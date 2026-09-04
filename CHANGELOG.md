@@ -16,4 +16,4 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
-[1.0.0]: https://github.com/frostdev-io/glaze/releases/tag/v1.0.0
+[1.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v1.0.0

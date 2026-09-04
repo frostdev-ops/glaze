@@ -33,7 +33,7 @@ yourself.
 
 The Chrome Web Store requires a publicly hosted privacy policy URL. This document is served from the
 project's GitHub repository at
-`https://github.com/frostdev-io/glaze/blob/main/PRIVACY.md`.
+`https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md`.
 
 ## Contact
 

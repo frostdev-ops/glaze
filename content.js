@@ -115,7 +115,7 @@
       const f = document.createElement('footer');
       f.id = 'gz-footer';
       const a = document.createElement('a');
-      a.href = 'https://github.com/frostdev-io/glaze';
+      a.href = 'https://github.com/frostdev-ops/glaze';
       a.target = '_blank';
       a.rel = 'noopener';
       a.textContent = 'Glaze';

@@ -38,7 +38,7 @@ There is nothing to configure: install it, open your Blackboard, and pick your c
 
 Privacy: Glaze stores only your settings, in Chrome's sync storage. It collects no data, sends nothing
 anywhere, and makes no network requests at all. The source is open at
-https://github.com/frostdev-io/glaze.
+https://github.com/frostdev-ops/glaze.
 
 Blackboard is a trademark of Anthology Inc. Glaze is an independent project and is not affiliated with,
 endorsed by, or sponsored by Anthology Inc.
@@ -89,4 +89,4 @@ SVG sources sit alongside each PNG in the same folder; re-export from those if t
 
 ## Privacy policy URL
 
-https://github.com/frostdev-io/glaze/blob/main/PRIVACY.md
+https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
