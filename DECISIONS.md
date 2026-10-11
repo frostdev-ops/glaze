@@ -63,3 +63,7 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Safari manifest drops `options_ui.open_in_tab` and `use_dynamic_url` | Keeping one manifest | Safari rejects the first and ignores the second; Chrome keeps both. |
 | Packager's app icon kept (the 128px icon on a white plate) | Rendering a full-size icon from `icons/icon.svg` | Matches Gemino. Worth redoing for both apps together. |
 | Chrome Web Store uploads via API v2 and a service account impersonated with `gcloud` | OAuth client + refresh token; a JSON key | Short-lived tokens only; nothing secret on disk or in the repo. The dashboard can't be scripted by any extension. |
+| Mac downloads: a notarized DMG with an Applications link, alongside the zip | Zip only (Gemino's) | Drag-to-install is what Mac users expect from a download. |
+| Mac App Store: same Xcode project, automatic App Store signing via an Admin API key, upload with `xcodebuild -exportArchive` | Transporter; a separate App Store project | One project for both channels; Xcode makes the certificates and profiles. |
+| App Store manifest description shortened to 86 characters, Safari copy only | Shortening the Chrome manifest too | The App Store caps it at 112; Chrome's 120-character summary stays as published. |
+| App Store listing reuses the Chrome screenshots of themed Blackboard pages, not the 1.0 popup shot | New screenshots | They show no browser frame or Chrome branding; the popup shot no longer matches 2.0. |

@@ -73,6 +73,12 @@ then notarizes the app, staples the ticket, checks Gatekeeper, and writes
 `release/glaze-<version>-safari-macos.zip` and a notarized `.dmg`, each with its SHA-256 checksum. Without credentials the zip is
 marked `unnotarized` and is for development only.
 
+For the Mac App Store, `scripts/appstore-safari.sh` archives the same project with App Store signing
+and uploads the build to App Store Connect. It needs an App Store Connect API key with the Admin role in
+`ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID`; Xcode creates the distribution certificate and profiles
+on first use. `APPSTORE_EXPORT_ONLY=1` builds the signed package without uploading. Listing text,
+screenshots and review submission happen in App Store Connect.
+
 `scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
 Use it only when you mean to regenerate the project.
 
