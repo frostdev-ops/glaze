@@ -1,0 +1,757 @@
+/* Glaze — a customizable colour theme over Blackboard Ultra's DOM.
+   Ultra ships no CSS variables and hashes its JSS classes, so every hook here is
+   a semantic class (element-card, base-header, content-list-item), a MUI slot
+   class, or a data-analytics-id. Text colour is INHERITED from the nearest
+   container by default (see "ink"), so anonymous spans/bdis follow the theme.
+
+   Everything is driven by the tokens below. content.js overrides them as inline
+   --gz-* on <html> when the user picks colours (inline beats these defaults), and
+   flips the motion knobs off with data-gz-no-* attributes. Every other colour in
+   this file is one of the tokens or a color-mix() of them. */
+/* Bundled faces (SIL OFL 1.1, see fonts/). Relative URLs resolve against this sheet's own
+   chrome-extension:// URL, so they need to be web-accessible too. */
+@font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+
+/* Colours and look values are NOT defaulted here: defaults.js is the one place a default lives,
+   and content.js writes every --gz-* value inline on <html> before this sheet is even added.
+   What lives here is only what is derived from them. */
+:root {
+  --gz-radius-sm: calc(var(--gz-radius) * 2 / 3);
+  /* Derived, not black: on a light preset surface-2 is off-white, so the shadow lands as a soft
+     grey instead of a hard smudge. Depth 0-3 picks the size; 0 is flat. */
+  --gz-shadow-ink: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 55%) 35%, transparent);
+  --gz-shadow: 0 8px 24px var(--gz-shadow-ink);
+  /* The page ground. extras.css swaps it for transparent when a background is painted behind. */
+  --gz-ground: var(--gz-surface-2);
+  --gz-footer-h: 2rem;
+  --gz-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* content.js sets color-scheme inline on <html> from the surface luminance, so light presets get
+     light form controls and scrollbars. Pinning it dark here would only fight that. */
+}
+/* Depth: --gz-shadow is for lifted things (hover, menus, dialogs); --gz-rest-shadow sits under every
+   card at rest, and only from depth 2. */
+html { --gz-rest-shadow: none; }
+html[data-gz-depth="0"] { --gz-shadow: none; }
+html[data-gz-depth="2"] { --gz-shadow: 0 12px 32px var(--gz-shadow-ink), 0 2px 6px var(--gz-shadow-ink); --gz-rest-shadow: 0 1px 3px var(--gz-shadow-ink); }
+html[data-gz-depth="3"] { --gz-shadow: 0 20px 48px var(--gz-shadow-ink), 0 4px 12px var(--gz-shadow-ink); --gz-rest-shadow: 0 4px 14px var(--gz-shadow-ink); }
+/* Density scales Ultra's own spacing: compact, cozy (Ultra as shipped), roomy. */
+html { --gz-space: 1; }
+html[data-gz-density="compact"] { --gz-space: 0.6; }
+html[data-gz-density="roomy"] { --gz-space: 1.4; }
+/* Text size: Ultra sizes text in rem off a 100% root, so the root alone scales all of it. */
+html { font-size: calc(100% * var(--gz-scale, 1)) !important; }
+html[data-gz-font="inter"] { --gz-font: "Glaze Inter", ui-sans-serif, system-ui, sans-serif; }
+html[data-gz-font="atkinson"] { --gz-font: "Glaze Atkinson", ui-sans-serif, system-ui, sans-serif; }
+html[data-gz-font="serif"] { --gz-font: ui-serif, "Iowan Old Style", Georgia, serif; }
+html[data-gz-font="mono"] { --gz-font: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+/* ---- Ultra's own MUI palette, remapped. Ultra exposes its theme as --palette-* custom properties
+   (light mode values); every MUI surface, divider, text and state colour derives from them, so
+   swapping them here is what makes pages we never visited come out mostly right. ---- */
+:root, body, #site-wrap {
+  --palette-background-default: var(--gz-surface-2) !important;
+  --palette-background-paper: var(--gz-surface) !important;
+  --palette-background-b1: var(--gz-surface) !important;
+  --palette-background-b2: var(--gz-surface-2) !important;
+  --palette-background-b3: color-mix(in srgb, var(--gz-surface-2), var(--gz-surface)) !important;
+  --palette-background-b4: var(--gz-line) !important;
+  --palette-background-b5: var(--gz-line-strong) !important;
+  --palette-background-b6: var(--gz-ink-faint) !important;
+  --palette-background-b7: color-mix(in srgb, var(--gz-ink-faint), var(--gz-ink-muted)) !important;
+  --palette-background-b8: var(--gz-ink-muted) !important;
+  --palette-background-b9: var(--gz-ink) !important;
+  --palette-background-b10: var(--gz-ink) !important;
+  --palette-text-primary: var(--gz-ink) !important;
+  --palette-text-secondary: var(--gz-ink-muted) !important;
+  --palette-text-hint: var(--gz-ink-faint) !important;
+  --palette-text-disabled: var(--gz-ink-faint) !important;
+  --palette-divider: var(--gz-line) !important;
+  --palette-border-main: var(--gz-line) !important;
+  --palette-border-dark: var(--gz-line-strong) !important;
+  --palette-grey-50: color-mix(in srgb, var(--gz-surface-2), var(--gz-surface)) !important;
+  --palette-grey-100: var(--gz-surface) !important;
+  --palette-grey-200: color-mix(in srgb, var(--gz-surface), var(--gz-line)) !important;
+  --palette-grey-300: var(--gz-line) !important;
+  --palette-grey-400: var(--gz-line-strong) !important;
+  --palette-grey-500: var(--gz-ink-faint) !important;
+  --palette-grey-600: color-mix(in srgb, var(--gz-ink-faint), var(--gz-ink-muted)) !important;
+  --palette-grey-700: var(--gz-ink-muted) !important;
+  --palette-grey-800: color-mix(in srgb, var(--gz-ink-muted), var(--gz-ink)) !important;
+  --palette-grey-900: var(--gz-ink) !important;
+  --palette-grey-A100: var(--gz-surface) !important;
+  --palette-grey-A200: color-mix(in srgb, var(--gz-surface), var(--gz-line)) !important;
+  --palette-grey-A400: var(--gz-line-strong) !important;
+  --palette-grey-A700: var(--gz-ink-muted) !important;
+  --palette-primary-main: var(--gz-ink) !important;
+  --palette-primary-dark: var(--gz-ink) !important;
+  --palette-primary-light: var(--gz-ink-muted) !important;
+  --palette-primary-contrastText: var(--gz-surface-2) !important;
+  --palette-secondary-main: var(--gz-line-strong) !important;
+  --palette-secondary-light: var(--gz-line) !important;
+  --palette-secondary-dark: var(--gz-ink-faint) !important;
+  --palette-secondary-contrastText: var(--gz-ink) !important;
+  --palette-action-active: var(--gz-ink) !important;
+  --palette-action-hover: var(--gz-ink) !important;
+  --palette-action-selected: var(--gz-accent) !important;
+  --palette-action-disabled: var(--gz-ink-faint) !important;
+  --palette-action-disabledBackground: var(--gz-line) !important;
+  --palette-action-focus: var(--gz-accent-soft) !important;
+  --palette-link-active: var(--gz-accent) !important;
+  --palette-link-selected: var(--gz-accent) !important;
+  --palette-link-hover: var(--gz-accent-hi) !important;
+  --palette-link-disabled: var(--gz-ink-faint) !important;
+  --palette-focus-main: var(--gz-accent) !important;
+  --palette-focus-light: var(--gz-accent-hi) !important;
+  --palette-focus-dark: var(--gz-accent) !important;
+  --palette-brand-main: var(--gz-accent) !important;
+  --palette-brand-dark: color-mix(in srgb, var(--gz-accent), var(--gz-accent-ink) 25%) !important;
+  --palette-brand-light: var(--gz-accent-soft) !important;
+  --palette-brand-contrastText: var(--gz-accent-ink) !important;
+  --palette-brandAlt-main: var(--gz-accent-hi) !important;
+  --palette-brandAlt-contrastText: var(--gz-accent-ink) !important;
+  --palette-indicatorPrimary-main: var(--gz-accent) !important;
+  --palette-indicatorPrimary-dark: color-mix(in srgb, var(--gz-accent), var(--gz-accent-ink) 25%) !important;
+  --palette-indicatorSecondary-main: var(--gz-err) !important;
+  --palette-info-main: var(--gz-accent) !important;
+  --palette-info-light: var(--gz-accent-soft) !important;
+  --palette-info-dark: var(--gz-accent-hi) !important;
+  --palette-info-contrastText: var(--gz-accent-ink) !important;
+  --palette-success-main: var(--gz-ok) !important;
+  --palette-success-light: color-mix(in srgb, var(--gz-ok) 18%, var(--gz-surface)) !important;
+  --palette-success-dark: color-mix(in srgb, var(--gz-ok), var(--gz-ink) 30%) !important;
+  --palette-success-contrastText: var(--gz-accent-ink) !important;
+  --palette-warning-main: var(--gz-warn) !important;
+  --palette-warning-light: color-mix(in srgb, var(--gz-warn) 18%, var(--gz-surface)) !important;
+  --palette-warning-dark: color-mix(in srgb, var(--gz-warn), var(--gz-ink) 30%) !important;
+  --palette-warning-contrastText: var(--gz-accent-ink) !important;
+  --palette-error-main: var(--gz-err) !important;
+  --palette-error-light: color-mix(in srgb, var(--gz-err) 18%, var(--gz-surface)) !important;
+  --palette-error-dark: color-mix(in srgb, var(--gz-err), var(--gz-ink) 30%) !important;
+  --palette-error-contrastText: var(--gz-accent-ink) !important;
+  --palette-caution-main: var(--gz-warn) !important;
+  --palette-caution-light: color-mix(in srgb, var(--gz-warn), var(--gz-ink) 30%) !important;
+  --palette-urgency-high: var(--gz-err) !important;
+  --palette-urgency-medium: var(--gz-warn) !important;
+  --palette-urgency-low: var(--gz-accent) !important;
+  /* Twelve grade bands, best to worst: tints of ok → warn → err over the surface. */
+  --palette-grade-excellent: color-mix(in srgb, var(--gz-ok) 24%, var(--gz-surface)) !important;
+  --palette-grade-veryGood: color-mix(in srgb, var(--gz-ok) 20%, var(--gz-surface)) !important;
+  --palette-grade-good: color-mix(in srgb, color-mix(in srgb, var(--gz-ok), var(--gz-accent)) 20%, var(--gz-surface)) !important;
+  --palette-grade-fair: color-mix(in srgb, var(--gz-warn) 16%, var(--gz-surface)) !important;
+  --palette-grade-borderline: color-mix(in srgb, var(--gz-warn) 20%, var(--gz-surface)) !important;
+  --palette-grade-warning: color-mix(in srgb, var(--gz-warn) 24%, var(--gz-surface)) !important;
+  --palette-grade-low: color-mix(in srgb, color-mix(in srgb, var(--gz-warn), var(--gz-err)) 20%, var(--gz-surface)) !important;
+  --palette-grade-veryLow: color-mix(in srgb, color-mix(in srgb, var(--gz-warn), var(--gz-err)) 24%, var(--gz-surface)) !important;
+  --palette-grade-critical: color-mix(in srgb, var(--gz-err) 20%, var(--gz-surface)) !important;
+  --palette-grade-failing: color-mix(in srgb, var(--gz-err) 22%, var(--gz-surface)) !important;
+  --palette-grade-severeFailing: color-mix(in srgb, var(--gz-err) 26%, var(--gz-surface)) !important;
+  --palette-grade-extremeFailing: color-mix(in srgb, var(--gz-err) 30%, var(--gz-surface)) !important;
+}
+
+/* ---- ground ---- */
+html, body, #site-wrap, .off-canvas-wrap, .inner-wrap, .base, #main-content, #main-content-inner,
+.route-view-container, .base-courses-content, .courses-panel,
+.panel-wrap, .course-content-container, .course-content, .content-list, .peek-content,
+.ms-Panel-main, .ms-Panel-content {
+  background: var(--gz-ground) !important;
+  color: var(--gz-ink) !important;
+}
+html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !important; }
+::selection { background: var(--gz-accent-soft); color: var(--gz-ink); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--gz-line-strong); border-radius: 999px; border: 2px solid var(--gz-surface-2); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- ink: everything inherits, then the few semantic roles ---- */
+#site-wrap { color: var(--gz-ink) !important; }
+/* Every element, custom elements included (bb-ui-username set #262626 on itself and the tag list
+   missed it). Links, buttons, chips and svg keep their own colour rules below. */
+/* :where() keeps this at the specificity of the id alone, so it beats every Ultra class rule but any
+   targeted #site-wrap rule below can still set a colour. (1.0 had it at (1,2,3), which silently beat
+   the button, badge and chip colours written later in this file.) */
+#site-wrap :where(*:not(a, .MuiButton-root, .MuiChip-label, svg, svg *)) { color: inherit !important; }
+#site-wrap :where(.course-id, .course-status, .summary, .ellipsis, .more-info-toggle, .MuiFormLabel-root,
+  .MuiInputLabel-root, .MuiListItemText-secondary, .muted, .secondary, .subtitle) { color: var(--gz-ink-muted) !important; }
+#site-wrap :where(a, .MuiLink-root) { color: var(--gz-accent) !important; transition: color var(--gz-t) var(--gz-ease); }
+#site-wrap :where(a, .MuiLink-root):hover { color: var(--gz-accent-hi) !important; }
+#site-wrap .element-card :where(a, .course-title, .js-course-title-element) { color: var(--gz-ink) !important; }
+.svg-icon, .svg-icon path, .svg-icon use { fill: currentColor !important; }
+#site-wrap svg.svg-icon, #site-wrap bb-svg-icon, #site-wrap svg.MuiSvgIcon-root { color: inherit !important; } /* Ultra sets color:#000/#262626 on the svg itself */
+/* Course outline: the collapse wrappers around nested folders are painted white by Ultra. */
+#site-wrap .MuiCollapse-root, #site-wrap .MuiCollapse-wrapper, #site-wrap .MuiCollapse-wrapperInner { background: transparent !important; }
+/* Grade pill: Ultra paints the empty one rgb(240,240,240). The #site-wrap prefix is needed to
+   beat the inherit rule above. Graded pills carry Ultra's grade-band class (excellent … extremeFailing)
+   and take that band's tint from the palette remap; --gz-grade-edge is the band's own colour. */
+#site-wrap .wrapping-input-style.pill-style { background: var(--gz-surface) !important; border: 1px solid var(--gz-line-strong) !important; }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.excellent, .veryGood) { --gz-grade-edge: var(--gz-ok); }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).good { --gz-grade-edge: color-mix(in srgb, var(--gz-ok), var(--gz-accent)); }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.fair, .borderline, .warning) { --gz-grade-edge: var(--gz-warn); }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.low, .veryLow) { --gz-grade-edge: color-mix(in srgb, var(--gz-warn), var(--gz-err)); }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.critical, .failing, .severeFailing, .extremeFailing) { --gz-grade-edge: var(--gz-err); }
+#site-wrap .excellent { --gz-grade-bg: var(--palette-grade-excellent); } #site-wrap .veryGood { --gz-grade-bg: var(--palette-grade-veryGood); }
+#site-wrap .good { --gz-grade-bg: var(--palette-grade-good); } #site-wrap .fair { --gz-grade-bg: var(--palette-grade-fair); }
+#site-wrap .borderline { --gz-grade-bg: var(--palette-grade-borderline); } #site-wrap .warning { --gz-grade-bg: var(--palette-grade-warning); }
+#site-wrap .low { --gz-grade-bg: var(--palette-grade-low); } #site-wrap .veryLow { --gz-grade-bg: var(--palette-grade-veryLow); }
+#site-wrap .critical { --gz-grade-bg: var(--palette-grade-critical); } #site-wrap .failing { --gz-grade-bg: var(--palette-grade-failing); }
+#site-wrap .severeFailing { --gz-grade-bg: var(--palette-grade-severeFailing); } #site-wrap .extremeFailing { --gz-grade-bg: var(--palette-grade-extremeFailing); }
+#site-wrap .wrapping-input-style.pill-style, #site-wrap .wrapping-input-style.pill-style * { color: var(--gz-ink) !important; }
+.ms-Button, .ms-Button *, .ms-Button-flexContainer { color: var(--gz-ink) !important; }
+
+/* ---- side nav ---- */
+.MuiDrawer-paper, .themed-background-primary-fill-only, .themed-logo-background-primary-fill,
+.themed-background-primary-alt-fill-only {
+  background: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent) !important;
+  color: var(--gz-ink-muted) !important;
+}
+.MuiDrawer-paper { border-right: 1px solid var(--gz-line) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.4); }
+.MuiDrawer-paper header { border-bottom: 1px solid var(--gz-line) !important; }
+.base-navigation-button-content {
+  color: var(--gz-ink-muted) !important;
+  border-radius: var(--gz-radius-sm) !important;
+  margin: 2px 8px !important;
+  transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring) !important;
+}
+.base-navigation-button-content:hover { background: var(--gz-surface) !important; color: var(--gz-ink) !important; transform: var(--gz-nudge); }
+.base-navigation-button-content.Mui-selected, .base-navigation-button-content[aria-current], .base-navigation-button-content.active {
+  background: var(--gz-accent-soft) !important;
+  color: var(--gz-accent) !important;
+  box-shadow: inset 3px 0 0 var(--gz-accent) !important;
+}
+
+/* ---- page header: glass. --gz-glass is the blur (0 = solid), --gz-glass-mix the opacity left.
+   The course header is a JSS-hashed <header> inside Ultra's course-page-header element, painted
+   #262626 in every palette until 2.0. The #site-wrap-scoped selectors outrank the "*-header"
+   catch-all further down, which used to paint these opaque and hide the blur. ---- */
+#site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header, .bb-course-navigation [class*="makeStylestoolbar"] {
+  background: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
+  border-bottom: 1px solid var(--gz-line) !important;
+  box-shadow: none !important;
+}
+/* The tools row sits inside the header: no second blur, no second rule under the title. */
+#site-wrap .base-header-tools { background: transparent !important; border: 0 !important; backdrop-filter: none; }
+
+/* ---- cards ---- */
+.element-card, .MuiPaper-root:not(.MuiDrawer-paper), .MuiCard-root, .panel, .todo-item, article,
+.content-list-item .itemContainer {
+  background: var(--gz-surface) !important;
+  color: var(--gz-ink) !important;
+  border: 1px solid var(--gz-line) !important;
+  border-radius: var(--gz-radius) !important;
+  box-shadow: var(--gz-rest-shadow) !important;
+  transition: var(--gz-card-transition) !important;
+}
+.element-card:hover, .content-list-item .itemContainer:hover {
+  transform: var(--gz-lift);
+  box-shadow: var(--gz-hover-shadow) !important;
+  border-color: var(--gz-line-strong) !important;
+}
+.course-banner, .status-bar { border-radius: var(--gz-radius) 0 0 var(--gz-radius) !important; }
+/* Course outline: one card per top-level folder; everything nested is a flat row with a hairline. */
+#site-wrap .content-list-item .itemContainer { overflow: hidden; }
+#site-wrap .content-list-item .content-list-item .itemContainer { background: transparent !important; border: 0 !important; border-top: 1px solid var(--gz-line) !important; border-radius: 0 !important; }
+#site-wrap .content-list-item .content-list-item .itemContainer:hover { transform: none; box-shadow: none !important; background: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent) !important; }
+.content-list-item a, .content-list-item [role=button] { color: var(--gz-ink) !important; }
+.content-list-item a:hover { color: var(--gz-accent) !important; }
+aside, .todo-panel { background: var(--gz-ground) !important; border-left: 1px solid var(--gz-line) !important; }
+.MuiAccordion-root, .MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+.MuiAccordionDetails-root { border-top: 1px solid var(--gz-line) !important; }
+.MuiAccordionDetails-root > div { background: var(--gz-surface-2) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm); }
+.MuiBadge-badge { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
+/* The favourite star pops. */
+#site-wrap .js-favourite-button { transition: transform var(--gz-t-slow) var(--gz-spring), color var(--gz-t) var(--gz-ease) !important; }
+#site-wrap .js-favourite-button:hover { transform: var(--gz-pop); color: var(--gz-accent) !important; }
+
+/* ---- controls ---- */
+input, textarea, select, .MuiInputBase-root, .MuiOutlinedInput-root, .MuiSelect-select {
+  background: var(--gz-surface) !important;
+  color: var(--gz-ink) !important;
+  border-color: var(--gz-line) !important;
+  border-radius: var(--gz-radius-sm) !important;
+  transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease) !important;
+}
+.MuiOutlinedInput-notchedOutline { border-color: var(--gz-line) !important; transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease); }
+.MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-line-strong) !important; }
+.Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft); }
+#site-wrap legend, #site-wrap legend *, #site-wrap label { background: transparent !important; }
+#site-wrap legend * { color: transparent !important; }
+/* MUI floating label: the notch cover is the label's ::before (an absolute block), which Ultra paints white. */
+#site-wrap label.MuiInputLabel-root { background: transparent !important; color: var(--gz-ink-muted) !important; padding: 0 4px !important; }
+/* Ultra hides the field border behind a shrunk label with a white block. A solid block reads as a
+   chip sitting on the border; this one is clear on top (whatever is behind shows) and field-coloured
+   below the line, so only the border disappears. */
+#site-wrap label.MuiInputLabel-root.MuiInputLabel-shrink, #site-wrap label.MuiInputLabel-root::before { background: linear-gradient(to bottom, transparent 0 46%, var(--gz-surface) 46%) !important; border-radius: 0; }
+.course-overview-management > div > div > div { background: transparent !important; }
+.course-overview-management label:has(input) { background: var(--gz-surface) !important; border: 1px solid var(--gz-line) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm) !important; transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
+.course-overview-management label:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-line-strong) !important; }
+.MuiChip-root { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
+.MuiButton-contained { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; border-radius: var(--gz-radius-sm) !important; box-shadow: none !important; }
+.MuiButton-contained:hover { filter: var(--gz-hover-filter); }
+.MuiButton-contained.MuiButton-containedSecondary { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; }
+.MuiButton-outlined, .MuiButton-text, .standard-button { color: var(--gz-accent) !important; border-color: var(--gz-line-strong) !important; }
+button, .MuiButtonBase-root { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), filter var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring), scale var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease) !important; }
+button:active, .MuiButtonBase-root:active { scale: var(--gz-press); }
+.MuiMenu-paper, .MuiPopover-paper, .MuiDialog-paper { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; box-shadow: var(--gz-shadow) !important; }
+.MuiMenuItem-root { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
+.MuiMenuItem-root:hover { background: var(--gz-accent-soft) !important; }
+.MuiDivider-root, hr { border-color: var(--gz-line) !important; }
+table, th, td { border-color: var(--gz-line) !important; color: var(--gz-ink) !important; }
+th { background: var(--gz-surface) !important; }
+.MuiRadio-root, .MuiCheckbox-root { transition: color var(--gz-t) var(--gz-ease) !important; }
+
+/* ---- per-route leaks (found with the light/dark finder in the browser) ---- */
+#site-wrap a.base-navigation-button-content { color: var(--gz-ink-muted) !important; }
+#site-wrap a.base-navigation-button-content:hover { color: var(--gz-ink) !important; }
+#site-wrap a.base-navigation-button-content.Mui-selected, #site-wrap a.base-navigation-button-content[aria-current] { color: var(--gz-accent) !important; }
+.page-title, h1, h2, h3 { font-family: inherit !important; }
+.element-image { background: var(--gz-surface) !important; border-color: var(--gz-line) !important; }
+#site-wrap button:not(.MuiButton-contained) { color: var(--gz-ink) !important; }
+.button-group button, .button-group li { background: var(--gz-surface) !important; color: var(--gz-ink-muted) !important; border-color: var(--gz-line) !important; }
+.button-group button.active, .button-group button[aria-pressed=true], .button-group button.selected { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; }
+.days .week-day button { color: var(--gz-ink-muted) !important; }
+.days .week-day.today button, .days .week-day button.selected { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+.base-grades-empty-state, .base-grades-empty-state *, .no-grades { background: var(--gz-ground) !important; background-image: none !important; color: var(--gz-ink-muted) !important; }
+.grades-list .columns, .grades-list .row { background: transparent !important; }
+.messages-container-summary, .color-override { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+/* Course messages toolbar. Ultra's own rule is class-stacked + !important, so #site-wrap is what outranks it. */
+#site-wrap .messages-header, #site-wrap .messages-header .summary, #site-wrap .messages-container { background: var(--gz-ground) !important; border-color: var(--gz-line) !important; }
+#site-wrap .messages-header .summary { border-bottom: 1px solid var(--gz-line) !important; }
+#site-wrap .messages-container-summary .summary { background: transparent !important; border: 0 !important; }
+/* Empty-state copy is Noto Serif in Ultra and usernames are Open Sans; the theme is one sans everywhere. */
+#site-wrap :where(p, h1, h2, h3, h4, h5, h6, .main, bb-ui-username, bb-ui-username *, bb-username, bb-username *) { font-family: inherit !important; }
+
+/* Document view (course item pages): Ultra paints the whole body and the title bar white. The title
+   bar's div is anonymous, so it is reached through :has() from the stable h1 class. */
+#site-wrap .document-content-root, #site-wrap .document-body, #site-wrap .bbml-editor, #site-wrap main { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
+#site-wrap .bbml-editor-parent { background: var(--gz-surface) !important; }
+#site-wrap div:has(> div > div > div > h1.js-header-text) { background: var(--gz-ground) !important; border-bottom: 1px solid var(--gz-line) !important; }
+
+/* Item panels (discussions, assignments, tests): Ultra's panel chrome and its Quill editor are white. */
+#site-wrap .panel-header, #site-wrap .persistent-white-header, #site-wrap .panel-title, #site-wrap .panel-content, #site-wrap .panel-content-slide-toggle, #site-wrap .collapsible-row, #site-wrap .editable-title-container { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
+#site-wrap .panel-header { border-bottom: 1px solid var(--gz-line) !important; box-shadow: none !important; }
+#site-wrap .reply-form, #site-wrap .new-comment, #site-wrap .bb-editor-root, #site-wrap .bb-editor-container, #site-wrap .editor-content-container, #site-wrap .ql-editor, #site-wrap .ql-container, #site-wrap .ql-toolbar, #site-wrap bb-message, #site-wrap .message-body, #site-wrap .comments { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+#site-wrap .lti-placement__root { background: transparent !important; }
+
+/* Off-canvas side panels (rubric details, settings sheets): the panel wrap and its Fluent header are white. */
+#site-wrap .bb-offcanvas-panel-wrap, #site-wrap .bb-offcanvas-panel, #site-wrap .panel-body, #site-wrap .ms-Panel-commands, #site-wrap .simple-header { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
+#site-wrap button.bb-close { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; }
+
+/* ---- slide-outs (Ultra's "peek" panels: settings, rubrics, details) ----
+   A sheet over the dimmed page: one step above the ground, with an edge and a shadow toward the
+   page. Inside it the ground is transparent, so the many pieces Ultra paints in the ground colour
+   don't patch over the sheet. */
+#site-wrap :is(.bb-offcanvas-panel.peek, .peek-panel__content-wrapper), .ms-Panel-main {
+  --gz-ground: transparent;
+  background: color-mix(in srgb, var(--gz-surface) 45%, var(--gz-surface-2)) !important;
+  border-left: 1px solid var(--gz-line-strong) !important;
+  box-shadow: -18px 0 48px var(--gz-shadow-ink) !important;
+}
+/* #site-wrap is overflow: hidden, but an off-screen helper of Ultra's sticks out past its right
+   edge, so opening a slide-out scrolls the whole page sideways and leaves a strip beside the sheet.
+   clip looks the same and can't be scrolled. */
+#site-wrap { overflow: clip !important; }
+#site-wrap :is(.peek, .peek-panel__content-wrapper) .peek-panel__content-wrapper { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+/* Attendance bleeds its sections 30px past both edges, so the panel scrolls sideways; Glaze's styled
+   (always-visible) scrollbars turned that into a bar along the bottom. */
+#site-wrap .peek-panel__container { overflow-x: hidden !important; }
+#site-wrap .bb-offcanvas-overlay { background: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 45%) 60%, transparent) !important; }
+#site-wrap .peek .panel-header { padding-bottom: 0.25rem; }
+#site-wrap .peek .panel-sub-title { color: var(--gz-ink-faint) !important; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+#site-wrap .peek .panel-footer { border-top: 1px solid var(--gz-line) !important; }
+/* The close button straddles the sheet's edge: a round button instead of a tab with a purple fold. */
+#site-wrap .peek button.bb-close {
+  border-radius: 999px !important; border-color: var(--gz-line-strong) !important; box-shadow: var(--gz-shadow) !important;
+  background: color-mix(in srgb, var(--gz-surface) 45%, var(--gz-surface-2)) !important;
+  transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease) !important;
+}
+/* Colour only: Ultra positions this button with a transform, so a hover transform moved it out from under the pointer. */
+#site-wrap .peek button.bb-close:is(:hover, :focus-visible) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
+#site-wrap button.bb-close::after { display: none !important; }
+#site-wrap .rubric-view-panel .panel-body > div, #site-wrap .rubric-view-panel .MuiAccordionDetails-root > div > div > div { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap .js-rubric-view-achievement-score { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
+
+/* File attachment header above the PDF/file viewer (the viewer itself is an iframe on /bbcswebdav/, untouched). */
+#site-wrap div:has(> .js-file-viewer-root-controls) { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important; }
+#site-wrap .js-file-viewer-root-controls, #site-wrap .js-file-viewer-attachment-meta { color: var(--gz-ink) !important; }
+
+/* Announcements (and other sortable tables): the search/guidance bar and read rows are white. */
+#site-wrap .guidance-wrapper { background: var(--gz-ground) !important; color: var(--gz-ink) !important; border-bottom: 1px solid var(--gz-line) !important; box-shadow: none !important; }
+#site-wrap .guidance-wrapper input { background: var(--gz-surface) !important; }
+#site-wrap table tr, #site-wrap table td { background: transparent !important; }
+#site-wrap table td { transition: background var(--gz-t) var(--gz-ease); }
+#site-wrap table tr.is-read, #site-wrap table tr.announcement-item-row.is-read, #site-wrap table tr.is-read td { background: transparent !important; color: var(--gz-ink-muted) !important; }
+#site-wrap table tr:hover td { background: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent) !important; }
+
+/* Calendar due-dates list: the white group box around a day's cards, and the Today toggle. */
+#site-wrap .element-card-container { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+#site-wrap .calendar-toggle button { background: var(--gz-surface) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap .calendar-toggle button:hover { color: var(--gz-ink) !important; border-color: var(--gz-line-strong) !important; }
+
+/* Gradebook (MUI table + readonly grade pills). */
+#site-wrap table, #site-wrap .MuiTable-root, #site-wrap .MuiTableCell-root { background: transparent !important; color: var(--gz-ink) !important; }
+#site-wrap .MuiTableHead-root .MuiTableCell-root, #site-wrap thead th { background: var(--gz-surface) !important; }
+#site-wrap .readonly-pill { background: var(--gz-grade-bg, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line-strong) !important; }
+#site-wrap .readonly-pill.customGradePill { color: var(--gz-ink) !important; }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style)[class*="customGradePill"] { background: var(--gz-grade-bg, var(--gz-surface)) !important; border-color: color-mix(in srgb, var(--gz-grade-edge, var(--gz-line-strong)) 55%, var(--gz-line-strong)) !important; }
+
+/* Message compose: reply dock + the Quill toolbar. */
+#site-wrap .message-reply-container, #site-wrap .send-wrapper { background: var(--gz-ground) !important; border-top: 1px solid var(--gz-line) !important; }
+#site-wrap .bb-editor-toolbar { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border-color: var(--gz-line) !important; }
+#site-wrap .bb-editor-toolbar button, #site-wrap .bb-editor-toolbar .ql-picker, #site-wrap .bb-editor-toolbar svg { color: var(--gz-ink-muted) !important; background: transparent !important; border-color: var(--gz-line) !important; }
+#site-wrap .bb-editor-toolbar button:hover { color: var(--gz-ink) !important; background: var(--gz-accent-soft) !important; }
+
+/* Any Ultra "*-header" bar (course-groups-header, base-header, messages-header, …) is ground. */
+#site-wrap div:is([class*="-header"], [class*="header-"]):not(.base-header, .base-header-tools) { background: var(--gz-ground) !important; color: var(--gz-ink) !important; box-shadow: none !important; }
+#site-wrap .course-groups-header { border-bottom: 1px solid var(--gz-line) !important; }
+
+/* Attendance peek panel. */
+#site-wrap .peek-panel__content-wrapper, #site-wrap .student-panel, #site-wrap .student-panel__background { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
+#site-wrap .student-panel__background { border-bottom: 1px solid var(--gz-line) !important; }
+#site-wrap .attendance-grade-pill { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line-strong) !important; }
+#site-wrap thead, #site-wrap thead tr { background: var(--gz-surface) !important; }
+
+/* Empty states ("No course faculty", …). */
+#site-wrap .js-empty-state, #site-wrap [class*="empty-state"] { background: var(--gz-ground) !important; background-image: none !important; color: var(--gz-ink-muted) !important; border: 1px dashed var(--gz-line-strong) !important; border-radius: var(--gz-radius-sm) !important; }
+
+/* Assessment overview: Foundation-style .button links (Start attempt) and the Contents tree's selected row. */
+/* Button hierarchy. Ultra's Foundation .button is on everything from "Start attempt" to "Back" and
+   "Show more", so a solid accent on all of them left no hierarchy. Tonal by default; solid only for
+   the per-view call to action; text and clear buttons are links. */
+#site-wrap a.button, #site-wrap button.button { background: var(--gz-accent-soft) !important; border: 1px solid var(--gz-line-strong) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap a.button, #site-wrap a.button *, #site-wrap button.button, #site-wrap button.button * { color: var(--gz-accent) !important; }
+#site-wrap a.button:hover, #site-wrap button.button:hover { background: color-mix(in srgb, var(--gz-accent) 22%, var(--gz-surface)) !important; border-color: var(--gz-accent) !important; }
+#site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]) { background: var(--gz-accent) !important; border-color: transparent !important; }
+#site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]), #site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]) * { color: var(--gz-accent-ink) !important; }
+#site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]):hover { background: var(--gz-accent-hi) !important; }
+#site-wrap :is(a, button).button:is(.button--text, .super-clear) { background: transparent !important; border-color: transparent !important; text-decoration: none !important; }
+#site-wrap :is(a, button).button:is(.button--text, .super-clear):hover { background: var(--gz-accent-soft) !important; }
+/* Segmented switches (calendar Schedule/Due Dates, Day/Month): one joined control, the selected half
+   marked. Ultra marks it with .active-switch and nothing visual survived the recolour. */
+#site-wrap button.button.small:is(.left-button, .right-button) { background: var(--gz-surface) !important; border: 1px solid var(--gz-line) !important; }
+#site-wrap button.button.small:is(.left-button, .right-button), #site-wrap button.button.small:is(.left-button, .right-button) * { color: var(--gz-ink-muted) !important; }
+#site-wrap button.button.small.left-button { border-radius: var(--gz-radius-sm) 0 0 var(--gz-radius-sm) !important; margin-right: -1px !important; }
+#site-wrap button.button.small.right-button { border-radius: 0 var(--gz-radius-sm) var(--gz-radius-sm) 0 !important; }
+#site-wrap button.button.small.today-toggle { border-radius: var(--gz-radius-sm) !important; }
+#site-wrap button.button.small:is(.left-button, .right-button):hover { background: var(--gz-accent-soft) !important; }
+#site-wrap button.button.small.active-switch { position: relative; z-index: 1; background: var(--gz-accent-soft) !important; border-color: var(--gz-accent) !important; }
+#site-wrap button.button.small.active-switch, #site-wrap button.button.small.active-switch * { color: var(--gz-accent) !important; font-weight: 600 !important; }
+#site-wrap .MuiListItem-root { background: transparent !important; }
+#site-wrap .MuiListItem-root.Mui-selected, #site-wrap .MuiListItem-root[aria-current], #site-wrap li.MuiListItem-padding:has([aria-current]) { background: var(--gz-accent-soft) !important; box-shadow: inset 3px 0 0 var(--gz-accent) !important; }
+
+/* Test attempt page: progress bar, radios/checkboxes, option letters, secondary buttons, filter button. */
+#site-wrap .MuiLinearProgress-root { background: var(--gz-line) !important; border-radius: 999px; }
+#site-wrap .MuiLinearProgress-bar { background: var(--gz-accent) !important; }
+#site-wrap .PrivateSwitchBase-root > span, #site-wrap .MuiRadio-root > span, #site-wrap .MuiCheckbox-root > span { background: transparent !important; }
+#site-wrap .MuiRadio-root, #site-wrap .MuiCheckbox-root, #site-wrap .MuiRadio-root svg, #site-wrap .MuiCheckbox-root svg { color: var(--gz-ink-muted) !important; }
+#site-wrap .MuiRadio-root.Mui-checked, #site-wrap .MuiCheckbox-root.Mui-checked, #site-wrap .Mui-checked svg { color: var(--gz-accent) !important; }
+#site-wrap label.MuiFormControlLabel-root, #site-wrap label.MuiFormControlLabel-root .MuiFormControlLabel-label, #site-wrap label.MuiFormControlLabel-root .MuiFormControlLabel-label * { color: var(--gz-ink) !important; }
+#site-wrap .MuiFormControlLabel-label::before, #site-wrap .MuiFormControlLabel-label *::before, #site-wrap .MuiFormControlLabel-label *::after { color: var(--gz-ink-muted) !important; }
+#site-wrap button.button--secondary, #site-wrap button.button--secondary *, #site-wrap .js-assessment-filter-dropdown-button, #site-wrap .js-assessment-filter-dropdown-button * { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+#site-wrap button.button--secondary, #site-wrap .js-assessment-filter-dropdown-button { border: 1px solid var(--gz-line-strong) !important; border-radius: var(--gz-radius-sm) !important; }
+
+/* ---- portals: MUI popovers, menus and dialogs mount on <body>, OUTSIDE #site-wrap, so the page-scoped
+   inherit/border rules above never reach them. Same rules, portal scope. ---- */
+.MuiModal-root, .MuiPopper-root, .MuiPopover-root, .MuiDialog-root { color: var(--gz-ink) !important; }
+:is(.MuiModal-root, .MuiPopper-root) *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg *) { color: inherit !important; }
+:is(.MuiModal-root, .MuiPopper-root) * { border-color: var(--gz-line) !important; }
+:is(.MuiModal-root, .MuiPopper-root) :is(a, .MuiLink-root) { color: var(--gz-accent) !important; }
+:is(.MuiModal-root, .MuiPopper-root) :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root) { color: var(--gz-ink-muted) !important; }
+:is(.MuiModal-root, .MuiPopper-root) .Mui-checked { color: var(--gz-accent) !important; }
+:is(.MuiModal-root, .MuiPopper-root) :is(fieldset, legend, legend *, .MuiFormControlLabel-root, .MuiMenuItem-root, .MuiListItem-root, [class*="popover-container"]) { background: transparent !important; }
+.MuiPaper-root:not(.MuiDrawer-paper) { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+
+/* ---- footer bar (content.js appends it; every rule here is gated on the popup's Footer switch) ----
+   Ultra sizes its layout to the full viewport and scrolls inside, so a footer only earns its space
+   if the app is shrunk by exactly its height. Anything Ultra fixes to the viewport bottom (the help
+   button, action bars) or sizes with 100vh is outside that shrink; content.js tags those and they are
+   lifted / clamped by the same amount. */
+html[data-gz-footer], html[data-gz-footer] body, html[data-gz-footer] #site-wrap,
+html[data-gz-footer] .off-canvas-wrap, html[data-gz-footer] .inner-wrap {
+  height: calc(100vh - var(--gz-footer-h)) !important;
+  max-height: calc(100vh - var(--gz-footer-h)) !important;
+}
+html[data-gz-footer] .pagehelp-directive, html[data-gz-footer] [data-gz-fixed-bottom] {
+  bottom: var(--gz-footer-h) !important;
+  max-height: calc(100vh - var(--gz-footer-h)) !important;
+}
+html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, html[data-gz-footer] [data-gz-vh] {
+  max-height: calc(100vh - var(--gz-footer-h)) !important;
+}
+#gz-footer {
+  position: fixed;
+  inset: auto 0 0 0;
+  height: var(--gz-footer-h);
+  box-sizing: border-box;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  font: 500 11px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  color: var(--gz-ink-faint) !important;
+  background: var(--gz-surface-2);
+  border-top: 1px solid var(--gz-line);
+}
+#gz-footer a {
+  color: var(--gz-ink-faint) !important;
+  text-decoration: none;
+  transition: color var(--gz-t) var(--gz-ease);
+}
+#gz-footer a:hover { color: var(--gz-accent) !important; }
+
+/* ---- the long tail: content.js tags anything still painted light / with dark text ---- */
+[data-gz-light] { background-color: var(--gz-surface) !important; }
+[data-gz-dark] { color: var(--gz-ink) !important; }
+
+/* ---- spacing ----
+   Ultra ships zero padding on several containers because in its own design they had no visible
+   edge. Ours do (border + radius), which leaves the text hugging the corner, so give them room. */
+#site-wrap .MuiAccordionSummary-root { padding: 0 1rem !important; }
+#site-wrap .MuiAccordionDetails-root { padding: 0 0.75rem 0.75rem !important; }
+#site-wrap .MuiSelect-select { padding-left: 0.875rem !important; }
+#site-wrap .MuiChip-root { padding-left: 0.25rem !important; padding-right: 0.25rem !important; }
+/* The gradebook identity card (a bare div.element-card, nothing else on it) ships no padding; its
+   name ran into the card's right edge. Course cards carry an instructor bb-ui-username too, so the
+   match is on the exact class, not on the username. */
+#site-wrap div[class="element-card"] { padding: 0.375rem 0.75rem 0.375rem 0.375rem !important; }
+/* Menus: inset the list so items read as pills inside the rounded paper, not flush to its corners. */
+:is(.MuiMenu-paper, .MuiPopover-paper) ul { padding: 0.375rem !important; }
+.MuiMenuItem-root, [role="option"] { border-radius: var(--gz-radius-sm) !important; padding: 0.5rem 0.75rem !important; }
+/* Tab underline: Ultra draws it in the course colour; theme accent, like the course tab strip. */
+.MuiTabs-indicator { background-color: var(--gz-accent) !important; }
+/* Participant-list dividers are pseudo-elements filled with currentColor, so they turned ink-white. */
+#site-wrap .element-card-list li::before, #site-wrap .element-card-list li::after { background-color: var(--gz-line) !important; }
+
+/* ---- borders: every border under the page is a theme line; the few that mean something are restated ---- */
+#site-wrap * { border-color: var(--gz-line) !important; }
+#site-wrap .element-card:hover, #site-wrap .content-list-item > .itemContainer:hover, #site-wrap .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-line-strong) !important; }
+#site-wrap .Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--gz-accent) !important; }
+#site-wrap .wrapping-input-style.pill-style, #site-wrap .MuiChip-root { border-color: var(--gz-line-strong) !important; }
+/* Course tab strip: the active tab's 4px underline is the course colour in Ultra; theme accent here. */
+#site-wrap a.MuiListItemButton-root[variant=secondary] { border-bottom-color: transparent !important; }
+#site-wrap a.MuiListItemButton-root[aria-current=page] { border-bottom-color: var(--gz-accent) !important; }
+#site-wrap .bb-ui-navigation-list-horizontal a.MuiListItemButton-root[aria-current=page] { border-bottom-color: transparent !important; position: relative; }
+
+/* ======================================================================================
+   2.0 polish: fixes found on a live Ultra site, page by page.
+   ====================================================================================== */
+/* The grade-band vars are set by class on the pill itself; without this they would inherit into
+   any pill nested under an unrelated .good / .warning / .low element. */
+@property --gz-grade-bg { syntax: "*"; inherits: false; }
+@property --gz-grade-edge { syntax: "*"; inherits: false; }
+
+/* ---- course colours ----
+   Ultra marks anything course-scoped with .course-color-1…10 and paints a stripe in that hue
+   (a ::before bar, a top border, a calendar chip border). Its ten hues are fully saturated and
+   clash with every palette; harmonised, each is pulled 30% toward the muted ink so they sit in
+   the palette but stay telling apart. A colour picked for a course (content.js sets --gz-pick-N
+   on <html>) is used as is; an unset --gz-pick-N leaves --gz-pick invalid, so the fallback applies.
+   data-gz-raw-courses keeps Ultra's originals. */
+.course-color-1 { --gz-course-raw: #c473d4; --gz-pick: var(--gz-pick-1); } .course-color-2 { --gz-course-raw: #2fd9fc; --gz-pick: var(--gz-pick-2); }
+.course-color-3 { --gz-course-raw: #ffe12b; --gz-pick: var(--gz-pick-3); } .course-color-4 { --gz-course-raw: #ff6417; --gz-pick: var(--gz-pick-4); }
+.course-color-5 { --gz-course-raw: #89f3db; --gz-pick: var(--gz-pick-5); } .course-color-6 { --gz-course-raw: #fe5b91; --gz-pick: var(--gz-pick-6); }
+.course-color-7 { --gz-course-raw: #85f472; --gz-pick: var(--gz-pick-7); } .course-color-8 { --gz-course-raw: #22c7cc; --gz-pick: var(--gz-pick-8); }
+.course-color-9 { --gz-course-raw: #ca22ad; --gz-pick: var(--gz-pick-9); } .course-color-10 { --gz-course-raw: #157afb; --gz-pick: var(--gz-pick-10); }
+[class*="course-color-"] { --gz-course: var(--gz-pick, color-mix(in oklch, var(--gz-course-raw) 70%, var(--gz-ink-muted))); }
+html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
+[class*="course-color-"]::before, .element-card.element-card-deadline[class*="course-color-"]::after,
+.calendar-wrapper .event-dot[class*="course-color-"] { background-color: var(--gz-course) !important; }
+#site-wrap [class*="course-color-"].top-border, .peek .telemetry-panel.panel-wrap[class*="course-color-"] { border-top-color: var(--gz-course) !important; }
+#site-wrap .calendar-wrapper .month-list li[class*="course-color-"] { border-color: var(--gz-course) !important; }
+/* Calendar tiles: the selected/hovered tile turned its stripe grey in Ultra; keep the course hue. */
+.calendar-wrapper .element-card.tile[class*="course-color-"]:is(:hover, :focus)::before { background-color: var(--gz-course) !important; }
+
+/* ---- calendar month (FullCalendar 3) ---- */
+#site-wrap .fc-day-header { text-align: center !important; padding: 0.5rem 0 !important; font-size: 0.7rem !important; font-weight: 600 !important; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted) !important; background: var(--gz-surface) !important; }
+#site-wrap .fc-day-number { font-size: 0.85rem !important; padding: 0.4rem 0.5rem 0.1rem !important; color: var(--gz-ink-muted) !important; }
+#site-wrap .fc-day-number.fc-other-month { color: var(--gz-ink-faint) !important; opacity: 0.6; }
+#site-wrap .fc-monthWithoutDD-view .fc-day.fc-today { background: color-mix(in srgb, var(--gz-accent-soft) 60%, transparent) !important; box-shadow: inset 0 0 0 1px var(--gz-accent); }
+#site-wrap .fc-day-number.fc-today { color: var(--gz-accent) !important; font-weight: 700 !important; }
+#site-wrap .fc-monthWithoutDD-view .fc-event { margin: 1px 4px !important; padding: 1px 6px !important; border: 0 !important; border-left: 3px solid var(--gz-course, var(--gz-accent)) !important; border-radius: 4px !important; background: color-mix(in srgb, var(--gz-course, var(--gz-accent)) 16%, var(--gz-surface)) !important; transition: background var(--gz-t) var(--gz-ease); }
+#site-wrap .fc-monthWithoutDD-view .fc-event:hover { background: color-mix(in srgb, var(--gz-course, var(--gz-accent)) 28%, var(--gz-surface)) !important; }
+#site-wrap .fc-monthWithoutDD-view .fc-event, #site-wrap .fc-monthWithoutDD-view .fc-event * { color: var(--gz-ink) !important; }
+/* Every month-view chip is a due date, and the cells are narrow: the "Due:" prefix only costs title. */
+#site-wrap .fc-monthWithoutDD-view .fc-event .fc-time { display: none !important; }
+#site-wrap .fc-content-skeleton thead, #site-wrap .fc-content-skeleton thead tr { background: transparent !important; }
+#site-wrap .fc-more { color: var(--gz-accent) !important; font-weight: 600; padding-right: 0.5rem; }
+
+/* ---- course list view toggle (list / grid): radio labels, the checked one is the current view ---- */
+#site-wrap [data-analytics-id^="courses.overview.view.toggle."] { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease); }
+#site-wrap [data-analytics-id^="courses.overview.view.toggle."]:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
+
+/* ---- course content ----
+   The Course Faculty / Details & Actions blocks were a bordered box around a bordered accordion. */
+#site-wrap .outline-action-block { border: 0 !important; padding: 0 !important; background: transparent !important; }
+#site-wrap .outline-action-block .MuiAccordion-root { background: var(--gz-surface) !important; }
+/* Item type at a glance: the type icon carries its name as aria-label. */
+#site-wrap .content-list-item svg[aria-label] { color: var(--gz-type, var(--gz-accent)) !important; }
+#site-wrap .content-list-item svg:is([aria-label="Assignment"], [aria-label*="Assessment"]) { --gz-type: var(--gz-warn); }
+#site-wrap .content-list-item svg:is([aria-label="Test"], [aria-label*="Quiz"], [aria-label="Survey"]) { --gz-type: color-mix(in srgb, var(--gz-err), var(--gz-accent) 35%); }
+#site-wrap .content-list-item svg:is([aria-label="Discussion"], [aria-label="Journal"], [aria-label*="Conversation"]) { --gz-type: var(--gz-ok); }
+#site-wrap .content-list-item svg:is([aria-label="Link"], [aria-label*="Tool"], [aria-label*="LTI"]) { --gz-type: var(--gz-accent-hi); }
+#site-wrap .content-list-item svg:is([aria-label="Text Document"], [aria-label="Document"], [aria-label="File"]) { --gz-type: var(--gz-ink-muted); }
+/* Completion: a folder with nothing left shows its count in the success colour. */
+#site-wrap .js-content-state-completion:not(:has(.js-completion-chart)) .js-completion-status-message { color: var(--gz-ok) !important; }
+#site-wrap .js-completion-chart [data-gz-light] { background-color: var(--gz-line) !important; }
+/* The folder bar's segments: done is ok, started is accent (Ultra paints it black), unopened is the track. */
+#site-wrap .js-completion-chart [class*="chartLineCompleted"] { background-color: var(--gz-ok) !important; }
+#site-wrap .js-completion-chart [class*="chartLineStarted"] { background-color: var(--gz-accent) !important; }
+#site-wrap .js-completion-chart [class*="chartLineProgressbarUnopened"] { background-color: var(--gz-line) !important; }
+
+/* ---- stream & grades item icons: a soft accent tile instead of a white outline on navy ---- */
+#site-wrap .element-card .element-image { background: var(--gz-accent-soft) !important; border: 0 !important; border-radius: var(--gz-radius-sm) !important; color: var(--gz-accent) !important; }
+#site-wrap .element-card .element-image svg { color: var(--gz-accent) !important; }
+
+/* ---- discussions: the author header was its own card, narrower than the post body under it ---- */
+#site-wrap .clearfix > div:has(> .user-info) { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+/* Decorative divider images (thin, wide, made for a white page) — content.js tags them. */
+html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg); opacity: 0.5; }
+
+/* ---- read-only rich text (announcement detail, posts): room to breathe ---- */
+#site-wrap .bb-editor-container.is-read-only { border-radius: var(--gz-radius) !important; padding: 1rem 1.25rem !important; }
+/* Pictures in it are made for a white page: rounded, and on a dark palette a little dimmer until
+   pointed at, so a white screenshot doesn't glare. */
+#site-wrap .bb-editor-container.is-read-only img:not([data-gz-rule]) { border-radius: var(--gz-radius-sm); transition: filter var(--gz-t) var(--gz-ease); }
+html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([data-gz-rule], :hover) { filter: brightness(0.85); }
+
+/* ---- rich text editor (submissions, replies, messages): toolbar, text and word count as one
+   card, with the accent ring while you type ---- */
+#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-root {
+  border: 1px solid var(--gz-line-strong) !important; border-radius: var(--gz-radius) !important;
+  transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease);
+}
+#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-root:focus-within { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft) !important; }
+#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar {
+  border: 0 !important; border-bottom: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important;
+  background: color-mix(in srgb, var(--gz-surface) 55%, var(--gz-surface-2)) !important;
+}
+#site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar :is(button, .ql-picker) { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap .bb-editor-wrapper:not(.read-only) :is(.editor-content-container, .bb-editor-container) { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
+#site-wrap .bb-editor-wrapper:not(.read-only) .ql-editor.ql-blank::before { color: var(--gz-ink-faint) !important; font-style: normal !important; }
+#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar { padding: 0.3rem 0.9rem 0.45rem !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; text-align: right; font-size: 12px; color: var(--gz-ink-faint) !important; }
+#site-wrap .bb-editor-wrapper:not(.read-only) .status-bar * { font-style: normal !important; color: inherit !important; }
+
+/* ---- assessment pages (an assignment or test attempt, its submission view): Ultra lays out an
+   "authoring" column and a "details" column. ---- */
+/* Instructions: one card. Ultra nests a box in a box in the accordion; the inner ones go flat. */
+#site-wrap [class*="makeStylesinstructionsWrapper-"] { background: transparent !important; }
+#site-wrap [class*="makeStylesinstructionsWrapper-"] .bb-editor-container.is-read-only { background: transparent !important; border: 0 !important; padding: 0.75rem 0.5rem 0.25rem !important; }
+/* Details stay in view while the instructions scroll; a long description scrolls inside them. */
+#site-wrap [class*="makeStylesauthoring-"] + [class*="makeStylesdetails-"] { position: sticky; top: 1.5rem; align-self: flex-start; }
+#site-wrap [class*="makeStylesauthoring-"] + [class*="makeStylesdetails-"] svg.MuiSvgIcon-root { color: var(--gz-accent) !important; }
+#site-wrap [class*="makeStylesauthoring-"] + [class*="makeStylesdetails-"] h3 + span.MuiTypography-body1 { display: block; max-height: 10lh; overflow-y: auto; overscroll-behavior: contain; color: var(--gz-ink-muted) !important; }
+/* Submission: a plain rule above it, a roomy writing area, and a drop zone that answers the pointer. */
+#site-wrap [class*="makeStylessubmission-"] { border-top-style: solid !important; }
+#site-wrap [class*="makeStylessubmission-"] .ql-editor { min-height: 11rem; }
+#site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"] {
+  border: 2px dashed color-mix(in srgb, var(--gz-line-strong) 70%, var(--gz-accent)) !important; border-radius: var(--gz-radius) !important;
+  background: color-mix(in srgb, var(--gz-surface) 70%, transparent) !important;
+  transition: border-color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease);
+}
+#site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"]:is(:hover, :focus-within) { border-color: var(--gz-accent) !important; background: color-mix(in srgb, var(--gz-accent-soft) 50%, var(--gz-surface)) !important; }
+#site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"] svg { color: var(--gz-accent) !important; }
+/* The Exit button in the item header: Ultra paints it #404040. */
+#site-wrap header[class*="makeStylesheader-"] .MuiButtonBase-root[class*="makeStylescontained-"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-radius: var(--gz-radius-sm) !important; }
+
+/* ---- empty states: centred, quieter ---- */
+#site-wrap :is(.js-empty-state, [class*="empty-state"]) { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-faint) !important; border-color: color-mix(in srgb, var(--gz-line-strong) 70%, transparent) !important; }
+
+/* ---- course header pieces Ultra paints #404040 ---- */
+course-page-header > header [data-analytics-id="course.header.home"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-radius: var(--gz-radius-sm) !important; }
+course-page-header > header .MuiDivider-root { background-color: var(--gz-line) !important; }
+
+/* ---- row actions: a solid MUI button repeated on every gradebook row is noise; tonal, like .button ---- */
+#site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
+#site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained:hover { background: color-mix(in srgb, var(--gz-accent) 22%, var(--gz-surface)) !important; border-color: var(--gz-accent) !important; filter: none; }
+
+/* ---- review state (the circle before each item): not started is quiet, started is accent, done is ok ---- */
+#site-wrap .js-review-state-icon-button[aria-checked="false"] { color: var(--gz-ink-faint) !important; }
+#site-wrap .js-review-state-icon-button[aria-checked="mixed"] { color: var(--gz-accent) !important; }
+#site-wrap .js-review-state-icon-button[aria-checked="true"] { color: var(--gz-ok) !important; }
+
+/* ---- course banner: the title sits on the course image, so it is light on every palette ---- */
+#site-wrap course-banner [class*="titleContainer"], #site-wrap course-banner [class*="titleContainer"] * { color: #fff !important; text-shadow: 0 1px 12px rgb(0 0 0 / 0.55); }
+
+/* ---- hover fills Ultra hard-codes as #f0f0f0 (the sweep only sees resting colours) ---- */
+#site-wrap :is([class*="courseCard"], .MuiListItemButton-root):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 45%, transparent) !important; }
+
+/* ---- density ---- */
+#site-wrap [class*="makeStylescontentList-"] { gap: calc(20px * var(--gz-space)) !important; }
+#site-wrap .content-list-item .itemContainer, #site-wrap .content-list-item .itemContainer > div { padding: calc(8px * var(--gz-space)) !important; }
+#site-wrap .element-card { padding-top: calc(6px * var(--gz-space)) !important; padding-bottom: calc(6px * var(--gz-space)) !important; }
+
+/* ---- line height: running text only (course content, posts, announcements), not UI labels ---- */
+#site-wrap :is(.ql-editor, .js-description, .bbml-content, .vtbegenerated) :is(p, li, div, span) , #site-wrap :is(.ql-editor, .js-description) { line-height: var(--gz-leading) !important; }
+
+/* ======================================================================================
+   Hover, focus and tooltips: one language for everything you can point at.
+   ====================================================================================== */
+:root {
+  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface));
+  --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
+  --gz-tip-bg: color-mix(in srgb, var(--gz-surface) 78%, var(--gz-line-strong));
+}
+
+/* Fills Ultra lights up only on hover or focus; content.js tags them on first contact. */
+[data-gz-hover]:is(:hover, :focus, :focus-visible, .Mui-focusVisible) { background-color: var(--gz-hover-fill) !important; }
+
+/* Cards: everything card-shaped lifts the same way (the outline and course cards already did). */
+#site-wrap :is(.element-list-row, .messages-container-summary) {
+  transition: var(--gz-card-transition) !important;
+}
+#site-wrap .element-list-row { border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important; background: var(--gz-surface) !important; }
+#site-wrap :is(.element-list-row, .messages-container-summary):hover {
+  transform: var(--gz-lift);
+  box-shadow: var(--gz-hover-shadow) !important;
+  border-color: var(--gz-line-strong) !important;
+}
+
+/* Rows (nested outline items, table rows, menu items) tint instead of lifting. */
+#site-wrap :is(.content-list-item .content-list-item .itemContainer, table tr td, .MuiMenuItem-root, .MuiListItemButton-root) { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease) !important; }
+
+/* Icon buttons (the ⋯ menus, the eye, search, close): a round tint behind the icon. */
+#site-wrap :is(.MuiIconButton-root, button.icon.clear, a.standard-button, button.standard-button) {
+  border-radius: 999px !important;
+  transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring) !important;
+}
+#site-wrap :is(.MuiIconButton-root, button.icon.clear, a.standard-button, button.standard-button):is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent) !important;
+  color: var(--gz-accent) !important;
+}
+
+/* Course tab strip: hovered tabs tint like rows. */
+#site-wrap .bb-ui-navigation-list-horizontal a.MuiListItemButton-root { border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0 !important; }
+#site-wrap .bb-ui-navigation-list-horizontal a.MuiListItemButton-root:hover { background: var(--gz-row-hover) !important; }
+
+/* Links: the underline sits clear of descenders and fades in instead of snapping. */
+#site-wrap :where(a, .MuiLink-root) { text-underline-offset: 0.2em; text-decoration-thickness: 1px; transition: color var(--gz-t) var(--gz-ease), text-decoration-color var(--gz-t) var(--gz-ease); }
+
+/* Keyboard focus: always the accent, whatever ring Ultra draws. */
+#site-wrap :focus-visible, :is(.MuiModal-root, .MuiPopper-root) :focus-visible { outline-color: var(--gz-accent) !important; }
+
+/* ---- tooltips: every flavour Ultra ships (Foundation .tooltip, enhanced-tooltip, MUI, Fluent,
+   keyboard hints) and Glaze's own (.gz-tip, which replaces native title tooltips) ---- */
+:is(.tooltip, span.enhanced-tooltip, .MuiTooltip-tooltip, .ms-Tooltip, .ms-Callout-main, .keyboard-tooltip, .editor-keyboard-tooltip, .gz-tip) {
+  background: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent) !important;
+  color: var(--gz-ink) !important;
+  border: 1px solid var(--gz-line-strong) !important;
+  border-radius: var(--gz-radius-sm) !important;
+  box-shadow: var(--gz-shadow) !important;
+  backdrop-filter: blur(var(--gz-glass));
+}
+:is(.tooltip, span.enhanced-tooltip, .ms-Tooltip) * { color: inherit !important; }
+.MuiTooltip-arrow { color: var(--gz-tip-bg) !important; }
+.MuiTooltip-arrow::before { border: 1px solid var(--gz-line-strong); }
+.ms-Callout-beak, .ms-Callout-beakCurtain { background: var(--gz-tip-bg) !important; }
+/* Arrows: Foundation's nub is a border triangle with a white ::after; enhanced-tooltip's pip is a rotated box. */
+.tooltip > .nub { border-color: transparent !important; }
+.tooltip > .nub::after { background-color: var(--gz-tip-bg) !important; border-color: var(--gz-line-strong) transparent transparent var(--gz-line-strong) !important; }
+span.enhanced-tooltip span.enhanced-tooltip-pip { background-color: var(--gz-tip-bg) !important; border-color: transparent var(--gz-line-strong) var(--gz-line-strong) transparent !important; }
+.gz-tip {
+  position: fixed; z-index: 2147483002; max-width: 280px; padding: 0.35rem 0.6rem; pointer-events: none;
+  font: 500 12px/1.35 var(--gz-font); letter-spacing: 0.01em; white-space: normal; overflow-wrap: anywhere;
+}
+.gz-tip-sub { display: block; margin-top: 0.1rem; font-weight: 400; color: var(--gz-ink-muted); }

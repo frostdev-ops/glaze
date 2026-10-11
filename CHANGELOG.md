@@ -4,6 +4,16 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A Safari Mac app, released separately as `safari-v2.0.1`.
+
+### Changed
+
+- The popup's "Open the editor" button works whether or not the browser returns a promise.
+
 ## [2.0.1] — 2026-10-11
 
 ### Fixed

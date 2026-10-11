@@ -20,9 +20,11 @@ GZ_UI.load().then((s) => {
   $('#enabled').addEventListener('change', (e) => { s.enabled = e.target.checked; save(['enabled']); render(); });
   $('#motion').addEventListener('change', (e) => { s.motion.level = e.target.value; save(['motion']); });
   // openOptionsPage reuses an editor tab that is already open, but Chrome sometimes refuses it
-  // ("Could not create an options page"); a plain tab always opens.
+  // ("Could not create an options page"); a plain tab always opens. Promise.resolve: not every
+  // browser returns a promise here.
   $('#editor').addEventListener('click', () => {
-    chrome.runtime.openOptionsPage().catch(() => chrome.tabs.create({ url: chrome.runtime.getURL('options.html') }));
+    const tab = () => chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+    try { Promise.resolve(chrome.runtime.openOptionsPage()).catch(tab); } catch { tab(); }
   });
   render();
 });

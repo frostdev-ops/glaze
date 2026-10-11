@@ -1,0 +1,637 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 110;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3B8EDA70307C30D300B0DD77 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDA6F307C30D300B0DD77 /* AppDelegate.swift */; };
+		3B8EDA74307C30D300B0DD77 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA72307C30D300B0DD77 /* Main.html */; };
+		3B8EDA76307C30D300B0DD77 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA75307C30D300B0DD77 /* Icon.png */; };
+		3B8EDA78307C30D300B0DD77 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA77307C30D300B0DD77 /* Style.css */; };
+		3B8EDA7A307C30D300B0DD77 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA79307C30D300B0DD77 /* Script.js */; };
+		3B8EDA7C307C30D300B0DD77 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDA7B307C30D300B0DD77 /* ViewController.swift */; };
+		3B8EDA7F307C30D300B0DD77 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA7D307C30D300B0DD77 /* Main.storyboard */; };
+		3B8EDA81307C30D500B0DD77 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA80307C30D500B0DD77 /* Assets.xcassets */; };
+		3B8EDA88307C30D500B0DD77 /* Glaze Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3B8EDA8D307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */; };
+		3B8EDAA9307C30D500B0DD77 /* preview.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA99307C30D500B0DD77 /* preview.html */; };
+		3B8EDAAA307C30D500B0DD77 /* ui.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9A307C30D500B0DD77 /* ui.js */; };
+		3B8EDAAB307C30D500B0DD77 /* theme.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9B307C30D500B0DD77 /* theme.css */; };
+		3B8EDAAC307C30D500B0DD77 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9C307C30D500B0DD77 /* popup.js */; };
+		3B8EDAAD307C30D500B0DD77 /* extras.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9D307C30D500B0DD77 /* extras.css */; };
+		3B8EDAAE307C30D500B0DD77 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9E307C30D500B0DD77 /* popup.html */; };
+		3B8EDAAF307C30D500B0DD77 /* options.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9F307C30D500B0DD77 /* options.js */; };
+		3B8EDAB0307C30D500B0DD77 /* ui.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA0307C30D500B0DD77 /* ui.css */; };
+		3B8EDAB1307C30D500B0DD77 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA1307C30D500B0DD77 /* icons */; };
+		3B8EDAB2307C30D500B0DD77 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA2307C30D500B0DD77 /* manifest.json */; };
+		3B8EDAB3307C30D500B0DD77 /* lib in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA3307C30D500B0DD77 /* lib */; };
+		3B8EDAB4307C30D500B0DD77 /* options.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA4307C30D500B0DD77 /* options.html */; };
+		3B8EDAB5307C30D500B0DD77 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA5307C30D500B0DD77 /* content.js */; };
+		3B8EDAB6307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
+		3B8EDAB7307C30D500B0DD77 /* motion.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA7307C30D500B0DD77 /* motion.css */; };
+		3B8EDAB8307C30D500B0DD77 /* defaults.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA8307C30D500B0DD77 /* defaults.js */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3B8EDA89307C30D500B0DD77 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3B8EDA64307C30D300B0DD77 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3B8EDA86307C30D500B0DD77;
+			remoteInfo = "Glaze Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		3B8EDA94307C30D500B0DD77 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				3B8EDA88307C30D500B0DD77 /* Glaze Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		3B8EDA6C307C30D300B0DD77 /* Glaze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glaze.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B8EDA6F307C30D300B0DD77 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		3B8EDA73307C30D300B0DD77 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		3B8EDA75307C30D300B0DD77 /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		3B8EDA77307C30D300B0DD77 /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		3B8EDA79307C30D300B0DD77 /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		3B8EDA7B307C30D300B0DD77 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		3B8EDA7E307C30D300B0DD77 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		3B8EDA80307C30D500B0DD77 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3B8EDA82307C30D500B0DD77 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Glaze Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		3B8EDA8E307C30D500B0DD77 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		3B8EDA99307C30D500B0DD77 /* preview.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = preview.html; path = Resources/preview.html; sourceTree = "<group>"; };
+		3B8EDA9A307C30D500B0DD77 /* ui.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = ui.js; path = Resources/ui.js; sourceTree = "<group>"; };
+		3B8EDA9B307C30D500B0DD77 /* theme.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = theme.css; path = Resources/theme.css; sourceTree = "<group>"; };
+		3B8EDA9C307C30D500B0DD77 /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path = Resources/popup.js; sourceTree = "<group>"; };
+		3B8EDA9D307C30D500B0DD77 /* extras.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = extras.css; path = Resources/extras.css; sourceTree = "<group>"; };
+		3B8EDA9E307C30D500B0DD77 /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = popup.html; path = Resources/popup.html; sourceTree = "<group>"; };
+		3B8EDA9F307C30D500B0DD77 /* options.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = options.js; path = Resources/options.js; sourceTree = "<group>"; };
+		3B8EDAA0307C30D500B0DD77 /* ui.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = ui.css; path = Resources/ui.css; sourceTree = "<group>"; };
+		3B8EDAA1307C30D500B0DD77 /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = Resources/icons; sourceTree = "<group>"; };
+		3B8EDAA2307C30D500B0DD77 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = Resources/manifest.json; sourceTree = "<group>"; };
+		3B8EDAA3307C30D500B0DD77 /* lib */ = {isa = PBXFileReference; lastKnownFileType = folder; name = lib; path = Resources/lib; sourceTree = "<group>"; };
+		3B8EDAA4307C30D500B0DD77 /* options.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = options.html; path = Resources/options.html; sourceTree = "<group>"; };
+		3B8EDAA5307C30D500B0DD77 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = content.js; path = Resources/content.js; sourceTree = "<group>"; };
+		3B8EDAA6307C30D500B0DD77 /* fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fonts; path = Resources/fonts; sourceTree = "<group>"; };
+		3B8EDAA7307C30D500B0DD77 /* motion.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = motion.css; path = Resources/motion.css; sourceTree = "<group>"; };
+		3B8EDAA8307C30D500B0DD77 /* defaults.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = defaults.js; path = Resources/defaults.js; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3B8EDA69307C30D300B0DD77 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+		3B8EDA84307C30D500B0DD77 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3B8EDA63307C30D300B0DD77 = {
+			isa = PBXGroup;
+			children = (
+				3B8EDA6E307C30D300B0DD77 /* Glaze */,
+				3B8EDA8B307C30D500B0DD77 /* Glaze Extension */,
+				3B8EDA6D307C30D300B0DD77 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		3B8EDA6D307C30D300B0DD77 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3B8EDA6C307C30D300B0DD77 /* Glaze.app */,
+				3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3B8EDA6E307C30D300B0DD77 /* Glaze */ = {
+			isa = PBXGroup;
+			children = (
+				3B8EDA6F307C30D300B0DD77 /* AppDelegate.swift */,
+				3B8EDA7B307C30D300B0DD77 /* ViewController.swift */,
+				3B8EDA7D307C30D300B0DD77 /* Main.storyboard */,
+				3B8EDA80307C30D500B0DD77 /* Assets.xcassets */,
+				3B8EDA82307C30D500B0DD77 /* Info.plist */,
+				3B8EDA71307C30D300B0DD77 /* Resources */,
+			);
+			path = Glaze;
+			sourceTree = "<group>";
+		};
+		3B8EDA71307C30D300B0DD77 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				3B8EDA72307C30D300B0DD77 /* Main.html */,
+				3B8EDA75307C30D300B0DD77 /* Icon.png */,
+				3B8EDA77307C30D300B0DD77 /* Style.css */,
+				3B8EDA79307C30D300B0DD77 /* Script.js */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		3B8EDA8B307C30D500B0DD77 /* Glaze Extension */ = {
+			isa = PBXGroup;
+			children = (
+				3B8EDA98307C30D500B0DD77 /* Resources */,
+				3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */,
+				3B8EDA8E307C30D500B0DD77 /* Info.plist */,
+			);
+			path = "Glaze Extension";
+			sourceTree = "<group>";
+		};
+		3B8EDA98307C30D500B0DD77 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				3B8EDA99307C30D500B0DD77 /* preview.html */,
+				3B8EDA9A307C30D500B0DD77 /* ui.js */,
+				3B8EDA9B307C30D500B0DD77 /* theme.css */,
+				3B8EDA9C307C30D500B0DD77 /* popup.js */,
+				3B8EDA9D307C30D500B0DD77 /* extras.css */,
+				3B8EDA9E307C30D500B0DD77 /* popup.html */,
+				3B8EDA9F307C30D500B0DD77 /* options.js */,
+				3B8EDAA0307C30D500B0DD77 /* ui.css */,
+				3B8EDAA1307C30D500B0DD77 /* icons */,
+				3B8EDAA2307C30D500B0DD77 /* manifest.json */,
+				3B8EDAA3307C30D500B0DD77 /* lib */,
+				3B8EDAA4307C30D500B0DD77 /* options.html */,
+				3B8EDAA5307C30D500B0DD77 /* content.js */,
+				3B8EDAA6307C30D500B0DD77 /* fonts */,
+				3B8EDAA7307C30D500B0DD77 /* motion.css */,
+				3B8EDAA8307C30D500B0DD77 /* defaults.js */,
+			);
+			name = Resources;
+			path = "Glaze Extension";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3B8EDA6B307C30D300B0DD77 /* Glaze */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B8EDA95307C30D500B0DD77 /* Build configuration list for PBXNativeTarget "Glaze" */;
+			buildPhases = (
+				3B8EDA68307C30D300B0DD77 /* Sources */,
+				3B8EDA69307C30D300B0DD77 /* Frameworks */,
+				3B8EDA6A307C30D300B0DD77 /* Resources */,
+				3B8EDA94307C30D500B0DD77 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3B8EDA8A307C30D500B0DD77 /* PBXTargetDependency */,
+			);
+			name = Glaze;
+			productName = Glaze;
+			productReference = 3B8EDA6C307C30D300B0DD77 /* Glaze.app */;
+			productType = "com.apple.product-type.application";
+		};
+		3B8EDA86307C30D500B0DD77 /* Glaze Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B8EDA91307C30D500B0DD77 /* Build configuration list for PBXNativeTarget "Glaze Extension" */;
+			buildPhases = (
+				3B8EDA83307C30D500B0DD77 /* Sources */,
+				3B8EDA84307C30D500B0DD77 /* Frameworks */,
+				3B8EDA85307C30D500B0DD77 /* Resources */,
+			);
+			buildRules = (
+			);
+			name = "Glaze Extension";
+			productName = "Glaze Extension";
+			productReference = 3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3B8EDA64307C30D300B0DD77 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					3B8EDA6B307C30D300B0DD77 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					3B8EDA86307C30D500B0DD77 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+				};
+			};
+			buildConfigurationList = 3B8EDA67307C30D300B0DD77 /* Build configuration list for PBXProject "Glaze" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 3B8EDA63307C30D300B0DD77;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3B8EDA6D307C30D300B0DD77 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3B8EDA6B307C30D300B0DD77 /* Glaze */,
+				3B8EDA86307C30D500B0DD77 /* Glaze Extension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3B8EDA6A307C30D300B0DD77 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+				3B8EDA76307C30D300B0DD77 /* Icon.png in Resources */,
+				3B8EDA7F307C30D300B0DD77 /* Main.storyboard in Resources */,
+				3B8EDA7A307C30D300B0DD77 /* Script.js in Resources */,
+				3B8EDA74307C30D300B0DD77 /* Main.html in Resources */,
+				3B8EDA81307C30D500B0DD77 /* Assets.xcassets in Resources */,
+				3B8EDA78307C30D300B0DD77 /* Style.css in Resources */,
+			);
+		};
+		3B8EDA85307C30D500B0DD77 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+				3B8EDAAA307C30D500B0DD77 /* ui.js in Resources */,
+				3B8EDAAE307C30D500B0DD77 /* popup.html in Resources */,
+				3B8EDAB2307C30D500B0DD77 /* manifest.json in Resources */,
+				3B8EDAB6307C30D500B0DD77 /* fonts in Resources */,
+				3B8EDAAD307C30D500B0DD77 /* extras.css in Resources */,
+				3B8EDAB5307C30D500B0DD77 /* content.js in Resources */,
+				3B8EDAB1307C30D500B0DD77 /* icons in Resources */,
+				3B8EDAB0307C30D500B0DD77 /* ui.css in Resources */,
+				3B8EDAAF307C30D500B0DD77 /* options.js in Resources */,
+				3B8EDAA9307C30D500B0DD77 /* preview.html in Resources */,
+				3B8EDAB3307C30D500B0DD77 /* lib in Resources */,
+				3B8EDAB7307C30D500B0DD77 /* motion.css in Resources */,
+				3B8EDAAB307C30D500B0DD77 /* theme.css in Resources */,
+				3B8EDAAC307C30D500B0DD77 /* popup.js in Resources */,
+				3B8EDAB8307C30D500B0DD77 /* defaults.js in Resources */,
+				3B8EDAB4307C30D500B0DD77 /* options.html in Resources */,
+			);
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3B8EDA68307C30D300B0DD77 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				3B8EDA7C307C30D300B0DD77 /* ViewController.swift in Sources */,
+				3B8EDA70307C30D300B0DD77 /* AppDelegate.swift in Sources */,
+			);
+		};
+		3B8EDA83307C30D500B0DD77 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				3B8EDA8D307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3B8EDA8A307C30D500B0DD77 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3B8EDA86307C30D500B0DD77 /* Glaze Extension */;
+			targetProxy = 3B8EDA89307C30D500B0DD77 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		3B8EDA72307C30D300B0DD77 /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				3B8EDA73307C30D300B0DD77 /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		3B8EDA7D307C30D300B0DD77 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				3B8EDA7E307C30D300B0DD77 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		3B8EDA8F307C30D500B0DD77 /* Debug configuration for PBXProject "Glaze" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		3B8EDA90307C30D500B0DD77 /* Release configuration for PBXProject "Glaze" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		3B8EDA92307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze Extension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Glaze Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Glaze Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.frostdev.Glaze.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3B8EDA93307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze Extension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Glaze Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Glaze Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.frostdev.Glaze.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3B8EDA96307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Glaze/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Glaze;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				INFOPLIST_KEY_NSViewGestureRecognizerIsExclusive = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.frostdev.Glaze;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3B8EDA97307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Glaze/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Glaze;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				INFOPLIST_KEY_NSViewGestureRecognizerIsExclusive = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.frostdev.Glaze;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3B8EDA67307C30D300B0DD77 /* Build configuration list for PBXProject "Glaze" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B8EDA8F307C30D500B0DD77 /* Debug configuration for PBXProject "Glaze" */,
+				3B8EDA90307C30D500B0DD77 /* Release configuration for PBXProject "Glaze" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		3B8EDA91307C30D500B0DD77 /* Build configuration list for PBXNativeTarget "Glaze Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B8EDA92307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze Extension" */,
+				3B8EDA93307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze Extension" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		3B8EDA95307C30D500B0DD77 /* Build configuration list for PBXNativeTarget "Glaze" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B8EDA96307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze" */,
+				3B8EDA97307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze" */,
+			);
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 3B8EDA64307C30D300B0DD77 /* Project object */;
+	validationLevel = 1;
+}

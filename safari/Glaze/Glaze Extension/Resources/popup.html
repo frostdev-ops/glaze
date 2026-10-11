@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Glaze</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  body { width: 320px; padding: 0.875rem 1rem 1rem; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
+  section { padding: 0.75rem 0; border-top: 1px solid var(--gz-line); }
+  body.off section { opacity: 0.45; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .row h2 { margin: 0; }
+  #editor { width: 100%; margin-top: 0.25rem; }
+  .hint { margin-top: 0.6rem; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Glaze</h1>
+    <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
+  </header>
+
+  <section>
+    <h2>Palette</h2>
+    <div class="swatches" id="presets"></div>
+  </section>
+
+  <section>
+    <div class="row">
+      <h2>Motion</h2>
+      <div class="seg" id="motion" role="radiogroup" aria-label="Motion level">
+        <label><input type="radio" name="motion" value="off">Off</label>
+        <label><input type="radio" name="motion" value="subtle">Subtle</label>
+        <label><input type="radio" name="motion" value="expressive">Expressive</label>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <button type="button" class="primary" id="editor">Open the editor</button>
+    <p class="hint" id="hint">Changes apply to open Blackboard Ultra tabs immediately.</p>
+  </section>
+
+  <script src="lib/color.js"></script>
+  <script src="defaults.js"></script>
+  <script src="ui.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

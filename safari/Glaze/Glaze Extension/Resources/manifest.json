@@ -1,0 +1,63 @@
+{
+  "manifest_version": 3,
+  "name": "Glaze for Blackboard Ultra",
+  "version": "2.0.1",
+  "description": "Restyle Blackboard Ultra: palettes, fonts, backgrounds, motion and at-a-glance extras. Works on any institution's Ultra.",
+  "permissions": [
+    "storage"
+  ],
+  "minimum_chrome_version": "113",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "glaze@frostdev.io",
+      "strict_min_version": "121.0"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Glaze",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/ultra/*"
+      ],
+      "js": [
+        "lib/color.js",
+        "lib/page.js",
+        "defaults.js",
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "theme.css",
+        "motion.css",
+        "extras.css",
+        "fonts/*.woff2"
+      ],
+      "matches": [
+        "https://*/*"
+      ]
+    }
+  ]
+}

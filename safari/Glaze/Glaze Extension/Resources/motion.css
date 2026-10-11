@@ -1,0 +1,100 @@
+/* Glaze — motion. Every animated rule in theme.css and extras.css reads these knobs; the level
+   (html[data-gz-motion], set by content.js) and the three fine-tune switches only change knobs,
+   so no rule ever branches on motion itself. */
+:root {
+  --gz-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --gz-spring: linear(0, 0.3538 4.1%, 0.6624 8.4%, 0.8613 12.6%, 0.9823 17%, 1.0407 21.6%, 1.0618 26.5%, 1.0532 32.2%, 1.0157 44.4%, 0.998 55.6%, 0.9954 66.9%, 1);
+  --gz-t: 0.25s;
+  --gz-t-slow: 0.5s;
+  --gz-enter: gz-in 0.6s var(--gz-spring) backwards;
+  --gz-enter-page: gz-in 0.45s var(--gz-ease) backwards;
+  --gz-enter-panel: gz-fade 0.3s var(--gz-ease) backwards;
+  --gz-tip-in: gz-tip 0.16s var(--gz-ease) backwards;
+  --gz-stagger: 0.05s;
+  --gz-lift: translateY(-2px);
+  --gz-nudge: translateX(3px);
+  --gz-press: 0.96; /* the `scale` property: it adds to a transform Ultra positions a button with, instead of replacing it */
+  --gz-pop: scale(1.15);
+  --gz-hover-shadow: var(--gz-shadow);
+  --gz-hover-filter: brightness(1.08);
+  --gz-ambient: paused;
+  --gz-card-transition: transform var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease);
+}
+
+/* Expressive: bigger, bouncier, and the ambient background drifts. */
+html[data-gz-motion="expressive"] {
+  --gz-t-slow: 0.7s;
+  --gz-spring: linear(0, 0.2 3%, 0.55 7.5%, 0.86 12%, 1.06 17%, 1.14 22%, 1.12 27%, 1.04 35%, 0.98 45%, 0.99 60%, 1);
+  --gz-enter: gz-rise 0.8s var(--gz-spring) backwards;
+  --gz-enter-panel: gz-focus 0.45s var(--gz-ease) backwards;
+  --gz-tip-in: gz-tip 0.34s var(--gz-spring) backwards;
+  --gz-stagger: 0.07s;
+  --gz-lift: translateY(-4px) scale(1.01);
+  --gz-nudge: translateX(5px);
+  --gz-press: 0.93;
+  --gz-pop: scale(1.3) rotate(-8deg);
+  --gz-ambient: running;
+}
+
+/* Off: nothing moves. The fine-tune switches zero one group each. */
+html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s; }
+html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-tip-in: none; --gz-stagger: 0s; }
+html[data-gz-motion="off"], html[data-gz-no-hover] { --gz-lift: none; --gz-nudge: none; --gz-press: none; --gz-pop: none; --gz-hover-shadow: none; --gz-hover-filter: none; }
+html[data-gz-motion="off"] { --gz-ambient: paused; }
+/* content.js maps the system setting to "off" unless the user opted out; this only covers the
+   moment before it runs. */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-ambient: paused; }
+}
+
+@keyframes gz-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes gz-rise { from { opacity: 0; transform: translateY(18px) scale(0.98); } to { opacity: 1; transform: none; } }
+/* Panels: Ultra already slides them in (a transform transition), so Glaze only fades them;
+   a transform here would fight Ultra's. Expressive adds a blur-to-sharp focus, still no transform. */
+@keyframes gz-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gz-focus { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: none; } }
+@keyframes gz-tip { from { opacity: 0; transform: translateY(var(--gz-tip-dy, 4px)) scale(0.94); } to { opacity: 1; transform: none; } }
+
+/* Entrances: pages fade up, panels fade in while Ultra slides them, cards stagger. With the
+   enter knobs at none the delays are 0 too, so nothing waits invisible. Fill is backwards, never
+   both: a finished transform or filter animation that keeps filling leaves the element a containing
+   block for position: fixed, which made every panel's background layer scroll sideways.
+   Content inside a panel doesn't fade up as well: one movement per opening. */
+.route-view-container, .panel-wrap { animation: var(--gz-enter-page); }
+#site-wrap :is(.bb-offcanvas-panel, .peek-panel__content-wrapper) :is(.route-view-container, .panel-wrap) { animation: none; }
+#site-wrap .peek-panel__content-wrapper, #site-wrap .bb-offcanvas-panel, .ms-Panel-main { animation: var(--gz-enter-panel); }
+/* Tooltips grow from the side they point at. */
+:is(.tooltip, span.enhanced-tooltip, .ms-Tooltip, .gz-tip) { animation: var(--gz-tip-in); }
+.gz-tip[data-side="bottom"] { --gz-tip-dy: -4px; }
+.element-card, .content-list-item { animation: var(--gz-enter); }
+.element-card:nth-child(2), .content-list-item:nth-child(2) { animation-delay: calc(var(--gz-stagger) * 1); }
+.element-card:nth-child(3), .content-list-item:nth-child(3) { animation-delay: calc(var(--gz-stagger) * 2); }
+.element-card:nth-child(4), .content-list-item:nth-child(4) { animation-delay: calc(var(--gz-stagger) * 3); }
+.element-card:nth-child(5), .content-list-item:nth-child(5) { animation-delay: calc(var(--gz-stagger) * 4); }
+.element-card:nth-child(n+6), .content-list-item:nth-child(n+6) { animation-delay: calc(var(--gz-stagger) * 5); }
+
+/* Course tab strip: the current tab's bar grows from the centre each time the tab changes. */
+#site-wrap .bb-ui-navigation-list-horizontal a.MuiListItemButton-root[aria-current=page]::after {
+  content: ""; position: absolute; left: 10%; right: 10%; bottom: 0; height: 3px; border-radius: 3px 3px 0 0;
+  background: var(--gz-accent); animation: gz-grow var(--gz-t-slow) var(--gz-spring) both;
+}
+@keyframes gz-grow { from { transform: scaleX(0); } to { transform: none; } }
+
+/* Expressive: lifted cards pick up a faint accent edge. */
+html[data-gz-motion="expressive"] :is(.element-card, .content-list-item .itemContainer):hover {
+  box-shadow: var(--gz-hover-shadow), 0 0 0 1px color-mix(in srgb, var(--gz-accent) 40%, transparent) !important;
+}
+
+/* Completion burst: content.js drops one at the review circle when an item flips to complete, in
+   Expressive only, and removes it when done. */
+.gz-burst { position: fixed; z-index: 2147483001; width: 0; height: 0; pointer-events: none; }
+.gz-burst i {
+  position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--gz-ok); animation: gz-burst 0.8s var(--gz-ease) forwards;
+}
+.gz-burst i:nth-child(3n) { background: var(--gz-accent); }
+.gz-burst i:nth-child(3n + 1) { background: var(--gz-warn); width: 4px; height: 4px; }
+@keyframes gz-burst {
+  from { transform: rotate(var(--a)) translateX(4px) scale(1); opacity: 1; }
+  to { transform: rotate(var(--a)) translateX(30px) scale(0.3); opacity: 0; }
+}

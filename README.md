@@ -7,7 +7,7 @@
 
 # Glaze for Blackboard Ultra
 
-Glaze is a Chrome extension that restyles Blackboard Ultra. It replaces Ultra's palette with one you
+Glaze is a Chrome and Safari extension that restyles Blackboard Ultra. It replaces Ultra's palette with one you
 control, reshapes the pages around it, and adds small helpers you can see at a glance. It works on any
 institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/` on its own
 domain.
@@ -35,6 +35,41 @@ domain.
 3. Enable **Developer mode** (top right).
 4. Click **Load unpacked** and select the repository folder.
 5. Open your Blackboard Ultra site and click the Glaze icon.
+
+## Safari
+
+Download the signed and notarized **Safari Mac app** from
+[GitHub Releases](https://github.com/frostdev-ops/glaze/releases) (the `safari-v*` release). It runs
+on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
+the frosted-glass blur needs Safari 18.
+
+1. Unzip `glaze-<version>-safari-macos.zip` and move `Glaze.app` into Applications.
+2. Open Glaze once, then choose **Quit and Open Safari Settings…**.
+3. In Safari Settings → Extensions, turn Glaze on, and allow it on your Blackboard site.
+
+Safari loads Glaze from this Mac app. The Xcode project is in `safari/`; to build the app yourself
+you need Xcode:
+
+```sh
+sh scripts/build-safari.sh
+```
+
+That packages the extension, copies it into a temporary copy of the project, and builds a universal
+app in `release/Glaze.app`, signed with the configured Developer ID. Override `SAFARI_SIGN_IDENTITY`
+and `SAFARI_TEAM_ID` to use a different identity. Safari only installs apps from outside the App Store
+when they are notarized, so pass a saved `notarytool` Keychain profile:
+
+```sh
+NOTARY_PROFILE=your-profile sh scripts/build-safari.sh
+```
+
+or set `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID` for an App Store Connect API key. The script
+then notarizes the app, staples the ticket, checks Gatekeeper, and writes
+`release/glaze-<version>-safari-macos.zip` with its SHA-256 checksum. Without credentials the zip is
+marked `unnotarized` and is for development only.
+
+`scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
+Use it only when you mean to regenerate the project.
 
 ## How it works
 
