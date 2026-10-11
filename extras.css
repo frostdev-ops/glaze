@@ -2,9 +2,11 @@
    attribute content.js sets, so with the feature off none of it matches. */
 
 /* ---- backgrounds ----
-   One fixed layer, drawn by ::before: on <html> for base pages, and again on each Ultra overlay
-   (a course opens as a panel over the base page, an item as a panel over the course). Each overlay
-   paints the same viewport-fixed layer, so it covers what is underneath and the picture lines up.
+   One fixed layer, drawn by ::before: on <html> for base pages, and again on each full-screen Ultra
+   overlay (a course opens as a panel over the base page, an item as a panel over the course). Each
+   overlay paints the same viewport-fixed layer, so it covers what is underneath and the picture
+   lines up. Slide-outs (.peek) cover only part of the screen: a viewport-sized layer would hide the
+   page beside them, so they get their own sheet in theme.css instead.
    The ground goes transparent so the layer shows; cards keep most of their surface.
    Layer = dim tint over the picture, then blurred. */
 html[data-gz-bg]:not([data-gz-bg="solid"]) {
@@ -17,10 +19,10 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) {
   background: var(--gz-surface-2) !important;
 }
 html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
-html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .peek-panel__content-wrapper, .bb-offcanvas-panel, .ms-Panel-main) { isolation: isolate; background: transparent !important; }
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; background: transparent !important; }
 /* :where() keeps this base layer at element specificity, so the per-kind rules below refine it. */
 html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before,
-html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .peek-panel__content-wrapper, .bb-offcanvas-panel, .ms-Panel-main)::before {
+html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offcanvas-panel):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before {
   content: "";
   position: fixed;
   inset: calc(var(--gz-bg-blur, 0px) * -2);
@@ -38,7 +40,7 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .pa
    the GPU slides the already-painted layer instead of repainting gradients every frame; the layer
    is oversized so the drift never shows an edge. */
 html[data-gz-bg="aurora"]::before,
-html[data-gz-bg="aurora"] :is(.panel-wrap, .peek-panel__content-wrapper, .bb-offcanvas-panel, .ms-Panel-main)::before {
+html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before {
   inset: -18%;
   background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)),
     radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-accent) 46%, transparent), transparent 70%),

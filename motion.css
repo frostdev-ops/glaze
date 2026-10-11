@@ -13,7 +13,7 @@
   --gz-stagger: 0.05s;
   --gz-lift: translateY(-2px);
   --gz-nudge: translateX(3px);
-  --gz-press: scale(0.96);
+  --gz-press: 0.96; /* the `scale` property: it adds to a transform Ultra positions a button with, instead of replacing it */
   --gz-pop: scale(1.15);
   --gz-hover-shadow: var(--gz-shadow);
   --gz-hover-filter: brightness(1.08);
@@ -31,7 +31,7 @@ html[data-gz-motion="expressive"] {
   --gz-stagger: 0.07s;
   --gz-lift: translateY(-4px) scale(1.01);
   --gz-nudge: translateX(5px);
-  --gz-press: scale(0.93);
+  --gz-press: 0.93;
   --gz-pop: scale(1.3) rotate(-8deg);
   --gz-ambient: running;
 }

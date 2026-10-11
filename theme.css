@@ -291,8 +291,8 @@ input, textarea, select, .MuiInputBase-root, .MuiOutlinedInput-root, .MuiSelect-
 .MuiButton-contained:hover { filter: var(--gz-hover-filter); }
 .MuiButton-contained.MuiButton-containedSecondary { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; }
 .MuiButton-outlined, .MuiButton-text, .standard-button { color: var(--gz-accent) !important; border-color: var(--gz-line-strong) !important; }
-button, .MuiButtonBase-root { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), filter var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease) !important; }
-button:active, .MuiButtonBase-root:active { transform: var(--gz-press); }
+button, .MuiButtonBase-root { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), filter var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring), scale var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease) !important; }
+button:active, .MuiButtonBase-root:active { scale: var(--gz-press); }
 .MuiMenu-paper, .MuiPopover-paper, .MuiDialog-paper { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; box-shadow: var(--gz-shadow) !important; }
 .MuiMenuItem-root { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
 .MuiMenuItem-root:hover { background: var(--gz-accent-soft) !important; }
@@ -337,6 +337,38 @@ th { background: var(--gz-surface) !important; }
 /* Off-canvas side panels (rubric details, settings sheets): the panel wrap and its Fluent header are white. */
 #site-wrap .bb-offcanvas-panel-wrap, #site-wrap .bb-offcanvas-panel, #site-wrap .panel-body, #site-wrap .ms-Panel-commands, #site-wrap .simple-header { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
 #site-wrap button.bb-close { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; }
+
+/* ---- slide-outs (Ultra's "peek" panels: settings, rubrics, details) ----
+   A sheet over the dimmed page: one step above the ground, with an edge and a shadow toward the
+   page. Inside it the ground is transparent, so the many pieces Ultra paints in the ground colour
+   don't patch over the sheet. */
+#site-wrap :is(.bb-offcanvas-panel.peek, .peek-panel__content-wrapper), .ms-Panel-main {
+  --gz-ground: transparent;
+  background: color-mix(in srgb, var(--gz-surface) 45%, var(--gz-surface-2)) !important;
+  border-left: 1px solid var(--gz-line-strong) !important;
+  box-shadow: -18px 0 48px var(--gz-shadow-ink) !important;
+}
+/* #site-wrap is overflow: hidden, but an off-screen helper of Ultra's sticks out past its right
+   edge, so opening a slide-out scrolls the whole page sideways and leaves a strip beside the sheet.
+   clip looks the same and can't be scrolled. */
+#site-wrap { overflow: clip !important; }
+#site-wrap :is(.peek, .peek-panel__content-wrapper) .peek-panel__content-wrapper { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+/* Attendance bleeds its sections 30px past both edges, so the panel scrolls sideways; Glaze's styled
+   (always-visible) scrollbars turned that into a bar along the bottom. */
+#site-wrap .peek-panel__container { overflow-x: hidden !important; }
+#site-wrap .bb-offcanvas-overlay { background: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 45%) 60%, transparent) !important; }
+#site-wrap .peek .panel-header { padding-bottom: 0.25rem; }
+#site-wrap .peek .panel-sub-title { color: var(--gz-ink-faint) !important; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+#site-wrap .peek .panel-footer { border-top: 1px solid var(--gz-line) !important; }
+/* The close button straddles the sheet's edge: a round button instead of a tab with a purple fold. */
+#site-wrap .peek button.bb-close {
+  border-radius: 999px !important; border-color: var(--gz-line-strong) !important; box-shadow: var(--gz-shadow) !important;
+  background: color-mix(in srgb, var(--gz-surface) 45%, var(--gz-surface-2)) !important;
+  transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease) !important;
+}
+/* Colour only: Ultra positions this button with a transform, so a hover transform moved it out from under the pointer. */
+#site-wrap .peek button.bb-close:is(:hover, :focus-visible) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
+#site-wrap button.bb-close::after { display: none !important; }
 #site-wrap .rubric-view-panel .panel-body > div, #site-wrap .rubric-view-panel .MuiAccordionDetails-root > div > div > div { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap .js-rubric-view-achievement-score { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
 

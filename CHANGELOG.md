@@ -4,6 +4,16 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] — 2026-10-11
+
+### Fixed
+
+- With a background on, opening a slide-out (rubric, settings, attendance) covered the whole page with the background.
+- Slide-outs now look like a sheet over the dimmed page, with an edge, a shadow and a round close button.
+- Opening a slide-out no longer shifts the page sideways and leaves a strip beside the panel. This was Ultra's bug.
+- The attendance slide-out showed a scrollbar along its bottom.
+- Pressing a button could nudge it out from under the pointer; the slide-out close button swung away on hover.
+
 ## [2.0.0] — 2026-10-11
 
 Glaze now reshapes Ultra's pages, not just their colours, and has a full editor.
@@ -48,5 +58,6 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
+[2.0.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.1
 [2.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.0
 [1.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v1.0.0
