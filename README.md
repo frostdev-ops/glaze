@@ -95,6 +95,19 @@ node --test
 
 Runs the tests for the colour, settings and page-text logic. No dependencies to install.
 
+### Publishing to the Chrome Web Store
+
+```sh
+sh scripts/publish-chrome.sh
+```
+
+Packages the extension, uploads it with the Chrome Web Store API, and submits it for review. Pass a
+zip path to upload a specific build; set `CWS_NO_PUBLISH=1` to upload without submitting. It signs in
+as the `cws-publisher` service account through `gcloud` impersonation, so no key file is kept: your
+Google account needs the Service Account Token Creator role on it, and the service account must be
+added under **Account** in the Developer Dashboard. The listing text, screenshots and privacy answers
+aren't in the API; edit those in the dashboard. The publisher and item IDs default to Glaze's; override them with `CWS_PUBLISHER_ID` and `CWS_EXTENSION_ID` (the publisher ID is in the dashboard's address, after `/devconsole/`).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
