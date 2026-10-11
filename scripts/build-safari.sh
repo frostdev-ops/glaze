@@ -103,3 +103,6 @@ ditto "$app" release/Glaze.app
 ditto -c -k --sequesterRsrc --keepParent release/Glaze.app "release/$name.zip"
 (cd release && shasum -a 256 "$name.zip" > "$name.sha256")
 echo "Built release/Glaze.app and release/$name.zip"
+if [ -n "${NOTARY_PROFILE:-}${ASC_KEY_PATH:-}" ]; then
+  sh scripts/make-dmg.sh release/Glaze.app "release/$name.dmg"
+fi

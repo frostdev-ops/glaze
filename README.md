@@ -12,6 +12,11 @@ control, reshapes the pages around it, and adds small helpers you can see at a g
 institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/` on its own
 domain.
 
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
+  <a href="https://github.com/frostdev-ops/glaze/releases/download/safari-v2.0.1/glaze-2.0.1-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
+</p>
+
 ## Features
 
 - **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system.
@@ -26,7 +31,7 @@ domain.
 
 ## Install
 
-**Chrome Web Store:** _link coming once the listing is published._
+**Chrome:** install from the [Chrome Web Store](https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh).
 
 **Load unpacked (development):**
 
@@ -38,12 +43,12 @@ domain.
 
 ## Safari
 
-Download the signed and notarized **Safari Mac app** from
-[GitHub Releases](https://github.com/frostdev-ops/glaze/releases) (the `safari-v*` release). It runs
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/safari-v2.0.1/glaze-2.0.1-safari-macos.dmg): signed and notarized, from the `safari-v*` release on
+[GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
 on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
 the frosted-glass blur needs Safari 18.
 
-1. Unzip `glaze-<version>-safari-macos.zip` and move `Glaze.app` into Applications.
+1. Open the `.dmg` and drag **Glaze** into **Applications**. (A `.zip` of the same app is there too.)
 2. Open Glaze once, then choose **Quit and Open Safari Settings…**.
 3. In Safari Settings → Extensions, turn Glaze on, and allow it on your Blackboard site.
 
@@ -65,7 +70,7 @@ NOTARY_PROFILE=your-profile sh scripts/build-safari.sh
 
 or set `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID` for an App Store Connect API key. The script
 then notarizes the app, staples the ticket, checks Gatekeeper, and writes
-`release/glaze-<version>-safari-macos.zip` with its SHA-256 checksum. Without credentials the zip is
+`release/glaze-<version>-safari-macos.zip` and a notarized `.dmg`, each with its SHA-256 checksum. Without credentials the zip is
 marked `unnotarized` and is for development only.
 
 `scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
