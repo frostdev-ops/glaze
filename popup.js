@@ -1,70 +1,28 @@
-// Popup: every control writes straight to chrome.storage.sync; the content script listens.
-const $ = (s) => document.querySelector(s);
-let settings = GZ_MERGE();
+// Popup: the quick controls. Every change saves at once (the popup closes the moment focus
+// leaves it, so a pending timer would die with it); the content script listens for the change.
+const $ = (sel) => document.querySelector(sel);
+const hint = (msg) => { $('#hint').textContent = msg || 'Changes apply to open Blackboard Ultra tabs immediately.'; $('#hint').classList.toggle('err', !!msg); };
 
-// Switches save at once: the popup closes the moment focus leaves it, and a pending timer dies
-// with it. Colour inputs fire on every drag tick and sync storage has a per-minute write quota,
-// so those alone are debounced.
-let saveTimer = 0;
-let touched = false;
-// sync storage has write quotas and can fail offline; say so instead of silently losing the change.
-const note = (msg) => { const h = $('.hint'); if (h) h.textContent = msg; };
-const save = () => {
-  clearTimeout(saveTimer);
-  touched = true;
-  try {
-    chrome.storage.sync.set(settings, () => {
-      const err = chrome.runtime.lastError;
-      note(err ? `Not saved: ${err.message}` : 'Changes apply to open Blackboard Ultra tabs immediately.');
-    });
-  } catch (e) { note(`Not saved: ${e.message}`); }
-};
-const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 150); };
+GZ_UI.load().then((s) => {
+  const save = (keys) => GZ_UI.save(s, keys, hint);
 
-// The popup previews the palette on itself.
-const preview = () => { for (const [v] of GZ_COLORS) document.documentElement.style.setProperty(v, settings.colors[v]); };
+  const render = () => {
+    GZ_UI.paint(s);
+    $('#enabled').checked = s.enabled;
+    document.body.classList.toggle('off', !s.enabled);
+    // inert, not just dimmed: body.off alone leaves the controls reachable by keyboard.
+    for (const sec of document.querySelectorAll('section:not(:last-of-type)')) sec.inert = !s.enabled;
+    GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); render(); });
+    for (const r of document.querySelectorAll('[name=motion]')) r.checked = r.value === s.motion.level;
+    if (s.auto.on) hint('Auto light/dark is on. Picking a palette turns it off.');
+  };
 
-// body.off only sets pointer-events:none, which still leaves the controls keyboard-reachable.
-const setOff = () => {
-  document.body.classList.toggle('off', !settings.enabled);
-  for (const s of document.querySelectorAll('section')) s.inert = !settings.enabled;
-};
-
-const render = () => {
-  $('#enabled').checked = settings.enabled;
-  setOff();
-  const grid = $('#colors');
-  grid.replaceChildren();
-  for (const [v, label] of GZ_COLORS) {
-    const row = document.createElement('label');
-    const input = Object.assign(document.createElement('input'), { type: 'color', value: settings.colors[v], title: v });
-    input.addEventListener('input', () => { settings.colors[v] = input.value; preview(); saveSoon(); });
-    input.addEventListener('change', save);
-    row.append(input, label);
-    grid.append(row);
-  }
-  for (const cb of document.querySelectorAll('[data-motion]')) cb.checked = settings.motion[cb.dataset.motion];
-  $('#footer').checked = settings.footer;
-  preview();
-};
-
-// The popup renders from the defaults first, so ignore a slow load if the user already changed
-// something — otherwise their edit is overwritten by what was on disk.
-render();
-chrome.storage.sync.get(null, (raw) => {
-  if (touched) return;
-  if (chrome.runtime.lastError) return note(`Could not load settings: ${chrome.runtime.lastError.message}`);
-  settings = GZ_MERGE(raw);
+  $('#enabled').addEventListener('change', (e) => { s.enabled = e.target.checked; save(['enabled']); render(); });
+  $('#motion').addEventListener('change', (e) => { s.motion.level = e.target.value; save(['motion']); });
+  // openOptionsPage reuses an editor tab that is already open, but Chrome sometimes refuses it
+  // ("Could not create an options page"); a plain tab always opens.
+  $('#editor').addEventListener('click', () => {
+    chrome.runtime.openOptionsPage().catch(() => chrome.tabs.create({ url: chrome.runtime.getURL('options.html') }));
+  });
   render();
 });
-
-$('#enabled').addEventListener('change', (e) => {
-  settings.enabled = e.target.checked;
-  setOff();
-  save();
-});
-for (const cb of document.querySelectorAll('[data-motion]')) {
-  cb.addEventListener('change', () => { settings.motion[cb.dataset.motion] = cb.checked; save(); });
-}
-$('#footer').addEventListener('change', (e) => { settings.footer = e.target.checked; save(); });
-$('#reset').addEventListener('click', () => { settings.colors = { ...GZ_DEFAULTS.colors }; render(); save(); });

@@ -1,0 +1,176 @@
+/* Glaze — backgrounds, course and enhancement extras. Everything here is gated on an html
+   attribute content.js sets, so with the feature off none of it matches. */
+
+/* ---- backgrounds ----
+   One fixed layer, drawn by ::before: on <html> for base pages, and again on each Ultra overlay
+   (a course opens as a panel over the base page, an item as a panel over the course). Each overlay
+   paints the same viewport-fixed layer, so it covers what is underneath and the picture lines up.
+   The ground goes transparent so the layer shows; cards keep most of their surface.
+   Layer = dim tint over the picture, then blurred. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) {
+  --gz-ground: transparent;
+  --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) var(--gz-bg-dim, 60%), transparent);
+  --gz-bg-art: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--gz-accent) 34%, transparent), transparent 60%),
+    radial-gradient(90% 80% at 100% 100%, color-mix(in srgb, var(--gz-accent-hi) 22%, transparent), transparent 55%),
+    radial-gradient(70% 60% at 85% 10%, color-mix(in srgb, var(--gz-ok) 14%, transparent), transparent 60%),
+    var(--gz-surface-2);
+  background: var(--gz-surface-2) !important;
+}
+html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .peek-panel__content-wrapper, .bb-offcanvas-panel, .ms-Panel-main) { isolation: isolate; background: transparent !important; }
+/* :where() keeps this base layer at element specificity, so the per-kind rules below refine it. */
+html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before,
+html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .peek-panel__content-wrapper, .bb-offcanvas-panel, .ms-Panel-main)::before {
+  content: "";
+  position: fixed;
+  inset: calc(var(--gz-bg-blur, 0px) * -2);
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-art);
+  filter: blur(var(--gz-bg-blur, 0px));
+}
+/* Cards over a picture: a little see-through, never so much that text sits on the image. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer) {
+  background: color-mix(in srgb, var(--gz-surface) 88%, transparent) !important;
+}
+
+/* Aurora: richer art, and in Expressive the whole layer drifts. It moves by transform only, so
+   the GPU slides the already-painted layer instead of repainting gradients every frame; the layer
+   is oversized so the drift never shows an edge. */
+html[data-gz-bg="aurora"]::before,
+html[data-gz-bg="aurora"] :is(.panel-wrap, .peek-panel__content-wrapper, .bb-offcanvas-panel, .ms-Panel-main)::before {
+  inset: -18%;
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)),
+    radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-accent) 46%, transparent), transparent 70%),
+    radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-accent-hi) 32%, transparent), transparent 70%),
+    radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-ok) 26%, transparent), transparent 70%),
+    radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-err) 16%, transparent), transparent 70%),
+    var(--gz-surface-2);
+  animation: gz-aurora 42s ease-in-out infinite alternate;
+  animation-play-state: var(--gz-ambient);
+  will-change: transform;
+}
+@keyframes gz-aurora {
+  0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
+  50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
+  100% { transform: translate3d(-2%, 5%, 0) rotate(-2deg) scale(1.02); }
+}
+
+/* Expressive: a soft light follows the pointer across a hovered card (content.js feeds
+   --gz-mx/--gz-my in viewport pixels, hence the fixed attachment). After the background-mode
+   card rule above so it wins the tie. */
+html[data-gz-motion="expressive"] :is(.element-card, .content-list-item > .itemContainer, .element-list-row, .messages-container-summary):hover {
+  background-image: radial-gradient(240px circle at var(--gz-mx, -999px) var(--gz-my, -999px), color-mix(in srgb, var(--gz-accent) 12%, transparent), transparent 70%) !important;
+  background-attachment: fixed !important;
+}
+
+/* ---- extras (each behind its own switch in the options page) ---- */
+
+/* Reading width: running text keeps to a comfortable measure. */
+html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .ql-editor, .document-body, .bbml-content) { max-width: 72ch; }
+html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { font-size: 1.04em; }
+
+/* Shorter descriptions: three lines until the item is hovered or focused. */
+html[data-gz-enhance-clamp] #site-wrap .content-list-item .itemContainer:not(:hover, :focus-within) .js-description {
+  display: -webkit-box !important; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+
+/* Score bars: content.js reads the pill's own numbers into --gz-score (0-1) and a band. */
+/* Specific enough to beat the grade-band tint, whose background shorthand would reset the image. */
+html[data-gz-enhance-scores] #site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style)[data-gz-score][class] {
+  background-image: linear-gradient(var(--gz-score-ink), var(--gz-score-ink)) !important;
+  background-size: calc(var(--gz-score) * 100%) 3px !important;
+  background-position: left bottom !important;
+  background-repeat: no-repeat !important;
+}
+#site-wrap [data-gz-score="hi"] { --gz-score-ink: var(--gz-ok); }
+#site-wrap [data-gz-score="mid"] { --gz-score-ink: var(--gz-warn); }
+#site-wrap [data-gz-score="lo"] { --gz-score-ink: var(--gz-err); }
+
+/* Due-date urgency: content.js tags the due-date text itself. */
+html[data-gz-enhance-urgency] #site-wrap [data-gz-due] {
+  display: inline-block; padding: 0 0.5em; border-radius: 999px; font-weight: 600;
+  color: var(--gz-due) !important; background: color-mix(in srgb, var(--gz-due) 16%, transparent) !important;
+}
+#site-wrap [data-gz-due="overdue"] { --gz-due: var(--gz-err); }
+#site-wrap [data-gz-due="today"] { --gz-due: var(--gz-warn); }
+#site-wrap [data-gz-due="soon"] { --gz-due: var(--gz-accent); }
+
+/* Inline countdowns and grade percentages: drawn from the attributes content.js sets. */
+html[data-gz-enhance-inline] #site-wrap [data-gz-countdown]::after {
+  content: attr(data-gz-countdown);
+  display: inline-block; margin-left: 0.5em; padding: 0 0.5em; border-radius: 999px;
+  font-size: 0.85em; font-weight: 600; line-height: 1.6; vertical-align: 0.05em;
+  color: var(--gz-due, var(--gz-ink-muted)) !important;
+  background: color-mix(in srgb, var(--gz-due, var(--gz-ink-muted)) 14%, transparent);
+}
+html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
+  content: attr(data-gz-pct);
+  margin-left: 0.45em; padding-left: 0.45em; border-left: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  font-weight: 500; opacity: 0.8;
+}
+
+/* Folder preview card. */
+#gz-peek {
+  position: fixed; z-index: 2147483002; width: 300px; max-width: calc(100vw - 16px); padding: 0.6rem 0.75rem 0.55rem;
+  pointer-events: none; font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); backdrop-filter: blur(var(--gz-glass));
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  animation: var(--gz-tip-in);
+}
+#gz-peek .gz-peek-head { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-faint); margin-bottom: 0.35rem; }
+#gz-peek ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
+#gz-peek li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0.5rem; align-items: center; }
+#gz-peek li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--gz-ink-faint); }
+#gz-peek li[data-state="started"]::before { border-color: var(--gz-accent); background: color-mix(in srgb, var(--gz-accent) 40%, transparent); }
+#gz-peek li[data-state="done"]::before { border-color: var(--gz-ok); background: var(--gz-ok); }
+#gz-peek li[data-state="done"] .gz-peek-title { color: var(--gz-ink-muted); }
+#gz-peek .gz-peek-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-peek .gz-peek-due { font-size: 11px; color: var(--gz-ink-muted); white-space: nowrap; }
+#gz-peek .gz-peek-more { margin-top: 0.3rem; font-size: 11px; color: var(--gz-ink-faint); }
+
+/* Course progress bar above the outline. */
+#gz-progress {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem 0.75rem; align-items: baseline;
+  margin: 0 0 calc(14px * var(--gz-space)); padding: 0.7rem 1rem 0.8rem;
+  background: var(--gz-surface); border: 1px solid var(--gz-line); border-radius: var(--gz-radius);
+  font-size: 0.85rem; color: var(--gz-ink-muted);
+}
+#gz-progress b { color: var(--gz-ink); font-variant-numeric: tabular-nums; }
+#gz-progress i { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--gz-line); overflow: hidden; position: relative; }
+#gz-progress i::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: var(--gz-pct); border-radius: inherit;
+  background: linear-gradient(90deg, var(--gz-accent), var(--gz-ok));
+  animation: gz-grow-x var(--gz-t-slow) var(--gz-ease) both; transform-origin: left;
+}
+@keyframes gz-grow-x { from { transform: scaleX(0); } }
+
+/* Keyboard shortcut list. */
+#gz-keys {
+  position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--gz-surface-2) 55%, transparent); backdrop-filter: blur(4px);
+  animation: gz-fade var(--gz-t) var(--gz-ease) both;
+}
+#gz-keys .gz-keys-panel {
+  width: min(360px, calc(100vw - 32px)); padding: 1rem 1.25rem 1.1rem; font-family: var(--gz-font);
+  color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line-strong);
+  border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-enter);
+}
+#gz-keys h2 { margin: 0 0 0.6rem; font-size: 15px; }
+#gz-keys dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 1rem; align-items: center; }
+#gz-keys dt { display: flex; gap: 0.25rem; }
+#gz-keys dd { margin: 0; color: var(--gz-ink-muted); font-size: 13px; }
+#gz-keys kbd { min-width: 1.6em; padding: 0.1rem 0.4rem; text-align: center; font: 600 12px/1.5 ui-monospace, Menlo, monospace; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-bottom-width: 2px; border-radius: 6px; }
+
+/* ---- declutter ---- */
+html[data-gz-hide-help] .pagehelp-directive { display: none !important; }
+html[data-gz-hide-banner] #site-wrap course-banner { display: none !important; }
+/* The faculty block when it has nobody in it (no username element rendered). */
+html[data-gz-hide-faculty] #site-wrap bb-course-instructors:not(:has(bb-ui-username, bb-username)) { display: none !important; }
+html[data-gz-hide-tab-calendar] .bb-ui-navigation-list-horizontal li:has(> a[href*="/calendar"]),
+html[data-gz-hide-tab-announcements] .bb-ui-navigation-list-horizontal li:has(> a[href*="/announcements"]),
+html[data-gz-hide-tab-engagement] .bb-ui-navigation-list-horizontal li:has(> a[href*="/engagement"]),
+html[data-gz-hide-tab-grades] .bb-ui-navigation-list-horizontal li:has(> a[href*="/grades"]),
+html[data-gz-hide-tab-messages] .bb-ui-navigation-list-horizontal li:has(> a[href*="/messages"]),
+html[data-gz-hide-tab-groups] .bb-ui-navigation-list-horizontal li:has(> a[href*="/groups/"]),
+html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a[href*="/achievements"]) { display: none !important; }

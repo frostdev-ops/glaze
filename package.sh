@@ -8,6 +8,7 @@ OUT="dist/glaze-v$version.zip"
 
 mkdir -p dist
 rm -f "$OUT"
-zip -q -r -X "$OUT" manifest.json content.js theme.css defaults.js popup.html popup.js presets.js icons
+zip -q -r -X "$OUT" manifest.json content.js defaults.js lib theme.css motion.css extras.css \
+  popup.html popup.js options.html options.js preview.html ui.js ui.css fonts icons -x '*.DS_Store'
 
 echo "packaged Glaze v$version -> $OUT ($(du -h "$OUT" | cut -f1))"

@@ -7,17 +7,21 @@
 
 # Glaze for Blackboard Ultra
 
-Glaze is a Chrome extension that recolours Blackboard Ultra. It replaces Ultra's palette with one you
-control — fourteen colour tokens, a set of presets, and switches for motion and the footer bar — and it
-works on any institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/`
-on its own domain.
+Glaze is a Chrome extension that restyles Blackboard Ultra. It replaces Ultra's palette with one you
+control, reshapes the pages around it, and adds small helpers you can see at a glance. It works on any
+institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/` on its own
+domain.
 
 ## Features
 
-- **Custom palette** — 14 colour tokens (accent, surfaces, text, lines, success/warning/error) picked from the popup, applied live to open tabs.
-- **Presets** — one-click palettes, plus reset back to the default "Frost".
-- **Motion toggles** — entrance animations, hover lift, and colour transitions each switch off independently.
-- **Footer toggle** — show or hide the Glaze footer bar.
+- **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system.
+- **Look** — font (two bundled), text size, line height, corner radius, density, depth and glass.
+- **Backgrounds** — solid, gradient, a drifting aurora, or your own image.
+- **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
+- **Course colours** — Ultra's course stripes blended into your palette, or set one by one.
+- **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
+- **Extras** (each off by default) — due-date urgency, countdowns, score bars, folder previews, course progress, keyboard shortcuts, reading width, and hiding page parts you don't use.
+- **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
 
 ## Install
@@ -34,11 +38,13 @@ on its own domain.
 
 ## How it works
 
-The content script injects `theme.css` into the page as a `<link>` it owns, so the popup can toggle the
-theme on and off without a reload. The stylesheet remaps Blackboard's own `--palette-*` custom properties
-onto Glaze's `--gz-*` tokens, which the content script writes onto `<html>` from your saved settings. A
-small DOM sweep tags the long tail — elements with hardcoded light backgrounds, dark text, viewport-fixed
-bars — with `data-gz-*` attributes that `theme.css` then restyles.
+The content script adds three stylesheets it owns (`theme.css`, `motion.css`, `extras.css`) at page
+start, so the popup can switch the theme on and off without a reload. `theme.css` remaps Blackboard's
+own `--palette-*` custom properties onto Glaze's `--gz-*` tokens and restyles Ultra's components. Every
+setting becomes either a `--gz-*` variable or a `data-gz-*` attribute on `<html>`, which the content
+script writes from your saved settings, so the CSS never needs JavaScript to decide anything. A small
+DOM sweep tags the long tail — hardcoded light backgrounds, dark text, viewport-fixed bars — with
+`data-gz-*` attributes the stylesheets then restyle.
 
 ## Building
 
@@ -48,14 +54,21 @@ bars — with `data-gz-*` attributes that `theme.css` then restyles.
 
 Writes `dist/glaze-v<version>.zip`, ready for the Chrome Web Store. Requires `node` and `zip`.
 
+```sh
+node --test
+```
+
+Runs the tests for the colour, settings and page-text logic. No dependencies to install.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Privacy
 
-Glaze stores only your settings in `chrome.storage.sync`. It collects nothing and makes no network
-requests. See [PRIVACY.md](PRIVACY.md).
+Glaze stores your settings in `chrome.storage.sync` and your course names on your own device. It
+collects nothing. The only requests it makes are the folder previews (to your own Blackboard site) and
+a background image you choose, each only when you turn it on. See [PRIVACY.md](PRIVACY.md).
 
 ## License
 

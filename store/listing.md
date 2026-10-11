@@ -6,9 +6,9 @@ Glaze for Blackboard Ultra
 
 ## Short summary (132 char max)
 
-> Recolour Blackboard Ultra. 14 colour tokens, one-click presets, motion and footer toggles. Works on any institution's Ultra.
+> Make Blackboard Ultra yours: palettes, fonts, backgrounds, motion and due-date countdowns. Works on any institution's Ultra.
 
-(123 characters.)
+(124 characters.)
 
 ## Category
 
@@ -19,25 +19,37 @@ would overclaim — it makes no contrast or screen-reader guarantees.
 
 Blackboard Ultra looks the same at every institution, and you don't get a say in it. Glaze gives you one.
 
-Open the popup and set fourteen colours — accent, surfaces, text, lines, and the success, warning and
-error states. The page updates as you pick, in every open Ultra tab, with no reload. Start from a preset
-if you'd rather not choose fourteen colours yourself, and reset back to the default "Frost" palette at
-any time.
+Pick a palette, or set all fourteen colours yourself, and every open Ultra tab updates as you choose. Save
+your own palettes, or let Glaze switch between a light and a dark one with your system.
 
-You also get switches for the things a theme usually forces on you:
+Then shape the rest:
 
-• Entrance animations — on or off
-• Hover lift and press feedback — on or off
-• Colour and border transitions — on or off
-• The Glaze footer bar — on or off
-• The whole theme — one master switch, instant, no reload
+• Look — font, text size, line height, rounded corners, spacing, depth and frosted glass
+• Background — solid, gradient, a slowly drifting aurora, or your own image
+• Motion — Off, Subtle or Expressive. Reduced-motion settings are respected automatically.
+• Course colours — Ultra's course stripes blended into your palette, or chosen one by one
+
+Glaze also tidies Ultra itself: clearer buttons, a visible selected state on toggles, a readable
+calendar, grade bands in the gradebook, and calmer assignment pages.
+
+Optional helpers, each off until you switch it on:
+
+• Due-date urgency and countdowns ("in 2 days") next to every deadline
+• Grade percentages and score bars
+• Folder previews: hover a folder to see what's inside and what's due
+• Course progress: how much of a course you've completed
+• Keyboard shortcuts for courses, calendar, grades and messages
+• Hide parts of the page you don't use
+
+Everything lives in one editor page with a live preview; the popup keeps the quick controls. Back up
+and restore your settings as a file.
 
 Glaze works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
 Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed list of universities.
-There is nothing to configure: install it, open your Blackboard, and pick your colours.
 
-Privacy: Glaze stores only your settings, in Chrome's sync storage. It collects no data, sends nothing
-anywhere, and makes no network requests at all. The source is open at
+Privacy: Glaze stores your settings in Chrome's sync storage and your course names on your device. It
+collects nothing and has no server. The only requests it makes are folder previews, to your own
+Blackboard site, and a background image you choose, each only if you turn it on. The source is open at
 https://github.com/frostdev-ops/glaze.
 
 Blackboard is a trademark of Anthology Inc. Glaze is an independent project and is not affiliated with,
@@ -45,38 +57,48 @@ endorsed by, or sponsored by Anthology Inc.
 
 ## Single-purpose statement
 
-Glaze has one purpose: to restyle Blackboard Ultra pages according to the user's chosen colours and
-motion preferences. Every permission and every line of code serves that purpose.
+Glaze has one purpose: to customise how Blackboard Ultra pages look and read, according to the user's
+chosen colours, layout, motion and display preferences. The optional helpers (countdowns, previews,
+progress, shortcuts) only present information already on the user's Blackboard pages. Every permission
+and every line of code serves that purpose.
 
 ## Permission justifications
 
 **storage**
-Saves the user's theme settings — the on/off state, fourteen colour values, three motion toggles and the
-footer toggle — in `chrome.storage.sync`, so the theme persists across sessions and devices. No other
-data is stored.
+Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and
+devices, and the names of the user's courses in `chrome.storage.local`, so the editor can list them for
+recolouring. No other data is stored.
 
 **Host access: `https://*/ultra/*`**
 Blackboard Ultra is self-hosted by each institution on its own arbitrary domain (for example
 `learn.example.edu`, `blackboard.example.ac.uk`), with no common hostname. Every deployment serves the
 Ultra interface under the `/ultra/` path, so that path is the narrowest match pattern that can reach the
-pages the extension is for. The content script only injects a stylesheet, sets CSS custom properties on
-`<html>`, and tags elements with `data-gz-*` attributes so they can be restyled. It reads no page
-content, and transmits nothing.
+pages the extension is for. The content script injects stylesheets, sets CSS custom properties on
+`<html>`, and tags elements with `data-gz-*` attributes so they can be restyled. With optional helpers
+on, it reads dates and grades already shown on the page to display countdowns and percentages, and
+folder previews ask the same Blackboard site for a folder's contents. Nothing is sent anywhere else.
 
-**web_accessible_resources: `theme.css`**
-The content script injects the stylesheet as a `<link>` it owns, so the master switch can add and remove
-the theme without reloading the page. Chrome requires the file be web-accessible to be linked this way.
+**web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `fonts/*.woff2`**
+The content script injects the stylesheets as `<link>`s it owns, so the master switch can add and remove
+the theme without reloading the page; the stylesheets load the bundled fonts. Chrome requires these
+files be web-accessible to be linked this way.
 
-## Screenshots checklist (1280x800 each, PNG, up to 5)
+## Remote code
 
-- [ ] 1 — Ultra course page, themed, default "Frost" palette. The hero shot.
-- [ ] 2 — Popup open over a themed Ultra page, showing the colour grid.
-- [ ] 3 — A contrasting preset applied (light palette), same page as #1 for comparison.
-- [ ] 4 — Popup motion and footer sections, with the footer bar visible on the page behind.
-- [ ] 5 — Master switch off: unthemed Ultra, showing the extension is fully reversible.
+None. All code ships in the package.
 
-Use the same course and same viewport across shots. Blur or replace any real names, grades, or student
-data before uploading.
+## Screenshots checklist (1280x800 each, PNG or JPEG, up to 5)
+
+The 1.0 shots in `assets/store/screenshots-1280/` still show the palettes. For 2.0, replace or add:
+
+- [ ] 1 — Ultra course outline, themed, with countdown chips and course progress on.
+- [ ] 2 — The editor page with its live preview.
+- [ ] 3 — An assignment page: instructions card, details column, editor.
+- [ ] 4 — Aurora or image background with a light and a dark palette side by side.
+- [ ] 5 — A folder preview and a themed tooltip.
+
+Use the same course and viewport across shots. Blur or replace any real names, grades, or student data
+before uploading.
 
 ## Promo images
 

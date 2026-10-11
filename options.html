@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glaze settings</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  /* Layout: editor column on the left, a live preview of Ultra pinned on the right; one column
+     below 980px with the preview on top. */
+  body { font-size: 14px; }
+  .top {
+    position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    padding: 0.75rem 1.5rem; background: color-mix(in srgb, var(--gz-surface-2) 85%, transparent);
+    backdrop-filter: blur(10px); border-bottom: 1px solid var(--gz-line);
+  }
+  .brand { display: flex; align-items: center; gap: 0.6rem; }
+  .brand img { width: 24px; height: 24px; }
+  .top nav { display: flex; gap: 0.25rem; flex-wrap: wrap; flex: 1; }
+  .top nav a { color: var(--gz-ink-muted); text-decoration: none; font-size: 13px; padding: 0.25rem 0.6rem; border-radius: 999px; }
+  .top nav a:hover { color: var(--gz-accent); background: var(--gz-accent-soft); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 46%); gap: 1.5rem; padding: 1.5rem; max-width: 1500px; margin: 0 auto; }
+  .editor { display: grid; gap: 1.25rem; min-width: 0; }
+  .preview { position: sticky; top: 4.5rem; height: calc(100vh - 6rem); border: 1px solid var(--gz-line); border-radius: 14px; overflow: hidden; background: var(--gz-surface-2); }
+  .preview iframe { width: 100%; height: 100%; border: 0; display: block; }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    .preview { position: relative; top: 0; height: 460px; order: -1; }
+  }
+  section { background: var(--gz-surface); border: 1px solid var(--gz-line); border-radius: 14px; padding: 1.1rem 1.25rem 1.25rem; display: grid; gap: 1rem; scroll-margin-top: 5rem; }
+  section > h2 { margin: 0; font-size: 12px; }
+  h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--gz-ink); }
+  .field { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) 3.5rem; align-items: center; gap: 0.75rem; }
+  .field > span:first-child { color: var(--gz-ink-muted); }
+  .field output { font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); text-align: right; font-size: 12px; }
+  .field.wide { grid-template-columns: 9.5rem minmax(0, 1fr); }
+  .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  .row input[type="text"], .row input[type="url"] { flex: 1; min-width: 12rem; }
+  .group { display: grid; gap: 0.6rem; padding-top: 1rem; border-top: 1px solid var(--gz-line); }
+  .desc { margin: 0; color: var(--gz-ink-faint); font-size: 12px; }
+  .check { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.6rem; align-items: start; cursor: pointer; }
+  .check input { margin-top: 2px; }
+  .check .desc { grid-column: 2; }
+
+  .tokens { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.45rem 1rem; }
+  .tokens label { color: var(--gz-ink-muted); font-size: 13px; }
+  .contrast { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.35rem 1rem; }
+  .contrast li { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 12px; color: var(--gz-ink-muted); }
+  .contrast b { font-variant-numeric: tabular-nums; font-weight: 600; padding: 0 0.45rem; border-radius: 999px; }
+  .contrast .pass b { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
+  .contrast .fail b { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
+  .mine { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+  .mine li { display: flex; align-items: center; gap: 0.6rem; }
+  .mine input[type="text"] { flex: 1; }
+  .courses { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+  .courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; }
+  .courses .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .courses .slot { font-size: 11px; color: var(--gz-ink-faint); margin-left: 0.4rem; }
+  button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
+  body.off .editor > section:not(#data) { opacity: 0.5; }
+</style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><img src="icons/icon48.png" alt=""><h1>Glaze</h1></div>
+    <nav aria-label="Sections">
+      <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
+      <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#extras">Extras</a><a href="#data">Backup</a>
+    </nav>
+    <p class="hint" id="hint" aria-live="polite"></p>
+    <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
+  </header>
+
+  <div class="layout">
+    <main class="editor">
+      <section id="palette">
+        <h2>Palette</h2>
+        <div class="swatches" id="presets"></div>
+        <div class="tokens" id="colors"></div>
+        <ul class="contrast" id="contrast" aria-label="Contrast checks"></ul>
+        <div class="row">
+          <input type="text" id="preset-name" maxlength="40" placeholder="Name this palette" aria-label="Preset name">
+          <button type="button" id="save-preset">Save as preset</button>
+          <button type="button" id="reset-colors">Back to Frost</button>
+        </div>
+        <ul class="mine" id="mine" aria-label="Your presets"></ul>
+        <div class="group">
+          <label class="check"><input type="checkbox" data-key="auto.on"><span>Follow the system's light and dark mode</span>
+            <span class="desc">Switches between two palettes when your computer changes mode.</span></label>
+          <div class="row">
+            <label>Light <select id="auto-light" data-key="auto.light"></select></label>
+            <label>Dark <select id="auto-dark" data-key="auto.dark"></select></label>
+          </div>
+        </div>
+      </section>
+
+      <section id="look">
+        <h2>Look</h2>
+        <label class="field wide"><span>Font</span>
+          <select data-key="look.font">
+            <option value="system">System</option><option value="blackboard">Blackboard's own (Open Sans)</option>
+            <option value="inter">Inter</option><option value="atkinson">Atkinson Hyperlegible</option>
+            <option value="serif">Serif</option><option value="mono">Monospace</option>
+          </select></label>
+        <label class="field"><span>Text size</span><input type="range" data-key="look.scale" min="0.85" max="1.25" step="0.05"><output data-for="look.scale" data-format="pct"></output></label>
+        <label class="field"><span>Line height</span><input type="range" data-key="look.leading" min="1.2" max="2" step="0.05"><output data-for="look.leading"></output></label>
+        <label class="field"><span>Corner radius</span><input type="range" data-key="look.radius" min="0" max="24" step="1"><output data-for="look.radius" data-format="px"></output></label>
+        <label class="field"><span>Depth</span><input type="range" data-key="look.depth" min="0" max="3" step="1"><output data-for="look.depth" data-format="depth"></output></label>
+        <label class="field"><span>Glass blur</span><input type="range" data-key="look.glass" min="0" max="24" step="1"><output data-for="look.glass" data-format="px"></output></label>
+        <div class="field wide"><span>Density</span>
+          <div class="seg" role="radiogroup" aria-label="Density">
+            <label><input type="radio" name="look.density" value="compact">Compact</label>
+            <label><input type="radio" name="look.density" value="cozy">Cozy</label>
+            <label><input type="radio" name="look.density" value="roomy">Roomy</label>
+          </div></div>
+        <label class="check"><input type="checkbox" data-key="look.tooltips"><span>Themed tooltips</span>
+          <span class="desc">Blackboard's icon buttons use the browser's plain tooltip. This shows a themed one instead, a little sooner.</span></label>
+        <label class="check"><input type="checkbox" data-key="look.hints"><span>Hover hints</span>
+          <span class="desc">Hover a date to see how far off it is ("Due in 2 days"), a grade to see its percentage, or cut-off text to read all of it.</span></label>
+        <label class="check"><input type="checkbox" data-key="footer"><span>Show the Glaze footer bar</span></label>
+      </section>
+
+      <section id="background">
+        <h2>Background</h2>
+        <div class="field wide"><span>Behind the page</span>
+          <div class="seg" role="radiogroup" aria-label="Background">
+            <label><input type="radio" name="bg.kind" value="solid">Solid</label>
+            <label><input type="radio" name="bg.kind" value="gradient">Gradient</label>
+            <label><input type="radio" name="bg.kind" value="aurora">Aurora</label>
+            <label><input type="radio" name="bg.kind" value="image">Image</label>
+          </div></div>
+        <label class="field wide"><span>Image address</span><input type="url" id="bg-image" placeholder="https://…" aria-describedby="bg-image-note"></label>
+        <p class="desc" id="bg-image-note">An https link to a picture. If it can't load, the gradient shows instead.</p>
+        <label class="field"><span>Dim</span><input type="range" data-key="bg.dim" min="0" max="90" step="5"><output data-for="bg.dim" data-format="pct100"></output></label>
+        <label class="field"><span>Blur</span><input type="range" data-key="bg.blur" min="0" max="20" step="1"><output data-for="bg.blur" data-format="px"></output></label>
+        <p class="desc">Aurora drifts slowly when motion is set to Expressive.</p>
+      </section>
+
+      <section id="motion">
+        <h2>Motion</h2>
+        <div class="field wide"><span>Level</span>
+          <div class="seg" role="radiogroup" aria-label="Motion level">
+            <label><input type="radio" name="motion.level" value="off">Off</label>
+            <label><input type="radio" name="motion.level" value="subtle">Subtle</label>
+            <label><input type="radio" name="motion.level" value="expressive">Expressive</label>
+          </div></div>
+        <p class="desc">Subtle: pages and cards ease in, panels slide, hover lifts. Expressive adds springier motion, a drifting aurora and a small burst when you complete an item.</p>
+        <label class="check"><input type="checkbox" data-key="motion.followSystem"><span>Turn motion off when the system asks for reduced motion</span></label>
+        <div class="group">
+          <h3>Fine-tune</h3>
+          <label class="check"><input type="checkbox" data-key="motion.enter"><span>Page and card entrances</span></label>
+          <label class="check"><input type="checkbox" data-key="motion.hover"><span>Hover lift and press</span></label>
+          <label class="check"><input type="checkbox" data-key="motion.transitions"><span>Colour and border transitions</span></label>
+        </div>
+      </section>
+
+      <section id="courses">
+        <h2>Courses</h2>
+        <label class="check"><input type="checkbox" data-key="courses.harmonize"><span>Tone Blackboard's course colours to fit the palette</span>
+          <span class="desc">Blackboard gives each course one of ten bright colours. Toned, they keep their hue but sit in your palette.</span></label>
+        <ul class="courses" id="course-list"></ul>
+        <p class="desc" id="course-empty">Open Messages or Grades on Blackboard once and your courses show up here, each with a colour you can change.</p>
+      </section>
+
+      <section id="extras">
+        <h2>Extras</h2>
+        <label class="check"><input type="checkbox" data-key="enhance.urgency"><span>Due-date urgency</span>
+          <span class="desc">Marks items overdue, due today or due within three days.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.clamp"><span>Shorter descriptions</span>
+          <span class="desc">Long item descriptions in course content show three lines until you hover or focus them.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.scores"><span>Score bars</span>
+          <span class="desc">A small bar under each gradebook score showing how much of the total it is.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.reading"><span>Reading width</span>
+          <span class="desc">Announcements, posts and documents keep lines to a comfortable length.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.inline"><span>Countdowns and percentages</span>
+          <span class="desc">"in 2 days" next to every due date, and the percentage inside every grade.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.previews"><span>Folder previews</span>
+          <span class="desc">Hover a closed folder in course content to see what is inside, what is done and what is due.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.progress"><span>Course progress</span>
+          <span class="desc">A bar at the top of course content adding up how much of the course you have completed.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.keys"><span>Keyboard shortcuts</span>
+          <span class="desc">g then c, a, g, m or s for Courses, Calendar, Grades, Messages, Activity; / to search; ? for the list.</span></label>
+        <div class="group">
+          <h3>Declutter</h3>
+          <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
+          <label class="check"><input type="checkbox" data-key="declutter.banner"><span>Hide course banner images</span></label>
+          <label class="check"><input type="checkbox" data-key="declutter.faculty"><span>Hide the Course Faculty box when it is empty</span></label>
+          <p class="desc">Hide course tabs you never use:</p>
+          <div class="row" id="declutter-tabs"></div>
+        </div>
+      </section>
+
+      <section id="data">
+        <h2>Backup</h2>
+        <div class="row">
+          <button type="button" id="export">Export settings</button>
+          <label class="row"><button type="button" id="import-btn">Import settings…</button><input type="file" id="import" accept="application/json,.json" hidden></label>
+          <button type="button" id="reset-all" class="danger">Reset everything</button>
+        </div>
+        <p class="desc">Exports are a JSON file with your palette, presets and options. Course names stay on this computer and are not exported.</p>
+      </section>
+    </main>
+
+    <aside class="preview" aria-label="Preview">
+      <iframe id="preview" src="preview.html" title="Preview of a Blackboard course page"></iframe>
+    </aside>
+  </div>
+
+  <script src="lib/color.js"></script>
+  <script src="defaults.js"></script>
+  <script src="ui.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
