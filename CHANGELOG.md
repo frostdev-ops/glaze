@@ -74,7 +74,7 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
-[2.0.2]: https://github.com/frostdev-ops/glaze/releases/tag/safari-v2.0.2
+[2.0.2]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.2
 [2.0.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.1
 [2.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.0
 [1.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v1.0.0
