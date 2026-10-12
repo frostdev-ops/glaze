@@ -87,18 +87,18 @@ files be web-accessible to be linked this way.
 
 None. All code ships in the package.
 
-## Screenshots checklist (1280x800 each, PNG or JPEG, up to 5)
+## Screenshots (1280x800, up to 5)
 
-The 1.0 shots in `assets/store/screenshots-1280/` still show the palettes. For 2.0, replace or add:
+`assets/store/screenshots/`, captured by `scripts/store-screenshots.js` from the packaged extension and
+its built-in sample course (no real coursework), with the clock fixed at October 11, 2026:
 
-- [ ] 1 — Ultra course outline, themed, with countdown chips and course progress on.
-- [ ] 2 — The editor page with its live preview.
-- [ ] 3 — An assignment page: instructions card, details column, editor.
-- [ ] 4 — Aurora or image background with a light and a dark palette side by side.
-- [ ] 5 — A folder preview and a themed tooltip.
+1. `1-course-frost.jpg` — a themed course with countdowns, urgency, score bars and course progress.
+2. `2-editor.jpg` — the editor beside its live preview.
+3. `3-extras-paper.jpg` — the Extras section in the light Paper palette.
+4. `4-aurora-midnight.jpg` — the aurora background with the Midnight palette.
+5. `5-popup-ember.jpg` — the quick-controls popup over a course in Ember.
 
-Use the same course and viewport across shots. Blur or replace any real names, grades, or student data
-before uploading.
+Rerun after visible UI changes: `NODE_PATH=<a node_modules with playwright> node scripts/store-screenshots.js`.
 
 ## Promo images
 
