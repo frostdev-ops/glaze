@@ -1,31 +1,35 @@
-function show(enabled, useSettingsInsteadOfPreferences) {
-  if (useSettingsInsteadOfPreferences) {
-    document.getElementsByClassName('state-on')[0].innerText =
-      'Glaze’s extension is currently on. You can turn it off in the Extensions section of Safari Settings.';
-    document.getElementsByClassName('state-off')[0].innerText =
-      'Glaze’s extension is currently off. You can turn it on in the Extensions section of Safari Settings.';
-    document.getElementsByClassName('state-unknown')[0].innerText =
-      'You can turn on Glaze’s extension in the Extensions section of Safari Settings.';
-    document.getElementsByClassName('open-preferences')[0].innerText =
-      'Quit and Open Safari Settings…';
-  }
-
-  if (typeof enabled === 'boolean') {
-    document.body.classList.toggle(`state-on`, enabled);
-    document.body.classList.toggle(`state-off`, !enabled);
-  } else {
-    document.body.classList.remove(`state-on`);
-    document.body.classList.remove(`state-off`);
-  }
+// The app calls these: showInstall() outside Applications, showGuide() inside, then show(enabled) every second.
+function showInstall() {
+  document.body.dataset.view = 'install';
 }
 
-function openPreferences() {
-  webkit.messageHandlers.controller.postMessage('open-preferences');
+function showGuide() {
+  document.body.dataset.view = 'guide';
+}
+
+function useSettingsName() {
+  // macOS 12's Safari calls its settings "Preferences".
+  for (const el of document.querySelectorAll('.settings-name')) el.textContent = 'Settings';
+}
+
+function show(enabled) {
+  document.body.classList.toggle('state-on', enabled === true);
 }
 
 window.showError = function (message) {
-  show(undefined, true);
-  document.querySelector('.state-unknown').innerText = message;
+  document.querySelector('.error').textContent = message;
+  for (const button of document.querySelectorAll('button')) button.disabled = false;
+  document.querySelector('.install-button').textContent = 'Install Glaze';
 };
 
-document.querySelector('button.open-preferences').addEventListener('click', openPreferences);
+for (const el of document.querySelectorAll('.settings-name')) el.textContent = 'Preferences';
+
+document.querySelector('.install-button').addEventListener('click', (event) => {
+  event.target.disabled = true;
+  event.target.textContent = 'Installing…';
+  webkit.messageHandlers.controller.postMessage('install');
+});
+
+document.querySelector('.open-preferences').addEventListener('click', () => {
+  webkit.messageHandlers.controller.postMessage('open-preferences');
+});

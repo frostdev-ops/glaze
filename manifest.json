@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze for Blackboard Ultra",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Restyle Blackboard Ultra: palettes, fonts, backgrounds, motion and at-a-glance extras. Works on any institution's Ultra.",
   "permissions": [
     "storage"

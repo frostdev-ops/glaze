@@ -14,7 +14,7 @@ domain.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
-  <a href="https://github.com/frostdev-ops/glaze/releases/download/safari-v2.0.1/glaze-2.0.1-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
+  <a href="https://github.com/frostdev-ops/glaze/releases/download/safari-v2.0.2/glaze-2.0.2-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
 </p>
 
 ## Features
@@ -43,14 +43,16 @@ domain.
 
 ## Safari
 
-[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/safari-v2.0.1/glaze-2.0.1-safari-macos.dmg): signed and notarized, from the `safari-v*` release on
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/safari-v2.0.2/glaze-2.0.2-safari-macos.dmg): signed and notarized, from the `safari-v*` release on
 [GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
 on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
 the frosted-glass blur needs Safari 18.
 
-1. Open the `.dmg` and drag **Glaze** into **Applications**. (A `.zip` of the same app is there too.)
-2. Open Glaze once, then choose **Quit and Open Safari Settings…**.
-3. In Safari Settings → Extensions, turn Glaze on, and allow it on your Blackboard site.
+1. Open the `.dmg`, open **Glaze** and click **Install Glaze**. It copies itself into Applications
+   (your own `~/Applications` if you aren't an administrator) and reopens from there. Dragging it into
+   **Applications** works too. (A `.zip` of the same app is there too.)
+2. Glaze opens Safari's Extensions settings and shows an illustrated guide: tick Glaze, then allow it
+   on your Blackboard site. The guide ticks off the first step as soon as Safari turns Glaze on.
 
 Safari loads Glaze from this Mac app. The Xcode project is in `safari/`; to build the app yourself
 you need Xcode:

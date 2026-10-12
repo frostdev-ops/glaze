@@ -28,6 +28,11 @@ cleanup() {
 trap cleanup EXIT
 app="$stage/DerivedData/Build/Products/Release/Glaze.app"
 cp -R safari/Glaze "$stage/Glaze"
+# The downloaded app copies itself into Applications. macOS won't run an app a sandboxed app wrote,
+# so this build's app runs unsandboxed; the extension stays sandboxed, and the App Store build is unchanged.
+/usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$stage/Glaze/Glaze/Release.entitlements"
+perl -0pi -e 's/ENABLE_APP_SANDBOX = YES;(?=(?:(?!buildSettings).)*?PRODUCT_BUNDLE_IDENTIFIER = io\.frostdev\.Glaze;)/ENABLE_APP_SANDBOX = NO;/gs' \
+  "$stage/Glaze/Glaze.xcodeproj/project.pbxproj"
 resources="$stage/Glaze/Glaze Extension/Resources"
 rm -rf "$resources"
 mkdir -p "$resources"
@@ -57,14 +62,14 @@ codesign --verify --deep --strict --verbose=2 "$app"
 # Keep a debug entitlement from slipping into a release.
 for bundle in "$extension" "$app"; do
   codesign -d --entitlements - --xml "$bundle" > "$stage/entitlements.plist" 2>/dev/null
-  python3 - "$stage/entitlements.plist" <<'PY'
+  python3 - "$stage/entitlements.plist" "$bundle" <<'PY'
 import plistlib, sys
 with open(sys.argv[1], 'rb') as f:
     entitlements = plistlib.load(f)
 if entitlements.get('com.apple.security.get-task-allow'):
     sys.exit('build-safari: debug entitlement found in release')
-if not entitlements.get('com.apple.security.app-sandbox'):
-    sys.exit('build-safari: Safari app and extension must be sandboxed')
+if sys.argv[2].endswith('.appex') and not entitlements.get('com.apple.security.app-sandbox'):
+    sys.exit('build-safari: the Safari extension must be sandboxed')
 PY
 done
 

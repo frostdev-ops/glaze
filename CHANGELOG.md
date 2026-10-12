@@ -6,13 +6,19 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.2] — 2026-10-11
+
 ### Added
 
 - A Safari Mac app, released separately as `safari-v2.0.1`.
+- The Safari Mac app installs itself: open it from the disk image and click **Install Glaze**. It
+  copies itself into Applications, opens Safari's Extensions settings, and shows an illustrated
+  guide that ticks off as Safari turns Glaze on.
 
 ### Changed
 
 - The popup's "Open the editor" button works whether or not the browser returns a promise.
+- American spelling: "colours" is now "colors".
 
 ## [2.0.1] — 2026-10-11
 
@@ -68,6 +74,7 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
+[2.0.2]: https://github.com/frostdev-ops/glaze/releases/tag/safari-v2.0.2
 [2.0.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.1
 [2.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.0
 [1.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v1.0.0

@@ -2,12 +2,16 @@
     -webkit-user-select: none;
     -webkit-user-drag: none;
     cursor: default;
+    box-sizing: border-box;
 }
 
 :root {
     color-scheme: light dark;
-
-    --spacing: 20px;
+    --accent: -apple-system-control-accent;
+    --ok: #2f9e44;
+    --muted: color-mix(in srgb, CanvasText 60%, transparent);
+    --line: color-mix(in srgb, CanvasText 14%, transparent);
+    --panel: color-mix(in srgb, CanvasText 5%, Canvas);
 }
 
 html {
@@ -15,31 +19,154 @@ html {
 }
 
 body {
+    margin: 0;
+    padding: 24px 28px;
+    min-height: 100vh;
     display: flex;
-    align-items: center;
-    justify-content: center;
     flex-direction: column;
-
-    gap: var(--spacing);
-    margin: 0 calc(var(--spacing) * 2);
-    height: 100%;
-
-    font: -apple-system-short-body;
-    text-align: center;
+    font: -apple-system-body;
+    background: Canvas;
+    color: CanvasText;
 }
 
-body:not(.state-on, .state-off) :is(.state-on, .state-off) {
-    display: none;
-}
-
-body.state-on :is(.state-off, .state-unknown) {
-    display: none;
-}
-
-body.state-off :is(.state-on, .state-unknown) {
-    display: none;
-}
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 14px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+p { margin: 0 0 8px; line-height: 1.4; }
+.note { color: var(--muted); font-size: 12px; }
 
 button {
-    font-size: 1em;
+    font: inherit;
+    font-size: 13px;
+    padding: 5px 14px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: Canvas;
+    color: CanvasText;
 }
+button.primary {
+    font-size: 15px;
+    font-weight: 600;
+    padding: 10px 36px;
+    border: 0;
+    background: var(--accent);
+    color: white;
+}
+button:disabled { opacity: .6; }
+
+/* Views: the app picks one; nothing shows before it does. */
+section { display: none; }
+body[data-view="install"] .install { display: flex; }
+body[data-view="guide"] .guide { display: block; }
+
+.install {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 10px;
+    flex: 1;
+}
+.install p { margin: 0; }
+.install .primary { margin: 14px 0 4px; }
+.install .note { max-width: 300px; }
+
+.guide header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.guide header p { margin: 2px 0 0; }
+
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.step {
+    display: grid;
+    grid-template-columns: 1fr 200px;
+    gap: 16px;
+    align-items: center;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+}
+.step p { font-size: 12.5px; }
+.badge {
+    display: inline-grid;
+    place-items: center;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-size: 12px;
+}
+.state-on .step-enable .badge { background: var(--ok); }
+.state-on .step-enable .badge { font-size: 0; }
+.state-on .step-enable .badge::after { content: "✓"; font-size: 12px; }
+
+.status { font-weight: 600; font-size: 12.5px; }
+.status-on, .state-on .status-off { display: none; }
+.state-on .status-on { display: inline; color: var(--ok); }
+.status-off { color: var(--muted); }
+.state-on .open-preferences { display: none; }
+
+/* Drawn stand-ins for Safari's own screens; the highlighted part is what to click. */
+.mock {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: Canvas;
+    overflow: hidden;
+    font-size: 9px;
+    box-shadow: 0 4px 14px color-mix(in srgb, black 12%, transparent);
+}
+.mock-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+}
+.mock-bar i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+.mock-bar > span { margin: 0 auto; font-weight: 600; }
+.mock-body { display: grid; grid-template-columns: 1.4fr 1fr; min-height: 92px; }
+.mock-list { border-right: 1px solid var(--line); padding: 4px; }
+.mock-row { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 4px; white-space: nowrap; }
+.mock-row img, .mock-row .blank { width: 12px; height: 12px; border-radius: 3px; background: var(--line); flex: none; }
+.check { width: 9px; height: 9px; border: 1px solid var(--muted); border-radius: 2px; flex: none; }
+.mock-pane { padding: 8px; display: grid; gap: 6px; align-content: start; }
+.line { display: block; height: 4px; border-radius: 2px; background: var(--line); width: 100%; }
+.line.short { width: 60%; }
+.mock-row .line { width: 48px; }
+
+.target { outline: 2px solid var(--accent); outline-offset: 1px; animation: pulse 1.6s ease-in-out infinite; }
+.mock-row.target { background: color-mix(in srgb, var(--accent) 14%, transparent); font-weight: 600; }
+.mock-row.target .check { background: var(--accent); border-color: var(--accent); }
+.state-on .mock-row.target { outline-color: var(--ok); animation: none; }
+.state-on .mock-row.target .check { background: var(--ok); border-color: var(--ok); }
+
+.address {
+    flex: 1;
+    margin: 0 4px !important;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: Canvas;
+    font-weight: 400 !important;
+    color: var(--muted);
+}
+.mock-bar img.target { width: 12px; height: 12px; border-radius: 3px; }
+.mock-popover {
+    margin: 6px 6px 8px auto;
+    width: 150px;
+    padding: 8px;
+    display: grid;
+    gap: 5px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel);
+}
+.mock-button { padding: 3px; border-radius: 4px; text-align: center; border: 1px solid var(--line); background: Canvas; }
+.mock-button.target { background: var(--accent); color: white; border-color: transparent; }
+
+.done-note { display: none; margin-top: 14px; text-align: center; }
+.state-on .done-note { display: block; }
+
+.error:empty { display: none; }
+.error { margin: 12px 0 0; color: #d9480f; text-align: center; font-size: 12.5px; }
+
+@keyframes pulse { 50% { outline-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .target { animation: none; } }
