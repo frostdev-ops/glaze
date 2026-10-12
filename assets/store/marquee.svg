@@ -9,5 +9,5 @@
     <ellipse cx="79" cy="76" rx="10" ry="15" transform="rotate(20 79 76)" fill="#ffffff" opacity="0.5"/>
   </g>
   <text x="400" y="300" font-family="system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="130" font-weight="700" fill="#eaf6ff">Glaze</text>
-  <text x="400" y="360" font-family="system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="44" font-weight="500" fill="#6fdcff">Your colours on Blackboard Ultra.</text>
+  <text x="400" y="360" font-family="system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="44" font-weight="500" fill="#6fdcff">Your colors on Blackboard Ultra.</text>
 </svg>

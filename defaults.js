@@ -166,7 +166,7 @@ const GZ_SANITIZE = (raw) => {
   return out;
 };
 
-// The palette to paint: the user's colours, or with auto on, the light/dark preset for the OS mode.
+// The palette to paint: the user's colors, or with auto on, the light/dark preset for the OS mode.
 const GZ_ACTIVE_COLORS = (s, prefersDark) => {
   if (!s.auto.on) return s.colors;
   return GZ_PRESET(prefersDark ? s.auto.dark : s.auto.light, s.presets) || s.colors;

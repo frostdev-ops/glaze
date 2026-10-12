@@ -23,7 +23,7 @@ domain.
 - **Look** — font (two bundled), text size, line height, corner radius, density, depth and glass.
 - **Backgrounds** — solid, gradient, a drifting aurora, or your own image.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
-- **Course colours** — Ultra's course stripes blended into your palette, or set one by one.
+- **Course colors** — Ultra's course stripes blended into your palette, or set one by one.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
 - **Extras** (each off by default) — due-date urgency, countdowns, score bars, folder previews, course progress, keyboard shortcuts, reading width, and hiding page parts you don't use.
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.

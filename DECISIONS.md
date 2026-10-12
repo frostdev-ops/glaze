@@ -22,7 +22,7 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Classic scripts with a `module.exports` guard | ES modules; node `vm` | MV3 content scripts can't import modules; the guard is one line per file. |
 | Three stylesheets (`theme`, `motion`, `extras`), each its own `<link>` | One file; `@import` | Keeps theme.css readable; `@import` resolution under `use_dynamic_url` is untested. |
 | Stylesheets added at document_start before the storage read | Manifest `css` | Manifest CSS can't be removed without a reload, and the popup toggles the theme live. A disabled user sees a frame of theme instead of an enabled user seeing a frame of Ultra. |
-| Course colours: 12 fixed hue anchors mixed toward the accent with `color-mix(in oklch)` | Relative colour syntax (`oklch(from …)`) | Relative colour syntax needs Chrome 119 / Firefox 128; `color-mix` works on the current minimums. |
+| Course colors: 12 fixed hue anchors mixed toward the accent with `color-mix(in oklch)` | Relative colour syntax (`oklch(from …)`) | Relative colour syntax needs Chrome 119 / Firefox 128; `color-mix` works on the current minimums. |
 | No View Transitions | `startViewTransition` | Ultra routes client-side; an extension can't wrap its navigations. |
 | Background image by `https:` URL only | Upload into `storage.local` | Requested scope. Add upload if wanted. |
 
@@ -30,7 +30,7 @@ What 2.0 chose, what it turned down, and why. Newest last.
 
 | Decision | Considered | Why |
 |---|---|---|
-| Course colours: harmonised = 70% Ultra hue + 30% muted ink | Mixing toward the accent | Mixing toward the accent made every course the same colour; ink keeps the hues apart. |
+| Course colors: harmonised = 70% Ultra hue + 30% muted ink | Mixing toward the accent | Mixing toward the accent made every course the same colour; ink keeps the hues apart. |
 | Per-course colour keyed by Ultra's colour slot (1–10) | Course id from `/ultra/courses/_ID_/` | The slot class is on every course-scoped element (calendar, messages, grades, stream); ids are only on some links. Pure CSS via `--gz-pick-N`. |
 | Ink-inherit rule wrapped in `:where()` | Raising each colour rule's specificity | At (1,2,3) it silently beat every later button, chip and badge colour, 1.0's included. |
 | Backgrounds: a fixed `::before` on `<html>` and on each Ultra overlay root | Hiding the page under an overlay via `aria-hidden` | Ultra doesn't reliably mark the covered layer; each overlay painting the same viewport-fixed layer covers it either way. |

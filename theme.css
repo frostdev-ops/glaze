@@ -5,7 +5,7 @@
    container by default (see "ink"), so anonymous spans/bdis follow the theme.
 
    Everything is driven by the tokens below. content.js overrides them as inline
-   --gz-* on <html> when the user picks colours (inline beats these defaults), and
+   --gz-* on <html> when the user picks colors (inline beats these defaults), and
    flips the motion knobs off with data-gz-no-* attributes. Every other colour in
    this file is one of the tokens or a color-mix() of them. */
 /* Bundled faces (SIL OFL 1.1, see fonts/). Relative URLs resolve against this sheet's own
@@ -14,7 +14,7 @@
 @font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 
-/* Colours and look values are NOT defaulted here: defaults.js is the one place a default lives,
+/* Colors and look values are NOT defaulted here: defaults.js is the one place a default lives,
    and content.js writes every --gz-* value inline on <html> before this sheet is even added.
    What lives here is only what is derived from them. */
 :root {
@@ -170,7 +170,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    missed it). Links, buttons, chips and svg keep their own colour rules below. */
 /* :where() keeps this at the specificity of the id alone, so it beats every Ultra class rule but any
    targeted #site-wrap rule below can still set a colour. (1.0 had it at (1,2,3), which silently beat
-   the button, badge and chip colours written later in this file.) */
+   the button, badge and chip colors written later in this file.) */
 #site-wrap :where(*:not(a, .MuiButton-root, .MuiChip-label, svg, svg *)) { color: inherit !important; }
 #site-wrap :where(.course-id, .course-status, .summary, .ellipsis, .more-info-toggle, .MuiFormLabel-root,
   .MuiInputLabel-root, .MuiListItemText-secondary, .muted, .secondary, .subtitle) { color: var(--gz-ink-muted) !important; }
@@ -543,7 +543,7 @@ html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, h
 @property --gz-grade-bg { syntax: "*"; inherits: false; }
 @property --gz-grade-edge { syntax: "*"; inherits: false; }
 
-/* ---- course colours ----
+/* ---- course colors ----
    Ultra marks anything course-scoped with .course-color-1…10 and paints a stripe in that hue
    (a ::before bar, a top border, a calendar chip border). Its ten hues are fully saturated and
    clash with every palette; harmonised, each is pulled 30% toward the muted ink so they sit in
@@ -675,7 +675,7 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 /* ---- course banner: the title sits on the course image, so it is light on every palette ---- */
 #site-wrap course-banner [class*="titleContainer"], #site-wrap course-banner [class*="titleContainer"] * { color: #fff !important; text-shadow: 0 1px 12px rgb(0 0 0 / 0.55); }
 
-/* ---- hover fills Ultra hard-codes as #f0f0f0 (the sweep only sees resting colours) ---- */
+/* ---- hover fills Ultra hard-codes as #f0f0f0 (the sweep only sees resting colors) ---- */
 #site-wrap :is([class*="courseCard"], .MuiListItemButton-root):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 45%, transparent) !important; }
 
 /* ---- density ---- */

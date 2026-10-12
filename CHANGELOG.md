@@ -26,7 +26,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [2.0.0] — 2026-10-11
 
-Glaze now reshapes Ultra's pages, not just their colours, and has a full editor.
+Glaze now reshapes Ultra's pages, not just their colors, and has a full editor.
 
 ### Added
 
@@ -34,7 +34,7 @@ Glaze now reshapes Ultra's pages, not just their colours, and has a full editor.
 - **Look:** font (System, Blackboard, Inter, Atkinson Hyperlegible, Serif, Mono; Inter and Atkinson are bundled), text size, line height, corner radius, density, depth and glass blur.
 - **Backgrounds:** solid, gradient, aurora, or an image from an `https://` link, with dim and blur.
 - **Motion levels:** Off, Subtle (default) and Expressive. Off is used automatically when the system asks for reduced motion, unless you opt out. The three 1.0 switches remain as fine-tuning.
-- **Course colours:** Ultra's course stripes are blended into the palette, or set one by one.
+- **Course colors:** Ultra's course stripes are blended into the palette, or set one by one.
 - **Theme management:** save, rename and delete your own palettes; export and import settings as JSON; contrast badges; automatic light/dark palettes that follow the system.
 - **Tooltips and hints:** themed tooltips replace the browser's plain ones. Hovering a date shows how far off it is, a grade shows its share, and cut-off text shows in full.
 - **Extras**, each off until switched on: due-date urgency, countdowns and grade percentages, shorter descriptions, score bars, reading width, folder previews, course progress, keyboard shortcuts, and hiding parts of the page you don't use.

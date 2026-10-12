@@ -30,7 +30,7 @@ test('contrast matches WCAG reference values', () => {
   assert.equal(C.contrast('#777777', '#ffffff').toFixed(2), '4.48');
 });
 
-test('saturation separates greys from brand colours', () => {
+test('saturation separates greys from brand colors', () => {
   assert.equal(C.saturated(C.parse('#f4f5f7')), false);
   assert.equal(C.saturated(C.parse('#17c8f4')), true);
 });

@@ -1,6 +1,6 @@
 // Glaze — content script, document_start.
 // Jobs: (1) put the stylesheets on the page while the theme is on (<link>s we own, so the popup can
-// toggle them without a reload), (2) push settings onto <html> — colours and look values as inline
+// toggle them without a reload), (2) push settings onto <html> — colors and look values as inline
 // --gz-* vars, everything else as data-gz-* attributes — so the CSS never branches here,
 // (3) the long tail: tag what no selector can reach and let the CSS restyle the tag.
 (() => {
@@ -222,7 +222,7 @@
   // ---- hover fills ------------------------------------------------------------------------------
   // Ultra hard-codes some hover and focus fills (#fff, #f0f0f0, #e5e5e5) that exist only while
   // hovered, so the sweep never sees them. The first time the pointer reaches an element, it and
-  // its nearest ancestors (all :hover too) are checked once; theme.css recolours the tagged ones.
+  // its nearest ancestors (all :hover too) are checked once; theme.css recolors the tagged ones.
   // Focus only puts :focus on the target, so focus checks the target alone, in its own set.
   let hoverSeen = new WeakSet();
   let focusSeen = new WeakSet();

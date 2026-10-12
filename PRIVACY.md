@@ -4,7 +4,7 @@ _Last updated: 2026-10-11_
 
 ## What Glaze stores
 
-- **Your settings**, in `chrome.storage.sync`: the on/off switch, your colours and saved palettes, look,
+- **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
   background, motion, course colour and extras choices. Chrome syncs them to your own Google account so
   your theme follows you between devices.
 - **The names of your courses**, in `chrome.storage.local`, on this device only. Glaze notes which

@@ -1,4 +1,4 @@
-/* Shared by the popup and the options page. Colours are the user's own palette: ui.js writes the
+/* Shared by the popup and the options page. Colors are the user's own palette: ui.js writes the
    --gz-* tokens onto :root before first paint. */
 :root { --gz-ease: cubic-bezier(0.22, 1, 0.36, 1); --r: 10px; }
 * { box-sizing: border-box; }

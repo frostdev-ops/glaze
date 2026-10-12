@@ -19,7 +19,7 @@ would overclaim — it makes no contrast or screen-reader guarantees.
 
 Blackboard Ultra looks the same at every institution, and you don't get a say in it. Glaze gives you one.
 
-Pick a palette, or set all fourteen colours yourself, and every open Ultra tab updates as you choose. Save
+Pick a palette, or set all fourteen colors yourself, and every open Ultra tab updates as you choose. Save
 your own palettes, or let Glaze switch between a light and a dark one with your system.
 
 Then shape the rest:
@@ -27,7 +27,7 @@ Then shape the rest:
 • Look — font, text size, line height, rounded corners, spacing, depth and frosted glass
 • Background — solid, gradient, a slowly drifting aurora, or your own image
 • Motion — Off, Subtle or Expressive. Reduced-motion settings are respected automatically.
-• Course colours — Ultra's course stripes blended into your palette, or chosen one by one
+• Course colors — Ultra's course stripes blended into your palette, or chosen one by one
 
 Glaze also tidies Ultra itself: clearer buttons, a visible selected state on toggles, a readable
 calendar, grade bands in the gradebook, and calmer assignment pages.
@@ -58,7 +58,7 @@ endorsed by, or sponsored by Anthology Inc.
 ## Single-purpose statement
 
 Glaze has one purpose: to customise how Blackboard Ultra pages look and read, according to the user's
-chosen colours, layout, motion and display preferences. The optional helpers (countdowns, previews,
+chosen colors, layout, motion and display preferences. The optional helpers (countdowns, previews,
 progress, shortcuts) only present information already on the user's Blackboard pages. Every permission
 and every line of code serves that purpose.
 
