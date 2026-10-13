@@ -81,6 +81,16 @@ All notable changes to Glaze are documented here. The format follows
 - **What's new.** After an update, the editor opens with a few lines on what changed, once; Dismiss
   puts it away. A fresh install shows nothing. Until then, a small dot on the popup's "Open the
   editor" button. Nothing on the toolbar icon or on Blackboard.
+- **Glaze speaks Spanish, French, German, Portuguese (Brazil) and Dutch.** Everything Glaze writes
+  on Blackboard (due-date status, hover hints, new badges, the what-if calculator, the command
+  palette, Download all, the typing backup, focus mode, keyboard shortcuts, folder previews) is in the
+  language Blackboard is shown in, so a Spanish Blackboard gets "dentro de 2 días · Sin abrir" even in
+  an English browser. The editor and the popup follow your browser's language. Dates, numbers and
+  percentages are written that language's way ("82,45 %"). Any other language, and any word not
+  translated yet, stays English. Settings search finds the translated names, with or without accents.
+  The store description is translated too; the name stays Glaze. The translations are machine-made
+  and waiting for native speakers to review them.
+
 
 ### Changed
 
@@ -88,8 +98,8 @@ All notable changes to Glaze are documented here. The format follows
   read only US-style dates (10/18/26, 11:59 PM). In course content and on an assignment's page the
   date now comes from your gradebook, whatever language Blackboard shows; elsewhere Glaze reads it the
   way Blackboard writes it for your language: 18.10.26, 18/10/2026, 2026/10/18, month names, a 24-hour
-  clock, Arabic digits. Glaze's own words ("in 2 days", "Past due") are still English. A discussion
-  with two due dates now counts down to the last one, the date your gradebook keeps.
+  clock, Arabic digits. A discussion with two due dates now counts down to the last one, the date your
+  gradebook keeps.
 - **Glaze for iPhone and iPad.** Safari on iOS and iPadOS 18 or newer, from the same App Store listing as
   the Mac app. The app is a two-step guide in the Mac app's style, in light and dark: turn Glaze on in
   Settings, then allow it on your Blackboard site. On iOS 26.2 and newer its button opens Safari's

@@ -19,6 +19,12 @@ test('synonyms: dark finds palettes, font finds text size, either spelling of co
   assert.ok(!hit('dark', 'Motion Level'));
 });
 
+test('accents are optional either way, and spans still line up', () => {
+  assert.ok(hit('tamano', 'Aspecto Tamaño del texto'));
+  assert.ok(hit('arrière', 'Arriere-plan'));
+  assert.deepEqual(F.spans('Größe: Tamaño', F.parse('tamano')), [[7, 13]]);
+});
+
 test('spans mark every alternative that appears', () => {
   assert.deepEqual(F.spans('Dark palette, dark', F.parse('dark')), [[0, 4], [14, 18]]);
   assert.deepEqual(F.spans('Palette', F.parse('dark'), true), [[0, 7]]);

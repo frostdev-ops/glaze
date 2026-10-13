@@ -3,16 +3,19 @@
 // everything else saves on change.
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
+// In the browser's language (lib/i18n.js): this page's own text now, and every word written later.
+GZ_I18N.page();
+const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
 // Ultra's own colour for each course slot: the picker starts there.
 const SLOT_COLORS = { 1: '#c473d4', 2: '#2fd9fc', 3: '#ffe12b', 4: '#ff6417', 5: '#89f3db', 6: '#fe5b91', 7: '#85f472', 8: '#22c7cc', 9: '#ca22ad', 10: '#157afb' };
 const DEPTH = ['Flat', 'Soft', 'Raised', 'Floating'];
 const FORMAT = {
-  pct: (v) => `${Math.round(v * 100)}%`,
-  pct100: (v) => `${v}%`,
+  pct: (v) => GZ_I18N.pct(Math.round(v * 100), GZ_I18N.ui()),
+  pct100: (v) => GZ_I18N.pct(v, GZ_I18N.ui()),
   px: (v) => `${v}px`,
-  depth: (v) => DEPTH[v],
+  depth: (v) => t(DEPTH[v]),
   deg: (v) => `${v}°`,
-  presence: (v) => ['Faint', 'Soft', 'Clear', 'Bold'][Math.min(3, Math.floor(v / 25))],
+  presence: (v) => t(['Faint', 'Soft', 'Clear', 'Bold'][Math.min(3, Math.floor(v / 25))]),
 };
 
 let hintTimer = 0;
@@ -78,7 +81,7 @@ const filter = () => {
   }
   for (const a of $$('.top nav a')) a.classList.toggle('miss', !!$(a.hash)?.classList.contains('miss'));
   if (window.Highlight) CSS.highlights.set('find', new Highlight(...marks));
-  const msg = !on ? '' : n ? `${n} setting${n > 1 ? 's' : ''}` : 'No settings match';
+  const msg = !on ? '' : n ? t('{n} settings', { n }) : t('No settings match');
   if ($('#find-status').textContent !== msg) $('#find-status').textContent = msg;
 };
 finder.addEventListener('input', filter);
@@ -99,8 +102,8 @@ addEventListener('keydown', (e) => {
 GZ_NEWS.check((notes) => {
   GZ_NEWS.seen();
   if (!notes.length) return;
-  $('#news-title').textContent = `New in ${notes.map(([v]) => v).join(', ')}`;
-  $('#news-list').replaceChildren(...notes.flatMap(([, lines]) => lines).map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+  $('#news-title').textContent = t('New in {version}', { version: notes.map(([v]) => v).join(', ') });
+  $('#news-list').replaceChildren(...notes.flatMap(([, lines]) => lines).map((line) => Object.assign(document.createElement('li'), { textContent: t(line) })));
   $('#news').hidden = false;
 });
 $('#news-close').addEventListener('click', () => { $('#news').hidden = true; finder.focus(); });
@@ -127,7 +130,7 @@ GZ_UI.load().then((s) => {
     clearTimeout(timer);
     timer = 0;
     if (!pending.size) return;
-    GZ_UI.save(s, [...pending], (err) => hint(err || 'Saved', !!err));
+    GZ_UI.save(s, [...pending], (err) => hint(err || t('Saved'), !!err));
     pending.clear();
   };
   const save = (keys, soon = false) => {
@@ -156,7 +159,7 @@ GZ_UI.load().then((s) => {
     });
     input.addEventListener('change', () => save(['colors', 'preset', 'auto']));
     colorInputs[v] = input;
-    row.append(input, label);
+    row.append(input, t(label));
     $('#colors').append(row);
   }
 
@@ -174,18 +177,18 @@ GZ_UI.load().then((s) => {
       dot.className = 'swatch';
       dot.style.cssText = `background:${p.colors['--gz-surface']};border-color:${p.colors['--gz-line-strong']};--dot:${p.colors['--gz-accent']};cursor:default`;
       const name = Object.assign(document.createElement('input'), { type: 'text', value: p.name, maxLength: 40 });
-      name.setAttribute('aria-label', `Rename ${p.name}`);
+      name.setAttribute('aria-label', t('Rename {name}', { name: p.name }));
       name.addEventListener('change', () => {
         const next = name.value.trim();
         if (next === p.name) return;
-        if (!next || GZ_PRESET(next, s.presets)) { name.value = p.name; return hint(next ? `There's already a palette called ${next}.` : 'A palette needs a name.', true); }
+        if (!next || GZ_PRESET(next, s.presets)) { name.value = p.name; return hint(next ? t("There's already a palette called {name}.", { name: next }) : t('A palette needs a name.'), true); }
         for (const k of ['light', 'dark']) if (s.auto[k] === p.name) s.auto[k] = next;
         if (s.preset === p.name) s.preset = next;
         p.name = next;
         refresh();
         save(['presets', 'preset', 'auto']);
       });
-      const del = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Delete', className: 'danger' });
+      const del = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Delete'), className: 'danger' });
       del.addEventListener('click', () => {
         s.presets = s.presets.filter((q) => q !== p);
         if (s.preset === p.name) s.preset = null;
@@ -203,17 +206,17 @@ GZ_UI.load().then((s) => {
     $('#contrast').replaceChildren(...GZ_CONTRAST(s.colors).map((r) => {
       const li = document.createElement('li');
       li.className = r.pass ? 'pass' : 'fail';
-      li.title = `Needs ${r.min}:1`;
+      li.title = t('Needs {min}:1', { min: r.min });
       const b = document.createElement('b');
-      b.textContent = `${r.ratio.toFixed(1)}:1`;
-      li.append(r.label, b);
+      b.textContent = `${GZ_I18N.num(+r.ratio.toFixed(1), GZ_I18N.ui())}:1`;
+      li.append(t(r.label), b);
       return li;
     }));
   };
 
   // ---- everything that follows the state, cheap enough to redo on every edit ----
   const outputs = () => {
-    for (const o of $$('output[data-for]')) o.textContent = (FORMAT[o.dataset.format] || String)(get(o.dataset.for));
+    for (const o of $$('output[data-for]')) o.textContent = (FORMAT[o.dataset.format] || ((v) => GZ_I18N.num(v, GZ_I18N.ui())))(get(o.dataset.for));
   };
   const refresh = () => {
     GZ_UI.paint(s);
@@ -251,9 +254,11 @@ GZ_UI.load().then((s) => {
   // ---- fonts: one list for three slots (text, headings, code), each card drawn in its own face ----
   let slot = 'font';
   const AUTO = { head: 'Same as text', mono: 'As Blackboard has it' };
-  const fontLabel = (sl) => (s.look[sl] === 'auto' ? AUTO[sl] : GZ_FONTS.resolve(s.look[sl])?.name || s.look[sl]);
+  // A few built-in names are words ("Serif", "System"); the rest are the fonts' own names.
+  const fontName = (f) => t(f.name);
+  const fontLabel = (sl) => (s.look[sl] === 'auto' ? t(AUTO[sl]) : (GZ_FONTS.resolve(s.look[sl]) && fontName(GZ_FONTS.resolve(s.look[sl]))) || s.look[sl]);
   const META = { system: 'This computer', blackboard: 'Open Sans', inter: 'Bundled', atkinson: 'Bundled', serif: 'This computer', mono: 'This computer' };
-  const meta = (f) => META[f.id] || (f.files ? `jsDelivr${f.size ? ` · ${f.size}` : ''}` : f.local ? 'Google Fonts or this computer' : 'Google Fonts');
+  const meta = (f) => (META[f.id] ? t(META[f.id]) : f.files ? `jsDelivr${f.size ? ` · ${f.size}` : ''}` : f.local ? t('Google Fonts or this computer') : 'Google Fonts');
   // The card's own face: a preview family where there is one (Google's text= subset, loaded when the
   // list opens), else the stack content.js would use.
   const face = (f) => (f.google || f.preview ? `"${f.preview || f.google}", ${f.fb}` : GZ_FONTS.stack(f.id));
@@ -278,17 +283,17 @@ GZ_UI.load().then((s) => {
   const renderFonts = () => {
     fontLabels();
     const groups = new Map();
-    if (slot !== 'font') groups.set('', [card('auto', AUTO[slot], slot === 'head' ? 'Follows the text font' : "Ultra's monospace", 'inherit')]);
+    if (slot !== 'font') groups.set('', [card('auto', t(AUTO[slot]), t(slot === 'head' ? 'Follows the text font' : "Ultra's monospace"), 'inherit')]);
     const own = GZ_FONTS.custom(s.look[slot]) ? [GZ_FONTS.resolve(s.look[slot])] : [];
     for (const f of [...GZ_FONTS.LIST, ...own]) {
       if (!groups.has(f.group)) groups.set(f.group, []);
-      groups.get(f.group).push(card(f.id, f.name, meta(f), face(f)));
+      groups.get(f.group).push(card(f.id, fontName(f), meta(f), face(f)));
     }
     $('#font-grid').replaceChildren(...[...groups].flatMap(([g, cards]) => {
       const box = Object.assign(document.createElement('div'), { className: 'cards', role: 'radiogroup' });
-      box.setAttribute('aria-label', g || 'Automatic');
+      box.setAttribute('aria-label', t(g || 'Automatic'));
       box.append(...cards);
-      return g ? [Object.assign(document.createElement('h3'), { textContent: g }), box] : [box];
+      return g ? [Object.assign(document.createElement('h3'), { textContent: t(g) }), box] : [box];
     }));
   };
   // Previews: every Google family's name, and only those letters, in one small request.
@@ -307,7 +312,7 @@ GZ_UI.load().then((s) => {
   for (const r of $$('input[name="font-slot"]')) r.addEventListener('change', () => { slot = r.value; renderFonts(); });
   $('#font-use').addEventListener('click', async () => {
     const name = $('#font-custom').value.trim().replace(/\s+/g, ' ');
-    if (!GZ_FONTS.custom(name) && !GZ_FONTS.resolve(name)) return hint('Font names are letters, digits and spaces.', true);
+    if (!GZ_FONTS.custom(name) && !GZ_FONTS.resolve(name)) return hint(t('Font names are letters, digits and spaces.'), true);
     const known = GZ_FONTS.LIST.find((f) => f.name.toLowerCase() === name.toLowerCase());
     const value = known ? known.id : name;
     s.look[slot] = value;
@@ -318,7 +323,7 @@ GZ_UI.load().then((s) => {
     if (known) return;
     const found = await fetch(GZ_FONTS.cssUrl(name, false), { credentials: 'omit', referrerPolicy: 'no-referrer' }).then((r) => r.ok, () => false);
     if (found) previewLink([name]);
-    else hint(`${name} isn't on Google Fonts. It shows if it's installed on this computer.`);
+    else hint(t("{name} isn't on Google Fonts. It shows if it's installed on this computer.", { name }));
   });
   $('#font-custom').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#font-use').click(); });
 
@@ -327,7 +332,7 @@ GZ_UI.load().then((s) => {
   const activeColors = () => GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
   const bgPickers = [1, 2, 3].map((n) => {
     const input = Object.assign(document.createElement('input'), { type: 'color' });
-    input.setAttribute('aria-label', `Background color ${n}`);
+    input.setAttribute('aria-label', t('Background color {n}', { n }));
     input.addEventListener('input', () => {
       if (!s.bg.colors.length) s.bg.colors = [...GZ_BG_COLORS([], activeColors())];
       s.bg.colors[n - 1] = input.value;
@@ -342,8 +347,8 @@ GZ_UI.load().then((s) => {
     const shows = (el) => el.dataset.kinds.split(' ').includes(s.bg.kind) && (!el.dataset.styles || el.dataset.styles.split(' ').includes(s.bg.style));
     for (const el of $$('#background [data-kinds]')) el.hidden = !shows(el);
     $('#bg-sets').replaceChildren(...[['Palette', []], ...GZ_BG_SETS].map(([name, set]) => {
-      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'swatch bg-set', title: name });
-      b.setAttribute('aria-label', name === 'Palette' ? 'Palette colors' : name);
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'swatch bg-set', title: name === 'Palette' ? t(name) : name });
+      b.setAttribute('aria-label', name === 'Palette' ? t('Palette colors') : name);
       b.setAttribute('aria-pressed', String(set.join() === s.bg.colors.join()));
       b.style.background = `linear-gradient(135deg, ${GZ_BG_COLORS(set, activeColors()).join(', ')})`;
       b.addEventListener('click', () => { s.bg.colors = [...set]; refresh(); save(['bg']); });
@@ -361,7 +366,7 @@ GZ_UI.load().then((s) => {
       refresh();
       save(['declutter']);
     });
-    row.append(box, label);
+    row.append(box, t(label));
     $('#declutter-tabs').append(row);
     return [slug, box];
   });
@@ -385,7 +390,7 @@ GZ_UI.load().then((s) => {
     if (raw) {
       let url = null;
       try { url = new URL(raw); } catch { /* not a URL */ }
-      if (url?.protocol !== 'https:') return hint('Use an https:// link to an image.', true);
+      if (url?.protocol !== 'https:') return hint(t('Use an https:// link to an image.'), true);
       s.bg.image = url.href;
       s.bg.kind = 'image';
     } else s.bg.image = '';
@@ -395,9 +400,9 @@ GZ_UI.load().then((s) => {
 
   $('#save-preset').addEventListener('click', () => {
     const name = $('#preset-name').value.trim();
-    if (!name) return hint('Give the palette a name first.', true);
-    if (GZ_PRESET(name, s.presets)) return hint(`There's already a palette called ${name}.`, true);
-    if (s.presets.length >= GZ_MAX_PRESETS) return hint(`You can keep ${GZ_MAX_PRESETS} palettes. Delete one first.`, true);
+    if (!name) return hint(t('Give the palette a name first.'), true);
+    if (GZ_PRESET(name, s.presets)) return hint(t("There's already a palette called {name}.", { name }), true);
+    if (s.presets.length >= GZ_MAX_PRESETS) return hint(t('You can keep {n} palettes. Delete one first.', { n: GZ_MAX_PRESETS }), true);
     s.presets.push({ name, colors: { ...s.colors } });
     s.preset = name;
     $('#preset-name').value = '';
@@ -414,7 +419,7 @@ GZ_UI.load().then((s) => {
     $('#course-list').replaceChildren(...slots.map((slot) => {
       const li = document.createElement('li');
       const input = Object.assign(document.createElement('input'), { type: 'color', value: s.courses.colors[slot] || SLOT_COLORS[slot] });
-      input.setAttribute('aria-label', `Colour for ${seen[slot]}`);
+      input.setAttribute('aria-label', t('Colour for {name}', { name: seen[slot] }));
       input.addEventListener('input', () => { s.courses.colors[slot] = input.value; refresh(); save(['courses'], true); reset.hidden = false; });
       input.addEventListener('change', () => save(['courses']));
       const name = document.createElement('span');
@@ -422,20 +427,20 @@ GZ_UI.load().then((s) => {
       name.textContent = seen[slot];
       const tag = document.createElement('span');
       tag.className = 'slot';
-      tag.textContent = `colour ${slot}`;
+      tag.textContent = t('colour {n}', { n: +slot });
       name.append(tag);
-      const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Reset', hidden: !s.courses.colors[slot] });
+      const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Reset'), hidden: !s.courses.colors[slot] });
       reset.addEventListener('click', () => { delete s.courses.colors[slot]; input.value = SLOT_COLORS[slot]; reset.hidden = true; refresh(); save(['courses']); });
       const tint = Object.assign(document.createElement('label'), { className: 'check', hidden: !s.courses.tint });
       tint.dataset.tint = '';
       const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: s.courses.tinted.includes(slot) });
-      box.setAttribute('aria-label', `Tint inside ${seen[slot]}`);
+      box.setAttribute('aria-label', t('Tint inside {name}', { name: seen[slot] }));
       box.addEventListener('change', () => {
         s.courses.tinted = box.checked ? [...s.courses.tinted, slot] : s.courses.tinted.filter((n) => n !== slot);
         refresh();
         save(['courses']);
       });
-      tint.append(box, 'Tint');
+      tint.append(box, t('Tint'));
       li.append(input, name, tint, reset);
       return li;
     }));
@@ -457,26 +462,29 @@ GZ_UI.load().then((s) => {
   // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
   $('#share-copy').addEventListener('click', async () => {
     const code = await GZ_SHARE.encode(s);
-    try { await navigator.clipboard.writeText(code); hint('Theme code copied.'); } catch { $('#share-code').value = code; $('#share-code').select(); hint('Copy the code from the box.'); }
+    try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
   const endOffer = () => { offer = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
   const tryCode = async () => {
     const code = $('#share-code').value.trim();
     if (!code) return endOffer();
     let got;
-    try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(e.message, true); }
+    try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
     offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg } });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
     offer.auto = { ...s.auto, on: false };
     // What it is, and anything it would fetch from elsewhere.
     const fonts = [...new Set(['font', 'head', 'mono'].map((k) => offer.look[k]).filter((v) => v !== 'auto'))].map((v) => GZ_FONTS.resolve(v));
     const web = fonts.filter((f) => f.google || f.files).map((f) => f.name);
-    const kind = { solid: 'a solid', gradient: `a ${offer.bg.style} gradient`, aurora: 'an aurora', scene: `the ${offer.bg.scene} animated`, image: 'an image' }[offer.bg.kind];
+    // Style and scene values are the editor's own labels, lowercased: 'radial' is 'Radial'.
+    const word = (v) => t(v[0].toUpperCase() + v.slice(1));
+    const kind = { solid: t('a solid background'), gradient: t('a {style|lower} gradient background', { style: word(offer.bg.style) }), aurora: t('an aurora background'), scene: t('the {scene|lower} animated background', { scene: word(offer.bg.scene) }), image: t('an image background') }[offer.bg.kind];
+    const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
     const what = $('#share-what');
-    what.textContent = `${offer.preset ? `The ${offer.preset} palette` : 'A custom palette'}, ${fonts.map((f) => f.name).join(' and ')}, and ${kind} background. It's showing in the preview.`;
+    what.textContent = t("{palette}, {fonts}, and {background}. It's showing in the preview.", { palette: offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette'), fonts: and(fonts.map(fontName)), background: kind });
     const notes = [];
-    if (web.length) notes.push(`Downloads ${web.join(' and ')} (${web.length > 1 ? 'web fonts' : 'a web font'}).`);
-    if (offer.bg.kind === 'image' && offer.bg.image) notes.push(`Loads its background image from ${new URL(offer.bg.image).hostname}.`);
+    if (web.length) notes.push(t('Downloads {fonts} (web fonts).', { n: web.length, fonts: and(web) }));
+    if (offer.bg.kind === 'image' && offer.bg.image) notes.push(t('Loads its background image from {host}.', { host: new URL(offer.bg.image).hostname }));
     if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     $('#share-offer').hidden = false;
     GZ_UI.paint(offer);
@@ -492,7 +500,7 @@ GZ_UI.load().then((s) => {
     endOffer();
     fill();
     save(['colors', 'look', 'bg', 'preset', 'auto']);
-    hint('Theme applied.');
+    hint(t('Theme applied.'));
   });
 
   // ---- backup ----
@@ -508,31 +516,32 @@ GZ_UI.load().then((s) => {
     e.target.value = '';
     if (!file) return;
     let raw;
-    try { raw = JSON.parse(await file.text()); } catch { return hint(`${file.name} isn't a JSON file.`, true); }
+    try { raw = JSON.parse(await file.text()); } catch { return hint(t("{file} isn't a JSON file.", { file: file.name }), true); }
     if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {
-      return hint(`No Glaze settings found in ${file.name}.`, true);
+      return hint(t('No Glaze settings found in {file}.', { file: file.name }), true);
     }
     Object.assign(s, GZ_SANITIZE(raw));
     save(Object.keys(s));
     fill();
-    hint(`Imported ${file.name}.`);
+    hint(t('Imported {file}.', { file: file.name }));
   });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
   let armed = 0;
   $('#reset-all').addEventListener('click', (e) => {
     const b = e.currentTarget;
     if (!armed) {
-      b.textContent = 'Click again to reset';
-      armed = setTimeout(() => { armed = 0; b.textContent = 'Reset everything'; }, 4000);
+      b.textContent = t('Click again to reset');
+      armed = setTimeout(() => { armed = 0; b.textContent = t('Reset everything'); }, 4000);
       return;
     }
     clearTimeout(armed);
     armed = 0;
-    b.textContent = 'Reset everything';
+    b.textContent = t('Reset everything');
     Object.assign(s, GZ_SANITIZE({ presets: s.presets }));
     save(Object.keys(s));
     fill();
-    hint('Everything is back to the defaults. Your presets are kept.');
+    hint(t('Everything is back to the defaults. Your presets are kept.'));
+
   });
 
   fill();

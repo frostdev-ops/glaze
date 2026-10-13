@@ -1,0 +1,90 @@
+// Glaze's own words in other languages. Classic script; module.exports for node.
+//
+// The English text is the key: t('Restore') is English as written, and each i18n/<lang>.js maps it
+// to that language. A value is a string or, for a count, CLDR plural forms ({ one, other, … }) picked
+// by Intl.PluralRules on vars.n. {name} fills from vars (numbers through Intl.NumberFormat);
+// {name|lower} lowercases what fills it. Anything missing falls back to English.
+const GZ_I18N = (() => {
+  // English forms for keys that count. The key is the 'other' form.
+  const EN = {
+    '{n} items · {done} done': { one: '{n} item · {done} done', other: '{n} items · {done} done' },
+    'Course progress: {done} of {n} items complete': { one: 'Course progress: {done} of {n} item complete', other: 'Course progress: {done} of {n} items complete' },
+    '{n} new items': { one: '{n} new item', other: '{n} new items' },
+    '{n} new grades: open the gradebook': { one: '{n} new grade: open the gradebook', other: '{n} new grades: open the gradebook' },
+    '{n} new items: open the course': { one: '{n} new item: open the course', other: '{n} new items: open the course' },
+    '{n} new items: show them': { one: '{n} new item: show it', other: '{n} new items: show them' },
+    '{got} of {n} points': { one: '{got} of {n} point', other: '{got} of {n} points' },
+    'With those scores: {pct} overall.': { one: 'With that score: {pct} overall.', other: 'With those scores: {pct} overall.' },
+    'Out of reach: full marks on the {n} items left would make {pct}.': { one: 'Out of reach: full marks on the {n} item left would make {pct}.', other: 'Out of reach: full marks on the {n} items left would make {pct}.' },
+    "You'd need about {pct} on each of the {n} items left.": { one: "You'd need about {pct} on the item left.", other: "You'd need about {pct} on each of the {n} items left." },
+    'Saved {n} files': { one: 'Saved {n} file', other: 'Saved {n} files' },
+    '{n} settings': { one: '{n} setting', other: '{n} settings' },
+    'Downloads {fonts} (web fonts).': { one: 'Downloads {fonts} (a web font).', other: 'Downloads {fonts} (web fonts).' },
+  };
+
+  // tag → [the locale Intl formats in, its catalogue]. A language Glaze has, in any region (es-MX gets
+  // es; pt-PT gets pt-BR), else English: words and numbers then stay one language.
+  const picked = new Map();
+  const pick = (tag) => {
+    if (picked.has(tag)) return picked.get(tag);
+    let loc = 'en';
+    try { loc = Intl.getCanonicalLocales(tag || 'en')[0] || 'en'; } catch { /* not a locale */ }
+    const base = (l) => l.split('-')[0].toLowerCase();
+    const langs = globalThis.GZ_LANGS || {};
+    const code = langs[loc] ? loc : Object.keys(langs).find((k) => base(k) === base(loc));
+    const out = code ? [loc, langs[code]] : [base(loc) === 'en' ? loc : 'en', {}];
+    picked.set(tag, out);
+    return out;
+  };
+  const locale = (tag) => pick(tag)[0];
+
+  const memo = (make) => { const m = new Map(); return (k) => { if (!m.has(k)) m.set(k, make(k)); return m.get(k); }; };
+  const plurals = memo((loc) => new Intl.PluralRules(loc));
+  const nums = memo((loc) => new Intl.NumberFormat(loc, { maximumFractionDigits: 2 }));
+  const pcts = memo((loc) => new Intl.NumberFormat(loc, { style: 'percent', maximumFractionDigits: 2 }));
+  const num = (x, tag) => nums(locale(tag)).format(x);
+  // 0-100 → "82.45%", "82,45 %".
+  const pct = (x, tag) => pcts(locale(tag)).format(x / 100);
+
+  const t = (key, vars = {}, tag) => {
+    const [loc, cat] = pick(tag);
+    let m = cat[key] ?? EN[key] ?? key;
+    if (typeof m === 'object') m = m[plurals(key in cat ? loc : 'en').select(vars.n)] ?? m.other;
+    return m.replace(/\{(\w+)(\|lower)?\}/g, (s, k, low) => {
+      if (!(k in vars)) return s;
+      const v = typeof vars[k] === 'number' ? num(vars[k], tag) : String(vars[k]);
+      return low ? v.toLocaleLowerCase(loc) : v;
+    });
+  };
+
+  // The browser's own language, for the editor and the popup.
+  const ui = () => { try { return chrome.i18n.getUILanguage(); } catch { return navigator.language; } };
+
+  // An extension page's own text, in `tag`: text nodes, titles, placeholders and aria-labels whose
+  // English is a key. translate="no" keeps a subtree as it is.
+  const page = (tag = ui()) => {
+    const d = document;
+    d.documentElement.lang = locale(tag);
+    const say = (s) => {
+      const k = s.trim().replace(/\s+/g, ' ');
+      const v = k && t(k, {}, tag);
+      return !k || v === k ? s : s.match(/^\s*/)[0] + v + s.match(/\s*$/)[0];
+    };
+    const kept = (el) => el.closest('[translate="no"], script, style');
+    const walk = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) if (!kept(n.parentElement)) n.data = say(n.data);
+    for (const el of d.body.querySelectorAll('[title], [placeholder], [aria-label]')) {
+      if (kept(el)) continue;
+      for (const a of ['title', 'placeholder', 'aria-label']) if (el.hasAttribute(a)) el.setAttribute(a, say(el.getAttribute(a)));
+    }
+    d.title = say(d.title);
+  };
+
+  return { EN, t, locale, num, pct, ui, page };
+})();
+
+if (typeof module !== 'undefined') {
+  const dir = require('path').join(__dirname, '../i18n');
+  for (const f of require('fs').readdirSync(dir)) require(`${dir}/${f}`);
+  module.exports = GZ_I18N;
+}

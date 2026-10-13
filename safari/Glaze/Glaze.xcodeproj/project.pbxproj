@@ -28,6 +28,8 @@
 		3B8EDAB1307C30D500B0DD77 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA1307C30D500B0DD77 /* icons */; };
 		3B8EDAB2307C30D500B0DD77 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA2307C30D500B0DD77 /* manifest.json */; };
 		3B8EDAB3307C30D500B0DD77 /* lib in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA3307C30D500B0DD77 /* lib */; };
+		3B8EDDA2307C30D500B0DD77 /* i18n in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDDA0307C30D500B0DD77 /* i18n */; };
+		3B8EDDA3307C30D500B0DD77 /* _locales in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDDA1307C30D500B0DD77 /* _locales */; };
 		3B8EDAB4307C30D500B0DD77 /* options.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA4307C30D500B0DD77 /* options.html */; };
 		3B8EDAB5307C30D500B0DD77 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA5307C30D500B0DD77 /* content.js */; };
 		3B8EDAB6307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
@@ -53,6 +55,8 @@
 		3B8EDC2B307C30D500B0DD77 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA1307C30D500B0DD77 /* icons */; };
 		3B8EDC2C307C30D500B0DD77 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA2307C30D500B0DD77 /* manifest.json */; };
 		3B8EDC2D307C30D500B0DD77 /* lib in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA3307C30D500B0DD77 /* lib */; };
+		3B8EDDA4307C30D500B0DD77 /* i18n in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDDA0307C30D500B0DD77 /* i18n */; };
+		3B8EDDA5307C30D500B0DD77 /* _locales in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDDA1307C30D500B0DD77 /* _locales */; };
 		3B8EDC2E307C30D500B0DD77 /* options.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA4307C30D500B0DD77 /* options.html */; };
 		3B8EDC2F307C30D500B0DD77 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA5307C30D500B0DD77 /* content.js */; };
 		3B8EDC30307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
@@ -123,6 +127,8 @@
 		3B8EDAA1307C30D500B0DD77 /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = Resources/icons; sourceTree = "<group>"; };
 		3B8EDAA2307C30D500B0DD77 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = Resources/manifest.json; sourceTree = "<group>"; };
 		3B8EDAA3307C30D500B0DD77 /* lib */ = {isa = PBXFileReference; lastKnownFileType = folder; name = lib; path = Resources/lib; sourceTree = "<group>"; };
+		3B8EDDA0307C30D500B0DD77 /* i18n */ = {isa = PBXFileReference; lastKnownFileType = folder; name = i18n; path = Resources/i18n; sourceTree = "<group>"; };
+		3B8EDDA1307C30D500B0DD77 /* _locales */ = {isa = PBXFileReference; lastKnownFileType = folder; name = _locales; path = Resources/_locales; sourceTree = "<group>"; };
 		3B8EDAA4307C30D500B0DD77 /* options.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = options.html; path = Resources/options.html; sourceTree = "<group>"; };
 		3B8EDAA5307C30D500B0DD77 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = content.js; path = Resources/content.js; sourceTree = "<group>"; };
 		3B8EDAA6307C30D500B0DD77 /* fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fonts; path = Resources/fonts; sourceTree = "<group>"; };
@@ -229,6 +235,8 @@
 				3B8EDAA1307C30D500B0DD77 /* icons */,
 				3B8EDAA2307C30D500B0DD77 /* manifest.json */,
 				3B8EDAA3307C30D500B0DD77 /* lib */,
+				3B8EDDA0307C30D500B0DD77 /* i18n */,
+				3B8EDDA1307C30D500B0DD77 /* _locales */,
 				3B8EDAA4307C30D500B0DD77 /* options.html */,
 				3B8EDAA5307C30D500B0DD77 /* content.js */,
 				3B8EDAA6307C30D500B0DD77 /* fonts */,
@@ -401,6 +409,8 @@
 				3B8EDAAF307C30D500B0DD77 /* options.js in Resources */,
 				3B8EDAA9307C30D500B0DD77 /* preview.html in Resources */,
 				3B8EDAB3307C30D500B0DD77 /* lib in Resources */,
+				3B8EDDA2307C30D500B0DD77 /* i18n in Resources */,
+				3B8EDDA3307C30D500B0DD77 /* _locales in Resources */,
 				3B8EDAB7307C30D500B0DD77 /* motion.css in Resources */,
 				3B8EDAAB307C30D500B0DD77 /* theme.css in Resources */,
 				3B8EDAAC307C30D500B0DD77 /* popup.js in Resources */,
@@ -433,6 +443,8 @@
 				3B8EDC2B307C30D500B0DD77 /* icons in Resources */,
 				3B8EDC2C307C30D500B0DD77 /* manifest.json in Resources */,
 				3B8EDC2D307C30D500B0DD77 /* lib in Resources */,
+				3B8EDDA4307C30D500B0DD77 /* i18n in Resources */,
+				3B8EDDA5307C30D500B0DD77 /* _locales in Resources */,
 				3B8EDC2E307C30D500B0DD77 /* options.html in Resources */,
 				3B8EDC2F307C30D500B0DD77 /* content.js in Resources */,
 				3B8EDC30307C30D500B0DD77 /* fonts in Resources */,

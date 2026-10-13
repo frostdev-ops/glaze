@@ -143,6 +143,8 @@
   const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '') || !!el?.closest(DUE_AT);
   // The locale Ultra renders in: <html lang> is bound to it ("{{index.locale}}" until Ultra starts).
   const locale = () => { try { return Intl.getCanonicalLocales(html.lang.replace(/_/g, '-'))[0] || navigator.language; } catch { return navigator.language; } };
+  // Glaze's own words on the page are in that language too (lib/i18n.js), English where it has none.
+  const t = (key, vars) => GZ_I18N.t(key, vars, locale());
 
   // ---- the gradebook --------------------------------------------------------------------------
   // Due-date status, new grades and the what-if calculator read the student's own gradebook records,
@@ -214,7 +216,7 @@
           b.pending = false;
           const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])]]);
           if (key === b.key) return;
-          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results), late: lateCols, key });
+          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results, locale()), late: lateCols, key });
           onBook();
         }))
         .catch(() => { b.pending = false; });
@@ -231,6 +233,7 @@
     const { scores, urgency, inline } = settings.enhance;
     if (!scores && !urgency && !inline) return;
     const now = new Date();
+    const loc = locale();
     for (const root of roots) {
       if (scores || inline) {
         for (const pill of root.querySelectorAll('.readonly-pill, .wrapping-input-style.pill-style')) {
@@ -239,12 +242,11 @@
           // Only on change: a style write is itself a mutation the observer would hand back.
           if (scores && pill.style.getPropertyValue('--gz-score') !== String(sc.ratio)) pill.style.setProperty('--gz-score', sc.ratio);
           if (scores) pill.setAttribute('data-gz-score', sc.band);
-          if (inline) pill.setAttribute('data-gz-pct', `${Math.round(sc.ratio * 100)}%`);
+          if (inline) pill.setAttribute('data-gz-pct', GZ_I18N.pct(Math.round(sc.ratio * 100), loc));
         }
       }
       if (urgency || inline) {
         // Due dates by where Ultra puts them; in English, also by the word ("puede" isn't one).
-        const loc = locale();
         const en = /^en\b/i.test(loc);
         const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => ((en && /due/i.test(n.data)) || (/\d/.test(n.data) && dueLabelled(n.parentElement)) ? 1 : 3) });
         for (let n = walk.nextNode(); n; n = walk.nextNode()) {
@@ -276,7 +278,7 @@
           if (inline && (item || pageId)) chip = GZ_PAGE.status(at, circle, grade, now, late, loc);
           else if (inline) {
             const w = GZ_PAGE.when(at, now, loc, true);
-            if (w && !w.title.startsWith('Was due')) chip = { label: w.rel, tone: '' };
+            if (w && !w.past) chip = { label: w.rel, tone: '' };
           }
           if (chip) {
             el.setAttribute('data-gz-countdown', chip.label);
@@ -487,7 +489,7 @@
         const got = el.querySelector('.js-pill-grade')?.textContent;
         const max = el.querySelector('.pill-points-possible')?.textContent;
         const sc = GZ_PAGE.score(got, max);
-        if (sc) return [el, { title: `${got.trim()} of ${max.trim()} points`, sub: `${Math.round(sc.ratio * 100)}%` }];
+        if (sc) return [el, { title: t('{got} of {n} points', { got: parseFloat(got), n: parseFloat(max) }), sub: GZ_I18N.pct(Math.round(sc.ratio * 100), locale()) }];
       }
       // Month-view chips are always cut short: the whole title, and when it is due.
       if (el.matches('.fc-event')) return [el, { title: squash(el.querySelector('.fc-title')?.textContent || el.textContent) }];
@@ -560,7 +562,7 @@
     const done = list.filter((c) => c.state === 'Completed').length;
     const head = document.createElement('div');
     head.className = 'gz-peek-head';
-    head.textContent = `${list.length} item${list.length === 1 ? '' : 's'} · ${done} done`;
+    head.textContent = t('{n} items · {done} done', { n: list.length, done });
     const ul = document.createElement('ul');
     const now = new Date();
     for (const c of list.slice(0, 8)) {
@@ -574,7 +576,7 @@
       if (due) {
         const d = document.createElement('span');
         d.className = 'gz-peek-due';
-        d.textContent = GZ_PAGE.describe(new Date(due), true, now).rel;
+        d.textContent = GZ_PAGE.describe(new Date(due), true, now, locale()).rel;
         li.append(d);
       }
       ul.append(li);
@@ -583,7 +585,7 @@
     if (list.length > 8) {
       const more = document.createElement('div');
       more.className = 'gz-peek-more';
-      more.textContent = `and ${list.length - 8} more`;
+      more.textContent = t('and {n} more', { n: list.length - 8 });
       peek.append(more);
     }
     document.body.append(peek);
@@ -624,7 +626,7 @@
       if (rs) { total += 1; if (rs.getAttribute('aria-checked') === 'true') done += 1; }
     }
     if (!total) return old?.remove();
-    const key = `${done}/${total}`;
+    const key = `${done}/${total} ${locale()}`;
     if (old?.dataset.v === key && old.isConnected) return;
     const bar = old || document.createElement('div');
     bar.id = 'gz-progress';
@@ -633,9 +635,9 @@
     bar.style.setProperty('--gz-pct', `${pct}%`);
     bar.replaceChildren();
     const label = document.createElement('span');
-    label.textContent = `Course progress: ${done} of ${total} items complete`;
+    label.textContent = t('Course progress: {done} of {n} items complete', { done, n: total });
     const num = document.createElement('b');
-    num.textContent = `${pct}%`;
+    num.textContent = GZ_I18N.pct(pct, locale());
     const track = document.createElement('i');
     bar.append(label, num, track);
     if (!old) top[0].parentElement.before(bar);
@@ -673,7 +675,7 @@
   // item ('items'); on a closed folder in the outline, after its title, unfolding it down to its newest
   // item ('inside'). A new item's own "New" ('item') is a plain label. Clicks are taken in the capture
   // phase so the card or row around a pill (itself a link or a toggle) doesn't act instead.
-  const KIND = { grades: ['grade', 'open the gradebook'], items: ['item', 'open the course'], inside: ['item', 'show them'] };
+  const KIND = { grades: '{n} new grades: open the gradebook', items: '{n} new items: open the course', inside: '{n} new items: show them' };
   const cardBadge = (el, cid, count, kind = 'grades') => {
     let pill = el.querySelector(`:scope > .gz-new[data-kind="${kind}"]`);
     if (!count) return pill?.remove();
@@ -684,10 +686,10 @@
       else el.insertBefore(pill, (kind === 'items' && el.querySelector(':scope > .gz-new')?.nextSibling) || el.firstChild);
       if (KIND[kind]) { pill.tabIndex = 0; pill.setAttribute('role', 'link'); }
     }
-    const label = kind === 'item' ? 'New' : `${count} new${kind === 'items' ? ` item${count === 1 ? '' : 's'}` : ''}`;
+    const label = kind === 'item' ? t('New') : t(kind === 'items' ? '{n} new items' : '{n} new', { n: count });
     if (pill.textContent !== label) {
       pill.textContent = label;
-      if (KIND[kind]) pill.setAttribute('aria-label', `${count} new ${KIND[kind][0]}${count === 1 ? '' : 's'}: ${KIND[kind][1]}`);
+      if (KIND[kind]) pill.setAttribute('aria-label', t(KIND[kind], { n: count }));
     }
     pill.dataset.cid = cid;
   };
@@ -718,7 +720,7 @@
         for (const id of ids) set.add(id);
         shown.set(cid, set);
         if (JSON.stringify(now) !== JSON.stringify(seen[cid])) { seen[cid] = now; keepSeen('seenGrades', cid, now); }
-        for (const el of document.querySelectorAll('[id^="course-student-grades-item-name-"]')) badge(el, set.has(el.id.slice(32)) && 'New');
+        for (const el of document.querySelectorAll('[id^="course-student-grades-item-name-"]')) badge(el, set.has(el.id.slice(32)) && t('New'));
         // Arrived from a card's "N new": bring the first new grade into view, once.
         const first = sessionStorage.getItem('gz-new-jump') === `grades ${cid}` && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
         if (first) { sessionStorage.removeItem('gz-new-jump'); glide(first.closest('li, tr, [role="row"]')); }
@@ -817,7 +819,7 @@
   // overall grade (lib/grades.js), and it must reproduce Blackboard's figure first; otherwise it says so.
   const whatIf = new Map(); // cid → { overrides: Map columnId → score, target }
   // Cut, not rounded, to two places: how Ultra writes its own overall grade (82.456 is 82.45%).
-  const asPct = (p) => (p == null ? '–' : `${Math.floor(p * 100 + 1e-9) / 100}%`);
+  const asPct = (p) => (p == null ? '–' : GZ_I18N.pct(Math.floor(p * 100 + 1e-9) / 100, locale()));
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const renderCalc = () => {
     const old = document.getElementById('gz-calc');
@@ -826,17 +828,17 @@
     if (!host) return old?.remove();
     const b = bookFor(cid);
     if (!b.results) return;
-    const key = `${cid} ${b.key}`;
+    const key = `${cid} ${b.key} ${locale()}`;
     if (old?.dataset.key === key && old.previousElementSibling === host) return;
     const m = GZ_GRADES.model(b.results);
     if (!whatIf.has(cid)) whatIf.set(cid, { overrides: new Map(), target: '' });
     const st = whatIf.get(cid);
     const now = make('b', { textContent: m.kind === 'unsupported' ? '' : asPct(m.percent()) });
     const box = make('details', { id: 'gz-calc', open: !!old?.open },
-      make('summary', {}, make('span', { textContent: 'What-if calculator' }), now));
+      make('summary', {}, make('span', { textContent: t('What-if calculator') }), now));
     box.dataset.key = key;
-    box.setAttribute('aria-label', 'What-if grade calculator');
-    if (m.note) box.append(make('p', { className: 'gz-calc-note', textContent: m.note }));
+    box.setAttribute('aria-label', t('What-if grade calculator'));
+    if (m.note) box.append(make('p', { className: 'gz-calc-note', textContent: m.why ? t("Glaze can't work out this course's overall grade: {why}.", { why: t(m.why) }) : t(m.note) }));
     if (m.kind !== 'unsupported') {
       const left = m.items.filter((i) => i.score == null && i.possible > 0);
       const out = make('p', { className: 'gz-calc-out' });
@@ -844,31 +846,33 @@
       const need = make('p', { className: 'gz-calc-out' });
       need.setAttribute('aria-live', 'polite');
       const target = make('input', { type: 'number', min: 0, max: 100, step: 'any', value: st.target, placeholder: '90' });
-      target.setAttribute('aria-label', 'Target overall grade, in percent');
+      target.setAttribute('aria-label', t('Target overall grade, in percent'));
       const update = () => {
         const p = m.percent(st.overrides);
-        out.textContent = st.overrides.size ? `With ${st.overrides.size === 1 ? 'that score' : 'those scores'}: ${asPct(p)} overall.` : left.length ? 'Type a score to see where it would leave you.' : 'Everything here is graded.';
-        const t = parseFloat(st.target);
-        if (!Number.isFinite(t)) { need.textContent = ''; return; }
-        const r = m.need(t, st.overrides);
-        need.textContent = !r.left ? `Nothing left to change: ${asPct(p)}.`
-          : r.reachable === false ? `Out of reach: full marks on the ${r.left} item${r.left === 1 ? '' : 's'} left would make ${asPct(r.best)}.`
-            : r.share === 0 ? `You'd stay at ${t}% or above even with zeros on what's left.`
-              : `You'd need about ${Math.ceil(r.share * 1000) / 10}% on ${r.left === 1 ? 'the item' : `each of the ${r.left} items`} left.`;
+        out.textContent = st.overrides.size ? t('With those scores: {pct} overall.', { n: st.overrides.size, pct: asPct(p) }) : t(left.length ? 'Type a score to see where it would leave you.' : 'Everything here is graded.');
+        const goal = parseFloat(st.target);
+        if (!Number.isFinite(goal)) { need.textContent = ''; return; }
+        const r = m.need(goal, st.overrides);
+        need.textContent = !r.left ? t('Nothing left to change: {pct}.', { pct: asPct(p) })
+          : r.reachable === false ? t('Out of reach: full marks on the {n} items left would make {pct}.', { n: r.left, pct: asPct(r.best) })
+            : r.share === 0 ? t("You'd stay at {pct} or above even with zeros on what's left.", { pct: asPct(goal) })
+              : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: asPct(Math.ceil(r.share * 1000) / 10) });
       };
       const rows = left.map((i) => {
         const input = make('input', { type: 'number', min: 0, step: 'any', value: st.overrides.get(i.id) ?? '', placeholder: '–' });
-        input.setAttribute('aria-label', `Score for ${i.name}, out of ${i.possible}`);
+        input.setAttribute('aria-label', t('Score for {name}, out of {n}', { name: i.name, n: i.possible }));
         input.addEventListener('input', () => {
           const v = parseFloat(input.value);
           if (Number.isFinite(v) && v >= 0) st.overrides.set(i.id, v); else st.overrides.delete(i.id);
           update();
         });
-        return make('li', {}, make('span', { className: 'gz-calc-name', textContent: i.name }), make('span', { className: 'gz-calc-score' }, input, ` / ${i.possible}`));
+        return make('li', {}, make('span', { className: 'gz-calc-name', textContent: i.name }), make('span', { className: 'gz-calc-score' }, input, ` / ${GZ_I18N.num(i.possible, locale())}`));
       });
       target.addEventListener('input', () => { st.target = target.value; update(); });
-      if (rows.length) box.append(make('h3', { textContent: 'Not graded yet' }), make('ul', {}, ...rows));
-      box.append(out, make('label', { className: 'gz-calc-target' }, 'Aim for ', target, '% overall'), need);
+      if (rows.length) box.append(make('h3', { textContent: t('Not graded yet') }), make('ul', {}, ...rows));
+      // The box sits where {target} is in the sentence.
+      const [before, after] = t('Aim for {target}% overall').split('{target}');
+      box.append(out, make('label', { className: 'gz-calc-target' }, before, target, after), need);
       update();
     }
     if (old) old.replaceWith(box); else host.after(box);
@@ -929,7 +933,7 @@
     bar.className = 'gz-draft';
     bar.setAttribute('role', 'status');
     const msg = document.createElement('span');
-    msg.textContent = `Glaze kept a copy of what you wrote here (${GZ_PAGE.describe(new Date(d.at), true).rel}).`;
+    msg.textContent = t('Glaze kept a copy of what you wrote here ({when}).', { when: GZ_PAGE.describe(new Date(d.at), true, new Date(), locale()).rel });
     // type=button: Ultra's editors sit in forms, where a plain button would submit.
     const button = (label, fn) => {
       const b = document.createElement('button');
@@ -938,14 +942,14 @@
       b.addEventListener('click', () => { bar.remove(); fn(); });
       return b;
     };
-    bar.append(msg, button('Restore', () => {
+    bar.append(msg, button(t('Restore'), () => {
       ed.focus();
       const r = document.createRange();
       r.selectNodeContents(ed);
       getSelection().removeAllRanges();
       getSelection().addRange(r);
       document.execCommand('insertHTML', false, d.html);
-    }), button('Dismiss', () => local((s) => s.remove(key))));
+    }), button(t('Dismiss'), () => local((s) => s.remove(key))));
     (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed).before(bar);
     bars.set(bar, ed);
   };
@@ -1001,7 +1005,7 @@
     if (!b) return;
     // Idle it's just an arrow, named for screen readers; working, it says how far along.
     b.textContent = j?.label || '';
-    b.setAttribute('aria-label', j?.label || 'Download all');
+    b.setAttribute('aria-label', j?.label || t('Download all'));
     b.toggleAttribute('data-busy', !!j && !j.done);
     b.toggleAttribute('data-job', !!j);
     b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
@@ -1009,7 +1013,7 @@
   const download = async (fid, title) => {
     const cid = courseId();
     const ctl = new AbortController();
-    const job = { ctl, label: 'Finding files · Cancel', pct: 0 };
+    const job = { ctl, label: t('Finding files · Cancel'), pct: 0 };
     jobs.set(fid, job);
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
@@ -1030,34 +1034,35 @@
         for (const f of fs) { seen.add(f.url); found.push({ ...f, dir }); }
       }
     };
-    const mb = (n) => `${Math.round(n / 2 ** 20)} MB`;
+    const mb = (n) => new Intl.NumberFormat(GZ_I18N.locale(locale()), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(n / 2 ** 20);
+    const tooBig = (label) => Object.assign(new Error(label), { said: true });
     try {
       await walk(fid, '');
       const known = found.reduce((n, f) => n + (f.size || 0), 0);
-      if (known > MAX_ZIP) throw new Error(`Too big: ${mb(known)}, over ${mb(MAX_ZIP)}`);
+      if (known > MAX_ZIP) throw tooBig(t('Too big: {size}, over {max}', { size: mb(known), max: mb(MAX_ZIP) }));
       const out = [];
       const taken = new Set();
       let bytes = 0;
       let failed = 0;
       for (const [i, f] of found.entries()) {
-        say(`${i + 1} of ${found.length} · Cancel`, (i / found.length) * 100);
+        say(t('{i} of {n} · Cancel', { i: i + 1, n: found.length }), (i / found.length) * 100);
         const r = await fetch(f.url, { credentials: 'same-origin', signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
         if (!r?.ok) { failed += 1; continue; }
         const data = new Uint8Array(await r.arrayBuffer());
         bytes += data.length;
-        if (bytes > MAX_ZIP) throw new Error(`Too big: over ${mb(MAX_ZIP)}`);
+        if (bytes > MAX_ZIP) throw tooBig(t('Too big: over {max}', { max: mb(MAX_ZIP) }));
         out.push({ name: GZ_ZIP.unique(f.dir + GZ_ZIP.safeName(f.name), taken), data });
       }
-      const left = skipped ? ` · ${skipped} unopened left out` : '';
-      if (!out.length) return say(found.length ? `Download failed${left}` : `No files${skipped ? ' you have opened' : ''}${left}`);
+      const left = skipped ? ` · ${t('{n} unopened left out', { n: skipped })}` : '';
+      if (!out.length) return say((found.length ? t('Download failed') : t(skipped ? 'No files you have opened' : 'No files')) + left);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob(GZ_ZIP.zip(out), { type: 'application/zip' }));
       a.download = `${GZ_ZIP.safeName(title)}.zip`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      say(`Saved ${out.length} file${out.length === 1 ? '' : 's'}${left}${failed ? ` · ${failed} failed` : ''}`);
+      say(t('Saved {n} files', { n: out.length }) + left + (failed ? ` · ${t('{n} failed', { n: failed })}` : ''));
     } catch (e) {
-      say(ctl.signal.aborted ? 'Cancelled' : /^Too big/.test(e.message) ? e.message : 'Download failed');
+      say(ctl.signal.aborted ? t('Cancelled') : e.said ? e.message : t('Download failed'));
     } finally {
       job.done = true;
       paintDl(fid);
@@ -1078,7 +1083,7 @@
       b.type = 'button';
       b.id = `gz-dl-${fid}`; // gz- ids are skipped by the sweep
       b.className = 'gz-dl';
-      b.title = "Download all: save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.";
+      b.title = t("Download all: save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.");
       // Inside Ultra's clickable row: keep the row from opening or folding.
       for (const ev of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'keydown', 'keyup']) b.addEventListener(ev, (e) => e.stopPropagation());
       b.addEventListener('click', (e) => {
@@ -1182,17 +1187,18 @@
       docTools = document.createElement('div');
       docTools.id = 'gz-doc-tools';
       docTools.setAttribute('role', 'toolbar');
-      docTools.setAttribute('aria-label', 'Document');
+      docTools.setAttribute('aria-label', t('Document'));
       const time = document.createElement('span');
       time.className = 'gz-doc-time';
-      docTools.append(time, docButton('dark', 'Dark documents', () => setDark(!settings.enhance.darkDocs)), docButton('focus', 'Focus mode', () => setFocus(!focusAt)));
+      docTools.append(time, docButton('dark', t('Dark documents'), () => setDark(!settings.enhance.darkDocs)), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
       document.body.append(docTools);
     }
     const [time, darkB, focusB] = docTools.children;
     const mins = focusAt && GZ_PAGE.readMinutes(focusAt.querySelector('.bbml-editor')?.textContent);
     time.hidden = !mins;
     // Only on change: a text write is itself a mutation the observer would hand back.
-    if (mins && time.textContent !== `${mins} min read`) time.textContent = `${mins} min read`;
+    const read = mins && t('{n} min read', { n: mins });
+    if (mins && time.textContent !== read) time.textContent = read;
     darkB.hidden = !dark;
     darkB.setAttribute('aria-pressed', String(settings.enhance.darkDocs));
     focusB.hidden = !doc;
@@ -1224,9 +1230,9 @@
     keysBox = document.createElement('div');
     keysBox.id = 'gz-keys';
     keysBox.setAttribute('role', 'dialog');
-    keysBox.setAttribute('aria-label', 'Keyboard shortcuts');
+    keysBox.setAttribute('aria-label', t('Keyboard shortcuts'));
     const h = document.createElement('h2');
-    h.textContent = 'Keyboard shortcuts';
+    h.textContent = t('Keyboard shortcuts');
     const dl = document.createElement('dl');
     const row = (keys, what) => {
       const dt = document.createElement('dt');
@@ -1235,10 +1241,10 @@
       dd.textContent = what;
       dl.append(dt, dd);
     };
-    for (const [k, [, label]] of Object.entries(GO)) row(['g', k], label);
-    row(['/'], 'Search');
-    if (settings.enhance.palette) row([/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl', 'K'], 'Go to anything');
-    row(['?'], 'Show or hide this list');
+    for (const [k, [, label]] of Object.entries(GO)) row(['g', k], t(label));
+    row(['/'], t('Search'));
+    if (settings.enhance.palette) row([/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl', 'K'], t('Go to anything'));
+    row(['?'], t('Show or hide this list'));
     const panel = document.createElement('div');
     panel.className = 'gz-keys-panel';
     panel.append(h, dl);
@@ -1281,6 +1287,7 @@
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
     previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator' };
   const go = (path) => () => location.assign(location.origin + path);
+  const pages = () => TOOLS.map(([path, label]) => ({ label: t(label), hint: 'Blackboard', group: 'Go to', run: go(path) }));
   const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
     const title = new Map(all.map((c) => [c.id, c.title]));
@@ -1291,19 +1298,19 @@
     const cid = courseId();
     // A tab's name without its count badge ("Announcements 12").
     const tabName = (a) => { const c = a.cloneNode(true); for (const b of c.querySelectorAll('[class*="badge" i]')) b.remove(); return c.textContent.trim(); };
-    const here = cid ? [...document.querySelectorAll('.bb-ui-navigation-list-horizontal a[href]')].map((a) => ({ label: tabName(a), hint: 'This course', group: 'Go to', run: () => a.click() })).filter((c) => c.label) : [];
+    const here = cid ? [...document.querySelectorAll('.bb-ui-navigation-list-horizontal a[href]')].map((a) => ({ label: tabName(a), hint: t('This course'), group: 'Go to', run: () => a.click() })).filter((c) => c.label) : [];
     const [courses, items] = await Promise.all([myCourses(), cid ? paletteItems(cid) : []]);
     const s = settings;
     return [
       ...here,
-      ...TOOLS.map(([path, label]) => ({ label, hint: 'Blackboard', group: 'Go to', run: go(path) })),
+      ...pages(),
       ...courses.filter((m) => m.course).sort((a, b) => !!a.course.isClosed - !!b.course.isClosed)
-        .map((m) => ({ label: m.course.name, hint: m.course.isOrganization ? 'Organization' : m.course.isClosed ? 'Closed course' : m.course.courseId || 'Course', group: 'Courses', run: go(`/ultra/courses/${m.courseId}/outline`) })),
+        .map((m) => ({ label: m.course.name, hint: m.course.isOrganization ? t('Organization') : m.course.isClosed ? t('Closed course') : m.course.courseId || t('Course'), group: 'Courses', run: go(`/ultra/courses/${m.courseId}/outline`) })),
       ...items,
-      ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: `Palette: ${name}`, hint: s.preset === name && !s.auto.on ? 'Current' : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
-      ...['off', 'subtle', 'expressive'].map((level) => ({ label: `Motion: ${level[0].toUpperCase()}${level.slice(1)}`, hint: s.motion.level === level ? 'Current' : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
-      ...Object.entries(EXTRAS).map(([k, label]) => ({ label: `${s.enhance[k] ? 'Turn off' : 'Turn on'} ${label.toLowerCase()}`, hint: 'Glaze extra', group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
-      { label: 'Turn the theme off', hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
+      ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
+      ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
+      ...Object.entries(EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
+      { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
     ];
   };
   let cmd = null; // { box, input, list, all, shown, active, back }
@@ -1327,13 +1334,13 @@
       const label = document.createElement('span');
       label.textContent = c.label;
       const hint = document.createElement('small');
-      hint.textContent = c.hint && c.hint !== c.group ? `${c.group} · ${c.hint}` : c.group;
+      hint.textContent = c.hint && c.hint !== c.group ? `${t(c.group)} · ${c.hint}` : t(c.group);
       li.append(label, hint);
       li.addEventListener('pointermove', () => { if (cmd.active !== i) { cmd.active = i; mark(); } });
       li.addEventListener('click', () => runCmd(i));
       return li;
     }));
-    if (!cmd.shown.length) cmd.list.append(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: cmd.loading ? 'Loading…' : 'Nothing matches.' }));
+    if (!cmd.shown.length) cmd.list.append(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: t(cmd.loading ? 'Loading…' : 'Nothing matches.') }));
     mark();
   };
   const mark = () => {
@@ -1354,20 +1361,20 @@
     panel.className = 'gz-cmd-panel';
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
-    panel.setAttribute('aria-label', 'Go to');
+    panel.setAttribute('aria-label', t('Go to'));
     const input = document.createElement('input');
     input.type = 'text';
-    input.placeholder = 'Go to a course, an item, a page or a Glaze setting…';
+    input.placeholder = t('Go to a course, an item, a page or a Glaze setting…');
     input.autocomplete = 'off';
     input.spellcheck = false;
-    for (const [k, v] of [['role', 'combobox'], ['aria-expanded', 'true'], ['aria-controls', 'gz-cmd-list'], ['aria-autocomplete', 'list'], ['aria-label', 'Go to']]) input.setAttribute(k, v);
+    for (const [k, v] of [['role', 'combobox'], ['aria-expanded', 'true'], ['aria-controls', 'gz-cmd-list'], ['aria-autocomplete', 'list'], ['aria-label', t('Go to')]]) input.setAttribute(k, v);
     const list = document.createElement('ul');
     list.id = 'gz-cmd-list';
     list.setAttribute('role', 'listbox');
-    list.setAttribute('aria-label', 'Results');
+    list.setAttribute('aria-label', t('Results'));
     const foot = document.createElement('p');
     foot.className = 'gz-cmd-foot';
-    foot.textContent = '↑ ↓ to choose · Enter to go · Esc to close';
+    foot.textContent = t('↑ ↓ to choose · Enter to go · Esc to close');
     panel.append(input, list, foot);
     box.append(panel);
     box.addEventListener('pointerdown', (e) => {
@@ -1388,7 +1395,8 @@
     input.focus();
     // Pages show at once; courses and items join when Ultra answers.
     const mine = cmd;
-    cmd.all = TOOLS.map(([path, label]) => ({ label, hint: 'Blackboard', group: 'Go to', run: go(path) }));
+    cmd.all = pages();
+
     showCmd();
     commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(); });
   };

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const P = require('../lib/page.js');
+const I = require('../lib/i18n.js');
 
 const now = new Date(2026, 9, 11, 15, 0); // Sun 11 Oct 2026, 3 PM
 
@@ -37,12 +38,12 @@ test('score share and band', () => {
 });
 
 test('hover hints for dates read naturally', () => {
-  assert.deepEqual(P.when('Due date: 10/13/26, 11:59 PM (EDT)', now), { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days' });
-  assert.deepEqual(P.when('Due date: 10/12/26, 9:00 AM', now), { title: 'Due tomorrow', sub: 'Monday, October 12 at 9:00 AM', rel: 'tomorrow' });
+  assert.deepEqual(P.when('Due date: 10/13/26, 11:59 PM (EDT)', now), { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days', past: false });
+  assert.deepEqual(P.when('Due date: 10/12/26, 9:00 AM', now), { title: 'Due tomorrow', sub: 'Monday, October 12 at 9:00 AM', rel: 'tomorrow', past: false });
   assert.equal(P.when('Due date: 10/11/26, 11:59 PM', now).title, 'Due in 9 hours');
   assert.equal(P.when('Due date: 10/11/26, 3:20 PM', now).title, 'Due in 20 minutes');
   assert.equal(P.when('Due Date: 10/4/26, 11:59 PM', now).title, 'Was due last week');
-  assert.deepEqual(P.when('9/17/26', now), { title: '3 weeks ago', sub: 'Thursday, September 17', rel: '3 weeks ago' });
+  assert.deepEqual(P.when('9/17/26', now), { title: '3 weeks ago', sub: 'Thursday, September 17', rel: '3 weeks ago', past: true });
   assert.equal(P.when('10/10/26', now).title, 'Yesterday');
   assert.equal(P.when('1/5/27', now).sub, 'Tuesday, January 5, 2027');
   assert.equal(P.when('Due: 12/25/26', now).title, 'Due in 2 months');
@@ -120,7 +121,7 @@ test('en-US reads only what it always has', () => {
     assert.equal(P.when(t, now, 'en-US'), null, t);
   }
   for (const l of [undefined, 'en', 'en-US']) {
-    assert.deepEqual(P.when('Due date: 10/13/26, 11:59 PM (EDT)', now, l), { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days' });
+    assert.deepEqual(P.when('Due date: 10/13/26, 11:59 PM (EDT)', now, l), { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days', past: false });
     assert.equal(P.due('Due date: 10/11/26, 11:59 PM (EDT)', now, l), 'today');
     assert.equal(P.due('Due date: 10/11/26', now, l), null); // no time, no urgency
   }
@@ -130,21 +131,33 @@ test('urgency, hints and status in another locale', () => {
   assert.equal(P.due('Fecha de vencimiento: 13/10/26 9:00', now, 'es-ES'), 'soon');
   assert.equal(P.due('Fälligkeitsdatum: 11.10.26, 23:59', now, 'de-DE'), 'today');
   assert.equal(P.due('Fälligkeitsdatum: 11.10.26', now, 'de-DE'), null);
-  // Glaze's own words stay English; whether it's a due date comes from where the text is.
-  assert.deepEqual(P.when('13/10/2026 23:59', now, 'fr', true), { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days' });
-  assert.equal(P.when('13/10/2026', now, 'fr').title, 'In 2 days');
-  assert.deepEqual(P.status('18.10.26, 23:59', 'false', {}, now, false, 'de-DE'), { label: 'next week · Unopened', tone: 'later' });
-  assert.deepEqual(P.status('04.10.26, 23:59', null, {}, now, false, 'de-DE'), { label: 'Past due · Not submitted', tone: 'overdue' });
+  // Glaze's words, dates and numbers in Ultra's language; whether it's a due date comes from where the
+  // text is.
+  const t = (k, v, l) => I.t(k, v, l);
+  assert.deepEqual(P.when('13/10/2026 23:59', now, 'fr', true), { title: t('Due {when}', { when: 'après-demain' }, 'fr'), sub: 'mardi 13 octobre à 23:59', rel: 'après-demain', past: false });
+  assert.equal(P.when('13/10/2026', now, 'fr').title, 'Après-demain');
+  assert.equal(P.when('4/10/26 9:00', now, 'es-ES', true).title, t('Was due {when}', { when: 'la semana pasada' }, 'es'));
+  assert.deepEqual(P.status('18.10.26, 23:59', 'false', {}, now, false, 'de-DE'), { label: `nächste Woche · ${t('Unopened', {}, 'de')}`, tone: 'later' });
+  assert.deepEqual(P.status('04.10.26, 23:59', null, {}, now, false, 'de-DE'), { label: t('Past due · {status}', { status: t('Not submitted', {}, 'de') }, 'de'), tone: 'overdue' });
+  const graded = { status: 'GRADED', displayGrade: { score: 18.5 }, pointsPossible: 20 };
+  assert.equal(P.status('13-10-26 23:59', null, graded, now, false, 'nl').label, t('Graded · {mark}', { mark: '18,5/20' }, 'nl'));
+  assert.equal(P.overall([{ effectiveScore: 77.30273, pointsPossible: 93.75, column: { externalGrade: true } }], 'fr').label, '82,45 %');
+  // A language Glaze doesn't speak is English throughout, dates included.
+  assert.equal(P.when(new Date(2026, 9, 13, 23, 59), now, 'ar-SA', true).sub, 'Tuesday, October 13 at 11:59 PM');
 });
 
 test('dates from Ultra\'s data read the same in every locale', () => {
   const soon = new Date('2026-10-14T03:59:00.000Z'); // gradebook column.dueDate
   const d = new Date(2026, 9, 13, 23, 59);
-  for (const l of [undefined, 'en-US', 'de', 'ar-SA', 'not a locale!']) {
+  for (const l of [undefined, 'en-US', 'ar-SA', 'not a locale!']) {
     assert.equal(P.due(d, now, l), 'soon');
     assert.equal(P.when(d, now, l, true).title, 'Due in 2 days');
     assert.deepEqual(P.status(d, null, { status: 'NEEDS_GRADING' }, now, false, l), { label: 'Submitted · due in 2 days', tone: 'done' });
   }
+  assert.equal(P.due(d, now, 'de'), 'soon');
+  assert.equal(P.when(d, now, 'de', true).title, I.t('Due {when}', { when: 'übermorgen' }, 'de'));
+  assert.equal(P.status(d, null, { status: 'NEEDS_GRADING' }, now, false, 'de').label, I.t('{status} · due {when}', { status: I.t('Submitted', {}, 'de'), when: 'übermorgen' }, 'de'));
+
   assert.equal(P.due(soon, now), P.due(new Date(soon), now));
   assert.equal(P.due(new Date('nonsense'), now), null);
   assert.equal(P.when(new Date('nonsense'), now), null);
