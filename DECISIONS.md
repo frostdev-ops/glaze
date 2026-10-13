@@ -182,3 +182,15 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Highlights with the CSS Custom Highlight API; no highlight where it's missing (Firefox before 140) | Wrapping matches in `<mark>` | Wrapping rewrites text nodes the editor redraws and labels it reads; ranges leave the DOM alone. |
 | Controls hidden by the current choice (a background kind, tint off) don't match | Showing them anyway | They can't be used until that choice changes; switching it re-runs the search. |
 | While searching in one column (under 980px), the preview hides | Leaving it above the results | It's 460px tall, so results started below the fold. |
+
+## Due dates in other locales (2.1)
+
+| Decision | Considered | Why |
+|---|---|---|
+| In course content and on an assignment's page, the due date is the gradebook's `column.dueDate`, matched by item id; text is read only where there's no record | Parsing the text everywhere; the content API's `genericReadOnlyData.dueDate` | The gradebook is already fetched for the chips, so it costs nothing. The content API carries the date too, but only per folder (`/children`), which would be a request per open folder; the public `contents?recursive=true` the palette uses has no due dates. Items past the gradebook's 200 still read their text. |
+| A discussion with two due dates ("Due dates: 9/17 and 9/20") counts down to the last one | Keeping the first, as the text gave it | The gradebook keeps only the last, and "Submitted late" already compared against it; chip and lateness now agree. |
+| Due dates found by where Ultra writes them: an item's grade line (`[class*="makeStylesgradeDetail-"]`) and `.due-date-container`; the word "due" only when the locale is English | Ultra's translated labels from its locale bundles | Structure holds in every language. A word list would need every language pack, and "puede" contains "due". |
+| Ultra's locale from `<html lang>`, then `navigator.language` | `/users/me`; the `cldrdata-*` bundle Ultra loaded | Ultra binds `lang` to the locale it renders in (`{{index.locale}}`, the user's or else the system default). `/users/me` had no locale field here (none picked), and costs a request. Untested on a course that enforces its own locale. |
+| Only day/month/year order (and month names, digits, AM/PM words) from `Intl`; separators, year width and 12/24-hour read loosely | Matching `Intl`'s exact pattern | Ultra formats with its own CLDR data, which differs from the browser's: pt-BR and nl write 2-digit years where Intl writes 4, zh writes `yy/M/d`, ko uses a 24-hour clock where Intl uses 12. Order matched in every bundle checked. |
+| en-US keeps its old patterns byte for byte (no month names, no dotted dates) | One reader for all | Owner's call: US users see no change. A 600,000-case differential check against 2.1 found none. |
+| Gregorian dates only | Following `Intl`'s default calendar | `Intl` writes fa and th in Persian and Buddhist calendars. Assumed, not checked on such a site: Ultra writes Gregorian dates there too. |

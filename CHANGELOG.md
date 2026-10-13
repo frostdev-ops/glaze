@@ -82,6 +82,15 @@ All notable changes to Glaze are documented here. The format follows
   puts it away. A fresh install shows nothing. Until then, a small dot on the popup's "Open the
   editor" button. Nothing on the toolbar icon or on Blackboard.
 
+### Changed
+
+- **Due dates in any language.** Due-date status, urgency, "Submitted late" and date hints used to
+  read only US-style dates (10/18/26, 11:59 PM). In course content and on an assignment's page the
+  date now comes from your gradebook, whatever language Blackboard shows; elsewhere Glaze reads it the
+  way Blackboard writes it for your language: 18.10.26, 18/10/2026, 2026/10/18, month names, a 24-hour
+  clock, Arabic digits. Glaze's own words ("in 2 days", "Past due") are still English. A discussion
+  with two due dates now counts down to the last one, the date your gradebook keeps.
+
 ## [2.0.4] — release candidate
 
 ### Added
