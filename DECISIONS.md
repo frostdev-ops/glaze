@@ -39,7 +39,7 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Completion burst triggered by `aria-checked` flipping to true on Ultra's review circle | Watching completion text | Ultra already exposes the state as a checkbox role. |
 | Due-date chips in course content show status from the progress circle and the gradebook (`gradebook/grades?expand=column`, matched by `column.contentId`); urgency only on items not done | Countdowns everywhere; the circle alone | A past date reading "2 weeks ago" sent students to check work they'd handed in. Courses without progress tracking have no circle, so a submitted assignment showed as overdue. `hasBeenViewedByStudent` is about viewing the grade, so only the circle says opened. One request per course a minute. |
 | No chip for a past due date whose status is unknown | "Was due 2 weeks ago" | The date is on the page already; a bare "ago" reads as a warning Glaze can't back up. |
-| Bundled fonts: Inter (variable) + Atkinson Hyperlegible, Latin subset, 71 KB | Google Fonts at runtime | No third-party request from Blackboard pages. |
+| Bundled fonts: Inter (variable) + Atkinson Hyperlegible, Latin subset, 71 KB | Google Fonts at runtime | No third-party request from Blackboard pages. (2.1 adds web fonts, but only once the user picks one.) |
 | Themed tooltips replace native `title` tooltips while hovered (title restored on leave; aria-label filled when the title was the only name) | Leaving native tooltips | Native tooltips can't be styled and appear late; Ultra's icon buttons rely on them. Stands down when Ultra shows its own tooltip. |
 | Hover hints worked out at hover time (dates, grade share, ellipsised text) | Pre-tagging the page | No cost until someone points at something; no attributes left on Ultra's tree. |
 | Light hover fills caught on first pointer contact | Parsing Ultra's 100+ JSS sheets for :hover rules | Hashed class names change per build; checking the live element is robust. |
@@ -97,3 +97,13 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Hold each page's container (`.route-view-container`, not the course shell) hidden while Ultra builds it, release after 300 ms still with no loader and grades in (2.5 s cap), reveal from blur | Animating each part as it arrives; a fixed delay | Measured: Ultra's own script stalls up to ~0.5 s and parts land in bursts (CS2010 opened with CLS 0.11, half from Glaze's progress bar). Hiding until built took CLS to ~0. Held in the observer callback so nothing paints first; 300 ms because Grades pauses ~250 ms between courses. |
 | Menu and tab clicks: a view transition from the old page until the new one is held, then a crossfade | Holding until fully loaded inside the transition | Rendering is frozen during a transition's update, so a long hold feels hung; the gate shows the wait instead. |
 | Grade pills one width (10rem min) on one line; the gradebook's Grade column widened from Item Name | Narrower type; hiding the rubric icon or percentage | Ultra's 102 px box clipped "100 / 100" and wrapped "Not graded"; what's in the pill stays, the pill fits it. |
+
+## 2.1 (Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Web fonts fetched by the content script and handed to `document.fonts` as `FontFace` data, registered as "Glaze <name>" | `@font-face` with a URL; a `<link>` to Google's CSS | A URL font is subject to the page's `font-src` CSP; data isn't. No cookies or referrer go with the fetch. The prefix keeps it from colliding with a face the page defines. |
+| Google Fonts for most faces; jsDelivr (pinned versions) for OpenDyslexic (Fontsource) and Nerd Fonts (the GitHub release) | Bundling them; the Nerd Fonts symbols font as a fallback | Bundling 40 families is megabytes for a choice most people never make. Google's CSS API takes any family by name. Nerd Font icons never appear in Blackboard text, so the patched families are offered as-is. |
+| Latin and Latin Extended subsets only | Every subset Google lists | Data fonts can't load subsets lazily the way `unicode-range` URL fonts do. |
+| One font list for three slots (text, headings, code) | Three selects | Native `<option>`s can't be drawn in their own face. Previews use Google's `text=` subsets of just the names, loaded when the list is opened. |
+| A typed name is tried on Google Fonts, then as a local font | A separate "local font" field | The stack lists both, so one field covers Google families and installed ones (a Nerd Font you already have). |

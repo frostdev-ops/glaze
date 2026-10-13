@@ -20,7 +20,7 @@ domain.
 ## Features
 
 - **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system.
-- **Look** — font (two bundled), text size, line height, corner radius, density, depth and glass.
+- **Look** — fonts for text, headings and code (two bundled; about forty more from Google Fonts and Nerd Fonts, or any Google Font by name, each previewed in its own face), text size, line height, corner radius, density, depth and glass.
 - **Backgrounds** — solid; a gradient you shape (linear, radial, conic or mesh; angle, blend, spread); a drifting aurora; your own image; or eight slow animated scenes (three.js, drawn at low resolution) with one Intensity slider. Palette colors or your own.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — Ultra's course stripes blended into your palette, or set one by one.
@@ -129,8 +129,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Glaze stores your settings in `chrome.storage.sync` and your course names on your own device. It
 collects nothing. The only requests it makes are folder previews (to your own Blackboard site, when you
-hover a folder), your submission and grade status for due dates (to the same site) and a background
-image you choose. See [PRIVACY.md](PRIVACY.md).
+hover a folder), your submission and grade status for due dates (to the same site), a web font you
+choose (Google Fonts or jsDelivr) and a background image you choose. See [PRIVACY.md](PRIVACY.md).
 
 ## License
 

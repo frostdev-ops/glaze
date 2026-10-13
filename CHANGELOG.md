@@ -6,6 +6,15 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Fonts:** about forty to choose from, each shown in its own face in a new font list. Readable
+  faces (Lexend, OpenDyslexic, Atkinson Hyperlegible Next, Andika, Readex Pro, Comic Neue), sans,
+  serif and monospace families from Google Fonts, and four Nerd Fonts (JetBrainsMono, FiraCode, Hack,
+  Meslo). Type any Google Font's name, or one installed on your computer. Headings and code can each
+  have their own font. Web fonts download only once chosen, and load even on Blackboard sites whose
+  security policy blocks outside fonts.
+
 ## [2.0.4] — release candidate
 
 ### Added

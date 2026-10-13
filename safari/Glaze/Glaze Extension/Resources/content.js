@@ -777,7 +777,13 @@
     setVar('--gz-glass', `${s.look.glass}px`);
     // No blur means no glass: a see-through header without the blur just shows text behind text.
     setVar('--gz-glass-mix', s.look.glass ? '78%' : '100%');
+    // Fonts: the stacks are vars; a web font loads into the page once chosen (lib/fonts.js).
     setAttr('data-gz-font', s.look.font);
+    setVar('--gz-font', GZ_FONTS.stack(s.look.font));
+    setVar('--gz-font-head', s.look.head === 'auto' ? 'inherit' : GZ_FONTS.stack(s.look.head));
+    setAttr('data-gz-font-mono', s.look.mono !== 'auto');
+    setVar('--gz-font-mono', GZ_FONTS.stack(s.look.mono));
+    for (const f of [s.look.font, s.look.head, s.look.mono]) GZ_FONTS.load(f);
     setAttr('data-gz-density', s.look.density);
     setAttr('data-gz-depth', String(s.look.depth));
     // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that

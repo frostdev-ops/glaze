@@ -24,7 +24,9 @@ your own palettes, or let Glaze switch between a light and a dark one with your 
 
 Then shape the rest:
 
-• Look — font, text size, line height, rounded corners, spacing, depth and frosted glass
+• Look — fonts for text, headings and code, each previewed in its own face: readable faces like Lexend
+  and OpenDyslexic, Google Fonts, Nerd Fonts, or any font by name; text size, line height, rounded
+  corners, spacing, depth and frosted glass
 • Background — solid; a smooth gradient you shape (linear, radial, conic or mesh; angle, blend and spread);
   a drifting aurora; your own image; or one of eight animated scenes, from northern lights to a lava lamp,
   with one Intensity slider for how much it stands out. In your palette's colors or your own.
@@ -55,7 +57,8 @@ Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed 
 
 Privacy: Glaze stores your settings in Chrome's sync storage and your course names on your device. It
 collects nothing and has no server. The only requests it makes go to your own Blackboard site, for folder
-previews and for which items you've submitted, opened or had graded; and to a background image you choose. The source is open at
+previews and for which items you've submitted, opened or had graded; to Google Fonts or jsDelivr for a web
+font you choose; and to a background image you choose. The source is open at
 https://github.com/frostdev-ops/glaze.
 
 Blackboard is a trademark of Anthology Inc. Glaze is an independent project and is not affiliated with,

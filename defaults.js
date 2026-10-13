@@ -1,6 +1,7 @@
 // Shared by the content script, the popup, the options page and the tests: the one place a default
 // lives. Classic script (the extension loads it after lib/color.js); node loads it via module.exports.
 const GZC = typeof GZ_COLOR !== 'undefined' ? GZ_COLOR : require('./lib/color.js');
+const GZF = typeof GZ_FONTS !== 'undefined' ? GZ_FONTS : require('./lib/fonts.js');
 
 // One row per colour token: CSS variable, label, default value (the "Frost" preset).
 const GZ_COLORS = [
@@ -25,12 +26,14 @@ const GZ_COLORS = [
 const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], ['engagement', 'Discussions'], ['grades', 'Gradebook'], ['messages', 'Messages'], ['groups', 'Groups'], ['achievements', 'Achievements']];
 
 // Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
-// range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs) or
-// 'hexes' (three #rrggbb colors, or none). GZ_SANITIZE walks this.
+// range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
+// 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
+// 'font-auto' (the same, or 'auto'). GZ_SANITIZE walks this.
 const GZ_SPEC = {
   auto: { on: [false, 'bool'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
-    font: ['system', ['system', 'blackboard', 'inter', 'atkinson', 'serif', 'mono']],
+    // Text, headings and code. Headings on auto follow the text; code on auto is left as Ultra has it.
+    font: ['system', 'font'], head: ['auto', 'font-auto'], mono: ['auto', 'font-auto'],
     scale: [1, [0.85, 1.25]],
     leading: [1.5, [1.2, 2]],
     radius: [12, [0, 24]],
@@ -167,6 +170,10 @@ const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
   if (rule === 'name') return cleanName(v) || d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];
+  if (rule === 'font' || rule === 'font-auto') {
+    const f = typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '';
+    return (rule === 'font-auto' && f === 'auto') || GZF.resolve(f) ? f : d;
+  }
   if (rule === 'hexes') return Array.isArray(v) && v.length === 3 && v.every((c) => HEX.test(c)) ? v.map((c) => c.toLowerCase()) : [...d];
   if (rule === 'url') {
     if (v === '') return '';

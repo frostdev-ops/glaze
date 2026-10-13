@@ -34,7 +34,7 @@ test('hostile import is cleaned, not trusted', () => {
     version: 2,
     enabled: 'yes',
     colors: { '--gz-accent': 'red; background:url(x)', '--gz-evil': '#000000' },
-    look: { radius: 999, font: 'comic', scale: '1.1', extra: 1 },
+    look: { radius: 999, font: 'comic"; } body { x', head: 'url(x)', scale: '1.1', extra: 1 },
     bg: { kind: 'image', image: 'javascript:alert(1)' },
     motion: { level: 'max' },
     courses: { colors: { '3': '#ffffff', 'x") ; }': '#000000', '4': 'blue', '11': '#000000' } },

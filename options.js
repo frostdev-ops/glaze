@@ -146,11 +146,86 @@ GZ_UI.load().then((s) => {
       if (el.type === 'checkbox') el.checked = v;
       else el.value = v;
     }
-    for (const r of $$('.seg input[type="radio"]')) r.checked = String(get(r.name)) === r.value;
+    for (const r of $$('.seg input[type="radio"]:not([data-local])')) r.checked = String(get(r.name)) === r.value;
     $('#bg-image').value = s.bg.image;
     for (const [slug, box] of tabBoxes) box.checked = s.declutter.tabs.includes(slug);
+    renderFonts();
     refresh();
   };
+
+  // ---- fonts: one list for three slots (text, headings, code), each card drawn in its own face ----
+  let slot = 'font';
+  const AUTO = { head: 'Same as text', mono: 'As Blackboard has it' };
+  const fontLabel = (sl) => (s.look[sl] === 'auto' ? AUTO[sl] : GZ_FONTS.resolve(s.look[sl])?.name || s.look[sl]);
+  const META = { system: 'This computer', blackboard: 'Open Sans', inter: 'Bundled', atkinson: 'Bundled', serif: 'This computer', mono: 'This computer' };
+  const meta = (f) => META[f.id] || (f.files ? `jsDelivr${f.size ? ` · ${f.size}` : ''}` : f.local ? 'Google Fonts or this computer' : 'Google Fonts');
+  // The card's own face: a preview family where there is one (Google's text= subset, loaded when the
+  // list opens), else the stack content.js would use.
+  const face = (f) => (f.google || f.preview ? `"${f.preview || f.google}", ${f.fb}` : GZ_FONTS.stack(f.id));
+  const card = (value, name, sub, family) => {
+    const label = Object.assign(document.createElement('label'), { className: 'font-card' });
+    const input = Object.assign(document.createElement('input'), { type: 'radio', name: 'font-pick', value, checked: s.look[slot] === value });
+    // Arrow keys walk the list: only the font it rests on is applied (and downloaded), and the list
+    // isn't redrawn under the focus.
+    input.addEventListener('change', () => {
+      s.look[slot] = value;
+      fontLabels();
+      clearTimeout(pickTimer);
+      pickTimer = setTimeout(() => { refresh(); save(['look']); }, 350);
+    });
+    const n = Object.assign(document.createElement('span'), { className: 'face', textContent: name });
+    n.style.fontFamily = family;
+    label.append(input, n, Object.assign(document.createElement('span'), { className: 'meta', textContent: sub }));
+    return label;
+  };
+  let pickTimer = 0;
+  const fontLabels = () => { for (const sl of ['font', 'head', 'mono']) $(`#font-now-${sl}`).textContent = fontLabel(sl); };
+  const renderFonts = () => {
+    fontLabels();
+    const groups = new Map();
+    if (slot !== 'font') groups.set('', [card('auto', AUTO[slot], slot === 'head' ? 'Follows the text font' : "Ultra's monospace", 'inherit')]);
+    const own = GZ_FONTS.custom(s.look[slot]) ? [GZ_FONTS.resolve(s.look[slot])] : [];
+    for (const f of [...GZ_FONTS.LIST, ...own]) {
+      if (!groups.has(f.group)) groups.set(f.group, []);
+      groups.get(f.group).push(card(f.id, f.name, meta(f), face(f)));
+    }
+    $('#font-grid').replaceChildren(...[...groups].flatMap(([g, cards]) => {
+      const box = Object.assign(document.createElement('div'), { className: 'cards', role: 'radiogroup' });
+      box.setAttribute('aria-label', g || 'Automatic');
+      box.append(...cards);
+      return g ? [Object.assign(document.createElement('h3'), { textContent: g }), box] : [box];
+    }));
+  };
+  // Previews: every Google family's name, and only those letters, in one small request.
+  const previewLink = (names) => {
+    const text = [...new Set([...GZ_FONTS.LIST.map((f) => f.name).join(''), ...names.join(''), ...'Aa'])].join('');
+    const fams = names.map((n) => `family=${encodeURIComponent(n).replace(/%20/g, '+')}`).join('&');
+    document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: `https://fonts.googleapis.com/css2?${fams}&text=${encodeURIComponent(text)}&display=swap` }));
+  };
+  $('#font-browse').addEventListener('toggle', (e) => {
+    if (!e.target.open || e.target.dataset.loaded) return;
+    e.target.dataset.loaded = '1';
+    previewLink(GZ_FONTS.LIST.filter((f) => f.google || f.preview).map((f) => f.preview || f.google));
+    // The small file-only faces load whole; the Nerd Fonts preview through their base family.
+    for (const f of GZ_FONTS.LIST) if (f.files && !f.size) GZ_FONTS.load(f.id);
+  });
+  for (const r of $$('input[name="font-slot"]')) r.addEventListener('change', () => { slot = r.value; renderFonts(); });
+  $('#font-use').addEventListener('click', async () => {
+    const name = $('#font-custom').value.trim().replace(/\s+/g, ' ');
+    if (!GZ_FONTS.custom(name) && !GZ_FONTS.resolve(name)) return hint('Font names are letters, digits and spaces.', true);
+    const known = GZ_FONTS.LIST.find((f) => f.name.toLowerCase() === name.toLowerCase());
+    const value = known ? known.id : name;
+    s.look[slot] = value;
+    $('#font-custom').value = '';
+    renderFonts();
+    refresh();
+    save(['look']);
+    if (known) return;
+    const found = await fetch(GZ_FONTS.cssUrl(name, false), { credentials: 'omit', referrerPolicy: 'no-referrer' }).then((r) => r.ok, () => false);
+    if (found) previewLink([name]);
+    else hint(`${name} isn't on Google Fonts. It shows if it's installed on this computer.`);
+  });
+  $('#font-custom').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#font-use').click(); });
 
   // ---- background colors: a ready-made set or three pickers. None stored means the palette's, so
   // they follow palette changes until one is picked. ----
@@ -205,7 +280,7 @@ GZ_UI.load().then((s) => {
       el.addEventListener('change', () => save([group(key)]));
     } else el.addEventListener('change', () => { set(key, el.value); refresh(); save([group(key)]); });
   }
-  for (const r of $$('.seg input[type="radio"]')) {
+  for (const r of $$('.seg input[type="radio"]:not([data-local])')) {
     r.addEventListener('change', () => { set(r.name, r.value); refresh(); save([group(r.name)]); });
   }
   $('#enabled').addEventListener('change', (e) => { s.enabled = e.target.checked; refresh(); save(['enabled']); });

@@ -42,10 +42,6 @@ html[data-gz-density="compact"] { --gz-space: 0.6; }
 html[data-gz-density="roomy"] { --gz-space: 1.4; }
 /* Text size: Ultra sizes text in rem off a 100% root, so the root alone scales all of it. */
 html { font-size: calc(100% * var(--gz-scale, 1)) !important; }
-html[data-gz-font="inter"] { --gz-font: "Glaze Inter", ui-sans-serif, system-ui, sans-serif; }
-html[data-gz-font="atkinson"] { --gz-font: "Glaze Atkinson", ui-sans-serif, system-ui, sans-serif; }
-html[data-gz-font="serif"] { --gz-font: ui-serif, "Iowan Old Style", Georgia, serif; }
-html[data-gz-font="mono"] { --gz-font: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 
 /* ---- Ultra's own MUI palette, remapped. Ultra exposes its theme as --palette-* custom properties
    (light mode values); every MUI surface, divider, text and state colour derives from them, so
@@ -319,7 +315,7 @@ th { background: var(--gz-surface) !important; }
 #site-wrap a.base-navigation-button-content { color: var(--gz-ink-muted) !important; }
 #site-wrap a.base-navigation-button-content:hover { color: var(--gz-ink) !important; }
 #site-wrap a.base-navigation-button-content.Mui-selected, #site-wrap a.base-navigation-button-content[aria-current] { color: var(--gz-accent) !important; }
-.page-title, h1, h2, h3 { font-family: inherit !important; }
+.page-title, h1, h2, h3 { font-family: var(--gz-font-head, inherit) !important; }
 .element-image { background: var(--gz-surface) !important; border-color: var(--gz-line) !important; }
 #site-wrap button:not(.MuiButton-contained) { color: var(--gz-ink) !important; }
 .button-group button, .button-group li { background: var(--gz-surface) !important; color: var(--gz-ink-muted) !important; border-color: var(--gz-line) !important; }
@@ -334,7 +330,11 @@ th { background: var(--gz-surface) !important; }
 #site-wrap .messages-header .summary { border-bottom: 1px solid var(--gz-line) !important; }
 #site-wrap .messages-container-summary .summary { background: transparent !important; border: 0 !important; }
 /* Empty-state copy is Noto Serif in Ultra and usernames are Open Sans; the theme is one sans everywhere. */
-#site-wrap :where(p, h1, h2, h3, h4, h5, h6, .main, bb-ui-username, bb-ui-username *, bb-username, bb-username *) { font-family: inherit !important; }
+#site-wrap :where(p, .main, bb-ui-username, bb-ui-username *, bb-username, bb-username *) { font-family: inherit !important; }
+/* Headings take the heading font (content.js sets it to inherit when it follows the text), code the
+   code font once one is chosen. */
+#site-wrap :where(h1, h2, h3, h4, h5, h6, .page-title) { font-family: var(--gz-font-head, inherit) !important; }
+html[data-gz-font-mono] :is(code, pre, kbd, samp, .ql-code-block, .ql-code-block-container, .ql-syntax) { font-family: var(--gz-font-mono) !important; }
 
 /* Document view (course item pages): Ultra paints the whole body and the title bar white. The title
    bar's div is anonymous, so it is reached through :has() from the stable h1 class. */
