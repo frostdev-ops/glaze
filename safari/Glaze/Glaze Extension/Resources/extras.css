@@ -94,9 +94,12 @@ html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .
 html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { margin-inline: auto; }
 html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { font-size: 1.04em; }
 
-/* Shorter descriptions: three lines until the item is hovered or focused. */
+/* Shorter descriptions: three lines until the item is hovered or focused. Not on touch screens, which
+   can't hover: a tap opens the item instead, so the rest of the text could never be read. */
+@media (hover: hover) {
 html[data-gz-enhance-clamp] #site-wrap .content-list-item .itemContainer:not(:hover, :focus-within) .js-description {
   display: -webkit-box !important; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
 }
 
 /* Score bars: content.js reads the pill's own numbers into --gz-score (0-1) and a band. */

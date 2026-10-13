@@ -47,6 +47,11 @@ html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s
 html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-t-reveal: 0s; }
 html[data-gz-motion="off"], html[data-gz-no-hover] { --gz-lift: none; --gz-nudge: none; --gz-press: none; --gz-pop: none; --gz-hover-shadow: none; --gz-hover-filter: none; }
 html[data-gz-motion="off"] { --gz-ambient: paused; }
+/* Touch screens: :hover sticks to whatever was tapped last, so a tapped card would stay lifted. Nothing
+   lifts on hover there; press feedback stays. */
+@media (hover: none) {
+  html[data-gz-motion] { --gz-lift: none; --gz-nudge: none; --gz-pop: none; --gz-hover-shadow: var(--gz-rest-shadow); --gz-hover-filter: none; }
+}
 /* content.js maps the system setting to "off" unless the user opted out; this only covers the
    moment before it runs. */
 @media (prefers-reduced-motion: reduce) {

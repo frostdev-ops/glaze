@@ -353,7 +353,8 @@
   let mx = 0;
   let my = 0;
   document.addEventListener('pointermove', (e) => {
-    if (html.getAttribute('data-gz-motion') !== 'expressive') return;
+    // A finger has no hover: the light would stay wherever the last touch was.
+    if (e.pointerType === 'touch' || html.getAttribute('data-gz-motion') !== 'expressive') return;
     mx = e.clientX;
     my = e.clientY;
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; setVar('--gz-mx', `${mx}px`); setVar('--gz-my', `${my}px`); });

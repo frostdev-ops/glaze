@@ -6,6 +6,24 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Glaze for iPhone and iPad.** Safari on iOS and iPadOS 18 or newer, from the same App Store listing as
+  the Mac app. The app is a two-step guide in the Mac app's style, in light and dark: turn Glaze on in
+  Settings, then allow it on your Blackboard site. On iOS 26.2 and newer its button opens Safari's
+  extension settings, and the guide ticks the first step off as soon as Glaze is on.
+
+### Changed
+
+- **Touch screens.** Cards and buttons no longer stay lifted or scaled after a tap, and Expressive's pointer
+  light no longer sticks where a finger last touched. Shorter descriptions stay full length on touch
+  screens, where there's no hover to expand them.
+- **The popup** fills Safari's sheet on iPhone and opens wider on iPad, with fingertip-sized swatches,
+  switches and choices.
+- **The editor at phone width:** the section links scroll in one row instead of stacking four deep,
+  sliders get the full width under their labels, and segmented choices wrap instead of running out of
+  their card. Text fields no longer make iOS zoom in when you tap them.
+
 ## [2.0.4] — release candidate
 
 ### Added

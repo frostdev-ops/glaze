@@ -70,3 +70,24 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 .hint { margin: 0; font-size: 11px; color: var(--gz-ink-faint); }
 .hint.err { color: var(--gz-err); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+
+/* Touch screens (Safari on iPhone and iPad): fingertip-sized controls, text fields iOS won't zoom into
+   (it zooms on focus below 16px), and no hover state left stuck on whatever was tapped last. */
+@media (pointer: coarse) {
+  .swatches { gap: 0.6rem; }
+  .swatch { width: 36px; height: 36px; }
+  .swatch::after { width: 12px; height: 12px; }
+  .seg label { padding: 0.45rem 0.85rem; }
+  button { padding: 0.45rem 0.9rem; }
+  input[type="checkbox"] { width: 20px; height: 20px; }
+  input[type="color"] { width: 40px; height: 34px; }
+  input[type="text"], input[type="url"], select { font-size: 16px; }
+  .switch { width: 46px; height: 28px; }
+  .switch span::after { width: 22px; height: 22px; }
+  .switch input:checked + span::after { transform: translateX(18px); }
+}
+@media (hover: none) {
+  .swatch:hover { transform: none; }
+  button:hover { color: var(--gz-ink-muted); border-color: var(--gz-line-strong); }
+  button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: transparent; }
+}
