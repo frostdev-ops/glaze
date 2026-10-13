@@ -13,6 +13,8 @@
   .row h2 { margin: 0; }
   #editor { width: 100%; margin-top: 0.25rem; }
   .hint { margin-top: 0.6rem; }
+  /* Notes for this version not seen yet: a dot, nothing on the toolbar icon. */
+  #editor.new::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 0.45rem; border-radius: 50%; background: currentColor; vertical-align: middle; }
 </style>
 </head>
 <body>
@@ -45,6 +47,7 @@
   <script src="lib/color.js"></script>
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
+  <script src="lib/news.js"></script>
   <script src="ui.js"></script>
   <script src="popup.js"></script>
 </body>

@@ -26,5 +26,11 @@ GZ_UI.load().then((s) => {
     const tab = () => chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
     try { Promise.resolve(chrome.runtime.openOptionsPage()).catch(tab); } catch { tab(); }
   });
+  GZ_NEWS.check((notes) => {
+    if (!notes.length) return;
+    $('#editor').classList.add('new');
+    $('#editor').title = `New in ${notes[0][0]}`;
+    $('#editor').setAttribute('aria-label', `Open the editor (new in ${notes[0][0]})`);
+  });
   render();
 });
