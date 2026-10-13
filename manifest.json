@@ -44,6 +44,7 @@
         "lib/grades.js",
         "lib/fonts.js",
         "lib/drafts.js",
+        "lib/zip.js",
         "defaults.js",
         "content.js"
       ],
