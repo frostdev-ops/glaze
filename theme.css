@@ -207,6 +207,9 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 }
 .MuiDrawer-paper { border-right: 1px solid var(--gz-line) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.4); }
 .MuiDrawer-paper header { border-bottom: 1px solid var(--gz-line) !important; }
+/* In a narrow window the nav is a drawer floating over the page: solid, so the page under it doesn't show
+   through the glass and its items. */
+.MuiDrawer-modal > .MuiDrawer-paper { background: var(--gz-surface-2) !important; backdrop-filter: none; box-shadow: var(--gz-shadow) !important; }
 .base-navigation-button-content {
   color: var(--gz-ink-muted) !important;
   border-radius: var(--gz-radius-sm) !important;
@@ -508,6 +511,19 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 /* Test attempt page: progress bar, radios/checkboxes, option letters, secondary buttons, filter button. */
 #site-wrap .MuiLinearProgress-root { background: var(--gz-line) !important; border-radius: 999px; }
 #site-wrap .MuiLinearProgress-bar { background: var(--gz-accent) !important; }
+
+/* ---- loaders: in the accent with a soft glow, not the institution's brand purple or plain grey. Ultra's
+   older pages draw a .spinner ring on ::after; its React ones an SVG path; course cards wait as
+   skeletons. ---- */
+.spinner::after {
+  border-color: var(--gz-accent) var(--gz-accent) color-mix(in srgb, var(--gz-accent) 18%, transparent) color-mix(in srgb, var(--gz-accent) 18%, transparent) !important;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gz-accent) 45%, transparent));
+}
+path:is([class*="makeStylesindeterminateSvg-"], [class*="makeStylesdeterminateSvg-"]) { stroke: var(--gz-accent) !important; }
+svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--gz-accent) 45%, transparent)); }
+.MuiCircularProgress-root { color: var(--gz-accent) !important; }
+.MuiSkeleton-root { background-color: color-mix(in srgb, var(--gz-ink) 8%, transparent) !important; }
+.MuiSkeleton-wave::after { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gz-accent) 14%, transparent), transparent) !important; }
 #site-wrap .PrivateSwitchBase-root > span, #site-wrap .MuiRadio-root > span, #site-wrap .MuiCheckbox-root > span { background: transparent !important; }
 #site-wrap .MuiRadio-root, #site-wrap .MuiCheckbox-root, #site-wrap .MuiRadio-root svg, #site-wrap .MuiCheckbox-root svg { color: var(--gz-ink-muted) !important; }
 #site-wrap .MuiRadio-root.Mui-checked, #site-wrap .MuiCheckbox-root.Mui-checked, #site-wrap .Mui-checked svg { color: var(--gz-accent) !important; }

@@ -15,6 +15,11 @@ All notable changes to Glaze are documented here. The format follows
   gets no chip, instead of an anxious "2 weeks ago"; outside course content only upcoming dates get one.
   The same chip sits beside the due date on an assignment's own page. The status comes from your
   Blackboard's gradebook, asked at most once a minute per course.
+- **Loading spinners and placeholders** follow your palette: Ultra's spinners turn from the
+  institution's brand color (or plain grey) to the accent with a soft glow, and the course cards'
+  loading placeholders shimmer in the accent.
+- In a narrow window, the menu drawer that floats over the page is solid, so the page no longer shows
+  through it.
 
 ### Fixed
 
