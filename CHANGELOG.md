@@ -20,6 +20,9 @@ All notable changes to Glaze are documented here. The format follows
   one with anything Glaze wouldn't accept is refused whole. Under Share in the editor.
 - **Submitted late:** due-date status says "Submitted late", in amber, for work handed in after its due
   date and not graded yet. Never said where you have a due-date exception.
+- **New-grade badges:** "New" beside grades that arrived since you last opened a course's gradebook,
+  and a count ("2 new") on course cards on the Courses and Grades pages. The first time, the grades
+  Blackboard says you haven't viewed count as new. What you've seen is kept on this computer.
 
 ## [2.0.4] — release candidate
 

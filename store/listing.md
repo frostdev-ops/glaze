@@ -42,6 +42,7 @@ At-a-glance helpers, on from the start:
 • Score bars under gradebook scores
 • Folder previews: hover a folder to see what's inside and what's due
 • Course progress: how much of a course you've completed
+• New-grade badges on gradebook rows and course cards
 
 More you can switch on:
 
@@ -76,8 +77,9 @@ and every line of code serves that purpose.
 
 **storage**
 Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and
-devices, and the names of the user's courses in `chrome.storage.local`, so the editor can list them for
-recolouring. No other data is stored.
+devices; the names of the user's courses in `chrome.storage.local`, so the editor can list them for
+recolouring; and which grades the user has seen, in `chrome.storage.local`, so new ones can be marked.
+No other data is stored.
 
 **Host access: `https://*/ultra/*`**
 Blackboard Ultra is self-hosted by each institution on its own arbitrary domain (for example
@@ -87,7 +89,8 @@ pages the extension is for. The content script injects stylesheets, sets CSS cus
 `<html>`, and tags elements with `data-gz-*` attributes so they can be restyled. With optional helpers
 on, it reads dates and grades already shown on the page to display due-date status and percentages, and
 folder previews ask the same Blackboard site for a folder's contents. Due-date status asks that site's
-gradebook which of the user's items are submitted or graded. Nothing is sent anywhere else.
+gradebook which of the user's items are submitted, late or graded, and new-grade badges ask it which
+grades are new in the courses listed on the page. Nothing is sent anywhere else.
 
 **web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**
 The content script injects the stylesheets as `<link>`s it owns, so the master switch can add and remove

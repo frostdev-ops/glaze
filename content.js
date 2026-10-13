@@ -11,7 +11,7 @@
   const html = document.documentElement;
   const SHEETS = ['theme.css', 'motion.css', 'extras.css'];
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -138,7 +138,7 @@
   const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '') || !!el?.closest('.due-date-container');
 
   // ---- the gradebook --------------------------------------------------------------------------
-  // Due-date status reads the student's own gradebook records,
+  // Due-date status and new grades read the student's own gradebook records,
   // asked of their own Blackboard (same origin, their session) the way Ultra's Grades page asks: at
   // most once a minute per course, and only for courses on the page where one of those is showing.
   // Absolute URLs: Ultra's <base href> points at its CDN.
@@ -191,7 +191,7 @@
   };
   // undefined until the current course's gradebook answers.
   const gradesIn = () => { const cid = courseId(); return cid ? bookFor(cid).grades : undefined; };
-  const onBook = () => { tagExtras([document.body]); };
+  const onBook = () => { tagExtras([document.body]); renderNew(); };
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagExtras = (roots) => {
@@ -262,6 +262,7 @@
     if (tip && ultraTipShown()) hideTip();
     placeScene();
     renderProgress();
+    renderNew();
     recordCourses();
   };
   // ---- page loads ------------------------------------------------------------------------------
@@ -591,6 +592,64 @@
     if (!old) top[0].parentElement.before(bar);
   };
 
+  // ---- new grades (Extras) --------------------------------------------------------------------
+  // "New" on a course gradebook's rows graded since that gradebook was last shown here (or, the first
+  // time, that Ultra says are unviewed), and a count on course cards elsewhere. Showing a gradebook marks
+  // its grades seen; the badges stay until the page is left. Kept on this device (storage.local).
+  let seen = null; // { cid: { columnId: mark } }
+  let seenLoad = null;
+  const shown = new Map(); // cid → column ids badged on this page
+  const loadSeen = () => {
+    seenLoad ||= new Promise((res) => {
+      try { chrome.storage.local.get('seenGrades', (r) => res(r?.seenGrades || {})); } catch { res({}); }
+    }).then((v) => { seen = v; renderNew(); });
+  };
+  // One course at a time, over what's stored: another tab may have recorded other courses since.
+  const keepSeen = (cid) => {
+    try { chrome.storage.local.get('seenGrades', (r) => chrome.storage.local.set({ seenGrades: { ...r?.seenGrades, [cid]: seen[cid] } })); } catch { /* extension reloaded under the tab */ }
+  };
+  // [card selector, its course id, where the badge goes]. Course list cards, recent courses, Grades tiles.
+  const COURSE_CARDS = [
+    ['article[id^="course-list-course-"]', (e) => e.id.slice(19), (e) => e.querySelector('h4[id^="course-name-"]')],
+    ['bb-recent-courses-view a[href*="/ultra/courses/_"]', (e) => e.getAttribute('href').match(/courses\/(_\d+_\d+)/)?.[1], (e) => e],
+    ['.base-grades-course-tile', (e) => e.querySelector('a[href*="/grades"]')?.getAttribute('href').match(/(_\d+_\d+)\/grades/)?.[1], (e) => e.querySelector('.grades-header a.bb-click-target')],
+  ];
+  const badge = (el, label) => {
+    if (!label) el.removeAttribute('data-gz-new');
+    else if (el.getAttribute('data-gz-new') !== label) el.setAttribute('data-gz-new', label);
+  };
+  const renderNew = () => {
+    if (!settings.enhance.newgrades || window.top !== window || !observer) return;
+    if (!seen) return loadSeen();
+    const cid = courseId();
+    if (cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname)) {
+      const b = bookFor(cid);
+      if (b.results) {
+        const { ids, seen: now } = GZ_GRADES.fresh(b.results, seen[cid]);
+        const set = shown.get(cid) || new Set();
+        for (const id of ids) set.add(id);
+        shown.set(cid, set);
+        if (JSON.stringify(now) !== JSON.stringify(seen[cid])) { seen[cid] = now; keepSeen(cid); }
+        for (const el of document.querySelectorAll('[id^="course-student-grades-item-name-"]')) badge(el, set.has(el.id.slice(32)) && 'New');
+      }
+    }
+    // Cards only count: nothing is marked seen until its gradebook is shown. Only on the Courses and
+    // Grades pages themselves, not under a course opened over them.
+    // ponytail: the first 12 cards, one gradebook request each a minute; a long course list waits its turn.
+    if (!/^\/ultra\/(course|grades)\/?$/.test(location.pathname)) return;
+    let n = 0;
+    for (const [sel, idOf, where] of COURSE_CARDS) {
+      for (const card of document.querySelectorAll(sel)) {
+        const id = idOf(card);
+        const el = where(card);
+        if (!id || !el || n++ >= 12) continue;
+        const b = bookFor(id);
+        const count = b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : 0;
+        badge(el, count > 0 && `${count} new`);
+      }
+    }
+  };
+
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them. Never while typing, never with
   // a modifier, top frame only.
@@ -836,6 +895,8 @@
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
     if (observer && ['scores', 'urgency', 'inline'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
     if (observer) renderProgress();
+    if (!s.enhance.newgrades) clearTags(['data-gz-new']);
+    else if (observer) renderNew();
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));

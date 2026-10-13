@@ -9,8 +9,10 @@ _Last updated: 2026-10-13_
   your theme follows you between devices.
 - **The names of your courses**, in `chrome.storage.local`, on this device only. Glaze notes which
   course Ultra shows in which of its ten colour slots, so the editor can list them for you to recolour.
+- **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
+  gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 
-Uninstalling the extension removes both.
+Uninstalling the extension removes all three.
 
 ## What Glaze collects
 
@@ -35,6 +37,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
   due-date exception in that course. The requests go to the site you are on, with your existing session,
   at most once a minute per course, and the answers are kept in memory only. Nothing is stored or sent
   anywhere else.
+- **New-grade badges** (an Extra, on by default). To count new grades on your course cards, Glaze asks
+  your own Blackboard site's gradebook for your grades in the courses on the Courses and Grades pages
+  (the first twelve), the same way as for due-date status: at most once a minute per course, kept in
+  memory. The what-if calculator uses the same answer and asks for nothing more.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an
