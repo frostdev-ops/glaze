@@ -633,16 +633,17 @@
   // time, that Ultra says are unviewed), and a count on course cards elsewhere. Showing a gradebook marks
   // its grades seen; the badges stay until the page is left. Kept on this device (storage.local).
   let seen = null; // { cid: { columnId: mark } }
+  let seenItems = null; // { cid: [content ids] }, for new content (below)
   let seenLoad = null;
   const shown = new Map(); // cid → column ids badged on this page
   const loadSeen = () => {
     seenLoad ||= new Promise((res) => {
-      try { chrome.storage.local.get('seenGrades', (r) => res(r?.seenGrades || {})); } catch { res({}); }
-    }).then((v) => { seen = v; renderNew(); });
+      try { chrome.storage.local.get(['seenGrades', 'seenContent'], (r) => res(r || {})); } catch { res({}); }
+    }).then((r) => { seen = r.seenGrades || {}; seenItems = r.seenContent || {}; renderNew(); });
   };
   // One course at a time, over what's stored: another tab may have recorded other courses since.
-  const keepSeen = (cid) => {
-    try { chrome.storage.local.get('seenGrades', (r) => chrome.storage.local.set({ seenGrades: { ...r?.seenGrades, [cid]: seen[cid] } })); } catch { /* extension reloaded under the tab */ }
+  const keepSeen = (key, cid, v) => {
+    try { chrome.storage.local.get(key, (r) => chrome.storage.local.set({ [key]: { ...r?.[key], [cid]: v } })); } catch { /* extension reloaded under the tab */ }
   };
   // [card selector, its course id, where the badge goes]. Course list cards, recent courses, Grades tiles.
   const COURSE_CARDS = [
@@ -654,66 +655,146 @@
     if (!label) el.removeAttribute('data-gz-new');
     else if (el.getAttribute('data-gz-new') !== label) el.setAttribute('data-gz-new', label);
   };
-  // A card's count is a real link-like pill, first in the course name (where an ellipsis can't cut
-  // it): it opens that course's gradebook at the first new grade. Clicks are taken in the capture
-  // phase so the card around it (itself a link) doesn't open the course instead.
-  const cardBadge = (el, cid, count) => {
-    let pill = el.querySelector(':scope > .gz-new');
+  // Counts are real link-like pills: on a card, first in the course name (where an ellipsis can't cut
+  // it), opening that course's gradebook at the first new grade ('grades') or its outline at the newest
+  // item ('items'); on a closed folder in the outline, after its title, unfolding it down to its newest
+  // item ('inside'). A new item's own "New" ('item') is a plain label. Clicks are taken in the capture
+  // phase so the card or row around a pill (itself a link or a toggle) doesn't act instead.
+  const KIND = { grades: ['grade', 'open the gradebook'], items: ['item', 'open the course'], inside: ['item', 'show them'] };
+  const cardBadge = (el, cid, count, kind = 'grades') => {
+    let pill = el.querySelector(`:scope > .gz-new[data-kind="${kind}"]`);
     if (!count) return pill?.remove();
     if (!pill) {
-      pill = Object.assign(document.createElement('span'), { className: 'gz-new', tabIndex: 0 });
-      pill.setAttribute('role', 'link');
-      el.prepend(pill);
+      pill = Object.assign(document.createElement('span'), { className: 'gz-new' });
+      pill.dataset.kind = kind;
+      if (kind === 'item' || kind === 'inside') el.append(pill);
+      else el.insertBefore(pill, (kind === 'items' && el.querySelector(':scope > .gz-new')?.nextSibling) || el.firstChild);
+      if (KIND[kind]) { pill.tabIndex = 0; pill.setAttribute('role', 'link'); }
     }
-    const label = `${count} new`;
+    const label = kind === 'item' ? 'New' : `${count} new${kind === 'items' ? ` item${count === 1 ? '' : 's'}` : ''}`;
     if (pill.textContent !== label) {
       pill.textContent = label;
-      pill.setAttribute('aria-label', `${count} new grade${count === 1 ? '' : 's'}: open the gradebook`);
+      if (KIND[kind]) pill.setAttribute('aria-label', `${count} new ${KIND[kind][0]}${count === 1 ? '' : 's'}: ${KIND[kind][1]}`);
     }
     pill.dataset.cid = cid;
   };
   const openNew = (e) => {
-    const pill = e.target instanceof Element && e.target.closest('.gz-new');
+    const pill = e.target instanceof Element && e.target.closest('.gz-new[role="link"]');
     if (!pill || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault();
     e.stopPropagation();
     if (e.type !== 'click' && e.type !== 'keydown') return;
-    sessionStorage.setItem('gz-new-jump', pill.dataset.cid);
-    location.assign(`${location.origin}/ultra/courses/${pill.dataset.cid}/grades`);
+    const { kind, cid } = pill.dataset;
+    if (kind === 'inside') { jump = { under: pill.closest('[data-content-id]').dataset.contentId, at: Date.now(), opened: new Set() }; return renderNew(); }
+    sessionStorage.setItem('gz-new-jump', `${kind} ${cid}`);
+    location.assign(`${location.origin}/ultra/courses/${cid}/${kind === 'items' ? 'outline' : 'grades'}`);
   };
+  const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
   for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, openNew, true);
   const renderNew = () => {
-    if (!settings.enhance.newgrades || window.top !== window || !observer) return;
+    const { newgrades, newcontent } = settings.enhance;
+    if (!(newgrades || newcontent) || window.top !== window || !observer) return;
     if (!seen) return loadSeen();
     const cid = courseId();
-    if (cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname)) {
+    if (newcontent && cid) renderItems(cid);
+    if (newgrades && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname)) {
       const b = bookFor(cid);
       if (b.results) {
         const { ids, seen: now } = GZ_GRADES.fresh(b.results, seen[cid]);
         const set = shown.get(cid) || new Set();
         for (const id of ids) set.add(id);
         shown.set(cid, set);
-        if (JSON.stringify(now) !== JSON.stringify(seen[cid])) { seen[cid] = now; keepSeen(cid); }
+        if (JSON.stringify(now) !== JSON.stringify(seen[cid])) { seen[cid] = now; keepSeen('seenGrades', cid, now); }
         for (const el of document.querySelectorAll('[id^="course-student-grades-item-name-"]')) badge(el, set.has(el.id.slice(32)) && 'New');
         // Arrived from a card's "N new": bring the first new grade into view, once.
-        const first = sessionStorage.getItem('gz-new-jump') === cid && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
-        if (first) { sessionStorage.removeItem('gz-new-jump'); first.closest('li, tr, [role="row"]')?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' }); }
+        const first = sessionStorage.getItem('gz-new-jump') === `grades ${cid}` && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
+        if (first) { sessionStorage.removeItem('gz-new-jump'); glide(first.closest('li, tr, [role="row"]')); }
       }
     }
     // Cards only count: nothing is marked seen until its gradebook is shown. Only on the Courses and
     // Grades pages themselves, not under a course opened over them.
     // ponytail: the first 12 cards, one gradebook request each a minute; a long course list waits its turn.
+    // New content is counted only for courses opened before (there's nothing to compare with
+    // otherwise), and asked for only while the card is on screen.
     if (!/^\/ultra\/(course|grades)\/?$/.test(location.pathname)) return;
+    for (const el of inView) if (!el.isConnected) { inView.delete(el); cardsInView.unobserve(el); }
     let n = 0;
     for (const [sel, idOf, where] of COURSE_CARDS) {
       for (const card of document.querySelectorAll(sel)) {
         const id = idOf(card);
         const el = where(card);
-        if (!id || !el || n++ >= 12) continue;
-        const b = bookFor(id);
-        const count = b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : 0;
-        cardBadge(el, id, count);
+        if (!id || !el) continue;
+        if (newgrades && n++ < 12) {
+          const b = bookFor(id);
+          cardBadge(el, id, b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : 0);
+        }
+        if (!newcontent) continue;
+        cardsInView.observe(el);
+        const items = seenItems[id] && (inView.has(el) ? courseItems(id) : contents.get(id))?.items;
+        cardBadge(el, id, GZ_GRADES.newItems(items, seenItems[id]).ids.size, 'items');
       }
+    }
+  };
+
+  // ---- new content (Extras) -------------------------------------------------------------------
+  // "New" on course items added (or made visible) since the course's content was last looked at here,
+  // a count on a closed folder or module holding some, and on course cards. The first visit records
+  // everything; an item is seen once its row has been on the page (the badge stays for that visit), so
+  // what's in a folder only once it's unfolded. Kept on this device (storage.local, seenContent).
+  // ponytail: "on the page", not on screen; a long outline's last rows count as seen unscrolled.
+  // The course's items come from one request, shared with the command palette and asked again after
+  // five minutes at most, with only the fields used. Courses past 200 items show the first 200.
+  const contents = new Map(); // cid → { at, p, items }
+  const courseItems = (cid) => {
+    let c = contents.get(cid);
+    if (!c || Date.now() - c.at > 300000) {
+      c = { at: Date.now(), items: c?.items };
+      c.p = api(`/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,availability.available,links,contentHandler.isBbPage`, '/learn/api/public/v1')
+        .then((j) => { c.items = (j.results || []).filter((i) => i.availability?.available !== 'No'); renderNew(); return c.items; }, () => c.items || []);
+      contents.set(cid, c);
+    }
+    return c;
+  };
+  const inView = new Set();
+  const cardsInView = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) inView.add(e.target); else inView.delete(e.target);
+    renderNew();
+  });
+  const shownItems = new Map(); // cid → content ids badged on this page
+  let jump = null; // { under (a folder id, or null for the whole course), at, opened (folder ids) }
+  const renderItems = (cid) => {
+    const rows = document.querySelectorAll('.content-list-item[data-content-id]');
+    const c = rows.length && courseItems(cid);
+    if (!c?.items) return;
+    const { ids, seen: now, inside } = GZ_GRADES.newItems(c.items, seenItems[cid], new Set([...rows].map((r) => r.dataset.contentId)));
+    const set = shownItems.get(cid) || new Set();
+    for (const id of ids) set.add(id);
+    shownItems.set(cid, set);
+    if (now !== seenItems[cid]) { seenItems[cid] = now; keepSeen('seenContent', cid, now); }
+    // A row's own title comes first; an open folder's rows follow it.
+    for (const r of rows) {
+      const title = r.querySelector('[class*="contentItemTitle"]')?.parentElement;
+      if (!title) continue;
+      const id = r.dataset.contentId;
+      const closed = r.querySelector('[aria-expanded]')?.getAttribute('aria-expanded') === 'false';
+      cardBadge(title, cid, set.has(id) ? 1 : 0, 'item');
+      cardBadge(title, cid, !set.has(id) && closed ? inside.get(id) : 0, 'inside');
+    }
+    // Arrived from a card's count, or a folder's count was clicked: unfold the folders down to the
+    // newest new item (the highest id) and bring it into view. Folders are only unfolded, never opened,
+    // and each at most once, so a slow one isn't folded back. Given up after ten seconds.
+    if (sessionStorage.getItem('gz-new-jump') === `items ${cid}`) { sessionStorage.removeItem('gz-new-jump'); jump = { under: null, at: Date.now(), opened: new Set() }; }
+    if (!jump) return;
+    const up = new Map(c.items.map((i) => [i.id, i.parentId]));
+    const chain = (id) => { const a = []; for (let p = up.get(id); up.has(p); p = up.get(p)) a.unshift(p); return a; };
+    const target = [...set].filter((id) => !jump.under || chain(id).includes(jump.under)).sort((a, b) => b.split('_')[1] - a.split('_')[1])[0];
+    const row = (id) => document.querySelector(`.content-list-item[data-content-id="${id}"]`);
+    if (!target || Date.now() - jump.at > 10000) { jump = null; return; }
+    if (row(target)) { glide(row(target)); jump = null; return; }
+    for (const f of chain(target)) {
+      const t = row(f)?.querySelector('[aria-expanded]');
+      if (!t) return;
+      if (t.getAttribute('aria-expanded') === 'false' && !jump.opened.has(f)) { jump.opened.add(f); t.click(); return; }
     }
   };
 
@@ -1184,27 +1265,20 @@
   const TOOLS = [['/ultra/course', 'Courses'], ['/ultra/calendar', 'Calendar'], ['/ultra/grades', 'Grades'], ['/ultra/messages', 'Messages'],
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
-    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', calc: 'What-if calculator' };
+    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator' };
   const go = (path) => () => location.assign(location.origin + path);
   const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
-  const contents = new Map(); // cid → Promise of the course's items
-  const courseItems = (cid) => {
-    if (!contents.has(cid)) {
-      contents.set(cid, api(`/courses/${cid}/contents?recursive=true&limit=200`, '/learn/api/public/v1').then((j) => {
-        const all = j.results || [];
-        const title = new Map(all.map((c) => [c.id, c.title]));
-        return all.filter((c) => c.availability?.available !== 'No' && c.links?.[0]?.href).map((c) => ({ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(c.links[0].href.replace(/^https?:\/\/[^/]+/, '')) }));
-      }, () => []));
-    }
-    return contents.get(cid);
-  };
+  const paletteItems = (cid) => courseItems(cid).p.then((all) => {
+    const title = new Map(all.map((c) => [c.id, c.title]));
+    return all.filter((c) => c.links?.[0]?.href).map((c) => ({ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(c.links[0].href.replace(/^https?:\/\/[^/]+/, '')) }));
+  });
   // Everything the palette can do, built when it opens.
   const commands = async () => {
     const cid = courseId();
     // A tab's name without its count badge ("Announcements 12").
     const tabName = (a) => { const c = a.cloneNode(true); for (const b of c.querySelectorAll('[class*="badge" i]')) b.remove(); return c.textContent.trim(); };
     const here = cid ? [...document.querySelectorAll('.bb-ui-navigation-list-horizontal a[href]')].map((a) => ({ label: tabName(a), hint: 'This course', group: 'Go to', run: () => a.click() })).filter((c) => c.label) : [];
-    const [courses, items] = await Promise.all([myCourses(), cid ? courseItems(cid) : []]);
+    const [courses, items] = await Promise.all([myCourses(), cid ? paletteItems(cid) : []]);
     const s = settings;
     return [
       ...here,
@@ -1549,8 +1623,9 @@
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
     if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
     if (observer) { renderProgress(); renderCalc(); syncDownloads(); }
-    if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new')) p.remove(); }
-    else if (observer) renderNew();
+    if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
+    if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
+    if (observer) renderNew();
     if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
