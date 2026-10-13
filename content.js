@@ -873,8 +873,11 @@
     const b = document.getElementById(`gz-dl-${fid}`);
     const j = jobs.get(fid);
     if (!b) return;
-    b.textContent = j?.label || 'Download all';
+    // Idle it's just an arrow, named for screen readers; working, it says how far along.
+    b.textContent = j?.label || '';
+    b.setAttribute('aria-label', j?.label || 'Download all');
     b.toggleAttribute('data-busy', !!j && !j.done);
+    b.toggleAttribute('data-job', !!j);
     b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
   };
   const download = async (fid, title) => {
@@ -949,7 +952,7 @@
       b.type = 'button';
       b.id = `gz-dl-${fid}`; // gz- ids are skipped by the sweep
       b.className = 'gz-dl';
-      b.title = "Save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.";
+      b.title = "Download all: save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.";
       // Inside Ultra's clickable row: keep the row from opening or folding.
       for (const ev of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'keydown', 'keyup']) b.addEventListener(ev, (e) => e.stopPropagation());
       b.addEventListener('click', (e) => {

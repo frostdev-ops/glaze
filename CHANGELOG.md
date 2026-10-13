@@ -43,8 +43,8 @@ All notable changes to Glaze are documented here. The format follows
   in Recent Courses and in the card and list views of all courses. The grade comes from the same
   gradebook request as due-date status, asked only for courses on screen and at most once a minute
   each, so opening a course right after reuses it. An Extra, on by default.
-- **Download all.** Each folder and learning module in course content gets a "Download all" button
-  beside its title that saves the files inside, subfolders included, as one zip named after it. It
+- **Download all.** Each folder and learning module in course content gets a download arrow beside its
+  title, shown while you point at it or tab to it, that saves the files inside, subfolders included, as one zip named after it. It
   shows its progress, a second click cancels, and folders over 250 MB are refused rather than filling
   your browser's memory. Files in items you haven't opened yet are left out, and the button says how
   many, so a download never marks anything as viewed. On by default; switch it off under Extras.
