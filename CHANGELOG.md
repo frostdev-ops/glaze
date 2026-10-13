@@ -18,6 +18,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
+- The selected item's glow in the main menu now also shows in a narrow window, where Ultra moves the
+  menu into a drawer; it had Ultra's purple bar back.
 - **Due-date urgency** no longer flags work you've handed in, in any course: due soon and due today
   now check it too, not only overdue, and courses without progress circles check the gradebook.
 

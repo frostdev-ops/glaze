@@ -218,13 +218,14 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 /* The current page in the main nav and in a course's Contents tree: Ultra marks it with a straight
    bar in the institution's brand color on its own ::before (a purple strip next to Glaze's stripe,
    poking past the rounded corners). That ::before becomes a short accent bar with a glow, over a
-   soft accent wash. */
-#site-wrap :is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"]) {
+   soft accent wash. In a narrow window the main nav is a drawer outside #site-wrap, so its list's id
+   reaches it there. */
+:is(#site-wrap, #base_tools) :is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"]) {
   position: relative;
   background: radial-gradient(120% 140% at 0% 50%, color-mix(in srgb, var(--gz-accent) 20%, transparent), transparent 70%), color-mix(in srgb, var(--gz-accent-soft) 55%, transparent) !important;
   box-shadow: none !important;
 }
-#site-wrap :is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"])::before {
+:is(#site-wrap, #base_tools) :is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"])::before {
   content: "" !important; display: block !important; position: absolute; left: 0; top: 24%; bottom: 24%; height: auto !important; width: 3px !important;
   border: 0 !important; border-radius: 999px; background: var(--gz-accent) !important;
   box-shadow: 0 0 6px 1px color-mix(in srgb, var(--gz-accent) 85%, transparent), 0 0 18px 5px color-mix(in srgb, var(--gz-accent) 35%, transparent);
