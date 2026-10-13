@@ -79,7 +79,8 @@ const GZ_DEFAULTS = {
   colors: Object.fromEntries(GZ_COLORS.map(([v, , d]) => [v, d])),
   preset: 'Frost',
   ...Object.fromEntries(Object.entries(GZ_SPEC).map(([g, keys]) => [g, Object.fromEntries(Object.entries(keys).map(([k, [d]]) => [k, d]))])),
-  // tint: inside a course listed in `tinted` (color slots), its color tints the palette, `strength` %.
+  // colors: picked by course id (a slot number is a pick from before 2.1.3). tint: inside a course
+  // listed in `tinted` (course ids, or slots likewise), its color tints the palette, `strength` %.
   courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60 },
   footer: true,
   presets: [],
@@ -169,6 +170,7 @@ const GZ_SCENE_LOOK = (intensity) => {
 const HEX = /^#[0-9a-f]{6}$/i;
 // Ultra gives each course one of ten colour slots (.course-color-1…10), the same on every page.
 const COURSE_SLOT = /^([1-9]|10)$/;
+const COURSE_ID = /^_\d+_\d+$/;
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 const cleanName = (n) => (typeof n === 'string' ? n.trim().slice(0, 40) : '');
 
@@ -257,12 +259,12 @@ const GZ_SANITIZE = (raw) => {
     out.motion.level = out.motion.enter || out.motion.hover || out.motion.transitions ? 'subtle' : 'off';
   }
   const rc = isObj(raw.courses) ? raw.courses : {};
-  const cc = isObj(rc.colors) ? Object.entries(rc.colors).filter(([slot, c]) => COURSE_SLOT.test(slot) && HEX.test(c)) : [];
+  const cc = isObj(rc.colors) ? Object.entries(rc.colors).filter(([k, c]) => (COURSE_SLOT.test(k) || COURSE_ID.test(k)) && HEX.test(c)).slice(0, 200) : [];
   out.courses = {
     harmonize: typeof rc.harmonize === 'boolean' ? rc.harmonize : true,
     colors: Object.fromEntries(cc.map(([id, c]) => [id, c.toLowerCase()])),
     tint: cleanValue(rc.tint, false, 'bool'),
-    tinted: Array.isArray(rc.tinted) ? [...new Set(rc.tinted.filter((n) => typeof n === 'string' && COURSE_SLOT.test(n)))] : [],
+    tinted: Array.isArray(rc.tinted) ? [...new Set(rc.tinted.filter((n) => typeof n === 'string' && (COURSE_ID.test(n) || COURSE_SLOT.test(n))))].slice(0, 200) : [],
     strength: cleanValue(rc.strength, 60, [10, 100]),
   };
   out.footer = typeof raw.footer === 'boolean' ? raw.footer : GZ_DEFAULTS.footer;
@@ -297,12 +299,60 @@ const GZ_CONTRAST = (colors) => GZ_CONTRAST_PAIRS.map(([fg, bg, min, label]) => 
 });
 
 // ---- the student's courses ----------------------------------------------------------------------
-// Course id -> { name, slot } from Ultra's membership list (/users/{id}/memberships?expand=course),
-// leaving out courses the student hid. The slot is Ultra's course-color-N: a membership's card color
+// Course id -> { name, slot, org } from Ultra's membership list (/users/{id}/memberships?expand=course),
+// leaving out courses the student hid; org marks an organization. The slot is Ultra's course-color-N: a membership's card color
 // index runs past ten and wraps onto the ten (index 2 is course-color-3, 2326 is course-color-7).
 const GZ_COURSES = (memberships) => Object.fromEntries((memberships || [])
   .filter((m) => m?.course && !m.userHasHidden && Number.isInteger(m.courseCardColorIndex) && m.courseCardColorIndex >= 0)
-  .map((m) => [m.courseId, { name: String(m.course.name || m.course.displayName || m.courseId).slice(0, 80), slot: String(m.courseCardColorIndex % 10 + 1) }]));
+  .map((m) => [m.courseId, { name: String(m.course.name || m.course.displayName || m.courseId).slice(0, 80), slot: String(m.courseCardColorIndex % 10 + 1), org: !!m.course.isOrganization }]));
+
+// Every course its own color. Ultra has ten (course-color-1…10, these) and gives two courses the same
+// one whenever their card color indexes match modulo ten. Glaze keeps a slot's color for one course in
+// it (courses before organizations, the newest first, so last term's course is the one that moves)
+// and gives each other course an Ultra color no course holds, then a hue of its own. A color picked in
+// the editor wins: by course id, or, from before 2.1.3, by slot, which is that slot's own course's.
+// id -> { color, picked, own }: own = keeps its slot's color, so Ultra's own class already paints it.
+const GZ_SLOT_COLORS = { 1: '#c473d4', 2: '#2fd9fc', 3: '#ffe12b', 4: '#ff6417', 5: '#89f3db', 6: '#fe5b91', 7: '#85f472', 8: '#22c7cc', 9: '#ca22ad', 10: '#157afb' };
+const GZ_COURSE_COLORS = (courses, picks = {}) => {
+  const hsl = (h, s, l) => {
+    const f = (n) => { const k = (n + h / 30) % 12; return Math.round(255 * (l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0'); };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+  const num = (id) => +id.split('_')[1] || 0;
+  const ids = Object.keys(courses || {}).filter((id) => courses[id]?.slot)
+    .sort((a, b) => !!courses[a].org - !!courses[b].org || num(b) - num(a));
+  const out = {};
+  const held = new Set();
+  for (const id of ids) {
+    const { slot } = courses[id];
+    if (held.has(slot)) continue;
+    held.add(slot);
+    out[id] = { color: picks[id] || picks[slot] || GZ_SLOT_COLORS[slot], picked: !!(picks[id] || picks[slot]), own: true };
+  }
+  const free = Object.keys(GZ_SLOT_COLORS).filter((n) => !held.has(n));
+  const hue = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+    return d ? (60 * (max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) + 360) % 360 : 0;
+  };
+  const used = Object.values(GZ_SLOT_COLORS).map(hue);
+  // Past Ultra's ten, the hue farthest from every one in use. ponytail: hue alone; past about thirty
+  // courses neighbors get close, lightness steps would stretch it.
+  const far = () => {
+    let best = 0, gap = -1;
+    for (let h = 0; h < 360; h += 3) {
+      const g = Math.min(...used.map((u) => Math.min(Math.abs(h - u), 360 - Math.abs(h - u))));
+      if (g > gap) [best, gap] = [h, g];
+    }
+    used.push(best);
+    return hsl(best, 0.7, 0.6);
+  };
+  for (const id of ids) if (!out[id]) out[id] = { color: picks[id] || (free.length ? GZ_SLOT_COLORS[free.shift()] : far()), picked: !!picks[id], own: false };
+  return out;
+};
+// What an element of a course carries on top of its slot class, so it shows the course's own color.
+// --gz-pick: initial drops a slot's picked color, so the course's raw color is toned like Ultra's.
+const GZ_COURSE_VARS = (c) => (!c || c.own ? {} : c.picked ? { '--gz-pick': c.color } : { '--gz-pick': 'initial', '--gz-course-raw': c.color });
 
 // ---- course tint ------------------------------------------------------------------------------
 // Inside a course picked for it, the accent family takes the course's hue, and `t` (0-1) of the way
@@ -338,5 +388,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_TINT };
 }

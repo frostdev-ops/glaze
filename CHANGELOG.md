@@ -4,6 +4,23 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3] — 2026-10-13
+
+### Changed
+
+- **Every course its own colour.** Blackboard has ten course colours and gives two courses the same
+  one whenever their numbers line up, so three courses could share yellow, and 2.1.2's course list put
+  them in one row with one colour and one Tint box. Now each course and organization has its own row,
+  its own colour and its own Tint box, under Courses and Organizations. Where Blackboard repeats a
+  colour, its newest course keeps it and the others get one no course has; Glaze paints those on
+  course pages, Messages and Grades, and tints with them. The calendar names no course, so its
+  entries keep Blackboard's colour. Colours and ticks you set before carry over.
+
+### Fixed
+
+- **Course tint on a course's first page.** The tint could miss a course whose page didn't change
+  after loading, until something on it moved.
+
 ## [2.1.2] — 2026-10-13
 
 ### Added

@@ -183,8 +183,8 @@ test('theme codes are untrusted: anything off refuses the whole code', async () 
 
 test('course tint is off and empty until configured; junk is dropped', () => {
   assert.deepEqual(G.GZ_DEFAULTS.courses, { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60 });
-  const c = G.GZ_SANITIZE({ courses: { tint: 'yes', tinted: ['2', '2', '11', 3, 'x', '10'], strength: 500 } }).courses;
-  assert.deepEqual([c.tint, c.tinted, c.strength], [false, ['2', '10'], 60]);
+  const c = G.GZ_SANITIZE({ courses: { tint: 'yes', tinted: ['2', '2', '11', 3, 'x', '10', '_53708_1', '_x_1', '_53708_1'], strength: 500 } }).courses;
+  assert.deepEqual([c.tint, c.tinted, c.strength], [false, ['2', '10', '_53708_1'], 60]);
 });
 
 test('course tint never costs a contrast pair, and at full strength is the course color where that reads', () => {
@@ -227,9 +227,31 @@ test('courses come from the membership list, each in its own color slot', () => 
   assert.deepEqual(G.GZ_COURSES([
     m('_1_1', 'SPAN1100', 2), m('_2_1', 'CS2010', 1), m('_3_1', 'Tutoring', 2326), m('_4_1', 'Orientation', 2508),
     m('_5_1', 'Hidden', 3, { userHasHidden: true }), m('_6_1', 'No index'),
-  ]), {
-    _1_1: { name: 'SPAN1100', slot: '3' }, _2_1: { name: 'CS2010', slot: '2' },
-    _3_1: { name: 'Tutoring', slot: '7' }, _4_1: { name: 'Orientation', slot: '9' },
+  ].map((x, i) => (i === 2 ? { ...x, course: { ...x.course, isOrganization: true } } : x))), {
+    _1_1: { name: 'SPAN1100', slot: '3', org: false }, _2_1: { name: 'CS2010', slot: '2', org: false },
+    _3_1: { name: 'Tutoring', slot: '7', org: true }, _4_1: { name: 'Orientation', slot: '9', org: false },
   });
   assert.deepEqual(G.GZ_COURSES(undefined), {});
+});
+
+test('every course gets its own color, and a slot keeps its color for its newest course', () => {
+  const C = (slot, org = false) => ({ name: 'x', slot, org });
+  // Three courses in slot 3, a course and an organization in slot 2: one of each slot keeps Ultra's.
+  const courses = { _9_1: C('3'), _10_1: C('3'), _11_1: C('3'), _1_1: C('2'), _2_1: C('2', true) };
+  const r = G.GZ_COURSE_COLORS(courses);
+  assert.equal(r._11_1.color, G.GZ_SLOT_COLORS[3]);
+  assert.equal(r._1_1.color, G.GZ_SLOT_COLORS[2]);
+  assert.ok(r._11_1.own && r._1_1.own && !r._10_1.own && !r._2_1.own);
+  assert.equal(new Set(Object.values(r).map((c) => c.color)).size, 5);
+  // Past Ultra's ten, every course still has a color of its own.
+  const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`_${i + 1}_1`, C(String(i % 10 + 1))]));
+  assert.equal(new Set(Object.values(G.GZ_COURSE_COLORS(many)).map((c) => c.color)).size, 30);
+  // A pick by id wins; one by slot (from before 2.1.3) is the slot's own course's.
+  const p = G.GZ_COURSE_COLORS(courses, { _10_1: '#123456', 3: '#abcdef' });
+  assert.deepEqual([p._10_1, p._11_1.color, p._9_1.picked], [{ color: '#123456', picked: true, own: false }, '#abcdef', false]);
+  assert.deepEqual(G.GZ_COURSE_VARS(p._11_1), {});
+  assert.deepEqual(G.GZ_COURSE_VARS(p._10_1), { '--gz-pick': '#123456' });
+  assert.deepEqual(G.GZ_COURSE_VARS(r._2_1), { '--gz-pick': 'initial', '--gz-course-raw': r._2_1.color });
+  const s = G.GZ_SANITIZE({ courses: { colors: { 3: '#ABCDEF', _10_1: '#123456', _x: '#000000', 11: '#000000' } } }).courses;
+  assert.deepEqual(s.colors, { 3: '#abcdef', _10_1: '#123456' });
 });

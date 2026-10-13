@@ -298,7 +298,8 @@
     dirty.clear();
     if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
     if (tip && ultraTipShown()) hideTip();
-    if (tintSlot() !== tinted) applySettings();
+    paintCourses();
+    if (tintKey() !== tinted) applySettings();
     placeScene();
     renderProgress();
     renderNew();
@@ -1524,19 +1525,43 @@
     }).catch(() => { sceneFailed = true; stopScene(); });
   };
 
-  // ---- course tint ----------------------------------------------------------------------------
-  // Inside a course picked in the editor, the palette leans toward the course's color (GZ_TINT).
-  // A course's own pages carry its color slot on the course section; its item pages carry nothing,
-  // so the slot is remembered per course id, on this device. flush() re-checks on every page change.
+  // ---- course colors and tint ------------------------------------------------------------------
+  // Every course its own color (GZ_COURSE_COLORS), worked out from the course list recordCourses
+  // keeps. Inside a course picked in the editor, the palette also leans toward it (GZ_TINT). A
+  // course's own pages carry its color slot on the course section; its item pages carry nothing, so
+  // the slot is remembered per course id, on this device. flush() re-checks on every page change.
   const COURSE = 'section.course[class*="course-color-"]';
   const courseSlots = {};
+  let courseList = {};
+  const courseColors = () => GZ_COURSE_COLORS(courseList, settings.courses.colors);
   try {
-    chrome.storage.local.get('courseSlots', (r) => {
+    chrome.storage.local.get(['courseSlots', 'seenCourses'], (r) => {
       Object.assign(courseSlots, r?.courseSlots);
-      if (tintSlot() !== tinted) reapply();
+      courseList = r?.seenCourses || {};
+      reapply();
     });
   } catch { /* extension reloaded under the tab */ }
-  const tintSlot = () => {
+  // A course's own color on everything of it Glaze can tell is it: a course's section, a Messages card
+  // (data-course-id), a Grades row (a link into the course), anything on the course's own pages.
+  // Calendar entries name no course, so they keep their slot's color.
+  const courseOf = (el) => el.getAttribute('bb-course-membership-markups') || el.closest('[data-course-id]')?.dataset.courseId
+    || (el.closest('a[href*="/courses/_"]') || el.querySelector('a[href*="/courses/_"]'))?.getAttribute('href').match(/\/courses\/(_\d+_\d+)/)?.[1]
+    || courseId();
+  const paintCourses = () => {
+    if (isPreview) return;
+    const colors = courseColors();
+    for (const el of document.querySelectorAll('[class*="course-color-"]')) {
+      const v = GZ_COURSE_VARS(colors[courseOf(el)]);
+      for (const k of ['--gz-pick', '--gz-course-raw']) {
+        if (el.style.getPropertyValue(k) === (v[k] || '')) continue;
+        if (v[k]) el.style.setProperty(k, v[k]);
+        else el.style.removeProperty(k);
+      }
+    }
+  };
+  const varText = (v) => Object.entries(v).map(([k, x]) => `${k}:${x}`).join(';');
+  // The course tinting the page now, as { key, slot, vars }, or null.
+  const tintOf = () => {
     const cid = courseId();
     const sec = document.querySelector(COURSE);
     const slot = sec?.className.match(/course-color-(\d+)/)?.[1];
@@ -1548,21 +1573,26 @@
       try { chrome.storage.local.set({ courseSlots }); } catch { /* reloaded */ }
     }
     const { tint, tinted: picked } = settings.courses;
-    const now = cid ? courseSlots[cid] : isPreview && slot;
-    return tint && picked.includes(now) ? now : null;
+    if (!tint) return null;
+    // The editor's preview is its first ticked course: the section carries that course's slot and color.
+    if (!cid) return isPreview && slot && picked.length ? { key: `${slot};${sec.style.cssText}`, slot, vars: sec.style.cssText } : null;
+    // Ticked by id; a slot number is a tick from before each course had its own.
+    const now = courseSlots[cid];
+    return now && (picked.includes(cid) || picked.includes(now)) ? { key: cid, slot: now, vars: varText(GZ_COURSE_VARS(courseColors()[cid])) } : null;
   };
+  const tintKey = () => tintOf()?.key || null;
   // The color the Course colors section already resolves (--gz-course: a pick, toned or raw), read
   // off a hidden probe on <html>, outside the observed body. Null until theme.css has loaded.
-  const courseColor = (slot) => {
+  const courseColor = (slot, vars = '') => {
     const p = document.createElement('i');
     p.className = `course-color-${slot}`;
-    p.style.cssText = 'display:none;color:color-mix(in srgb, var(--gz-course, transparent) 100%, transparent)';
+    p.style.cssText = `${vars};display:none;color:color-mix(in srgb, var(--gz-course, transparent) 100%, transparent)`;
     html.append(p);
     const c = C.parse(getComputedStyle(p).color);
     p.remove();
     return c?.a ? C.hex(c) : null;
   };
-  let tinted = null; // the slot whose color is painted now
+  let tinted = null; // the key of the course whose color is painted now
   let palette = GZ_DEFAULTS.colors; // the colors painted, tint included
 
   // ---- settings → <html> ----------------------------------------------------------------------
@@ -1590,18 +1620,22 @@
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);
+    // A slot's own course's pick colors the slot, so what Glaze can't tell apart (the calendar) agrees.
+    const own = {};
+    for (const [id, c] of Object.entries(courseColors())) if (c.own && c.picked) own[courseList[id].slot] = c.color;
     for (let n = 1; n <= 10; n++) {
-      const c = s.courses.colors[n];
+      const c = own[n] || s.courses.colors[n];
       if (c) setVar(`--gz-pick-${n}`, c);
       else html.style.removeProperty(`--gz-pick-${n}`);
     }
     // The course color is worked out from the untinted palette set above, then painted over it.
-    const slot = tintSlot();
-    const course = slot && courseColor(slot);
-    tinted = course ? slot : null;
+    const on = tintOf();
+    const course = on && courseColor(on.slot, on.vars);
+    tinted = course ? on.key : null;
     const colors = course ? GZ_TINT(base, course, s.courses.strength / 100) : base;
     if (course) for (const [v] of GZ_COLORS) setVar(v, colors[v]);
     palette = colors;
+    paintCourses();
     const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
     accentInk = C.parse(colors['--gz-accent-ink']);
     setVar('color-scheme', dark ? 'dark' : 'light');
@@ -1680,6 +1714,8 @@
         const l = document.createElement('link');
         l.rel = 'stylesheet';
         l.href = chrome.runtime.getURL(f);
+        // The tint reads the course color theme.css resolves: none before it loads.
+        l.addEventListener('load', () => { if (tintKey() !== tinted) reapply(); }, { once: true });
         (document.head || html).appendChild(l);
         return l;
       });
@@ -1739,7 +1775,11 @@
       else if (settings.enabled) applySettings();
     });
   }
-  chrome.storage.onChanged.addListener((_, area) => {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.seenCourses) {
+      courseList = changes.seenCourses.newValue || {};
+      reapply();
+    }
     if (area !== 'sync' || isPreview) return;
     load().then((s) => {
       const was = settings.enabled && links.length > 0;

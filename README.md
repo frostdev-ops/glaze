@@ -14,7 +14,7 @@ domain.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
-  <a href="https://github.com/frostdev-ops/glaze/releases/download/v2.1.2/glaze-2.1.2-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
+  <a href="https://github.com/frostdev-ops/glaze/releases/download/v2.1.3/glaze-2.1.3-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
 </p>
 
 ## Features
@@ -47,7 +47,7 @@ domain.
 
 ## Safari
 
-[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v2.1.2/glaze-2.1.2-safari-macos.dmg): signed and notarized, attached to each release on
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v2.1.3/glaze-2.1.3-safari-macos.dmg): signed and notarized, attached to each release on
 [GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
 on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
 the frosted-glass blur needs Safari 18.

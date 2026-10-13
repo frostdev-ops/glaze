@@ -7,7 +7,6 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 GZ_I18N.page();
 const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
 // Ultra's own colour for each course slot: the picker starts there.
-const SLOT_COLORS = { 1: '#c473d4', 2: '#2fd9fc', 3: '#ffe12b', 4: '#ff6417', 5: '#89f3db', 6: '#fe5b91', 7: '#85f472', 8: '#22c7cc', 9: '#ca22ad', 10: '#157afb' };
 const DEPTH = ['Flat', 'Soft', 'Raised', 'Floating'];
 const FORMAT = {
   pct: (v) => GZ_I18N.pct(Math.round(v * 100), GZ_I18N.ui()),
@@ -112,13 +111,16 @@ GZ_UI.load().then((s) => {
   const frame = $('#preview');
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
-  let seen = {}; // color slot -> its courses' names, from the content script
+  let courses = {}; // course id -> { name, slot, org }, from the content script
   const preview = () => {
-    // The mock is a course: it shows as the first course picked for tinting.
     const sec = frame.contentDocument?.querySelector('section.course');
-    const slot = s.courses.tinted[0];
-    if (sec && slot) sec.className = `course course-color-${slot}`;
-    if (sec && seen[slot]) sec.querySelector('.pv-course').textContent = seen[slot][0];
+    // The mock is a course: it shows as the first course picked for tinting, in that course's color.
+    const first = courses[s.courses.tinted[0]];
+    if (sec && first) {
+      sec.className = `course course-color-${first.slot}`;
+      sec.style.cssText = Object.entries(GZ_COURSE_VARS(GZ_COURSE_COLORS(courses, s.courses.colors)[s.courses.tinted[0]])).map(([k, v]) => `${k}:${v}`).join(';');
+      sec.querySelector('.pv-course').textContent = first.name;
+    }
     frame.contentWindow?.postMessage({ gzPreview: offer || s }, location.origin);
   };
   frame.addEventListener('load', preview);
@@ -412,45 +414,55 @@ GZ_UI.load().then((s) => {
   });
   $('#reset-colors').addEventListener('click', () => { save(GZ_UI.pickPreset(s, 'Frost', GZ_PRESET('Frost'))); fill(); });
 
-  // ---- courses: names come from the content script, recorded on this device only ----
-  // Courses sharing one of Ultra's ten color slots share a row: the color and the tint are the slot's.
-  let courses = {};
+  // ---- courses: recorded by the content script, on this device only ----
+  // A row per course, organizations apart, each in its own color (GZ_COURSE_COLORS) with its own tint.
   const renderCourses = (next = courses) => {
     courses = next || {};
-    seen = {};
-    for (const c of Object.values(courses)) if (c?.slot) (seen[c.slot] ||= []).push(c.name);
-    for (const names of Object.values(seen)) names.sort((a, b) => a.localeCompare(b));
-    const slots = Object.keys(seen).sort((a, b) => a - b);
-    $('#course-empty').hidden = slots.length > 0;
-    $('#course-list').replaceChildren(...slots.map((slot) => {
+    const all = Object.entries(courses).filter(([, c]) => c?.slot)
+      .sort(([, a], [, b]) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    // Picks and ticks from before each course had its own were by slot: a pick becomes the slot's own
+    // course's, a tick every course in the slot.
+    const own = GZ_COURSE_COLORS(courses, {});
+    const cc = s.courses;
+    const oldTicks = cc.tinted.filter((n) => /^\d+$/.test(n));
+    const oldPicks = Object.keys(cc.colors).filter((n) => /^\d+$/.test(n) && all.some(([id, c]) => c.slot === n && own[id].own));
+    if (all.length && (oldTicks.length || oldPicks.length)) {
+      cc.tinted = [...new Set([...cc.tinted.filter((n) => !oldTicks.includes(n)), ...all.filter(([, c]) => oldTicks.includes(c.slot)).map(([id]) => id)])];
+      for (const n of oldPicks) {
+        const [id] = all.find(([i, c]) => c.slot === n && own[i].own);
+        cc.colors[id] ||= cc.colors[n];
+        delete cc.colors[n];
+      }
+      save(['courses']);
+    }
+    const colors = GZ_COURSE_COLORS(courses, cc.colors);
+    const row = ([id, c]) => {
       const li = document.createElement('li');
-      const input = Object.assign(document.createElement('input'), { type: 'color', value: s.courses.colors[slot] || SLOT_COLORS[slot] });
-      input.setAttribute('aria-label', t('Colour for {name}', { name: seen[slot].join(', ') }));
-      input.addEventListener('input', () => { s.courses.colors[slot] = input.value; refresh(); save(['courses'], true); reset.hidden = false; });
+      const input = Object.assign(document.createElement('input'), { type: 'color', value: colors[id].color });
+      input.setAttribute('aria-label', t('Colour for {name}', { name: c.name }));
+      const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Reset'), hidden: !cc.colors[id] });
+      input.addEventListener('input', () => { cc.colors[id] = input.value; reset.hidden = false; refresh(); save(['courses'], true); });
       input.addEventListener('change', () => save(['courses']));
-      const name = document.createElement('span');
-      name.className = 'name';
-      name.textContent = seen[slot].join(', ');
-      name.title = seen[slot].join('\n');
-      const tag = document.createElement('span');
-      tag.className = 'slot';
-      tag.textContent = t('colour {n}', { n: +slot });
-      name.append(tag);
-      const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Reset'), hidden: !s.courses.colors[slot] });
-      reset.addEventListener('click', () => { delete s.courses.colors[slot]; input.value = SLOT_COLORS[slot]; reset.hidden = true; refresh(); save(['courses']); });
-      const tint = Object.assign(document.createElement('label'), { className: 'check', hidden: !s.courses.tint });
+      reset.addEventListener('click', () => { delete cc.colors[id]; renderCourses(); refresh(); save(['courses']); });
+      const name = Object.assign(document.createElement('span'), { className: 'name', textContent: c.name, title: c.name });
+      const tint = Object.assign(document.createElement('label'), { className: 'check', hidden: !cc.tint });
       tint.dataset.tint = '';
-      const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: s.courses.tinted.includes(slot) });
-      box.setAttribute('aria-label', t('Tint inside {name}', { name: seen[slot].join(', ') }));
+      const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: cc.tinted.includes(id) });
+      box.setAttribute('aria-label', t('Tint inside {name}', { name: c.name }));
       box.addEventListener('change', () => {
-        s.courses.tinted = box.checked ? [...s.courses.tinted, slot] : s.courses.tinted.filter((n) => n !== slot);
+        cc.tinted = box.checked ? [...cc.tinted, id] : cc.tinted.filter((n) => n !== id);
         refresh();
         save(['courses']);
       });
       tint.append(box, t('Tint'));
       li.append(input, name, tint, reset);
       return li;
-    }));
+    };
+    const orgs = all.filter(([, c]) => c.org);
+    $('#course-list').replaceChildren(...all.filter(([, c]) => !c.org).map(row));
+    $('#org-list').replaceChildren(...orgs.map(row));
+    $('#course-head').hidden = $('#org-head').hidden = !orgs.length;
+    $('#course-empty').hidden = all.length > 0;
   };
   chrome.storage.local.get('seenCourses', (r) => renderCourses(r?.seenCourses));
 
