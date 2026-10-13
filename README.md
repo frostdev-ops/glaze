@@ -25,7 +25,7 @@ domain.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — Ultra's course stripes blended into your palette, or set one by one.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
-- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade badges, a what-if grade calculator, a Ctrl+K command palette for courses, items, pages and settings, a backup of what you type in Blackboard's editors, Download all, which saves a folder's files as one zip, and focus mode for course documents (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts, dark documents and hiding page parts you don't use (off by default).
+- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade and new-content badges, a what-if grade calculator, a Ctrl+K command palette for courses, items, pages and settings, a backup of what you type in Blackboard's editors, Download all, which saves a folder's files as one zip, and focus mode for course documents (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts, dark documents and hiding page parts you don't use (off by default).
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
@@ -128,12 +128,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Privacy
 
-Glaze stores your settings in `chrome.storage.sync`, and your course names, which grades you've seen
-and a backup of what you type in Blackboard's editors (until it's posted, 14 days at most) on your own
+Glaze stores your settings in `chrome.storage.sync`, and your course names, which grades and course
+items you've seen and a backup of what you type in Blackboard's editors (until it's posted, 14 days at most) on your own
 device. It collects nothing. The only requests it makes go to your own Blackboard site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards;
-your course list and a course's items for the command palette), to Google Fonts or jsDelivr for a web
+your course list and a course's items for the command palette and new-content badges), to Google Fonts or jsDelivr for a web
 font you choose, and to a background image you choose. See [PRIVACY.md](PRIVACY.md).
 
 ## License

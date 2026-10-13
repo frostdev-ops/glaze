@@ -11,6 +11,8 @@ _Last updated: 2026-10-13_
   course Ultra shows in which of its ten colour slots, so the editor can list them for you to recolour.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
+- **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
+  you've opened, the ids of its items, so new-content badges know what's new.
 - **What you type in Blackboard's editors** (the "Back up what you type" Extra, on by default), in
   `chrome.storage.local`, on this device only. While you write a post, reply, journal entry, message or
   assignment text, Glaze keeps a copy so it can offer it back if the page reloads or your session times
@@ -48,8 +50,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
   (the first twelve), the same way as for due-date status: at most once a minute per course, kept in
   memory. The what-if calculator uses the same answer and asks for nothing more.
 - **Command palette** (an Extra, on by default). When you open it, Glaze asks your own Blackboard site
-  for your list of courses and, inside a course, that course's items, once per page, using Blackboard's
-  own addresses with your existing session. The answers are kept in memory only.
+  for your list of courses and, inside a course, that course's items, using Blackboard's own addresses
+  with your existing session. The answers are kept in memory only.
+- **New-content badges** (an Extra, on by default). In a course's content, Glaze asks your own
+  Blackboard site for the course's list of items (the same request as the command palette's, which
+  shares the answer), and on the Courses and Grades pages for each course you've opened before whose
+  card is on screen: at most once every five minutes per course, with your existing session. The list
+  is kept in memory; only the items' ids are stored, as above. Nothing is sent anywhere else.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an

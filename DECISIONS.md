@@ -145,6 +145,17 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Reading time from the document's own text at 230 words a minute, none under half a minute | Counting attachments; always showing it | Attachments can't be read from here; "1 min" on a file-only page is noise. |
 | Esc leaves focus mode at the window in capture, before Ultra's handlers | Letting it through | One key, one effect. Focus inside a preview frame keeps Esc there; the button still works. |
 | No keyboard shortcut for focus mode | A letter key or Ctrl/Cmd+K | Ctrl/Cmd+K belongs to the command palette; Esc and the button cover it. |
+## New content (2.1)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Seen = a set of content ids per course (`seenContent` in `storage.local`); the first visit records everything | Comparing `created` dates to a last-visit time | Courses are copied each term, so `created` is the copy's date (2024 for a Fall 2026 course here), and an item made visible keeps its old date. An id that wasn't there before is exactly "added or made visible". |
+| An item is seen once its row has been on the page; the badge stays for that visit | Seen as soon as the course is opened; seen once scrolled on screen | Opening a course shouldn't clear what's inside folders you never unfolded, which is what the folder count is for. On screen would need an observer per row for little gain. A long outline's last rows count as seen unscrolled. |
+| A folder's count only while it's closed, and a quiet outline pill rather than the accent fill | A count always; a dot | Open, its new items carry their own "New". The count says how many without opening anything. |
+| An Ultra document's blocks (children of an `isBbPage` folder) are left out | Counting them into the document | Every document is a page folder with its body as a hidden child; counted, a new document would never be seen. |
+| Card counts only for courses opened before, fetched only while the card is on screen, sharing the palette's request (five minutes) | Leaving cards out | `fields=` cuts the request to ~25–40 KB a course (130–160 KB unfiltered); four open courses here make that ~120 KB per five minutes on the Courses page at most. A course never opened has nothing to compare with. |
+| Clicking a count lands on the newest new item (highest id), unfolding each folder above it once | The first in outline order; opening the item | Folders are only unfolded, never opened, so no progress is recorded. Once each, so a slow folder isn't clicked shut again; given up after ten seconds. |
+
 ## Course tint (2.1)
 
 | Decision | Considered | Why |
