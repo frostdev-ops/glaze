@@ -23,6 +23,11 @@ All notable changes to Glaze are documented here. The format follows
 - **New-grade badges:** "New" beside grades that arrived since you last opened a course's gradebook,
   and a count ("2 new") on course cards on the Courses and Grades pages. The first time, the grades
   Blackboard says you haven't viewed count as new. What you've seen is kept on this computer.
+- **What-if calculator** on a course's gradebook: type scores for work that isn't graded yet and see
+  the overall grade they'd make, or set a target and see the score you'd need on everything left. It
+  follows the course's own category weights, and only once it reproduces the overall grade Blackboard
+  shows; when a course uses rules Glaze can't read (dropped scores, say), it says so instead of
+  guessing. A course with no overall grade gets a plain share of points, labelled as just that.
 
 ## [2.0.4] — release candidate
 

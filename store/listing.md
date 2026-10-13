@@ -43,6 +43,7 @@ At-a-glance helpers, on from the start:
 • Folder previews: hover a folder to see what's inside and what's due
 • Course progress: how much of a course you've completed
 • New-grade badges on gradebook rows and course cards
+• What-if grade calculator: try scores for ungraded work, or see what you need for a target grade
 
 More you can switch on:
 

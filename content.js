@@ -138,7 +138,7 @@
   const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '') || !!el?.closest('.due-date-container');
 
   // ---- the gradebook --------------------------------------------------------------------------
-  // Due-date status and new grades read the student's own gradebook records,
+  // Due-date status, new grades and the what-if calculator read the student's own gradebook records,
   // asked of their own Blackboard (same origin, their session) the way Ultra's Grades page asks: at
   // most once a minute per course, and only for courses on the page where one of those is showing.
   // Absolute URLs: Ultra's <base href> points at its CDN.
@@ -191,7 +191,7 @@
   };
   // undefined until the current course's gradebook answers.
   const gradesIn = () => { const cid = courseId(); return cid ? bookFor(cid).grades : undefined; };
-  const onBook = () => { tagExtras([document.body]); renderNew(); };
+  const onBook = () => { tagExtras([document.body]); renderNew(); renderCalc(); };
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagExtras = (roots) => {
@@ -263,6 +263,7 @@
     placeScene();
     renderProgress();
     renderNew();
+    renderCalc();
     recordCourses();
   };
   // ---- page loads ------------------------------------------------------------------------------
@@ -650,6 +651,68 @@
     }
   };
 
+  // ---- what-if calculator (Extras) -----------------------------------------------------------
+  // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make,
+  // and a target gives the even share of the remaining points it needs. The recipe is the course's own
+  // overall grade (lib/grades.js), and it must reproduce Blackboard's figure first; otherwise it says so.
+  const whatIf = new Map(); // cid → { overrides: Map columnId → score, target }
+  const asPct = (p) => (p == null ? '–' : `${Math.round(p * 100) / 100}%`);
+  const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  const renderCalc = () => {
+    const old = document.getElementById('gz-calc');
+    const cid = courseId();
+    const host = settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview');
+    if (!host) return old?.remove();
+    const b = bookFor(cid);
+    if (!b.results) return;
+    const key = `${cid} ${b.key}`;
+    if (old?.dataset.key === key && old.previousElementSibling === host) return;
+    const m = GZ_GRADES.model(b.results);
+    if (!whatIf.has(cid)) whatIf.set(cid, { overrides: new Map(), target: '' });
+    const st = whatIf.get(cid);
+    const now = make('b', { textContent: m.kind === 'unsupported' ? '' : asPct(m.percent()) });
+    const box = make('details', { id: 'gz-calc', open: !!old?.open },
+      make('summary', {}, make('span', { textContent: 'What-if calculator' }), now));
+    box.dataset.key = key;
+    box.setAttribute('aria-label', 'What-if grade calculator');
+    if (m.note) box.append(make('p', { className: 'gz-calc-note', textContent: m.note }));
+    if (m.kind !== 'unsupported') {
+      const left = m.items.filter((i) => i.score == null && i.possible > 0);
+      const out = make('p', { className: 'gz-calc-out' });
+      out.setAttribute('aria-live', 'polite');
+      const need = make('p', { className: 'gz-calc-out' });
+      need.setAttribute('aria-live', 'polite');
+      const target = make('input', { type: 'number', min: 0, max: 100, step: 'any', value: st.target, placeholder: '90' });
+      target.setAttribute('aria-label', 'Target overall grade, in percent');
+      const update = () => {
+        const p = m.percent(st.overrides);
+        out.textContent = st.overrides.size ? `With ${st.overrides.size === 1 ? 'that score' : 'those scores'}: ${asPct(p)} overall.` : left.length ? 'Type a score to see where it would leave you.' : 'Everything here is graded.';
+        const t = parseFloat(st.target);
+        if (!Number.isFinite(t)) { need.textContent = ''; return; }
+        const r = m.need(t, st.overrides);
+        need.textContent = !r.left ? `Nothing left to change: ${asPct(p)}.`
+          : r.reachable === false ? `Out of reach: full marks on the ${r.left} item${r.left === 1 ? '' : 's'} left would make ${asPct(r.best)}.`
+            : r.share === 0 ? `You'd stay at ${t}% or above even with zeros on what's left.`
+              : `You'd need about ${Math.ceil(r.share * 1000) / 10}% on ${r.left === 1 ? 'the item' : `each of the ${r.left} items`} left.`;
+      };
+      const rows = left.map((i) => {
+        const input = make('input', { type: 'number', min: 0, step: 'any', value: st.overrides.get(i.id) ?? '', placeholder: '–' });
+        input.setAttribute('aria-label', `Score for ${i.name}, out of ${i.possible}`);
+        input.addEventListener('input', () => {
+          const v = parseFloat(input.value);
+          if (Number.isFinite(v) && v >= 0) st.overrides.set(i.id, v); else st.overrides.delete(i.id);
+          update();
+        });
+        return make('li', {}, make('span', { className: 'gz-calc-name', textContent: i.name }), make('span', { className: 'gz-calc-score' }, input, ` / ${i.possible}`));
+      });
+      target.addEventListener('input', () => { st.target = target.value; update(); });
+      if (rows.length) box.append(make('h3', { textContent: 'Not graded yet' }), make('ul', {}, ...rows));
+      box.append(out, make('label', { className: 'gz-calc-target' }, 'Aim for ', target, '% overall'), need);
+      update();
+    }
+    if (old) old.replaceWith(box); else host.after(box);
+  };
+
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them. Never while typing, never with
   // a modifier, top frame only.
@@ -894,7 +957,7 @@
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
     if (observer && ['scores', 'urgency', 'inline'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (observer) renderProgress();
+    if (observer) { renderProgress(); renderCalc(); }
     if (!s.enhance.newgrades) clearTags(['data-gz-new']);
     else if (observer) renderNew();
     // Declutter: CSS hides by these.
@@ -942,7 +1005,7 @@
     hideTip();
     hidePeek();
     closeKeys();
-    document.getElementById('gz-progress')?.remove();
+    for (const id of ['gz-progress', 'gz-calc']) document.getElementById(id)?.remove();
     for (const l of links) l.remove();
     links = [];
     stopScene();

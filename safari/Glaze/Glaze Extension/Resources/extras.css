@@ -211,6 +211,30 @@ html[data-gz-enhance-newgrades] h4[id^="course-name-"][data-gz-new]::before {
   color: var(--gz-accent-ink); background: var(--gz-accent);
 }
 
+/* What-if calculator, under the gradebook's header. */
+#gz-calc {
+  margin: 0 0 calc(14px * var(--gz-space)); padding: 0.2rem 1rem;
+  background: var(--gz-surface); border: 1px solid var(--gz-line); border-radius: var(--gz-radius);
+  font-size: 0.875rem; color: var(--gz-ink-muted);
+}
+#gz-calc[open] { padding-bottom: 0.9rem; }
+#gz-calc summary { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.55rem 0; cursor: pointer; color: var(--gz-ink); font-weight: 600; }
+#gz-calc summary b { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--gz-accent); }
+#gz-calc h3 { margin: 0.4rem 0 0.35rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-faint); }
+#gz-calc ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+#gz-calc li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; }
+#gz-calc .gz-calc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gz-ink); }
+#gz-calc .gz-calc-score { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#gz-calc input {
+  width: 5.5em; padding: 0.15rem 0.45rem; font: inherit; text-align: right; font-variant-numeric: tabular-nums;
+  color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 6px;
+}
+#gz-calc input:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+#gz-calc .gz-calc-note { margin: 0.2rem 0 0.5rem; color: var(--gz-ink-faint); }
+#gz-calc .gz-calc-out { margin: 0.6rem 0 0; color: var(--gz-ink); }
+#gz-calc .gz-calc-out:empty { display: none; }
+#gz-calc .gz-calc-target { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.75rem; }
+
 /* ---- declutter ---- */
 html[data-gz-hide-help] .pagehelp-directive { display: none !important; }
 html[data-gz-hide-banner] #site-wrap course-banner { display: none !important; }
