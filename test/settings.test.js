@@ -205,3 +205,19 @@ test('course tint never costs a contrast pair, and at full strength is the cours
     }
   }
 });
+
+test('looks apply cleanly: every value is one Glaze accepts, contrast holds, and the look reads as on', () => {
+  assert.equal(G.GZ_LOOKS.length, 8);
+  const mine = G.GZ_SANITIZE({ look: { tooltips: false, scale: 1.2, font: 'mono' }, bg: { image: 'https://example.com/a.jpg', kind: 'image' }, auto: { on: true } });
+  for (const L of G.GZ_LOOKS) {
+    const s = { ...mine, ...G.GZ_LOOK_APPLY(mine, L) };
+    assert.deepEqual(G.GZ_SANITIZE(s), s, `${L.name} survives GZ_SANITIZE unchanged`);
+    for (const r of G.GZ_CONTRAST(s.colors)) assert.ok(r.pass, `${L.name}: ${r.label} ${r.ratio.toFixed(2)}`);
+    assert.ok(G.GZ_LOOK_ON(s, L), `${L.name} reads as on`);
+    assert.ok(!s.auto.on, 'picking a look turns auto light/dark off');
+    assert.equal(s.look.tooltips, false, 'tooltips stay the user\'s');
+    assert.equal(s.bg.image, 'https://example.com/a.jpg', 'the image address stays the user\'s');
+    if (!('scale' in L.look)) assert.equal(s.look.scale, G.GZ_DEFAULTS.look.scale, `${L.name} resets what it doesn't name`);
+    for (const O of G.GZ_LOOKS) if (O !== L) assert.ok(!G.GZ_LOOK_ON(s, O), `${L.name} isn't also ${O.name}`);
+  }
+});

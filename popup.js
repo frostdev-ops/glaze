@@ -15,6 +15,7 @@ GZ_UI.load().then((s) => {
     document.body.classList.toggle('off', !s.enabled);
     // inert, not just dimmed: body.off alone leaves the controls reachable by keyboard.
     for (const sec of document.querySelectorAll('section:not(:last-of-type)')) sec.inert = !s.enabled;
+    GZ_UI.looks($('#looks'), s, (L) => { save(GZ_UI.pickLook(s, L)); render(); });
     GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); render(); });
     for (const r of document.querySelectorAll('[name=motion]')) r.checked = r.value === s.motion.level;
     if (s.auto.on) hint(t('Auto light/dark is on. Picking a palette turns it off.'));

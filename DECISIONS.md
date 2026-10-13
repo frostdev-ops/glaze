@@ -233,3 +233,14 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Item-type icon tints match Ultra's own names for them in its 32 other locale bundles (rel.37), written into theme.css beside the English rules | Tagging icons from the content API; matching icon path data | The type is only in the label: the content API's handler can't tell an assignment from a test. Path data would be unreadable magic. ~6 KB of selectors; a renamed label just goes back to the accent color. The English rules are untouched, so "Form" (Ultra's current name for a survey) is still untinted in English. ponytail: regenerate from the bundles if Ultra renames a type. |
 | The `/` shortcut finds `input[type=search]` and inputs or buttons whose id has "search" | Placeholder and aria-label containing "earch" | Ultra's ids (`courses-overview-filter-search`, `search-button`) don't change with language. The Courses page's search box had neither a placeholder nor a search type, so `/` found nothing there before, in English too. |
 | A course card's id line is skipped by Ultra's label for it in every language ("ID:", "Code :", "Kimlik:"…) | Structure | Not seen on this site's pages, so no structure to go by; the word list comes from the bundles' `base.courses.idLabel`. |
+
+## Looks (Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| A look sets every look and background value; what it doesn't name goes back to the default | Changing only what the look names | Picking Terminal after Clear would otherwise keep Clear's larger text and roomy spacing: the result would be neither. |
+| Tooltips, hints and the background image's address survive a look | Resetting them too | They're how Glaze behaves and what the user typed, not how a theme looks (the same line theme codes draw). |
+| Applied at once, in the popup and the editor | Previewing first, like a pasted theme code | Every look is one click back to any other, and the palette swatches undo the colors; a confirm step would make the popup's quick controls slow. |
+| A look with its own palette (Synthwave) leaves no preset name, like an unsaved palette | Adding Synthwave to the palette presets | The palette list stays the six palettes; save it as a preset to keep it on its own. |
+| Look names aren't translated | Translating them | Same as palette names: they're names. |
+

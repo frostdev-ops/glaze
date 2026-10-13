@@ -51,5 +51,33 @@ const GZ_UI = (() => {
     return ['colors', 'preset', 'auto'];
   };
 
-  return { load, save, paint, swatches, pickPreset };
+  // One card per look: its name in its own text color on its own surface, fading into its background's
+  // colors, with its accent down the edge; pressed when it is what the page is wearing.
+  const looks = (box, s, onPick) => {
+    box.replaceChildren();
+    for (const L of GZ_LOOKS) {
+      const c = L.colors;
+      // The strip: the background's own colors, else the palette's accents (a solid look stays plain).
+      const tint = L.bg.colors?.length ? L.bg.colors : L.bg.kind === 'solid' ? [c['--gz-surface-2']] : [c['--gz-accent'], c['--gz-accent-hi']];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'look';
+      b.textContent = L.name;
+      b.setAttribute('translate', 'no');
+      b.setAttribute('aria-pressed', String(GZ_LOOK_ON(s, L)));
+      b.style.color = c['--gz-ink'];
+      b.style.borderColor = c['--gz-line-strong'];
+      b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 4px, transparent 4px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${tint.join(', ')})`;
+      b.addEventListener('click', () => onPick(L));
+      box.append(b);
+    }
+  };
+
+  // A look is an explicit choice too: palette, fonts, shape and background at once.
+  const pickLook = (s, L) => {
+    Object.assign(s, GZ_LOOK_APPLY(s, L));
+    return ['colors', 'preset', 'auto', 'look', 'bg'];
+  };
+
+  return { load, save, paint, swatches, pickPreset, looks, pickLook };
 })();

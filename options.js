@@ -221,6 +221,7 @@ GZ_UI.load().then((s) => {
   const refresh = () => {
     GZ_UI.paint(s);
     preview();
+    GZ_UI.looks($('#looks'), s, (L) => { save(GZ_UI.pickLook(s, L)); fill(); });
     GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); fill(); });
     renderContrast();
     renderMine();

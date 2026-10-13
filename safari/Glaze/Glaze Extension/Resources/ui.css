@@ -67,6 +67,16 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 .swatch:hover { transform: scale(1.12); }
 .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface-2), 0 0 0 4px var(--gz-accent); }
 
+/* Looks: a card per look, in its own colors; the active one gets a ring. */
+.looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.4rem; }
+.look {
+  min-height: 34px; padding: 0.35rem 0.6rem 0.35rem 0.85rem; text-align: left; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid; border-radius: 8px; cursor: pointer;
+  transition: transform 0.2s var(--gz-ease), box-shadow 0.2s var(--gz-ease);
+}
+.look:hover { transform: translateY(-1px); }
+.look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface-2), 0 0 0 4px var(--gz-accent); }
+
 .hint { margin: 0; font-size: 11px; color: var(--gz-ink-faint); }
 .hint.err { color: var(--gz-err); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
@@ -77,6 +87,7 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
   .swatches { gap: 0.6rem; }
   .swatch { width: 36px; height: 36px; }
   .swatch::after { width: 12px; height: 12px; }
+  .look { min-height: 44px; }
   .seg label { padding: 0.45rem 0.85rem; }
   button { padding: 0.45rem 0.9rem; }
   input[type="checkbox"] { width: 20px; height: 20px; }
@@ -87,7 +98,7 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
   .switch input:checked + span::after { transform: translateX(18px); }
 }
 @media (hover: none) {
-  .swatch:hover { transform: none; }
+  .swatch:hover, .look:hover { transform: none; }
   button:hover { color: var(--gz-ink-muted); border-color: var(--gz-line-strong); }
   button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: transparent; }
 }

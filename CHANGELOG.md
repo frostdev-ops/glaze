@@ -6,6 +6,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Looks:** eight ready-made combinations of palette, fonts, shape and background, one click each,
+  in the popup and at the top of the editor's Palette section, and as "Look: …" in the command palette.
+  Aurora Night, Library, Terminal, Lava Lounge, Synthwave, Clear, Lagoon and Rose Garden. A look sets
+  the whole look and background, so nothing from the last one lingers; your tooltips, hints and a
+  background image's address stay as you set them.
+
 ## [2.1.1] — 2026-10-13
 
 ### Fixed

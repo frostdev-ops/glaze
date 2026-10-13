@@ -209,6 +209,38 @@ const GZ_SANITIZE_PRESETS = (list) => {
 const sameColors = (a, b) => GZ_COLORS.every(([v]) => a[v] === b[v]);
 // Built-ins first, then the user's own.
 const GZ_ALL_PRESETS = (custom = []) => [...GZ_PRESETS, ...custom.map((p) => [p.name, p.colors])];
+
+// Looks: a palette, fonts, shape and background picked to go together, in one click. A look sets every
+// look and background value (what it doesn't name goes back to the default), so one look never keeps
+// another's leftovers; tooltips, hints and a background image's address stay the user's.
+const GZ_LOOKS = [
+  ['Aurora Night', 'Midnight', { font: 'outfit', radius: 16, glass: 16, depth: 2 }, { kind: 'scene', scene: 'borealis', intensity: 55 }],
+  ['Library', 'Paper', { font: 'literata', head: 'fraunces', radius: 6, density: 'roomy', leading: 1.7, glass: 0 }, { kind: 'solid' }],
+  ['Terminal', 'Forest', { font: 'jetbrains-mono', radius: 2, density: 'compact', glass: 0, depth: 0 }, { kind: 'solid' }],
+  ['Lava Lounge', 'Ember', { font: 'dm-sans', head: 'fraunces', radius: 20, glass: 14, depth: 2 }, { kind: 'scene', scene: 'lava' }],
+  ['Synthwave', GZ_PALETTE(
+    '#f472b6', '#f9a8d4', '#3b1238', '#1e0a1d',
+    '#1a1030', '#0e0819', '#f5e8ff', '#c3a6d8', '#8f78a6', '#2b1c45', '#46306b',
+    '#34d399', '#fbbf24', '#fb7185'), { font: 'outfit', radius: 14, glass: 18, depth: 2 }, { kind: 'scene', scene: 'horizon', intensity: 60, colors: ['#f472b6', '#a78bfa', '#fb923c'] }],
+  ['Clear', 'Frost', { font: 'atkinson', scale: 1.1, leading: 1.7, density: 'roomy', glass: 0, radius: 10 }, { kind: 'solid' }],
+  ['Lagoon', 'Frost', { font: 'figtree', radius: 14, glass: 14 }, { kind: 'gradient', style: 'mesh', colors: ['#22d3ee', '#6366f1', '#34d399'], dim: 70 }],
+  ['Rose Garden', 'Rose', { font: 'nunito', head: 'lora', radius: 18 }, { kind: 'aurora', colors: ['#f472b6', '#a78bfa', '#fb923c'], dim: 75 }],
+].map(([name, palette, look, bg]) => ({ name, palette: typeof palette === 'string' ? palette : null, colors: typeof palette === 'string' ? GZ_PRESETS.find(([n]) => n === palette)[1] : palette, look, bg }));
+// The settings a look changes, from settings `s`: { colors, preset, auto, look, bg }. A look with its own
+// colors (Synthwave) has no preset name, like any unsaved palette.
+const GZ_LOOK_APPLY = (s, L) => ({
+  colors: { ...L.colors },
+  preset: L.palette,
+  auto: { ...s.auto, on: false },
+  look: { ...GZ_DEFAULTS.look, tooltips: s.look.tooltips, hints: s.look.hints, ...L.look },
+  bg: { ...GZ_DEFAULTS.bg, image: s.bg.image, ...L.bg },
+});
+// Whether `s` is wearing look L as it was applied.
+const GZ_LOOK_ON = (s, L) => {
+  const want = GZ_LOOK_APPLY(s, L);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  return !s.auto.on && same(s.colors, want.colors) && Object.keys(want.look).every((k) => same(s.look[k], want.look[k])) && Object.keys(want.bg).every((k) => same(s.bg[k], want.bg[k]));
+};
 const GZ_PRESET = (name, custom) => GZ_ALL_PRESETS(custom).find(([n]) => n === name)?.[1] || null;
 const GZ_MATCH_PRESET = (colors, custom) => GZ_ALL_PRESETS(custom).find(([, c]) => sameColors(c, colors))?.[0] || null;
 
@@ -298,5 +330,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_TINT };
 }
