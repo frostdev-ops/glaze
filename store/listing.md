@@ -40,9 +40,11 @@ At-a-glance helpers, on from the start:
 • Score bars under gradebook scores
 • Folder previews: hover a folder to see what's inside and what's due
 • Course progress: how much of a course you've completed
+• Focus mode for course documents: just the document, a reading-progress line and the reading time
 
 More you can switch on:
 
+• Dark documents: PDFs and file previews turned dark, colors kept
 • Due-date urgency for overdue and soon-due items
 • Keyboard shortcuts for courses, calendar, grades and messages
 • Hide parts of the page you don't use

@@ -237,6 +237,7 @@
     if (tip && ultraTipShown()) hideTip();
     placeScene();
     renderProgress();
+    syncDocTools();
     recordCourses();
   };
   // ---- page loads ------------------------------------------------------------------------------
@@ -566,6 +567,127 @@
     if (!old) top[0].parentElement.before(bar);
   };
 
+  // ---- document buttons (Extras) ---------------------------------------------------------------
+  // Round buttons in the bottom-right gutter, top frame only: dark documents while a file preview is
+  // on screen (dark palettes only), focus mode on a course document. Dark documents invert the
+  // preview's frame (extras.css), which works whatever its origin; where a frame is same-origin, its
+  // images and videos are turned back.
+  const PREVIEWS = '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe';
+  const UNFLIP = 'img, video, picture, canvas { filter: invert(1) hue-rotate(180deg); }';
+  const shown = new Set();
+  const framesSeen = new WeakSet();
+  let docTools = null;
+  let focusAt = null; // the document focus mode is on for
+  let readBar = null;
+  const unflip = (f) => {
+    try {
+      const d = f.contentDocument;
+      const old = d?.getElementById('gz-unflip');
+      const on = html.matches('[data-gz-dark-theme][data-gz-enhance-darkDocs]'); // as extras.css
+      if (!d?.documentElement || on === !!old) return;
+      if (old) return old.remove();
+      const s = d.createElement('style');
+      s.id = 'gz-unflip';
+      s.textContent = UNFLIP;
+      d.documentElement.append(s);
+    } catch { /* another origin */ }
+  };
+  const ICONS = { dark: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z', focus: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5' };
+  const docButton = (key, label, onClick) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.gz = key;
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const p = document.createElementNS(svg.namespaceURI, 'path');
+    p.setAttribute('d', ICONS[key]);
+    svg.append(p);
+    b.append(svg);
+    b.addEventListener('click', onClick);
+    return b;
+  };
+  const onRead = () => {
+    if (!readBar) return;
+    const sc = focusAt.parentElement; // Ultra's scroller around the document
+    // On <html>, outside the observed body: a style write on the bar would wake the sweep every scroll.
+    setVar('--gz-read', GZ_PAGE.readShare(sc.scrollTop, sc.scrollHeight, sc.clientHeight));
+  };
+  const setFocus = (on) => {
+    const doc = on && document.querySelector('#site-wrap .document-content-root');
+    if ((doc || null) === focusAt) return;
+    focusAt = doc || null;
+    html.toggleAttribute('data-gz-focus', !!focusAt);
+    readBar?.remove();
+    readBar = null;
+    if (focusAt) {
+      readBar = document.createElement('div');
+      readBar.id = 'gz-read';
+      readBar.setAttribute('aria-hidden', 'true');
+      document.body.append(readBar);
+      onRead();
+    }
+    syncDocTools();
+  };
+  const setDark = (on) => {
+    settings = { ...settings, enhance: { ...settings.enhance, darkDocs: on } };
+    setAttr('data-gz-enhance-darkDocs', on);
+    syncDocTools();
+    try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
+  };
+  const syncDocTools = () => {
+    const on = window.top === window && observer && settings.enhance.toggles;
+    const doc = on && document.querySelector('#site-wrap .document-content-root');
+    if (focusAt && focusAt !== doc) setFocus(false);
+    for (const f of document.querySelectorAll(PREVIEWS)) {
+      if (!framesSeen.has(f)) { framesSeen.add(f); frameIO.observe(f); f.addEventListener('load', () => unflip(f)); }
+      unflip(f);
+    }
+    for (const f of shown) if (!f.isConnected) { shown.delete(f); frameIO.unobserve(f); }
+    const dark = on && darkTheme && shown.size > 0;
+    if (!doc && !dark) {
+      docTools?.remove();
+      docTools = null;
+      html.removeAttribute('data-gz-doc-tools');
+      return;
+    }
+    if (!docTools) {
+      docTools = document.createElement('div');
+      docTools.id = 'gz-doc-tools';
+      docTools.setAttribute('role', 'toolbar');
+      docTools.setAttribute('aria-label', 'Document');
+      const time = document.createElement('span');
+      time.className = 'gz-doc-time';
+      docTools.append(time, docButton('dark', 'Dark documents', () => setDark(!settings.enhance.darkDocs)), docButton('focus', 'Focus mode', () => setFocus(!focusAt)));
+      document.body.append(docTools);
+    }
+    const [time, darkB, focusB] = docTools.children;
+    const mins = focusAt && GZ_PAGE.readMinutes(focusAt.querySelector('.bbml-editor')?.textContent);
+    time.hidden = !mins;
+    // Only on change: a text write is itself a mutation the observer would hand back.
+    if (mins && time.textContent !== `${mins} min read`) time.textContent = `${mins} min read`;
+    darkB.hidden = !dark;
+    darkB.setAttribute('aria-pressed', String(settings.enhance.darkDocs));
+    focusB.hidden = !doc;
+    focusB.setAttribute('aria-pressed', String(!!focusAt));
+    html.setAttribute('data-gz-doc-tools', '');
+  };
+  const frameIO = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) shown.add(e.target); else shown.delete(e.target);
+    syncDocTools();
+  });
+  document.addEventListener('scroll', onRead, { capture: true, passive: true });
+  // Esc leaves focus mode, and Ultra doesn't also act on it. An open menu or dialog gets its Esc as
+  // usual. Focus inside a preview's frame keeps the key there; the button still works.
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !focusAt || (e.target instanceof Element && e.target.closest('[role="menu"], [role="dialog"], [role="listbox"]'))) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    setFocus(false);
+  }, true);
+
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them. Never while typing, never with
   // a modifier, top frame only.
@@ -817,6 +939,7 @@
       if (observer) { clearTags(['data-gz-light', 'data-gz-dark', 'data-gz-hover']); sweepAll(); }
     }
     if (!s.look.tooltips) hideTip();
+    if (observer) syncDocTools();
     syncScene();
   };
   const clearSettings = () => {
@@ -856,6 +979,7 @@
     stopScene();
     stopSweep();
     clearSettings();
+    syncDocTools();
     syncFooter();
   };
 

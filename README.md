@@ -25,7 +25,7 @@ domain.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — Ultra's course stripes blended into your palette, or set one by one.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
-- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Graded · 18/20") and grade percentages, folder previews and course progress (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts and hiding page parts you don't use (off by default).
+- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Graded · 18/20") and grade percentages, folder previews, course progress and focus mode for course documents (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts, dark documents and hiding page parts you don't use (off by default).
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
 

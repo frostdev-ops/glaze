@@ -6,6 +6,21 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Dark documents.** PDFs and file previews in course documents can turn dark to match a dark
+  palette: the page inverted, its colors turned back so links stay blue and photos keep their hues.
+  Off until you switch it on, with the moon button that appears at the bottom right while a preview
+  is on screen; Glaze remembers the choice. Light palettes leave previews as they are, so the button
+  shows only on dark ones.
+- **Focus mode** for course documents. The focus button at the bottom right hides the document's
+  title bar, a learning module's bar and Previous / Next, leaving the document on its own with a thin
+  reading-progress line along the top and the reading time beside the button. Esc or the button again
+  brings everything back.
+- Both buttons are themed, follow the motion setting, and can be reached with the keyboard. In a
+  narrow window the document makes room for them instead of sitting underneath. "Document buttons"
+  under Extras hides them altogether.
+
 ## [2.0.4] — release candidate
 
 ### Added

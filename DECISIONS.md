@@ -97,3 +97,16 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Hold each page's container (`.route-view-container`, not the course shell) hidden while Ultra builds it, release after 300 ms still with no loader and grades in (2.5 s cap), reveal from blur | Animating each part as it arrives; a fixed delay | Measured: Ultra's own script stalls up to ~0.5 s and parts land in bursts (CS2010 opened with CLS 0.11, half from Glaze's progress bar). Hiding until built took CLS to ~0. Held in the observer callback so nothing paints first; 300 ms because Grades pauses ~250 ms between courses. |
 | Menu and tab clicks: a view transition from the old page until the new one is held, then a crossfade | Holding until fully loaded inside the transition | Rendering is frozen during a transition's update, so a long hold feels hung; the gate shows the wait instead. |
 | Grade pills one width (10rem min) on one line; the gradebook's Grade column widened from Item Name | Narrower type; hiding the rubric icon or percentage | Ultra's 102 px box clipped "100 / 100" and wrapped "Not graded"; what's in the pill stays, the pill fits it. |
+
+## 2.1: document buttons (Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Dark documents invert the preview's frame (`filter: invert(0.9) hue-rotate(180deg)`) | Styling inside the frame | The PDF and Office viewer behind an attachment preview is another origin, out of reach; a filter on the frame works whatever its origin. The viewer's own toolbar inverts too. 0.9 keeps white paper off pure black. Images and videos are turned back only in same-origin frames. |
+| Dark documents only on dark palettes; the moon button hides on light ones | Showing it everywhere | A dark page inside a light palette is the glare in reverse. The choice is kept, so it comes back when the palette (or auto mode) turns dark. |
+| The dark-documents choice is a synced setting (`enhance.darkDocs`) written by the button, also in the editor | `storage.local`; button only | One place for it, and it stays switchable when the buttons are hidden. |
+| Focus mode is not remembered and leaves when the document does | Remembering it | It's for one reading; coming back to a document with its header gone would look broken. |
+| Buttons float bottom right; under 58rem of document width the document pads its right side for them | A toolbar in Ultra's title bar; always padding both sides | The title bar's contents vary per item and focus mode hides it. Padding one side keeps the most width in a narrow window, where exact centering matters least. |
+| Reading time from the document's own text at 230 words a minute, none under half a minute | Counting attachments; always showing it | Attachments can't be read from here; "1 min" on a file-only page is noise. |
+| Esc leaves focus mode at the window in capture, before Ultra's handlers | Letting it through | One key, one effect. Focus inside a preview frame keeps Esc there; the button still works. |
+| No keyboard shortcut for focus mode | A letter key or Ctrl/Cmd+K | Ctrl/Cmd+K belongs to the command palette; Esc and the button cover it. |
