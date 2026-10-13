@@ -49,8 +49,9 @@ More you can switch on:
 • Keyboard shortcuts for courses, calendar, grades and messages
 • Hide parts of the page you don't use
 
-Everything lives in one editor page with a live preview; the popup keeps the quick controls. Back up
-and restore your settings as a file.
+Everything lives in one editor page with a live preview; the popup keeps the quick controls. Share
+your theme as a code a classmate can paste (it previews before it applies), and back up and restore
+your settings as a file.
 
 Glaze works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
 Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed list of universities.

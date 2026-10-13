@@ -26,7 +26,9 @@ const hint = (msg, err = false) => {
 
 GZ_UI.load().then((s) => {
   const frame = $('#preview');
-  const preview = () => frame.contentWindow?.postMessage({ gzPreview: s }, location.origin);
+  // A pasted theme code shows in the preview until it is used or cancelled.
+  let offer = null;
+  const preview = () => frame.contentWindow?.postMessage({ gzPreview: offer || s }, location.origin);
   frame.addEventListener('load', preview);
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
@@ -346,6 +348,47 @@ GZ_UI.load().then((s) => {
       Object.assign(s, next);
       fill();
     });
+  });
+
+  // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
+  $('#share-copy').addEventListener('click', async () => {
+    const code = await GZ_SHARE.encode(s);
+    try { await navigator.clipboard.writeText(code); hint('Theme code copied.'); } catch { $('#share-code').value = code; $('#share-code').select(); hint('Copy the code from the box.'); }
+  });
+  const endOffer = () => { offer = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
+  const tryCode = async () => {
+    const code = $('#share-code').value.trim();
+    if (!code) return endOffer();
+    let got;
+    try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(e.message, true); }
+    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg } });
+    offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
+    offer.auto = { ...s.auto, on: false };
+    // What it is, and anything it would fetch from elsewhere.
+    const fonts = [...new Set(['font', 'head', 'mono'].map((k) => offer.look[k]).filter((v) => v !== 'auto'))].map((v) => GZ_FONTS.resolve(v));
+    const web = fonts.filter((f) => f.google || f.files).map((f) => f.name);
+    const kind = { solid: 'a solid', gradient: `a ${offer.bg.style} gradient`, aurora: 'an aurora', scene: `the ${offer.bg.scene} animated`, image: 'an image' }[offer.bg.kind];
+    const what = $('#share-what');
+    what.textContent = `${offer.preset ? `The ${offer.preset} palette` : 'A custom palette'}, ${fonts.map((f) => f.name).join(' and ')}, and ${kind} background. It's showing in the preview.`;
+    const notes = [];
+    if (web.length) notes.push(`Downloads ${web.join(' and ')} (${web.length > 1 ? 'web fonts' : 'a web font'}).`);
+    if (offer.bg.kind === 'image' && offer.bg.image) notes.push(`Loads its background image from ${new URL(offer.bg.image).hostname}.`);
+    if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
+    $('#share-offer').hidden = false;
+    GZ_UI.paint(offer);
+    preview();
+  };
+  $('#share-try').addEventListener('click', tryCode);
+  $('#share-code').addEventListener('paste', () => setTimeout(tryCode));
+  $('#share-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
+  $('#share-cancel').addEventListener('click', () => { $('#share-code').value = ''; endOffer(); });
+  $('#share-apply').addEventListener('click', () => {
+    for (const k of ['colors', 'look', 'bg', 'preset', 'auto']) s[k] = offer[k];
+    $('#share-code').value = '';
+    endOffer();
+    fill();
+    save(['colors', 'look', 'bg', 'preset', 'auto']);
+    hint('Theme applied.');
   });
 
   // ---- backup ----

@@ -14,6 +14,10 @@ All notable changes to Glaze are documented here. The format follows
   Meslo). Type any Google Font's name, or one installed on your computer. Headings and code can each
   have their own font. Web fonts download only once chosen, and load even on Blackboard sites whose
   security policy blocks outside fonts.
+- **Theme codes:** copy your palette, fonts, look and background as one line of text and send it to
+  someone. Pasting a code shows it in the preview first, says what it would download (a web font, a
+  background image's site), and applies only when you choose. Codes are checked setting by setting;
+  one with anything Glaze wouldn't accept is refused whole. Under Share in the editor.
 
 ## [2.0.4] — release candidate
 

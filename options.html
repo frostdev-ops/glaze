@@ -81,6 +81,9 @@
   .font-card:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
   .font-card input { position: absolute; opacity: 0; width: 0; height: 0; }
   .font-card .face { font-size: 16px; line-height: 1.3; color: var(--gz-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .offer { display: grid; gap: 0.6rem; padding: 0.75rem 0.9rem; border: 1px solid var(--gz-accent); border-radius: 10px; background: var(--gz-accent-soft); }
+  .offer p { margin: 0; color: var(--gz-ink); }
+  .offer .desc { display: block; margin-top: 0.25rem; }
   .font-card .meta { font-size: 11px; color: var(--gz-ink-faint); }
 </style>
 </head>
@@ -89,7 +92,7 @@
     <div class="brand"><img src="icons/icon48.png" alt=""><h1>Glaze</h1></div>
     <nav aria-label="Sections">
       <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
-      <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#extras">Extras</a><a href="#data">Backup</a>
+      <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#extras">Extras</a><a href="#data">Share</a>
     </nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
@@ -260,7 +263,19 @@
       </section>
 
       <section id="data">
-        <h2>Backup</h2>
+        <h2>Share and back up</h2>
+        <div class="row">
+          <button type="button" id="share-copy" class="primary">Copy theme code</button>
+          <span class="desc">Your palette, fonts, look and background as one line of text, to send to someone with Glaze.</span>
+        </div>
+        <div class="row">
+          <input type="text" id="share-code" placeholder="Paste a theme code (glaze1:…)" aria-label="Theme code" spellcheck="false" autocomplete="off">
+          <button type="button" id="share-try">Preview</button>
+        </div>
+        <div class="offer" id="share-offer" hidden>
+          <p id="share-what"></p>
+          <div class="row"><button type="button" id="share-apply" class="primary">Use this theme</button><button type="button" id="share-cancel">Cancel</button></div>
+        </div>
         <div class="row">
           <button type="button" id="export">Export settings</button>
           <label class="row"><button type="button" id="import-btn">Import settings…</button><input type="file" id="import" accept="application/json,.json" hidden></label>
@@ -278,6 +293,7 @@
   <script src="lib/color.js"></script>
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
+  <script src="lib/share.js"></script>
   <script src="ui.js"></script>
   <script src="options.js"></script>
 </body>

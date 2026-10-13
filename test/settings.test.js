@@ -144,3 +144,39 @@ test('gradient: blend sets how long each color holds, spread how much of the lin
   assert.equal(g({ style: 'mesh' }).split('-gradient(').length - 1, 3, 'mesh: two glows over the sweep');
   assert.match(G.GZ_GRADIENT(G.GZ_DEFAULTS.bg, 'oklab'), /^linear-gradient\(135deg in oklab, /);
 });
+
+test('theme codes round-trip palette, look and background, and nothing else', async () => {
+  const S = require('../lib/share.js');
+  const s = G.GZ_SANITIZE({ colors: G.GZ_PRESET('Midnight'), look: { font: 'Comic Neue', radius: 4, tooltips: false }, bg: { kind: 'image', image: 'https://example.com/a.jpg', dim: 30 }, enhance: { keys: true } });
+  const code = await S.encode(s);
+  assert.match(code, /^glaze1:[\w-]+$/);
+  assert.ok(code.length < 450, `short enough to paste anywhere (${code.length})`);
+  const got = await S.decode(` ${code.slice(0, 40)}\n${code.slice(40)} `);
+  assert.deepEqual(got.colors, s.colors);
+  assert.equal(got.look.font, 'Comic Neue');
+  assert.equal(got.look.radius, 4);
+  assert.ok(!('tooltips' in got.look), 'behaviour settings are not part of a theme');
+  assert.deepEqual(got.bg, s.bg);
+});
+
+test('theme codes are untrusted: anything off refuses the whole code', async () => {
+  const S = require('../lib/share.js');
+  const make = async (obj) => {
+    const z = await new Response(new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
+    return `glaze1:${Buffer.from(z).toString('base64url')}`;
+  };
+  const c = G.GZ_COLORS.map(([, , d]) => d.slice(1)).join('');
+  await S.decode(await make({ c, l: { radius: 3 }, b: { kind: 'aurora' } }));
+  for (const [why, obj] of [
+    ['javascript url', { c, b: { kind: 'image', image: 'javascript:alert(1)' } }],
+    ['http url', { c, b: { image: 'http://example.com/a.jpg' } }],
+    ['css in a font name', { c, l: { font: 'x"; } body { y' } }],
+    ['out of range', { c, l: { radius: 99 } }],
+    ['unknown setting', { c, l: { tooltips: false } }],
+    ['unknown group', { c, enhance: { keys: true } }],
+    ['short palette', { c: c.slice(6) }],
+  ]) await assert.rejects(S.decode(await make(obj)), Error, why);
+  for (const bad of ['', 'hello', 'glaze1:!!!', 'glaze1:AAAA', `glaze1:${'A'.repeat(5000)}`]) await assert.rejects(S.decode(bad), Error, bad.slice(0, 20));
+  // A tiny code that inflates past the cap.
+  await assert.rejects(S.decode(await make({ c, l: { font: 'x'.repeat(50000) } })), /damaged/);
+});
