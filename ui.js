@@ -11,9 +11,11 @@ const GZ_UI = (() => {
   const save = (s, keys, note = () => {}) => {
     const patch = { version: 2 };
     for (const k of keys) patch[k] = s[k];
+    const failed = (error) => GZ_I18N.t('Not saved: {error}', { error }, GZ_I18N.ui());
     try {
-      store.set(patch, () => note(chrome.runtime.lastError ? `Not saved: ${chrome.runtime.lastError.message}` : ''));
-    } catch (e) { note(`Not saved: ${e.message}`); }
+      store.set(patch, () => note(chrome.runtime.lastError ? failed(chrome.runtime.lastError.message) : ''));
+    } catch (e) { note(failed(e.message)); }
+
   };
 
   // The extension's own pages wear the palette being edited.

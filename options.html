@@ -103,7 +103,7 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand"><img src="icons/icon48.png" alt=""><h1>Glaze</h1></div>
+    <div class="brand"><img src="icons/icon48.png" alt=""><h1 translate="no">Glaze</h1></div>
     <div class="find" role="search">
       <input type="search" id="find" placeholder="Search settings  /" aria-label="Search settings" aria-keyshortcuts="/" aria-describedby="find-status" autocomplete="off" spellcheck="false">
       <p class="hint" id="find-status" role="status"></p>
@@ -184,7 +184,7 @@
       <section id="background">
         <h2>Background</h2>
         <div class="field wide"><span>Behind the page</span>
-          <div class="seg" role="radiogroup" aria-label="Background">
+          <div class="seg wrap" role="radiogroup" aria-label="Background">
             <label><input type="radio" name="bg.kind" value="solid">Solid</label>
             <label><input type="radio" name="bg.kind" value="gradient">Gradient</label>
             <label><input type="radio" name="bg.kind" value="aurora">Aurora</label>
@@ -221,7 +221,7 @@
         <label class="field" data-kinds="gradient"><span>Blend</span><input type="range" data-key="bg.blend" min="0" max="100" step="5" aria-describedby="bg-blend-note"><output data-for="bg.blend" data-format="pct100"></output></label>
         <label class="field" data-kinds="gradient" data-styles="linear radial mesh"><span>Spread</span><input type="range" data-key="bg.spread" min="20" max="200" step="5" aria-describedby="bg-blend-note"><output data-for="bg.spread" data-format="pct100"></output></label>
         <p class="desc" id="bg-blend-note" data-kinds="gradient">Blend: how softly the colors melt into each other (0 gives crisp bands). Spread: how much of the screen the change covers; past it, the end colors hold.</p>
-        <label class="field wide" data-kinds="image"><span>Image address</span><input type="url" id="bg-image" placeholder="https://…" aria-describedby="bg-image-note"></label>
+        <label class="field wide" data-kinds="image"><span>Image address</span><input type="url" id="bg-image" translate="no" placeholder="https://…" aria-describedby="bg-image-note"></label>
         <p class="desc" id="bg-image-note" data-kinds="image">An https link to a picture. If it can't load, the gradient shows instead.</p>
         <label class="field" data-kinds="gradient aurora image"><span>Dim</span><input type="range" data-key="bg.dim" min="0" max="90" step="5"><output data-for="bg.dim" data-format="pct100"></output></label>
         <label class="field" data-kinds="gradient aurora image"><span>Blur</span><input type="range" data-key="bg.blur" min="0" max="20" step="1"><output data-for="bg.blur" data-format="px"></output></label>
@@ -340,6 +340,12 @@
   <script src="lib/share.js"></script>
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
+  <script src="i18n/de.js"></script>
+  <script src="i18n/es.js"></script>
+  <script src="i18n/fr.js"></script>
+  <script src="i18n/nl.js"></script>
+  <script src="i18n/pt-BR.js"></script>
+  <script src="lib/i18n.js"></script>
   <script src="ui.js"></script>
   <script src="options.js"></script>
 </body>

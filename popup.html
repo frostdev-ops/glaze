@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Glaze</title>
+<title translate="no">Glaze</title>
 <link rel="stylesheet" href="ui.css">
 <style>
   body { width: 320px; padding: 0.875rem 1rem 1rem; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
   section { padding: 0.75rem 0; border-top: 1px solid var(--gz-line); }
   body.off section { opacity: 0.45; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem 0.75rem; flex-wrap: wrap; }
   .row h2 { margin: 0; }
   #editor { width: 100%; margin-top: 0.25rem; }
   .hint { margin-top: 0.6rem; }
@@ -19,7 +19,7 @@
 </head>
 <body>
   <header>
-    <h1>Glaze</h1>
+    <h1 translate="no">Glaze</h1>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
   </header>
 
@@ -48,6 +48,12 @@
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
   <script src="lib/news.js"></script>
+  <script src="i18n/de.js"></script>
+  <script src="i18n/es.js"></script>
+  <script src="i18n/fr.js"></script>
+  <script src="i18n/nl.js"></script>
+  <script src="i18n/pt-BR.js"></script>
+  <script src="lib/i18n.js"></script>
   <script src="ui.js"></script>
   <script src="popup.js"></script>
 </body>

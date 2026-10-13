@@ -28,6 +28,8 @@ domain.
 - **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade and new-content badges, a what-if grade calculator, a Ctrl+K command palette for courses, items, pages and settings, a backup of what you type in Blackboard's editors, Download all, which saves a folder's files as one zip, and focus mode for course documents (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts, dark documents and hiding page parts you don't use (off by default).
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
+- **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations awaiting native review, and corrections are welcome.
+
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
 
 ## Install
