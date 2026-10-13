@@ -1,5 +1,6 @@
 // Working with Ultra's gradebook records (gradebook/grades?expand=column), for the extras: what's
-// newly graded, what was handed in late, and the what-if calculator. Pure, so node can test it.
+// newly graded, what was handed in late, and the what-if calculator; and what's new in a course's
+// content. Pure, so node can test it.
 // Classic script for the content script; module.exports for node.
 const GZ_GRADES = (() => {
   // An item's own column: not the overall grade, not another calculated column.
@@ -16,6 +17,26 @@ const GZ_GRADES = (() => {
     const graded = (results || []).filter((g) => isItem(g) && isGraded(g));
     const ids = graded.filter((g) => (seen ? seen[g.columnId] !== mark(g) : g.hasBeenViewedByStudent === false)).map((g) => g.columnId);
     return { ids: new Set(ids), seen: Object.fromEntries(graded.map((g) => [g.columnId, mark(g)])) };
+  };
+
+  // ---- new content -------------------------------------------------------------------------------
+  // items: a course's visible content (contents?recursive=true); seen: the content ids already looked
+  // at, or undefined the first time, when everything counts as seen; looked: the ids on the page now.
+  // An Ultra document is a page (isBbPage) whose blocks are its children, never shown on their own, so
+  // they're left out. Returns the new ids, the record to keep (the same array while nothing new has
+  // been looked at) and, per folder, how many new items are inside it at any depth.
+  const newItems = (items, seen, looked = new Set()) => {
+    if (!items) return { ids: new Set(), seen, inside: new Map() };
+    const pages = new Set(items.filter((c) => c.contentHandler?.isBbPage).map((c) => c.id));
+    const own = items.filter((c) => !pages.has(c.parentId));
+    if (!seen) return { ids: new Set(), seen: own.map((c) => c.id), inside: new Map() };
+    const had = new Set(seen);
+    const ids = new Set(own.map((c) => c.id).filter((id) => !had.has(id)));
+    const parent = new Map(own.map((c) => [c.id, c.parentId]));
+    const inside = new Map();
+    for (const id of ids) for (let p = parent.get(id); parent.has(p); p = parent.get(p)) inside.set(p, (inside.get(p) || 0) + 1);
+    const add = [...ids].filter((id) => looked.has(id));
+    return { ids, seen: add.length ? [...seen, ...add] : seen, inside };
   };
 
   // ---- submitted late ----------------------------------------------------------------------------
@@ -111,7 +132,7 @@ const GZ_GRADES = (() => {
     return { ...base, kind: 'weighted', note: '' };
   };
 
-  return { mark, fresh, awaiting, late, parse, model };
+  return { mark, fresh, newItems, awaiting, late, parse, model };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_GRADES;

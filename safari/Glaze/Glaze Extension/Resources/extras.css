@@ -239,17 +239,26 @@ html[data-gz-enhance-newgrades] [data-gz-new]::after {
   animation: var(--gz-tip-in);
 }
 /* A course card's count: a pill first in the course name, where an ellipsis can't cut it, that opens
-   the gradebook. align-self: inside a flex link (a Grades page tile) it would otherwise stretch. */
-html[data-gz-enhance-newgrades] .gz-new {
+   the gradebook or the course. align-self: inside a flex link (a Grades page tile) it would otherwise
+   stretch. New content puts the same pill after an item's title ("New", not a link) and, quieter, after
+   a closed folder's ("2 new", unfolding it). */
+html:is([data-gz-enhance-newgrades], [data-gz-enhance-newcontent]) .gz-new {
   display: inline-block; align-self: center; flex: none; margin-right: 0.5em; padding: 0 0.55em; border-radius: 999px;
   font-size: 0.72rem; font-weight: 700; line-height: 1.6; letter-spacing: 0.02em; vertical-align: 0.12em; white-space: nowrap;
   color: var(--gz-accent-ink); background: var(--gz-accent); cursor: pointer;
   box-shadow: 0 0 10px color-mix(in srgb, var(--gz-accent) 45%, transparent);
   animation: var(--gz-tip-in); transition: box-shadow var(--gz-t) var(--gz-ease), transform var(--gz-t) var(--gz-ease);
 }
-html[data-gz-enhance-newgrades] .gz-new:hover { box-shadow: 0 0 14px color-mix(in srgb, var(--gz-accent) 70%, transparent); }
-html[data-gz-enhance-newgrades] .gz-new:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
-html:not([data-gz-enhance-newgrades]) .gz-new { display: none; }
+/* theme.css has every element in #site-wrap inherit its color, with !important. */
+#site-wrap .gz-new { color: var(--gz-accent-ink) !important; }
+#site-wrap .gz-new[data-kind="inside"] { color: var(--gz-accent) !important; }
+html .gz-new[role="link"]:hover { box-shadow: 0 0 14px color-mix(in srgb, var(--gz-accent) 70%, transparent); }
+html .gz-new:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+html .gz-new:is([data-kind="item"], [data-kind="inside"]) { margin: 0 0 0 0.6em; }
+html .gz-new[data-kind="item"] { cursor: inherit; }
+html .gz-new[data-kind="inside"] { color: var(--gz-accent); background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gz-accent) 55%, transparent); }
+html .gz-new[data-kind="inside"]:hover { background: color-mix(in srgb, var(--gz-accent) 14%, transparent); box-shadow: inset 0 0 0 1px var(--gz-accent); }
+html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([data-gz-enhance-newcontent]) .gz-new:not([data-kind="grades"]) { display: none; }
 
 /* What-if calculator, under the gradebook's header. */
 #gz-calc {
