@@ -7,8 +7,8 @@ _Last updated: 2026-10-13_
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
   background, motion, course colour and extras choices. Chrome syncs them to your own Google account so
   your theme follows you between devices.
-- **The names of your courses**, in `chrome.storage.local`, on this device only. Glaze notes which
-  course Ultra shows in which of its ten colour slots, so the editor can list them for you to recolour.
+- **Your courses**, in `chrome.storage.local`, on this device only: each course's name and which of
+  Ultra's ten colour slots it is in, so the editor can list them for you to recolour or tint.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 - **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
@@ -33,6 +33,9 @@ analytics and no server of its own.
 Glaze ships as static files and loads no remote code. Its built-in fonts and three.js (used by the
 animated backgrounds) are bundled. It makes requests in these cases:
 
+- **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
+  site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
+  session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
 - **Folder previews** (an Extra, on by default; switch it off under Extras). Hovering a folder asks your own Blackboard site for the
   folder's contents, using the same internal address Blackboard's own page uses. The request goes to the
   site you are on, with your existing session, and the answer is kept in memory for a minute. Nothing is

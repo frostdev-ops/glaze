@@ -88,7 +88,7 @@
   'Tint the theme inside a course': 'Het thema binnen een cursus kleuren',
   "Inside each course ticked below, the accent takes the course's color and the background leans toward it, so you can tell at a glance which course you're in.": 'Binnen elke cursus die hieronder is aangevinkt, neemt het accent de kleur van de cursus over en neigt de achtergrond ernaar, zodat je in één oogopslag ziet in welke cursus je bent.',
   'Tint strength': 'Sterkte van de kleuring',
-  'Open Messages or Grades on Blackboard once and your courses show up here, each with a colour you can change.': 'Open één keer Berichten of Cijfers in Blackboard, dan verschijnen je cursussen hier, elk met een kleur die je kunt aanpassen.',
+  'Open Blackboard once and your courses show up here, each with a colour you can change.': 'Open één keer Blackboard, dan verschijnen je cursussen hier, elk met een kleur die je kunt aanpassen.',
   'Due-date urgency': 'Urgentie van deadlines',
   'Marks items overdue, due today or due within three days.': 'Markeert items die te laat zijn, vandaag moeten of binnen drie dagen.',
   'Shorter descriptions': 'Kortere beschrijvingen',

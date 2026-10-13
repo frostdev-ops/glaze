@@ -221,3 +221,15 @@ test('looks apply cleanly: every value is one Glaze accepts, contrast holds, and
     for (const O of G.GZ_LOOKS) if (O !== L) assert.ok(!G.GZ_LOOK_ON(s, O), `${L.name} isn't also ${O.name}`);
   }
 });
+
+test('courses come from the membership list, each in its own color slot', () => {
+  const m = (courseId, name, courseCardColorIndex, extra) => ({ courseId, courseCardColorIndex, course: { name }, ...extra });
+  assert.deepEqual(G.GZ_COURSES([
+    m('_1_1', 'SPAN1100', 2), m('_2_1', 'CS2010', 1), m('_3_1', 'Tutoring', 2326), m('_4_1', 'Orientation', 2508),
+    m('_5_1', 'Hidden', 3, { userHasHidden: true }), m('_6_1', 'No index'),
+  ]), {
+    _1_1: { name: 'SPAN1100', slot: '3' }, _2_1: { name: 'CS2010', slot: '2' },
+    _3_1: { name: 'Tutoring', slot: '7' }, _4_1: { name: 'Orientation', slot: '9' },
+  });
+  assert.deepEqual(G.GZ_COURSES(undefined), {});
+});

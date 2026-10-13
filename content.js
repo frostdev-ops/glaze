@@ -114,25 +114,21 @@
     setTimeout(() => b.remove(), 900);
   };
 
-  // ---- courses seen ---------------------------------------------------------------------------
-  // Which course sits in which of Ultra's ten colour slots, for the options page's course list.
-  // Messages and Grades title every course-coloured card. Stored locally; nothing leaves the device.
-  let seenAt = 0;
+  // ---- the student's courses -------------------------------------------------------------------
+  // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
+  // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
+  // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
   const recordCourses = () => {
-    if (window.top !== window || Date.now() - seenAt < 5000) return;
-    seenAt = Date.now();
-    const found = {};
-    for (const e of document.querySelectorAll('[class*="course-color-"]')) {
-      const slot = e.className.match?.(/course-color-(\d+)/)?.[1];
-      const name = e.querySelector('h2.title, h2, h3, .course-title')?.textContent.trim();
-      // Not a course id's line, labelled in Ultra's words: "ID: …", "Code : …", "Kimlik: …".
-      if (slot && name && !/^(ID|Code|Código|Cyfeirnod|Identyfikator|Kimlik|Идентификатор|Ідентифікатор|المعرف|מזהה|編號) ?:/.test(name)) found[slot] = name.slice(0, 80);
-    }
-    if (!Object.keys(found).length) return;
+    if (window.top !== window) return;
     try {
-      chrome.storage.local.get('seenCourses', (r) => {
-        const seen = { ...(r?.seenCourses || {}), ...found };
-        if (JSON.stringify(seen) !== JSON.stringify(r?.seenCourses)) chrome.storage.local.set({ seenCourses: seen });
+      chrome.storage.local.get('seenCoursesAt', (r) => {
+        if (Date.now() - (r?.seenCoursesAt || 0) < 600000) return;
+        myCourses().then((ms) => {
+          const seen = GZ_COURSES(ms);
+          if (!Object.keys(seen).length) return;
+          for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
+          try { chrome.storage.local.set({ seenCourses: seen, seenCoursesAt: Date.now(), courseSlots }); } catch { /* reloaded */ }
+        });
       });
     } catch { /* extension reloaded under the tab */ }
   };
@@ -310,7 +306,6 @@
     watchDrafts();
     syncDownloads();
     syncDocTools();
-    recordCourses();
   };
   // ---- page loads ------------------------------------------------------------------------------
   // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with

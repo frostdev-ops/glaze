@@ -88,7 +88,7 @@
   'Tint the theme inside a course': 'Teinter le thème dans un cours',
   "Inside each course ticked below, the accent takes the course's color and the background leans toward it, so you can tell at a glance which course you're in.": 'Dans chaque cours coché ci-dessous, l’accent prend la couleur du cours et le fond s’en rapproche : vous voyez d’un coup d’œil dans quel cours vous êtes.',
   'Tint strength': 'Intensité de la teinte',
-  'Open Messages or Grades on Blackboard once and your courses show up here, each with a colour you can change.': 'Ouvrez une fois Messages ou Notes sur Blackboard et vos cours apparaîtront ici, chacun avec une couleur modifiable.',
+  'Open Blackboard once and your courses show up here, each with a colour you can change.': 'Ouvrez une fois Blackboard et vos cours apparaîtront ici, chacun avec une couleur modifiable.',
   'Due-date urgency': 'Urgence des échéances',
   'Marks items overdue, due today or due within three days.': 'Signale les éléments en retard, à rendre aujourd’hui ou dans les trois jours.',
   'Shorter descriptions': 'Descriptions raccourcies',

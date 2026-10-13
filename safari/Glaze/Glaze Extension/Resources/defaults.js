@@ -296,6 +296,14 @@ const GZ_CONTRAST = (colors) => GZ_CONTRAST_PAIRS.map(([fg, bg, min, label]) => 
   return { fg, bg, min, label, ratio, pass: ratio >= min };
 });
 
+// ---- the student's courses ----------------------------------------------------------------------
+// Course id -> { name, slot } from Ultra's membership list (/users/{id}/memberships?expand=course),
+// leaving out courses the student hid. The slot is Ultra's course-color-N: a membership's card color
+// index runs past ten and wraps onto the ten (index 2 is course-color-3, 2326 is course-color-7).
+const GZ_COURSES = (memberships) => Object.fromEntries((memberships || [])
+  .filter((m) => m?.course && !m.userHasHidden && Number.isInteger(m.courseCardColorIndex) && m.courseCardColorIndex >= 0)
+  .map((m) => [m.courseId, { name: String(m.course.name || m.course.displayName || m.courseId).slice(0, 80), slot: String(m.courseCardColorIndex % 10 + 1) }]));
+
 // ---- course tint ------------------------------------------------------------------------------
 // Inside a course picked for it, the accent family takes the course's hue, and `t` (0-1) of the way
 // from the palette's lightness and colorfulness to the course color's own: any strength reads as
@@ -330,5 +338,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_TINT };
 }

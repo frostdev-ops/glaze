@@ -112,13 +112,13 @@ GZ_UI.load().then((s) => {
   const frame = $('#preview');
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
-  let seen = {}; // color slot -> course name, from the content script
+  let seen = {}; // color slot -> its courses' names, from the content script
   const preview = () => {
     // The mock is a course: it shows as the first course picked for tinting.
     const sec = frame.contentDocument?.querySelector('section.course');
     const slot = s.courses.tinted[0];
     if (sec && slot) sec.className = `course course-color-${slot}`;
-    if (sec && seen[slot]) sec.querySelector('.pv-course').textContent = seen[slot];
+    if (sec && seen[slot]) sec.querySelector('.pv-course').textContent = seen[slot][0];
     frame.contentWindow?.postMessage({ gzPreview: offer || s }, location.origin);
   };
   frame.addEventListener('load', preview);
@@ -413,19 +413,25 @@ GZ_UI.load().then((s) => {
   $('#reset-colors').addEventListener('click', () => { save(GZ_UI.pickPreset(s, 'Frost', GZ_PRESET('Frost'))); fill(); });
 
   // ---- courses: names come from the content script, recorded on this device only ----
-  const renderCourses = (next = seen) => {
-    seen = next || {};
+  // Courses sharing one of Ultra's ten color slots share a row: the color and the tint are the slot's.
+  let courses = {};
+  const renderCourses = (next = courses) => {
+    courses = next || {};
+    seen = {};
+    for (const c of Object.values(courses)) if (c?.slot) (seen[c.slot] ||= []).push(c.name);
+    for (const names of Object.values(seen)) names.sort((a, b) => a.localeCompare(b));
     const slots = Object.keys(seen).sort((a, b) => a - b);
     $('#course-empty').hidden = slots.length > 0;
     $('#course-list').replaceChildren(...slots.map((slot) => {
       const li = document.createElement('li');
       const input = Object.assign(document.createElement('input'), { type: 'color', value: s.courses.colors[slot] || SLOT_COLORS[slot] });
-      input.setAttribute('aria-label', t('Colour for {name}', { name: seen[slot] }));
+      input.setAttribute('aria-label', t('Colour for {name}', { name: seen[slot].join(', ') }));
       input.addEventListener('input', () => { s.courses.colors[slot] = input.value; refresh(); save(['courses'], true); reset.hidden = false; });
       input.addEventListener('change', () => save(['courses']));
       const name = document.createElement('span');
       name.className = 'name';
-      name.textContent = seen[slot];
+      name.textContent = seen[slot].join(', ');
+      name.title = seen[slot].join('\n');
       const tag = document.createElement('span');
       tag.className = 'slot';
       tag.textContent = t('colour {n}', { n: +slot });
@@ -435,7 +441,7 @@ GZ_UI.load().then((s) => {
       const tint = Object.assign(document.createElement('label'), { className: 'check', hidden: !s.courses.tint });
       tint.dataset.tint = '';
       const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: s.courses.tinted.includes(slot) });
-      box.setAttribute('aria-label', t('Tint inside {name}', { name: seen[slot] }));
+      box.setAttribute('aria-label', t('Tint inside {name}', { name: seen[slot].join(', ') }));
       box.addEventListener('change', () => {
         s.courses.tinted = box.checked ? [...s.courses.tinted, slot] : s.courses.tinted.filter((n) => n !== slot);
         refresh();

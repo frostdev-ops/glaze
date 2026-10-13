@@ -14,6 +14,15 @@ All notable changes to Glaze are documented here. The format follows
   the whole look and background, so nothing from the last one lingers; your tooltips, hints and a
   background image's address stay as you set them.
 
+### Fixed
+
+- **Every course in the editor's course list.** The Courses section learned course names from headings
+  on Messages and Grades, one per colour slot, so courses sharing one of Blackboard's ten slots hid each
+  other, and headings inside a course got in as names ("Course Content"). It now lists every course
+  you haven't hidden, from Blackboard's own course list, the moment you open Blackboard; courses that
+  share a slot share a row, since they share its colour and tint. Course tint also works on a course's
+  item pages before you've opened the course itself.
+
 ## [2.1.1] — 2026-10-13
 
 ### Fixed
