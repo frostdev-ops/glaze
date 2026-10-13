@@ -73,9 +73,10 @@ const GZ_PAGE = (() => {
   // The chip beside a due date in course content: where the work stands, then when it's due.
   // circle: Ultra's progress circle ('false' empty, 'mixed' half, 'true' full), or null where the course
   // doesn't track progress. grade: the gradebook's record, null if the item has no column, undefined while
-  // unknown. Returns { label, tone }, or null when there's nothing reassuring or useful to say: a past
-  // date whose status is unknown is left alone rather than shown as "2 weeks ago".
-  const status = (text, circle, grade, now = new Date()) => {
+  // unknown. late: handed in after the due date (lib/grades.js). Returns { label, tone }, or null when
+  // there's nothing reassuring or useful to say: a past date whose status is unknown is left alone
+  // rather than shown as "2 weeks ago".
+  const status = (text, circle, grade, now = new Date(), late = false) => {
     const w = when(text, now);
     if (!w) return null;
     const past = w.title.startsWith('Was due'); // the caller's text always says "due"
@@ -87,6 +88,7 @@ const GZ_PAGE = (() => {
       const mark = d.text || (sc ? `${n(d.score)}/${n(grade.pointsPossible)}` : '');
       return { label: mark ? `Graded · ${mark}` : 'Graded', tone: sc ? `graded-${sc.band}` : 'done' };
     }
+    if (grade?.status === 'NEEDS_GRADING' && late) return { label: 'Submitted late', tone: 'late' };
     if (isDone(circle, grade)) {
       const label = grade?.status === 'NEEDS_GRADING' ? 'Submitted' : 'Done';
       return { label: past ? label : `${label} · due ${w.rel}`, tone: 'done' };

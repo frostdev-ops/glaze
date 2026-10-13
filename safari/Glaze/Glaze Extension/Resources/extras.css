@@ -131,7 +131,7 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-countdown]::after {
 /* Course content's chips say where the work stands: done in green, a grade in its score band, not done
    by how close the due date is. */
 #site-wrap [data-gz-chip="done"], #site-wrap [data-gz-chip="graded-hi"] { --gz-chip: var(--gz-ok); }
-#site-wrap [data-gz-chip="graded-mid"], #site-wrap [data-gz-chip="today"] { --gz-chip: var(--gz-warn); }
+#site-wrap [data-gz-chip="graded-mid"], #site-wrap [data-gz-chip="today"], #site-wrap [data-gz-chip="late"] { --gz-chip: var(--gz-warn); }
 #site-wrap [data-gz-chip="graded-lo"], #site-wrap [data-gz-chip="overdue"] { --gz-chip: var(--gz-err); }
 #site-wrap [data-gz-chip="soon"] { --gz-chip: var(--gz-accent); }
 #site-wrap [data-gz-chip="later"], #site-wrap [data-gz-chip="muted"] { --gz-chip: var(--gz-ink-muted); }

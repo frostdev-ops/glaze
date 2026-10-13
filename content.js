@@ -137,37 +137,61 @@
   // an assignment's own page puts both in a .due-date-container.
   const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '') || !!el?.closest('.due-date-container');
 
-  // Due dates in course content and on an assignment's own page carry a status: Ultra's progress circle
-  // where the course tracks progress, and the gradebook (submitted, graded, exempt). The gradebook is
-  // asked of the user's own Blackboard (same origin, their session) at most once a minute per course, and
-  // only when one of those due dates is on the page; an answer that changes anything re-tags the page.
-  // undefined until it answers.
+  // ---- the gradebook --------------------------------------------------------------------------
+  // Due-date status reads the student's own gradebook records,
+  // asked of their own Blackboard (same origin, their session) the way Ultra's Grades page asks: at
+  // most once a minute per course, and only for courses on the page where one of those is showing.
+  // Absolute URLs: Ultra's <base href> points at its CDN.
+  const api = (path, base = '/learn/api/v1') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
   let meId = null;
-  let book = { cid: null, at: 0, grades: undefined, key: '' };
-  const gradesIn = () => {
-    const cid = courseId();
-    if (!cid) return undefined;
-    if (book.cid !== cid || Date.now() - book.at > 60000) {
-      book = book.cid === cid ? { ...book, at: Date.now(), pending: true } : { cid, at: Date.now(), grades: undefined, key: '', pending: true };
-      // Absolute URLs: Ultra's <base href> points at its CDN.
-      const get = (path) => fetch(`${location.origin}/learn/api/v1${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
-        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
-      // ponytail: one page, Ultra's cap of 200 grades; items past that show only their countdown.
-      (meId ? Promise.resolve(meId) : get('/users/me').then((me) => (meId = me.id)))
-        .then((id) => get(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
-        .then((j) => {
-          if (book.cid !== cid) return;
-          book.pending = false;
-          const grades = GZ_PAGE.gradesByContent(j.results);
-          const key = JSON.stringify([...grades].map(([id, g]) => [id, g.status, g.isExempt, g.displayGrade]));
-          if (key === book.key) return;
-          Object.assign(book, { grades, key });
-          tagExtras([document.body]);
-        })
-        .catch(() => { if (book.cid === cid) book.pending = false; });
-    }
-    return book.grades;
+  const me = () => (meId ? Promise.resolve(meId) : api('/users/me').then((m) => (meId = m.id)));
+  // The student's courses, once per page, for each membership's due-date exception setting.
+  let memberships = null;
+  const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`)).then((j) => j.results || []).catch(() => (memberships = null, [])));
+  // Submitted late: the latest attempt against the due date, for work waiting to be graded. An
+  // attempt's date never changes, so each is asked once. Nothing is called late in a course that
+  // gives this student due-date exceptions, or for an item with one of its own.
+  const attempts = new Map();
+  const lateIn = (cid, results) => {
+    const waiting = GZ_GRADES.awaiting(results);
+    if (!waiting.length || !settings.enhance.inline) return Promise.resolve(new Set());
+    const excepted = myCourses().then((ms) => {
+      const m = ms.find((x) => x.courseId === cid);
+      if (!m || m.dueDateExceptionType !== 'Normal') return () => true;
+      return api(`/courses/${cid}/gradebook/memberships/${m.id}/exceptions?columnId=${waiting.map((g) => g.columnId).join(',')}`)
+        .then((j) => { const text = JSON.stringify(j.results || []); return (col) => text.includes(col); }, () => () => true);
+    });
+    const dates = waiting.map((g) => {
+      if (!attempts.has(g.lastAttemptId)) attempts.set(g.lastAttemptId, api(`/courses/${cid}/gradebook/attempts/${g.lastAttemptId}?columnId=${g.columnId}`).then((a) => a.attemptDate, () => null));
+      return attempts.get(g.lastAttemptId);
+    });
+    return Promise.all([excepted, ...dates]).then(([exc, ...when]) => new Set(waiting.filter((g, i) => !exc(g.columnId) && GZ_GRADES.late(when[i], g.column.dueDate)).map((g) => g.columnId)));
   };
+  // cid → { at, pending, results, grades (by content item), late (column ids), key }. An answer that
+  // changes anything re-tags the page.
+  const books = new Map();
+  const bookFor = (cid) => {
+    let b = books.get(cid);
+    if (!b || (!b.pending && Date.now() - b.at > 60000)) {
+      b = { key: '', ...b, at: Date.now(), pending: true };
+      books.set(cid, b);
+      // ponytail: one page, Ultra's cap of 200 grades; items past that show only their countdown.
+      me().then((id) => api(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
+        .then((j) => lateIn(cid, j.results).then((late) => {
+          b.pending = false;
+          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...late]]);
+          if (key === b.key) return;
+          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), late, key });
+          onBook();
+        }))
+        .catch(() => { b.pending = false; });
+    }
+    return b;
+  };
+  // undefined until the current course's gradebook answers.
+  const gradesIn = () => { const cid = courseId(); return cid ? bookFor(cid).grades : undefined; };
+  const onBook = () => { tagExtras([document.body]); };
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagExtras = (roots) => {
@@ -200,6 +224,7 @@
           const grades = (item || pageId) && gradesIn();
           const grade = !grades ? undefined : pageId ? grades.get(pageId) : grades.get(item.dataset.contentId)
             ?? grades.get(item.querySelector('a[href*="/discussion/"]')?.getAttribute('href').match(/\/discussion\/(_\d+_\d+)/)?.[1]);
+          const late = !!grade && !!books.get(courseId())?.late?.has(grade.columnId);
           // Nothing is urgent once it's done. Elsewhere a past date may well be done, and the stream
           // says "Past due" itself.
           let state = urgency && GZ_PAGE.due(text, now);
@@ -209,7 +234,7 @@
           // The chip is drawn by CSS from these attributes: no element is added to Ultra's tree. In course
           // content it says where the work stands; elsewhere only how long is left, never how long ago.
           let chip = null;
-          if (inline && (item || pageId)) chip = GZ_PAGE.status(text, circle, grade, now);
+          if (inline && (item || pageId)) chip = GZ_PAGE.status(text, circle, grade, now, late);
           else if (inline) {
             const w = GZ_PAGE.when(text, now);
             if (w && !w.title.startsWith('Was due')) chip = { label: w.rel, tone: '' };
@@ -254,7 +279,7 @@
   const release = () => {
     const now = performance.now();
     for (const [el, t] of held) {
-      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || book.pending || loaderIn(el))) continue;
+      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || books.get(courseId())?.pending || loaderIn(el))) continue;
       held.delete(el);
       // Cards already there arrive with the page, not one by one after it.
       for (const c of el.querySelectorAll('.content-list-item, .element-card')) c.setAttribute('data-gz-held', '');

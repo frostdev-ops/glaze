@@ -41,6 +41,7 @@
       "js": [
         "lib/color.js",
         "lib/page.js",
+        "lib/grades.js",
         "lib/fonts.js",
         "defaults.js",
         "content.js"

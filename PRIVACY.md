@@ -30,9 +30,11 @@ animated backgrounds) are bundled. It makes requests in these cases:
 - **Due-date status** (the "Due-date status and percentages" Extra, on by default, and due-date urgency).
   To show beside a due date whether you've submitted the work or had it graded, Glaze asks your own
   Blackboard site's gradebook for your grades in the course you're viewing, using the same internal
-  address Blackboard's own Grades page uses. The request goes to the site you are on, with your existing
-  session, at most once a minute per course, and the answer is kept in memory only. Nothing is stored or
-  sent anywhere else.
+  address Blackboard's own Grades page uses. To say whether work waiting for a grade was handed in late,
+  it also asks for the date of your latest submission of it (once per submission) and whether you have a
+  due-date exception in that course. The requests go to the site you are on, with your existing session,
+  at most once a minute per course, and the answers are kept in memory only. Nothing is stored or sent
+  anywhere else.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an

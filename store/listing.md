@@ -38,7 +38,7 @@ calendar, grade bands in the gradebook, and calmer assignment pages.
 
 At-a-glance helpers, on from the start:
 
-• Status beside every due date: "in 2 days · Unopened", "Submitted", "Graded · 18/20", and grade percentages
+• Status beside every due date: "in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20", and grade percentages
 • Score bars under gradebook scores
 • Folder previews: hover a folder to see what's inside and what's due
 • Course progress: how much of a course you've completed

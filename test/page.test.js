@@ -83,6 +83,8 @@ test('status chips beside due dates in course content', () => {
   assert.deepEqual(S(soon, null, { status: 'NEEDS_GRADING' }), { label: 'Submitted · due in 2 days', tone: 'done' });
   assert.deepEqual(S(gone, 'true', { status: 'NEEDS_GRADING' }), { label: 'Submitted', tone: 'done' });
   assert.deepEqual(S(gone, 'true', null), { label: 'Done', tone: 'done' });
+  assert.deepEqual(P.status(gone, 'true', { status: 'NEEDS_GRADING' }, now, true), { label: 'Submitted late', tone: 'late' });
+  assert.deepEqual(P.status(gone, null, { status: 'GRADED', displayGrade: { score: 9 }, pointsPossible: 10 }, now, true).label, 'Graded · 9/10', 'once graded, the grade is what matters');
   assert.deepEqual(S(soon, null, { isExempt: true }), { label: 'Exempt', tone: 'muted' });
   // Not done yet: the countdown, with the circle's word where the course has circles.
   assert.deepEqual(S(soon, 'false', {}), { label: 'in 2 days · Unopened', tone: 'soon' });

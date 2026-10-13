@@ -18,6 +18,8 @@ All notable changes to Glaze are documented here. The format follows
   someone. Pasting a code shows it in the preview first, says what it would download (a web font, a
   background image's site), and applies only when you choose. Codes are checked setting by setting;
   one with anything Glaze wouldn't accept is refused whole. Under Share in the editor.
+- **Submitted late:** due-date status says "Submitted late", in amber, for work handed in after its due
+  date and not graded yet. Never said where you have a due-date exception.
 
 ## [2.0.4] — release candidate
 
