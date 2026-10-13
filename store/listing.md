@@ -45,6 +45,7 @@ At-a-glance helpers, on from the start:
 • Download all: save a folder's files as one zip
 • Course progress: how much of a course you've completed
 • New-grade badges on gradebook rows and course cards
+• New-content badges: what your instructor added since you last looked, in the outline and on course cards
 • What-if grade calculator: try scores for ungraded work, or see what you need for a target grade
 • Typing backup: if the page reloads or your session times out before you post, get back what you wrote
 • Focus mode for course documents: just the document, a reading-progress line and the reading time
@@ -88,7 +89,8 @@ and every line of code serves that purpose.
 **storage**
 Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and
 devices; the names of the user's courses in `chrome.storage.local`, so the editor can list them for
-recolouring; and which grades the user has seen, in `chrome.storage.local`, so new ones can be marked;
+recolouring; which grades and course items the user has seen, in `chrome.storage.local`, so new ones
+can be marked;
 and, with the typing backup on, a copy of what the user is writing in Blackboard's editors in
 `chrome.storage.local`, deleted once it is posted or after 14 days. No other data is stored, and
 nothing is sent anywhere.
@@ -105,7 +107,8 @@ in a folder the user chooses from that site and zips them in the browser. Due-da
 gradebook which of the user's items are submitted, late or graded, and new-grade badges ask it which
 grades are new in the courses listed on the page, and card grades ask it for the user's overall grade
 in each course shown on the Courses page. The command palette asks the site for the user's
-course list and the current course's items. Apart from a web font the user picks (downloaded from Google
+course list and the current course's items, and new-content badges ask it for the items of the course
+being viewed and of courses shown on the Courses and Grades pages. Apart from a web font the user picks (downloaded from Google
 Fonts or jsDelivr, without cookies or the page's address), nothing is sent anywhere else.
 
 **web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**

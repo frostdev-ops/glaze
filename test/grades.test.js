@@ -81,6 +81,26 @@ test('new grades: what changed since the gradebook was last shown, or what Ultra
   assert.deepEqual([...R.fresh([regraded, b], first.seen).ids], [a.columnId]);
 });
 
+test('new content: items not seen before, counted into the folders above them', () => {
+  // The shape of contents?recursive=true: a folder holding an Ultra document (a page whose one block is a child).
+  const items = [
+    { id: 'f', parentId: 'root' }, { id: 'p', parentId: 'f', contentHandler: { isBbPage: true } }, { id: 'blk', parentId: 'p' },
+    { id: 'sub', parentId: 'f' }, { id: 'x', parentId: 'sub' }, { id: 'top', parentId: 'root' },
+  ];
+  const first = R.newItems(items, undefined);
+  assert.equal(first.ids.size, 0, 'the first visit marks everything seen');
+  assert.deepEqual(first.seen, ['f', 'p', 'sub', 'x', 'top'], "a page's blocks are part of the page");
+  const more = [...items, { id: 'y', parentId: 'sub' }, { id: 'p2', parentId: 'f', contentHandler: { isBbPage: true } }, { id: 'blk2', parentId: 'p2' }];
+  const next = R.newItems(more, first.seen, new Set(['f', 'top']));
+  assert.deepEqual([...next.ids], ['y', 'p2']);
+  assert.deepEqual([...next.inside], [['sub', 1], ['f', 2]]);
+  assert.equal(next.seen, first.seen, 'unchanged until a new item is on the page');
+  const opened = R.newItems(more, first.seen, new Set(['f', 'sub', 'y']));
+  assert.deepEqual(opened.seen, [...first.seen, 'y']);
+  assert.deepEqual(R.newItems(null, first.seen).seen, first.seen, 'a failed request changes nothing');
+  assert.equal(R.newItems(null, undefined).seen, undefined, 'and never records an empty course');
+});
+
 test('late: the latest attempt after the due date, for work waiting to be graded', () => {
   const waiting = g('_1_1', 10, null, { lastAttemptId: '_5_1' });
   waiting.column.dueDate = '2026-10-05T03:59:00.000Z';

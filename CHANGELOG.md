@@ -24,6 +24,13 @@ All notable changes to Glaze are documented here. The format follows
   and a count ("2 new") on course cards on the Courses and Grades pages; clicking the count opens that
   course's gradebook at the first new grade. The first time, the grades
   Blackboard says you haven't viewed count as new. What you've seen is kept on this computer.
+- **New-content badges:** "New" after course items your instructor added or made visible since you
+  last looked at the course, and a quieter count on a closed folder or learning module holding some;
+  clicking the count unfolds it down to the newest one, without opening anything. Course cards on the
+  Courses and Grades pages say "3 new items" for courses you've opened before; clicking it opens the
+  course there. The first visit to a course counts nothing as new. An item stays marked for the visit
+  in which it's first on the page. On by default under Extras. Ultra itself marks no new content.
+- The new-grade count on course cards had text the same color as its pill; it's readable now.
 - **What-if calculator** on a course's gradebook: type scores for work that isn't graded yet and see
   the overall grade they'd make, or set a target and see the score you'd need on everything left. It
   follows the course's own category weights, and only once it reproduces the overall grade Blackboard
