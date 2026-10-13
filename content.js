@@ -237,6 +237,7 @@
     if (tip && ultraTipShown()) hideTip();
     placeScene();
     renderProgress();
+    watchDrafts();
     recordCourses();
   };
   // ---- page loads ------------------------------------------------------------------------------
@@ -306,6 +307,7 @@
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
     tagExtras([document.body]);
+    watchDrafts();
     recordCourses();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
@@ -566,6 +568,120 @@
     if (!old) top[0].parentElement.before(bar);
   };
 
+  // ---- draft backup (Extras) ------------------------------------------------------------------
+  // What you write in Ultra's editors (Quill) is copied to storage.local a second after you stop, keyed
+  // by the page and the editor. The copy goes once what you wrote shows on the page outside an editor
+  // (the post went through), when you clear the editor, or after 14 days. When that editor turns up
+  // empty again (a reload, a crash, a timed-out session) a bar above it offers the copy back. Restoring
+  // types it in through the browser's own editing, so Quill and Ultra take it as your edit.
+  const EDITOR = '.ql-editor[contenteditable="true"]';
+  const BBID = /_\d+_\d+/;
+  // The nearest Blackboard id above the editor (a reply's post, say), and the editor's own id.
+  const draftKey = (ed) => {
+    let near = '';
+    for (let p = ed.parentElement, i = 0; p && !near && i < 15; p = p.parentElement, i++) {
+      for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
+    }
+    return `draft:${location.pathname}#${near}/${ed.id}`;
+  };
+  const local = (fn) => { try { fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
+  const typed = new Map(); // key -> { ed, text, gone }: written here, watched until it posts
+  const saveTimers = new Map(); // editor -> timer
+  const offered = new WeakSet();
+  const bars = new Map(); // bar -> editor
+  const saveDraft = (ed) => {
+    saveTimers.delete(ed);
+    if (!ed.isConnected || !settings.enhance.drafts) return;
+    const key = draftKey(ed);
+    const text = ed.textContent;
+    // Too short, or cleared: drop the copy, but only one written here. A copy still on offer stays
+    // until something worth keeping replaces it.
+    if (!GZ_DRAFTS.worth(text)) { if (typed.delete(key)) local((s) => s.remove(key)); return; }
+    typed.set(key, { ed, text, gone: 0 });
+    local((s) => s.set({ [key]: { html: ed.innerHTML, text, at: Date.now() } }));
+  };
+  // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
+  const onWrite = (e) => {
+    const ed = settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(EDITOR);
+    if (!ed) return;
+    clearTimeout(saveTimers.get(ed));
+    saveTimers.set(ed, setTimeout(() => saveDraft(ed), 1000));
+  };
+  for (const ev of ['keydown', 'input', 'paste']) document.addEventListener(ev, onWrite, true);
+  addEventListener('pagehide', () => { for (const [ed, t] of saveTimers) { clearTimeout(t); saveDraft(ed); } });
+  // The page's text outside the editors being written in: where a post shows up once it's sent.
+  // ponytail: walks the whole page, only while a draft's editor has just emptied or gone (a minute at most).
+  const pageText = () => {
+    const skip = `${EDITOR}, .ql-clipboard, .gz-draft`;
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeType === 3 ? 1 : n.matches(skip) ? 2 : 3) });
+    let out = '';
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) out += n.data;
+    return out;
+  };
+  const restoreBar = (ed, key, d) => {
+    const bar = document.createElement('div');
+    bar.className = 'gz-draft';
+    bar.setAttribute('role', 'status');
+    const msg = document.createElement('span');
+    msg.textContent = `Glaze kept a copy of what you wrote here (${GZ_PAGE.describe(new Date(d.at), true).rel}).`;
+    // type=button: Ultra's editors sit in forms, where a plain button would submit.
+    const button = (label, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.addEventListener('click', () => { bar.remove(); fn(); });
+      return b;
+    };
+    bar.append(msg, button('Restore', () => {
+      ed.focus();
+      const r = document.createRange();
+      r.selectNodeContents(ed);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.execCommand('insertHTML', false, d.html);
+    }), button('Dismiss', () => local((s) => s.remove(key))));
+    (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed).before(bar);
+    bars.set(bar, ed);
+  };
+  const dropBars = () => { for (const bar of bars.keys()) bar.remove(); bars.clear(); };
+  const offerDraft = (ed) => {
+    const key = draftKey(ed);
+    local((s) => s.get(key, (r) => {
+      const d = r?.[key];
+      if (!d?.html || !settings.enhance.drafts || !observer || !ed.isConnected || ed.textContent.trim()) return;
+      if (GZ_DRAFTS.posted(d.text, pageText())) s.remove(key);
+      else restoreBar(ed, key, d);
+    }));
+  };
+  const watchDrafts = () => {
+    if (!settings.enhance.drafts) return;
+    const now = Date.now();
+    let page = null;
+    for (const [key, d] of typed) {
+      // Still being written in. An editor turned read-only shows the sent post, so it counts as gone.
+      if (d.ed.isConnected && d.ed.matches(EDITOR) && d.ed.textContent.trim()) { d.gone = 0; continue; }
+      d.gone ||= now;
+      page ??= pageText();
+      if (GZ_DRAFTS.posted(d.text, page)) { typed.delete(key); local((s) => s.remove(key)); }
+      else if (now - d.gone > 60000) typed.delete(key); // never posted: the copy stays
+    }
+    // A bar steps aside while its editor has text (Ultra's own saved draft, or you're writing), and goes with it.
+    for (const [bar, ed] of bars) {
+      if (!bar.isConnected || !ed.isConnected) { bar.remove(); bars.delete(bar); } else bar.hidden = !!ed.textContent.trim();
+    }
+    // An editor offers its copy once, after it has sat empty for a moment: Ultra may still be filling it.
+    for (const ed of document.querySelectorAll(EDITOR)) {
+      if (offered.has(ed)) continue;
+      offered.add(ed);
+      if (!ed.textContent.trim()) setTimeout(() => offerDraft(ed), 800);
+    }
+  };
+  // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
+  const tidyDrafts = () => {
+    if (window.top !== window) return;
+    local((s) => s.get(null, (all) => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }));
+  };
+
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them. Never while typing, never with
   // a modifier, top frame only.
@@ -805,6 +921,7 @@
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
     if (observer && ['scores', 'urgency', 'inline'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
     if (observer) renderProgress();
+    if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
@@ -850,6 +967,7 @@
     hideTip();
     hidePeek();
     closeKeys();
+    dropBars();
     document.getElementById('gz-progress')?.remove();
     for (const l of links) l.remove();
     links = [];
@@ -871,6 +989,7 @@
   enable();
   load().then((s) => {
     settings = s;
+    tidyDrafts();
     if (!s.enabled) disable();
     else if (links.length) applySettings();
   });

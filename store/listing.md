@@ -40,6 +40,7 @@ At-a-glance helpers, on from the start:
 • Score bars under gradebook scores
 • Folder previews: hover a folder to see what's inside and what's due
 • Course progress: how much of a course you've completed
+• Typing backup: if the page reloads or your session times out before you post, get back what you wrote
 
 More you can switch on:
 
@@ -53,8 +54,8 @@ and restore your settings as a file.
 Glaze works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
 Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed list of universities.
 
-Privacy: Glaze stores your settings in Chrome's sync storage and your course names on your device. It
-collects nothing and has no server. The only requests it makes go to your own Blackboard site, for folder
+Privacy: Glaze stores your settings in Chrome's sync storage, and your course names and a backup of what
+you type (until it's posted, 14 days at most) on your device. It collects nothing and has no server. The only requests it makes go to your own Blackboard site, for folder
 previews and for which items you've submitted, opened or had graded; and to a background image you choose. The source is open at
 https://github.com/frostdev-ops/glaze.
 
@@ -65,15 +66,17 @@ endorsed by, or sponsored by Anthology Inc.
 
 Glaze has one purpose: to customise how Blackboard Ultra pages look and read, according to the user's
 chosen colors, layout, motion and display preferences. The optional helpers (countdowns, previews,
-progress, shortcuts) only present information already on the user's Blackboard pages. Every permission
+progress, shortcuts) only present information already on the user's Blackboard pages; the typing
+backup keeps a local copy of what the user writes on those pages until it is posted. Every permission
 and every line of code serves that purpose.
 
 ## Permission justifications
 
 **storage**
 Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and
-devices, and the names of the user's courses in `chrome.storage.local`, so the editor can list them for
-recolouring. No other data is stored.
+devices; the names of the user's courses in `chrome.storage.local`, so the editor can list them for
+recolouring; and, with the typing backup on, a copy of what the user is writing in Blackboard's editors in
+`chrome.storage.local`, deleted once it is posted or after 14 days. Nothing is sent anywhere.
 
 **Host access: `https://*/ultra/*`**
 Blackboard Ultra is self-hosted by each institution on its own arbitrary domain (for example
