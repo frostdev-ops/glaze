@@ -67,6 +67,16 @@ const GZ_PAGE = (() => {
   // with no content item (external tools, totals) are left out.
   const gradesByContent = (results) => new Map((results || []).filter((g) => g.column?.contentId).map((g) => [g.column.contentId, g]));
 
+  // The course's overall grade, from the same answer: the column marked as the course's external grade,
+  // unless it's hidden from students. As Ultra's Grades page writes it, a percentage cut (not rounded) to
+  // two places, or a letter where the gradebook gives one. { label, tone } in the chips' bands, or null.
+  const overall = (results) => {
+    const g = (results || []).find((r) => r.column?.externalGrade);
+    if (!g || g.column.visible === false || g.column.visibleInBook === false || !score(g.effectiveScore, g.pointsPossible)) return null;
+    const pct = Math.floor((g.effectiveScore / g.pointsPossible) * 1e4 + 1e-6) / 100;
+    return { label: g.displayGrade?.text || `${pct}%`, tone: `graded-${score(pct, 100).band}` };
+  };
+
   // Done: graded, submitted (needs grading), exempt, or Ultra's progress circle full.
   const isDone = (circle, grade) => circle === 'true' || !!grade?.isExempt || grade?.status === 'GRADED' || grade?.status === 'NEEDS_GRADING';
 
@@ -99,6 +109,35 @@ const GZ_PAGE = (() => {
     return { label: circle ? `${w.rel} · ${where}` : w.rel, tone: due(text, now) || 'later' };
   };
 
+  // Focus mode: minutes to read a document's text at 230 words a minute (0 under half a minute), and how
+  // far down its scroller the reader is, 0-1.
+  const readMinutes = (text) => {
+    const words = (text || '').split(/\s+/).filter(Boolean).length;
+    return Math.round(words / 230);
+  };
+  const readShare = (top, height, client) => (height > client ? Math.min(1, Math.max(0, top / (height - client))) : 1);
+
+  // The files a content item from Ultra's content API carries: a File item's own, and those a document
+  // block links in its text (anchors with data-bbfile on a /bbcswebdav/ address of `origin`; videos and
+  // tool links have neither). [{ url, name, size }], size when Ultra knows it.
+  const ENT = { quot: '"', amp: '&', lt: '<', gt: '>', apos: "'", '#39': "'" };
+  const unescape = (s) => s.replace(/&(quot|amp|lt|gt|apos|#39);/g, (_, e) => ENT[e]);
+  const files = (item, origin) => {
+    const out = [];
+    const own = item?.contentDetail?.['resource/x-bb-file']?.file;
+    if (own?.permanentUrl) out.push({ url: origin + own.permanentUrl, name: own.fileName, size: own.fileSize });
+    for (const [tag] of (item?.body?.rawText || '').matchAll(/<a\s[^>]*>/gi)) {
+      const attr = (n) => { const m = tag.match(new RegExp(`\\s${n}="([^"]*)"`, 'i')); return m ? unescape(m[1]) : ''; };
+      try {
+        const bf = JSON.parse(attr('data-bbfile'));
+        const url = new URL(attr('href'), origin);
+        if (url.origin !== origin || !url.pathname.startsWith('/bbcswebdav/')) continue;
+        out.push({ url: url.href, name: bf.fileName || bf.linkName || bf.displayName || decodeURIComponent(url.pathname.split('/').pop()), size: bf.fileSize });
+      } catch { /* not a file link */ }
+    }
+    return out;
+  };
+
   // How well a typed query matches a label, for the command palette: higher is better, -1 is no
   // match. Every typed letter must appear in order; runs, word starts and an early start score more.
   // Spaces separate words that can match anywhere after the last.
@@ -121,7 +160,7 @@ const GZ_PAGE = (() => {
     return score - t.length * 0.01;
   };
 
-  return { due, score, when, describe, gradesByContent, isDone, status, fuzzy };
+  return { due, score, when, describe, gradesByContent, overall, isDone, status, fuzzy, files, readMinutes, readShare };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_PAGE;

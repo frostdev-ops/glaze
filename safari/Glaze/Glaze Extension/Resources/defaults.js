@@ -63,8 +63,12 @@ const GZ_SPEC = {
   },
   enhance: {
     urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
-    inline: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
-    newgrades: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'],
+    inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
+    newgrades: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
+    download: [true, 'bool'],
+    // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
+    // document buttons themselves.
+    darkDocs: [false, 'bool'], toggles: [true, 'bool'],
   },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };
@@ -75,7 +79,8 @@ const GZ_DEFAULTS = {
   colors: Object.fromEntries(GZ_COLORS.map(([v, , d]) => [v, d])),
   preset: 'Frost',
   ...Object.fromEntries(Object.entries(GZ_SPEC).map(([g, keys]) => [g, Object.fromEntries(Object.entries(keys).map(([k, [d]]) => [k, d]))])),
-  courses: { harmonize: true, colors: {} },
+  // tint: inside a course listed in `tinted` (color slots), its color tints the palette, `strength` %.
+  courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60 },
   footer: true,
   presets: [],
 };
@@ -221,7 +226,13 @@ const GZ_SANITIZE = (raw) => {
   }
   const rc = isObj(raw.courses) ? raw.courses : {};
   const cc = isObj(rc.colors) ? Object.entries(rc.colors).filter(([slot, c]) => COURSE_SLOT.test(slot) && HEX.test(c)) : [];
-  out.courses = { harmonize: typeof rc.harmonize === 'boolean' ? rc.harmonize : true, colors: Object.fromEntries(cc.map(([id, c]) => [id, c.toLowerCase()])) };
+  out.courses = {
+    harmonize: typeof rc.harmonize === 'boolean' ? rc.harmonize : true,
+    colors: Object.fromEntries(cc.map(([id, c]) => [id, c.toLowerCase()])),
+    tint: cleanValue(rc.tint, false, 'bool'),
+    tinted: Array.isArray(rc.tinted) ? [...new Set(rc.tinted.filter((n) => typeof n === 'string' && COURSE_SLOT.test(n)))] : [],
+    strength: cleanValue(rc.strength, 60, [10, 100]),
+  };
   out.footer = typeof raw.footer === 'boolean' ? raw.footer : GZ_DEFAULTS.footer;
   out.presets = GZ_SANITIZE_PRESETS(raw.presets);
   // 1.0 stored no preset name: recover it from the palette, so the popup can mark it.
@@ -253,6 +264,39 @@ const GZ_CONTRAST = (colors) => GZ_CONTRAST_PAIRS.map(([fg, bg, min, label]) => 
   return { fg, bg, min, label, ratio, pass: ratio >= min };
 });
 
+// ---- course tint ------------------------------------------------------------------------------
+// Inside a course picked for it, the accent family takes the course's hue, and `t` (0-1) of the way
+// from the palette's lightness and colorfulness to the course color's own: any strength reads as
+// that course, and blending the hues instead would turn a pink accent and a green course gray. Bright
+// and tint keep their place (bright toward the text, tint toward the ground); the surfaces lean a
+// tenth of `t` toward the course. Contrast holds: a surface tint that costs text contrast the palette
+// had is dropped, and the accent moves toward the text until it reads on the surface and its own
+// text reads on it (in every preset, text on the accent is ground-like). A palette where that can't
+// work gets black or white text on the accent, one of which always clears 4.5:1.
+const GZ_TINT = (colors, course, t) => {
+  const m = GZC.mix;
+  const ink = colors['--gz-ink'];
+  const lean = (v, to) => m(GZC.rehue(colors[v], course), to, t);
+  const out = {
+    ...colors,
+    '--gz-accent': lean('--gz-accent', course),
+    '--gz-accent-hi': lean('--gz-accent-hi', m(course, ink, 0.3)),
+    '--gz-accent-soft': lean('--gz-accent-soft', m(course, colors['--gz-surface-2'], 0.8)),
+    '--gz-surface': m(colors['--gz-surface'], course, t / 10),
+    '--gz-surface-2': m(colors['--gz-surface-2'], course, t / 10),
+  };
+  const was = GZ_CONTRAST(colors);
+  if (GZ_CONTRAST(out).some((r, i) => r.fg.startsWith('--gz-ink') && was[i].pass && !r.pass)) {
+    out['--gz-surface'] = colors['--gz-surface'];
+    out['--gz-surface-2'] = colors['--gz-surface-2'];
+  }
+  const reads = (fg, bg) => GZ_CONTRAST(out).find((r) => r.fg === fg && r.bg === bg).pass;
+  const ok = () => reads('--gz-accent', '--gz-surface') && reads('--gz-accent-ink', '--gz-accent');
+  for (let i = 0; i < 20 && !ok(); i++) out['--gz-accent'] = m(out['--gz-accent'], ink, 0.15);
+  if (!ok()) out['--gz-accent-ink'] = GZC.contrast(out['--gz-accent'], '#000000') > GZC.contrast(out['--gz-accent'], '#ffffff') ? '#000000' : '#ffffff';
+  return out;
+};
+
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_TINT };
 }

@@ -11,7 +11,7 @@
   const html = document.documentElement;
   const SHEETS = ['theme.css', 'motion.css', 'extras.css'];
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -24,6 +24,8 @@
   let darkTheme = true;
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
+  // The options page shows a mock of Ultra (preview.html) that runs this same script.
+  const isPreview = location.protocol === 'chrome-extension:';
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
   const onBody = (fn) => (document.body ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
@@ -144,8 +146,9 @@
   // Absolute URLs: Ultra's <base href> points at its CDN.
   const api = (path, base = '/learn/api/v1') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+  // One /users/me for everything that asks at once; asked again only if it failed.
   let meId = null;
-  const me = () => (meId ? Promise.resolve(meId) : api('/users/me').then((m) => (meId = m.id)));
+  const me = () => (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meId = null; throw e; }));
   // The student's courses, once per page: names for the command palette, and each membership's
   // due-date exception setting.
   let memberships = null;
@@ -169,7 +172,29 @@
     });
     return Promise.all([excepted, ...dates]).then(([exc, ...when]) => new Set(waiting.filter((g, i) => !exc(g.columnId) && GZ_GRADES.late(when[i], g.column.dueDate)).map((g) => g.columnId)));
   };
-  // cid → { at, pending, results, grades (by content item), late (column ids), key }. Lateness is
+
+  // ---- grades on course cards (Extras) -------------------------------------------------------
+  // On the Courses page each card's status line ("Open") gains the course's overall grade, drawn by CSS
+  // from attributes. Grid and list views share one card; the Recent Courses strip has its own. A card's
+  // book is asked for only once the card is on screen.
+  const CARD_STATUS = 'article.course-element-card[data-course-id] .course-status, a[class*="courseCard"] [class*="courseStatus"]';
+  const onScreen = new Set();
+  const cardsIO = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) onScreen.add(e.target); else onScreen.delete(e.target);
+    tagCards();
+  });
+  const tagCards = () => {
+    if (!observer || !settings.enhance.overall || location.pathname !== '/ultra/course') return;
+    for (const el of document.querySelectorAll(CARD_STATUS)) cardsIO.observe(el);
+    for (const el of onScreen) {
+      if (!el.isConnected) { onScreen.delete(el); cardsIO.unobserve(el); continue; }
+      const cid = el.closest('[data-course-id]')?.dataset.courseId || el.closest('a')?.href.match(/\/courses\/(_\d+_\d+)\//)?.[1];
+      const g = cid && bookFor(cid).overall;
+      if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); }
+      else if (g === null) { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
+    }
+  };
+  // cid → { at, pending, results, grades (by content item), overall, late (column ids), key }. Lateness is
   // asked only by the due-date chips (late = true), so a course card never costs attempt requests. An
   // answer that changes anything re-tags the page.
   const books = new Map();
@@ -184,7 +209,7 @@
           b.pending = false;
           const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])]]);
           if (key === b.key) return;
-          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), late: lateCols, key });
+          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results), late: lateCols, key });
           onBook();
         }))
         .catch(() => { b.pending = false; });
@@ -197,6 +222,7 @@
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagExtras = (roots) => {
+    tagCards();
     const { scores, urgency, inline } = settings.enhance;
     if (!scores && !urgency && !inline) return;
     const now = new Date();
@@ -262,10 +288,14 @@
     dirty.clear();
     if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
     if (tip && ultraTipShown()) hideTip();
+    if (tintSlot() !== tinted) applySettings();
     placeScene();
     renderProgress();
     renderNew();
     renderCalc();
+    watchDrafts();
+    syncDownloads();
+    syncDocTools();
     recordCourses();
   };
   // ---- page loads ------------------------------------------------------------------------------
@@ -283,7 +313,7 @@
   const release = () => {
     const now = performance.now();
     for (const [el, t] of held) {
-      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || books.get(courseId())?.pending || loaderIn(el))) continue;
+      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || [...books.values()].some((b) => b.pending) || loaderIn(el))) continue;
       held.delete(el);
       // Cards already there arrive with the page, not one by one after it.
       for (const c of el.querySelectorAll('.content-list-item, .element-card')) c.setAttribute('data-gz-held', '');
@@ -335,6 +365,7 @@
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
     tagExtras([document.body]);
+    watchDrafts();
     recordCourses();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
@@ -345,6 +376,8 @@
     timer = 0;
     dirty.clear();
     full = false;
+    cardsIO.disconnect();
+    onScreen.clear();
     clearTags(TAGS);
   };
 
@@ -715,6 +748,342 @@
     if (old) old.replaceWith(box); else host.after(box);
   };
 
+  // ---- draft backup (Extras) ------------------------------------------------------------------
+  // What you write in Ultra's editors (Quill) is copied to storage.local a second after you stop, keyed
+  // by the page and the editor. The copy goes once what you wrote shows on the page outside an editor
+  // (the post went through), when you clear the editor, or after 14 days. When that editor turns up
+  // empty again (a reload, a crash, a timed-out session) a bar above it offers the copy back. Restoring
+  // types it in through the browser's own editing, so Quill and Ultra take it as your edit.
+  const EDITOR = '.ql-editor[contenteditable="true"]';
+  const BBID = /_\d+_\d+/;
+  // The nearest Blackboard id above the editor (a reply's post, say), and the editor's own id.
+  const draftKey = (ed) => {
+    let near = '';
+    for (let p = ed.parentElement, i = 0; p && !near && i < 15; p = p.parentElement, i++) {
+      for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
+    }
+    return `draft:${location.pathname}#${near}/${ed.id}`;
+  };
+  const local = (fn) => { try { fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
+  const typed = new Map(); // key -> { ed, text, gone }: written here, watched until it posts
+  const saveTimers = new Map(); // editor -> timer
+  const offered = new WeakSet();
+  const bars = new Map(); // bar -> editor
+  const saveDraft = (ed) => {
+    saveTimers.delete(ed);
+    if (!ed.isConnected || !settings.enhance.drafts) return;
+    const key = draftKey(ed);
+    const text = ed.textContent;
+    // Too short, or cleared: drop the copy, but only one written here. A copy still on offer stays
+    // until something worth keeping replaces it.
+    if (!GZ_DRAFTS.worth(text)) { if (typed.delete(key)) local((s) => s.remove(key)); return; }
+    typed.set(key, { ed, text, gone: 0 });
+    local((s) => s.set({ [key]: { html: ed.innerHTML, text, at: Date.now() } }));
+  };
+  // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
+  const onWrite = (e) => {
+    const ed = settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(EDITOR);
+    if (!ed) return;
+    clearTimeout(saveTimers.get(ed));
+    saveTimers.set(ed, setTimeout(() => saveDraft(ed), 1000));
+  };
+  for (const ev of ['keydown', 'input', 'paste']) document.addEventListener(ev, onWrite, true);
+  addEventListener('pagehide', () => { for (const [ed, t] of saveTimers) { clearTimeout(t); saveDraft(ed); } });
+  // The page's text outside the editors being written in: where a post shows up once it's sent.
+  // ponytail: walks the whole page, only while a draft's editor has just emptied or gone (a minute at most).
+  const pageText = () => {
+    const skip = `${EDITOR}, .ql-clipboard, .gz-draft`;
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeType === 3 ? 1 : n.matches(skip) ? 2 : 3) });
+    let out = '';
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) out += n.data;
+    return out;
+  };
+  const restoreBar = (ed, key, d) => {
+    const bar = document.createElement('div');
+    bar.className = 'gz-draft';
+    bar.setAttribute('role', 'status');
+    const msg = document.createElement('span');
+    msg.textContent = `Glaze kept a copy of what you wrote here (${GZ_PAGE.describe(new Date(d.at), true).rel}).`;
+    // type=button: Ultra's editors sit in forms, where a plain button would submit.
+    const button = (label, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.addEventListener('click', () => { bar.remove(); fn(); });
+      return b;
+    };
+    bar.append(msg, button('Restore', () => {
+      ed.focus();
+      const r = document.createRange();
+      r.selectNodeContents(ed);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.execCommand('insertHTML', false, d.html);
+    }), button('Dismiss', () => local((s) => s.remove(key))));
+    (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed).before(bar);
+    bars.set(bar, ed);
+  };
+  const dropBars = () => { for (const bar of bars.keys()) bar.remove(); bars.clear(); };
+  const offerDraft = (ed) => {
+    const key = draftKey(ed);
+    local((s) => s.get(key, (r) => {
+      const d = r?.[key];
+      if (!d?.html || !settings.enhance.drafts || !observer || !ed.isConnected || ed.textContent.trim()) return;
+      if (GZ_DRAFTS.posted(d.text, pageText())) s.remove(key);
+      else restoreBar(ed, key, d);
+    }));
+  };
+  const watchDrafts = () => {
+    if (!settings.enhance.drafts) return;
+    const now = Date.now();
+    let page = null;
+    for (const [key, d] of typed) {
+      // Still being written in. An editor turned read-only shows the sent post, so it counts as gone.
+      if (d.ed.isConnected && d.ed.matches(EDITOR) && d.ed.textContent.trim()) { d.gone = 0; continue; }
+      d.gone ||= now;
+      page ??= pageText();
+      if (GZ_DRAFTS.posted(d.text, page)) { typed.delete(key); local((s) => s.remove(key)); }
+      else if (now - d.gone > 60000) typed.delete(key); // never posted: the copy stays
+    }
+    // A bar steps aside while its editor has text (Ultra's own saved draft, or you're writing), and goes with it.
+    for (const [bar, ed] of bars) {
+      if (!bar.isConnected || !ed.isConnected) { bar.remove(); bars.delete(bar); } else bar.hidden = !!ed.textContent.trim();
+    }
+    // An editor offers its copy once, after it has sat empty for a moment: Ultra may still be filling it.
+    for (const ed of document.querySelectorAll(EDITOR)) {
+      if (offered.has(ed)) continue;
+      offered.add(ed);
+      if (!ed.textContent.trim()) setTimeout(() => offerDraft(ed), 800);
+    }
+  };
+  // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
+  const tidyDrafts = () => {
+    if (window.top !== window) return;
+    local((s) => s.get(null, (all) => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }));
+  };
+
+  // ---- download all (Extras) -------------------------------------------------------------------
+  // A button on each folder and learning module in course content saves the files inside, subfolders
+  // included, as one zip named after it. Listed with the content API, fetched from the site you are on
+  // (Blackboard redirects the bytes to its file CDN, which allows it), zipped here, saved through a blob
+  // link. Items you haven't opened are left out: downloading is never what marks them viewed.
+  const MAX_ZIP = 250 * 2 ** 20; // ponytail: the whole zip is built in memory; stream to disk if folders outgrow it
+  const jobs = new Map(); // folder id -> { ctl, label, pct, done }
+  const paintDl = (fid) => {
+    const b = document.getElementById(`gz-dl-${fid}`);
+    const j = jobs.get(fid);
+    if (!b) return;
+    b.textContent = j?.label || 'Download all';
+    b.toggleAttribute('data-busy', !!j && !j.done);
+    b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
+  };
+  const download = async (fid, title) => {
+    const cid = courseId();
+    const ctl = new AbortController();
+    const job = { ctl, label: 'Finding files · Cancel', pct: 0 };
+    jobs.set(fid, job);
+    const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
+    say(job.label);
+    const list = (id) => fetch(`${location.origin}/learn/api/v1/courses/${cid}/contents/${id}/children?limit=200`, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status)))).then((j) => j.results || []);
+    const found = [];
+    const seen = new Set();
+    let skipped = 0;
+    // A folder or module is a directory; an Ultra document is a folder too (isBbPage), whose blocks hold its files.
+    // ponytail: first 200 children of each folder.
+    const walk = async (id, dir) => {
+      for (const c of await list(id)) {
+        const page = c.contentDetail?.[c.contentHandler]?.isBbPage;
+        if (/folder|lesson/.test(c.contentHandler) && !page) { await walk(c.id, `${dir}${GZ_ZIP.safeName(c.title)}/`); continue; }
+        const fs = (page ? (await list(c.id)).flatMap((k) => GZ_PAGE.files(k, location.origin)) : GZ_PAGE.files(c, location.origin)).filter((f) => !seen.has(f.url));
+        if (!fs.length) continue;
+        if (c.state !== 'Started' && c.state !== 'Completed') { skipped += 1; continue; }
+        for (const f of fs) { seen.add(f.url); found.push({ ...f, dir }); }
+      }
+    };
+    const mb = (n) => `${Math.round(n / 2 ** 20)} MB`;
+    try {
+      await walk(fid, '');
+      const known = found.reduce((n, f) => n + (f.size || 0), 0);
+      if (known > MAX_ZIP) throw new Error(`Too big: ${mb(known)}, over ${mb(MAX_ZIP)}`);
+      const out = [];
+      const taken = new Set();
+      let bytes = 0;
+      let failed = 0;
+      for (const [i, f] of found.entries()) {
+        say(`${i + 1} of ${found.length} · Cancel`, (i / found.length) * 100);
+        const r = await fetch(f.url, { credentials: 'same-origin', signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
+        if (!r?.ok) { failed += 1; continue; }
+        const data = new Uint8Array(await r.arrayBuffer());
+        bytes += data.length;
+        if (bytes > MAX_ZIP) throw new Error(`Too big: over ${mb(MAX_ZIP)}`);
+        out.push({ name: GZ_ZIP.unique(f.dir + GZ_ZIP.safeName(f.name), taken), data });
+      }
+      const left = skipped ? ` · ${skipped} unopened left out` : '';
+      if (!out.length) return say(found.length ? `Download failed${left}` : `No files${skipped ? ' you have opened' : ''}${left}`);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(GZ_ZIP.zip(out), { type: 'application/zip' }));
+      a.download = `${GZ_ZIP.safeName(title)}.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      say(`Saved ${out.length} file${out.length === 1 ? '' : 's'}${left}${failed ? ` · ${failed} failed` : ''}`);
+    } catch (e) {
+      say(ctl.signal.aborted ? 'Cancelled' : /^Too big/.test(e.message) ? e.message : 'Download failed');
+    } finally {
+      job.done = true;
+      paintDl(fid);
+      setTimeout(() => { if (jobs.get(fid) === job) { jobs.delete(fid); paintDl(fid); } }, 6000);
+    }
+  };
+  const FOLDER = /^(Folder|Learning Module)$/;
+  const syncDownloads = () => {
+    const on = settings.enhance.download && courseId();
+    if (!on) { for (const b of document.querySelectorAll('.gz-dl')) b.remove(); return; }
+    for (const item of document.querySelectorAll('.content-list-item[data-content-id]')) {
+      const fid = item.dataset.contentId;
+      // The item's own icon and title come first; an open folder's children follow them.
+      if (!FOLDER.test(item.querySelector('svg[aria-label]')?.getAttribute('aria-label')) || document.getElementById(`gz-dl-${fid}`)) continue;
+      const h3 = item.querySelector('h3');
+      if (!h3) continue;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.id = `gz-dl-${fid}`; // gz- ids are skipped by the sweep
+      b.className = 'gz-dl';
+      b.title = "Save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.";
+      // Inside Ultra's clickable row: keep the row from opening or folding.
+      for (const ev of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'keydown', 'keyup']) b.addEventListener(ev, (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const j = jobs.get(fid);
+        if (j && !j.done) j.ctl.abort();
+        else download(fid, h3.textContent.trim());
+      });
+      h3.after(b);
+      paintDl(fid);
+    }
+  };
+
+  // ---- document buttons (Extras) ---------------------------------------------------------------
+  // Round buttons in the bottom-right gutter, top frame only: dark documents while a file preview is
+  // on screen (dark palettes only), focus mode on a course document. Dark documents invert the
+  // preview's frame (extras.css), which works whatever its origin; where a frame is same-origin, its
+  // images and videos are turned back.
+  const PREVIEWS = '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe';
+  const UNFLIP = 'img, video, picture, canvas { filter: invert(1) hue-rotate(180deg); }';
+  const framesShown = new Set();
+  const framesSeen = new WeakSet();
+  let docTools = null;
+  let focusAt = null; // the document focus mode is on for
+  let readBar = null;
+  const unflip = (f) => {
+    try {
+      const d = f.contentDocument;
+      const old = d?.getElementById('gz-unflip');
+      const on = html.matches('[data-gz-dark-theme][data-gz-enhance-darkDocs]'); // as extras.css
+      if (!d?.documentElement || on === !!old) return;
+      if (old) return old.remove();
+      const s = d.createElement('style');
+      s.id = 'gz-unflip';
+      s.textContent = UNFLIP;
+      d.documentElement.append(s);
+    } catch { /* another origin */ }
+  };
+  const ICONS = { dark: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z', focus: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5' };
+  const docButton = (key, label, onClick) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.gz = key;
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    const p = document.createElementNS(svg.namespaceURI, 'path');
+    p.setAttribute('d', ICONS[key]);
+    svg.append(p);
+    b.append(svg);
+    b.addEventListener('click', onClick);
+    return b;
+  };
+  const onRead = () => {
+    if (!readBar) return;
+    const sc = focusAt.parentElement; // Ultra's scroller around the document
+    // On <html>, outside the observed body: a style write on the bar would wake the sweep every scroll.
+    setVar('--gz-read', GZ_PAGE.readShare(sc.scrollTop, sc.scrollHeight, sc.clientHeight));
+  };
+  const setFocus = (on) => {
+    const doc = on && document.querySelector('#site-wrap .document-content-root');
+    if ((doc || null) === focusAt) return;
+    focusAt = doc || null;
+    html.toggleAttribute('data-gz-focus', !!focusAt);
+    readBar?.remove();
+    readBar = null;
+    if (focusAt) {
+      readBar = document.createElement('div');
+      readBar.id = 'gz-read';
+      readBar.setAttribute('aria-hidden', 'true');
+      document.body.append(readBar);
+      onRead();
+    }
+    syncDocTools();
+  };
+  const setDark = (on) => {
+    settings = { ...settings, enhance: { ...settings.enhance, darkDocs: on } };
+    setAttr('data-gz-enhance-darkDocs', on);
+    syncDocTools();
+    try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
+  };
+  const syncDocTools = () => {
+    const on = window.top === window && observer && settings.enhance.toggles;
+    const doc = on && document.querySelector('#site-wrap .document-content-root');
+    if (focusAt && focusAt !== doc) setFocus(false);
+    for (const f of document.querySelectorAll(PREVIEWS)) {
+      if (!framesSeen.has(f)) { framesSeen.add(f); frameIO.observe(f); f.addEventListener('load', () => unflip(f)); }
+      unflip(f);
+    }
+    for (const f of framesShown) if (!f.isConnected) { framesShown.delete(f); frameIO.unobserve(f); }
+    const dark = on && darkTheme && framesShown.size > 0;
+    if (!doc && !dark) {
+      docTools?.remove();
+      docTools = null;
+      html.removeAttribute('data-gz-doc-tools');
+      return;
+    }
+    if (!docTools) {
+      docTools = document.createElement('div');
+      docTools.id = 'gz-doc-tools';
+      docTools.setAttribute('role', 'toolbar');
+      docTools.setAttribute('aria-label', 'Document');
+      const time = document.createElement('span');
+      time.className = 'gz-doc-time';
+      docTools.append(time, docButton('dark', 'Dark documents', () => setDark(!settings.enhance.darkDocs)), docButton('focus', 'Focus mode', () => setFocus(!focusAt)));
+      document.body.append(docTools);
+    }
+    const [time, darkB, focusB] = docTools.children;
+    const mins = focusAt && GZ_PAGE.readMinutes(focusAt.querySelector('.bbml-editor')?.textContent);
+    time.hidden = !mins;
+    // Only on change: a text write is itself a mutation the observer would hand back.
+    if (mins && time.textContent !== `${mins} min read`) time.textContent = `${mins} min read`;
+    darkB.hidden = !dark;
+    darkB.setAttribute('aria-pressed', String(settings.enhance.darkDocs));
+    focusB.hidden = !doc;
+    focusB.setAttribute('aria-pressed', String(!!focusAt));
+    html.setAttribute('data-gz-doc-tools', '');
+  };
+  const frameIO = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) framesShown.add(e.target); else framesShown.delete(e.target);
+    syncDocTools();
+  });
+  document.addEventListener('scroll', onRead, { capture: true, passive: true });
+  // Esc leaves focus mode, and Ultra doesn't also act on it. An open menu or dialog gets its Esc as
+  // usual. Focus inside a preview's frame keeps the key there; the button still works.
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !focusAt || (e.target instanceof Element && e.target.closest('[role="menu"], [role="dialog"], [role="listbox"]'))) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    setFocus(false);
+  }, true);
+
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them. Never while typing, never with
   // a modifier, top frame only.
@@ -998,12 +1367,11 @@
     sceneCanvas = null;
   };
   const sceneOpts = () => {
-    const colors = GZ_ACTIVE_COLORS(settings, darkMQ.matches);
     const { dim, amount, pace } = GZ_SCENE_LOOK(settings.bg.intensity);
     return {
       name: settings.bg.scene,
-      ground: colors['--gz-surface-2'],
-      colors: GZ_BG_COLORS(settings.bg.colors, colors),
+      ground: palette['--gz-surface-2'],
+      colors: GZ_BG_COLORS(settings.bg.colors, palette),
       dim,
       amount,
       speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
@@ -1023,6 +1391,47 @@
       scene.update(sceneOpts());
     }).catch(() => { sceneFailed = true; stopScene(); });
   };
+
+  // ---- course tint ----------------------------------------------------------------------------
+  // Inside a course picked in the editor, the palette leans toward the course's color (GZ_TINT).
+  // A course's own pages carry its color slot on the course section; its item pages carry nothing,
+  // so the slot is remembered per course id, on this device. flush() re-checks on every page change.
+  const COURSE = 'section.course[class*="course-color-"]';
+  const courseSlots = {};
+  try {
+    chrome.storage.local.get('courseSlots', (r) => {
+      Object.assign(courseSlots, r?.courseSlots);
+      if (tintSlot() !== tinted) reapply();
+    });
+  } catch { /* extension reloaded under the tab */ }
+  const tintSlot = () => {
+    const cid = courseId();
+    const sec = document.querySelector(COURSE);
+    const slot = sec?.className.match(/course-color-(\d+)/)?.[1];
+    // The section names its course: the address changes ~250 ms before the next course's section
+    // replaces the last one's.
+    const id = sec?.getAttribute('bb-course-membership-markups') || cid;
+    if (id && slot && courseSlots[id] !== slot) {
+      courseSlots[id] = slot;
+      try { chrome.storage.local.set({ courseSlots }); } catch { /* reloaded */ }
+    }
+    const { tint, tinted: picked } = settings.courses;
+    const now = cid ? courseSlots[cid] : isPreview && slot;
+    return tint && picked.includes(now) ? now : null;
+  };
+  // The color the Course colors section already resolves (--gz-course: a pick, toned or raw), read
+  // off a hidden probe on <html>, outside the observed body. Null until theme.css has loaded.
+  const courseColor = (slot) => {
+    const p = document.createElement('i');
+    p.className = `course-color-${slot}`;
+    p.style.cssText = 'display:none;color:color-mix(in srgb, var(--gz-course, transparent) 100%, transparent)';
+    html.append(p);
+    const c = C.parse(getComputedStyle(p).color);
+    p.remove();
+    return c?.a ? C.hex(c) : null;
+  };
+  let tinted = null; // the slot whose color is painted now
+  let palette = GZ_DEFAULTS.colors; // the colors painted, tint included
 
   // ---- settings → <html> ----------------------------------------------------------------------
   // Everything set goes through these two, so clearSettings removes exactly what was set.
@@ -1046,18 +1455,25 @@
 
   const applySettings = () => {
     const s = settings;
-    const colors = GZ_ACTIVE_COLORS(s, darkMQ.matches);
-    for (const [v] of GZ_COLORS) setVar(v, colors[v]);
-    const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
-    accentInk = C.parse(colors['--gz-accent-ink']);
-    setVar('color-scheme', dark ? 'dark' : 'light');
-    setAttr('data-gz-dark-theme', dark);
+    const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
+    for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);
     for (let n = 1; n <= 10; n++) {
       const c = s.courses.colors[n];
       if (c) setVar(`--gz-pick-${n}`, c);
       else html.style.removeProperty(`--gz-pick-${n}`);
     }
+    // The course color is worked out from the untinted palette set above, then painted over it.
+    const slot = tintSlot();
+    const course = slot && courseColor(slot);
+    tinted = course ? slot : null;
+    const colors = course ? GZ_TINT(base, course, s.courses.strength / 100) : base;
+    if (course) for (const [v] of GZ_COLORS) setVar(v, colors[v]);
+    palette = colors;
+    const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
+    accentInk = C.parse(colors['--gz-accent-ink']);
+    setVar('color-scheme', dark ? 'dark' : 'light');
+    setAttr('data-gz-dark-theme', dark);
     // Look: numbers become vars, choices become attributes theme.css matches on.
     setVar('--gz-radius', `${s.look.radius}px`);
     setVar('--gz-scale', s.look.scale);
@@ -1097,10 +1513,11 @@
     const was = enhanced;
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
-    if (observer && ['scores', 'urgency', 'inline'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (observer) { renderProgress(); renderCalc(); }
+    if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
+    if (observer) { renderProgress(); renderCalc(); syncDownloads(); }
     if (!s.enhance.newgrades) clearTags(['data-gz-new']);
     else if (observer) renderNew();
+    if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
@@ -1113,6 +1530,7 @@
       if (observer) { clearTags(['data-gz-light', 'data-gz-dark', 'data-gz-hover']); sweepAll(); }
     }
     if (!s.look.tooltips) hideTip();
+    if (observer) syncDocTools();
     syncScene();
   };
   const clearSettings = () => {
@@ -1148,11 +1566,14 @@
     closeKeys();
     closeCmd();
     for (const id of ['gz-progress', 'gz-calc']) document.getElementById(id)?.remove();
+    dropBars();
+    for (const b of document.querySelectorAll('.gz-dl')) b.remove();
     for (const l of links) l.remove();
     links = [];
     stopScene();
     stopSweep();
     clearSettings();
+    syncDocTools();
     syncFooter();
   };
 
@@ -1168,13 +1589,12 @@
   enable();
   load().then((s) => {
     settings = s;
+    tidyDrafts();
     if (!s.enabled) disable();
     else if (links.length) applySettings();
   });
-  // The options page shows a mock of Ultra (preview.html) that runs this same script. It is fed
-  // the editor's state directly, before it is saved, and ignores storage so a save landing late
-  // can't undo an edit that is further along.
-  const isPreview = location.protocol === 'chrome-extension:';
+  // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
+  // save landing late can't undo an edit that is further along.
   if (isPreview) {
     addEventListener('message', (e) => {
       if (e.origin !== location.origin || !e.data?.gzPreview) return;

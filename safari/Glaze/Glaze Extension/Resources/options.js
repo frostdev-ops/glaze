@@ -28,7 +28,15 @@ GZ_UI.load().then((s) => {
   const frame = $('#preview');
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
-  const preview = () => frame.contentWindow?.postMessage({ gzPreview: offer || s }, location.origin);
+  let seen = {}; // color slot -> course name, from the content script
+  const preview = () => {
+    // The mock is a course: it shows as the first course picked for tinting.
+    const sec = frame.contentDocument?.querySelector('section.course');
+    const slot = s.courses.tinted[0];
+    if (sec && slot) sec.className = `course course-color-${slot}`;
+    if (sec && seen[slot]) sec.querySelector('.pv-course').textContent = seen[slot];
+    frame.contentWindow?.postMessage({ gzPreview: offer || s }, location.origin);
+  };
   frame.addEventListener('load', preview);
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
@@ -136,6 +144,7 @@ GZ_UI.load().then((s) => {
     presetOptions();
     outputs();
     $('[data-key="auto.on"]').checked = s.auto.on;
+    for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
     document.body.classList.toggle('off', !s.enabled);
   };
   // Puts every control back in line with the state (load, import, reset, preset pick).
@@ -152,6 +161,7 @@ GZ_UI.load().then((s) => {
     $('#bg-image').value = s.bg.image;
     for (const [slug, box] of tabBoxes) box.checked = s.declutter.tabs.includes(slug);
     renderFonts();
+    renderCourses();
     refresh();
   };
 
@@ -314,7 +324,8 @@ GZ_UI.load().then((s) => {
   $('#reset-colors').addEventListener('click', () => { save(GZ_UI.pickPreset(s, 'Frost', GZ_PRESET('Frost'))); fill(); });
 
   // ---- courses: names come from the content script, recorded on this device only ----
-  const renderCourses = (seen = {}) => {
+  const renderCourses = (next = seen) => {
+    seen = next || {};
     const slots = Object.keys(seen).sort((a, b) => a - b);
     $('#course-empty').hidden = slots.length > 0;
     $('#course-list').replaceChildren(...slots.map((slot) => {
@@ -332,7 +343,17 @@ GZ_UI.load().then((s) => {
       name.append(tag);
       const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Reset', hidden: !s.courses.colors[slot] });
       reset.addEventListener('click', () => { delete s.courses.colors[slot]; input.value = SLOT_COLORS[slot]; reset.hidden = true; refresh(); save(['courses']); });
-      li.append(input, name, reset);
+      const tint = Object.assign(document.createElement('label'), { className: 'check', hidden: !s.courses.tint });
+      tint.dataset.tint = '';
+      const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: s.courses.tinted.includes(slot) });
+      box.setAttribute('aria-label', `Tint inside ${seen[slot]}`);
+      box.addEventListener('change', () => {
+        s.courses.tinted = box.checked ? [...s.courses.tinted, slot] : s.courses.tinted.filter((n) => n !== slot);
+        refresh();
+        save(['courses']);
+      });
+      tint.append(box, 'Tint');
+      li.append(input, name, tint, reset);
       return li;
     }));
   };

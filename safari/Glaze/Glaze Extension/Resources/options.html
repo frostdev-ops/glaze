@@ -56,7 +56,7 @@
   .mine li { display: flex; align-items: center; gap: 0.6rem; }
   .mine input[type="text"] { flex: 1; }
   .courses { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
-  .courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; }
+  .courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 0.75rem; align-items: center; }
   .courses .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .courses .slot { font-size: 11px; color: var(--gz-ink-faint); margin-left: 0.4rem; }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
@@ -230,6 +230,9 @@
         <h2>Courses</h2>
         <label class="check"><input type="checkbox" data-key="courses.harmonize"><span>Tone Blackboard's course colors to fit the palette</span>
           <span class="desc">Blackboard gives each course one of ten bright colors. Toned, they keep their hue but sit in your palette.</span></label>
+        <label class="check"><input type="checkbox" data-key="courses.tint"><span>Tint the theme inside a course</span>
+          <span class="desc">Inside each course ticked below, the accent takes the course's color and the background leans toward it, so you can tell at a glance which course you're in.</span></label>
+        <label class="field" data-tint><span>Tint strength</span><input type="range" data-key="courses.strength" min="10" max="100" step="5"><output data-for="courses.strength" data-format="pct100"></output></label>
         <ul class="courses" id="course-list"></ul>
         <p class="desc" id="course-empty">Open Messages or Grades on Blackboard once and your courses show up here, each with a colour you can change.</p>
       </section>
@@ -246,6 +249,8 @@
           <span class="desc">Announcements, posts and documents keep lines to a comfortable length.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.inline"><span>Due-date status and percentages</span>
           <span class="desc">Beside each due date in course content, where the work stands: "in 2 days · Unopened", "Submitted", "Graded · 18/20". Elsewhere, how long is left. And the percentage inside every grade.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.overall"><span>Grades on course cards</span>
+          <span class="desc">Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.previews"><span>Folder previews</span>
           <span class="desc">Hover a closed folder in course content to see what is inside, what is done and what is due.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.progress"><span>Course progress</span>
@@ -256,8 +261,16 @@
           <span class="desc">On a course's gradebook: try scores for work not graded yet, or set a target and see what you'd need. Uses the course's own weights, and says so when it can't.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.palette"><span>Command palette</span>
           <span class="desc">Ctrl+K (⌘K on a Mac) to jump to a course, an item in this course, a Blackboard page or a Glaze setting.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.download"><span>Download all</span>
+          <span class="desc">A button on each folder and learning module in course content that saves its files as one zip. Items you haven't opened are left out, so downloading never marks them viewed.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.keys"><span>Keyboard shortcuts</span>
           <span class="desc">g then c, a, g, m or s for Courses, Calendar, Grades, Messages, Activity; / to search; ? for the list.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.drafts"><span>Back up what you type</span>
+          <span class="desc">Keeps a copy of what you write in Blackboard's editors on this device until it's posted, and offers it back if the page reloads or your session times out. Copies are deleted after 14 days.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.darkDocs"><span>Dark documents</span>
+          <span class="desc">PDFs and file previews turned dark to match a dark palette, colors kept. Also switched from the moon button beside a preview.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.toggles"><span>Document buttons</span>
+          <span class="desc">Round buttons at the bottom right of course documents: dark documents, and focus mode (the document alone, with a reading-progress line and reading time; Esc leaves it).</span></label>
         <div class="group">
           <h3>Declutter</h3>
           <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
