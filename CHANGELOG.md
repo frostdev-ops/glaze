@@ -38,6 +38,14 @@ All notable changes to Glaze are documented here. The format follows
   column scales up with the window, text, files and videos included, up to 1.5x.
 - Videos at Ultra's default size fill the document column at 16:9. Attachments are rounded tiles, with
   an open preview framed inside them.
+- **Safari updates:** opening a newer Glaze over an installed one offers **Update Glaze**, replaces the
+  old copy where it is (`/Applications` or `~/Applications`), quits it if it's running, and then says
+  what changed instead of repeating setup. An equal or newer Glaze, or the App Store's, is opened
+  rather than replaced. The new copy is swapped in only once it's fully copied, so a failed update
+  leaves the old Glaze working.
+- **Safari:** after installing, the disk image's copy of Glaze unregisters itself and ejects the image.
+  Running it had added a second Glaze to Safari's Extensions list; ticking that one left Glaze off
+  once the image was ejected.
 - Previous and Next above an item are themed buttons instead of a dark grey bar.
 - **Assignment pages:** the title lines up with the content, and the instructions and the details
   panel are frosted-glass cards, without the divider between them.

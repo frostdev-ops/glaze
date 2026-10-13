@@ -111,3 +111,6 @@ echo "Built release/Glaze.app and release/$name.zip"
 if [ -n "${NOTARY_PROFILE:-}${ASC_KEY_PATH:-}" ]; then
   sh scripts/make-dmg.sh release/Glaze.app "release/$name.dmg"
 fi
+# Keep the release copy out of Safari's Extensions list too (making the disk image registers it).
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+  -u release/Glaze.app >/dev/null 2>&1 || true

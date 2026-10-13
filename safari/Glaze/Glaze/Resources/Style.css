@@ -164,6 +164,12 @@ body[data-view="guide"] .guide { display: block; }
 
 .done-note { display: none; margin-top: 14px; text-align: center; }
 .state-on .done-note { display: block; }
+/* An update that finds Glaze already on has nothing left to set up: a centred confirmation instead of the steps. */
+.updated.state-on .steps { display: none; }
+body.updated.state-on[data-view="guide"] .guide { display: flex; flex-direction: column; justify-content: center; flex: 1; text-align: center; }
+.updated.state-on .guide header { flex-direction: column; gap: 10px; margin: 0; }
+.updated.state-on .guide header img { width: 112px; height: 112px; }
+.updated.state-on .guide header .note { max-width: 300px; margin: 6px auto 0; }
 
 .error:empty { display: none; }
 .error { margin: 12px 0 0; color: #d9480f; text-align: center; font-size: 12.5px; }
