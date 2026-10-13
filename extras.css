@@ -176,6 +176,16 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
 }
 @keyframes gz-grow-x { from { transform: scaleX(0); } }
 
+/* Download all, beside a folder's title. Quiet until pointed at; the fill is its progress. */
+.gz-dl {
+  flex: none; align-self: center; margin: 0 0 0 0.75rem; padding: 0.1rem 0.65rem; font: 600 12px/1.6 var(--gz-font); color: var(--gz-ink-muted);
+  background: linear-gradient(90deg, var(--gz-accent-soft) var(--gz-pct, 0%), transparent 0);
+  border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer;
+  transition: color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease);
+}
+.gz-dl::before { content: "\2193"; margin-right: 0.35em; }
+.gz-dl:is(:hover, :focus-visible, [data-busy]) { color: var(--gz-accent); border-color: var(--gz-accent); }
+
 /* Keyboard shortcut list. */
 #gz-keys {
   position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center;

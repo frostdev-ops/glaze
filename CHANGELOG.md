@@ -6,6 +6,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Download all.** Each folder and learning module in course content gets a "Download all" button
+  beside its title that saves the files inside, subfolders included, as one zip named after it. It
+  shows its progress, a second click cancels, and folders over 250 MB are refused rather than filling
+  your browser's memory. Files in items you haven't opened yet are left out, and the button says how
+  many, so a download never marks anything as viewed. On by default; switch it off under Extras.
+
 ## [2.0.4] — release candidate
 
 ### Added

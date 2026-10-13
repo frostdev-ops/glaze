@@ -25,7 +25,7 @@ domain.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — Ultra's course stripes blended into your palette, or set one by one.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
-- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Graded · 18/20") and grade percentages, folder previews and course progress (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts and hiding page parts you don't use (off by default).
+- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Graded · 18/20") and grade percentages, folder previews, course progress and Download all, which saves a folder's files as one zip (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts and hiding page parts you don't use (off by default).
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
 
@@ -129,8 +129,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Glaze stores your settings in `chrome.storage.sync` and your course names on your own device. It
 collects nothing. The only requests it makes are folder previews (to your own Blackboard site, when you
-hover a folder), your submission and grade status for due dates (to the same site) and a background
-image you choose. See [PRIVACY.md](PRIVACY.md).
+hover a folder), a folder's files when you click Download all (from the same site), your submission and
+grade status for due dates (to the same site) and a background image you choose. See [PRIVACY.md](PRIVACY.md).
 
 ## License
 

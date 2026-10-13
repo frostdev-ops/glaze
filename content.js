@@ -237,6 +237,7 @@
     if (tip && ultraTipShown()) hideTip();
     placeScene();
     renderProgress();
+    syncDownloads();
     recordCourses();
   };
   // ---- page loads ------------------------------------------------------------------------------
@@ -566,6 +567,107 @@
     if (!old) top[0].parentElement.before(bar);
   };
 
+  // ---- download all (Extras) -------------------------------------------------------------------
+  // A button on each folder and learning module in course content saves the files inside, subfolders
+  // included, as one zip named after it. Listed with the content API, fetched from the site you are on
+  // (Blackboard redirects the bytes to its file CDN, which allows it), zipped here, saved through a blob
+  // link. Items you haven't opened are left out: downloading is never what marks them viewed.
+  const MAX_ZIP = 250 * 2 ** 20; // ponytail: the whole zip is built in memory; stream to disk if folders outgrow it
+  const jobs = new Map(); // folder id -> { ctl, label, pct, done }
+  const paintDl = (fid) => {
+    const b = document.getElementById(`gz-dl-${fid}`);
+    const j = jobs.get(fid);
+    if (!b) return;
+    b.textContent = j?.label || 'Download all';
+    b.toggleAttribute('data-busy', !!j && !j.done);
+    b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
+  };
+  const download = async (fid, title) => {
+    const cid = courseId();
+    const ctl = new AbortController();
+    const job = { ctl, label: 'Finding files · Cancel', pct: 0 };
+    jobs.set(fid, job);
+    const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
+    say(job.label);
+    const list = (id) => fetch(`${location.origin}/learn/api/v1/courses/${cid}/contents/${id}/children?limit=200`, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status)))).then((j) => j.results || []);
+    const found = [];
+    const seen = new Set();
+    let skipped = 0;
+    // A folder or module is a directory; an Ultra document is a folder too (isBbPage), whose blocks hold its files.
+    // ponytail: first 200 children of each folder.
+    const walk = async (id, dir) => {
+      for (const c of await list(id)) {
+        const page = c.contentDetail?.[c.contentHandler]?.isBbPage;
+        if (/folder|lesson/.test(c.contentHandler) && !page) { await walk(c.id, `${dir}${GZ_ZIP.safeName(c.title)}/`); continue; }
+        const fs = (page ? (await list(c.id)).flatMap((k) => GZ_PAGE.files(k, location.origin)) : GZ_PAGE.files(c, location.origin)).filter((f) => !seen.has(f.url));
+        if (!fs.length) continue;
+        if (c.state !== 'Started' && c.state !== 'Completed') { skipped += 1; continue; }
+        for (const f of fs) { seen.add(f.url); found.push({ ...f, dir }); }
+      }
+    };
+    const mb = (n) => `${Math.round(n / 2 ** 20)} MB`;
+    try {
+      await walk(fid, '');
+      const known = found.reduce((n, f) => n + (f.size || 0), 0);
+      if (known > MAX_ZIP) throw new Error(`Too big: ${mb(known)}, over ${mb(MAX_ZIP)}`);
+      const out = [];
+      const taken = new Set();
+      let bytes = 0;
+      let failed = 0;
+      for (const [i, f] of found.entries()) {
+        say(`${i + 1} of ${found.length} · Cancel`, (i / found.length) * 100);
+        const r = await fetch(f.url, { credentials: 'same-origin', signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
+        if (!r?.ok) { failed += 1; continue; }
+        const data = new Uint8Array(await r.arrayBuffer());
+        bytes += data.length;
+        if (bytes > MAX_ZIP) throw new Error(`Too big: over ${mb(MAX_ZIP)}`);
+        out.push({ name: GZ_ZIP.unique(f.dir + GZ_ZIP.safeName(f.name), taken), data });
+      }
+      const left = skipped ? ` · ${skipped} unopened left out` : '';
+      if (!out.length) return say(found.length ? `Download failed${left}` : `No files${skipped ? ' you have opened' : ''}${left}`);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(GZ_ZIP.zip(out), { type: 'application/zip' }));
+      a.download = `${GZ_ZIP.safeName(title)}.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      say(`Saved ${out.length} file${out.length === 1 ? '' : 's'}${left}${failed ? ` · ${failed} failed` : ''}`);
+    } catch (e) {
+      say(ctl.signal.aborted ? 'Cancelled' : /^Too big/.test(e.message) ? e.message : 'Download failed');
+    } finally {
+      job.done = true;
+      paintDl(fid);
+      setTimeout(() => { if (jobs.get(fid) === job) { jobs.delete(fid); paintDl(fid); } }, 6000);
+    }
+  };
+  const FOLDER = /^(Folder|Learning Module)$/;
+  const syncDownloads = () => {
+    const on = settings.enhance.download && courseId();
+    if (!on) { for (const b of document.querySelectorAll('.gz-dl')) b.remove(); return; }
+    for (const item of document.querySelectorAll('.content-list-item[data-content-id]')) {
+      const fid = item.dataset.contentId;
+      // The item's own icon and title come first; an open folder's children follow them.
+      if (!FOLDER.test(item.querySelector('svg[aria-label]')?.getAttribute('aria-label')) || document.getElementById(`gz-dl-${fid}`)) continue;
+      const h3 = item.querySelector('h3');
+      if (!h3) continue;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.id = `gz-dl-${fid}`; // gz- ids are skipped by the sweep
+      b.className = 'gz-dl';
+      b.title = "Save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.";
+      // Inside Ultra's clickable row: keep the row from opening or folding.
+      for (const ev of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'keydown', 'keyup']) b.addEventListener(ev, (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const j = jobs.get(fid);
+        if (j && !j.done) j.ctl.abort();
+        else download(fid, h3.textContent.trim());
+      });
+      h3.after(b);
+      paintDl(fid);
+    }
+  };
+
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them. Never while typing, never with
   // a modifier, top frame only.
@@ -804,7 +906,7 @@
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
     if (observer && ['scores', 'urgency', 'inline'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (observer) renderProgress();
+    if (observer) { renderProgress(); syncDownloads(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
@@ -851,6 +953,7 @@
     hidePeek();
     closeKeys();
     document.getElementById('gz-progress')?.remove();
+    for (const b of document.querySelectorAll('.gz-dl')) b.remove();
     for (const l of links) l.remove();
     links = [];
     stopScene();

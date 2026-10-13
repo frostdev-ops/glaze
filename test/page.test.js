@@ -94,3 +94,23 @@ test('status chips beside due dates in course content', () => {
   assert.equal(S(gone, null, undefined), null);
   assert.equal(S(gone, null, null), null);
 });
+
+test('files in content items, as the content API sends them', () => {
+  const o = 'https://learn.example.edu';
+  // A File item.
+  const file = { contentHandler: 'resource/x-bb-file', contentDetail: { 'resource/x-bb-file': { file: { permanentUrl: '/bbcswebdav/pid-1-dt-content-rid-2_1/xid-2_1', fileName: 'cheat sheet.jpg', fileSize: 81601 } } } };
+  assert.deepEqual(P.files(file, o), [{ url: `${o}/bbcswebdav/pid-1-dt-content-rid-2_1/xid-2_1`, name: 'cheat sheet.jpg', size: 81601 }]);
+  // A document block: file links carry data-bbfile (HTML-escaped JSON); videos and tool links don't count.
+  const bf = (j) => JSON.stringify(j).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const rawText = `<div data-layout-row="r"><p><a data-bbid="x" data-bbfile="${bf({ linkName: 'Syllabus & Schedule.pdf', mimeType: 'application/pdf', render: 'inline' })}" href="${o}/bbcswebdav/pid-3-dt-content-rid-4_1/xid-4_1">Syllabus</a></p>`
+    + `<a data-bbfile="${bf({ fileName: 'Foto.jpg', fileSize: 72864 })}" href="/bbcswebdav/pid-3-dt-content-rid-5_1/xid-5_1">pic</a>`
+    + `<a data-bbfile="${bf({ src: 'https://video.example.com/V/Video?v=1', alt: 'Lecture' })}" href="https://video.example.com/V/Video?v=1">video</a>`
+    + `<a data-bbfile="${bf({ linkType: 'LTI', title: 'Tool' })}">tool</a>`
+    + `<a href="${o}/bbcswebdav/pid-3-dt-content-rid-6_1/xid-6_1">plain link</a>`
+    + `<a data-bbfile="${bf({ linkName: 'elsewhere.pdf' })}" href="https://other.example.com/bbcswebdav/x">elsewhere</a></div>`;
+  assert.deepEqual(P.files({ contentHandler: 'resource/x-bb-document', body: { rawText } }, o), [
+    { url: `${o}/bbcswebdav/pid-3-dt-content-rid-4_1/xid-4_1`, name: 'Syllabus & Schedule.pdf', size: undefined },
+    { url: `${o}/bbcswebdav/pid-3-dt-content-rid-5_1/xid-5_1`, name: 'Foto.jpg', size: 72864 },
+  ]);
+  for (const item of [null, {}, { body: { rawText: '<a data-bbfile="not json" href="/bbcswebdav/x">x</a>' } }]) assert.deepEqual(P.files(item, o), []);
+});
