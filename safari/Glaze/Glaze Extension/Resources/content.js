@@ -647,7 +647,7 @@
   // [card selector, its course id, where the badge goes]. Course list cards, recent courses, Grades tiles.
   const COURSE_CARDS = [
     ['article[id^="course-list-course-"]', (e) => e.id.slice(19), (e) => e.querySelector('h4[id^="course-name-"]')],
-    ['bb-recent-courses-view a[href*="/ultra/courses/_"]', (e) => e.getAttribute('href').match(/courses\/(_\d+_\d+)/)?.[1], (e) => e],
+    ['bb-recent-courses-view a[href*="/ultra/courses/_"]', (e) => e.getAttribute('href').match(/courses\/(_\d+_\d+)/)?.[1], (e) => e.querySelector('[class*="courseName"]')],
     ['.base-grades-course-tile', (e) => e.querySelector('a[href*="/grades"]')?.getAttribute('href').match(/(_\d+_\d+)\/grades/)?.[1], (e) => e.querySelector('.grades-header a.bb-click-target')],
   ];
   const badge = (el, label) => {

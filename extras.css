@@ -226,15 +226,16 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
 /* New grades: a badge on gradebook rows and course cards (content.js sets the label). */
 html[data-gz-enhance-newgrades] [data-gz-new]::after {
   content: attr(data-gz-new);
-  display: inline-block; margin-left: 0.5em; padding: 0 0.55em; border-radius: 999px;
+  /* align-self: in a flex link (a Grades page tile) it would otherwise stretch to the row's height. */
+  display: inline-block; align-self: center; flex: none; margin-left: 0.5em; padding: 0 0.55em; border-radius: 999px;
   font-size: 0.72rem; font-weight: 700; line-height: 1.6; letter-spacing: 0.02em; vertical-align: 0.12em; white-space: nowrap;
   color: var(--gz-accent-ink); background: var(--gz-accent);
   box-shadow: 0 0 10px color-mix(in srgb, var(--gz-accent) 45%, transparent);
   animation: var(--gz-tip-in);
 }
 /* Course names cut off with an ellipsis: the badge goes first, where it can't be cut. */
-html[data-gz-enhance-newgrades] h4[id^="course-name-"][data-gz-new]::after { content: none; }
-html[data-gz-enhance-newgrades] h4[id^="course-name-"][data-gz-new]::before {
+html[data-gz-enhance-newgrades] :is(h4[id^="course-name-"], [class*="courseName"])[data-gz-new]::after { content: none; }
+html[data-gz-enhance-newgrades] :is(h4[id^="course-name-"], [class*="courseName"])[data-gz-new]::before {
   content: attr(data-gz-new);
   display: inline-block; margin-right: 0.5em; padding: 0 0.55em; border-radius: 999px;
   font-size: 0.72rem; font-weight: 700; line-height: 1.6; vertical-align: 0.12em;
