@@ -148,14 +148,22 @@ real Borealis background):
 
 https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
-## What's new in 2.0.4
+## What's new in 2.1
 
 For the Mac App Store's "What's New" field; the Chrome Web Store has none.
 
-> Due dates now say where your work stands: "in 2 days · Unopened", "Submitted", "Graded · 18/20", or
-> "Past due" when something really is missing. No more "2 weeks ago" next to work you've handed in.
+> Fonts: about forty, each shown in its own face, for text, headings and code. Share your whole look
+> with a classmate as one line of text.
 >
-> Loading spinners and placeholders match your colors, and the menu keeps its glow in narrow windows.
+> Due dates say where your work stands: "in 2 days · Unopened", "Submitted", "Submitted late",
+> "Graded · 18/20". Grades show on your course cards, new grades and new course content get a badge
+> that takes you straight to them, and a what-if calculator shows what you need on what's left.
+>
+> Press Ctrl+K (⌘K) to jump to any course or item. Download a whole folder as one zip. If your session
+> times out mid-post, Glaze offers back what you wrote.
+>
+> Dark documents and focus mode for reading, course tint, settings search, and Glaze in Spanish,
+> French, German, Brazilian Portuguese and Dutch.
 
 ## What's new in 2.0.3
 

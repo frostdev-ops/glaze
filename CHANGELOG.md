@@ -6,6 +6,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-13
+
 ### Added
 
 - **Fonts:** about forty to choose from, each shown in its own face in a new font list. Readable
@@ -30,7 +32,6 @@ All notable changes to Glaze are documented here. The format follows
   Courses and Grades pages say "3 new items" for courses you've opened before; clicking it opens the
   course there. The first visit to a course counts nothing as new. An item stays marked for the visit
   in which it's first on the page. On by default under Extras. Ultra itself marks no new content.
-- The new-grade count on course cards had text the same color as its pill; it's readable now.
 - **What-if calculator** on a course's gradebook: type scores for work that isn't graded yet and see
   the overall grade they'd make, or set a target and see the score you'd need on everything left. It
   follows the course's own category weights, and only once it reproduces the overall grade Blackboard
@@ -90,36 +91,10 @@ All notable changes to Glaze are documented here. The format follows
   translated yet, stays English. Settings search finds the translated names, with or without accents.
   The store description is translated too; the name stays Glaze. The translations are machine-made
   and waiting for native speakers to review them.
-
-
-### Changed
-
-- **Due dates in any language.** Due-date status, urgency, "Submitted late" and date hints used to
-  read only US-style dates (10/18/26, 11:59 PM). In course content and on an assignment's page the
-  date now comes from your gradebook, whatever language Blackboard shows; elsewhere Glaze reads it the
-  way Blackboard writes it for your language: 18.10.26, 18/10/2026, 2026/10/18, month names, a 24-hour
-  clock, Arabic digits. A discussion with two due dates now counts down to the last one, the date your
-  gradebook keeps.
 - **Glaze for iPhone and iPad.** Safari on iOS and iPadOS 18 or newer, from the same App Store listing as
   the Mac app. The app is a two-step guide in the Mac app's style, in light and dark: turn Glaze on in
   Settings, then allow it on your Blackboard site. On iOS 26.2 and newer its button opens Safari's
   extension settings, and the guide ticks the first step off as soon as Glaze is on.
-
-### Changed
-
-- **Touch screens.** Cards and buttons no longer stay lifted or scaled after a tap, and Expressive's pointer
-  light no longer sticks where a finger last touched. Shorter descriptions stay full length on touch
-  screens, where there's no hover to expand them.
-- **The popup** fills Safari's sheet on iPhone and opens wider on iPad, with fingertip-sized swatches,
-  switches and choices.
-- **The editor at phone width:** the section links scroll in one row instead of stacking four deep,
-  sliders get the full width under their labels, and segmented choices wrap instead of running out of
-  their card. Text fields no longer make iOS zoom in when you tap them.
-
-## [2.0.4] — release candidate
-
-### Added
-
 - **Smoother page changes.** Ultra builds each page in view: a spinner, then parts arriving and
   pushing each other down. Glaze now holds a page hidden while it loads and reveals it once it's
   built, resolving from a blur in one motion; a spinner shows only if the wait outlasts 0.4 s. Clicking
@@ -130,10 +105,23 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Changed
 
+- **Due dates in any language.** Due-date status, urgency, "Submitted late" and date hints used to
+  read only US-style dates (10/18/26, 11:59 PM). In course content and on an assignment's page the
+  date now comes from your gradebook, whatever language Blackboard shows; elsewhere Glaze reads it the
+  way Blackboard writes it for your language: 18.10.26, 18/10/2026, 2026/10/18, month names, a 24-hour
+  clock, Arabic digits. A discussion with two due dates now counts down to the last one, the date your
+  gradebook keeps.
+- **Touch screens.** Cards and buttons no longer stay lifted or scaled after a tap, and Expressive's pointer
+  light no longer sticks where a finger last touched. Shorter descriptions stay full length on touch
+  screens, where there's no hover to expand them.
+- **The popup** fills Safari's sheet on iPhone and opens wider on iPad, with fingertip-sized swatches,
+  switches and choices.
+- **The editor at phone width:** the section links scroll in one row instead of stacking four deep,
+  sliders get the full width under their labels, and segmented choices wrap instead of running out of
+  their card. Text fields no longer make iOS zoom in when you tap them.
 - **Grade pills** are one width and one line in every row, sized for the longest grade ("100 / 100 ·
   100%" with the rubric icon); "Not graded" no longer wraps and long grades no longer lose their ends.
   A course gradebook's Grade column takes the room from Item Name.
-
 - **Due-date status** replaces countdowns in course content: beside each due date, where the work
   stands. "in 2 days · Unopened" or "· Opened" (from Ultra's progress circle), "Submitted · due in 2
   days", "Submitted", "Graded · 18/20" in its score band's color, "Exempt", "Done", and "Past due ·
@@ -155,6 +143,9 @@ All notable changes to Glaze are documented here. The format follows
   menu into a drawer; it had Ultra's purple bar back.
 - **Due-date urgency** no longer flags work you've handed in, in any course: due soon and due today
   now check it too, not only overdue, and courses without progress circles check the gradebook.
+- Glaze no longer stops with an error on an /ultra/ address that isn't a web page, such as a missing
+  file on Blackboard's content server.
+- In Firefox and Safari, the editor's preview follows each change as you make it, as in Chrome.
 
 ## [2.0.3] — 2026-10-13
 
@@ -277,7 +268,7 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
-[2.0.4]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.4-rc.1
+[2.1.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.0
 [2.0.3]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.3
 [2.0.2]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.2
 [2.0.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.1
