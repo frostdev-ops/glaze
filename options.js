@@ -24,6 +24,87 @@ const hint = (msg, err = false) => {
   if (msg && !err) hintTimer = setTimeout(() => { h.textContent = ''; }, 2500);
 };
 
+// ---- search: each child of a section (or of a .group) is a setting. It matches on its own text,
+// titles and labels, its section and group headings, and the notes it names by aria-describedby or
+// aria-labelledby, which show and hide with it. Nothing here lists the settings. ----
+const finder = $('#find');
+const filter = () => {
+  const words = GZ_FIND.parse(finder.value);
+  const on = words.length > 0;
+  document.body.classList.toggle('finding', on);
+  const marks = [];
+  const mark = (root, heading = false) => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let t; (t = w.nextNode());) {
+      for (const [a, b] of GZ_FIND.spans(t.data, words, heading)) {
+        const r = new Range();
+        r.setStart(t, a);
+        r.setEnd(t, b);
+        marks.push(r);
+      }
+    }
+  };
+  const named = (el) => [el, ...el.querySelectorAll('[aria-describedby], [aria-labelledby]')]
+    .flatMap((e) => `${e.getAttribute('aria-describedby') || ''} ${e.getAttribute('aria-labelledby') || ''}`.split(' '))
+    .map((id) => id && document.getElementById(id)).filter(Boolean);
+  const said = (el) => [el, ...el.querySelectorAll('[title], [aria-label], [placeholder]')]
+    .map((e) => `${e.title} ${e.getAttribute('aria-label') || ''} ${e.placeholder || ''}`).join(' ');
+  let n = 0;
+  for (const sec of $$('.editor > section')) {
+    const h2 = sec.querySelector('h2');
+    const parts = [...sec.querySelectorAll(':scope > :not(h2, .group), :scope > .group > :not(h3)')];
+    const notes = new Map(parts.map((el) => [el, named(el)]));
+    const isNote = new Set([...notes.values()].flat());
+    for (const el of isNote) el.classList.toggle('miss', on);
+    let any = false;
+    for (const el of parts) {
+      if (isNote.has(el)) continue;
+      const h3 = el.parentElement.querySelector(':scope > h3');
+      const text = [el.textContent, said(el), ...notes.get(el).map((x) => x.textContent)].join(' ');
+      const hit = !on || (!el.closest('[hidden]') && GZ_FIND.matches(`${h2.textContent} ${h3?.textContent || ''}`, text, words));
+      el.classList.toggle('miss', !hit);
+      if (!hit || !on) continue;
+      any = true;
+      n++;
+      for (const x of [el, ...notes.get(el)]) { x.classList.remove('miss'); mark(x); }
+    }
+    for (const g of sec.querySelectorAll(':scope > .group')) {
+      const empty = on && !g.querySelector(':scope > :not(h3, .miss)');
+      g.classList.toggle('miss', empty);
+      if (on && !empty) for (const h3 of g.querySelectorAll(':scope > h3')) mark(h3, true);
+    }
+    sec.classList.toggle('miss', on && !any);
+    if (on && any) mark(h2, true);
+  }
+  for (const a of $$('.top nav a')) a.classList.toggle('miss', !!$(a.hash)?.classList.contains('miss'));
+  if (window.Highlight) CSS.highlights.set('find', new Highlight(...marks));
+  const msg = !on ? '' : n ? `${n} setting${n > 1 ? 's' : ''}` : 'No settings match';
+  if ($('#find-status').textContent !== msg) $('#find-status').textContent = msg;
+};
+finder.addEventListener('input', filter);
+finder.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !finder.value) return;
+  e.preventDefault();
+  finder.value = '';
+  filter();
+});
+addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input:is([type="text"], [type="url"], [type="search"]), textarea, [contenteditable]')) return;
+  e.preventDefault();
+  finder.focus();
+  finder.select();
+});
+
+// ---- what's new: once per version, after an update (lib/news.js) ----
+GZ_NEWS.check((notes) => {
+  GZ_NEWS.seen();
+  if (!notes.length) return;
+  $('#news-title').textContent = `New in ${notes.map(([v]) => v).join(', ')}`;
+  $('#news-list').replaceChildren(...notes.flatMap(([, lines]) => lines).map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+  $('#news').hidden = false;
+});
+$('#news-close').addEventListener('click', () => { $('#news').hidden = true; finder.focus(); });
+
 GZ_UI.load().then((s) => {
   const frame = $('#preview');
   // A pasted theme code shows in the preview until it is used or cancelled.
@@ -146,6 +227,8 @@ GZ_UI.load().then((s) => {
     $('[data-key="auto.on"]').checked = s.auto.on;
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
     document.body.classList.toggle('off', !s.enabled);
+    // Redrawn lists and shown/hidden controls: match again.
+    if (finder.value) filter();
   };
   // Puts every control back in line with the state (load, import, reset, preset pick).
   const fill = () => {
