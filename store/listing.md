@@ -40,6 +40,7 @@ At-a-glance helpers, on from the start:
 
 • Status beside every due date: "in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20", and grade percentages
 • Score bars under gradebook scores
+• Your overall grade on each course card, when your instructor shares it
 • Folder previews: hover a folder to see what's inside and what's due
 • Course progress: how much of a course you've completed
 • New-grade badges on gradebook rows and course cards
@@ -63,7 +64,8 @@ Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed 
 Privacy: Glaze stores your settings in Chrome's sync storage, and your course names, which grades you've seen and a backup of what you type
 (until it's posted, 14 days at most) on your device. It
 collects nothing and has no server. The only requests it makes go to your own Blackboard site, for folder
-previews and for which items you've submitted, opened or had graded; to Google Fonts or jsDelivr for a web
+previews, for which items you've submitted, opened or had graded, and for your overall grade in each
+course; to Google Fonts or jsDelivr for a web
 font you choose; and to a background image you choose. The source is open at
 https://github.com/frostdev-ops/glaze.
 
@@ -97,7 +99,8 @@ pages the extension is for. The content script injects stylesheets, sets CSS cus
 on, it reads dates and grades already shown on the page to display due-date status and percentages, and
 folder previews ask the same Blackboard site for a folder's contents. Due-date status asks that site's
 gradebook which of the user's items are submitted, late or graded, and new-grade badges ask it which
-grades are new in the courses listed on the page. The command palette asks the site for the user's
+grades are new in the courses listed on the page, and card grades ask it for the user's overall grade
+in each course shown on the Courses page. The command palette asks the site for the user's
 course list and the current course's items. Apart from a web font the user picks (downloaded from Google
 Fonts or jsDelivr, without cookies or the page's address), nothing is sent anywhere else.
 

@@ -131,7 +131,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 Glaze stores your settings in `chrome.storage.sync`, and your course names, which grades you've seen
 and a backup of what you type in Blackboard's editors (until it's posted, 14 days at most) on your own
 device. It collects nothing. The only requests it makes go to your own Blackboard site
-(folder previews; your grades and submission status for due dates, new-grade badges and the calculator;
+(folder previews; your grades and submission status for due dates, new-grade badges, the calculator and
+your overall grade on course cards;
 your course list and a course's items for the command palette), to Google Fonts or jsDelivr for a web
 font you choose, and to a background image you choose. See [PRIVACY.md](PRIVACY.md).
 

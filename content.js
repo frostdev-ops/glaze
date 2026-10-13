@@ -11,7 +11,7 @@
   const html = document.documentElement;
   const SHEETS = ['theme.css', 'motion.css', 'extras.css'];
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -144,8 +144,9 @@
   // Absolute URLs: Ultra's <base href> points at its CDN.
   const api = (path, base = '/learn/api/v1') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+  // One /users/me for everything that asks at once; asked again only if it failed.
   let meId = null;
-  const me = () => (meId ? Promise.resolve(meId) : api('/users/me').then((m) => (meId = m.id)));
+  const me = () => (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meId = null; throw e; }));
   // The student's courses, once per page: names for the command palette, and each membership's
   // due-date exception setting.
   let memberships = null;
@@ -169,7 +170,29 @@
     });
     return Promise.all([excepted, ...dates]).then(([exc, ...when]) => new Set(waiting.filter((g, i) => !exc(g.columnId) && GZ_GRADES.late(when[i], g.column.dueDate)).map((g) => g.columnId)));
   };
-  // cid → { at, pending, results, grades (by content item), late (column ids), key }. Lateness is
+
+  // ---- grades on course cards (Extras) -------------------------------------------------------
+  // On the Courses page each card's status line ("Open") gains the course's overall grade, drawn by CSS
+  // from attributes. Grid and list views share one card; the Recent Courses strip has its own. A card's
+  // book is asked for only once the card is on screen.
+  const CARD_STATUS = 'article.course-element-card[data-course-id] .course-status, a[class*="courseCard"] [class*="courseStatus"]';
+  const onScreen = new Set();
+  const cardsIO = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) onScreen.add(e.target); else onScreen.delete(e.target);
+    tagCards();
+  });
+  const tagCards = () => {
+    if (!observer || !settings.enhance.overall || location.pathname !== '/ultra/course') return;
+    for (const el of document.querySelectorAll(CARD_STATUS)) cardsIO.observe(el);
+    for (const el of onScreen) {
+      if (!el.isConnected) { onScreen.delete(el); cardsIO.unobserve(el); continue; }
+      const cid = el.closest('[data-course-id]')?.dataset.courseId || el.closest('a')?.href.match(/\/courses\/(_\d+_\d+)\//)?.[1];
+      const g = cid && bookFor(cid).overall;
+      if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); }
+      else if (g === null) { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
+    }
+  };
+  // cid → { at, pending, results, grades (by content item), overall, late (column ids), key }. Lateness is
   // asked only by the due-date chips (late = true), so a course card never costs attempt requests. An
   // answer that changes anything re-tags the page.
   const books = new Map();
@@ -184,7 +207,7 @@
           b.pending = false;
           const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])]]);
           if (key === b.key) return;
-          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), late: lateCols, key });
+          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results), late: lateCols, key });
           onBook();
         }))
         .catch(() => { b.pending = false; });
@@ -197,6 +220,7 @@
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagExtras = (roots) => {
+    tagCards();
     const { scores, urgency, inline } = settings.enhance;
     if (!scores && !urgency && !inline) return;
     const now = new Date();
@@ -284,7 +308,7 @@
   const release = () => {
     const now = performance.now();
     for (const [el, t] of held) {
-      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || books.get(courseId())?.pending || loaderIn(el))) continue;
+      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || [...books.values()].some((b) => b.pending) || loaderIn(el))) continue;
       held.delete(el);
       // Cards already there arrive with the page, not one by one after it.
       for (const c of el.querySelectorAll('.content-list-item, .element-card')) c.setAttribute('data-gz-held', '');
@@ -347,6 +371,8 @@
     timer = 0;
     dirty.clear();
     full = false;
+    cardsIO.disconnect();
+    onScreen.clear();
     clearTags(TAGS);
   };
 
@@ -1213,7 +1239,7 @@
     const was = enhanced;
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
-    if (observer && ['scores', 'urgency', 'inline'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
+    if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
     if (observer) { renderProgress(); renderCalc(); }
     if (!s.enhance.newgrades) clearTags(['data-gz-new']);
     else if (observer) renderNew();

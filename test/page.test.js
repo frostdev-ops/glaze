@@ -105,3 +105,18 @@ test('status chips beside due dates in course content', () => {
   assert.equal(S(gone, null, undefined), null);
   assert.equal(S(gone, null, null), null);
 });
+
+test('the overall grade for course cards', () => {
+  const col = { externalGrade: true, visible: true, visibleInBook: true };
+  // As Ultra's Grades page shows it: 77.30273 of 93.75 is 82.45%, cut, not rounded to 82.46.
+  assert.deepEqual(P.overall([{ column: { contentId: '_1_1' } }, { effectiveScore: 77.30273, pointsPossible: 93.75, column: col }]), { label: '82.45%', tone: 'graded-mid' });
+  assert.deepEqual(P.overall([{ effectiveScore: 90, pointsPossible: 100, column: col }]), { label: '90%', tone: 'graded-hi' });
+  assert.deepEqual(P.overall([{ effectiveScore: 8.999, pointsPossible: 10, column: col }]), { label: '89.99%', tone: 'graded-mid' });
+  assert.deepEqual(P.overall([{ effectiveScore: 61, pointsPossible: 100, displayGrade: { text: 'D-' }, column: col }]), { label: 'D-', tone: 'graded-lo' });
+  // Nothing graded yet, hidden from students, or no overall column: no chip.
+  assert.equal(P.overall([{ effectiveScore: null, pointsPossible: 0, column: col }]), null);
+  assert.equal(P.overall([{ effectiveScore: 50, pointsPossible: 100, column: { ...col, visible: false } }]), null);
+  assert.equal(P.overall([{ effectiveScore: 50, pointsPossible: 100, column: { ...col, visibleInBook: false } }]), null);
+  assert.equal(P.overall([{ effectiveScore: 50, pointsPossible: 100, column: { contentId: '_1_1' } }]), null);
+  assert.equal(P.overall(undefined), null);
+});

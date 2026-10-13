@@ -37,6 +37,12 @@ All notable changes to Glaze are documented here. The format follows
   session times out before it's posted, a small bar above the empty editor offers it back: Restore puts
   it in with its formatting, Dismiss deletes it. The copy is deleted once your post shows up on the
   page, and after 14 days either way. On by default under Extras; switching it off deletes every copy.
+- **Grades on course cards.** On the Courses page, each course shows your overall grade beside its
+  status, "82.45%" as Ultra's Grades page writes it, in its score band's color like the due-date
+  chips. Only where the instructor shares the overall grade with students; otherwise nothing. Works
+  in Recent Courses and in the card and list views of all courses. The grade comes from the same
+  gradebook request as due-date status, asked only for courses on screen and at most once a minute
+  each, so opening a course right after reuses it. An Extra, on by default.
 
 ## [2.0.4] — release candidate
 

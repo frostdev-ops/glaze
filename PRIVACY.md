@@ -55,6 +55,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an
   ordinary font download from your browser. Opening the font list in the editor loads small previews
   of the fonts' names from Google Fonts the same way. Built-in fonts load nothing.
+- **Grades on course cards** (an Extra, on by default). To show your overall grade on each course on
+  the Courses page, Glaze makes the same gradebook request for each course whose card is on screen, at
+  most once a minute per course, to the site you are on, with your existing session. The answer is kept
+  in memory only. Nothing is stored or sent anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
 

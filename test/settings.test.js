@@ -96,9 +96,9 @@ test('declutter tabs keep only known slugs, once each', () => {
   assert.deepEqual(b.declutter.tabs, [], 'defaults are not shared between results');
 });
 
-test('score bars, countdowns, folder previews, course progress and draft backup are on by default; the rest are off', () => {
+test('score bars, countdowns, folder previews, course progress, card grades and draft backup are on by default; the rest are off', () => {
   const on = Object.entries(G.GZ_DEFAULTS.enhance).filter(([, v]) => v).map(([k]) => k);
-  assert.deepEqual(on.sort(), ['calc', 'drafts', 'inline', 'newgrades', 'palette', 'previews', 'progress', 'scores']);
+  assert.deepEqual(on.sort(), ['calc', 'drafts', 'inline', 'newgrades', 'overall', 'palette', 'previews', 'progress', 'scores']);
   assert.equal(G.GZ_SANITIZE({ enhance: { scores: false } }).enhance.scores, false, 'an explicit off is kept');
 });
 
