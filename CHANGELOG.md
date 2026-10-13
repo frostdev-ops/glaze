@@ -6,6 +6,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.1.1] — 2026-10-13
+
 ### Fixed
 
 - **Folder previews, Download all and course progress in any language.** They found folders and
@@ -276,6 +278,7 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
+[2.1.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.1
 [2.1.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.0
 [2.0.3]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.3
 [2.0.2]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.2
