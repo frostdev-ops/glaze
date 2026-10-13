@@ -79,10 +79,11 @@ endorsed by, or sponsored by Anthology Inc.
 ## Single-purpose statement
 
 Glaze has one purpose: to customise how Blackboard Ultra pages look and read, according to the user's
-chosen colors, layout, motion and display preferences. The optional helpers (countdowns, previews,
-progress, shortcuts) only present information already on the user's Blackboard pages; the typing
-backup keeps a local copy of what the user writes on those pages until it is posted. Every permission
-and every line of code serves that purpose.
+chosen colors, layout, motion and display preferences, and to help the user keep track of and keep
+their own coursework on those pages. The optional helpers (due-date status, grade badges, previews,
+progress, shortcuts) only present information already on the user's Blackboard pages; Download all saves
+files the user can already open there, and the typing backup keeps a local copy of what the user writes
+on those pages until it is posted. Every permission and every line of code serves that purpose.
 
 ## Permission justifications
 
