@@ -13,7 +13,8 @@ All notable changes to Glaze are documented here. The format follows
   days", "Submitted", "Graded · 18/20" in its score band's color, "Exempt", "Done", and "Past due ·
   Not submitted" in red. A past due date whose status Glaze can't know (an external tool's item, say)
   gets no chip, instead of an anxious "2 weeks ago"; outside course content only upcoming dates get one.
-  The status comes from your Blackboard's gradebook, asked at most once a minute per course.
+  The same chip sits beside the due date on an assignment's own page. The status comes from your
+  Blackboard's gradebook, asked at most once a minute per course.
 
 ### Fixed
 

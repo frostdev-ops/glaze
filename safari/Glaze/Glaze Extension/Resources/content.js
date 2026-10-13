@@ -133,13 +133,15 @@
     } catch { /* extension reloaded under the tab */ }
   };
 
-  // Ultra's details lists put the label one element up: "Assessment due date" / "10/11/26, 11:59 PM".
-  const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '');
+  // Ultra's details lists put the label one element up: "Assessment due date" / "10/11/26, 11:59 PM";
+  // an assignment's own page puts both in a .due-date-container.
+  const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '') || !!el?.closest('.due-date-container');
 
-  // Course content's due dates carry a status: Ultra's progress circle where the course tracks progress,
-  // and the gradebook (submitted, graded, exempt). The gradebook is asked of the user's own Blackboard
-  // (same origin, their session) at most once a minute per course, and only when a course item shows a
-  // due date; an answer that changes anything re-tags the page. undefined until it answers.
+  // Due dates in course content and on an assignment's own page carry a status: Ultra's progress circle
+  // where the course tracks progress, and the gradebook (submitted, graded, exempt). The gradebook is
+  // asked of the user's own Blackboard (same origin, their session) at most once a minute per course, and
+  // only when one of those due dates is on the page; an answer that changes anything re-tags the page.
+  // undefined until it answers.
   let meId = null;
   let book = { cid: null, at: 0, grades: undefined, key: '' };
   const gradesIn = () => {
@@ -191,20 +193,22 @@
           // tracking) and gradebook record say where the work stands.
           const item = el.closest('.content-list-item[data-content-id]');
           const circle = item?.querySelector('.js-review-state-icon-button')?.getAttribute('aria-checked') ?? null;
+          // An assignment's own page: the due date in its details card, its id in the address.
+          const pageId = !item && el.closest('.due-date-container') && location.pathname.match(/\/assessment\/(_\d+_\d+)\//)?.[1];
           // A discussion's outline item is a link with its own id; the gradebook knows the discussion's.
-          const grades = item && gradesIn();
-          const grade = grades ? grades.get(item.dataset.contentId)
-            ?? grades.get(item.querySelector('a[href*="/discussion/"]')?.getAttribute('href').match(/\/discussion\/(_\d+_\d+)/)?.[1]) : undefined;
-          // Nothing is urgent once it's done. Outside course content a past date may well be done, and
-          // the stream says "Past due" itself.
+          const grades = (item || pageId) && gradesIn();
+          const grade = !grades ? undefined : pageId ? grades.get(pageId) : grades.get(item.dataset.contentId)
+            ?? grades.get(item.querySelector('a[href*="/discussion/"]')?.getAttribute('href').match(/\/discussion\/(_\d+_\d+)/)?.[1]);
+          // Nothing is urgent once it's done. Elsewhere a past date may well be done, and the stream
+          // says "Past due" itself.
           let state = urgency && GZ_PAGE.due(text, now);
-          if (state && (GZ_PAGE.isDone(circle, grade) || (!item && state === 'overdue'))) state = null;
+          if (state && (GZ_PAGE.isDone(circle, grade) || (!item && !pageId && state === 'overdue'))) state = null;
           if (state) el.setAttribute('data-gz-due', state);
           else el.removeAttribute('data-gz-due');
           // The chip is drawn by CSS from these attributes: no element is added to Ultra's tree. In course
           // content it says where the work stands; elsewhere only how long is left, never how long ago.
           let chip = null;
-          if (inline && item) chip = GZ_PAGE.status(text, circle, grade, now);
+          if (inline && (item || pageId)) chip = GZ_PAGE.status(text, circle, grade, now);
           else if (inline) {
             const w = GZ_PAGE.when(text, now);
             if (w && !w.title.startsWith('Was due')) chip = { label: w.rel, tone: '' };
