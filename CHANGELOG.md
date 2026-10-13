@@ -28,6 +28,10 @@ All notable changes to Glaze are documented here. The format follows
   follows the course's own category weights, and only once it reproduces the overall grade Blackboard
   shows; when a course uses rules Glaze can't read (dropped scores, say), it says so instead of
   guessing. A course with no overall grade gets a plain share of points, labelled as just that.
+- **Command palette:** Ctrl+K (⌘K on a Mac) to jump to a course, an item in the course you're in, a
+  course tab or a Blackboard page, or to switch a palette, the motion level or an Extra. Fuzzy search,
+  keyboard first; it stays out of the way while you type in an editor. On by default; switch it off
+  under Extras.
 
 ## [2.0.4] — release candidate
 

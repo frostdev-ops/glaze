@@ -48,7 +48,8 @@ At-a-glance helpers, on from the start:
 More you can switch on:
 
 • Due-date urgency for overdue and soon-due items
-• Keyboard shortcuts for courses, calendar, grades and messages
+• Keyboard shortcuts for courses, calendar, grades and messages, and a command palette (Ctrl+K) to jump
+  to any course, item or setting
 • Hide parts of the page you don't use
 
 Everything lives in one editor page with a live preview; the popup keeps the quick controls. Share
@@ -91,7 +92,9 @@ pages the extension is for. The content script injects stylesheets, sets CSS cus
 on, it reads dates and grades already shown on the page to display due-date status and percentages, and
 folder previews ask the same Blackboard site for a folder's contents. Due-date status asks that site's
 gradebook which of the user's items are submitted, late or graded, and new-grade badges ask it which
-grades are new in the courses listed on the page. Nothing is sent anywhere else.
+grades are new in the courses listed on the page. The command palette asks the site for the user's
+course list and the current course's items. Apart from a web font the user picks (downloaded from Google
+Fonts or jsDelivr, without cookies or the page's address), nothing is sent anywhere else.
 
 **web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**
 The content script injects the stylesheets as `<link>`s it owns, so the master switch can add and remove

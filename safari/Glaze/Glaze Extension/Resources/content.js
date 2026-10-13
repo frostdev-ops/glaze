@@ -146,7 +146,8 @@
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
   let meId = null;
   const me = () => (meId ? Promise.resolve(meId) : api('/users/me').then((m) => (meId = m.id)));
-  // The student's courses, once per page, for each membership's due-date exception setting.
+  // The student's courses, once per page: names for the command palette, and each membership's
+  // due-date exception setting.
   let memberships = null;
   const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`)).then((j) => j.results || []).catch(() => (memberships = null, [])));
   // Submitted late: the latest attempt against the due date, for work waiting to be graded. An
@@ -737,6 +738,7 @@
     };
     for (const [k, [, label]] of Object.entries(GO)) row(['g', k], label);
     row(['/'], 'Search');
+    if (settings.enhance.palette) row([/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl', 'K'], 'Go to anything');
     row(['?'], 'Show or hide this list');
     const panel = document.createElement('div');
     panel.className = 'gz-keys-panel';
@@ -768,6 +770,144 @@
         if (keysBox) closeKeys();
         else openKeys();
       }
+    }, true);
+  }
+
+  // ---- command palette (Extras) --------------------------------------------------------------
+  // Ctrl+K (⌘K on a Mac) opens one search over Blackboard's pages, your courses, this course's tabs
+  // and items, and Glaze's own switches. Never while typing (Ultra's editor uses Ctrl+K for links),
+  // top frame only. Courses and items are asked of Ultra's own APIs once per page, when it first opens.
+  const TOOLS = [['/ultra/course', 'Courses'], ['/ultra/calendar', 'Calendar'], ['/ultra/grades', 'Grades'], ['/ultra/messages', 'Messages'],
+    ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
+  const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
+    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', calc: 'What-if calculator' };
+  const go = (path) => () => location.assign(location.origin + path);
+  const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
+  const contents = new Map(); // cid → Promise of the course's items
+  const courseItems = (cid) => {
+    if (!contents.has(cid)) {
+      contents.set(cid, api(`/courses/${cid}/contents?recursive=true&limit=200`, '/learn/api/public/v1').then((j) => {
+        const all = j.results || [];
+        const title = new Map(all.map((c) => [c.id, c.title]));
+        return all.filter((c) => c.availability?.available !== 'No' && c.links?.[0]?.href).map((c) => ({ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(c.links[0].href.replace(/^https?:\/\/[^/]+/, '')) }));
+      }, () => []));
+    }
+    return contents.get(cid);
+  };
+  // Everything the palette can do, built when it opens.
+  const commands = async () => {
+    const cid = courseId();
+    // A tab's name without its count badge ("Announcements 12").
+    const tabName = (a) => { const c = a.cloneNode(true); for (const b of c.querySelectorAll('[class*="badge" i]')) b.remove(); return c.textContent.trim(); };
+    const here = cid ? [...document.querySelectorAll('.bb-ui-navigation-list-horizontal a[href]')].map((a) => ({ label: tabName(a), hint: 'This course', group: 'Go to', run: () => a.click() })).filter((c) => c.label) : [];
+    const [courses, items] = await Promise.all([myCourses(), cid ? courseItems(cid) : []]);
+    const s = settings;
+    return [
+      ...here,
+      ...TOOLS.map(([path, label]) => ({ label, hint: 'Blackboard', group: 'Go to', run: go(path) })),
+      ...courses.filter((m) => m.course).sort((a, b) => !!a.course.isClosed - !!b.course.isClosed)
+        .map((m) => ({ label: m.course.name, hint: m.course.isOrganization ? 'Organization' : m.course.isClosed ? 'Closed course' : m.course.courseId || 'Course', group: 'Courses', run: go(`/ultra/courses/${m.courseId}/outline`) })),
+      ...items,
+      ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: `Palette: ${name}`, hint: s.preset === name && !s.auto.on ? 'Current' : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
+      ...['off', 'subtle', 'expressive'].map((level) => ({ label: `Motion: ${level[0].toUpperCase()}${level.slice(1)}`, hint: s.motion.level === level ? 'Current' : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
+      ...Object.entries(EXTRAS).map(([k, label]) => ({ label: `${s.enhance[k] ? 'Turn off' : 'Turn on'} ${label.toLowerCase()}`, hint: 'Glaze extra', group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
+      { label: 'Turn the theme off', hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
+    ];
+  };
+  let cmd = null; // { box, input, list, all, shown, active, back }
+  const closeCmd = () => {
+    if (!cmd) return;
+    cmd.box.remove();
+    if (cmd.back?.isConnected) cmd.back.focus({ preventScroll: true });
+    cmd = null;
+  };
+  const showCmd = () => {
+    const q = cmd.input.value;
+    // Empty: every page and course, then this course's first items, then Glaze. Typed: the best 40.
+    cmd.shown = q.trim()
+      ? cmd.all.map((c) => [c, Math.max(GZ_PAGE.fuzzy(q, c.label), GZ_PAGE.fuzzy(q, `${c.hint} ${c.label}`) - 2)]).filter(([, s]) => s >= 0).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([c]) => c)
+      : [...cmd.all.filter((c) => c.group !== 'In this course' && c.group !== 'Glaze'), ...cmd.all.filter((c) => c.group === 'In this course').slice(0, 8)];
+    cmd.active = 0;
+    cmd.list.replaceChildren(...cmd.shown.map((c, i) => {
+      const li = document.createElement('li');
+      li.id = `gz-cmd-${i}`;
+      li.setAttribute('role', 'option');
+      const label = document.createElement('span');
+      label.textContent = c.label;
+      const hint = document.createElement('small');
+      hint.textContent = c.hint && c.hint !== c.group ? `${c.group} · ${c.hint}` : c.group;
+      li.append(label, hint);
+      li.addEventListener('pointermove', () => { if (cmd.active !== i) { cmd.active = i; mark(); } });
+      li.addEventListener('click', () => runCmd(i));
+      return li;
+    }));
+    if (!cmd.shown.length) cmd.list.append(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: cmd.loading ? 'Loading…' : 'Nothing matches.' }));
+    mark();
+  };
+  const mark = () => {
+    for (const li of cmd.list.children) li.setAttribute('aria-selected', String(li.id === `gz-cmd-${cmd.active}`));
+    const on = cmd.list.querySelector('[aria-selected="true"]');
+    if (on) { cmd.input.setAttribute('aria-activedescendant', on.id); on.scrollIntoView({ block: 'nearest' }); } else cmd.input.removeAttribute('aria-activedescendant');
+  };
+  const runCmd = (i) => {
+    const c = cmd?.shown[i];
+    if (!c) return;
+    closeCmd();
+    c.run();
+  };
+  const openCmd = () => {
+    const box = document.createElement('div');
+    box.id = 'gz-cmd';
+    const panel = document.createElement('div');
+    panel.className = 'gz-cmd-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', 'Go to');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Go to a course, an item, a page or a Glaze setting…';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    for (const [k, v] of [['role', 'combobox'], ['aria-expanded', 'true'], ['aria-controls', 'gz-cmd-list'], ['aria-autocomplete', 'list'], ['aria-label', 'Go to']]) input.setAttribute(k, v);
+    const list = document.createElement('ul');
+    list.id = 'gz-cmd-list';
+    list.setAttribute('role', 'listbox');
+    list.setAttribute('aria-label', 'Results');
+    const foot = document.createElement('p');
+    foot.className = 'gz-cmd-foot';
+    foot.textContent = '↑ ↓ to choose · Enter to go · Esc to close';
+    panel.append(input, list, foot);
+    box.append(panel);
+    box.addEventListener('pointerdown', (e) => {
+      if (e.target === box) closeCmd();
+      else if (e.target !== input) e.preventDefault(); // focus stays in the search box
+    });
+    input.addEventListener('input', showCmd);
+    input.addEventListener('keydown', (e) => {
+      const n = cmd.shown.length;
+      const step = { ArrowDown: 1, ArrowUp: -1, Tab: e.shiftKey ? -1 : 1 }[e.key];
+      if (step && n) { e.preventDefault(); cmd.active = (cmd.active + step + n) % n; mark(); } else if (e.key === 'Tab') e.preventDefault();
+      else if (e.key === 'Home' || e.key === 'End') { if (n) { e.preventDefault(); cmd.active = e.key === 'Home' ? 0 : n - 1; mark(); } } else if (e.key === 'Enter') { e.preventDefault(); runCmd(cmd.active); } else if (e.key === 'Escape') { e.preventDefault(); closeCmd(); }
+      // Ultra's own shortcuts never see keys meant for the palette.
+      e.stopPropagation();
+    });
+    cmd = { box, input, list, all: [], shown: [], active: 0, back: document.activeElement, loading: true };
+    document.body.append(box);
+    input.focus();
+    // Pages show at once; courses and items join when Ultra answers.
+    const mine = cmd;
+    cmd.all = TOOLS.map(([path, label]) => ({ label, hint: 'Blackboard', group: 'Go to', run: go(path) }));
+    showCmd();
+    commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(); });
+  };
+  if (window.top === window) {
+    document.addEventListener('keydown', (e) => {
+      if (e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
+      if (cmd) { e.preventDefault(); closeCmd(); return; }
+      if (typing(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openCmd();
     }, true);
   }
 
@@ -1005,6 +1145,7 @@
     hideTip();
     hidePeek();
     closeKeys();
+    closeCmd();
     for (const id of ['gz-progress', 'gz-calc']) document.getElementById(id)?.remove();
     for (const l of links) l.remove();
     links = [];

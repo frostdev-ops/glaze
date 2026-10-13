@@ -41,6 +41,9 @@ animated backgrounds) are bundled. It makes requests in these cases:
   your own Blackboard site's gradebook for your grades in the courses on the Courses and Grades pages
   (the first twelve), the same way as for due-date status: at most once a minute per course, kept in
   memory. The what-if calculator uses the same answer and asks for nothing more.
+- **Command palette** (an Extra, on by default). When you open it, Glaze asks your own Blackboard site
+  for your list of courses and, inside a course, that course's items, once per page, using Blackboard's
+  own addresses with your existing session. The answers are kept in memory only.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an

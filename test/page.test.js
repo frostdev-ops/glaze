@@ -70,6 +70,15 @@ test('the gradebook by content item, and what counts as done', () => {
   assert.ok(!P.isDone('mixed', {}));
 });
 
+test('command palette matching: in order, word starts and runs first', () => {
+  const rank = (q, list) => list.map((t) => [t, P.fuzzy(q, t)]).filter(([, s]) => s >= 0).sort((a, b) => b[1] - a[1]).map(([t]) => t);
+  assert.deepEqual(rank('cal', ['Calendar', 'Local files', 'Course calendar', 'Grades']), ['Calendar', 'Course calendar', 'Local files']);
+  assert.deepEqual(rank('cs2010', ['202640-CS2010-800', '202640-SPAN1100-802']), ['202640-CS2010-800']);
+  assert.deepEqual(rank('mod 3 disc', ['Module 3: Discussion', 'Module 4: Discussion', 'Discussions']), ['Module 3: Discussion']);
+  assert.equal(P.fuzzy('', 'anything'), 0);
+  assert.equal(P.fuzzy('zz', 'Grades'), -1);
+});
+
 test('status chips beside due dates in course content', () => {
   const soon = 'Due date: 10/13/26, 11:59 PM (EDT)'; // in 2 days
   const later = 'Due date: 10/18/26, 11:59 PM (EDT)'; // next week

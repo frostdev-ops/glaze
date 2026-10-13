@@ -98,7 +98,7 @@ test('declutter tabs keep only known slugs, once each', () => {
 
 test('score bars, countdowns, folder previews and course progress are on by default; the rest are off', () => {
   const on = Object.entries(G.GZ_DEFAULTS.enhance).filter(([, v]) => v).map(([k]) => k);
-  assert.deepEqual(on.sort(), ['calc', 'inline', 'newgrades', 'previews', 'progress', 'scores']);
+  assert.deepEqual(on.sort(), ['calc', 'inline', 'newgrades', 'palette', 'previews', 'progress', 'scores']);
   assert.equal(G.GZ_SANITIZE({ enhance: { scores: false } }).enhance.scores, false, 'an explicit off is kept');
 });
 
