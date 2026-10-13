@@ -263,3 +263,21 @@ test('reading time and progress for focus mode', () => {
   assert.equal(P.readShare(1300, 2000, 800), 1); // overscroll
   assert.equal(P.readShare(0, 800, 800), 1); // fits on screen: nothing left to scroll
 });
+
+test('folder completion in every language Ultra writes it', () => {
+  // Ultra's own templates (its locale bundles), each in its language's order.
+  const lines = ['3 of 7 completed', '3 de 7 completados', '3 éléments terminés sur 7', '3 von 7 abgeschlossen', '3 de 7 concluídos',
+    '3 van 7 voltooid', '7 件中 3 件が完了済み', '3/7개 완료됨', 'Dokončeno: 3/7', '已完成 3 个 (共 7 个)', 'تم إكمال ٣ من أصل ٧', 'Ukończono 3 z 7'];
+  for (const l of lines) assert.deepEqual(P.completion(l, true), { done: 3, total: 7 }, l);
+  // "N of M started" is only shown while nothing is completed.
+  assert.deepEqual(P.completion('7 件中 2 件が開始済み', false), { done: 0, total: 7 });
+  for (const t of ['', null, 'Completed', '1,234 of 2,000 completed']) assert.equal(P.completion(t, true), null, t);
+  // English reads as it did, wherever Ultra marks the line as it does: "completed" while some are, else "started".
+  const old = (t) => { const m = t.match(/(\d+)\s+of\s+(\d+)\s+(completed|started)/i); return { done: /completed/i.test(m[3]) ? +m[1] : 0, total: +m[2] }; };
+  for (let total = 1; total < 30; total++) {
+    for (let k = 1; k <= total; k++) {
+      assert.deepEqual(P.completion(`${k} of ${total} completed`, true), old(`${k} of ${total} completed`));
+      assert.deepEqual(P.completion(`${k} of ${total} started`, false), old(`${k} of ${total} started`));
+    }
+  }
+});

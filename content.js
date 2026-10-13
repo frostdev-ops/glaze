@@ -125,7 +125,8 @@
     for (const e of document.querySelectorAll('[class*="course-color-"]')) {
       const slot = e.className.match?.(/course-color-(\d+)/)?.[1];
       const name = e.querySelector('h2.title, h2, h3, .course-title')?.textContent.trim();
-      if (slot && name && !/^ID:/.test(name)) found[slot] = name.slice(0, 80);
+      // Not a course id's line, labelled in Ultra's words: "ID: …", "Code : …", "Kimlik: …".
+      if (slot && name && !/^(ID|Code|Código|Cyfeirnod|Identyfikator|Kimlik|Идентификатор|Ідентифікатор|المعرف|מזהה|編號) ?:/.test(name)) found[slot] = name.slice(0, 80);
     }
     if (!Object.keys(found).length) return;
     try {
@@ -537,6 +538,9 @@
   // the same content API Ultra's own outline uses (same origin, the user's own session; nothing
   // leaves Blackboard). Answers are kept for a minute so moving back and forth costs nothing.
   const courseId = () => location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1];
+  // A folder's or learning module's own fold toggle, by the id Ultra gives it in every language; null for
+  // anything else (an Ultra document is a folder to the API, but has none).
+  const toggleOf = (item) => item?.querySelector(`[id="folder-title-${item.dataset.contentId}"], [id="learning-module-title-${item.dataset.contentId}"]`);
   const peeks = new Map();
   const children = (cid, fid) => {
     const key = `${cid}/${fid}`;
@@ -601,9 +605,8 @@
     if (item === peekFor) return;
     hidePeek();
     // Collapsed folders only: an open one already shows its contents.
-    const isFolder = item?.querySelector('svg:is([aria-label="Learning Module"], [aria-label="Folder"])');
     const cid = courseId();
-    if (!item || !isFolder || !cid || item.querySelector('[aria-expanded]')?.getAttribute('aria-expanded') !== 'false') return;
+    if (!cid || toggleOf(item)?.getAttribute('aria-expanded') !== 'false') return;
     peekFor = item;
     const fid = item.getAttribute('data-content-id');
     peekTimer = setTimeout(() => children(cid, fid).then((list) => showPeek(item, list)), 550);
@@ -612,7 +615,8 @@
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
-  // "N of M completed" plus each top-level item's review circle. Redrawn only when the numbers move.
+  // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
+  // only when the numbers move.
   const renderProgress = () => {
     const old = document.getElementById('gz-progress');
     if (!settings.enhance.progress) return old?.remove();
@@ -620,8 +624,10 @@
     let done = 0;
     let total = 0;
     for (const it of top) {
-      const m = it.querySelector('.js-completion-status-message')?.textContent.match(/(\d+)\s+of\s+(\d+)\s+(completed|started)/i);
-      if (m) { total += +m[2]; if (/completed/i.test(m[3])) done += +m[1]; continue; }
+      // Some are done where Ultra puts its check in the line (all done) or a completed part in its chart.
+      const msg = it.querySelector('.js-completion-status-message');
+      const m = msg && GZ_PAGE.completion(msg.textContent, !!msg.querySelector('svg') || !!msg.parentElement.querySelector('.js-completion-chart [class*="chartLineCompleted"]'));
+      if (m) { total += m.total; done += m.done; continue; }
       const rs = it.querySelector('.js-review-state-icon-button');
       if (rs) { total += 1; if (rs.getAttribute('aria-checked') === 'true') done += 1; }
     }
@@ -1069,14 +1075,13 @@
       setTimeout(() => { if (jobs.get(fid) === job) { jobs.delete(fid); paintDl(fid); } }, 6000);
     }
   };
-  const FOLDER = /^(Folder|Learning Module)$/;
   const syncDownloads = () => {
     const on = settings.enhance.download && courseId();
     if (!on) { for (const b of document.querySelectorAll('.gz-dl')) b.remove(); return; }
     for (const item of document.querySelectorAll('.content-list-item[data-content-id]')) {
       const fid = item.dataset.contentId;
-      // The item's own icon and title come first; an open folder's children follow them.
-      if (!FOLDER.test(item.querySelector('svg[aria-label]')?.getAttribute('aria-label')) || document.getElementById(`gz-dl-${fid}`)) continue;
+      // The item's own title comes first; an open folder's children follow it.
+      if (!toggleOf(item) || document.getElementById(`gz-dl-${fid}`)) continue;
       const h3 = item.querySelector('h3');
       if (!h3) continue;
       const b = document.createElement('button');
@@ -1265,7 +1270,8 @@
       }
       gAt = e.key === 'g' ? Date.now() : 0;
       if (e.key === '/') {
-        const target = [...document.querySelectorAll('input[type="search"], input[placeholder*="earch" i], button[aria-label*="earch" i]')].find((el) => el.offsetWidth > 0);
+        // By Ultra's ids (courses-overview-filter-search, search-button…), which no language changes.
+        const target = [...document.querySelectorAll('input[type="search"], :is(input, button)[id*="search" i]')].find((el) => el.offsetWidth > 0);
         if (!target) return;
         e.preventDefault();
         if (target.tagName === 'BUTTON') target.click();

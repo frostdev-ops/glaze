@@ -100,6 +100,11 @@ All notable changes to Glaze are documented here. The format follows
   way Blackboard writes it for your language: 18.10.26, 18/10/2026, 2026/10/18, month names, a 24-hour
   clock, Arabic digits. A discussion with two due dates now counts down to the last one, the date your
   gradebook keeps.
+- **Folder previews, Download all and course progress in any language.** They found folders and
+  learning modules, and read "3 of 7 completed", by Blackboard's English words, so on a Blackboard in
+  another language they did nothing. They now go by how Blackboard builds the page, and course progress
+  reads the count in any of its languages ("7 件中 3 件が完了済み" too). Item-type icon colors know
+  Blackboard's names for them in its other languages, and the / shortcut finds the course search box.
 - **Glaze for iPhone and iPad.** Safari on iOS and iPadOS 18 or newer, from the same App Store listing as
   the Mac app. The app is a two-step guide in the Mac app's style, in light and dark: turn Glaze on in
   Settings, then allow it on your Blackboard site. On iOS 26.2 and newer its button opens Safari's
