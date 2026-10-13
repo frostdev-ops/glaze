@@ -816,7 +816,8 @@
   // and a target gives the even share of the remaining points it needs. The recipe is the course's own
   // overall grade (lib/grades.js), and it must reproduce Blackboard's figure first; otherwise it says so.
   const whatIf = new Map(); // cid → { overrides: Map columnId → score, target }
-  const asPct = (p) => (p == null ? '–' : `${Math.round(p * 100) / 100}%`);
+  // Cut, not rounded, to two places: how Ultra writes its own overall grade (82.456 is 82.45%).
+  const asPct = (p) => (p == null ? '–' : `${Math.floor(p * 100 + 1e-9) / 100}%`);
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const renderCalc = () => {
     const old = document.getElementById('gz-calc');

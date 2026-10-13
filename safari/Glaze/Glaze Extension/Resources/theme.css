@@ -476,7 +476,8 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .readonly-pill > button svg { width: 16px !important; height: 16px !important; }
 #site-wrap .readonly-pill [class*="makeStylespillSeparator-"] { margin: 0 0.2em; opacity: 0.6; }
 #site-wrap .readonly-pill .pill-points-possible { opacity: 0.75; }
-#site-wrap .grades-list td:has(.readonly-pill), #site-wrap .grades-list th:nth-child(4) { width: calc(10rem + 32px) !important; }
+/* By id: a leading unread-dot column comes and goes, so the Grade column isn't always the 4th. */
+#site-wrap .grades-list td:has(.readonly-pill), #site-wrap .grades-list th#course-student-grades-header-grade { width: calc(10rem + 32px) !important; }
 #site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style)[class*="customGradePill"] { background: var(--gz-grade-bg, var(--gz-surface)) !important; border-color: color-mix(in srgb, var(--gz-grade-edge, var(--gz-line-strong)) 55%, var(--gz-line-strong)) !important; }
 
 /* Message compose: reply dock + the Quill toolbar. */
