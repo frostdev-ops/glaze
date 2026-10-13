@@ -25,7 +25,7 @@ domain.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — Ultra's course stripes blended into your palette, or set one by one.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
-- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade badges, a what-if grade calculator and a Ctrl+K command palette for courses, items, pages and settings (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts and hiding page parts you don't use (off by default).
+- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade badges, a what-if grade calculator, a Ctrl+K command palette for courses, items, pages and settings, and a backup of what you type in Blackboard's editors (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts and hiding page parts you don't use (off by default).
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
@@ -128,8 +128,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Privacy
 
-Glaze stores your settings in `chrome.storage.sync`, and your course names and which grades you've
-seen on your own device. It collects nothing. The only requests it makes go to your own Blackboard site
+Glaze stores your settings in `chrome.storage.sync`, and your course names, which grades you've seen
+and a backup of what you type in Blackboard's editors (until it's posted, 14 days at most) on your own
+device. It collects nothing. The only requests it makes go to your own Blackboard site
 (folder previews; your grades and submission status for due dates, new-grade badges and the calculator;
 your course list and a course's items for the command palette), to Google Fonts or jsDelivr for a web
 font you choose, and to a background image you choose. See [PRIVACY.md](PRIVACY.md).

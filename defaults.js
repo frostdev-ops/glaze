@@ -64,7 +64,7 @@ const GZ_SPEC = {
   enhance: {
     urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
     inline: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
-    newgrades: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'],
+    newgrades: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
   },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };

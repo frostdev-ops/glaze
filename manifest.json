@@ -43,6 +43,7 @@
         "lib/page.js",
         "lib/grades.js",
         "lib/fonts.js",
+        "lib/drafts.js",
         "defaults.js",
         "content.js"
       ],

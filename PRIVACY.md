@@ -11,8 +11,14 @@ _Last updated: 2026-10-13_
   course Ultra shows in which of its ten colour slots, so the editor can list them for you to recolour.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
+- **What you type in Blackboard's editors** (the "Back up what you type" Extra, on by default), in
+  `chrome.storage.local`, on this device only. While you write a post, reply, journal entry, message or
+  assignment text, Glaze keeps a copy so it can offer it back if the page reloads or your session times
+  out before it's posted. Each copy is deleted once the post shows up on the page, when you clear the
+  editor or dismiss the offer, and after 14 days at most. Switching the Extra off deletes them all. The
+  text is never sent anywhere.
 
-Uninstalling the extension removes all three.
+Uninstalling the extension removes all of it.
 
 ## What Glaze collects
 
@@ -56,7 +62,7 @@ The only link in the extension is the footer link to the project's GitHub page, 
 
 ## Permissions
 
-- `storage` — to save the settings and course names described above.
+- `storage` — to save the settings, course names and typed-text backups described above.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is
   self-hosted per institution on arbitrary domains, always under the `/ultra/` path, so the match
   pattern cannot name a fixed host. Glaze reads and restyles the page in your browser only.

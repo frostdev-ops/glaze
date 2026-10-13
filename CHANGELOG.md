@@ -32,6 +32,11 @@ All notable changes to Glaze are documented here. The format follows
   course tab or a Blackboard page, or to switch a palette, the motion level or an Extra. Fuzzy search,
   keyboard first; it stays out of the way while you type in an editor. On by default; switch it off
   under Extras.
+- **Back up what you type.** While you write a discussion response, reply, journal entry, message or
+  assignment text, Glaze keeps a copy on your device. If the page reloads, the tab crashes or your
+  session times out before it's posted, a small bar above the empty editor offers it back: Restore puts
+  it in with its formatting, Dismiss deletes it. The copy is deleted once your post shows up on the
+  page, and after 14 days either way. On by default under Extras; switching it off deletes every copy.
 
 ## [2.0.4] — release candidate
 

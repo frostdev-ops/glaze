@@ -176,6 +176,24 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
 }
 @keyframes gz-grow-x { from { transform: scaleX(0); } }
 
+/* Offer to restore what you wrote, above the editor it came from. */
+.gz-draft {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem;
+  margin: 0 0 0.5rem; padding: 0.45rem 0.5rem 0.45rem 0.85rem;
+  font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: color-mix(in srgb, var(--gz-accent) 12%, var(--gz-surface));
+  border: 1px solid color-mix(in srgb, var(--gz-accent) 40%, var(--gz-line)); border-radius: var(--gz-radius);
+  animation: var(--gz-enter);
+}
+.gz-draft[hidden] { display: none; }
+.gz-draft span { flex: 1 1 12rem; }
+.gz-draft button {
+  padding: 0.25rem 0.8rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
+  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-line-strong); border-radius: 999px;
+}
+.gz-draft button:first-of-type { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+.gz-draft button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+
 /* Keyboard shortcut list. */
 #gz-keys {
   position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center;
