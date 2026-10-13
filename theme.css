@@ -527,6 +527,13 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .MuiLinearProgress-root { background: var(--gz-line) !important; border-radius: 999px; }
 #site-wrap .MuiLinearProgress-bar { background: var(--gz-accent) !important; }
 
+/* Sprite icons with colors baked in: the favorite star is filled with the institution's brand purple,
+   and Ally's alternative-formats icon is near-black, lost on dark palettes. A rule on the <symbol>
+   reaches every <use> of it. */
+symbol[id*="star-press"] path { fill: var(--gz-accent) !important; stroke: var(--gz-accent) !important; }
+bb-svg-icon[icon$="star-press"] svg { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--gz-accent) 55%, transparent)); }
+symbol#icon-small-ally-alt-formats [fill="#262626" i] { fill: currentColor !important; }
+
 /* ---- loaders: in the accent with a soft glow, not the institution's brand purple or plain grey. Ultra's
    older pages draw a .spinner ring on ::after; its React ones an SVG path; course cards wait as
    skeletons. ---- */

@@ -34,6 +34,8 @@ All notable changes to Glaze are documented here. The format follows
 - **Loading spinners and placeholders** follow your palette: Ultra's spinners turn from the
   institution's brand color (or plain grey) to the accent with a soft glow, and the course cards'
   loading placeholders shimmer in the accent.
+- The favorite star on a course is your accent, with a soft glow, instead of the institution's brand
+  purple; Ally's alternative-formats icon follows the text color instead of near-black.
 - In a narrow window, the menu drawer that floats over the page is solid, so the page no longer shows
   through it.
 
