@@ -33,6 +33,31 @@
 		3B8EDAB6307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
 		3B8EDAB7307C30D500B0DD77 /* motion.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA7307C30D500B0DD77 /* motion.css */; };
 		3B8EDAB8307C30D500B0DD77 /* defaults.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA8307C30D500B0DD77 /* defaults.js */; };
+		3B8EDC1A307C30D500B0DD77 /* GlazeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDC05307C30D500B0DD77 /* GlazeApp.swift */; };
+		3B8EDC1B307C30D500B0DD77 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDC06307C30D500B0DD77 /* Main.html */; };
+		3B8EDC1C307C30D500B0DD77 /* iOS.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDC07307C30D500B0DD77 /* iOS.css */; };
+		3B8EDC1D307C30D500B0DD77 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA77307C30D300B0DD77 /* Style.css */; };
+		3B8EDC1E307C30D500B0DD77 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA79307C30D300B0DD77 /* Script.js */; };
+		3B8EDC1F307C30D500B0DD77 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA75307C30D300B0DD77 /* Icon.png */; };
+		3B8EDC20307C30D500B0DD77 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDC08307C30D500B0DD77 /* Assets.xcassets */; };
+		3B8EDC21307C30D500B0DD77 /* Glaze Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3B8EDC04307C30D500B0DD77 /* Glaze Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		3B8EDC22307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDA8C307C30D500B0DD77 /* SafariWebExtensionHandler.swift */; };
+		3B8EDC23307C30D500B0DD77 /* preview.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA99307C30D500B0DD77 /* preview.html */; };
+		3B8EDC24307C30D500B0DD77 /* ui.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9A307C30D500B0DD77 /* ui.js */; };
+		3B8EDC25307C30D500B0DD77 /* theme.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9B307C30D500B0DD77 /* theme.css */; };
+		3B8EDC26307C30D500B0DD77 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9C307C30D500B0DD77 /* popup.js */; };
+		3B8EDC27307C30D500B0DD77 /* extras.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9D307C30D500B0DD77 /* extras.css */; };
+		3B8EDC28307C30D500B0DD77 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9E307C30D500B0DD77 /* popup.html */; };
+		3B8EDC29307C30D500B0DD77 /* options.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDA9F307C30D500B0DD77 /* options.js */; };
+		3B8EDC2A307C30D500B0DD77 /* ui.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA0307C30D500B0DD77 /* ui.css */; };
+		3B8EDC2B307C30D500B0DD77 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA1307C30D500B0DD77 /* icons */; };
+		3B8EDC2C307C30D500B0DD77 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA2307C30D500B0DD77 /* manifest.json */; };
+		3B8EDC2D307C30D500B0DD77 /* lib in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA3307C30D500B0DD77 /* lib */; };
+		3B8EDC2E307C30D500B0DD77 /* options.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA4307C30D500B0DD77 /* options.html */; };
+		3B8EDC2F307C30D500B0DD77 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA5307C30D500B0DD77 /* content.js */; };
+		3B8EDC30307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
+		3B8EDC31307C30D500B0DD77 /* motion.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA7307C30D500B0DD77 /* motion.css */; };
+		3B8EDC32307C30D500B0DD77 /* defaults.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA8307C30D500B0DD77 /* defaults.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +68,13 @@
 			remoteGlobalIDString = 3B8EDA86307C30D500B0DD77;
 			remoteInfo = "Glaze Extension";
 		};
+		3B8EDC12307C30D500B0DD77 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3B8EDA64307C30D300B0DD77 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3B8EDC02307C30D500B0DD77;
+			remoteInfo = "Glaze iOS Extension";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -52,6 +84,15 @@
 			dstSubfolder = PlugIns;
 			files = (
 				3B8EDA88307C30D500B0DD77 /* Glaze Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+		3B8EDC0E307C30D500B0DD77 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				3B8EDC21307C30D500B0DD77 /* Glaze Extension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 		};
@@ -87,6 +128,12 @@
 		3B8EDAA6307C30D500B0DD77 /* fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fonts; path = Resources/fonts; sourceTree = "<group>"; };
 		3B8EDAA7307C30D500B0DD77 /* motion.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = motion.css; path = Resources/motion.css; sourceTree = "<group>"; };
 		3B8EDAA8307C30D500B0DD77 /* defaults.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = defaults.js; path = Resources/defaults.js; sourceTree = "<group>"; };
+		3B8EDC03307C30D500B0DD77 /* Glaze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glaze.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B8EDC04307C30D500B0DD77 /* Glaze Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Glaze Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B8EDC05307C30D500B0DD77 /* GlazeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlazeApp.swift; sourceTree = "<group>"; };
+		3B8EDC06307C30D500B0DD77 /* Main.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Main.html; sourceTree = "<group>"; };
+		3B8EDC07307C30D500B0DD77 /* iOS.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = iOS.css; sourceTree = "<group>"; };
+		3B8EDC08307C30D500B0DD77 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -100,6 +147,16 @@
 			files = (
 			);
 		};
+		3B8EDC0C307C30D500B0DD77 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+		3B8EDC10307C30D500B0DD77 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -108,6 +165,7 @@
 			children = (
 				3B8EDA6E307C30D300B0DD77 /* Glaze */,
 				3B8EDA8B307C30D500B0DD77 /* Glaze Extension */,
+				3B8EDC09307C30D500B0DD77 /* Glaze iOS */,
 				3B8EDA6D307C30D300B0DD77 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -117,6 +175,8 @@
 			children = (
 				3B8EDA6C307C30D300B0DD77 /* Glaze.app */,
 				3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */,
+				3B8EDC03307C30D500B0DD77 /* Glaze.app */,
+				3B8EDC04307C30D500B0DD77 /* Glaze Extension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -179,6 +239,25 @@
 			path = "Glaze Extension";
 			sourceTree = SOURCE_ROOT;
 		};
+		3B8EDC09307C30D500B0DD77 /* Glaze iOS */ = {
+			isa = PBXGroup;
+			children = (
+				3B8EDC05307C30D500B0DD77 /* GlazeApp.swift */,
+				3B8EDC08307C30D500B0DD77 /* Assets.xcassets */,
+				3B8EDC0A307C30D500B0DD77 /* Resources */,
+			);
+			path = "Glaze iOS";
+			sourceTree = "<group>";
+		};
+		3B8EDC0A307C30D500B0DD77 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				3B8EDC06307C30D500B0DD77 /* Main.html */,
+				3B8EDC07307C30D500B0DD77 /* iOS.css */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -216,6 +295,40 @@
 			productReference = 3B8EDA87307C30D500B0DD77 /* Glaze Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		3B8EDC01307C30D500B0DD77 /* Glaze iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B8EDC14307C30D500B0DD77 /* Build configuration list for PBXNativeTarget "Glaze iOS" */;
+			buildPhases = (
+				3B8EDC0B307C30D500B0DD77 /* Sources */,
+				3B8EDC0C307C30D500B0DD77 /* Frameworks */,
+				3B8EDC0D307C30D500B0DD77 /* Resources */,
+				3B8EDC0E307C30D500B0DD77 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3B8EDC13307C30D500B0DD77 /* PBXTargetDependency */,
+			);
+			name = "Glaze iOS";
+			productName = Glaze;
+			productReference = 3B8EDC03307C30D500B0DD77 /* Glaze.app */;
+			productType = "com.apple.product-type.application";
+		};
+		3B8EDC02307C30D500B0DD77 /* Glaze iOS Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3B8EDC17307C30D500B0DD77 /* Build configuration list for PBXNativeTarget "Glaze iOS Extension" */;
+			buildPhases = (
+				3B8EDC0F307C30D500B0DD77 /* Sources */,
+				3B8EDC10307C30D500B0DD77 /* Frameworks */,
+				3B8EDC11307C30D500B0DD77 /* Resources */,
+			);
+			buildRules = (
+			);
+			name = "Glaze iOS Extension";
+			productName = "Glaze Extension";
+			productReference = 3B8EDC04307C30D500B0DD77 /* Glaze Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -230,6 +343,12 @@
 						CreatedOnToolsVersion = 27.0;
 					};
 					3B8EDA86307C30D500B0DD77 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					3B8EDC01307C30D500B0DD77 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					3B8EDC02307C30D500B0DD77 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -250,6 +369,8 @@
 			targets = (
 				3B8EDA6B307C30D300B0DD77 /* Glaze */,
 				3B8EDA86307C30D500B0DD77 /* Glaze Extension */,
+				3B8EDC01307C30D500B0DD77 /* Glaze iOS */,
+				3B8EDC02307C30D500B0DD77 /* Glaze iOS Extension */,
 			);
 		};
 /* End PBXProject section */
@@ -287,6 +408,38 @@
 				3B8EDAB4307C30D500B0DD77 /* options.html in Resources */,
 			);
 		};
+		3B8EDC0D307C30D500B0DD77 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+				3B8EDC1B307C30D500B0DD77 /* Main.html in Resources */,
+				3B8EDC1C307C30D500B0DD77 /* iOS.css in Resources */,
+				3B8EDC1D307C30D500B0DD77 /* Style.css in Resources */,
+				3B8EDC1E307C30D500B0DD77 /* Script.js in Resources */,
+				3B8EDC1F307C30D500B0DD77 /* Icon.png in Resources */,
+				3B8EDC20307C30D500B0DD77 /* Assets.xcassets in Resources */,
+			);
+		};
+		3B8EDC11307C30D500B0DD77 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+				3B8EDC23307C30D500B0DD77 /* preview.html in Resources */,
+				3B8EDC24307C30D500B0DD77 /* ui.js in Resources */,
+				3B8EDC25307C30D500B0DD77 /* theme.css in Resources */,
+				3B8EDC26307C30D500B0DD77 /* popup.js in Resources */,
+				3B8EDC27307C30D500B0DD77 /* extras.css in Resources */,
+				3B8EDC28307C30D500B0DD77 /* popup.html in Resources */,
+				3B8EDC29307C30D500B0DD77 /* options.js in Resources */,
+				3B8EDC2A307C30D500B0DD77 /* ui.css in Resources */,
+				3B8EDC2B307C30D500B0DD77 /* icons in Resources */,
+				3B8EDC2C307C30D500B0DD77 /* manifest.json in Resources */,
+				3B8EDC2D307C30D500B0DD77 /* lib in Resources */,
+				3B8EDC2E307C30D500B0DD77 /* options.html in Resources */,
+				3B8EDC2F307C30D500B0DD77 /* content.js in Resources */,
+				3B8EDC30307C30D500B0DD77 /* fonts in Resources */,
+				3B8EDC31307C30D500B0DD77 /* motion.css in Resources */,
+				3B8EDC32307C30D500B0DD77 /* defaults.js in Resources */,
+			);
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -303,6 +456,18 @@
 				3B8EDA8D307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */,
 			);
 		};
+		3B8EDC0B307C30D500B0DD77 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				3B8EDC1A307C30D500B0DD77 /* GlazeApp.swift in Sources */,
+			);
+		};
+		3B8EDC0F307C30D500B0DD77 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				3B8EDC22307C30D500B0DD77 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -310,6 +475,11 @@
 			isa = PBXTargetDependency;
 			target = 3B8EDA86307C30D500B0DD77 /* Glaze Extension */;
 			targetProxy = 3B8EDA89307C30D500B0DD77 /* PBXContainerItemProxy */;
+		};
+		3B8EDC13307C30D500B0DD77 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3B8EDC02307C30D500B0DD77 /* Glaze iOS Extension */;
+			targetProxy = 3B8EDC12307C30D500B0DD77 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -603,6 +773,134 @@
 			};
 			name = Release;
 		};
+		3B8EDC15307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze iOS" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Glaze/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Glaze;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.frostdev.Glaze;
+				PRODUCT_NAME = Glaze;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3B8EDC16307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze iOS" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Glaze/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Glaze;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.frostdev.Glaze;
+				PRODUCT_NAME = Glaze;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		3B8EDC18307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze iOS Extension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Glaze Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Glaze Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.frostdev.Glaze.Extension;
+				PRODUCT_NAME = "Glaze Extension";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3B8EDC19307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze iOS Extension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Glaze Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Glaze Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.frostdev.Glaze.Extension;
+				PRODUCT_NAME = "Glaze Extension";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -627,6 +925,22 @@
 			buildConfigurations = (
 				3B8EDA96307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze" */,
 				3B8EDA97307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		3B8EDC14307C30D500B0DD77 /* Build configuration list for PBXNativeTarget "Glaze iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B8EDC15307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze iOS" */,
+				3B8EDC16307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze iOS" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		3B8EDC17307C30D500B0DD77 /* Build configuration list for PBXNativeTarget "Glaze iOS Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B8EDC18307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze iOS Extension" */,
+				3B8EDC19307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze iOS Extension" */,
 			);
 			defaultConfigurationName = Release;
 		};

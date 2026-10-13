@@ -1,0 +1,68 @@
+/* iPhone and iPad: Style.css (the Mac guide) at touch sizes, with Dynamic Type and iOS-shaped mocks. */
+:root {
+    /* -apple-system-control-accent is macOS only. */
+    --accent: #007aff;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: none;
+}
+@media (prefers-color-scheme: dark) {
+    :root { --accent: #0a84ff; --ok: #30d158; }
+}
+
+html { background: Canvas; }
+/* The page runs under the status bar (viewport-fit=cover); keep the bar's strip solid when scrolled. */
+body::before { content: ""; position: fixed; z-index: 1; inset: 0 0 auto; height: env(safe-area-inset-top); background: Canvas; }
+body {
+    font: -apple-system-body;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 20px) max(20px, env(safe-area-inset-right))
+             max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+h1 { font: -apple-system-title2; font-weight: 700; }
+h2 { font: -apple-system-headline; gap: 10px; margin-bottom: 8px; }
+.note, .step p, .status { font: -apple-system-subheadline; }
+.status { font-weight: 600; }
+.guide header { gap: 14px; margin-bottom: 22px; }
+.guide header img { border-radius: 22%; }
+
+.steps { gap: 16px; }
+.step { grid-template-columns: 1fr 280px; gap: 20px; padding: 18px; border-radius: 16px; }
+.badge { width: 24px; height: 24px; font-size: 14px; flex: none; }
+.state-on .step-enable .badge::after { font-size: 14px; }
+
+/* Only iOS 26.2 can open Glaze's page in Settings or say whether it's on (GlazeApp.swift adds .live). */
+.status, .open-preferences { display: none; }
+.live .status { display: block; }
+.live .open-preferences { display: block; }
+.live.state-on .open-preferences { display: none; }
+button.primary { width: 100%; min-height: 50px; margin-top: 6px; border-radius: 14px; font: -apple-system-headline; }
+
+/* iPhone: the picture under its step. */
+@media (max-width: 620px) {
+    .step { grid-template-columns: 1fr; }
+    .mock { max-width: 320px; width: 100%; justify-self: center; }
+}
+
+/* Drawn stand-ins for iOS screens; Style.css draws the Mac ones. */
+.mock { font-size: 12px; border-radius: 14px; }
+.mock-bar { padding: 9px 12px; justify-content: center; }
+.mock-list { border: 0; padding: 6px; display: grid; gap: 4px; }
+.mock-row { justify-content: space-between; padding: 8px 10px; border-radius: 10px; }
+.mock-row .line { width: 90px; }
+.toggle { width: 34px; height: 20px; border-radius: 10px; background: #34c759; position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; }
+.toggle.off { background: var(--line); }
+.toggle.off::after { right: auto; left: 2px; }
+
+/* Safari's extensions menu above, its button in the address bar below. */
+.mock-toolbar { display: grid; }
+.mock-toolbar .mock-bar { border: 0; border-top: 1px solid var(--line); gap: 8px; }
+.mock-toolbar .address { margin: 0 !important; padding: 6px 12px; border-radius: 999px; text-align: center; }
+.ext-button { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 7px; font-size: 15px; }
+.mock-popover { margin: 10px; width: auto; padding: 10px; gap: 8px; border-radius: 12px; }
+.mock-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: Canvas; font-weight: 600; }
+.mock-item span:nth-child(2) { flex: 1; }
+.mock-item img { width: 18px; height: 18px; border-radius: 5px; }
+.warn { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #ff9f0a; color: white; font-weight: 700; font-size: 11px; }
+.mock-button { padding: 7px; border-radius: 8px; }
