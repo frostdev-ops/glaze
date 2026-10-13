@@ -6,6 +6,15 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Course tint**, off until you set it up: inside a course you pick, the accent takes that course's
+  color and the background leans toward it, so you can tell at a glance which course you're in. Turn
+  it on under Courses in the editor, tick the courses, and set how strong it is; the preview shows it.
+  It follows the course onto its item pages and panels and lets go when you leave. Gradients and
+  animated backgrounds that follow your palette pick it up too. Text on the accent and the accent on
+  the page keep their contrast.
+
 ## [2.0.4] — release candidate
 
 ### Added

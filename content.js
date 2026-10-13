@@ -24,6 +24,8 @@
   let darkTheme = true;
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
+  // The options page shows a mock of Ultra (preview.html) that runs this same script.
+  const isPreview = location.protocol === 'chrome-extension:';
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
   const onBody = (fn) => (document.body ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
@@ -235,6 +237,7 @@
     dirty.clear();
     if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
     if (tip && ultraTipShown()) hideTip();
+    if (tintSlot() !== tinted) applySettings();
     placeScene();
     renderProgress();
     recordCourses();
@@ -710,12 +713,11 @@
     sceneCanvas = null;
   };
   const sceneOpts = () => {
-    const colors = GZ_ACTIVE_COLORS(settings, darkMQ.matches);
     const { dim, amount, pace } = GZ_SCENE_LOOK(settings.bg.intensity);
     return {
       name: settings.bg.scene,
-      ground: colors['--gz-surface-2'],
-      colors: GZ_BG_COLORS(settings.bg.colors, colors),
+      ground: palette['--gz-surface-2'],
+      colors: GZ_BG_COLORS(settings.bg.colors, palette),
       dim,
       amount,
       speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
@@ -735,6 +737,47 @@
       scene.update(sceneOpts());
     }).catch(() => { sceneFailed = true; stopScene(); });
   };
+
+  // ---- course tint ----------------------------------------------------------------------------
+  // Inside a course picked in the editor, the palette leans toward the course's color (GZ_TINT).
+  // A course's own pages carry its color slot on the course section; its item pages carry nothing,
+  // so the slot is remembered per course id, on this device. flush() re-checks on every page change.
+  const COURSE = 'section.course[class*="course-color-"]';
+  const courseSlots = {};
+  try {
+    chrome.storage.local.get('courseSlots', (r) => {
+      Object.assign(courseSlots, r?.courseSlots);
+      if (tintSlot() !== tinted) reapply();
+    });
+  } catch { /* extension reloaded under the tab */ }
+  const tintSlot = () => {
+    const cid = courseId();
+    const sec = document.querySelector(COURSE);
+    const slot = sec?.className.match(/course-color-(\d+)/)?.[1];
+    // The section names its course: the address changes ~250 ms before the next course's section
+    // replaces the last one's.
+    const id = sec?.getAttribute('bb-course-membership-markups') || cid;
+    if (id && slot && courseSlots[id] !== slot) {
+      courseSlots[id] = slot;
+      try { chrome.storage.local.set({ courseSlots }); } catch { /* reloaded */ }
+    }
+    const { tint, tinted: picked } = settings.courses;
+    const now = cid ? courseSlots[cid] : isPreview && slot;
+    return tint && picked.includes(now) ? now : null;
+  };
+  // The color the Course colors section already resolves (--gz-course: a pick, toned or raw), read
+  // off a hidden probe on <html>, outside the observed body. Null until theme.css has loaded.
+  const courseColor = (slot) => {
+    const p = document.createElement('i');
+    p.className = `course-color-${slot}`;
+    p.style.cssText = 'display:none;color:color-mix(in srgb, var(--gz-course, transparent) 100%, transparent)';
+    html.append(p);
+    const c = C.parse(getComputedStyle(p).color);
+    p.remove();
+    return c?.a ? C.hex(c) : null;
+  };
+  let tinted = null; // the slot whose color is painted now
+  let palette = GZ_DEFAULTS.colors; // the colors painted, tint included
 
   // ---- settings → <html> ----------------------------------------------------------------------
   // Everything set goes through these two, so clearSettings removes exactly what was set.
@@ -758,18 +801,25 @@
 
   const applySettings = () => {
     const s = settings;
-    const colors = GZ_ACTIVE_COLORS(s, darkMQ.matches);
-    for (const [v] of GZ_COLORS) setVar(v, colors[v]);
-    const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
-    accentInk = C.parse(colors['--gz-accent-ink']);
-    setVar('color-scheme', dark ? 'dark' : 'light');
-    setAttr('data-gz-dark-theme', dark);
+    const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
+    for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);
     for (let n = 1; n <= 10; n++) {
       const c = s.courses.colors[n];
       if (c) setVar(`--gz-pick-${n}`, c);
       else html.style.removeProperty(`--gz-pick-${n}`);
     }
+    // The course color is worked out from the untinted palette set above, then painted over it.
+    const slot = tintSlot();
+    const course = slot && courseColor(slot);
+    tinted = course ? slot : null;
+    const colors = course ? GZ_TINT(base, course, s.courses.strength / 100) : base;
+    if (course) for (const [v] of GZ_COLORS) setVar(v, colors[v]);
+    palette = colors;
+    const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
+    accentInk = C.parse(colors['--gz-accent-ink']);
+    setVar('color-scheme', dark ? 'dark' : 'light');
+    setAttr('data-gz-dark-theme', dark);
     // Look: numbers become vars, choices become attributes theme.css matches on.
     setVar('--gz-radius', `${s.look.radius}px`);
     setVar('--gz-scale', s.look.scale);
@@ -874,10 +924,8 @@
     if (!s.enabled) disable();
     else if (links.length) applySettings();
   });
-  // The options page shows a mock of Ultra (preview.html) that runs this same script. It is fed
-  // the editor's state directly, before it is saved, and ignores storage so a save landing late
-  // can't undo an edit that is further along.
-  const isPreview = location.protocol === 'chrome-extension:';
+  // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
+  // save landing late can't undo an edit that is further along.
   if (isPreview) {
     addEventListener('message', (e) => {
       if (e.origin !== location.origin || !e.data?.gzPreview) return;

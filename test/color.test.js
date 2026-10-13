@@ -39,3 +39,28 @@ test('same() compares across notations', () => {
   assert.ok(C.same(C.parse('#0d1b2e'), C.parse('rgb(13, 27, 46)')));
   assert.ok(!C.same(C.parse('#0d1b2e'), C.parse('rgb(13, 27, 47)')));
 });
+
+test('mix() matches Chrome\'s color-mix(in oklab)', () => {
+  assert.equal(C.mix('#17c8f4', '#ffe12b', 0), '#17c8f4');
+  assert.equal(C.mix('#17c8f4', 'rgb(255, 225, 43)', 1), '#ffe12b');
+  // [a, b, share of b, getComputedStyle() of color-mix(in oklab, a, b) in Chrome 155]
+  for (const [a, b, t, want] of [
+    ['#17c8f4', '#ffe12b', 0.6, 'color(srgb 0.734941 0.860226 0.613563)'],
+    ['#2563eb', '#c473d4', 0.5, 'color(srgb 0.503405 0.437274 0.879779)'],
+    ['#082f49', '#ff6417', 0.3, 'color(srgb 0.344867 0.273204 0.290544)'],
+    ['#0d1b2e', '#89f3db', 0.1, 'color(srgb 0.0898793 0.177239 0.241429)'],
+    ['#c026d3', '#85f472', 0.6, 'color(srgb 0.682793 0.702786 0.660296)'],
+    ['#000000', '#ffffff', 0.5, 'color(srgb 0.388573 0.388573 0.388573)'],
+  ]) {
+    const got = C.parse(C.mix(a, b, t));
+    const exp = C.parse(want);
+    for (const k of 'rgb') assert.ok(Math.abs(got[k] - exp[k]) <= 1, `${a} ${b} ${t}: ${C.mix(a, b, t)} vs ${C.hex(exp)}`);
+  }
+});
+
+test('rehue() keeps brightness and swaps the hue; a gray gives none', () => {
+  const pink = C.rehue('#17c8f4', '#c026d3');
+  assert.ok(Math.abs(C.luminance(C.parse(pink)) - C.luminance(C.parse('#17c8f4'))) < 0.05, pink);
+  assert.ok(C.parse(pink).r > C.parse(pink).g, `${pink} is pink, not cyan`);
+  assert.equal(C.rehue('#17c8f4', '#f4f5f7'), '#17c8f4');
+});
