@@ -180,3 +180,28 @@ test('theme codes are untrusted: anything off refuses the whole code', async () 
   // A tiny code that inflates past the cap.
   await assert.rejects(S.decode(await make({ c, l: { font: 'x'.repeat(50000) } })), /damaged/);
 });
+
+test('course tint is off and empty until configured; junk is dropped', () => {
+  assert.deepEqual(G.GZ_DEFAULTS.courses, { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60 });
+  const c = G.GZ_SANITIZE({ courses: { tint: 'yes', tinted: ['2', '2', '11', 3, 'x', '10'], strength: 500 } }).courses;
+  assert.deepEqual([c.tint, c.tinted, c.strength], [false, ['2', '10'], 60]);
+});
+
+test('course tint never costs a contrast pair, and at full strength is the course color where that reads', () => {
+  const C = require('../lib/color.js');
+  // Ultra's ten slot colors, plus black and white: the extremes a picked course color can be.
+  const courses = ['#c473d4', '#2fd9fc', '#ffe12b', '#ff6417', '#89f3db', '#fe5b91', '#85f472', '#22c7cc', '#ca22ad', '#157afb', '#000000', '#ffffff'];
+  for (const [name, colors] of G.GZ_PRESETS) {
+    for (const course of courses) {
+      for (const t of [0.1, 0.6, 1]) {
+        const out = G.GZ_TINT(colors, course, t);
+        for (const r of G.GZ_CONTRAST(out)) assert.ok(r.pass, `${name} ${course} ${t}: ${r.label} ${r.ratio.toFixed(2)}`);
+        assert.equal(out['--gz-ink'], colors['--gz-ink']);
+      }
+      const full = G.GZ_TINT(colors, course, 1);
+      const reads = C.contrast(course, full['--gz-surface']) >= 3 && C.contrast(colors['--gz-accent-ink'], course) >= 4.5;
+      if (reads) assert.equal(full['--gz-accent'], course, `${name} ${course}`);
+      else assert.notEqual(full['--gz-accent'], course, `${name} ${course}`);
+    }
+  }
+});

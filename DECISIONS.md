@@ -145,3 +145,14 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Reading time from the document's own text at 230 words a minute, none under half a minute | Counting attachments; always showing it | Attachments can't be read from here; "1 min" on a file-only page is noise. |
 | Esc leaves focus mode at the window in capture, before Ultra's handlers | Letting it through | One key, one effect. Focus inside a preview frame keeps Esc there; the button still works. |
 | No keyboard shortcut for focus mode | A letter key or Ctrl/Cmd+K | Ctrl/Cmd+K belongs to the command palette; Esc and the button cover it. |
+## Course tint (2.1)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Off, with no courses picked, until set up under Courses; picked by color slot like per-course colors | On for every course | Owner's call: nothing changes until it is configured. Slots are what the Course colors list already shows. |
+| The accent takes the course's hue; strength moves its lightness and colorfulness from the palette's to the course color's (100% is the course color) | Mixing the two colors in sRGB, OKLab or OKLCH | Halfway, a pink accent and a green course mix to gray (OKLab) or orange (OKLCH). Taking the hue reads as that course at any strength. |
+| The course color is read off a hidden probe on `<html>` carrying the slot's class | Recomputing it in JS | It is exactly what the Course colors section paints (a pick, toned or raw), without a second copy of the slot table and the OKLCH toning. Outside the observed body, so it costs no sweep. |
+| The slot is remembered per course id (`courseSlots` in `storage.local`), read from the course section's `bb-course-membership-markups` | The address alone; the course API | Item pages (documents) replace the course section and carry no slot, and the API has no color. The address changes ~250 ms before the next course's section replaces the last one, so the section names its own course. |
+| Painted on `<html>` and re-checked on each sweep pass | Scoping the tokens to the course section | Item pages replace the section entirely, and anything Ultra mounts on `<body>` sits outside it; `<html>` reaches all of it and the background layer. |
+| Contrast: a surface tint that costs a text pair is dropped; the accent moves toward the text until it reads on the surface and its text reads on it | Adjusting the text colors | Text stays the palette's. Paper's faint text has 3.07:1 on its ground, so Paper and Rose keep their own surfaces for most courses. |
+| Backgrounds pick up the tint only when they follow the palette | Tinting picked background colors too | Picked colors are an explicit choice. The ground's slight lean reaches every kind through the dim layer. |

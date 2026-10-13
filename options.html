@@ -56,7 +56,7 @@
   .mine li { display: flex; align-items: center; gap: 0.6rem; }
   .mine input[type="text"] { flex: 1; }
   .courses { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
-  .courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; }
+  .courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 0.75rem; align-items: center; }
   .courses .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .courses .slot { font-size: 11px; color: var(--gz-ink-faint); margin-left: 0.4rem; }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
@@ -230,6 +230,9 @@
         <h2>Courses</h2>
         <label class="check"><input type="checkbox" data-key="courses.harmonize"><span>Tone Blackboard's course colors to fit the palette</span>
           <span class="desc">Blackboard gives each course one of ten bright colors. Toned, they keep their hue but sit in your palette.</span></label>
+        <label class="check"><input type="checkbox" data-key="courses.tint"><span>Tint the theme inside a course</span>
+          <span class="desc">Inside each course ticked below, the accent takes the course's color and the background leans toward it, so you can tell at a glance which course you're in.</span></label>
+        <label class="field" data-tint><span>Tint strength</span><input type="range" data-key="courses.strength" min="10" max="100" step="5"><output data-for="courses.strength" data-format="pct100"></output></label>
         <ul class="courses" id="course-list"></ul>
         <p class="desc" id="course-empty">Open Messages or Grades on Blackboard once and your courses show up here, each with a colour you can change.</p>
       </section>

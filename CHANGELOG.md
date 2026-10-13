@@ -60,6 +60,12 @@ All notable changes to Glaze are documented here. The format follows
 - Both buttons are themed, follow the motion setting, and can be reached with the keyboard. In a
   narrow window the document makes room for them instead of sitting underneath. "Document buttons"
   under Extras hides them altogether.
+- **Course tint**, off until you set it up: inside a course you pick, the accent takes that course's
+  color and the background leans toward it, so you can tell at a glance which course you're in. Turn
+  it on under Courses in the editor, tick the courses, and set how strong it is; the preview shows it.
+  It follows the course onto its item pages and panels and lets go when you leave. Gradients and
+  animated backgrounds that follow your palette pick it up too. Text on the accent and the accent on
+  the page keep their contrast.
 
 ## [2.0.4] — release candidate
 
