@@ -83,7 +83,30 @@ on first use. `APPSTORE_EXPORT_ONLY=1` builds the signed package without uploadi
 screenshots and review submission happen in App Store Connect.
 
 `scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
-Use it only when you mean to regenerate the project.
+Use it only when you mean to regenerate the project. It doesn't know about the iPhone and iPad targets below.
+
+### iPhone and iPad
+
+Glaze for Safari on iPhone and iPad needs iOS or iPadOS 18 or newer. It comes from the same App Store
+listing as the Mac app; buying or installing on one platform covers the other.
+
+1. Install **Glaze** and open it. It shows a two-step guide.
+2. Turn Glaze on in **Settings › Apps › Safari › Extensions › Glaze for Blackboard Ultra** by switching on
+   **Allow Extension**. On iOS 26.2 and newer, the guide's **Open Settings** button takes you to
+   Safari's extension settings, and the guide ticks the step off as soon as Glaze is on.
+3. Open your Blackboard Ultra site in Safari and tap the extensions button in the address bar (a puzzle
+   piece; on iPhone it can be in the page menu at the left of the address). Tap **Glaze for Blackboard
+   Ultra**, then **Always Allow…** and **Always Allow on This Website**, and reload the page.
+
+The popup and the editor are under the same button. The editor also opens from Settings › Apps › Safari ›
+Extensions › Glaze for Blackboard Ultra › Settings.
+
+The iOS app is two more targets in the same Xcode project (`Glaze iOS` and `Glaze iOS Extension`), sharing
+the extension's resources and native handler with the Mac targets. `scripts/appstore-ios.sh` archives it
+with App Store signing into `release/Glaze-iOS.xcarchive` and `release/glaze-<version>-ios.ipa`. It uses
+the App Store profiles already on the Mac; set `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID` to let Xcode
+create them. It never uploads unless `APPSTORE_UPLOAD=1` is set. To try it in the Simulator, run the
+`Glaze iOS` scheme in Xcode.
 
 ## How it works
 

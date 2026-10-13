@@ -26,7 +26,7 @@
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
   // The options page shows a mock of Ultra (preview.html) that runs this same script.
-  const isPreview = location.protocol === 'chrome-extension:';
+  const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
   const onBody = (fn) => (document.body ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
@@ -426,7 +426,8 @@
   let mx = 0;
   let my = 0;
   document.addEventListener('pointermove', (e) => {
-    if (html.getAttribute('data-gz-motion') !== 'expressive') return;
+    // A finger has no hover: the light would stay wherever the last touch was.
+    if (e.pointerType === 'touch' || html.getAttribute('data-gz-motion') !== 'expressive') return;
     mx = e.clientX;
     my = e.clientY;
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; setVar('--gz-mx', `${mx}px`); setVar('--gz-my', `${my}px`); });

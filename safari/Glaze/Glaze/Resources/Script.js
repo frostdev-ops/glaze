@@ -1,4 +1,5 @@
 // The app calls these: showInstall(installed) outside Applications, showGuide(update) inside, then show(enabled) every second.
+// The iOS app calls only show(enabled), and only on iOS 26.2 or later.
 let installLabel = 'Install Glaze';
 
 // installed: null, or the Glaze already in Applications: {version, relation: 'older' | 'same' | 'newer', appStore}.
@@ -49,7 +50,8 @@ window.showError = function (message) {
 
 for (const el of document.querySelectorAll('.settings-name')) el.textContent = 'Preferences';
 
-document.querySelector('.install-button').addEventListener('click', (event) => {
+// The iOS app's page (Glaze iOS/Resources/Main.html) has no installer.
+document.querySelector('.install-button')?.addEventListener('click', (event) => {
   const open = document.body.dataset.install === 'open';
   event.target.disabled = true;
   event.target.textContent = open ? 'Opening…' : installLabel === 'Update Glaze' ? 'Updating…' : 'Installing…';

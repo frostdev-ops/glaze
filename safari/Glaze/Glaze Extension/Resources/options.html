@@ -99,6 +99,21 @@
   .news h2 { margin: 0; color: var(--gz-accent); }
   .news ul { grid-column: 1 / -1; margin: 0; padding-left: 1.1rem; display: grid; gap: 0.2rem; color: var(--gz-ink); }
   body.finding .news { display: none; }
+  /* Phone width: the section links scroll in one row under the title, labels sit above their
+     controls so sliders get the width, and segmented choices wrap instead of spilling out. */
+  @media (max-width: 600px) {
+    .top { padding: 0.6rem 1rem; gap: 0.5rem 1rem; }
+    .top nav { order: 1; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -1rem; padding: 0 1rem; }
+    .top nav a { flex: none; }
+    .top .hint { flex: 1; }
+    .layout { padding: 1rem; gap: 1rem; }
+    .preview { height: min(420px, 55vh); }
+    section { padding: 1rem; scroll-margin-top: 6.5rem; }
+    .field { grid-template-columns: minmax(0, 1fr) 3.5rem; gap: 0.35rem 0.75rem; }
+    .field.wide { grid-template-columns: minmax(0, 1fr); }
+    .field > span:first-child { grid-column: 1 / -1; }
+    .seg { flex-wrap: wrap; border-radius: 14px; }
+  }
 </style>
 </head>
 <body>
