@@ -654,6 +654,34 @@
     if (!label) el.removeAttribute('data-gz-new');
     else if (el.getAttribute('data-gz-new') !== label) el.setAttribute('data-gz-new', label);
   };
+  // A card's count is a real link-like pill, first in the course name (where an ellipsis can't cut
+  // it): it opens that course's gradebook at the first new grade. Clicks are taken in the capture
+  // phase so the card around it (itself a link) doesn't open the course instead.
+  const cardBadge = (el, cid, count) => {
+    let pill = el.querySelector(':scope > .gz-new');
+    if (!count) return pill?.remove();
+    if (!pill) {
+      pill = Object.assign(document.createElement('span'), { className: 'gz-new', tabIndex: 0 });
+      pill.setAttribute('role', 'link');
+      el.prepend(pill);
+    }
+    const label = `${count} new`;
+    if (pill.textContent !== label) {
+      pill.textContent = label;
+      pill.setAttribute('aria-label', `${count} new grade${count === 1 ? '' : 's'}: open the gradebook`);
+    }
+    pill.dataset.cid = cid;
+  };
+  const openNew = (e) => {
+    const pill = e.target instanceof Element && e.target.closest('.gz-new');
+    if (!pill || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type !== 'click' && e.type !== 'keydown') return;
+    sessionStorage.setItem('gz-new-jump', pill.dataset.cid);
+    location.assign(`${location.origin}/ultra/courses/${pill.dataset.cid}/grades`);
+  };
+  for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, openNew, true);
   const renderNew = () => {
     if (!settings.enhance.newgrades || window.top !== window || !observer) return;
     if (!seen) return loadSeen();
@@ -667,6 +695,9 @@
         shown.set(cid, set);
         if (JSON.stringify(now) !== JSON.stringify(seen[cid])) { seen[cid] = now; keepSeen(cid); }
         for (const el of document.querySelectorAll('[id^="course-student-grades-item-name-"]')) badge(el, set.has(el.id.slice(32)) && 'New');
+        // Arrived from a card's "N new": bring the first new grade into view, once.
+        const first = sessionStorage.getItem('gz-new-jump') === cid && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
+        if (first) { sessionStorage.removeItem('gz-new-jump'); first.closest('li, tr, [role="row"]')?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' }); }
       }
     }
     // Cards only count: nothing is marked seen until its gradebook is shown. Only on the Courses and
@@ -681,7 +712,7 @@
         if (!id || !el || n++ >= 12) continue;
         const b = bookFor(id);
         const count = b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : 0;
-        badge(el, count > 0 && `${count} new`);
+        cardBadge(el, id, count);
       }
     }
   };
@@ -1518,7 +1549,7 @@
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
     if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
     if (observer) { renderProgress(); renderCalc(); syncDownloads(); }
-    if (!s.enhance.newgrades) clearTags(['data-gz-new']);
+    if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new')) p.remove(); }
     else if (observer) renderNew();
     if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
     // Declutter: CSS hides by these.
@@ -1569,6 +1600,7 @@
     closeKeys();
     closeCmd();
     for (const id of ['gz-progress', 'gz-calc']) document.getElementById(id)?.remove();
+    for (const p of document.querySelectorAll('.gz-new')) p.remove();
     dropBars();
     for (const b of document.querySelectorAll('.gz-dl')) b.remove();
     for (const l of links) l.remove();

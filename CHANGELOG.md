@@ -21,7 +21,8 @@ All notable changes to Glaze are documented here. The format follows
 - **Submitted late:** due-date status says "Submitted late", in amber, for work handed in after its due
   date and not graded yet. Never said where you have a due-date exception.
 - **New-grade badges:** "New" beside grades that arrived since you last opened a course's gradebook,
-  and a count ("2 new") on course cards on the Courses and Grades pages. The first time, the grades
+  and a count ("2 new") on course cards on the Courses and Grades pages; clicking the count opens that
+  course's gradebook at the first new grade. The first time, the grades
   Blackboard says you haven't viewed count as new. What you've seen is kept on this computer.
 - **What-if calculator** on a course's gradebook: type scores for work that isn't graded yet and see
   the overall grade they'd make, or set a target and see the score you'd need on everything left. It
