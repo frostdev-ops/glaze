@@ -169,21 +169,22 @@
     });
     return Promise.all([excepted, ...dates]).then(([exc, ...when]) => new Set(waiting.filter((g, i) => !exc(g.columnId) && GZ_GRADES.late(when[i], g.column.dueDate)).map((g) => g.columnId)));
   };
-  // cid → { at, pending, results, grades (by content item), late (column ids), key }. An answer that
-  // changes anything re-tags the page.
+  // cid → { at, pending, results, grades (by content item), late (column ids), key }. Lateness is
+  // asked only by the due-date chips (late = true), so a course card never costs attempt requests. An
+  // answer that changes anything re-tags the page.
   const books = new Map();
-  const bookFor = (cid) => {
+  const bookFor = (cid, late = false) => {
     let b = books.get(cid);
-    if (!b || (!b.pending && Date.now() - b.at > 60000)) {
+    if (!b || (!b.pending && (Date.now() - b.at > 60000 || (late && !b.late)))) {
       b = { key: '', ...b, at: Date.now(), pending: true };
       books.set(cid, b);
       // ponytail: one page, Ultra's cap of 200 grades; items past that show only their countdown.
       me().then((id) => api(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
-        .then((j) => lateIn(cid, j.results).then((late) => {
+        .then((j) => (late || b.late ? lateIn(cid, j.results) : Promise.resolve(undefined)).then((lateCols) => {
           b.pending = false;
-          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...late]]);
+          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])]]);
           if (key === b.key) return;
-          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), late, key });
+          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), late: lateCols, key });
           onBook();
         }))
         .catch(() => { b.pending = false; });
@@ -191,7 +192,7 @@
     return b;
   };
   // undefined until the current course's gradebook answers.
-  const gradesIn = () => { const cid = courseId(); return cid ? bookFor(cid).grades : undefined; };
+  const gradesIn = () => { const cid = courseId(); return cid ? bookFor(cid, true).grades : undefined; };
   const onBook = () => { tagExtras([document.body]); renderNew(); renderCalc(); };
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
