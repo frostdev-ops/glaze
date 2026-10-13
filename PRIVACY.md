@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze for Blackboard Ultra
 
-_Last updated: 2026-10-11_
+_Last updated: 2026-10-13_
 
 ## What Glaze stores
 
@@ -21,7 +21,7 @@ analytics and no server of its own.
 ## Network requests
 
 Glaze ships as static files and loads no remote code. Its fonts and three.js (used by the animated
-backgrounds) are bundled. It makes requests in three cases:
+backgrounds) are bundled. It makes requests in four cases:
 
 - **Folder previews** (an Extra, on by default; switch it off under Extras). Hovering a folder asks your own Blackboard site for the
   folder's contents, using the same internal address Blackboard's own page uses. The request goes to the
@@ -33,6 +33,10 @@ backgrounds) are bundled. It makes requests in three cases:
   address Blackboard's own Grades page uses. The request goes to the site you are on, with your existing
   session, at most once a minute per course, and the answer is kept in memory only. Nothing is stored or
   sent anywhere else.
+- **Grades on course cards** (an Extra, on by default). To show your overall grade on each course on
+  the Courses page, Glaze makes the same gradebook request for each course whose card is on screen, at
+  most once a minute per course, to the site you are on, with your existing session. The answer is kept
+  in memory only. Nothing is stored or sent anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
 

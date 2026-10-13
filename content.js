@@ -11,7 +11,7 @@
   const html = document.documentElement;
   const SHEETS = ['theme.css', 'motion.css', 'extras.css'];
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -140,37 +140,62 @@
   // Due dates in course content and on an assignment's own page carry a status: Ultra's progress circle
   // where the course tracks progress, and the gradebook (submitted, graded, exempt). The gradebook is
   // asked of the user's own Blackboard (same origin, their session) at most once a minute per course, and
-  // only when one of those due dates is on the page; an answer that changes anything re-tags the page.
-  // undefined until it answers.
-  let meId = null;
-  let book = { cid: null, at: 0, grades: undefined, key: '' };
-  const gradesIn = () => {
-    const cid = courseId();
+  // only when one of those due dates, or that course's card, is on the page; an answer that changes
+  // anything re-tags the page. The course's book: grades and overall are undefined until it answers.
+  let meId = null; // the user's id, as a promise
+  const books = new Map(); // course id -> { at, grades, overall, key, pending }
+  const gradesIn = (cid = courseId()) => {
     if (!cid) return undefined;
-    if (book.cid !== cid || Date.now() - book.at > 60000) {
-      book = book.cid === cid ? { ...book, at: Date.now(), pending: true } : { cid, at: Date.now(), grades: undefined, key: '', pending: true };
+    let book = books.get(cid);
+    if (!book || Date.now() - book.at > 60000) {
+      book = { ...book, at: Date.now(), pending: true };
+      books.set(cid, book);
       // Absolute URLs: Ultra's <base href> points at its CDN.
       const get = (path) => fetch(`${location.origin}/learn/api/v1${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
         .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
       // ponytail: one page, Ultra's cap of 200 grades; items past that show only their countdown.
-      (meId ? Promise.resolve(meId) : get('/users/me').then((me) => (meId = me.id)))
+      // One /users/me for all the cards that ask at once; asked again only if it failed.
+      (meId ||= get('/users/me').then((me) => me.id).catch((e) => { meId = null; throw e; }))
         .then((id) => get(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
         .then((j) => {
-          if (book.cid !== cid) return;
           book.pending = false;
           const grades = GZ_PAGE.gradesByContent(j.results);
-          const key = JSON.stringify([...grades].map(([id, g]) => [id, g.status, g.isExempt, g.displayGrade]));
+          const overall = GZ_PAGE.overall(j.results);
+          const key = JSON.stringify([overall, ...[...grades].map(([id, g]) => [id, g.status, g.isExempt, g.displayGrade])]);
           if (key === book.key) return;
-          Object.assign(book, { grades, key });
+          Object.assign(book, { grades, overall, key });
           tagExtras([document.body]);
         })
-        .catch(() => { if (book.cid === cid) book.pending = false; });
+        .catch(() => { book.pending = false; });
     }
-    return book.grades;
+    return book;
+  };
+
+  // ---- grades on course cards (Extras) -------------------------------------------------------
+  // On the Courses page each card's status line ("Open") gains the course's overall grade, drawn by CSS
+  // from attributes. Grid and list views share one card; the Recent Courses strip has its own. A card's
+  // book is asked for only once the card is on screen.
+  const CARD_STATUS = 'article.course-element-card[data-course-id] .course-status, a[class*="courseCard"] [class*="courseStatus"]';
+  const onScreen = new Set();
+  const cardsIO = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) onScreen.add(e.target); else onScreen.delete(e.target);
+    tagCards();
+  });
+  const tagCards = () => {
+    if (!observer || !settings.enhance.overall || location.pathname !== '/ultra/course') return;
+    for (const el of document.querySelectorAll(CARD_STATUS)) cardsIO.observe(el);
+    for (const el of onScreen) {
+      if (!el.isConnected) { onScreen.delete(el); cardsIO.unobserve(el); continue; }
+      const cid = el.closest('[data-course-id]')?.dataset.courseId || el.closest('a')?.href.match(/\/courses\/(_\d+_\d+)\//)?.[1];
+      const g = gradesIn(cid)?.overall;
+      if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); }
+      else if (g === null) { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
+    }
   };
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagExtras = (roots) => {
+    tagCards();
     const { scores, urgency, inline } = settings.enhance;
     if (!scores && !urgency && !inline) return;
     const now = new Date();
@@ -197,7 +222,7 @@
           // An assignment's own page: the due date in its details card, its id in the address.
           const pageId = !item && el.closest('.due-date-container') && location.pathname.match(/\/assessment\/(_\d+_\d+)\//)?.[1];
           // A discussion's outline item is a link with its own id; the gradebook knows the discussion's.
-          const grades = (item || pageId) && gradesIn();
+          const grades = (item || pageId) && gradesIn()?.grades;
           const grade = !grades ? undefined : pageId ? grades.get(pageId) : grades.get(item.dataset.contentId)
             ?? grades.get(item.querySelector('a[href*="/discussion/"]')?.getAttribute('href').match(/\/discussion\/(_\d+_\d+)/)?.[1]);
           // Nothing is urgent once it's done. Elsewhere a past date may well be done, and the stream
@@ -254,7 +279,7 @@
   const release = () => {
     const now = performance.now();
     for (const [el, t] of held) {
-      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || book.pending || loaderIn(el))) continue;
+      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || [...books.values()].some((b) => b.pending) || loaderIn(el))) continue;
       held.delete(el);
       // Cards already there arrive with the page, not one by one after it.
       for (const c of el.querySelectorAll('.content-list-item, .element-card')) c.setAttribute('data-gz-held', '');
@@ -316,6 +341,8 @@
     timer = 0;
     dirty.clear();
     full = false;
+    cardsIO.disconnect();
+    onScreen.clear();
     clearTags(TAGS);
   };
 
@@ -803,7 +830,7 @@
     const was = enhanced;
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
-    if (observer && ['scores', 'urgency', 'inline'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
+    if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
     if (observer) renderProgress();
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);

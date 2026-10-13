@@ -129,8 +129,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Glaze stores your settings in `chrome.storage.sync` and your course names on your own device. It
 collects nothing. The only requests it makes are folder previews (to your own Blackboard site, when you
-hover a folder), your submission and grade status for due dates (to the same site) and a background
-image you choose. See [PRIVACY.md](PRIVACY.md).
+hover a folder), your submission and grade status for due dates and your overall grade for course
+cards (to the same site) and a background image you choose. See [PRIVACY.md](PRIVACY.md).
 
 ## License
 

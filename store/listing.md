@@ -38,6 +38,7 @@ At-a-glance helpers, on from the start:
 
 • Status beside every due date: "in 2 days · Unopened", "Submitted", "Graded · 18/20", and grade percentages
 • Score bars under gradebook scores
+• Your overall grade on each course card, when your instructor shares it
 • Folder previews: hover a folder to see what's inside and what's due
 • Course progress: how much of a course you've completed
 
@@ -55,7 +56,8 @@ Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed 
 
 Privacy: Glaze stores your settings in Chrome's sync storage and your course names on your device. It
 collects nothing and has no server. The only requests it makes go to your own Blackboard site, for folder
-previews and for which items you've submitted, opened or had graded; and to a background image you choose. The source is open at
+previews, for which items you've submitted, opened or had graded, and for your overall grade in each
+course; and to a background image you choose. The source is open at
 https://github.com/frostdev-ops/glaze.
 
 Blackboard is a trademark of Anthology Inc. Glaze is an independent project and is not affiliated with,
@@ -83,7 +85,8 @@ pages the extension is for. The content script injects stylesheets, sets CSS cus
 `<html>`, and tags elements with `data-gz-*` attributes so they can be restyled. With optional helpers
 on, it reads dates and grades already shown on the page to display due-date status and percentages, and
 folder previews ask the same Blackboard site for a folder's contents. Due-date status asks that site's
-gradebook which of the user's items are submitted or graded. Nothing is sent anywhere else.
+gradebook which of the user's items are submitted or graded; card grades ask it for the user's overall
+grade in each course shown on the Courses page. Nothing is sent anywhere else.
 
 **web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**
 The content script injects the stylesheets as `<link>`s it owns, so the master switch can add and remove
