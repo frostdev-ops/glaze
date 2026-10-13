@@ -1,5 +1,5 @@
 // German for Glaze's own text: each key is the English, as written in the code (lib/i18n.js).
-// Machine translation awaiting native review (DECISIONS.md).
+// Machine translation, accepted as is; corrections come through bug reports (DECISIONS.md).
 (globalThis.GZ_LANGS ||= {}).de = {
   'Glaze settings': 'Glaze-Einstellungen',
   'Palette': 'Palette',

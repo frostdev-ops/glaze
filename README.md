@@ -29,7 +29,7 @@ domain.
 - **Looks** — eight ready-made combinations of palette, fonts, shape and background, one click each in the popup or the editor.
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
-- **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations awaiting native review, and corrections are welcome.
+- **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
 
