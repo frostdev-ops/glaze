@@ -462,6 +462,21 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .MuiTableHead-root .MuiTableCell-root, #site-wrap thead th { background: var(--gz-surface) !important; }
 #site-wrap .readonly-pill { background: var(--gz-grade-bg, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line-strong) !important; }
 #site-wrap .readonly-pill.customGradePill { color: var(--gz-ink) !important; }
+/* Grade pills: one width for every row, sized for the longest ("[rubric] 100 / 100 | 100%"), one line,
+   even digits. Ultra fixes the pill's box at ~100px and hides the rest, so "Not graded" wrapped and
+   "100 / 100" lost its ends; the box lets go, and a gradebook's Grade column makes room from Item Name. */
+#site-wrap :has(> .readonly-pill) { width: auto !important; max-width: none !important; }
+#site-wrap .readonly-pill {
+  box-sizing: border-box; display: inline-flex !important; align-items: center; justify-content: center; gap: 0.35em;
+  width: max-content !important; min-width: 10rem !important; max-width: none !important; height: 30px; padding: 0 0.8em !important;
+  overflow: visible !important; white-space: nowrap !important; font-size: 13px !important; font-variant-numeric: tabular-nums;
+}
+#site-wrap .readonly-pill * { white-space: nowrap !important; }
+#site-wrap .readonly-pill > button { width: 20px !important; height: 20px !important; padding: 0 !important; margin: 0 0.15em 0 0 !important; flex: none; opacity: 0.75; }
+#site-wrap .readonly-pill > button svg { width: 16px !important; height: 16px !important; }
+#site-wrap .readonly-pill [class*="makeStylespillSeparator-"] { margin: 0 0.2em; opacity: 0.6; }
+#site-wrap .readonly-pill .pill-points-possible { opacity: 0.75; }
+#site-wrap .grades-list td:has(.readonly-pill), #site-wrap .grades-list th:nth-child(4) { width: calc(10rem + 32px) !important; }
 #site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style)[class*="customGradePill"] { background: var(--gz-grade-bg, var(--gz-surface)) !important; border-color: color-mix(in srgb, var(--gz-grade-edge, var(--gz-line-strong)) 55%, var(--gz-line-strong)) !important; }
 
 /* Message compose: reply dock + the Quill toolbar. */

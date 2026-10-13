@@ -9,6 +9,9 @@
   --gz-enter: gz-in 0.6s var(--gz-spring) backwards;
   --gz-enter-page: gz-in 0.45s var(--gz-ease) backwards;
   --gz-enter-panel: gz-fade 0.3s var(--gz-ease) backwards;
+  --gz-t-page: 0.28s;
+  --gz-t-reveal: 0.35s;
+  --gz-reveal-blur: 8px;
   --gz-tip-in: gz-tip 0.16s var(--gz-ease) backwards;
   --gz-stagger: 0.05s;
   --gz-lift: translateY(-2px);
@@ -27,6 +30,9 @@ html[data-gz-motion="expressive"] {
   --gz-spring: linear(0, 0.2 3%, 0.55 7.5%, 0.86 12%, 1.06 17%, 1.14 22%, 1.12 27%, 1.04 35%, 0.98 45%, 0.99 60%, 1);
   --gz-enter: gz-rise 0.8s var(--gz-spring) backwards;
   --gz-enter-panel: gz-focus 0.45s var(--gz-ease) backwards;
+  --gz-t-page: 0.42s;
+  --gz-t-reveal: 0.5s;
+  --gz-reveal-blur: 14px;
   --gz-tip-in: gz-tip 0.34s var(--gz-spring) backwards;
   --gz-stagger: 0.07s;
   --gz-lift: translateY(-4px) scale(1.01);
@@ -38,7 +44,7 @@ html[data-gz-motion="expressive"] {
 
 /* Off: nothing moves. The fine-tune switches zero one group each. */
 html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s; }
-html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-tip-in: none; --gz-stagger: 0s; }
+html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-t-reveal: 0s; }
 html[data-gz-motion="off"], html[data-gz-no-hover] { --gz-lift: none; --gz-nudge: none; --gz-press: none; --gz-pop: none; --gz-hover-shadow: none; --gz-hover-filter: none; }
 html[data-gz-motion="off"] { --gz-ambient: paused; }
 /* content.js maps the system setting to "off" unless the user opted out; this only covers the
@@ -63,6 +69,21 @@ html[data-gz-motion="off"] { --gz-ambient: paused; }
 .route-view-container, .panel-wrap { animation: var(--gz-enter-page); }
 #site-wrap :is(.bb-offcanvas-panel, .peek-panel__content-wrapper) :is(.route-view-container, .panel-wrap) { animation: none; }
 #site-wrap .peek-panel__content-wrapper, #site-wrap .bb-offcanvas-panel, .ms-Panel-main { animation: var(--gz-enter-panel); }
+/* Page changes: content.js holds the old page while Ultra builds the next, then the two crossfade. */
+::view-transition-group(root) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
+[data-gz-held] { animation: none !important; }
+/* Page loads: content.js holds a page's container hidden while Ultra builds it, then lets go and the
+   page resolves from a blur, once. A spinner shows only if the wait outlasts 0.4 s. Hidden even with
+   motion off (the reveal is then instant): half-built pages are the problem, not the motion. */
+[data-gz-loading] > * { opacity: 0 !important; filter: blur(var(--gz-reveal-blur)); }
+[data-gz-reveal] > * { transition: opacity var(--gz-t-reveal) var(--gz-ease), filter var(--gz-t-reveal) var(--gz-ease); }
+[data-gz-loading]::after {
+  content: ""; position: fixed; left: 50%; top: 50%; width: 32px; height: 32px; margin: -16px 0 0 -16px; border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--gz-accent) 18%, transparent); border-top-color: var(--gz-accent); border-right-color: var(--gz-accent);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--gz-accent) 45%, transparent));
+  animation: gz-spin 0.75s linear infinite, gz-fade 0.3s var(--gz-ease) 0.4s backwards;
+}
+@keyframes gz-spin { to { rotate: 1turn; } }
 /* Tooltips grow from the side they point at. */
 :is(.tooltip, span.enhanced-tooltip, .ms-Tooltip, .gz-tip) { animation: var(--gz-tip-in); }
 .gz-tip[data-side="bottom"] { --gz-tip-dy: -4px; }

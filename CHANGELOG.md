@@ -6,7 +6,23 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.4] — release candidate
+
+### Added
+
+- **Smoother page changes.** Ultra builds each page in view: a spinner, then parts arriving and
+  pushing each other down. Glaze now holds a page hidden while it loads and reveals it once it's
+  built, resolving from a blur in one motion; a spinner shows only if the wait outlasts 0.4 s. Clicking
+  the main menu or a course's tabs crossfades from the old page instead of flashing through
+  half-built ones. Opening a course no longer jumps (its layout shift went from 0.11 to 0), and
+  Glaze's course progress bar no longer pushes the content down as it appears. Follows the motion
+  setting: off reveals instantly.
+
 ### Changed
+
+- **Grade pills** are one width and one line in every row, sized for the longest grade ("100 / 100 ·
+  100%" with the rubric icon); "Not graded" no longer wraps and long grades no longer lose their ends.
+  A course gradebook's Grade column takes the room from Item Name.
 
 - **Due-date status** replaces countdowns in course content: beside each due date, where the work
   stands. "in 2 days · Unopened" or "· Opened" (from Ultra's progress circle), "Submitted · due in 2
@@ -149,6 +165,7 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
+[2.0.4]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.4-rc.1
 [2.0.3]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.3
 [2.0.2]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.2
 [2.0.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.1

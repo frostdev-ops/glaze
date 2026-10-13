@@ -122,6 +122,15 @@ real Borealis background):
 
 https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
 
+## What's new in 2.0.4
+
+For the Mac App Store's "What's New" field; the Chrome Web Store has none.
+
+> Due dates now say where your work stands: "in 2 days · Unopened", "Submitted", "Graded · 18/20", or
+> "Past due" when something really is missing. No more "2 weeks ago" next to work you've handed in.
+>
+> Loading spinners and placeholders match your colors, and the menu keeps its glow in narrow windows.
+
 ## What's new in 2.0.3
 
 For the Mac App Store's "What's New" field; the Chrome Web Store has none.

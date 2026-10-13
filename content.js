@@ -11,7 +11,7 @@
   const html = document.documentElement;
   const SHEETS = ['theme.css', 'motion.css', 'extras.css'];
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -148,7 +148,7 @@
     const cid = courseId();
     if (!cid) return undefined;
     if (book.cid !== cid || Date.now() - book.at > 60000) {
-      book = book.cid === cid ? { ...book, at: Date.now() } : { cid, at: Date.now(), grades: undefined, key: '' };
+      book = book.cid === cid ? { ...book, at: Date.now(), pending: true } : { cid, at: Date.now(), grades: undefined, key: '', pending: true };
       // Absolute URLs: Ultra's <base href> points at its CDN.
       const get = (path) => fetch(`${location.origin}/learn/api/v1${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
         .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
@@ -157,13 +157,14 @@
         .then((id) => get(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
         .then((j) => {
           if (book.cid !== cid) return;
+          book.pending = false;
           const grades = GZ_PAGE.gradesByContent(j.results);
           const key = JSON.stringify([...grades].map(([id, g]) => [id, g.status, g.isExempt, g.displayGrade]));
           if (key === book.key) return;
           Object.assign(book, { grades, key });
           tagExtras([document.body]);
         })
-        .catch(() => {});
+        .catch(() => { if (book.cid === cid) book.pending = false; });
     }
     return book.grades;
   };
@@ -238,6 +239,41 @@
     renderProgress();
     recordCourses();
   };
+  // ---- page loads ------------------------------------------------------------------------------
+  // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
+  // Glaze's progress bar and chips landing on top. A page's container (a course tab's, not the course
+  // shell around it) is held hidden while that happens and let go once it's built: still for 300 ms
+  // (pages that load per course, like Grades, pause ~250 ms between parts), no spinner or skeleton
+  // showing, the course's grades in, or after 2.5 s at most. It then resolves from a blur, once
+  // (motion.css).
+  const GATE = '.route-view-container:not(.bb-offcanvas-container)';
+  const held = new Map(); // container -> { at, still }
+  let gateTimer = 0;
+  const loaderIn = (el) => [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root')]
+    .some((e) => e.getClientRects().length && !e.closest('.ng-hide'));
+  const release = () => {
+    const now = performance.now();
+    for (const [el, t] of held) {
+      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || book.pending || loaderIn(el))) continue;
+      held.delete(el);
+      // Cards already there arrive with the page, not one by one after it.
+      for (const c of el.querySelectorAll('.content-list-item, .element-card')) c.setAttribute('data-gz-held', '');
+      el.setAttribute('data-gz-reveal', '');
+      el.removeAttribute('data-gz-loading');
+      setTimeout(() => el.removeAttribute('data-gz-reveal'), 800);
+    }
+    if (!held.size) { clearInterval(gateTimer); gateTimer = 0; }
+  };
+  const hold = (el) => {
+    if (held.has(el) || el.parentElement?.closest('[data-gz-loading]')) return;
+    const now = performance.now();
+    held.set(el, { at: now, still: now });
+    // data-gz-held: the reveal is its entrance, so its own fade-up never starts (motion.css).
+    el.setAttribute('data-gz-held', '');
+    el.setAttribute('data-gz-loading', '');
+    gateTimer ||= setInterval(release, 50);
+  };
+
   // Throttle, not debounce: Ultra never stops mutating (ripples, popper repositioning), and a
   // debounce that restarts on every record would put the sweep off indefinitely.
   const schedule = (records) => {
@@ -250,8 +286,15 @@
         if (item) dirty.add(item);
         continue;
       }
-      if (r.type === 'attributes') dirty.add(r.target);
-      else for (const n of r.addedNodes) if (n.nodeType === 1) dirty.add(n);
+      if (r.type === 'attributes') { dirty.add(r.target); continue; }
+      // Here, not in the throttled pass: a page must be held before it's first painted.
+      for (const n of r.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        dirty.add(n);
+        if (n.matches(GATE)) hold(n);
+        else if (n.firstElementChild) for (const c of n.querySelectorAll(GATE)) hold(c);
+      }
+      if (held.size) for (const [el, t] of held) if (el.contains(r.target)) t.still = performance.now();
     }
     // Too many separate subtrees to be worth tracking: one full pass is cheaper.
     if (dirty.size > 500) { dirty.clear(); full = true; }
@@ -578,6 +621,47 @@
         if (keysBox) closeKeys();
         else openKeys();
       }
+    }, true);
+  }
+
+  // ---- page changes ---------------------------------------------------------------------------
+  // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
+  // stall it for half a second). A click on the main menu or a course's tabs instead holds the old
+  // page in a view transition until the next one exists, then crossfades into it: when the address has
+  // changed and the new page is being held while it loads (see page loads), or has been still for
+  // 120 ms, or after 500 ms at most. Top frame only, and only while entrances are on.
+  if (window.top === window && document.startViewTransition) {
+    const PAGE_LINKS = '#base_tools a, .bb-ui-navigation-list-horizontal a';
+    const settled = (from) => new Promise((done) => {
+      const t0 = performance.now();
+      let still = t0;
+      const mo = new MutationObserver(() => { still = performance.now(); });
+      mo.observe(document.body, { childList: true, subtree: true });
+      const check = () => {
+        const now = performance.now();
+        if ((location.href !== from && (held.size || now - still > 120)) || now - t0 > 500) { mo.disconnect(); done(); } else setTimeout(check, 25);
+      };
+      setTimeout(check, 25);
+    });
+    let replaying = false;
+    document.addEventListener('click', (e) => {
+      if (replaying || !observer || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (html.getAttribute('data-gz-motion') === 'off' || html.hasAttribute('data-gz-no-enter')) return;
+      const link = e.target instanceof Element && e.target.closest(PAGE_LINKS);
+      if (!link || link.matches('[aria-current="page"], .active')) return;
+      // Ultra gets the click inside the transition, once the old page has been captured.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const from = location.href;
+      document.startViewTransition(async () => {
+        replaying = true;
+        link.click();
+        replaying = false;
+        await settled(from);
+        // The crossfade is the entrance: the new page's own fade-up would be a second movement. Marked
+        // on the element rather than switched on <html>, so it can't restart when the mark goes.
+        for (const el of document.querySelectorAll('.route-view-container, .panel-wrap')) el.setAttribute('data-gz-held', '');
+      });
     }, true);
   }
 
