@@ -290,6 +290,46 @@ html[data-gz-enhance-newgrades] h4[id^="course-name-"][data-gz-new]::before {
 #gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
 #gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-line); }
+/* Dark documents: the preview frame inverted, with hues turned back, on dark palettes only. 0.9 so
+   white paper lands near the surface rather than on pure black. */
+#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { transition: filter var(--gz-t-slow) var(--gz-ease); }
+html[data-gz-dark-theme][data-gz-enhance-darkDocs] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: invert(0.9) hue-rotate(180deg); }
+
+/* Document buttons: a column of round buttons in the bottom-right gutter. Where the window is too
+   narrow for a gutter, the document makes room for one instead of sitting under them. */
+#gz-doc-tools {
+  position: fixed; right: 0.75rem; bottom: 0.75rem; z-index: 1250;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  font-family: var(--gz-font); animation: var(--gz-tip-in);
+}
+html[data-gz-footer] #gz-doc-tools { bottom: calc(var(--gz-footer-h) + 0.75rem); }
+@container (max-width: 58rem) { html[data-gz-doc-tools] #site-wrap .document-body { padding-right: 3.5rem !important; } }
+#gz-doc-tools button {
+  display: grid; place-items: center; width: 2.5rem; height: 2.5rem; padding: 0; cursor: pointer;
+  color: var(--gz-ink-muted); background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass)); border: 1px solid var(--gz-line-strong); border-radius: 999px; box-shadow: var(--gz-shadow);
+  transition: color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), scale var(--gz-t) var(--gz-ease);
+}
+#gz-doc-tools button:hover { color: var(--gz-ink); border-color: var(--gz-accent); }
+#gz-doc-tools button:active { scale: var(--gz-press); }
+#gz-doc-tools button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-doc-tools button[aria-pressed="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+#gz-doc-tools [hidden] { display: none; }
+#gz-doc-tools svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#gz-doc-tools .gz-doc-time { max-width: 3rem; font-size: 11px; font-weight: 600; line-height: 1.2; text-align: center; color: var(--gz-ink-muted); }
+
+/* Focus mode: the document alone. Its title bar, a learning module's bar (Contents, the module, its
+   arrows) and Previous / Next go, and the main menu and course tabs under the panel, should they
+   show. A reading-progress line runs along the top. */
+html[data-gz-focus] :is(#base_tools, .bb-ui-navigation-list-horizontal, course-banner),
+html[data-gz-focus] #site-wrap section.route-view-container:has(.document-content-root) > div > div:not(:has(.document-content-root)),
+html[data-gz-focus] #site-wrap div:has(+ div > .document-content-root),
+html[data-gz-focus] #site-wrap div:has(> .js-content-navigator-previous, > .js-content-navigator-next) { display: none !important; }
+#gz-read {
+  position: fixed; inset: 0 0 auto; height: 3px; z-index: 1250; pointer-events: none;
+  background: linear-gradient(90deg, var(--gz-accent), var(--gz-accent-hi));
+  transform: scaleX(var(--gz-read, 0)); transform-origin: left;
+}
 
 /* ---- declutter ---- */
 html[data-gz-hide-help] .pagehelp-directive { display: none !important; }

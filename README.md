@@ -25,7 +25,7 @@ domain.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — Ultra's course stripes blended into your palette, or set one by one.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
-- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade badges, a what-if grade calculator, a Ctrl+K command palette for courses, items, pages and settings, a backup of what you type in Blackboard's editors, and Download all, which saves a folder's files as one zip (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts and hiding page parts you don't use (off by default).
+- **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade badges, a what-if grade calculator, a Ctrl+K command palette for courses, items, pages and settings, a backup of what you type in Blackboard's editors, Download all, which saves a folder's files as one zip, and focus mode for course documents (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts, dark documents and hiding page parts you don't use (off by default).
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.

@@ -140,3 +140,15 @@ test('files in content items, as the content API sends them', () => {
   ]);
   for (const item of [null, {}, { body: { rawText: '<a data-bbfile="not json" href="/bbcswebdav/x">x</a>' } }]) assert.deepEqual(P.files(item, o), []);
 });
+
+test('reading time and progress for focus mode', () => {
+  assert.equal(P.readMinutes(''), 0);
+  assert.equal(P.readMinutes(null), 0);
+  assert.equal(P.readMinutes('  a few words  '), 0); // an attachment's name, say: not worth a label
+  assert.equal(P.readMinutes('word '.repeat(158)), 1);
+  assert.equal(P.readMinutes('word '.repeat(1150)), 5);
+  assert.equal(P.readShare(0, 2000, 800), 0);
+  assert.equal(P.readShare(600, 2000, 800), 0.5);
+  assert.equal(P.readShare(1300, 2000, 800), 1); // overscroll
+  assert.equal(P.readShare(0, 800, 800), 1); // fits on screen: nothing left to scroll
+});

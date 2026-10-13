@@ -66,6 +66,9 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'],
+    // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
+    // document buttons themselves.
+    darkDocs: [false, 'bool'], toggles: [true, 'bool'],
   },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };

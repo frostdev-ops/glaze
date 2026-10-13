@@ -47,9 +47,11 @@ At-a-glance helpers, on from the start:
 • New-grade badges on gradebook rows and course cards
 • What-if grade calculator: try scores for ungraded work, or see what you need for a target grade
 • Typing backup: if the page reloads or your session times out before you post, get back what you wrote
+• Focus mode for course documents: just the document, a reading-progress line and the reading time
 
 More you can switch on:
 
+• Dark documents: PDFs and file previews turned dark, colors kept
 • Due-date urgency for overdue and soon-due items
 • Keyboard shortcuts for courses, calendar, grades and messages, and a command palette (Ctrl+K) to jump
   to any course, item or setting
