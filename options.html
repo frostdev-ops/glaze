@@ -23,7 +23,7 @@
   .top nav a { color: var(--gz-ink-muted); text-decoration: none; font-size: 13px; padding: 0.25rem 0.6rem; border-radius: 999px; }
   .top nav a:hover { color: var(--gz-accent); background: var(--gz-accent-soft); }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 46%); gap: 1.5rem; padding: 1.5rem; max-width: 1500px; margin: 0 auto; }
-  .editor { display: grid; gap: 1.25rem; min-width: 0; }
+  .editor { display: grid; gap: 1.25rem; min-width: 0; align-content: start; }
   .preview { position: sticky; top: 4.5rem; height: calc(100vh - 6rem); border: 1px solid var(--gz-line); border-radius: 14px; overflow: hidden; background: var(--gz-surface-2); }
   .preview iframe { width: 100%; height: 100%; border: 0; display: block; }
   @media (max-width: 980px) {
@@ -85,11 +85,29 @@
   .offer p { margin: 0; color: var(--gz-ink); }
   .offer .desc { display: block; margin-top: 0.25rem; }
   .font-card .meta { font-size: 11px; color: var(--gz-ink-faint); }
+  /* Search: misses hide; matches are painted by the Highlight API where there is one. */
+  .find { display: flex; align-items: center; gap: 0.6rem; flex: 0 1 17rem; min-width: 0; }
+  .find input { flex: 1; width: 100%; font: inherit; color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: 999px; padding: 0.35rem 0.8rem; min-width: 0; }
+  .find input:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+  .find p { white-space: nowrap; font-size: 12px; color: var(--gz-ink-muted); }
+  .miss { display: none !important; }
+  ::highlight(find) { background-color: color-mix(in srgb, var(--gz-accent) 32%, transparent); color: var(--gz-ink); }
+  @media (max-width: 980px) { body.finding .preview { display: none; } }
+  @media (max-width: 640px) { .find { flex-basis: 100%; order: 1; } }
+  /* What's new: once per version, above everything. */
+  .news { grid-column: 1 / -1; order: -2; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 0.5rem 1rem; padding: 0.9rem 1.25rem; border: 1px solid var(--gz-accent); border-radius: 14px; background: var(--gz-accent-soft); }
+  .news h2 { margin: 0; color: var(--gz-accent); }
+  .news ul { grid-column: 1 / -1; margin: 0; padding-left: 1.1rem; display: grid; gap: 0.2rem; color: var(--gz-ink); }
+  body.finding .news { display: none; }
 </style>
 </head>
 <body>
   <header class="top">
     <div class="brand"><img src="icons/icon48.png" alt=""><h1>Glaze</h1></div>
+    <div class="find" role="search">
+      <input type="search" id="find" placeholder="Search settings  /" aria-label="Search settings" aria-keyshortcuts="/" aria-describedby="find-status" autocomplete="off" spellcheck="false">
+      <p class="hint" id="find-status" role="status"></p>
+    </div>
     <nav aria-label="Sections">
       <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
       <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#extras">Extras</a><a href="#data">Share</a>
@@ -99,6 +117,11 @@
   </header>
 
   <div class="layout">
+    <aside class="news" id="news" aria-labelledby="news-title" hidden>
+      <h2 id="news-title"></h2>
+      <button type="button" id="news-close">Dismiss</button>
+      <ul id="news-list"></ul>
+    </aside>
     <main class="editor">
       <section id="palette">
         <h2>Palette</h2>
@@ -211,12 +234,12 @@
       <section id="motion">
         <h2>Motion</h2>
         <div class="field wide"><span>Level</span>
-          <div class="seg" role="radiogroup" aria-label="Motion level">
+          <div class="seg" role="radiogroup" aria-label="Motion level" aria-describedby="motion-note">
             <label><input type="radio" name="motion.level" value="off">Off</label>
             <label><input type="radio" name="motion.level" value="subtle">Subtle</label>
             <label><input type="radio" name="motion.level" value="expressive">Expressive</label>
           </div></div>
-        <p class="desc">Subtle: pages and cards ease in, panels slide, hover lifts. Expressive adds springier motion, a drifting aurora, livelier animated backgrounds and a small burst when you complete an item. Off also holds animated backgrounds still.</p>
+        <p class="desc" id="motion-note">Subtle: pages and cards ease in, panels slide, hover lifts. Expressive adds springier motion, a drifting aurora, livelier animated backgrounds and a small burst when you complete an item. Off also holds animated backgrounds still.</p>
         <label class="check"><input type="checkbox" data-key="motion.followSystem"><span>Turn motion off when the system asks for reduced motion</span></label>
         <div class="group">
           <h3>Fine-tune</h3>
@@ -276,8 +299,8 @@
           <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
           <label class="check"><input type="checkbox" data-key="declutter.banner"><span>Hide course banner images</span></label>
           <label class="check"><input type="checkbox" data-key="declutter.faculty"><span>Hide the Course Faculty box when it is empty</span></label>
-          <p class="desc">Hide course tabs you never use:</p>
-          <div class="row" id="declutter-tabs"></div>
+          <p class="desc" id="declutter-tabs-note">Hide course tabs you never use:</p>
+          <div class="row" id="declutter-tabs" role="group" aria-labelledby="declutter-tabs-note"></div>
         </div>
       </section>
 
@@ -313,6 +336,8 @@
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
   <script src="lib/share.js"></script>
+  <script src="lib/news.js"></script>
+  <script src="lib/search.js"></script>
   <script src="ui.js"></script>
   <script src="options.js"></script>
 </body>

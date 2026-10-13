@@ -67,6 +67,13 @@ All notable changes to Glaze are documented here. The format follows
   It follows the course onto its item pages and panels and lets go when you leave. Gradients and
   animated backgrounds that follow your palette pick it up too. Text on the accent and the accent on
   the page keep their contrast.
+- **Settings search** at the top of the editor. It narrows the editor to the settings whose name or
+  description matches, highlights the words, and says how many there are, or "No settings match".
+  A few synonyms help: "dark" also finds the palettes, "font" text size and line height. / jumps to
+  it, Esc clears it.
+- **What's new.** After an update, the editor opens with a few lines on what changed, once; Dismiss
+  puts it away. A fresh install shows nothing. Until then, a small dot on the popup's "Open the
+  editor" button. Nothing on the toolbar icon or on Blackboard.
 
 ## [2.0.4] — release candidate
 

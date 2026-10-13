@@ -156,3 +156,18 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Painted on `<html>` and re-checked on each sweep pass | Scoping the tokens to the course section | Item pages replace the section entirely, and anything Ultra mounts on `<body>` sits outside it; `<html>` reaches all of it and the background layer. |
 | Contrast: a surface tint that costs a text pair is dropped; the accent moves toward the text until it reads on the surface and its text reads on it | Adjusting the text colors | Text stays the palette's. Paper's faint text has 3.07:1 on its ground, so Paper and Rose keep their own surfaces for most courses. |
 | Backgrounds pick up the tint only when they follow the palette | Tinting picked background colors too | Picked colors are an explicit choice. The ground's slight lean reaches every kind through the dim layer. |
+
+## Editor help (2.1)
+
+| Decision | Considered | Why |
+|---|---|---|
+| A fresh install shows no what's-new card and no welcome | A short welcome | The editor already is the welcome, and the owner turns down nagging UI. |
+| Fresh install = nothing seen and no settings ever saved (no `version` key in sync storage); either surface marks it seen | `runtime.onInstalled` in a background script | There is no background script, and Firefox MV3 wants `background.scripts` where Chrome wants a service worker: one cross-browser background page for one flag. Cost: an existing user who never saved a setting misses 2.1's card. |
+| Notes are hand-written in `lib/news.js`, keyed by version; every unseen version up to the running one shows, newest first | Parsing CHANGELOG.md; only the running version's notes | The changelog is too long for a card. Skipping a version (2.0.4 to 2.2) still shows 2.1's lines; a patch without notes shows nothing. |
+| Marked seen when shown, not when dismissed | On dismiss | "Once" means once; a card that comes back each visit until clicked is nagging. |
+| Notes ahead of manifest.json stay hidden, and `node --test` lists a todo until the manifest catches up | Keying on the manifest version as it is today | The branch says 2.0.4 while the notes say 2.1; the todo is the release-step reminder. |
+| Search items found from the DOM: each child of a section or `.group`, matched on its text, title, aria-label and placeholder, plus the section and group headings and the notes it names by `aria-describedby` / `aria-labelledby` | A list of settings and keywords | New Extras rows are found with no edit here. Notes linked by ARIA move with their control, so the two places that needed it got proper ARIA. |
+| Synonyms can be heading-only (`h:palette`) | Plain synonyms | Plain, "dark" matched every "palette" in the text (Command palette, theme codes). |
+| Highlights with the CSS Custom Highlight API; no highlight where it's missing (Firefox before 140) | Wrapping matches in `<mark>` | Wrapping rewrites text nodes the editor redraws and labels it reads; ranges leave the DOM alone. |
+| Controls hidden by the current choice (a background kind, tint off) don't match | Showing them anyway | They can't be used until that choice changes; switching it re-runs the search. |
+| While searching in one column (under 980px), the preview hides | Leaving it above the results | It's 460px tall, so results started below the fold. |
