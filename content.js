@@ -4,7 +4,8 @@
 // --gz-* vars, everything else as data-gz-* attributes — so the CSS never branches here,
 // (3) the long tail: tag what no selector can reach and let the CSS restyle the tag.
 (() => {
-  if (window.__gzGlaze) return;
+  // Only HTML pages: an /ultra/ address can also be an XML error from Ultra's CDN, or a raw script.
+  if (window.__gzGlaze || !/html/.test(document.contentType)) return;
   window.__gzGlaze = true;
 
   const C = GZ_COLOR;
