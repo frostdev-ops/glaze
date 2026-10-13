@@ -6,6 +6,51 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.3] — 2026-10-13
+
+### Added
+
+- **Animated backgrounds:** eight slow, soft three.js scenes, off until you pick one. Mist, Orbs,
+  Borealis (swaying northern lights), Lava (a lava lamp), Waves, Dust, Contours (a topographic map that
+  reshapes itself) and Horizon (a striped sun over a gliding grid). Drawn at low resolution, at most 30
+  frames a second, paused in background tabs and still when motion is off. three.js loads only when a
+  scene is chosen.
+- **Intensity:** one slider for how much an animated background stands out. It sets color, contrast
+  and pace together, from barely there to bold.
+- **Gradient controls:** style (Linear, Radial, Conic, Mesh), angle, blend (soft to crisp bands) and
+  spread. Gradients now fill the screen and are mixed in OKLab where the browser supports it, so the
+  colors melt into each other instead of sitting in separate patches.
+- **Background colors:** gradient, aurora and animated backgrounds can use your own three colors, or
+  one of six ready-made sets, instead of the palette's.
+- **Grain** for gradient, aurora and image backgrounds: a faint noise that hides color banding. On by default.
+
+### Changed
+
+- Score bars, countdowns and percentages, folder previews and course progress are now on by default.
+  If you had already changed any Extra, your choices are kept.
+- The background editor shows only the controls the chosen background uses.
+- Palette-colored backgrounds use the accent, bright accent and muted text colors. The success green
+  clashed with warm palettes once the gradient filled the screen.
+- The aurora's fourth glow uses the background colors instead of the palette's error red.
+- New store screenshots and promo tiles, drawn with the animated backgrounds.
+- **Course documents** are a centered column on one frosted-glass card, with the title lined up above
+  it, instead of a narrow stack of nested boxes at the left of the page. On wide screens the whole
+  column scales up with the window, text, files and videos included, up to 1.5x.
+- Videos at Ultra's default size fill the document column at 16:9. Attachments are rounded tiles, with
+  an open preview framed inside them.
+- Previous and Next above an item are themed buttons instead of a dark grey bar.
+- **Assignment pages:** the title lines up with the content, and the instructions and the details
+  panel are frosted-glass cards, without the divider between them.
+- With Reading width on, text sits in the middle of its card instead of against the left edge.
+- The current page in the main nav and in a course's Contents list is marked by a glowing accent bar,
+  replacing Ultra's purple strip.
+
+### Fixed
+
+- With Reading width on, course documents were squeezed into a narrow column at the left of the page.
+- The bundled Inter and Atkinson Hyperlegible fonts didn't load on Ultra pages in Chrome builds that
+  give extension files their static address.
+
 ## [2.0.2] — 2026-10-11
 
 ### Added
@@ -74,6 +119,7 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
+[2.0.3]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.3
 [2.0.2]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.2
 [2.0.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.1
 [2.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.0

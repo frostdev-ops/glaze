@@ -13,6 +13,8 @@
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
   const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+  // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
+  const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
   const calmMQ = matchMedia('(prefers-reduced-motion: reduce)');
   let settings = GZ_DEFAULTS;
   let links = [];
@@ -181,6 +183,7 @@
     dirty.clear();
     if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
     if (tip && ultraTipShown()) hideTip();
+    placeScene();
     renderProgress();
     recordCourses();
   };
@@ -543,6 +546,58 @@
     } else if (!want && have) have.remove();
   };
 
+  // ---- animated background (bg.kind "scene") ----------------------------------------------------
+  // lib/scene.js and three.js (~520 KB) load only once a scene is picked, and only in the top frame
+  // or the editor's preview: one WebGL canvas per tab. The canvas lives in the topmost full-screen
+  // layer (see extras.css); flush() moves it when a course or item panel opens or closes.
+  const LAYERS = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
+  const sceneFrame = window === top || location.protocol !== 'https:';
+  let scene = null; // { update, draw, stop } from lib/scene.js
+  let sceneCanvas = null;
+  let sceneLoad = null;
+  let sceneFailed = false; // no WebGL, or the module was blocked: the gradient under it stays
+  // ponytail: the last visible layer in document order is taken as the top one, which holds while
+  // Ultra stacks panels in DOM order. Compare z-index if a panel ever opens under the canvas.
+  const placeScene = () => {
+    if (!sceneCanvas) return;
+    const home = [...document.querySelectorAll(LAYERS)].filter((e) => e.getClientRects().length).pop() || document.body;
+    if (sceneCanvas.parentNode === home) return;
+    home.append(sceneCanvas);
+    scene?.draw();
+  };
+  const stopScene = () => {
+    scene?.stop();
+    scene = null;
+    sceneCanvas?.remove();
+    sceneCanvas = null;
+  };
+  const sceneOpts = () => {
+    const colors = GZ_ACTIVE_COLORS(settings, darkMQ.matches);
+    const { dim, amount, pace } = GZ_SCENE_LOOK(settings.bg.intensity);
+    return {
+      name: settings.bg.scene,
+      ground: colors['--gz-surface-2'],
+      colors: GZ_BG_COLORS(settings.bg.colors, colors),
+      dim,
+      amount,
+      speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
+    };
+  };
+  const syncScene = () => {
+    if (!settings.enabled || !links.length || settings.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
+    if (scene) return scene.update(sceneOpts());
+    sceneLoad ||= import(chrome.runtime.getURL('lib/scene.js'));
+    sceneLoad.then((mod) => {
+      if (scene || !links.length || settings.bg.kind !== 'scene') return;
+      sceneCanvas = document.createElement('canvas');
+      sceneCanvas.id = 'gz-scene';
+      sceneCanvas.setAttribute('aria-hidden', 'true');
+      placeScene();
+      scene = mod.start(sceneCanvas);
+      scene.update(sceneOpts());
+    }).catch(() => { sceneFailed = true; stopScene(); });
+  };
+
   // ---- settings → <html> ----------------------------------------------------------------------
   // Everything set goes through these two, so clearSettings removes exactly what was set.
   const vars = new Set();
@@ -591,8 +646,13 @@
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
     const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
     setAttr('data-gz-bg', kind);
-    setVar('--gz-bg-dim', `${s.bg.dim}%`);
-    setVar('--gz-bg-blur', `${s.bg.blur}px`);
+    // A scene's gradient fallback (until it draws, or without WebGL) takes its dim from intensity.
+    const look = kind === 'scene' && GZ_SCENE_LOOK(s.bg.intensity);
+    setVar('--gz-bg-dim', `${look ? Math.round(look.dim * 100) : s.bg.dim}%`);
+    setVar('--gz-bg-blur', `${look ? 0 : s.bg.blur}px`);
+    GZ_BG_COLORS(s.bg.colors, colors).forEach((c, i) => setVar(`--gz-bg-${i + 1}`, c));
+    setVar('--gz-bg-grad', GZ_GRADIENT(s.bg, OKLAB));
+    setAttr('data-gz-bg-grain', s.bg.grain);
     if (kind === 'image') probeImage(s.bg.image);
     else setAttr('data-gz-bg-failed', false);
     // Motion: the system's reduced-motion setting wins over the level unless told otherwise.
@@ -619,6 +679,7 @@
       if (observer) { clearTags(['data-gz-light', 'data-gz-dark', 'data-gz-hover']); sweepAll(); }
     }
     if (!s.look.tooltips) hideTip();
+    syncScene();
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
@@ -644,6 +705,7 @@
       if (!isUltra()) { disable(); notUltra = true; return; }
       syncFooter();
       startSweep();
+      syncScene();
     });
   };
   const disable = () => {
@@ -653,6 +715,7 @@
     document.getElementById('gz-progress')?.remove();
     for (const l of links) l.remove();
     links = [];
+    stopScene();
     stopSweep();
     clearSettings();
     syncFooter();

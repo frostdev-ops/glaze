@@ -25,8 +25,8 @@ const GZ_COLORS = [
 const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], ['engagement', 'Discussions'], ['grades', 'Gradebook'], ['messages', 'Messages'], ['groups', 'Groups'], ['achievements', 'Achievements']];
 
 // Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
-// range, 'bool', 'url' (https only, or empty), 'name' (a preset name) or 'tabs' (GZ_TABS slugs).
-// GZ_SANITIZE walks this.
+// range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs) or
+// 'hexes' (three #rrggbb colors, or none). GZ_SANITIZE walks this.
 const GZ_SPEC = {
   auto: { on: [false, 'bool'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
@@ -40,7 +40,17 @@ const GZ_SPEC = {
     tooltips: [true, 'bool'],
     hints: [true, 'bool'],
   },
-  bg: { kind: ['solid', ['solid', 'gradient', 'image', 'aurora']], image: ['', 'url'], dim: [60, [0, 90]], blur: [0, [0, 20]] },
+  // colors: the three the gradient, aurora and scenes are painted with; none = the palette's.
+  // scene: the three.js background drawn when kind is 'scene'; intensity is its one knob (dim and
+  // blur are for the other kinds).
+  bg: {
+    kind: ['solid', ['solid', 'gradient', 'image', 'aurora', 'scene']], image: ['', 'url'], dim: [60, [0, 90]], blur: [0, [0, 20]],
+    colors: [[], 'hexes'], grain: [true, 'bool'],
+    // The gradient's shape: style, direction (degrees), blend (100 melts the colors together, 0 is
+    // hard bands) and spread (how much of the screen the change of color covers, in %).
+    style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
+    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon']], intensity: [50, [0, 100]],
+  },
   motion: {
     level: ['subtle', ['off', 'subtle', 'expressive']],
     followSystem: [true, 'bool'],
@@ -49,8 +59,8 @@ const GZ_SPEC = {
     transitions: [true, 'bool'],
   },
   enhance: {
-    urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [false, 'bool'], reading: [false, 'bool'],
-    inline: [false, 'bool'], previews: [false, 'bool'], progress: [false, 'bool'], keys: [false, 'bool'],
+    urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
+    inline: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
   },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };
@@ -97,6 +107,52 @@ const GZ_PRESETS = [
 ];
 const GZ_MAX_PRESETS = 12;
 
+// Ready-made background colors: [name, [three hex]]. Bright on purpose: dim mixes them toward the ground.
+const GZ_BG_SETS = [
+  ['Lagoon', ['#22d3ee', '#6366f1', '#34d399']],
+  ['Dusk', ['#f472b6', '#a78bfa', '#fb923c']],
+  ['Ember', ['#f97316', '#ef4444', '#facc15']],
+  ['Mint', ['#5eead4', '#a3e635', '#38bdf8']],
+  ['Lilac', ['#c084fc', '#f0abfc', '#818cf8']],
+  ['Slate', ['#94a3b8', '#64748b', '#cbd5e1']],
+];
+// The background's three colors: the user's own (bg.colors), or the palette's accent, bright accent
+// and muted text, a neutral from the same palette (its success green clashed with warm palettes).
+const GZ_BG_COLORS = (own, colors) => (own.length ? own : [colors['--gz-accent'], colors['--gz-accent-hi'], colors['--gz-ink-muted']]);
+
+// The gradient as a CSS image. Colors are var(--gz-bg-N), so palette changes flow through without
+// rebuilding it; `space` is the interpolation space ('oklab' where supported: no muddy midpoints).
+// Each color holds solid for (1 - blend) of its share, then melts into the next.
+const GZ_GRADIENT = ({ style, angle, blend, spread }, space = '') => {
+  const cols = ['var(--gz-bg-1)', 'var(--gz-bg-2)', 'var(--gz-bg-3)'];
+  const pct = (v) => `${+(v * 100).toFixed(2)}%`;
+  const stops = (list, start, len) => {
+    const step = len / (list.length - 1);
+    const hold = ((1 - blend / 100) * step) / 2;
+    return list.map((c, i) => `${c} ${pct(Math.max(start, start + i * step - hold))} ${pct(Math.min(start + len, start + i * step + hold))}`).join(', ');
+  };
+  const sp = space ? ` in ${space}` : '';
+  const s = spread / 100;
+  // A point toward `deg` from the centre, `r` of the way to the edge (0 deg is the top).
+  const at = (deg, r) => `${pct(0.5 + Math.sin((deg * Math.PI) / 180) * r)} ${pct(0.5 - Math.cos((deg * Math.PI) / 180) * r)}`;
+  const linear = `linear-gradient(${angle}deg${sp}, ${stops(cols, 0.5 - s / 2, s)})`;
+  if (style === 'radial') return `radial-gradient(circle farthest-corner at ${at(angle, 0.4)}${sp}, ${stops(cols, 0, s)})`;
+  if (style === 'conic') return `conic-gradient(from ${angle}deg at 50% 50%${sp}, ${stops([...cols, cols[0]], 0, 1)})`;
+  if (style === 'mesh') {
+    // The linear sweep, with the end colors glowing in from the two sides across it.
+    const glow = (c, deg) => `radial-gradient(circle at ${at(deg, 0.5)}${sp}, ${c} ${pct((1 - blend / 100) * 0.2 * s)}, transparent ${pct(0.6 * s)})`;
+    return `${glow(cols[2], angle - 90)}, ${glow(cols[0], angle + 90)}, ${linear}`;
+  }
+  return linear;
+};
+
+// Intensity 0-100 → how far a scene's colors sit from the ground (as dim does for the other kinds),
+// how much each scene lets itself show, and how fast it moves.
+const GZ_SCENE_LOOK = (intensity) => {
+  const t = intensity / 100;
+  return { dim: 0.75 * (1 - t), amount: t, pace: 0.5 + t };
+};
+
 // ---- sanitize --------------------------------------------------------------------------------
 // Stored data (any version) and imported JSON both pass through here: unknown keys dropped, every
 // value type- and range-checked, anything invalid replaced by its default. Idempotent, so it runs
@@ -111,6 +167,7 @@ const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
   if (rule === 'name') return cleanName(v) || d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];
+  if (rule === 'hexes') return Array.isArray(v) && v.length === 3 && v.every((c) => HEX.test(c)) ? v.map((c) => c.toLowerCase()) : [...d];
   if (rule === 'url') {
     if (v === '') return '';
     // href, not the raw string: the parser percent-encodes quotes and strips newlines, so the value
@@ -189,5 +246,5 @@ const GZ_CONTRAST = (colors) => GZ_CONTRAST_PAIRS.map(([fg, bg, min, label]) => 
 });
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST };
 }

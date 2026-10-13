@@ -1,5 +1,6 @@
-// Capture the Chrome Web Store screenshots (1280x800) from the packaged extension and its sample course.
-// Runs the real extension in a throwaway Chromium profile; no Blackboard account or real coursework.
+// Capture the store screenshots (1280x800) from the packaged extension and its sample course, and
+// render the promo tiles from store/promo.html. Runs the real extension in a throwaway Chromium
+// profile; no Blackboard account or real coursework. Animated backgrounds hold still (reduced motion).
 //   NODE_PATH=/path/to/node_modules node scripts/store-screenshots.js     (needs playwright + its chromium)
 const { chromium } = require('playwright');
 const { execFileSync } = require('child_process');
@@ -16,13 +17,16 @@ const size = { width: 1280, height: 800 };
 const clock = new Date('2026-10-11T12:00:00-04:00');
 
 const enhance = { urgency: true, inline: true, scores: true, progress: true };
+const lagoon = ['#22d3ee', '#6366f1', '#34d399'];
+const dusk = ['#f472b6', '#a78bfa', '#fb923c'];
 const shots = [
   ['1-course-frost', 'preview.html', { preset: 'Frost', enhance }],
-  ['2-editor', 'options.html', { preset: 'Frost', enhance }],
+  ['2-backgrounds-editor', 'options.html#background', { preset: 'Frost', bg: { kind: 'gradient', style: 'mesh', colors: lagoon, dim: 45 }, enhance }],
   ['3-extras-paper', 'options.html#extras', { preset: 'Paper', look: { font: 'atkinson' }, enhance }],
-  ['4-aurora-midnight', 'preview.html', { preset: 'Midnight', bg: { kind: 'aurora', dim: 15 }, look: { glass: 16 }, enhance }],
-  ['5-popup-ember', 'popup', { preset: 'Ember', bg: { kind: 'gradient' }, enhance }],
+  ['4-horizon-midnight', 'preview.html', { preset: 'Midnight', bg: { kind: 'scene', scene: 'horizon', colors: dusk, intensity: 80 }, look: { glass: 16 }, enhance }],
+  ['5-popup-ember', 'popup', { preset: 'Ember', bg: { kind: 'gradient', angle: 160 }, enhance }],
 ];
+const promos = [['marquee', { width: 1400, height: 560 }], ['small-tile', { width: 440, height: 280 }]];
 
 // Chromium names an unpacked extension after its folder: the path's SHA-256, hex digits mapped to a-p.
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)]
@@ -38,7 +42,8 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
   const context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
     channel: 'chromium', headless: true, viewport: size, deviceScaleFactor: 1,
     colorScheme: 'dark', reducedMotion: 'reduce',
-    args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
+    // SwiftShader: WebGL for the animated backgrounds in headless mode.
+    args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
   });
   await context.clock.setFixedTime(clock);
   const page = context.pages()[0] || await context.newPage();
@@ -50,7 +55,8 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
     await chrome.storage.sync.clear();
     await chrome.storage.sync.set(GZ_SANITIZE({ ...rest, preset, colors }));
   }, opts);
-  const settle = () => page.evaluate(() => document.fonts.ready).then(() => page.waitForTimeout(800));
+  // Long enough for three.js to load and draw when a scene is on.
+  const settle = () => page.evaluate(() => document.fonts.ready).then(() => page.waitForTimeout(1500));
 
   for (const [name, target, opts] of shots) {
     await page.goto(`${base}/options.html`);
@@ -79,6 +85,23 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
       await settle();
     }
     await page.screenshot({ path: file, type: 'jpeg', quality: 92 });
+    console.log(`wrote ${path.relative(root, file)}`);
+  }
+
+  // Promo tiles: store/promo.html, served from the repo under a throwaway https origin so its module
+  // import works.
+  const types = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
+  await page.route('https://promo.test/**', (r) => {
+    const file = path.join(root, new URL(r.request().url()).pathname);
+    r.fulfill({ status: 200, contentType: types[path.extname(file)], body: fs.readFileSync(file) });
+  });
+  for (const [name, box] of promos) {
+    await page.setViewportSize(box);
+    await page.goto(`https://promo.test/store/promo.html?size=${name === 'marquee' ? 'marquee' : 'tile'}`);
+    await page.waitForSelector('body[data-ready]');
+    await page.waitForTimeout(500);
+    const file = path.join(root, `assets/store/${name}.png`);
+    await page.screenshot({ path: file });
     console.log(`wrote ${path.relative(root, file)}`);
   }
   await context.close();

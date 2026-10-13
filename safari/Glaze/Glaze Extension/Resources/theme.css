@@ -214,10 +214,20 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring) !important;
 }
 .base-navigation-button-content:hover { background: var(--gz-surface) !important; color: var(--gz-ink) !important; transform: var(--gz-nudge); }
-.base-navigation-button-content.Mui-selected, .base-navigation-button-content[aria-current], .base-navigation-button-content.active {
-  background: var(--gz-accent-soft) !important;
-  color: var(--gz-accent) !important;
-  box-shadow: inset 3px 0 0 var(--gz-accent) !important;
+.base-navigation-button-content.Mui-selected, .base-navigation-button-content[aria-current], .base-navigation-button-content.active { color: var(--gz-accent) !important; }
+/* The current page in the main nav and in a course's Contents tree: Ultra marks it with a straight
+   bar in the institution's brand color on its own ::before (a purple strip next to Glaze's stripe,
+   poking past the rounded corners). That ::before becomes a short accent bar with a glow, over a
+   soft accent wash. */
+#site-wrap :is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"]) {
+  position: relative;
+  background: radial-gradient(120% 140% at 0% 50%, color-mix(in srgb, var(--gz-accent) 20%, transparent), transparent 70%), color-mix(in srgb, var(--gz-accent-soft) 55%, transparent) !important;
+  box-shadow: none !important;
+}
+#site-wrap :is(.base-navigation-button-content:is(.Mui-selected, [aria-current], .active), li[class*="makeStylestreeListItem-"][class*="makeStylesselected-"])::before {
+  content: "" !important; display: block !important; position: absolute; left: 0; top: 24%; bottom: 24%; height: auto !important; width: 3px !important;
+  border: 0 !important; border-radius: 999px; background: var(--gz-accent) !important;
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--gz-accent) 85%, transparent), 0 0 18px 5px color-mix(in srgb, var(--gz-accent) 35%, transparent);
 }
 
 /* ---- page header: glass. --gz-glass is the blur (0 = solid), --gz-glass-mix the opacity left.
@@ -325,8 +335,62 @@ th { background: var(--gz-surface) !important; }
 /* Document view (course item pages): Ultra paints the whole body and the title bar white. The title
    bar's div is anonymous, so it is reached through :has() from the stable h1 class. */
 #site-wrap .document-content-root, #site-wrap .document-body, #site-wrap .bbml-editor, #site-wrap main { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
-#site-wrap .bbml-editor-parent { background: var(--gz-surface) !important; }
 #site-wrap div:has(> div > div > div > h1.js-header-text) { background: var(--gz-ground) !important; border-bottom: 1px solid var(--gz-line) !important; }
+/* The document is one centered column, its title row lined up with it, and the page is a single
+   frosted card: Ultra wraps every block in four nested borders and leaves it at the left of a wide
+   panel. Past a 92.5rem-wide content area the column zooms up with it, text and attachments
+   included, to 1.5x; below that it narrows. `zoom` because the rich text sets pixel font sizes
+   that a font-size change can't reach. Without typed calc() division the zoom is invalid and falls
+   back to 1. */
+html { --gz-doc-w: 50rem; --gz-doc-zoom: clamp(1, calc(100cqi / 92.5rem), 1.5); }
+#site-wrap :has(> .document-content-root) { container-type: inline-size; }
+#site-wrap .document-body { max-width: none !important; grid-template-columns: 0 minmax(0, 1fr) !important; }
+#site-wrap .bbml-editor-parent { background: transparent !important; width: 100%; max-width: var(--gz-doc-w); margin-inline: auto; padding-top: 1.5rem !important; zoom: var(--gz-doc-zoom); }
+/* Scoped to the document's own panel: other item pages (assignments) share the h1 class. */
+#site-wrap :has(> .document-content-root) div:has(> div > h1.js-header-text) { max-width: calc(var(--gz-doc-w) - 3rem); margin-inline: auto !important; zoom: var(--gz-doc-zoom); }
+/* The card: the document's paper, and an assignment's instructions and details. The instructions
+   are a MuiPaper, so the Paper surface rule further down outranks the see-through fill there and
+   that card stays opaque; the rest of the recipe (edge, radius, shadow) applies to all three. */
+#site-wrap .bbml-editor-parent > .bbml-editor, bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]) {
+  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.2);
+  border: 1px solid color-mix(in srgb, var(--gz-line-strong) 70%, transparent) !important;
+  border-radius: calc(var(--gz-radius) + 4px) !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--gz-ink) 6%, transparent) inset, var(--gz-shadow) !important;
+}
+#site-wrap .bbml-editor-parent > .bbml-editor { padding: 1.25rem 1.5rem 1rem !important; }
+#site-wrap .bbml-editor :is([class*="makeStylescolumn-"], [class*="makeStylesblockBorder-"]) { border-color: transparent !important; background: transparent !important; }
+#site-wrap .bbml-editor .bb-editor-container.is-read-only { background: transparent !important; border: 0 !important; padding: 0 !important; }
+#site-wrap .bbml-editor :is(.bb-editor-root, .editor-content-container, .ql-container, .ql-editor) { background: transparent !important; }
+/* Ultra's "default" video size is 48% wide at the left; it fills the column instead. Small and
+   large keep the size the instructor picked. */
+#site-wrap .bbml-editor .bb-video-embed--default { justify-content: center; }
+#site-wrap .bbml-editor .bb-video-embed--default iframe { width: 100% !important; max-width: 100% !important; height: auto !important; aspect-ratio: 16 / 9; border-radius: var(--gz-radius); }
+/* Attachments in a document: one rounded tile each, an open preview inside it, clipped to the corners. */
+#site-wrap .bbml-editor div:has(> .js-file-viewer-root-controls) {
+  border-radius: var(--gz-radius) !important; overflow: hidden; margin-block: 0.5rem;
+  background: color-mix(in srgb, var(--gz-surface-2) 55%, transparent) !important;
+}
+#site-wrap .bbml-editor .js-file-viewer-root-controls { padding-inline: 0.25rem; }
+#site-wrap .bbml-editor .js-file-viewer-inline-preview { border-top: 1px solid var(--gz-line); background: var(--gz-surface-2) !important; }
+#site-wrap .bbml-editor .js-file-viewer-inline-preview iframe { display: block; }
+/* Assignment attempt: Ultra centers the instructions and details as one group but leaves the title
+   at the left edge; it lines up with the group instead. The instructions accordion is see-through
+   inside its card, and the details card replaces the divider between the columns. */
+bb-assignment-attempt-authoring-panel div:has(> div > h1.js-header-text) { max-width: 80rem !important; margin-inline: auto !important; width: 100%; }
+bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"] { padding: 1rem 1.25rem !important; align-self: flex-start; }
+bb-assignment-attempt-authoring-panel .MuiAccordion-root :is(.MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root, .bb-editor-container, .ql-editor, .ql-container, .editor-content-container, .bb-editor-root) { background: transparent !important; }
+bb-assignment-attempt-authoring-panel .MuiAccordionSummary-root { border-bottom: 1px solid var(--gz-line) !important; }
+bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-right: 0 !important; }
+/* Previous / Next above an item: Ultra sits them on a hard-coded #262626 bar the sweep leaves alone
+   (it only recolors light fills). */
+#site-wrap div:has(> .js-content-navigator-previous, > .js-content-navigator-next) { background: transparent !important; gap: 0.5rem; }
+#site-wrap :is(.js-content-navigator-previous, .js-content-navigator-next) button {
+  border-radius: 999px !important; padding: 0.35rem 0.9rem !important; gap: 0.4rem; font-size: 0.875rem;
+  background: color-mix(in srgb, var(--gz-surface) 80%, transparent) !important; color: var(--gz-ink) !important;
+  border: 1px solid var(--gz-line-strong) !important;
+}
+#site-wrap :is(.js-content-navigator-previous, .js-content-navigator-next) button:is(:hover, :focus-visible) { color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; background: var(--gz-accent-soft) !important; }
 
 /* Item panels (discussions, assignments, tests): Ultra's panel chrome and its Quill editor are white. */
 #site-wrap .panel-header, #site-wrap .persistent-white-header, #site-wrap .panel-title, #site-wrap .panel-content, #site-wrap .panel-content-slide-toggle, #site-wrap .collapsible-row, #site-wrap .editable-title-container { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }

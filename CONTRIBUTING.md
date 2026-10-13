@@ -13,13 +13,13 @@ extension reload. Run `node --test` before sending a change.
 
 - `content.js` — runs on Ultra pages: adds the stylesheets, applies settings, the DOM sweep, tooltips and the extras.
 - `theme.css` (palette and page polish), `motion.css` (motion levels), `extras.css` (backgrounds and extras).
-- `defaults.js` — the settings schema, defaults, presets and `GZ_SANITIZE`. `lib/` — pure helpers with tests in `test/`.
+- `defaults.js` — the settings schema, defaults, presets and `GZ_SANITIZE`. `lib/` — pure helpers with tests in `test/`, plus `scene.js` (the animated backgrounds) and the vendored `three.min.js`.
 - `popup.*`, `options.*`, `ui.*` — the popup, the editor and what they share. `preview.html` is the editor's mock Ultra page.
 - `DECISIONS.md` — what was chosen, what was turned down, and why.
 
 ## Conventions
 
-- No build step, no dependencies, no bundler. Vanilla JS, plain CSS, files loaded directly.
+- No build step, no dependencies, no bundler. Vanilla JS, plain CSS, files loaded directly. The one exception is `lib/three.min.js`, a checked-in, tree-shaken three.js; `scripts/vendor-three.sh` rebuilds it, and only an upgrade needs that.
 - Keep diffs small and focused. One change per PR.
 - Defaults live in exactly one place: `defaults.js`. Don't duplicate a colour or a toggle elsewhere.
 - Every setting reaches the page as a `--gz-*` variable or an `html[data-gz-*]` attribute. CSS matches on those; it never waits on JavaScript.

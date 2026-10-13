@@ -8,15 +8,20 @@
    lines up. Slide-outs (.peek) cover only part of the screen: a viewport-sized layer would hide the
    page beside them, so they get their own sheet in theme.css instead.
    The ground goes transparent so the layer shows; cards keep most of their surface.
-   Layer = dim tint over the picture, then blurred. */
+   Layer = dim tint over grain over the picture, then blurred. The picture is the gradient content.js
+   builds from the user's shape settings (--gz-bg-grad, colors --gz-bg-1/2/3); an image or the
+   aurora replaces it, and an animated scene draws over it. */
 html[data-gz-bg]:not([data-gz-bg="solid"]) {
   --gz-ground: transparent;
   --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) var(--gz-bg-dim, 60%), transparent);
-  --gz-bg-art: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--gz-accent) 34%, transparent), transparent 60%),
-    radial-gradient(90% 80% at 100% 100%, color-mix(in srgb, var(--gz-accent-hi) 22%, transparent), transparent 55%),
-    radial-gradient(70% 60% at 85% 10%, color-mix(in srgb, var(--gz-ok) 14%, transparent), transparent 60%),
-    var(--gz-surface-2);
+  --gz-bg-art: var(--gz-bg-grad), var(--gz-surface-2);
+  --gz-bg-grain: linear-gradient(transparent, transparent);
   background: var(--gz-surface-2) !important;
+}
+/* Fine grey noise a few percent strong: it breaks up the 8-bit banding of soft gradients. Under the
+   tint, so dimming quiets it too. */
+html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
+  --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
 html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; background: transparent !important; }
@@ -28,7 +33,7 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offca
   inset: calc(var(--gz-bg-blur, 0px) * -2);
   z-index: -1;
   pointer-events: none;
-  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-art);
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain), var(--gz-bg-art);
   filter: blur(var(--gz-bg-blur, 0px));
 }
 /* Cards over a picture: a little see-through, never so much that text sits on the image. */
@@ -42,11 +47,11 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .pa
 html[data-gz-bg="aurora"]::before,
 html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before {
   inset: -18%;
-  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)),
-    radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-accent) 46%, transparent), transparent 70%),
-    radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-accent-hi) 32%, transparent), transparent 70%),
-    radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-ok) 26%, transparent), transparent 70%),
-    radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-err) 16%, transparent), transparent 70%),
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
+    radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-bg-1) 46%, transparent), transparent 70%),
+    radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-bg-2) 36%, transparent), transparent 70%),
+    radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
+    radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
     var(--gz-surface-2);
   animation: gz-aurora 42s ease-in-out infinite alternate;
   animation-play-state: var(--gz-ambient);
@@ -56,6 +61,20 @@ html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.
   0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
   50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
   100% { transform: translate3d(-2%, 5%, 0) rotate(-2deg) scale(1.02); }
+}
+
+/* Scene: content.js puts one three.js canvas in the topmost full-screen layer (the page, or the
+   open course or item panel), above that layer's ::before and below its content. Until it draws,
+   or without WebGL, the ::before shows the gradient. The canvas is drawn small and stretched. */
+#gz-scene {
+  position: fixed;
+  left: calc(var(--gz-bg-blur, 0px) * -2);
+  top: calc(var(--gz-bg-blur, 0px) * -2);
+  width: calc(100% + var(--gz-bg-blur, 0px) * 4);
+  height: calc(100% + var(--gz-bg-blur, 0px) * 4);
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(var(--gz-bg-blur, 0px));
 }
 
 /* Expressive: a soft light follows the pointer across a hovered card (content.js feeds
@@ -68,8 +87,11 @@ html[data-gz-motion="expressive"] :is(.element-card, .content-list-item > .itemC
 
 /* ---- extras (each behind its own switch in the options page) ---- */
 
-/* Reading width: running text keeps to a comfortable measure. */
-html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .ql-editor, .document-body, .bbml-content) { max-width: 72ch; }
+/* Reading width: running text keeps to a comfortable measure. Documents are already a centered
+   column (theme.css); capping .document-body here pinned them, narrow, to the left. */
+html[data-gz-enhance-reading] #site-wrap :is(.bb-editor-container.is-read-only .ql-editor, .bbml-content) { max-width: 72ch; }
+/* …in the middle of its card, which is often wider than the measure. */
+html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { margin-inline: auto; }
 html[data-gz-enhance-reading] #site-wrap .bb-editor-container.is-read-only .ql-editor { font-size: 1.04em; }
 
 /* Shorter descriptions: three lines until the item is hovered or focused. */

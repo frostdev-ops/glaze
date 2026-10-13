@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Glaze promo tile</title>
+<!-- The store's promo images, drawn with the extension's own animated background (lib/scene.js) so
+     they show the real thing. scripts/store-screenshots.js renders ?size=marquee (1400x560) and
+     ?size=tile (440x280) from here. Not part of the package. -->
+<style>
+  @font-face { font-family: "Glaze Inter"; src: url("../fonts/inter.woff2") format("woff2"); font-weight: 100 900; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #060d18; }
+  body { font-family: "Glaze Inter", system-ui, sans-serif; color: #eaf6ff; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+  /* A soft shade behind the words, so they read on the brightest curtain. */
+  .copy { position: fixed; inset: 0; display: flex; align-items: center; gap: var(--gap); padding: 0 var(--pad);
+    background: radial-gradient(70% 90% at 22% 50%, rgb(6 13 24 / 0.72), transparent 70%); }
+  .copy img { width: var(--logo); height: var(--logo); filter: drop-shadow(0 12px 32px rgb(0 0 0 / 0.45)); }
+  h1 { margin: 0; font-size: var(--title); font-weight: 750; letter-spacing: -0.03em; line-height: 1; }
+  p { text-wrap: balance; margin: 0.35em 0 0; font-size: var(--tag); font-weight: 500; color: #8fe6ff; letter-spacing: -0.01em; }
+  ul { display: flex; gap: 0.6em; margin: 1.1em 0 0; padding: 0; list-style: none; font-size: var(--chip); }
+  li { padding: 0.35em 0.85em; border-radius: 999px; background: rgb(13 27 46 / 0.7); border: 1px solid rgb(111 220 255 / 0.25); color: #cfe9f7; }
+  .marquee { --pad: 120px; --gap: 56px; --logo: 220px; --title: 132px; --tag: 42px; --chip: 22px; }
+  .tile { --pad: 36px; --gap: 24px; --logo: 96px; --title: 64px; --tag: 19px; --chip: 0; }
+  .tile ul { display: none; }
+</style>
+</head>
+<body>
+  <canvas></canvas>
+  <div class="copy">
+    <img src="../icons/icon.svg" alt="">
+    <div>
+      <h1>Glaze</h1>
+      <p>Your colors on Blackboard Ultra.</p>
+      <ul><li>Palettes</li><li>Animated backgrounds</li><li>Countdowns</li><li>Folder previews</li></ul>
+    </div>
+  </div>
+<script type="module">
+  import { start } from '../lib/scene.js';
+  const size = new URLSearchParams(location.search).get('size') || 'marquee';
+  document.body.className = size;
+  // Frost's accent, bright accent and success, at a high intensity, still (time 0) so every render matches.
+  start(document.querySelector('canvas')).update({ name: 'borealis', ground: '#060d18', colors: ['#17c8f4', '#6fdcff', '#34d399'], dim: 0.05, amount: 0.9, speed: 0 });
+  document.fonts.ready.then(() => { document.body.dataset.ready = '1'; });
+</script>
+</body>
+</html>

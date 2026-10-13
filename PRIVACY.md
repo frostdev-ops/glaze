@@ -20,10 +20,10 @@ analytics and no server of its own.
 
 ## Network requests
 
-Glaze ships as static files and loads no remote code. Its fonts are bundled. It makes requests in two
-cases, both only when you turn the feature on:
+Glaze ships as static files and loads no remote code. Its fonts and three.js (used by the animated
+backgrounds) are bundled. It makes requests in two cases:
 
-- **Folder previews** (an Extra, off by default). Hovering a folder asks your own Blackboard site for the
+- **Folder previews** (an Extra, on by default; switch it off under Extras). Hovering a folder asks your own Blackboard site for the
   folder's contents, using the same internal address Blackboard's own page uses. The request goes to the
   site you are on, with your existing session, and the answer is kept in memory for a minute. Nothing is
   sent anywhere else.

@@ -21,11 +21,11 @@ domain.
 
 - **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system.
 - **Look** — font (two bundled), text size, line height, corner radius, density, depth and glass.
-- **Backgrounds** — solid, gradient, a drifting aurora, or your own image.
+- **Backgrounds** — solid; a gradient you shape (linear, radial, conic or mesh; angle, blend, spread); a drifting aurora; your own image; or eight slow animated scenes (three.js, drawn at low resolution) with one Intensity slider. Palette colors or your own.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — Ultra's course stripes blended into your palette, or set one by one.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
-- **Extras** (each off by default) — due-date urgency, countdowns, score bars, folder previews, course progress, keyboard shortcuts, reading width, and hiding page parts you don't use.
+- **Extras** — score bars, countdowns and grade percentages, folder previews and course progress (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts and hiding page parts you don't use (off by default).
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
 
@@ -128,8 +128,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Privacy
 
 Glaze stores your settings in `chrome.storage.sync` and your course names on your own device. It
-collects nothing. The only requests it makes are the folder previews (to your own Blackboard site) and
-a background image you choose, each only when you turn it on. See [PRIVACY.md](PRIVACY.md).
+collects nothing. The only requests it makes are folder previews (to your own Blackboard site, when you
+hover a folder) and a background image you choose. See [PRIVACY.md](PRIVACY.md).
 
 ## License
 

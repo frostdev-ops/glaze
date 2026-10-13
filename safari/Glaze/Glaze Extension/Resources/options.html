@@ -58,6 +58,9 @@
   .courses .slot { font-size: 11px; color: var(--gz-ink-faint); margin-left: 0.4rem; }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
   body.off .editor > section:not(#data) { opacity: 0.5; }
+  [hidden] { display: none !important; }
+  .swatch.bg-set::after { display: none; }
+  .seg.wrap { flex-wrap: wrap; border-radius: 14px; }
 </style>
 </head>
 <body>
@@ -127,13 +130,47 @@
             <label><input type="radio" name="bg.kind" value="solid">Solid</label>
             <label><input type="radio" name="bg.kind" value="gradient">Gradient</label>
             <label><input type="radio" name="bg.kind" value="aurora">Aurora</label>
+            <label><input type="radio" name="bg.kind" value="scene">Animated</label>
             <label><input type="radio" name="bg.kind" value="image">Image</label>
           </div></div>
-        <label class="field wide"><span>Image address</span><input type="url" id="bg-image" placeholder="https://…" aria-describedby="bg-image-note"></label>
-        <p class="desc" id="bg-image-note">An https link to a picture. If it can't load, the gradient shows instead.</p>
-        <label class="field"><span>Dim</span><input type="range" data-key="bg.dim" min="0" max="90" step="5"><output data-for="bg.dim" data-format="pct100"></output></label>
-        <label class="field"><span>Blur</span><input type="range" data-key="bg.blur" min="0" max="20" step="1"><output data-for="bg.blur" data-format="px"></output></label>
-        <p class="desc">Aurora drifts slowly when motion is set to Expressive.</p>
+        <div class="field wide" data-kinds="scene"><span>Scene</span>
+          <div class="seg wrap" role="radiogroup" aria-label="Scene">
+            <label title="Slow, drifting fog"><input type="radio" name="bg.scene" value="mist">Mist</label>
+            <label title="Out-of-focus lights on long, slow loops"><input type="radio" name="bg.scene" value="orbs">Orbs</label>
+            <label title="Northern lights: swaying curtains with fine rays"><input type="radio" name="bg.scene" value="borealis">Borealis</label>
+            <label title="A lava lamp: soft blobs rising, sinking and merging"><input type="radio" name="bg.scene" value="lava">Lava</label>
+            <label title="A field of dots rolling in long swells"><input type="radio" name="bg.scene" value="waves">Waves</label>
+            <label title="Motes rising and glinting"><input type="radio" name="bg.scene" value="dust">Dust</label>
+            <label title="A topographic map that slowly reshapes"><input type="radio" name="bg.scene" value="contours">Contours</label>
+            <label title="A striped sun over a gliding grid"><input type="radio" name="bg.scene" value="horizon">Horizon</label>
+          </div></div>
+        <label class="field" data-kinds="scene"><span>Intensity</span><input type="range" data-key="bg.intensity" min="0" max="100" step="5" aria-describedby="bg-intensity-note"><output data-for="bg.intensity" data-format="presence"></output></label>
+        <p class="desc" id="bg-intensity-note" data-kinds="scene">How much it stands out: color, contrast and pace together. Drawn with WebGL (three.js) at low resolution, at most 30 frames a second; it pauses in background tabs and holds still when motion is off.</p>
+        <div class="field wide" data-kinds="gradient aurora scene"><span>Colors</span>
+          <div class="row">
+            <div class="swatches" id="bg-sets" aria-label="Background colors"></div>
+            <span class="row" id="bg-colors"></span>
+          </div></div>
+        <div class="field wide" data-kinds="gradient"><span>Style</span>
+          <div class="seg" role="radiogroup" aria-label="Gradient style">
+            <label title="A straight sweep from one color to the next"><input type="radio" name="bg.style" value="linear">Linear</label>
+            <label title="Rings spreading out from a point"><input type="radio" name="bg.style" value="radial">Radial</label>
+            <label title="Colors turning around the centre"><input type="radio" name="bg.style" value="conic">Conic</label>
+            <label title="A sweep with the end colors glowing in from the sides"><input type="radio" name="bg.style" value="mesh">Mesh</label>
+          </div></div>
+        <label class="field" data-kinds="gradient"><span>Angle</span><input type="range" data-key="bg.angle" min="0" max="360" step="5" aria-describedby="bg-angle-note"><output data-for="bg.angle" data-format="deg"></output></label>
+        <p class="desc" id="bg-angle-note" data-kinds="gradient" data-styles="radial">For Radial, the angle is where the centre sits.</p>
+        <label class="field" data-kinds="gradient"><span>Blend</span><input type="range" data-key="bg.blend" min="0" max="100" step="5" aria-describedby="bg-blend-note"><output data-for="bg.blend" data-format="pct100"></output></label>
+        <label class="field" data-kinds="gradient" data-styles="linear radial mesh"><span>Spread</span><input type="range" data-key="bg.spread" min="20" max="200" step="5" aria-describedby="bg-blend-note"><output data-for="bg.spread" data-format="pct100"></output></label>
+        <p class="desc" id="bg-blend-note" data-kinds="gradient">Blend: how softly the colors melt into each other (0 gives crisp bands). Spread: how much of the screen the change covers; past it, the end colors hold.</p>
+        <label class="field wide" data-kinds="image"><span>Image address</span><input type="url" id="bg-image" placeholder="https://…" aria-describedby="bg-image-note"></label>
+        <p class="desc" id="bg-image-note" data-kinds="image">An https link to a picture. If it can't load, the gradient shows instead.</p>
+        <label class="field" data-kinds="gradient aurora image"><span>Dim</span><input type="range" data-key="bg.dim" min="0" max="90" step="5"><output data-for="bg.dim" data-format="pct100"></output></label>
+        <label class="field" data-kinds="gradient aurora image"><span>Blur</span><input type="range" data-key="bg.blur" min="0" max="20" step="1"><output data-for="bg.blur" data-format="px"></output></label>
+        <label class="check" data-kinds="gradient aurora image"><input type="checkbox" data-key="bg.grain"><span>Grain</span>
+          <span class="desc">A faint film grain that smooths out banding in soft gradients. Blur hides it.</span></label>
+        <p class="desc" data-kinds="aurora">Aurora drifts slowly when motion is set to Expressive.</p>
+        <p class="desc" data-kinds="solid">Just the palette's ground color.</p>
       </section>
 
       <section id="motion">
@@ -144,7 +181,7 @@
             <label><input type="radio" name="motion.level" value="subtle">Subtle</label>
             <label><input type="radio" name="motion.level" value="expressive">Expressive</label>
           </div></div>
-        <p class="desc">Subtle: pages and cards ease in, panels slide, hover lifts. Expressive adds springier motion, a drifting aurora and a small burst when you complete an item.</p>
+        <p class="desc">Subtle: pages and cards ease in, panels slide, hover lifts. Expressive adds springier motion, a drifting aurora, livelier animated backgrounds and a small burst when you complete an item. Off also holds animated backgrounds still.</p>
         <label class="check"><input type="checkbox" data-key="motion.followSystem"><span>Turn motion off when the system asks for reduced motion</span></label>
         <div class="group">
           <h3>Fine-tune</h3>

@@ -95,3 +95,52 @@ test('declutter tabs keep only known slugs, once each', () => {
   a.declutter.tabs.push('groups');
   assert.deepEqual(b.declutter.tabs, [], 'defaults are not shared between results');
 });
+
+test('score bars, countdowns, folder previews and course progress are on by default; the rest are off', () => {
+  const on = Object.entries(G.GZ_DEFAULTS.enhance).filter(([, v]) => v).map(([k]) => k);
+  assert.deepEqual(on.sort(), ['inline', 'previews', 'progress', 'scores']);
+  assert.equal(G.GZ_SANITIZE({ enhance: { scores: false } }).enhance.scores, false, 'an explicit off is kept');
+});
+
+test('background colors: three hex or none; none follows the palette', () => {
+  assert.deepEqual(G.GZ_SANITIZE({ bg: { colors: ['#AABBCC', '#000000', '#ffffff'] } }).bg.colors, ['#aabbcc', '#000000', '#ffffff']);
+  for (const bad of [['#aabbcc'], ['#aabbcc', '#000000', 'red'], '#aabbcc', ['#aabbcc', '#000000', '#ffffff', '#111111']]) {
+    assert.deepEqual(G.GZ_SANITIZE({ bg: { colors: bad } }).bg.colors, [], JSON.stringify(bad));
+  }
+  const frost = G.GZ_DEFAULTS.colors;
+  assert.deepEqual(G.GZ_BG_COLORS([], frost), [frost['--gz-accent'], frost['--gz-accent-hi'], frost['--gz-ink-muted']]);
+  assert.deepEqual(G.GZ_BG_COLORS(['#111111', '#222222', '#333333'], frost), ['#111111', '#222222', '#333333']);
+  for (const [name, set] of G.GZ_BG_SETS) assert.deepEqual(G.GZ_SANITIZE({ bg: { colors: set } }).bg.colors, set, name);
+});
+
+test('animated scenes are a background kind, off by default', () => {
+  assert.equal(G.GZ_DEFAULTS.bg.kind, 'solid');
+  const s = G.GZ_SANITIZE({ bg: { kind: 'scene', scene: 'waves' } });
+  assert.equal(s.bg.kind, 'scene');
+  assert.equal(s.bg.scene, 'waves');
+  assert.equal(G.GZ_SANITIZE({ bg: { scene: 'plasma' } }).bg.scene, 'mist');
+  assert.equal(G.GZ_SANITIZE({ bg: { intensity: 140 } }).bg.intensity, 50);
+});
+
+test('every scene the settings allow is drawn by lib/scene.js', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../lib/scene.js'), 'utf8');
+  const drawn = src.slice(src.indexOf('const SCENES = {')).match(/^ {2}(\w+):/gm).map((m) => m.trim().slice(0, -1));
+  assert.deepEqual([...drawn].sort(), [...G.GZ_SPEC.bg.scene[1]].sort());
+});
+
+test('intensity runs from barely there to full strength', () => {
+  const lo = G.GZ_SCENE_LOOK(0); const hi = G.GZ_SCENE_LOOK(100);
+  assert.ok(lo.dim > hi.dim && lo.amount < hi.amount && lo.pace < hi.pace);
+  assert.equal(hi.dim, 0);
+  assert.ok(G.GZ_SCENE_LOOK(G.GZ_DEFAULTS.bg.intensity).dim < 0.6, 'the default stands out more than the old fixed dim of 60%');
+});
+
+test('gradient: blend sets how long each color holds, spread how much of the line the change covers', () => {
+  const g = (o) => G.GZ_GRADIENT({ ...G.GZ_DEFAULTS.bg, ...o });
+  assert.equal(g({ blend: 100 }), 'linear-gradient(135deg, var(--gz-bg-1) 0% 0%, var(--gz-bg-2) 50% 50%, var(--gz-bg-3) 100% 100%)');
+  assert.equal(g({ blend: 0 }), 'linear-gradient(135deg, var(--gz-bg-1) 0% 25%, var(--gz-bg-2) 25% 75%, var(--gz-bg-3) 75% 100%)');
+  assert.match(g({ spread: 50 }), /var\(--gz-bg-1\) 25% 25%.*var\(--gz-bg-3\) 75% 75%/);
+  assert.match(g({ style: 'conic' }), /^conic-gradient\(from 135deg .*var\(--gz-bg-1\) 100% 100%\)$/, 'conic comes back round to the first color');
+  assert.equal(g({ style: 'mesh' }).split('-gradient(').length - 1, 3, 'mesh: two glows over the sweep');
+  assert.match(G.GZ_GRADIENT(G.GZ_DEFAULTS.bg, 'oklab'), /^linear-gradient\(135deg in oklab, /);
+});

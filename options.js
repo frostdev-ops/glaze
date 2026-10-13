@@ -11,6 +11,8 @@ const FORMAT = {
   pct100: (v) => `${v}%`,
   px: (v) => `${v}px`,
   depth: (v) => DEPTH[v],
+  deg: (v) => `${v}°`,
+  presence: (v) => ['Faint', 'Soft', 'Clear', 'Bold'][Math.min(3, Math.floor(v / 25))],
 };
 
 let hintTimer = 0;
@@ -128,6 +130,7 @@ GZ_UI.load().then((s) => {
     GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); fill(); });
     renderContrast();
     renderMine();
+    renderBg();
     presetOptions();
     outputs();
     $('[data-key="auto.on"]').checked = s.auto.on;
@@ -147,6 +150,36 @@ GZ_UI.load().then((s) => {
     $('#bg-image').value = s.bg.image;
     for (const [slug, box] of tabBoxes) box.checked = s.declutter.tabs.includes(slug);
     refresh();
+  };
+
+  // ---- background colors: a ready-made set or three pickers. None stored means the palette's, so
+  // they follow palette changes until one is picked. ----
+  const activeColors = () => GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
+  const bgPickers = [1, 2, 3].map((n) => {
+    const input = Object.assign(document.createElement('input'), { type: 'color' });
+    input.setAttribute('aria-label', `Background color ${n}`);
+    input.addEventListener('input', () => {
+      if (!s.bg.colors.length) s.bg.colors = [...GZ_BG_COLORS([], activeColors())];
+      s.bg.colors[n - 1] = input.value;
+      refresh();
+      save(['bg'], true);
+    });
+    input.addEventListener('change', () => save(['bg']));
+    $('#bg-colors').append(input);
+    return input;
+  });
+  const renderBg = () => {
+    const shows = (el) => el.dataset.kinds.split(' ').includes(s.bg.kind) && (!el.dataset.styles || el.dataset.styles.split(' ').includes(s.bg.style));
+    for (const el of $$('#background [data-kinds]')) el.hidden = !shows(el);
+    $('#bg-sets').replaceChildren(...[['Palette', []], ...GZ_BG_SETS].map(([name, set]) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'swatch bg-set', title: name });
+      b.setAttribute('aria-label', name === 'Palette' ? 'Palette colors' : name);
+      b.setAttribute('aria-pressed', String(set.join() === s.bg.colors.join()));
+      b.style.background = `linear-gradient(135deg, ${GZ_BG_COLORS(set, activeColors()).join(', ')})`;
+      b.addEventListener('click', () => { s.bg.colors = [...set]; refresh(); save(['bg']); });
+      return b;
+    }));
+    GZ_BG_COLORS(s.bg.colors, activeColors()).forEach((c, i) => { bgPickers[i].value = c; });
   };
 
   // ---- declutter tabs: a list of slugs, so one checkbox each ----
