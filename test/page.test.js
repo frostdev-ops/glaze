@@ -56,3 +56,41 @@ test('describe() takes ISO dates from the content API', () => {
   assert.equal(P.describe(new Date('2026-10-19T03:59:00.000Z'), true, now).rel, 'next week');
   assert.equal(P.describe(new Date(2026, 9, 11, 18, 0), true, now).rel, 'in 3 hours');
 });
+
+test('the gradebook by content item, and what counts as done', () => {
+  const grades = P.gradesByContent([
+    { status: 'NEEDS_GRADING', column: { contentId: '_1_1' } },
+    { status: 'GRADED', column: {} }, // an external tool's column: no content item
+  ]);
+  assert.deepEqual([...grades.keys()], ['_1_1']);
+  assert.equal(P.gradesByContent(undefined).size, 0);
+  assert.ok(P.isDone(null, { status: 'NEEDS_GRADING' }));
+  assert.ok(P.isDone(null, { isExempt: true }));
+  assert.ok(P.isDone('true', undefined));
+  assert.ok(!P.isDone('mixed', {}));
+});
+
+test('status chips beside due dates in course content', () => {
+  const soon = 'Due date: 10/13/26, 11:59 PM (EDT)'; // in 2 days
+  const later = 'Due date: 10/18/26, 11:59 PM (EDT)'; // next week
+  const gone = 'Due date: 10/4/26, 11:59 PM (EDT)'; // last week
+  const S = (text, circle, grade) => P.status(text, circle, grade, now);
+  // Graded, with the mark and a band like the score bars.
+  assert.deepEqual(S(gone, null, { status: 'GRADED', displayGrade: { score: 18 }, pointsPossible: 20 }), { label: 'Graded · 18/20', tone: 'graded-hi' });
+  assert.deepEqual(S(gone, null, { status: 'GRADED', displayGrade: { score: 2.5 }, pointsPossible: 5 }), { label: 'Graded · 2.5/5', tone: 'graded-lo' });
+  assert.deepEqual(S(gone, null, { status: 'GRADED', displayGrade: { text: 'A-' } }), { label: 'Graded · A-', tone: 'done' });
+  // Submitted: before the due date it still says when.
+  assert.deepEqual(S(soon, null, { status: 'NEEDS_GRADING' }), { label: 'Submitted · due in 2 days', tone: 'done' });
+  assert.deepEqual(S(gone, 'true', { status: 'NEEDS_GRADING' }), { label: 'Submitted', tone: 'done' });
+  assert.deepEqual(S(gone, 'true', null), { label: 'Done', tone: 'done' });
+  assert.deepEqual(S(soon, null, { isExempt: true }), { label: 'Exempt', tone: 'muted' });
+  // Not done yet: the countdown, with the circle's word where the course has circles.
+  assert.deepEqual(S(soon, 'false', {}), { label: 'in 2 days · Unopened', tone: 'soon' });
+  assert.deepEqual(S(later, 'mixed', {}), { label: 'next week · Opened', tone: 'later' });
+  assert.deepEqual(S(later, null, {}), { label: 'next week', tone: 'later' });
+  // Past due: said only when the status is known.
+  assert.deepEqual(S(gone, null, {}), { label: 'Past due · Not submitted', tone: 'overdue' });
+  assert.deepEqual(S(gone, 'mixed', undefined), { label: 'Past due · Opened', tone: 'overdue' });
+  assert.equal(S(gone, null, undefined), null);
+  assert.equal(S(gone, null, null), null);
+});

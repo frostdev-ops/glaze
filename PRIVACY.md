@@ -21,11 +21,17 @@ analytics and no server of its own.
 ## Network requests
 
 Glaze ships as static files and loads no remote code. Its fonts and three.js (used by the animated
-backgrounds) are bundled. It makes requests in two cases:
+backgrounds) are bundled. It makes requests in three cases:
 
 - **Folder previews** (an Extra, on by default; switch it off under Extras). Hovering a folder asks your own Blackboard site for the
   folder's contents, using the same internal address Blackboard's own page uses. The request goes to the
   site you are on, with your existing session, and the answer is kept in memory for a minute. Nothing is
+  sent anywhere else.
+- **Due-date status** (the "Due-date status and percentages" Extra, on by default, and due-date urgency).
+  To show beside a due date whether you've submitted the work or had it graded, Glaze asks your own
+  Blackboard site's gradebook for your grades in the course you're viewing, using the same internal
+  address Blackboard's own Grades page uses. The request goes to the site you are on, with your existing
+  session, at most once a minute per course, and the answer is kept in memory only. Nothing is stored or
   sent anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.

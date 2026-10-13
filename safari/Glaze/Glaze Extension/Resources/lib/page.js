@@ -63,7 +63,41 @@ const GZ_PAGE = (() => {
     return { title, sub, rel };
   };
 
-  return { due, score, when, describe };
+  // The gradebook's record for each content item, from Ultra's gradebook/grades?expand=column. Columns
+  // with no content item (external tools, totals) are left out.
+  const gradesByContent = (results) => new Map((results || []).filter((g) => g.column?.contentId).map((g) => [g.column.contentId, g]));
+
+  // Done: graded, submitted (needs grading), exempt, or Ultra's progress circle full.
+  const isDone = (circle, grade) => circle === 'true' || !!grade?.isExempt || grade?.status === 'GRADED' || grade?.status === 'NEEDS_GRADING';
+
+  // The chip beside a due date in course content: where the work stands, then when it's due.
+  // circle: Ultra's progress circle ('false' empty, 'mixed' half, 'true' full), or null where the course
+  // doesn't track progress. grade: the gradebook's record, null if the item has no column, undefined while
+  // unknown. Returns { label, tone }, or null when there's nothing reassuring or useful to say: a past
+  // date whose status is unknown is left alone rather than shown as "2 weeks ago".
+  const status = (text, circle, grade, now = new Date()) => {
+    const w = when(text, now);
+    if (!w) return null;
+    const past = w.title.startsWith('Was due'); // the caller's text always says "due"
+    if (grade?.isExempt) return { label: 'Exempt', tone: 'muted' };
+    if (grade?.status === 'GRADED') {
+      const d = grade.displayGrade || {};
+      const n = (x) => +(+x).toFixed(2);
+      const sc = d.score != null && score(d.score, grade.pointsPossible);
+      const mark = d.text || (sc ? `${n(d.score)}/${n(grade.pointsPossible)}` : '');
+      return { label: mark ? `Graded · ${mark}` : 'Graded', tone: sc ? `graded-${sc.band}` : 'done' };
+    }
+    if (isDone(circle, grade)) {
+      const label = grade?.status === 'NEEDS_GRADING' ? 'Submitted' : 'Done';
+      return { label: past ? label : `${label} · due ${w.rel}`, tone: 'done' };
+    }
+    const where = circle === 'mixed' ? 'Opened' : circle === 'false' ? 'Unopened' : grade ? 'Not submitted' : '';
+    if (past) return where ? { label: `Past due · ${where}`, tone: 'overdue' } : null;
+    // Upcoming: "Not submitted" says nothing yet, so only the circle's word joins the countdown.
+    return { label: circle ? `${w.rel} · ${where}` : w.rel, tone: due(text, now) || 'later' };
+  };
+
+  return { due, score, when, describe, gradesByContent, isDone, status };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_PAGE;

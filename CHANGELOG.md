@@ -6,6 +6,20 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Due-date status** replaces countdowns in course content: beside each due date, where the work
+  stands. "in 2 days · Unopened" or "· Opened" (from Ultra's progress circle), "Submitted · due in 2
+  days", "Submitted", "Graded · 18/20" in its score band's color, "Exempt", "Done", and "Past due ·
+  Not submitted" in red. A past due date whose status Glaze can't know (an external tool's item, say)
+  gets no chip, instead of an anxious "2 weeks ago"; outside course content only upcoming dates get one.
+  The status comes from your Blackboard's gradebook, asked at most once a minute per course.
+
+### Fixed
+
+- **Due-date urgency** no longer flags work you've handed in, in any course: due soon and due today
+  now check it too, not only overdue, and courses without progress circles check the gradebook.
+
 ## [2.0.3] — 2026-10-13
 
 ### Added

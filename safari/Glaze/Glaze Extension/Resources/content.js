@@ -11,7 +11,7 @@
   const html = document.documentElement;
   const SHEETS = ['theme.css', 'motion.css', 'extras.css'];
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -136,6 +136,36 @@
   // Ultra's details lists put the label one element up: "Assessment due date" / "10/11/26, 11:59 PM".
   const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '');
 
+  // Course content's due dates carry a status: Ultra's progress circle where the course tracks progress,
+  // and the gradebook (submitted, graded, exempt). The gradebook is asked of the user's own Blackboard
+  // (same origin, their session) at most once a minute per course, and only when a course item shows a
+  // due date; an answer that changes anything re-tags the page. undefined until it answers.
+  let meId = null;
+  let book = { cid: null, at: 0, grades: undefined, key: '' };
+  const gradesIn = () => {
+    const cid = courseId();
+    if (!cid) return undefined;
+    if (book.cid !== cid || Date.now() - book.at > 60000) {
+      book = book.cid === cid ? { ...book, at: Date.now() } : { cid, at: Date.now(), grades: undefined, key: '' };
+      // Absolute URLs: Ultra's <base href> points at its CDN.
+      const get = (path) => fetch(`${location.origin}/learn/api/v1${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
+        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+      // ponytail: one page, Ultra's cap of 200 grades; items past that show only their countdown.
+      (meId ? Promise.resolve(meId) : get('/users/me').then((me) => (meId = me.id)))
+        .then((id) => get(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
+        .then((j) => {
+          if (book.cid !== cid) return;
+          const grades = GZ_PAGE.gradesByContent(j.results);
+          const key = JSON.stringify([...grades].map(([id, g]) => [id, g.status, g.isExempt, g.displayGrade]));
+          if (key === book.key) return;
+          Object.assign(book, { grades, key });
+          tagExtras([document.body]);
+        })
+        .catch(() => {});
+    }
+    return book.grades;
+  };
+
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagExtras = (roots) => {
     const { scores, urgency, inline } = settings.enhance;
@@ -157,19 +187,36 @@
         for (let n = walk.nextNode(); n; n = walk.nextNode()) {
           const el = n.parentElement;
           const text = /due/i.test(n.data) ? n.data : `Due: ${n.data}`;
-          let state = GZ_PAGE.due(text, now);
-          // "Overdue" only where Ultra says the item isn't done: course content, by its review
-          // circle. Elsewhere a past date may well be submitted, and the stream says "Past due" itself.
-          if (state === 'overdue') {
-            const item = el.closest('.content-list-item');
-            if (!item || item.querySelector('.js-review-state-icon-button')?.getAttribute('aria-checked') === 'true') state = null;
-          }
-          if (urgency && state) el.setAttribute('data-gz-due', state);
+          // A course item's circle ('false' empty, 'mixed' half, 'true' full; null without progress
+          // tracking) and gradebook record say where the work stands.
+          const item = el.closest('.content-list-item[data-content-id]');
+          const circle = item?.querySelector('.js-review-state-icon-button')?.getAttribute('aria-checked') ?? null;
+          // A discussion's outline item is a link with its own id; the gradebook knows the discussion's.
+          const grades = item && gradesIn();
+          const grade = grades ? grades.get(item.dataset.contentId)
+            ?? grades.get(item.querySelector('a[href*="/discussion/"]')?.getAttribute('href').match(/\/discussion\/(_\d+_\d+)/)?.[1]) : undefined;
+          // Nothing is urgent once it's done. Outside course content a past date may well be done, and
+          // the stream says "Past due" itself.
+          let state = urgency && GZ_PAGE.due(text, now);
+          if (state && (GZ_PAGE.isDone(circle, grade) || (!item && state === 'overdue'))) state = null;
+          if (state) el.setAttribute('data-gz-due', state);
           else el.removeAttribute('data-gz-due');
-          // The countdown chip is drawn by CSS from this attribute: no element is added to Ultra's tree.
-          const w = inline && GZ_PAGE.when(text, now);
-          if (w) el.setAttribute('data-gz-countdown', w.rel);
-          else el.removeAttribute('data-gz-countdown');
+          // The chip is drawn by CSS from these attributes: no element is added to Ultra's tree. In course
+          // content it says where the work stands; elsewhere only how long is left, never how long ago.
+          let chip = null;
+          if (inline && item) chip = GZ_PAGE.status(text, circle, grade, now);
+          else if (inline) {
+            const w = GZ_PAGE.when(text, now);
+            if (w && !w.title.startsWith('Was due')) chip = { label: w.rel, tone: '' };
+          }
+          if (chip) {
+            el.setAttribute('data-gz-countdown', chip.label);
+            if (chip.tone) el.setAttribute('data-gz-chip', chip.tone);
+            else el.removeAttribute('data-gz-chip');
+          } else {
+            el.removeAttribute('data-gz-countdown');
+            el.removeAttribute('data-gz-chip');
+          }
         }
       }
     }
@@ -194,6 +241,9 @@
       if (r.attributeName === 'aria-checked') {
         if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true'
           && html.getAttribute('data-gz-motion') === 'expressive' && r.target.matches('.js-review-state-icon-button')) celebrate(r.target);
+        // A circle that changes changes its item's due-date chip.
+        const item = r.target.closest('.content-list-item');
+        if (item) dirty.add(item);
         continue;
       }
       if (r.type === 'attributes') dirty.add(r.target);
