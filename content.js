@@ -135,9 +135,13 @@
     } catch { /* extension reloaded under the tab */ }
   };
 
-  // Ultra's details lists put the label one element up: "Assessment due date" / "10/11/26, 11:59 PM";
-  // an assignment's own page puts both in a .due-date-container.
-  const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '') || !!el?.closest('.due-date-container');
+  // Where Ultra writes a due date, in any language: a course item's grade line and an assignment's own
+  // page (its .due-date-container). Its English details lists put the label one element up:
+  // "Assessment due date" / "10/11/26, 11:59 PM".
+  const DUE_AT = '.due-date-container, .content-list-item [class*="makeStylesgradeDetail-"]';
+  const dueLabelled = (el) => /\bdue\b/i.test(el?.parentElement?.previousElementSibling?.textContent || '') || !!el?.closest(DUE_AT);
+  // The locale Ultra renders in: <html lang> is bound to it ("{{index.locale}}" until Ultra starts).
+  const locale = () => { try { return Intl.getCanonicalLocales(html.lang.replace(/_/g, '-'))[0] || navigator.language; } catch { return navigator.language; } };
 
   // ---- the gradebook --------------------------------------------------------------------------
   // Due-date status, new grades and the what-if calculator read the student's own gradebook records,
@@ -238,7 +242,10 @@
         }
       }
       if (urgency || inline) {
-        const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (/due/i.test(n.data) || (/\d\/\d/.test(n.data) && dueLabelled(n.parentElement)) ? 1 : 3) });
+        // Due dates by where Ultra puts them; in English, also by the word ("puede" isn't one).
+        const loc = locale();
+        const en = /^en\b/i.test(loc);
+        const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => ((en && /due/i.test(n.data)) || (/\d/.test(n.data) && dueLabelled(n.parentElement)) ? 1 : 3) });
         for (let n = walk.nextNode(); n; n = walk.nextNode()) {
           const el = n.parentElement;
           const text = /due/i.test(n.data) ? n.data : `Due: ${n.data}`;
@@ -253,18 +260,21 @@
           const grade = !grades ? undefined : pageId ? grades.get(pageId) : grades.get(item.dataset.contentId)
             ?? grades.get(item.querySelector('a[href*="/discussion/"]')?.getAttribute('href').match(/\/discussion\/(_\d+_\d+)/)?.[1]);
           const late = !!grade && !!books.get(courseId())?.late?.has(grade.columnId);
+          // The date itself from the gradebook where it has one, so it reads in any locale; otherwise
+          // from the text, in Ultra's locale.
+          const at = grade?.column?.dueDate && dueLabelled(el) ? new Date(grade.column.dueDate) : text;
           // Nothing is urgent once it's done. Elsewhere a past date may well be done, and the stream
           // says "Past due" itself.
-          let state = urgency && GZ_PAGE.due(text, now);
+          let state = urgency && GZ_PAGE.due(at, now, loc);
           if (state && (GZ_PAGE.isDone(circle, grade) || (!item && !pageId && state === 'overdue'))) state = null;
           if (state) el.setAttribute('data-gz-due', state);
           else el.removeAttribute('data-gz-due');
           // The chip is drawn by CSS from these attributes: no element is added to Ultra's tree. In course
           // content it says where the work stands; elsewhere only how long is left, never how long ago.
           let chip = null;
-          if (inline && (item || pageId)) chip = GZ_PAGE.status(text, circle, grade, now, late);
+          if (inline && (item || pageId)) chip = GZ_PAGE.status(at, circle, grade, now, late, loc);
           else if (inline) {
-            const w = GZ_PAGE.when(text, now);
+            const w = GZ_PAGE.when(at, now, loc, true);
             if (w && !w.title.startsWith('Was due')) chip = { label: w.rel, tone: '' };
           }
           if (chip) {
@@ -481,7 +491,8 @@
       if (el.matches('.fc-event')) return [el, { title: squash(el.querySelector('.fc-title')?.textContent || el.textContent) }];
       const text = el.childElementCount <= 3 ? squash(el.textContent) : '';
       if (text.length && text.length < 120) {
-        const w = GZ_PAGE.when(dueLabelled(el) ? `Due ${text}` : text);
+        const loc = locale();
+        const w = GZ_PAGE.when(text, new Date(), loc, dueLabelled(el) || (/^en\b/i.test(loc) && /\bdue\b/i.test(text)));
         if (w) return [el, w];
       }
       if (text && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow === 'ellipsis') {

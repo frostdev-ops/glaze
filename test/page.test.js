@@ -52,6 +52,104 @@ test('no hint where there is no real date', () => {
   for (const t of ['', 'Fall 2026', '2 / 2', '2/30/26', '13/1/26', null]) assert.equal(P.when(t, now), null, String(t));
 });
 
+// ---- other locales ----
+const at = new Date(2026, 9, 18, 23, 59); // next Sunday, a minute before midnight
+const fmt = (l, o, d = at) => new Intl.DateTimeFormat(l, o).format(d);
+const same = (l, text, want = at, timed = true) => {
+  const r = P.read(text, l, now);
+  assert.ok(r, `${l}: ${text}`);
+  assert.equal(r.at.getTime(), want.getTime(), `${l}: ${text} read as ${r.at}`);
+  assert.equal(r.timed, timed, `${l}: ${text}`);
+};
+const LOCALES = ['en-GB', 'en-AU', 'en-CA', 'de', 'fr', 'fr-CA', 'es', 'es-MX', 'pt-BR', 'nl', 'it', 'pl', 'ru', 'tr', 'sv', 'fi', 'da', 'hu', 'cy', 'ja', 'zh', 'zh-TW', 'ko', 'ar', 'ar-SA', 'he'];
+
+test('dates as Intl writes them, in many locales', () => {
+  const morning = new Date(2026, 0, 5, 0, 30); // 12:30 AM: the hour that tests a 12-hour clock
+  for (const l of LOCALES) {
+    same(l, `${fmt(l, { dateStyle: 'short', timeStyle: 'short' })} (EDT)`);
+    same(l, fmt(l, { dateStyle: 'short', timeStyle: 'short', hour12: true }, morning), morning);
+    same(l, fmt(l, { dateStyle: 'short', timeStyle: 'short', hour12: false }));
+    same(l, fmt(l, { dateStyle: 'short' }), new Date(2026, 9, 18), false);
+    same(l, fmt(l, { dateStyle: 'long', timeStyle: 'short' }));
+    same(l, fmt(l, { dateStyle: 'medium' }), new Date(2026, 9, 18), false);
+  }
+});
+
+test('dates as Ultra writes them: its CLDR, not always the browser\'s', () => {
+  // Short patterns from Ultra's own cldrdata bundles (Oct 2026): year widths and clocks differ from Intl's.
+  const rlm = String.fromCharCode(0x200f);
+  for (const [l, t] of [['en-GB', '18/10/2026, 23:59'], ['en-GB', '18/10/2026, 11:59 pm'], ['de-DE', 'Fälligkeitsdatum: 18.10.26, 23:59 (MESZ)'],
+    ['fr-FR', '18/10/2026 23:59'], ['es-ES', 'Fecha de vencimiento: 18/10/26 23:59'], ['es-ES', '18/10/26 11:59 p. m.'], ['pt-BR', '18/10/26 23:59'],
+    ['nl-NL', '18-10-26 23:59'], ['it-IT', '18/10/26, 23:59'], ['ja-JP', '期限: 2026/10/18 23:59'], ['zh', '26/10/18 23:59'], ['zh', '26/10/18 下午11:59'],
+    ['ko-KR', '26. 10. 18. 23:59'], ['ko-KR', '26. 10. 18. 오후 11:59'], ['he-IL', '18.10.2026, 23:59'], ['tr-TR', '18.10.2026 23:59'],
+    ['ar-SA', `١٨${rlm}/١٠${rlm}/٢٠٢٦ ١١:٥٩ م`], ['ar', `١٨${rlm}/١٠${rlm}/٢٠٢٦، ١١:٥٩ م`]]) same(l, t);
+  // Vietnamese puts the time first; Hong Kong writes 年 dates though its short dates are day-first.
+  same('vi', '23:59 18/10/26');
+  same('vi', '12:30 SA 18/10/26', new Date(2026, 9, 18, 0, 30));
+  same('zh-HK', '2026年10月18日 下午11:59');  // Morning in Arabic: ص, not م.
+  same('ar-SA', `١٨${rlm}/١٠${rlm}/٢٠٢٦ ١١:٥٩ ص`, new Date(2026, 9, 18, 11, 59));
+});
+
+test('month names, with or without a year', () => {
+  same('fr', 'À rendre le 18 octobre 2026 à 23:59');
+  same('es', 'Fecha de entrega: 18 de octubre de 2026, 23:59');
+  same('pt-BR', '18 de out. de 2026', new Date(2026, 9, 18), false);
+  same('de', '18. Okt.', new Date(2026, 9, 18), false);
+  same('he', '18 באוק׳ 2026', new Date(2026, 9, 18), false);
+  same('en-CA', 'Oct 18, 2026, 11:59 p.m.');
+  // "Juniper" is no month.
+  assert.equal(P.read('Projekt Juniper 3', 'de', now), null);
+});
+
+test('two dates: the first, and a later date is never read as a time', () => {
+  same('fr', 'Dates d’échéance : 17/09/2026 23:59 et 20/09/2026 23:59', new Date(2026, 8, 17, 23, 59));
+  same('de', 'Abgabetermine: 17.09.26 und 20.09.26', new Date(2026, 8, 17), false);
+});
+
+test('no date where there is none, in any locale', () => {
+  for (const l of LOCALES) {
+    for (const t of ['', null, 'Note: 5/5', 'Version 1.2.3', '31.31.31', '2 / 2', 'Module 3']) assert.equal(P.read(t, l, now), null, `${l}: ${t}`);
+  }
+  assert.equal(P.read('31.02.26', 'de', now), null); // rolls over: not a real date
+  assert.equal(P.read('1.2.2026', 'not a locale!', now), null);
+});
+
+test('en-US reads only what it always has', () => {
+  for (const t of ['Due date: 18.10.26, 23:59', 'Oct 18, 2026', '2026-10-18', '18/10/2026']) {
+    assert.equal(P.read(t, 'en-US', now), null, t);
+    assert.equal(P.when(t, now, 'en-US'), null, t);
+  }
+  for (const l of [undefined, 'en', 'en-US']) {
+    assert.deepEqual(P.when('Due date: 10/13/26, 11:59 PM (EDT)', now, l), { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days' });
+    assert.equal(P.due('Due date: 10/11/26, 11:59 PM (EDT)', now, l), 'today');
+    assert.equal(P.due('Due date: 10/11/26', now, l), null); // no time, no urgency
+  }
+});
+
+test('urgency, hints and status in another locale', () => {
+  assert.equal(P.due('Fecha de vencimiento: 13/10/26 9:00', now, 'es-ES'), 'soon');
+  assert.equal(P.due('Fälligkeitsdatum: 11.10.26, 23:59', now, 'de-DE'), 'today');
+  assert.equal(P.due('Fälligkeitsdatum: 11.10.26', now, 'de-DE'), null);
+  // Glaze's own words stay English; whether it's a due date comes from where the text is.
+  assert.deepEqual(P.when('13/10/2026 23:59', now, 'fr', true), { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days' });
+  assert.equal(P.when('13/10/2026', now, 'fr').title, 'In 2 days');
+  assert.deepEqual(P.status('18.10.26, 23:59', 'false', {}, now, false, 'de-DE'), { label: 'next week · Unopened', tone: 'later' });
+  assert.deepEqual(P.status('04.10.26, 23:59', null, {}, now, false, 'de-DE'), { label: 'Past due · Not submitted', tone: 'overdue' });
+});
+
+test('dates from Ultra\'s data read the same in every locale', () => {
+  const soon = new Date('2026-10-14T03:59:00.000Z'); // gradebook column.dueDate
+  const d = new Date(2026, 9, 13, 23, 59);
+  for (const l of [undefined, 'en-US', 'de', 'ar-SA', 'not a locale!']) {
+    assert.equal(P.due(d, now, l), 'soon');
+    assert.equal(P.when(d, now, l, true).title, 'Due in 2 days');
+    assert.deepEqual(P.status(d, null, { status: 'NEEDS_GRADING' }, now, false, l), { label: 'Submitted · due in 2 days', tone: 'done' });
+  }
+  assert.equal(P.due(soon, now), P.due(new Date(soon), now));
+  assert.equal(P.due(new Date('nonsense'), now), null);
+  assert.equal(P.when(new Date('nonsense'), now), null);
+});
+
 test('describe() takes ISO dates from the content API', () => {
   assert.equal(P.describe(new Date('2026-10-19T03:59:00.000Z'), true, now).rel, 'next week');
   assert.equal(P.describe(new Date(2026, 9, 11, 18, 0), true, now).rel, 'in 3 hours');
