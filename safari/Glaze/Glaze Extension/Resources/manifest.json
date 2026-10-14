@@ -1,11 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Glaze for Blackboard Ultra",
+  "name": "Glaze",
   "version": "2.1.4",
-  "description": "__MSG_description__",
+  "description": "Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras on Ultra.",
   "default_locale": "en",
   "permissions": [
-    "storage"
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*/*"
   ],
   "minimum_chrome_version": "113",
   "browser_specific_settings": {
@@ -39,7 +43,9 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*/ultra/*"
+        "https://*/ultra",
+        "https://*/ultra/*",
+        "https://*.instructure.com/*"
       ],
       "js": [
         "lib/color.js",
@@ -59,6 +65,20 @@
       ],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "https://*/*"
+      ],
+      "exclude_matches": [
+        "https://*/ultra",
+        "https://*/ultra/*",
+        "https://*.instructure.com/*"
+      ],
+      "js": [
+        "lib/detect.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
@@ -67,6 +87,7 @@
         "theme.css",
         "motion.css",
         "extras.css",
+        "canvas.css",
         "fonts/*.woff2"
       ],
       "matches": [

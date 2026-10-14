@@ -5,12 +5,12 @@
   </picture>
 </p>
 
-# Glaze for Blackboard Ultra
+# Glaze
 
-Glaze is a Chrome and Safari extension that restyles Blackboard Ultra. It replaces Ultra's palette with one you
-control, reshapes the pages around it, and adds small helpers you can see at a glance. It works on any
+Glaze is a Chrome and Safari extension that restyles Blackboard Ultra and Canvas. It replaces the palette with one you
+control, reshapes the pages around it, and adds small helpers you can see at a glance (on Ultra for now). It works on any
 institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/` on its own
-domain.
+domain, and on Canvas, which Glaze recognizes on any school's domain.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
@@ -31,7 +31,7 @@ domain.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
 - **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
-- **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
+- **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain.
 
 ## Install
 
@@ -43,7 +43,7 @@ domain.
 2. Open `chrome://extensions`.
 3. Enable **Developer mode** (top right).
 4. Click **Load unpacked** and select the repository folder.
-5. Open your Blackboard Ultra site and click the Glaze icon.
+5. Open your Blackboard Ultra or Canvas site and click the Glaze icon.
 
 ## Safari
 
@@ -94,15 +94,14 @@ Glaze for Safari on iPhone and iPad needs iOS or iPadOS 18 or newer. It comes fr
 listing as the Mac app; buying or installing on one platform covers the other.
 
 1. Install **Glaze** and open it. It shows a two-step guide.
-2. Turn Glaze on in **Settings › Apps › Safari › Extensions › Glaze for Blackboard Ultra** by switching on
+2. Turn Glaze on in **Settings › Apps › Safari › Extensions › Glaze** by switching on
    **Allow Extension**. On iOS 26.2 and newer, the guide's **Open Settings** button takes you to
    Safari's extension settings, and the guide ticks the step off as soon as Glaze is on.
-3. Open your Blackboard Ultra site in Safari and tap the extensions button in the address bar (a puzzle
-   piece; on iPhone it can be in the page menu at the left of the address). Tap **Glaze for Blackboard
-   Ultra**, then **Always Allow…** and **Always Allow on This Website**, and reload the page.
+3. Open your Blackboard Ultra or Canvas site in Safari and tap the extensions button in the address bar (a puzzle
+   piece; on iPhone it can be in the page menu at the left of the address). Tap **Glaze**, then **Always Allow…** and **Always Allow on This Website**, and reload the page.
 
 The popup and the editor are under the same button. The editor also opens from Settings › Apps › Safari ›
-Extensions › Glaze for Blackboard Ultra › Settings.
+Extensions › Glaze › Settings.
 
 The iOS app is two more targets in the same Xcode project (`Glaze iOS` and `Glaze iOS Extension`), sharing
 the extension's resources and native handler with the Mac targets. `scripts/appstore-ios.sh` archives it
@@ -154,7 +153,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Privacy
 
-Glaze stores your settings in `chrome.storage.sync`, and your course names, which grades and course
+Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
+you set in a course's menu. These follow Chrome sync when it's on; Safari keeps them on this device only.
+It keeps the course names your LMS lists, which grades and course
 items you've seen and a backup of what you type in Blackboard's editors (until it's posted, 14 days at most) on your own
 device. It collects nothing. The only requests it makes go to your own Blackboard site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and

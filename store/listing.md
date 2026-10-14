@@ -2,13 +2,13 @@
 
 ## Name
 
-Glaze for Blackboard Ultra
+Glaze
 
 ## Short summary (132 char max)
 
-> Make Blackboard Ultra yours: palettes, fonts, animated backgrounds and due-date countdowns. Works on any institution's Ultra.
+> Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras on Ultra. Works at any school.
 
-(125 characters.)
+(126 characters.)
 
 ## Category
 
@@ -67,10 +67,11 @@ Everything lives in one editor page with a live preview; the popup keeps the qui
 your theme as a code a classmate can paste (it previews before it applies), and back up and restore
 your settings as a file.
 
-Glaze works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
+Glaze works on Blackboard Ultra and Canvas. On Canvas it themes the page (palettes, fonts, backgrounds, motion) and brings Due this week, the command palette and grades on course cards; the other extras are for Ultra. It works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
 Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed list of universities.
 
-Privacy: Glaze stores your settings in Chrome's sync storage, and your course names, which grades you've seen, where you were in
+Privacy: Glaze stores your settings in Chrome's sync storage, including the course nicknames, colours, looks and tint you set, which
+follow your Chrome sync when it's on; and the course names your LMS lists, which grades you've seen, where you were in
 each course, your what-if scores, what's due this week and a backup of what you type (until it's posted, 14 days at most) on your
 device. It
 collects nothing and has no server. The only requests it makes go to your own Blackboard site, for folder
@@ -94,8 +95,10 @@ on those pages until it is posted. Every permission and every line of code serve
 ## Permission justifications
 
 **storage**
-Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and
-devices; the names of the user's courses in `chrome.storage.local`, so the editor can list them for
+Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and follows
+Chrome sync between devices when it's on, including the per-course colours, looks, tint and nicknames the user sets
+(nicknames are typed by the user); the names of the user's courses as the LMS lists them in
+`chrome.storage.local`, on the device only, so the editor can list them for
 recolouring; which grades and course items the user has seen, in `chrome.storage.local`, so new ones
 can be marked; which folders were open and how far down the user was in each course's content, so
 coming back restores it; hypothetical scores typed into the what-if calculator; and the user's own To
@@ -122,7 +125,25 @@ To Do list for the next seven days, and on the Calendar page Glaze asks for the 
 to color each by its course. Apart from a web font the user picks (downloaded from Google
 Fonts or jsDelivr, without cookies or the page's address), nothing is sent anywhere else.
 
-**web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**
+**Host access: `https://*.instructure.com/*`**
+Most schools' Canvas LMS is hosted by Instructure under `*.instructure.com`. On those pages the content
+script injects Glaze's Canvas stylesheet, sets CSS custom properties on `<html>` and tags elements with
+`data-gz-*` attributes so they can be restyled. With its helpers on, it asks the same Canvas site, with
+the user's session, for the user's planner items for the next seven days (the due list, kept in
+`chrome.storage.local`), the user's active courses with their current scores (grades on course cards,
+the command palette) and the current course's navigation tabs (the command palette). Nothing is sent
+anywhere else.
+
+**Host access: `https://*/*`, `scripting`**
+Some schools serve Canvas from their own domain (for example `canvas.example.edu`), so no match pattern
+can name it. A small content script (`lib/detect.js`) runs on https pages and checks only whether the
+page's `<head>` links Canvas's own stylesheet (a path containing `/dist/brandable_css/`), stopping when
+the body begins. When it does, the background injects the same theme script into that page with
+`scripting.executeScript` and registers it for that one host with `scripting.registerContentScripts`, so
+later pages there are themed from the first paint. The detector reads nothing else and sends no page
+content; the only thing kept is that hostname, in `chrome.storage.local`. Nothing is sent anywhere.
+
+**web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `canvas.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**
 The content script injects the stylesheets as `<link>`s it owns, so the master switch can add and remove
 the theme without reloading the page; the stylesheets load the bundled fonts. When the user picks an
 animated background, the content script imports `lib/scene.js`, which draws it with the bundled three.js

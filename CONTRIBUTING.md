@@ -4,14 +4,14 @@
 
 1. `chrome://extensions` → **Developer mode** → **Load unpacked** → pick this folder.
 2. Edit a file.
-3. Hit the reload arrow on the Glaze card, then reload your Blackboard Ultra tab.
+3. Hit the reload arrow on the Glaze card, then reload your Blackboard Ultra or Canvas tab.
 
 Popup and editor changes just need the page reopened. Stylesheet and content script changes need the
 extension reload. Run `node --test` before sending a change.
 
 ## Layout
 
-- `content.js` — runs on Ultra pages: adds the stylesheets, applies settings, the DOM sweep, tooltips and the extras.
+- `content.js` — runs on Ultra and Canvas pages: adds the stylesheets, applies settings, the DOM sweep, tooltips and the extras.
 - `theme.css` (palette and page polish), `motion.css` (motion levels), `extras.css` (backgrounds and extras).
 - `defaults.js` — the settings schema, defaults, presets and `GZ_SANITIZE`. `lib/` — pure helpers with tests in `test/`, plus `scene.js` (the animated backgrounds) and the vendored `three.min.js`.
 - `popup.*`, `options.*`, `ui.*` — the popup, the editor and what they share. `preview.html` is the editor's mock Ultra page.

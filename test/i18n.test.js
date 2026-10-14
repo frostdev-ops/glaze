@@ -127,7 +127,7 @@ test('numbers and percentages in the language', () => {
 test('the manifest description is localized and fits the stores', () => {
   const m = require('../manifest.json');
   assert.equal(m.description, '__MSG_description__');
-  assert.equal(m.name, 'Glaze for Blackboard Ultra');
+  assert.equal(m.name, 'Glaze');
   const dirs = fs.readdirSync(path.join(root, '_locales')).sort();
   assert.deepEqual(dirs, ['de', 'en', 'es', 'fr', 'nl', 'pt_BR']);
   for (const d of dirs) {

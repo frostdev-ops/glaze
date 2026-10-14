@@ -232,6 +232,49 @@ test('the overall grade for course cards', () => {
   assert.equal(P.overall(undefined), null);
 });
 
+test('the current score for Canvas course cards', () => {
+  // As /api/v1/courses?include[]=total_scores gives it, ids as strings.
+  const course = (id, o = {}, e = {}) => ({ id, name: `Course ${id}`, hide_final_grades: false, enrollments: [{ type: 'student', computed_current_score: 83.5, computed_current_grade: null, ...e }], ...o });
+  assert.deepEqual(P.canvasOverall([course('9'), course('10', {}, { computed_current_score: 91.234, computed_current_grade: 'A-' }), course('11', {}, { computed_current_score: 61 })]),
+    { 9: { label: '83.5%', tone: 'graded-mid' }, 10: { label: 'A-', tone: 'graded-hi' }, 11: { label: '61%', tone: 'graded-lo' } });
+  assert.equal(P.canvasOverall([course(9, {}, { computed_current_score: 83.5 })], 'fr')[9].label, '83,5\u00a0%');
+  // Hidden grades, no score yet, no student enrollment (a teacher, an observer), or nothing at all: no chip.
+  assert.deepEqual(P.canvasOverall([course('1', { hide_final_grades: true }), course('2', {}, { computed_current_score: null }), course('3', { enrollments: [{ type: 'teacher' }] }),
+    course('4', { enrollments: undefined }), { id: '5', access_restricted_by_date: true }, null]), {});
+  assert.deepEqual(P.canvasOverall({ errors: [] }), {});
+  assert.deepEqual(P.canvasOverall(undefined), {});
+});
+
+test('Canvas course cards: a course that restricts quantitative data shows only its letter', () => {
+  const course = (id, o = {}, e = {}) => ({ id, name: `Course ${id}`, hide_final_grades: false, enrollments: [{ type: 'student', computed_current_score: 83.5, computed_current_grade: null, ...e }], ...o });
+  const rqd = { restrict_quantitative_data: true };
+  // The letter Canvas coerces the score to, never the score; in the score's band.
+  assert.deepEqual(P.canvasOverall([course('1', rqd, { computed_current_letter_grade: 'B' }), course('2', rqd, { computed_current_score: 95, computed_current_grade: '95%', computed_current_letter_grade: 'A' })]),
+    { 1: { label: 'B', tone: 'graded-mid' }, 2: { label: 'A', tone: 'graded-hi' } });
+  // Restricted with no letter: no chip rather than a number.
+  assert.deepEqual(P.canvasOverall([course('3', rqd), course('4', rqd, { computed_current_letter_grade: null })]), {});
+  // Not restricted (false, or not said): as before, the letter is only Canvas's when the course grades in letters.
+  assert.deepEqual(P.canvasOverall([course('5', { restrict_quantitative_data: false }, { computed_current_letter_grade: 'B' }), course('6', {}, { computed_current_letter_grade: 'B' })]),
+    { 5: { label: '83.5%', tone: 'graded-mid' }, 6: { label: '83.5%', tone: 'graded-mid' } });
+  // Hidden final grades stay hidden.
+  assert.deepEqual(P.canvasOverall([course('7', { ...rqd, hide_final_grades: true }, { computed_current_letter_grade: 'B' })]), {});
+});
+
+test('Canvas course cards: with grading periods, the current period\'s score', () => {
+  const course = (id, o = {}, e = {}) => ({ id, name: `Course ${id}`, hide_final_grades: false, enrollments: [{ type: 'student', computed_current_score: 91, computed_current_grade: null, ...e }], ...o });
+  const gp = { has_grading_periods: true };
+  assert.deepEqual(P.canvasOverall([
+    course('1', gp, { current_period_computed_current_score: 43, current_period_computed_current_grade: null }),
+    course('2', gp, { current_period_computed_current_score: 88.25, current_period_computed_current_grade: 'B+', computed_current_grade: 'A-' }),
+    course('3', { has_grading_periods: false }, { current_period_computed_current_score: 43 }),
+  ]), { 1: { label: '43%', tone: 'graded-lo' }, 2: { label: 'B+', tone: 'graded-mid' }, 3: { label: '91%', tone: 'graded-hi' } });
+  // No current period (between periods): no score, so no chip, not the all-periods total.
+  assert.deepEqual(P.canvasOverall([course('4', gp, { current_period_computed_current_score: null }), course('5', gp)]), {});
+  // Restricted, with periods: Canvas's letter, the period's band.
+  assert.deepEqual(P.canvasOverall([course('6', { ...gp, restrict_quantitative_data: true }, { current_period_computed_current_score: 43, computed_current_letter_grade: 'F' })]),
+    { 6: { label: 'F', tone: 'graded-lo' } });
+});
+
 test('files in content items, as the content API sends them', () => {
   const o = 'https://learn.example.edu';
   // A File item.

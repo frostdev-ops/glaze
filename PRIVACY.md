@@ -1,14 +1,16 @@
-# Privacy Policy — Glaze for Blackboard Ultra
+# Privacy Policy — Glaze
 
 _Last updated: 2026-10-14_
 
 ## What Glaze stores
 
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
-  background, motion, course colour and extras choices. Chrome syncs them to your own Google account so
-  your theme follows you between devices.
-- **Your courses**, in `chrome.storage.local`, on this device only: each course's name and which of
-  Ultra's ten colour slots it is in, so the editor can list them for you to recolour or tint.
+  background, motion, course colour and extras choices, and what you set for a course in its course menu:
+  its colour, look, tint and the **nickname you type for it**. When Chrome sync is on, these follow
+  your own account between devices. Safari keeps them on this device only.
+- **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
+  lists it and which of Ultra's ten colour slots it is in, so the editor can list them for you to
+  recolour or tint.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 - **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
@@ -22,8 +24,9 @@ _Last updated: 2026-10-14_
   to 20 courses, the hypothetical scores you typed for work not graded yet. A score is removed once the
   item has a real grade or is gone, and "Clear scores" removes a course's.
 - **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
-  time of each item due in the next seven days, from Blackboard's own To Do list, so the popup can list
-  them. It is replaced each time it's fetched.
+  time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner),
+  and the address of the site it came from, so the popup can list them. It is replaced each time it's
+  fetched.
 - **What you type in Blackboard's editors** (the "Back up what you type" Extra, on by default), in
   `chrome.storage.local`, on this device only. While you write a post, reply, journal entry, message or
   assignment text, Glaze keeps a copy so it can offer it back if the page reloads or your session times
@@ -78,6 +81,12 @@ animated backgrounds) are bundled. It makes requests in these cases:
   shares the answer), and on the Courses and Grades pages for each course you've opened before whose
   card is on screen: at most once every five minutes per course, with your existing session. The list
   is kept in memory; only the items' ids are stored, as above. Nothing is sent anywhere else.
+- **On Canvas.** At most every ten minutes, Glaze asks your own Canvas site for your planner items for the
+  next seven days, the same list Canvas's own planner and To Do list show, and keeps what's still to do as
+  the due list above. On the Dashboard (Grades on course cards) and when you open the command palette, it
+  asks for your active courses with their current scores and, inside a course, that course's navigation
+  tabs. These go to the site you are on, with your existing session; apart from the due list, the answers
+  are kept in memory only. Nothing is sent anywhere else.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an
@@ -97,12 +106,21 @@ animated backgrounds) are bundled. It makes requests in these cases:
 
 The only link in the extension is the footer link to the project's GitHub page, which you click yourself.
 
+## Recognizing Canvas
+
+To recognize Canvas on any school's domain, Glaze checks the head of each https page for Canvas's own stylesheet link and stops at the page body; nothing is read beyond that, and nothing leaves the browser. When it finds Canvas, it remembers that site so it can style it from the start next time.
+
 ## Permissions
 
 - `storage` — to save the settings, course names, places, what-if scores, due list and typed-text backups described above.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is
   self-hosted per institution on arbitrary domains, always under the `/ultra/` path, so the match
   pattern cannot name a fixed host. Glaze reads and restyles the page in your browser only.
+- Host access to `https://*.instructure.com/*` — to apply the theme on Canvas, which Instructure hosts
+  for most schools under that domain.
+- Host access to `https://*/*` and `scripting` — Canvas also runs on schools' own domains. The Canvas check
+  described above runs on https pages for that reason; when it finds Canvas, Glaze styles that site, and
+  only that site, the same way. The hostname is kept in the extension's local storage on your device.
 
 ## Hosting
 
