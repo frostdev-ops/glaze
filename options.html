@@ -58,6 +58,7 @@
   .courses { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
   .courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 0.75rem; align-items: center; }
   .courses .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
   body.off .editor > section:not(#data) { opacity: 0.5; }
@@ -316,6 +317,8 @@
           <span class="desc">On a course's gradebook: try scores for work not graded yet, or set a target and see what you'd need. Uses the course's own weights, and says so when it can't.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.palette"><span>Command palette</span>
           <span class="desc">Ctrl+K (⌘K on a Mac) to jump to a course, an item in this course, a Blackboard page or a Glaze setting.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.coursemenu"><span>Course menu</span>
+          <span class="desc">A button on each course card on the Courses page to give the course a nickname, a color, a tint and a look without opening the editor. A nickname replaces the course's name on your cards and in Glaze, with Blackboard's name in a tooltip.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.download"><span>Download all</span>
           <span class="desc">A button on each folder and learning module in course content that saves its files as one zip. Items you haven't opened are left out, so downloading never marks them viewed.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.keys"><span>Keyboard shortcuts</span>

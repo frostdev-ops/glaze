@@ -96,9 +96,9 @@ test('declutter tabs keep only known slugs, once each', () => {
   assert.deepEqual(b.declutter.tabs, [], 'defaults are not shared between results');
 });
 
-test('score bars, countdowns, folder previews, course progress, card grades, draft backup, download all, remembering your place and the document buttons are on by default; the rest are off', () => {
+test('score bars, countdowns, folder previews, course progress, card grades, draft backup, download all, remembering your place, the course menu and the document buttons are on by default; the rest are off', () => {
   const on = Object.entries(G.GZ_DEFAULTS.enhance).filter(([, v]) => v).map(([k]) => k);
-  assert.deepEqual(on.sort(), ['calc', 'download', 'drafts', 'inline', 'newcontent', 'newgrades', 'overall', 'palette', 'place', 'previews', 'progress', 'scores', 'toggles']);
+  assert.deepEqual(on.sort(), ['calc', 'coursemenu', 'download', 'drafts', 'inline', 'newcontent', 'newgrades', 'overall', 'palette', 'place', 'previews', 'progress', 'scores', 'toggles']);
   assert.equal(G.GZ_SANITIZE({ enhance: { scores: false } }).enhance.scores, false, 'an explicit off is kept');
 });
 
@@ -182,7 +182,7 @@ test('theme codes are untrusted: anything off refuses the whole code', async () 
 });
 
 test('course tint is off and empty until configured; junk is dropped', () => {
-  assert.deepEqual(G.GZ_DEFAULTS.courses, { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {} });
+  assert.deepEqual(G.GZ_DEFAULTS.courses, { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {}, names: {} });
   const c = G.GZ_SANITIZE({ courses: { tint: 'yes', tinted: ['2', '2', '11', 3, 'x', '10', '_53708_1', '_x_1', '_53708_1'], strength: 500 } }).courses;
   assert.deepEqual([c.tint, c.tinted, c.strength], [false, ['2', '10', '_53708_1'], 60]);
 });
@@ -254,4 +254,22 @@ test('every course gets its own color, and a slot keeps its color for its newest
   assert.deepEqual(G.GZ_COURSE_VARS(r._2_1), { '--gz-pick': 'initial', '--gz-course-raw': r._2_1.color });
   const s = G.GZ_SANITIZE({ courses: { colors: { 3: '#ABCDEF', _10_1: '#123456', _x: '#000000', 11: '#000000' } } }).courses;
   assert.deepEqual(s.colors, { 3: '#abcdef', _10_1: '#123456' });
+});
+
+test('nicknames: by course id, one trimmed line of at most 60 characters, strings only', () => {
+  const long = 'é'.repeat(70);
+  const n = G.GZ_SANITIZE({ courses: { names: {
+    _1_1: '  Bio  ', _2_1: 'Two\n  lines\t here', _3_1: long, _4_1: '   ', _5_1: 7, _6_1: null, '3': 'slot', x: 'junk', _7_1: ['a'], _8_1: '😀'.repeat(61),
+  } } }).courses.names;
+  assert.deepEqual(Object.keys(n), ['_1_1', '_2_1', '_3_1', '_8_1']);
+  assert.deepEqual([n._1_1, n._2_1, [...n._3_1].length, [...n._8_1].length], ['Bio', 'Two lines here', 60, 60]);
+  assert.deepEqual(G.GZ_SANITIZE({ courses: { names: 'Bio' } }).courses.names, {});
+  assert.deepEqual(G.GZ_SANITIZE({}).courses.names, {}, 'none until given');
+  const many = Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`_${i}_1`, `${i}`]));
+  assert.equal(Object.keys(G.GZ_SANITIZE({ courses: { names: many } }).courses.names).length, 200, 'capped like the other per-course maps');
+  // They share the courses sync item (8 KB): long ones stop at a byte budget, with room left for the rest.
+  const big = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`_${i}_1`, '😀'.repeat(60)]));
+  const all = G.GZ_SANITIZE({ courses: { names: big, colors: Object.fromEntries(Object.keys(big).slice(0, 60).map((id) => [id, '#abcdef'])) } }).courses;
+  assert.ok(Object.keys(all.names).length >= 10, 'some are kept');
+  assert.ok(new TextEncoder().encode(JSON.stringify(all)).length + 'courses'.length < 8192, 'the item fits sync storage');
 });

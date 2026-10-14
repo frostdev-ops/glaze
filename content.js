@@ -386,6 +386,7 @@
     watchDrafts();
     syncDownloads();
     syncDocTools();
+    syncCourseMenu();
   };
   // ---- page loads ------------------------------------------------------------------------------
   // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
@@ -460,6 +461,7 @@
     tagExtras([document.body]);
     watchDrafts();
     recordCourses();
+    syncCourseMenu();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -1341,7 +1343,7 @@
       d.documentElement.append(s);
     } catch { /* another origin */ }
   };
-  const ICONS = { dark: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z', focus: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5' };
+  const ICONS = { dark: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z', focus: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5', paint: 'M12 3.5c3.4 4 6 7 6 10.2a6 6 0 0 1-12 0c0-3.2 2.6-6.2 6-10.2z' };
   const docButton = (key, label, onClick) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -1506,7 +1508,7 @@
   const TOOLS = [['/ultra/course', 'Courses'], ['/ultra/calendar', 'Calendar'], ['/ultra/grades', 'Grades'], ['/ultra/messages', 'Messages'],
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
-    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator' };
+    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu' };
   // Canvas's global navigation, and the one extra there is to switch (the palette itself isn't listed, as on Ultra).
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { overall: 'Grades on course cards' };
@@ -1522,7 +1524,7 @@
   const dueCmds = (due) => {
     const now = new Date();
     const lang = GZ_I18N.locale(locale());
-    return due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' }), d.course || courseList[d.cid]?.name].filter(Boolean).join(' · '), group: 'Due this week',
+    return due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' }), nickOf(d.cid) || d.course || courseList[d.cid]?.name].filter(Boolean).join(' · '), group: 'Due this week',
       run: d.url ? go(d.url) : () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(all.find((c) => c.id === d.content)?.links?.[0]?.href.replace(/^https?:\/\/[^/]+/, '') || `/ultra/courses/${d.cid}/outline`)()) }));
   };
   // Glaze's own switches, the same on both sites but for the extras.
@@ -1561,7 +1563,13 @@
       ...here,
       ...pages(),
       ...courses.filter((m) => m.course).sort((a, b) => !!a.course.isClosed - !!b.course.isClosed)
-        .map((m) => ({ label: m.course.name, hint: m.course.isOrganization ? t('Organization') : m.course.isClosed ? t('Closed course') : m.course.courseId || t('Course'), group: 'Courses', run: go(`/ultra/courses/${m.courseId}/outline`) })),
+        .map((m) => ({
+          label: nickOf(m.courseId) || m.course.name,
+          // A nickname's hint is the real name, so searching either finds it.
+          hint: [nickOf(m.courseId) && m.course.name, m.course.isOrganization ? t('Organization') : m.course.isClosed ? t('Closed course') : m.course.courseId || t('Course')].filter(Boolean).join(' · '),
+          group: 'Courses',
+          run: go(`/ultra/courses/${m.courseId}/outline`),
+        })),
       ...dueCmds(due),
       ...items,
       ...glazeCmds(),
@@ -1869,6 +1877,324 @@
   let looked = null; // the course look painted now
   let worn = settings; // the settings painted now: the student's, or a course's look over them
 
+  // ---- course menu (Extras) ----------------------------------------------------------------------
+  // Ultra's Courses page: each course card gets a small button in its corner that opens a popover with the
+  // course's nickname, color, tint and look. That is the editor's course row (options.js renderCourses) written to
+  // the same settings.courses keys, so the card and the editor always agree, and every card and page repaints from
+  // settings as it does after an edit made there. The popover lives in <body>, not in the card: a press in it can't
+  // reach the card (a link) behind it. Ultra only, top frame only; off with the Extras switch (nicknames with it).
+  const CARD = COURSE_CARDS[0][0];
+  // Ultra's course-color-1…10 in order, by hue, for the swatches' names.
+  const TONES = ['Purple', 'Cyan', 'Yellow', 'Orange', 'Mint', 'Pink', 'Green', 'Teal', 'Magenta', 'Blue'];
+  let menu = null; // { box, btn, cid, nick, custom, reset, tint, grid, sw, looks } while the popover is open
+
+  // The nickname given to a course, while the Extra is on; '' for none. Only Glaze's own surfaces and the page's
+  // course names call this: Blackboard's real name is always the course list's (recordCourses), never the page's.
+  const nickOf = (cid) => (ultra && observer && settings.enhance.coursemenu && settings.courses.names[cid]) || '';
+
+  // -- edits: painted here at once, saved a moment later --
+  // Each edit is kept by what it changes and applied again to the settings at save time, so one that an echo of an
+  // earlier save (or another tab) overwrote in between still goes out, and a color dragged for a second is one write
+  // (sync storage allows ~120 a minute).
+  const edits = new Map();
+  let editTimer = 0;
+  const saveEdits = () => {
+    clearTimeout(editTimer);
+    editTimer = 0;
+    if (!edits.size) return;
+    const c = structuredClone(settings.courses);
+    for (const fn of edits.values()) fn(c);
+    edits.clear();
+    try { chrome.storage.sync.set({ version: 2, courses: c }, () => void chrome.runtime.lastError); } catch { /* extension reloaded under the tab */ }
+  };
+  const editCourse = (key, fn, soon = false) => {
+    const c = structuredClone(settings.courses);
+    fn(c);
+    settings = { ...settings, courses: c };
+    applySettings();
+    edits.set(key, fn);
+    clearTimeout(editTimer);
+    if (soon) editTimer = setTimeout(saveEdits, 500); else saveEdits();
+  };
+  addEventListener('pagehide', saveEdits);
+
+  // -- nicknames: swapped into the page's own text, and put back exactly --
+  // Where Ultra writes a course's name: [selector, course id of a match, the element holding the name, whether the
+  // name is only one text among others there]. A card's title is the name, so its first text is swapped; the course's
+  // header and a breadcrumb hold other text too, so there only a text that is the course's name is.
+  // ponytail: the header and breadcrumb selectors are guesses at Ultra's markup (the cards' are COURSE_CARDS');
+  // check them on a real site, and add a surface by adding a row.
+  const NAME_AT = [
+    ...COURSE_CARDS.map(([sel, idOf, where]) => [sel, idOf, where, false]),
+    ['course-page-header > header', () => courseId(), (e) => e, true],
+    ['[class*="readcrumb"]', () => courseId(), (e) => e, true],
+  ];
+  // The swapped text's parent keeps what Ultra wrote (data-gz-real), what Glaze wrote over it (data-gz-nick) and
+  // whose name it is (data-gz-cid), and the real name as a tooltip unless the element has a title of its own
+  // (data-gz-titled). Putting it back is exact; a text Ultra has since rewritten is left as Ultra wrote it.
+  const unname = (p) => {
+    const mine = [...p.childNodes].find((n) => n.nodeType === 3 && n.data === p.dataset.gzNick);
+    if (mine) mine.data = p.dataset.gzReal;
+    if (p.dataset.gzTitled !== undefined) p.removeAttribute('title');
+    for (const k of ['gzReal', 'gzNick', 'gzCid', 'gzTitled']) delete p.dataset[k];
+  };
+  const paintName = (scope, cid, exact) => {
+    const nick = nickOf(cid);
+    const real = courseList[cid]?.name;
+    const walk = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (!n.data.trim() || n.parentElement?.closest('.gz-new, .gz-cm-btn') ? 3 : 1) });
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      const p = n.parentElement;
+      const was = p.dataset.gzReal;
+      if (was === undefined) {
+        // Nothing swapped here yet.
+        if (!nick || !real || (exact && n.data.replace(/\s+/g, ' ').trim() !== real)) continue;
+        p.dataset.gzReal = n.data;
+        p.dataset.gzCid = cid;
+        if (!p.hasAttribute('title') && p.dataset.gzTitle === undefined) { p.title = real; p.dataset.gzTitled = ''; }
+      } else if (n.data !== was && n.data !== p.dataset.gzNick) continue; // another text of this element
+      if (!nick) unname(p);
+      else {
+        if (n.data !== nick) n.data = nick;
+        p.dataset.gzNick = nick;
+      }
+      if (!exact) break;
+    }
+  };
+  // Run with the flush: Ultra draws cards and headers again as it likes, and this puts the nicknames back.
+  const syncNames = () => {
+    if (!document.querySelector('[data-gz-real]') && !Object.keys(settings.courses.names).length) return;
+    for (const [sel, idOf, where, exact] of NAME_AT) {
+      for (const el of document.querySelectorAll(sel)) {
+        const cid = idOf(el);
+        const at = cid && where(el);
+        if (at) paintName(at, cid, exact);
+      }
+    }
+    // What is still swapped whose nickname is gone or off (or whose element Ultra moved out of reach).
+    for (const p of document.querySelectorAll('[data-gz-real]')) if (!nickOf(p.dataset.gzCid)) unname(p);
+  };
+
+  // -- the button on each card --
+  const syncCourseMenu = () => {
+    const on = ultra && !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
+    for (const card of document.querySelectorAll(CARD)) {
+      const cid = card.dataset.courseId || card.id.slice(19);
+      let b = card.querySelector(':scope > .gz-cm-btn');
+      if (b && (!on || b.dataset.cid !== cid || !courseList[cid])) { b.remove(); b = null; }
+      if (!on || !courseList[cid]) continue;
+      const label = t('Colour and look for {name}', { name: nickOf(cid) || courseList[cid].name });
+      if (!b) {
+        // Inside Ultra's card, positioned over its corner (extras.css); document-level capture listeners take
+        // its events, below.
+        b = docButton('paint', label, () => {});
+        b.className = 'gz-cm-btn';
+        b.id = `gz-cm-${cid}`; // gz- ids are skipped by the sweep
+        b.dataset.cid = cid;
+        b.setAttribute('aria-haspopup', 'dialog');
+        b.setAttribute('aria-expanded', String(menu?.cid === cid));
+        card.append(b);
+      } else if (b.getAttribute('aria-label') !== label) {
+        b.setAttribute('aria-label', label);
+        // While the pointer is on it, its title is in the tooltip (onTip).
+        if (b.dataset.gzTitle !== undefined) b.dataset.gzTitle = label; else b.title = label;
+      }
+    }
+    // The popover goes with its card: gone, hidden, or the extra switched off.
+    if (menu && !menu.btn.isConnected) {
+      const again = document.getElementById(`gz-cm-${menu.cid}`); // a card Ultra drew again
+      if (again) menu.btn = again; else closeMenu(false);
+    }
+    if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false);
+    if (menu) paintMenu();
+    syncNames();
+  };
+  // Nothing of the extra left on the page: the theme or the extra is off.
+  const unmenu = () => {
+    closeMenu(false);
+    for (const b of document.querySelectorAll('.gz-cm-btn')) b.remove();
+    for (const p of document.querySelectorAll('[data-gz-real]')) unname(p);
+  };
+
+  // -- the popover --
+  const swatches = () => [
+    ...TONES.map((name, i) => [name, courseColor(String(i + 1), '--gz-pick:initial') || GZ_SLOT_COLORS[i + 1]]),
+    ['Accent', GZ_ACTIVE_COLORS(settings, darkMQ.matches)['--gz-accent']],
+  ];
+  // Everything that follows the settings: what is picked, ticked and worn.
+  const paintMenu = (m = menu) => {
+    const { cid } = m;
+    const c = settings.courses;
+    const cur = courseColors()[cid];
+    if (!cur) return;
+    // The color the cards show for it now (a pick as is, else Ultra's toned): the custom picker starts there.
+    const now = courseColor(courseList[cid].slot, varText(GZ_COURSE_VARS(cur))) || cur.color;
+    for (const b of m.sw) b.setAttribute('aria-pressed', String(cur.picked && C.same(C.parse(b.dataset.hex), C.parse(cur.color))));
+    m.custom.toggleAttribute('data-on', cur.picked && !m.sw.some((b) => b.getAttribute('aria-pressed') === 'true'));
+    if (m.custom.value !== now) m.custom.value = now; // not while it is being dragged to the same
+    m.reset.hidden = !cur.picked;
+    m.tint.checked = GZ_COURSE_TINTED(c, cid, courseList);
+    for (const b of m.looks) b.setAttribute('aria-pressed', String((c.looks[cid] || '') === b.dataset.look));
+  };
+  const placeMenu = () => {
+    if (!menu) return;
+    const { box, btn } = menu;
+    const r = btn.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return closeMenu(false);
+    const w = box.offsetWidth;
+    const h = box.offsetHeight;
+    let top = r.bottom + 6;
+    if (top + h > innerHeight - 8) top = r.top - h - 6; // above, when there is no room below
+    box.style.left = `${Math.min(Math.max(8, r.right - w), innerWidth - w - 8)}px`;
+    box.style.top = `${Math.min(Math.max(8, top), Math.max(8, innerHeight - h - 8))}px`;
+    box.style.setProperty('--gz-cm-origin', top < r.top ? 'bottom right' : 'top right');
+  };
+  // One tab stop per group; arrow keys walk it.
+  const rove = (group, active) => { for (const b of group.querySelectorAll('button, input')) b.tabIndex = b === active ? 0 : -1; };
+  const commitNick = (m = menu) => {
+    if (!m || m.nick.value.trim() === (settings.courses.names[m.cid] || '')) return;
+    const v = m.nick.value;
+    editCourse(`name ${m.cid}`, (c) => GZ_COURSE_EDIT.name(c, m.cid, v));
+    m.nick.value = settings.courses.names[m.cid] || ''; // as kept: one trimmed line
+  };
+  const closeMenu = (refocus = true) => {
+    const m = menu;
+    if (!m) return;
+    menu = null;
+    commitNick(m);
+    saveEdits();
+    m.box.remove();
+    m.btn.setAttribute('aria-expanded', 'false');
+    if (refocus && m.btn.isConnected) m.btn.focus({ preventScroll: true });
+  };
+  const openMenu = (btn) => {
+    const cid = btn.dataset.cid;
+    const real = courseList[cid]?.name;
+    if (!real) return;
+    closeMenu(false);
+    const name = nickOf(cid) || real;
+    const box = make('div', { id: 'gz-cm' });
+    for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t('Colour and look for {name}', { name })]]) box.setAttribute(k, v);
+    const cap = (text, id) => make('div', { className: 'gz-cm-cap', id, textContent: text });
+    const group = (labelledby, ...kids) => {
+      const g = make('div', {}, ...kids);
+      g.setAttribute('role', 'group');
+      g.setAttribute('aria-labelledby', labelledby);
+      g.dataset.roving = '';
+      return g;
+    };
+
+    // The nickname: what the field shows empty is the real name. Saved on Enter, on leaving it, and on closing.
+    const nick = make('input', { type: 'text', id: 'gz-cm-nick', className: 'gz-cm-nick', maxLength: GZ_NICK_MAX, placeholder: real, title: real, value: settings.courses.names[cid] || '', autocomplete: 'off', spellcheck: false });
+    nick.addEventListener('change', () => commitNick());
+
+    // Colors: Ultra's ten as Glaze tones them (the very colors its cards show: a pick is used as is, so a swatch picked
+    // is what its card then shows), and the theme's accent. Ultra's ten cover the hues except red and grey, which the
+    // custom picker is for. Then Reset, back to Blackboard's own.
+    const sw = swatches().map(([label, hex]) => {
+      const b = make('button', { type: 'button', className: 'gz-cm-sw', title: t(label) });
+      b.setAttribute('aria-label', t(label));
+      b.dataset.hex = hex;
+      b.style.backgroundColor = hex;
+      b.addEventListener('click', () => editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, courseList)));
+      return b;
+    });
+    const custom = make('input', { type: 'color', className: 'gz-cm-custom' });
+    custom.setAttribute('aria-label', t('Colour for {name}', { name }));
+    custom.addEventListener('input', () => { const hex = custom.value; editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, courseList), true); });
+    custom.addEventListener('change', saveEdits);
+    const grid = group('gz-cm-colors', ...sw, custom);
+    grid.className = 'gz-cm-grid';
+    const reset = make('button', { type: 'button', className: 'gz-cm-reset', textContent: t('Reset') });
+    reset.addEventListener('click', () => {
+      editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, null, courseList));
+      grid.querySelector('[tabindex="0"]').focus(); // the button hides, so focus can't stay on it
+    });
+
+    // Tint. A tick does nothing while the master switch (courses.tint) is off, so ticking turns it on too
+    // (GZ_COURSE_EDIT.tint); unticking leaves the master alone.
+    const tint = make('input', { type: 'checkbox' });
+    tint.addEventListener('change', () => { const on = tint.checked; editCourse(`tint ${cid}`, (c) => GZ_COURSE_EDIT.tint(c, cid, on, courseList)); });
+
+    // Look: the student's own theme, or one of the eight, drawn as the popup's look cards are. Look names are names.
+    const looks = [['', null], ...GZ_LOOKS.map((L) => [L.name, L])].map(([look, L]) => {
+      const b = make('button', { type: 'button', className: 'gz-cm-look', textContent: L ? L.name : t('Your theme') });
+      b.dataset.look = look;
+      if (L) {
+        const c = L.colors;
+        const tone = L.bg.colors?.length ? L.bg.colors : L.bg.kind === 'solid' ? [c['--gz-surface-2']] : [c['--gz-accent'], c['--gz-accent-hi']];
+        b.setAttribute('translate', 'no');
+        b.style.color = c['--gz-ink'];
+        b.style.borderColor = c['--gz-line-strong'];
+        b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 3px, transparent 3px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${tone.join(', ')})`;
+      }
+      b.addEventListener('click', () => editCourse(`look ${cid}`, (c) => GZ_COURSE_EDIT.look(c, cid, look)));
+      return b;
+    });
+    const lookGrid = group('gz-cm-look', ...looks);
+    lookGrid.className = 'gz-cm-looks';
+
+    box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick,
+      make('div', { className: 'gz-cm-colorhead' }, cap(t('Colors'), 'gz-cm-colors'), reset), grid,
+      make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')),
+      cap(t('Look'), 'gz-cm-look'), lookGrid);
+    document.body.append(box);
+    menu = { box, btn, cid, nick, custom, reset, tint, grid, sw, looks };
+    btn.setAttribute('aria-expanded', 'true');
+    paintMenu();
+    rove(grid, sw.find((b) => b.getAttribute('aria-pressed') === 'true') || sw[0]);
+    rove(lookGrid, looks.find((b) => b.getAttribute('aria-pressed') === 'true') || looks[0]);
+    placeMenu();
+    grid.querySelector('[tabindex="0"]').focus({ preventScroll: true });
+  };
+
+  // The button is taken at the document, in the capture phase, as the cards' counts are (openNew): Ultra's card
+  // around it, and what Ultra listens for on the way down, never see a press of it. A press opens or closes
+  // the popover on its click (a key press makes one); a key press is left to make it, not repeated here.
+  const onMenuButton = (e) => {
+    const b = e.target instanceof Element && e.target.closest('.gz-cm-btn');
+    if (!b) return;
+    e.stopPropagation();
+    if (e.type !== 'click') return;
+    e.preventDefault();
+    if (menu?.btn === b) closeMenu(); else openMenu(b);
+  };
+  for (const ev of ['click', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'keydown', 'keyup']) document.addEventListener(ev, onMenuButton, true);
+  // Esc closes; Tab stays inside; arrows walk a group; Enter in the nickname field saves it.
+  const ARROWS = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1, Home: -2, End: 2 };
+  document.addEventListener('keydown', (e) => {
+    if (!menu) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); return; }
+    if (!(e.target instanceof Element) || !menu.box.contains(e.target)) return;
+    if (e.key === 'Enter' && e.target === menu.nick) { e.preventDefault(); commitNick(); return; }
+    if (e.key === 'Tab') {
+      const tabs = [...menu.box.querySelectorAll('button, input')].filter((x) => x.tabIndex >= 0 && x.getClientRects().length);
+      const to = tabs[tabs.indexOf(e.target) + (e.shiftKey ? -1 : 1)] || tabs[e.shiftKey ? tabs.length - 1 : 0];
+      e.preventDefault();
+      to.focus();
+      return;
+    }
+    const g = e.target.closest('[data-roving]');
+    const step = ARROWS[e.key];
+    if (!g || !step || e.altKey || e.ctrlKey || e.metaKey) return;
+    const items = [...g.querySelectorAll('button, input')];
+    // Up and down move a row: as many along as the first row holds.
+    const per = items.filter((b) => b.offsetTop === items[0].offsetTop).length;
+    const at = items.indexOf(e.target);
+    const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown';
+    const next = Math.abs(step) === 2 ? (step < 0 ? 0 : items.length - 1) : Math.min(Math.max(at + step * (vertical ? per : 1), 0), items.length - 1);
+    e.preventDefault();
+    rove(g, items[next]);
+    items[next].focus();
+  }, true);
+  // An outside press closes it; its own button toggles it (above). Focus stays where the press put it.
+  document.addEventListener('pointerdown', (e) => {
+    if (menu && e.target instanceof Node && !menu.box.contains(e.target) && !menu.btn.contains(e.target)) closeMenu(false);
+  }, true);
+  let placing = 0;
+  const follow = () => { if (menu && !placing) placing = requestAnimationFrame(() => { placing = 0; placeMenu(); }); };
+  addEventListener('scroll', follow, { capture: true, passive: true });
+  addEventListener('resize', follow);
+
   // ---- settings → <html> ----------------------------------------------------------------------
   // Everything set goes through these two, so clearSettings removes exactly what was set.
   const vars = new Set();
@@ -1964,7 +2290,7 @@
     // but for the card grades.
     if (ultra) {
       if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-      if (observer) { renderProgress(); renderCalc(); syncDownloads(); }
+      if (observer) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
       if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
       if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
       if (observer) renderNew();
@@ -2023,6 +2349,7 @@
     for (const p of document.querySelectorAll('.gz-new')) p.remove();
     dropBars();
     for (const b of document.querySelectorAll('.gz-dl')) b.remove();
+    unmenu();
     for (const l of links) l.remove();
     links = [];
     stopScene();

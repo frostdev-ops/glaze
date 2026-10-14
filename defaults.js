@@ -68,6 +68,8 @@ const GZ_SPEC = {
     download: [true, 'bool'],
     // place: a course's content reopens where you left it (open folders, scroll).
     place: [true, 'bool'],
+    // coursemenu: the button on each course card that opens a popover for its color, tint and look.
+    coursemenu: [true, 'bool'],
     // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
     // document buttons themselves.
     darkDocs: [false, 'bool'], toggles: [true, 'bool'],
@@ -84,7 +86,8 @@ const GZ_DEFAULTS = {
   // colors: picked by course id (a slot number is a pick from before 2.1.3). tint: inside a course
   // listed in `tinted` (course ids, or slots likewise), its color tints the palette, `strength` %.
   // looks: a look's name by course id, worn on that course's pages instead of the student's theme.
-  courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {} },
+  // names: a nickname by course id, shown in place of the course's name (the course menu, Ultra only).
+  courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {}, names: {} },
   footer: true,
   presets: [],
 };
@@ -176,6 +179,25 @@ const COURSE_SLOT = /^([1-9]|10)$/;
 const COURSE_ID = /^_\d+_\d+$/;
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 const cleanName = (n) => (typeof n === 'string' ? n.trim().slice(0, 40) : '');
+// A course's nickname: one line, 60 characters at most (counted as people count them, not as UTF-16 units).
+const GZ_NICK_MAX = 60;
+const cleanNick = (n) => (typeof n === 'string' ? [...n.replace(/\s+/g, ' ').trim()].slice(0, GZ_NICK_MAX).join('').trim() : '');
+// All of them share settings.courses' one sync item (8 KB at most, with the colors, ticks and looks): the first
+// GZ_NICK_BUDGET bytes of them are kept, about 50 nicknames of 60 characters, many more of usual length.
+// ponytail: a nickname past the budget is dropped when read back, not refused when typed; warn in the menu if it bites.
+const GZ_NICK_BUDGET = 3500;
+const cleanNicks = (raw) => {
+  let bytes = 0;
+  const out = {};
+  for (const [id, v] of isObj(raw) ? Object.entries(raw) : []) {
+    const n = cleanNick(v);
+    if (!COURSE_ID.test(id) || !n) continue;
+    bytes += new TextEncoder().encode(JSON.stringify([id, n])).length;
+    if (bytes > GZ_NICK_BUDGET || Object.keys(out).length >= 200) break;
+    out[id] = n;
+  }
+  return out;
+};
 
 const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
@@ -275,6 +297,7 @@ const GZ_SANITIZE = (raw) => {
     tinted: Array.isArray(rc.tinted) ? [...new Set(rc.tinted.filter((n) => typeof n === 'string' && (COURSE_ID.test(n) || COURSE_SLOT.test(n))))].slice(0, 200) : [],
     strength: cleanValue(rc.strength, 60, [10, 100]),
     looks: Object.fromEntries(isObj(rc.looks) ? Object.entries(rc.looks).filter(([id, n]) => COURSE_ID.test(id) && GZ_LOOKS.some((L) => L.name === n)).slice(0, 200) : []),
+    names: cleanNicks(rc.names),
   };
   out.footer = typeof raw.footer === 'boolean' ? raw.footer : GZ_DEFAULTS.footer;
   out.presets = GZ_SANITIZE_PRESETS(raw.presets);
@@ -363,6 +386,37 @@ const GZ_COURSE_COLORS = (courses, picks = {}) => {
 // --gz-pick: initial drops a slot's picked color, so the course's raw color is toned like Ultra's.
 const GZ_COURSE_VARS = (c) => (!c || c.own ? {} : c.picked ? { '--gz-pick': c.color } : { '--gz-pick': 'initial', '--gz-course-raw': c.color });
 
+// The menu on a course's card (content.js) edits settings.courses through these: `c` is that object, changed in
+// place, for course `id`; `list` is the student's courses ({ id: { name, slot, org } }). A pick or tick from
+// before 2.1.3 was by slot (the editor moves those to course ids when it opens), so letting go of one here lets
+// go of the slot's too, where the slot was this course's.
+const GZ_COURSE_EDIT = {
+  // A color (#rrggbb), or null for Blackboard's own.
+  color: (c, id, hex, list = {}) => {
+    if (hex) { c.colors[id] = hex.toLowerCase(); return; }
+    delete c.colors[id];
+    if (GZ_COURSE_COLORS(list, {})[id]?.own) delete c.colors[list[id].slot];
+  },
+  // Ticking comes with the master switch: while it is off, a tick would do nothing. Unticking leaves it be, and
+  // a course left out of a slot's tick leaves the slot's other courses ticked.
+  tint: (c, id, on, list = {}) => {
+    if (on) {
+      c.tint = true;
+      if (!c.tinted.includes(id)) c.tinted.push(id);
+      return;
+    }
+    const slot = list[id]?.slot;
+    if (slot && c.tinted.includes(slot)) c.tinted.push(...Object.keys(list).filter((n) => n !== id && list[n].slot === slot && !c.tinted.includes(n)));
+    c.tinted = c.tinted.filter((n) => n !== id && n !== slot);
+  },
+  // A look's name, or '' for the student's theme.
+  look: (c, id, name) => { if (name) c.looks[id] = name; else delete c.looks[id]; },
+  // A nickname, or '' (or only spaces) to let it go.
+  name: (c, id, nick) => { const n = cleanNick(nick); if (n) c.names[id] = n; else delete c.names[id]; },
+};
+// Whether the course is tinting its pages now: the master switch is on and it (or its slot) is ticked.
+const GZ_COURSE_TINTED = (c, id, list = {}) => !!c.tint && (c.tinted.includes(id) || (!!list[id]?.slot && c.tinted.includes(list[id].slot)));
+
 // ---- the calendar ------------------------------------------------------------------------------
 // Ultra's calendar items (/learn/api/v1/calendars/calendarItems): calendarId is the course's id (or
 // PERSONAL, INSTITUTION), with the item's title and its dates.
@@ -434,5 +488,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }
