@@ -109,3 +109,18 @@ test('late: the latest attempt after the due date, for work waiting to be graded
   assert.ok(!R.late('2026-10-05T03:58:00.000Z', waiting.column.dueDate));
   assert.ok(!R.late(null, waiting.column.dueDate));
 });
+
+test('what-if scores: kept while their item waits for a grade, for the last 20 courses', () => {
+  const m = R.model(spanish());
+  const [open, other] = m.remaining(new Map());
+  const graded = m.items.find((i) => i.score != null);
+  const kept = R.keptScores(new Map([[open.id, 40], [graded.id, 10], ['_gone_1', 5], [other.id, 'x']]), m.items);
+  assert.deepEqual([...kept], [[open.id, 40]], 'graded, gone and malformed scores go');
+  let all = R.storeScores(undefined, '_1_1', kept);
+  assert.deepEqual(all, { _1_1: { [open.id]: 40 } });
+  for (let i = 2; i <= 21; i++) all = R.storeScores(all, `_${i}_1`, kept);
+  assert.equal(Object.keys(all).length, 20);
+  assert.ok(!all._1_1, 'the course touched longest ago goes first');
+  all = R.storeScores(all, '_5_1', new Map());
+  assert.ok(!('_5_1' in all), 'cleared: nothing stored for the course');
+});

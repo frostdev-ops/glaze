@@ -190,6 +190,7 @@
   'Score for {name}, out of {n}': 'Score voor {name}, van de {n}',
   'Not graded yet': 'Nog niet beoordeeld',
   'Aim for {target}% overall': 'Doel: {target}% in totaal',
+  'Clear scores': 'Scores wissen',
   'Glaze kept a copy of what you wrote here ({when}).': 'Glaze heeft een kopie bewaard van wat je hier schreef ({when}).',
   'Restore': 'Herstellen',
   'Finding files · Cancel': 'Bestanden zoeken · Annuleren',

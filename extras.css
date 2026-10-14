@@ -286,6 +286,12 @@ html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([dat
 #gz-calc .gz-calc-out { margin: 0.6rem 0 0; color: var(--gz-ink); }
 #gz-calc .gz-calc-out:empty { display: none; }
 #gz-calc .gz-calc-target { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.75rem; }
+#gz-calc .gz-calc-clear {
+  margin-top: 0.45rem; padding: 0.15rem 0.7rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
+  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-line-strong); border-radius: 999px;
+}
+#gz-calc .gz-calc-clear[hidden] { display: none; }
+#gz-calc .gz-calc-clear:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 
 /* Command palette. */
 #gz-cmd {

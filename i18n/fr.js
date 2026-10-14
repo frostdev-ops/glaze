@@ -190,6 +190,7 @@
   'Score for {name}, out of {n}': 'Note pour {name}, sur {n}',
   'Not graded yet': 'Pas encore noté',
   'Aim for {target}% overall': 'Viser {target} % au total',
+  'Clear scores': 'Effacer les notes',
   'Glaze kept a copy of what you wrote here ({when}).': 'Glaze a gardé une copie de ce que vous avez écrit ici ({when}).',
   'Restore': 'Restaurer',
   'Finding files · Cancel': 'Recherche des fichiers · Annuler',
