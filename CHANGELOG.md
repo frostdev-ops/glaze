@@ -4,6 +4,41 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4] — 2026-10-14
+
+### Added
+
+- **Due this week:** the popup and the command palette (Ctrl+K) list what's left to do in the next
+  seven days, from Blackboard's own To Do list, with its course, due time and how long is left;
+  picking one in the palette opens it. Checked at most every ten minutes. No badges, nothing pops up.
+- **A Look per course:** in the editor's Courses section, each course has a menu: keep your theme, or
+  pick one of the eight Looks. That course's outline and items wear it; everywhere else stays yours.
+- **Remember your place:** come back to a course and its content opens the folders you left open and
+  scrolls back to where you were, even after a reload or another course in between. Folders you close
+  stay closed, and scrolling yourself always wins. On by default; switch it off in Extras.
+- **Glaze settings in the command palette:** type "settings" after Ctrl+K to open the editor.
+- **What-if scores are kept:** the calculator remembers the scores you type for each course, even after
+  you leave or reload, until you clear them with the new Clear scores button. A score goes away on its
+  own once that item gets a real grade.
+
+### Changed
+
+- **Calendar course colours:** a calendar entry takes its course's own colour when its title belongs to
+  one course, so courses sharing a Blackboard colour no longer look the same there.
+- **Slide switches:** every checkbox in the editor is a switch that slides on and off. On a phone, a
+  course's name gets its own line, with its Look and Tint under it.
+
+### Fixed
+
+- **Toned course colours keep their hue:** yellow stays yellow instead of turning green, and orange no
+  longer turns pink.
+- **Discussion headers:** with a background other than solid, a discussion's back button and breadcrumbs
+  were hidden under the background (still clickable). They show again.
+- **Course progress on Content only:** the bar no longer turns up on a course's Discussions tab.
+- **Square corners:** the course header, the Course Content header, Messages rows, the Courses list/grid
+  switch and the gradebook's student header are rounded like everything else, with no box drawn inside
+  another.
+
 ## [2.1.3] — 2026-10-13
 
 ### Changed
