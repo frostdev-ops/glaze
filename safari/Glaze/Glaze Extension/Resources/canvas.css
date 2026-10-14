@@ -255,6 +255,7 @@ html:not([data-gz-dark-theme]) #header .ic-app-header__logomark { filter: invert
   color: var(--gz-accent); font-weight: 600; background: color-mix(in srgb, var(--gz-accent-soft) 55%, transparent);
   box-shadow: inset 3px 0 0 var(--gz-accent);
 }
+html:not([data-gz-dark-theme]) #application #section-tabs li a.active { color: var(--gz-accent-hi); }
 
 /* ---- focus: always the accent, whatever ring Canvas draws ---- */
 :is(:focus, :focus-visible) { outline-color: var(--gz-accent) !important; } /* InstUI draws its ring on :focus, in its brand blue */
@@ -409,6 +410,36 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 #application :is(.ic-Table--hover-row tbody tr, #grades_summary tr.student_assignment):hover td { background: var(--gz-row-hover) !important; }
 #application :is(a.toggle_score_details_link, .score_details_table) { color: var(--gz-ink-muted); }
 
+/* Both Canvas rubric renderers: retain the table and the selected-rating marker, using the palette. */
+#application :is(.rubric_container, .react-rubric) { color: var(--gz-ink); }
+#application :is(.rubric_table, .react-rubric table) { background: var(--gz-panel); }
+#application :is(.rubric_title, .rubric_table thead th, .react-rubric thead, .react-rubric th.rubric-title) { background: var(--gz-band) !important; color: var(--gz-ink); }
+#application :is(.rubric_container, .react-rubric) :is(td, th, .rating, .rating-tier, .rating-all-footer, .rubric_title) { border-color: var(--gz-line); }
+#application .react-rubric :is(.rating-tier, .react-rubric-cell, .rubric-freeform) { color: var(--gz-ink); }
+#application .react-rubric .rating-tier.selected { background: var(--gz-accent-soft); }
+#application .react-rubric .shader { background: var(--gz-ok); }
+#application .react-rubric .shader .triangle { color: var(--gz-ok); border-color: transparent transparent currentColor; }
+#application .react-rubric .nearMasteryShader { background: var(--gz-warn); }
+#application .react-rubric .nearMasteryShader .triangle { color: var(--gz-warn); }
+#application .react-rubric .wellBelowMasteryShader { background: var(--gz-err); }
+#application .react-rubric .wellBelowMasteryShader .triangle { color: var(--gz-err); }
+
+/* Assignment uploads: the drop target, the chosen-file list and the native upload progress meter. */
+#application [data-cid~="FileDrop"] [class*="fileDrop__label"] { border-color: var(--gz-ink-muted); }
+#application [data-cid~="FileDrop"] [class*="fileDrop__labelContent"] { background: var(--gz-panel); color: var(--gz-ink); }
+#application [data-cid~="FileDrop"] [data-gz-light] { background: transparent !important; }
+#application .submission_attachment [data-cid~="Tag"]:not([disabled], [aria-disabled="true"]) [class*="tag__icon"] { color: var(--gz-ink-muted); }
+#application :is(#uploaded_files, .file-upload-submission-table, [data-testid="uploaded_files_table"]) { background: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-line); }
+#application #uploaded_files :is([data-cid~="TreeButton"], [data-cid~="TreeNode"]) { background: transparent !important; }
+#application #uploaded_files :is([class*="treeButton__text"], [class*="treeButton__node"]) { color: var(--gz-ink) !important; }
+#application #uploaded_files a { color: var(--gz-accent-hi) !important; }
+#application #uploaded_files [class*="treeButton__icon"] :is(svg, path), #application #uploaded_files [class*="treeButton__icon"] { color: var(--gz-ink-muted) !important; }
+#application #uploaded_files [role="treeitem"][aria-selected="true"] > :is([data-cid~="TreeButton"], [data-cid~="TreeNode"]) { background: var(--gz-accent-soft) !important; }
+#application #uploaded_files :is([data-cid~="TreeButton"], [data-cid~="TreeNode"]):hover { background: var(--gz-row-hover) !important; }
+#application #uploaded_files :is([data-cid~="TreeButton"], [data-cid~="TreeNode"])::after { border-color: var(--gz-accent); }
+#application :is([class*="progressCircle__track"], [class*="progressCircle__border"]) { stroke: var(--gz-line-strong); }
+#application [class*="progressCircle__meter"] { stroke: var(--gz-accent); }
+
 /* ---- buttons ----
    Canvas's own buttons read the brand variables above (primary, secondary, their hovers); what is left
    is the shape, and the plain default one, which is a grey literal. */
@@ -446,6 +477,9 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 /* ---- badges and pills: the accent with dark ink on it. !important, because Canvas turns a badge white when
    its tab is the open one, and a white fill that the sweep tagged would put dark ink on a dark fill. ---- */
 #application :is(.nav-badge, .ic-unread-badge, .unread_dot, .ic-DashboardCard__action-badge, [class*="-badge"]:not([class*="badge__"])) { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+#application .ic-unread-badge__unread-count { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+#application .ic-unread-badge__total-count { background: var(--gz-panel) !important; color: var(--gz-ink-muted) !important; }
+#application :is(.highlight-discussion, .highlight-fadeout) { background-color: var(--gz-accent-soft); }
 
 /* ---- alerts and notices (an admin's announcement, the flash at the top of the page): a surface with an edge
    and an icon block in the status colour, which Canvas hard-codes per kind ---- */
@@ -475,12 +509,17 @@ li[class*="optionItem"] > [role="option"][aria-selected="true"] { color: var(--g
 [data-gz-brand-fg]:not([aria-disabled="true"] *, [disabled] *, [aria-disabled="true"], [disabled]) { color: var(--gz-accent) !important; }
 [data-gz-brand-bg]:not([aria-disabled="true"] *, [disabled] *, [aria-disabled="true"], [disabled]) { background-color: var(--gz-accent) !important; }
 [data-gz-brand-bg]:not([aria-disabled="true"] *, [disabled] *, [aria-disabled="true"], [disabled]), [data-gz-brand-bg]:not([aria-disabled="true"] *, [disabled] *, [aria-disabled="true"], [disabled]) :where(*) { color: var(--gz-accent-ink) !important; }
-[data-gz-brand-bg]:not([aria-disabled="true"] *, [disabled] *, [aria-disabled="true"], [disabled]):hover { background-color: var(--gz-accent-hi) !important; }
+[data-gz-brand-bg]:not([aria-disabled="true"] *, [disabled] *, [aria-disabled="true"], [disabled]):hover,
+[data-cid~="BaseButton"]:not([disabled], [aria-disabled="true"]):hover > [data-gz-brand-bg] { background-color: var(--gz-accent-hi) !important; }
 [data-gz-brand-bg]:is([aria-disabled="true"] *, [disabled] *, [aria-disabled="true"], [disabled]) { background-color: color-mix(in srgb, var(--gz-accent) 50%, transparent) !important; }
 /* An icon-only InstUI button (a modal's close X, the inbox's toolbar, attach, record) has no text for the sweep to read and draws
    its icon in Canvas's dark ink; the labelled ones, and a primary one's white, set their colour on the parts inside. */
 html :is([data-cid~="IconButton"], [data-cid~="Button"], [data-cid~="CloseButton"]) { color: var(--gz-ink-muted); }
 html :is([data-cid~="IconButton"], [data-cid~="Button"], [data-cid~="CloseButton"]):is(:hover, :focus-visible) { color: var(--gz-ink); }
+/* The SVG itself owns Canvas's slate ink, so changing its button's inherited colour does not reach it. */
+html [data-cid~="BaseButton"]:not([disabled], [aria-disabled="true"]) [class*="baseButton__iconSVG"] svg[data-gz-dark] { color: var(--gz-ink-muted) !important; }
+html [data-cid~="BaseButton"]:not([disabled], [aria-disabled="true"]):is(:hover, :focus-visible) [class*="baseButton__iconSVG"] svg[data-gz-dark] { color: var(--gz-accent) !important; }
+html [data-cid~="BaseButton"]:is([disabled], [aria-disabled="true"]) svg[data-gz-dark] { color: var(--gz-ink-faint) !important; }
 html :is([data-cid~="IconButton"], [data-cid~="Button"]):is([disabled], [aria-disabled="true"]) { color: var(--gz-ink-faint); }
 /* Previous / Next under a page: a glass bar, as the other bars are. */
 #application .module-sequence-footer-content {
@@ -495,7 +534,8 @@ html :is([data-cid~="IconButton"], [data-cid~="Button"]):is([disabled], [aria-di
 #application #calendar-app :is(.fc-body, .fc-head, .fc-widget-header, .fc-widget-content, .fc-view, .fc-day-grid, .fc-scroller, .fc-row) { background: transparent !important; border-color: var(--gz-line); }
 #application .fc-day-header { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); padding: 0.6rem 0; }
 #application .fc-day-number { color: var(--gz-ink-muted); transition: color var(--gz-t) var(--gz-ease); }
-#application .fc-other-month .fc-day-number, #application .fc-day-top.fc-other-month .fc-day-number { color: var(--gz-ink-faint); }
+#application .fc-other-month { opacity: 1; }
+#application .fc-other-month .fc-day-number, #application .fc-day-top.fc-other-month .fc-day-number { color: var(--gz-ink-muted) !important; }
 #application td.fc-today { background: color-mix(in srgb, var(--gz-accent-soft) 60%, transparent) !important; }
 #application td.fc-day-top.fc-today .fc-day-number { color: var(--gz-accent); font-weight: 700; }
 #application #calendar-app td.fc-day.fc-today { box-shadow: inset 0 0 0 1px var(--gz-accent); }
@@ -550,7 +590,9 @@ html[data-gz-raw-courses] :is(.ic-DashboardCard, .planner-grouping)[style*="--gz
 /* On a dark palette the hero is a whole slab of color, and the light grey the toning leans on turns it chalky: there it
    is Canvas's own color sunk toward the ground instead, so it keeps its hue and sits in the palette. */
 html[data-gz-dark-theme]:not([data-gz-raw-courses]) #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: color-mix(in oklab, var(--gz-course-raw) 62%, var(--gz-surface-2)) !important; }
-#application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: var(--gz-course) !important; }
+/* Only title lightness changes; the course hue and its hero colour stay Canvas's own. */
+#application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) min(l, 0.48) c h) !important; }
+html[data-gz-dark-theme] #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) max(l, 0.72) c h) !important; }
 /* List view (the planner): the group's banner and edge, and the icon (the avatar, for a personal to-do) of each item. */
 #application .planner-grouping[style*="--gz-course-raw"] > ol { border-color: var(--gz-course) !important; }
 #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__overlay"] { background-color: var(--gz-course) !important; }

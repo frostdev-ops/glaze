@@ -43,6 +43,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://*/ultra",
         "https://*/ultra/*",
         "https://*.instructure.com/*"
       ],
@@ -70,6 +71,7 @@
         "https://*/*"
       ],
       "exclude_matches": [
+        "https://*/ultra",
         "https://*/ultra/*",
         "https://*.instructure.com/*"
       ],
