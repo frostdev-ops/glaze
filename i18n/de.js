@@ -104,6 +104,8 @@
   "Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.": 'Jeder Kurs auf der Seite „Kurse“ zeigt deine Gesamtnote in der Farbe ihres Bereichs, sofern deine Lehrkraft sie freigibt.',
   'Folder previews': 'Ordnervorschau',
   'Hover a closed folder in course content to see what is inside, what is done and what is due.': 'Zeig im Kursinhalt auf einen geschlossenen Ordner, um zu sehen, was darin ist, was erledigt und was fällig ist.',
+  'Remember your place': 'Deine Stelle merken',
+  'Coming back to a course, its content opens the folders you left open and scrolls back to where you were. Kept on this device.': 'Wenn du zu einem Kurs zurückkehrst, öffnet sein Inhalt die Ordner, die du offen gelassen hast, und scrollt dorthin zurück, wo du warst. Auf diesem Gerät gespeichert.',
   'Course progress': 'Kursfortschritt',
   'A bar at the top of course content adding up how much of the course you have completed.': 'Ein Balken oben im Kursinhalt zeigt, wie viel des Kurses du abgeschlossen hast.',
   'New-grade badges': 'Hinweise auf neue Noten',

@@ -318,6 +318,7 @@
     placeScene();
     renderProgress();
     renderNew();
+    keepPlace();
     renderCalc();
     watchDrafts();
     syncDownloads();
@@ -830,6 +831,101 @@
       if (t.getAttribute('aria-expanded') === 'false' && !jump.opened.has(f)) { jump.opened.add(f); t.click(); return; }
     }
   };
+
+  // ---- your place in a course (Extras) --------------------------------------------------------
+  // Ultra keeps a course's open folders and last-clicked item in memory only: gone with a reload, a
+  // new visit or another course's content. Glaze keeps them per course on this device (storage.local
+  // coursePlace, lib/page.js): a folder once it unfolds, forgotten once you fold it yourself (Ultra
+  // folds some itself), and how far down you were. Each time the outline comes back, folders still
+  // closed are unfolded as the jump above does, each once, then it scrolls back if nothing has moved
+  // it. Anything you do first (wheel, touch, a key, a click) ends that; given up after ten seconds.
+  const OUTLINE = /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/;
+  const ROWS = '.content-list-item[data-content-id]';
+  let place = null; // { cid, open (folder ids), top, seen (id → open), away, loaded, back: { at, opened, clicked, quiet } | null }
+  let tapped = null; // { id, at }: the row of your last click
+  const scrollerOf = (el) => {
+    for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) if (/auto|scroll|overlay/.test(getComputedStyle(p).overflowY)) return p;
+    return document.scrollingElement;
+  };
+  const outlineRows = (cid) => (OUTLINE.test(location.pathname) && courseId() === cid ? document.querySelectorAll(ROWS) : []);
+  const savePlace = () => {
+    const p = place;
+    if (p?.loaded) local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, { open: [...p.open], top: p.top }, Date.now()) })));
+  };
+  const backTo = () => {
+    const p = place;
+    const b = p?.back;
+    if (!b) return;
+    const rows = outlineRows(p.cid);
+    if (!rows.length) { p.back = null; return; }
+    if (b.ready && !held.size) {
+      let busy = false;
+      for (const row of rows) {
+        const id = row.dataset.contentId;
+        const tg = p.open.has(id) && toggleOf(row);
+        if (!tg || tg.getAttribute('aria-expanded') !== 'false') continue;
+        if (!b.opened.has(id)) { b.opened.add(id); b.clicked = Date.now(); tg.click(); }
+        // A folder that never opens (restricted, say) is waited for two seconds.
+        busy ||= Date.now() - b.clicked < 2000;
+      }
+      b.quiet = busy ? 0 : b.quiet + 1;
+      if (b.quiet >= 2 || Date.now() - b.at > 10000) {
+        // Scrolled back only from the top; moved already (by you, or Ultra's own memory), that's the place now.
+        const sc = scrollerOf(rows[0]);
+        if (p.top && sc.scrollTop < 1) sc.scrollTop = p.top;
+        else if (Math.round(sc.scrollTop) !== p.top) { p.top = Math.round(sc.scrollTop); savePlace(); }
+        p.back = null;
+        return;
+      }
+    }
+    setTimeout(backTo, 200);
+  };
+  const keepPlace = () => {
+    if (!settings.enhance.place) { place = null; return; }
+    const cid = window.top === window && observer && courseId();
+    const rows = cid ? outlineRows(cid) : [];
+    if (!rows.length) { if (place) place.away = true; return; }
+    if (!place || place.away || place.cid !== cid) {
+      const p = { cid, open: new Set(), top: 0, seen: new Map(), back: { at: Date.now(), opened: new Set(), clicked: 0, quiet: 0 } };
+      place = p;
+      local((s) => s.get('coursePlace', (r) => {
+        const was = r?.coursePlace?.[cid];
+        p.open = new Set([...(Array.isArray(was?.open) ? was.open : []), ...p.open]);
+        if (was?.top > 0) p.top = was.top;
+        p.loaded = true;
+        if (p.back) { p.back.ready = true; backTo(); }
+      }));
+    }
+    let changed = false;
+    for (const row of rows) {
+      const tg = toggleOf(row);
+      if (!tg) continue;
+      const id = row.dataset.contentId;
+      const open = tg.getAttribute('aria-expanded') === 'true';
+      const was = place.seen.get(id);
+      place.seen.set(id, open);
+      if (was === open) continue;
+      if (open) place.open.add(id);
+      else if (was && tapped?.id === id && Date.now() - tapped.at < 3000) place.open.delete(id);
+      else continue;
+      changed = true;
+    }
+    if (changed) savePlace();
+  };
+  document.addEventListener('click', (e) => { if (e.isTrusted && e.target instanceof Element) tapped = { id: e.target.closest(ROWS)?.dataset.contentId, at: Date.now() }; }, true);
+  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (e.isTrusted && place) place.back = null; }, { capture: true, passive: true });
+  // How far down, read at most every half second while scrolling; not while being put back, or once the
+  // outline is gone (a page shrinking under it scrolls it too).
+  let placeTimer = 0;
+  document.addEventListener('scroll', () => {
+    if (!place || place.back || placeTimer) return;
+    placeTimer = setTimeout(() => {
+      placeTimer = 0;
+      const rows = place && !place.back && !place.away ? outlineRows(place.cid) : [];
+      const top = rows.length && scrollerOf(rows[0]).scrollTop;
+      if (rows.length && top !== place.top) { place.top = top; savePlace(); }
+    }, 500);
+  }, { capture: true, passive: true });
 
   // ---- what-if calculator (Extras) -----------------------------------------------------------
   // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make,

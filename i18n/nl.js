@@ -104,6 +104,8 @@
   "Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.": 'Elke cursus op de pagina Cursussen toont je eindcijfer, in de kleur van de scoreband, als je docent het deelt.',
   'Folder previews': 'Mapvoorbeelden',
   'Hover a closed folder in course content to see what is inside, what is done and what is due.': 'Wijs een gesloten map in de cursusinhoud aan om te zien wat erin zit, wat klaar is en wat er moet.',
+  'Remember your place': 'Onthoud waar je was',
+  'Coming back to a course, its content opens the folders you left open and scrolls back to where you were. Kept on this device.': 'Als je terugkomt in een cursus, opent de inhoud de mappen die je open liet en scrolt terug naar waar je was. Bewaard op dit apparaat.',
   'Course progress': 'Cursusvoortgang',
   'A bar at the top of course content adding up how much of the course you have completed.': 'Een balk boven de cursusinhoud die optelt hoeveel van de cursus je hebt afgerond.',
   'New-grade badges': 'Badges voor nieuwe cijfers',

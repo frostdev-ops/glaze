@@ -104,6 +104,8 @@
   "Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.": 'Cada curso na página Cursos mostra sua nota geral, na cor da faixa de desempenho, quando o professor a compartilha.',
   'Folder previews': 'Prévia de pastas',
   'Hover a closed folder in course content to see what is inside, what is done and what is due.': 'Passe o mouse sobre uma pasta fechada no conteúdo do curso para ver o que há dentro, o que está concluído e o que tem prazo.',
+  'Remember your place': 'Lembrar onde você parou',
+  'Coming back to a course, its content opens the folders you left open and scrolls back to where you were. Kept on this device.': 'Ao voltar a um curso, o conteúdo reabre as pastas que você deixou abertas e rola de volta até onde você estava. Guardado neste dispositivo.',
   'Course progress': 'Progresso no curso',
   'A bar at the top of course content adding up how much of the course you have completed.': 'Uma barra no topo do conteúdo do curso somando quanto do curso você já concluiu.',
   'New-grade badges': 'Selos de notas novas',

@@ -66,6 +66,8 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'],
+    // place: a course's content reopens where you left it (open folders, scroll).
+    place: [true, 'bool'],
     // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
     // document buttons themselves.
     darkDocs: [false, 'bool'], toggles: [true, 'bool'],

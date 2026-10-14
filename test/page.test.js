@@ -281,3 +281,17 @@ test('folder completion in every language Ultra writes it', () => {
     }
   }
 });
+
+test('your place in a course: the latest 30 courses, the last 100 open folders each', () => {
+  const all = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`_${i}_1`, { open: [], top: 0, at: 1000 + i }]));
+  all.junk = null;
+  const out = P.place(all, '_5_1', { open: ['_7_1', '_7_1', 'x"]', ...Array.from({ length: 120 }, (_, i) => `_${i + 100}_1`)], top: 812.6 }, 9999);
+  assert.equal(Object.keys(out).length, 30);
+  assert.deepEqual(Object.keys(out).slice(0, 3), ['_5_1', '_39_1', '_38_1']);
+  assert.equal(out._5_1.open.length, 100);
+  assert.equal(out._5_1.open[0], '_120_1', 'the oldest go first');
+  assert.ok(!out._5_1.open.includes('x"]'));
+  assert.equal(out._5_1.top, 813);
+  assert.equal(out._5_1.at, 9999);
+  assert.deepEqual(P.place(undefined, '_1_1', { open: ['_2_1'], top: -5 }, 1), { _1_1: { open: ['_2_1'], top: 0, at: 1 } });
+});
