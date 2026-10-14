@@ -117,7 +117,11 @@
       }
       // An InstUI icon's colour is on the <svg> itself, which the sweep otherwise skips.
       if (!ultra && e.tagName === 'svg') {
-        if (e.getAttribute('class')?.includes('css-') && instBlue(C.parse(sweepColors(e, getComputedStyle(e)).color))) pending.push([e, ['data-gz-brand-fg']]);
+        if (e.getAttribute('class')?.includes('css-')) {
+          const ink = C.parse(sweepColors(e, getComputedStyle(e)).color);
+          if (instBlue(ink)) pending.push([e, ['data-gz-brand-fg']]);
+          else if (ink && ink.a >= 0.5 && !C.saturated(ink) && C.brightness(ink) < 0.35 && e.closest('[data-cid~="BaseButton"]')) pending.push([e, ['data-gz-dark']]);
+        }
         continue;
       }
       if (!e.isConnected || SKIP.test(e.tagName) || e.id.startsWith('gz-') || e.closest('svg, [id^="gz-"]')) continue;
