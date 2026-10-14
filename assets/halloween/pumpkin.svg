@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <title>Glaze pumpkin</title>
+  <path d="M100 58c-3-18 5-32 20-40" fill="none" stroke="#4d7c0f" stroke-width="12" stroke-linecap="round"/>
+  <path d="M116 30c14-12 32-9 38 4-15 3-26 1-38-4z" fill="#65a30d"/>
+  <ellipse cx="62" cy="120" rx="46" ry="56" fill="#ea580c"/>
+  <ellipse cx="138" cy="120" rx="46" ry="56" fill="#ea580c"/>
+  <ellipse cx="100" cy="118" rx="52" ry="62" fill="#fb923c"/>
+  <path d="M78 66c-11 32-11 72 0 104M122 66c11 32 11 72 0 104" fill="none" stroke="#ea580c" stroke-width="5" stroke-linecap="round" opacity=".75"/>
+  <ellipse cx="74" cy="84" rx="6" ry="11" fill="#fed7aa" opacity=".35" transform="rotate(-20 74 84)"/>
+  <ellipse cx="80" cy="114" rx="8" ry="10" fill="#2a1406"/>
+  <ellipse cx="120" cy="114" rx="8" ry="10" fill="#2a1406"/>
+  <circle cx="82.5" cy="110" r="3" fill="#fff"/>
+  <circle cx="122.5" cy="110" r="3" fill="#fff"/>
+  <path d="M89 134q11 10 22 0" fill="none" stroke="#2a1406" stroke-width="5" stroke-linecap="round"/>
+  <ellipse cx="64" cy="134" rx="10" ry="6" fill="#f472b6" opacity=".55"/>
+  <ellipse cx="136" cy="134" rx="10" ry="6" fill="#f472b6" opacity=".55"/>
+</svg>

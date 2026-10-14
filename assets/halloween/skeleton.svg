@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 260">
+  <title>Glaze skeleton, waving</title>
+  <g fill="none" stroke="#f5f1e6" stroke-width="10" stroke-linecap="round">
+    <path d="M100 136v62"/>
+    <path d="M78 154q22 10 44 0M80 170q20 9 40 0M83 186q17 7 34 0"/>
+    <path d="M84 150l-22 34-4 22"/>
+    <path d="M116 150l32-20 24-26"/>
+    <path d="M88 214l-8 34M112 214l8 34"/>
+  </g>
+  <g fill="#f5f1e6">
+    <ellipse cx="100" cy="210" rx="22" ry="12"/>
+    <ellipse cx="74" cy="250" rx="14" ry="7"/>
+    <ellipse cx="126" cy="250" rx="14" ry="7"/>
+    <circle cx="57" cy="212" r="8"/>
+    <circle cx="178" cy="98" r="11"/>
+    <path d="M172 90l-4-14M180 87l2-15M187 92l8-11" stroke="#f5f1e6" stroke-width="6" stroke-linecap="round"/>
+    <path d="M100 14c-40 0-64 27-64 60 0 21 10 36 24 44v12c0 6 5 10 10 10h60c5 0 10-4 10-10v-12c14-8 24-23 24-44 0-33-24-60-64-60z"/>
+  </g>
+  <ellipse cx="78" cy="78" rx="15" ry="18" fill="#2b2540"/>
+  <ellipse cx="122" cy="78" rx="15" ry="18" fill="#2b2540"/>
+  <circle cx="83" cy="72" r="5" fill="#fff"/>
+  <circle cx="127" cy="72" r="5" fill="#fff"/>
+  <path d="M100 98l-6 10h12z" fill="#2b2540"/>
+  <path d="M82 122v12M94 122v14M106 122v14M118 122v12" stroke="#2b2540" stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="62" cy="104" rx="9" ry="5" fill="#f9a8d4" opacity=".6"/>
+  <ellipse cx="138" cy="104" rx="9" ry="5" fill="#f9a8d4" opacity=".6"/>
+</svg>

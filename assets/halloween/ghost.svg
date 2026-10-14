@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220">
+  <title>Glaze ghost</title>
+  <path d="M40 200V96a60 60 0 0 1 120 0v104l-20-14-20 14-20-14-20 14-20-14z" fill="#f1f5f9"/>
+  <path d="M52 92a48 48 0 0 1 40-46" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" opacity=".8"/>
+  <ellipse cx="80" cy="100" rx="9" ry="13" fill="#1e1b2e"/>
+  <ellipse cx="120" cy="100" rx="9" ry="13" fill="#1e1b2e"/>
+  <circle cx="83" cy="95" r="3.5" fill="#fff"/>
+  <circle cx="123" cy="95" r="3.5" fill="#fff"/>
+  <ellipse cx="100" cy="128" rx="8" ry="10" fill="#1e1b2e"/>
+  <ellipse cx="64" cy="120" rx="10" ry="6" fill="#f9a8d4" opacity=".6"/>
+  <ellipse cx="136" cy="120" rx="10" ry="6" fill="#f9a8d4" opacity=".6"/>
+</svg>

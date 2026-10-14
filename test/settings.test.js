@@ -207,7 +207,7 @@ test('course tint never costs a contrast pair, and at full strength is the cours
 });
 
 test('looks apply cleanly: every value is one Glaze accepts, contrast holds, and the look reads as on', () => {
-  assert.equal(G.GZ_LOOKS.length, 8);
+  assert.equal(G.GZ_LOOKS.length, 10);
   const mine = G.GZ_SANITIZE({ look: { tooltips: false, scale: 1.2, font: 'mono' }, bg: { image: 'https://example.com/a.jpg', kind: 'image' }, auto: { on: true } });
   for (const L of G.GZ_LOOKS) {
     const s = { ...mine, ...G.GZ_LOOK_APPLY(mine, L) };

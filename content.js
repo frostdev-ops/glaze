@@ -2441,6 +2441,7 @@
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
     const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
     setAttr('data-gz-bg', kind);
+    setAttr('data-gz-scene', kind === 'scene' && s.bg.scene);
     // A scene's gradient fallback (until it draws, or without WebGL) takes its dim from intensity.
     const look = kind === 'scene' && GZ_SCENE_LOOK(s.bg.intensity);
     setVar('--gz-bg-dim', `${look ? Math.round(look.dim * 100) : s.bg.dim}%`);

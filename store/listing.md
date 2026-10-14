@@ -28,10 +28,10 @@ Then shape the rest:
   and OpenDyslexic, Google Fonts, Nerd Fonts, or any font by name; text size, line height, rounded
   corners, spacing, depth and frosted glass
 • Background — solid; a smooth gradient you shape (linear, radial, conic or mesh; angle, blend and spread);
-  a drifting aurora; your own image; or one of eight animated scenes, from northern lights to a lava lamp,
-  with one Intensity slider for how much it stands out. In your palette's colors or your own.
+  a drifting aurora; your own image; or one of ten animated scenes, from northern lights to a lava lamp and a
+  Halloween graveyard and pumpkin patch, with one Intensity slider for how much it stands out. In your palette's colors or your own.
 • Motion — Off, Subtle or Expressive. Reduced-motion settings are respected automatically.
-• Looks — eight ready-made combinations of palette, fonts, shape and background, one click each; give a
+• Looks — ten ready-made combinations of palette, fonts, shape and background, one click each; give a
   course a Look of its own and its pages wear it
 • Course colors — every course its own color, even where Ultra repeats one: blended into your palette or
   chosen one by one, on course pages, Messages, Grades and the calendar

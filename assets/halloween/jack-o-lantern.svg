@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <title>Glaze jack-o'-lantern</title>
+  <defs>
+    <radialGradient id="glow"><stop offset="0" stop-color="#fde047" stop-opacity=".55"/><stop offset="1" stop-color="#fde047" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="100" cy="120" r="96" fill="url(#glow)"/>
+  <path d="M100 58c-3-18 5-32 20-40" fill="none" stroke="#4d7c0f" stroke-width="12" stroke-linecap="round"/>
+  <ellipse cx="62" cy="120" rx="46" ry="56" fill="#c2410c"/>
+  <ellipse cx="138" cy="120" rx="46" ry="56" fill="#c2410c"/>
+  <ellipse cx="100" cy="118" rx="52" ry="62" fill="#ea580c"/>
+  <path d="M78 66c-11 32-11 72 0 104M122 66c11 32 11 72 0 104" fill="none" stroke="#c2410c" stroke-width="5" stroke-linecap="round" opacity=".8"/>
+  <path d="M66 110l14-24 14 24zM106 110l14-24 14 24zM93 124l7-11 7 11z" fill="#fde047"/>
+  <path d="M62 132q38 34 76 0l-6 10-8-6-8 9-8-8-8 8-8-9-8 6z" fill="#fde047"/>
+</svg>
