@@ -629,10 +629,10 @@
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
   // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
-  // only when the numbers move.
+  // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
   const renderProgress = () => {
     const old = document.getElementById('gz-progress');
-    if (!settings.enhance.progress) return old?.remove();
+    if (!settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
     const top = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
     let done = 0;
     let total = 0;
