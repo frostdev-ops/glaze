@@ -6,10 +6,32 @@
 // It runs on two sites: Blackboard Ultra, which gets all of that plus its extras (everything marked
 // Extras below), and Canvas LMS, which gets (1) to (3), with its own stylesheet, and three extras: Due this
 // week, the command palette and grades on the dashboard's course cards (marked Canvas below).
-(() => {
+(async () => {
   // Only HTML pages: an /ultra/ address can also be an XML error from Ultra's CDN, or a raw script.
   if (window.__gzGlaze || !/html/.test(document.contentType)) return;
   window.__gzGlaze = true;
+
+  // The options preview is Ultra. On a site, decide once from its head while the parser is still there;
+  // addresses and body classes can belong to another app or a same-host tool.
+  const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
+  const ULTRA = 'base[href*="/ultra/"]';
+  let site;
+  if (isPreview) site = 'ultra';
+  else site = await new Promise((resolve) => {
+    const look = () => {
+      const hit = document.head?.querySelector(`${ULTRA}, link[rel~="stylesheet"][href*="/dist/brandable_css/"]`);
+      if (!hit && !document.body) return;
+      mo.disconnect();
+      document.removeEventListener('DOMContentLoaded', look);
+      resolve(hit ? (hit.matches(ULTRA) ? 'ultra' : 'canvas') : null);
+    };
+    const mo = new MutationObserver(look);
+    mo.observe(document, { childList: true, subtree: true });
+    document.addEventListener('DOMContentLoaded', look);
+    look();
+  });
+  if (!site) return;
+  const ultra = site === 'ultra';
 
   const C = GZ_COLOR;
   const html = document.documentElement;
@@ -27,12 +49,6 @@
   let darkTheme = true;
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
-  // The options page shows a mock of Ultra (preview.html) that runs this same script.
-  const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
-  // Which site this is, from the address: at document_start there is no body to look at yet. Ultra lives
-  // at /ultra or below it (the preview's mock of it too); other addresses are checked for Canvas below. Every
-  // Ultra-only part below is switched off on Canvas where it is entered, by this.
-  const ultra = isPreview || /^\/ultra(\/|$)/.test(location.pathname);
   // Canvas wears canvas.css instead of theme.css and extras.css, which are written against Ultra's markup.
   // motion.css comes along: it is mostly the motion knobs (--gz-t, --gz-enter…, set per level by
   // html[data-gz-motion] and the three switches) that any sheet's animations read, so canvas.css doesn't
@@ -43,13 +59,17 @@
   // On Canvas, the whole document: put on a school's own host by lib/background.js mid-load, the body can be
   // there before Canvas's wrapper (isCanvas) is.
   const onBody = (fn) => (document.body && (ultra || document.readyState !== 'loading') ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
-  // Ultra's address patterns match any host with those paths, so confirm this is really Blackboard
-  // Ultra before touching the page. Checked once, when the body exists.
-  const isUltra = () => !!document.querySelector('#site-wrap, [class*="bb-"], [id*="bb-"], base[href*="ultra"]');
+  // Keep the head marker check when enabling after settings change too.
+  const isUltra = () => isPreview || !!document.head?.querySelector(ULTRA);
   // Likewise `https://*.instructure.com/*`, and each school's own Canvas host that lib/detect.js found, is
   // every page and frame on that host. Canvas's own pages sit in this wrapper; a tool framed inside one
   // doesn't, and stays as it is.
   const isCanvas = () => !!document.querySelector('#application.ic-app');
+  // A same-host tool can carry Canvas's head marker too; confirm its wrapper before styling a frame.
+  if (!ultra && window.top !== window) {
+    await new Promise(onBody);
+    if (!isCanvas()) return;
+  }
 
   // ---- long tail -------------------------------------------------------------------------------
   // Read everything first, write after: setting an attribute mid-loop invalidates layout and the
