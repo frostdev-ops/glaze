@@ -81,7 +81,8 @@ const GZ_DEFAULTS = {
   ...Object.fromEntries(Object.entries(GZ_SPEC).map(([g, keys]) => [g, Object.fromEntries(Object.entries(keys).map(([k, [d]]) => [k, d]))])),
   // colors: picked by course id (a slot number is a pick from before 2.1.3). tint: inside a course
   // listed in `tinted` (course ids, or slots likewise), its color tints the palette, `strength` %.
-  courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60 },
+  // looks: a look's name by course id, worn on that course's pages instead of the student's theme.
+  courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {} },
   footer: true,
   presets: [],
 };
@@ -243,6 +244,11 @@ const GZ_LOOK_ON = (s, L) => {
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   return !s.auto.on && same(s.colors, want.colors) && Object.keys(want.look).every((k) => same(s.look[k], want.look[k])) && Object.keys(want.bg).every((k) => same(s.bg[k], want.bg[k]));
 };
+// The settings to paint on course `cid`'s pages: its own look (courses.looks) over `s`, or `s` itself.
+const GZ_COURSE_LOOK = (s, cid) => {
+  const L = cid && GZ_LOOKS.find((l) => l.name === s.courses.looks[cid]);
+  return L ? { ...s, ...GZ_LOOK_APPLY(s, L) } : s;
+};
 const GZ_PRESET = (name, custom) => GZ_ALL_PRESETS(custom).find(([n]) => n === name)?.[1] || null;
 const GZ_MATCH_PRESET = (colors, custom) => GZ_ALL_PRESETS(custom).find(([, c]) => sameColors(c, colors))?.[0] || null;
 
@@ -266,6 +272,7 @@ const GZ_SANITIZE = (raw) => {
     tint: cleanValue(rc.tint, false, 'bool'),
     tinted: Array.isArray(rc.tinted) ? [...new Set(rc.tinted.filter((n) => typeof n === 'string' && (COURSE_ID.test(n) || COURSE_SLOT.test(n))))].slice(0, 200) : [],
     strength: cleanValue(rc.strength, 60, [10, 100]),
+    looks: Object.fromEntries(isObj(rc.looks) ? Object.entries(rc.looks).filter(([id, n]) => COURSE_ID.test(id) && GZ_LOOKS.some((L) => L.name === n)).slice(0, 200) : []),
   };
   out.footer = typeof raw.footer === 'boolean' ? raw.footer : GZ_DEFAULTS.footer;
   out.presets = GZ_SANITIZE_PRESETS(raw.presets);
@@ -388,5 +395,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_TINT };
 }

@@ -299,7 +299,7 @@
     if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
     if (tip && ultraTipShown()) hideTip();
     paintCourses();
-    if (tintKey() !== tinted) applySettings();
+    if (tintKey() !== tinted || lookHere() !== looked) applySettings();
     placeScene();
     renderProgress();
     renderNew();
@@ -1522,22 +1522,22 @@
     sceneCanvas = null;
   };
   const sceneOpts = () => {
-    const { dim, amount, pace } = GZ_SCENE_LOOK(settings.bg.intensity);
+    const { dim, amount, pace } = GZ_SCENE_LOOK(worn.bg.intensity);
     return {
-      name: settings.bg.scene,
+      name: worn.bg.scene,
       ground: palette['--gz-surface-2'],
-      colors: GZ_BG_COLORS(settings.bg.colors, palette),
+      colors: GZ_BG_COLORS(worn.bg.colors, palette),
       dim,
       amount,
       speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
     };
   };
   const syncScene = () => {
-    if (!settings.enabled || !links.length || settings.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
+    if (!settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
     if (scene) return scene.update(sceneOpts());
     sceneLoad ||= import(chrome.runtime.getURL('lib/scene.js'));
     sceneLoad.then((mod) => {
-      if (scene || !links.length || settings.bg.kind !== 'scene') return;
+      if (scene || !links.length || worn.bg.kind !== 'scene') return;
       sceneCanvas = document.createElement('canvas');
       sceneCanvas.id = 'gz-scene';
       sceneCanvas.setAttribute('aria-hidden', 'true');
@@ -1616,6 +1616,10 @@
   };
   let tinted = null; // the key of the course whose color is painted now
   let palette = GZ_DEFAULTS.colors; // the colors painted, tint included
+  // A course given a look of its own wears it on its pages (GZ_COURSE_LOOK); flush() re-checks.
+  const lookHere = () => settings.courses.looks[courseId()] || null;
+  let looked = null; // the course look painted now
+  let worn = settings; // the settings painted now: the student's, or a course's look over them
 
   // ---- settings → <html> ----------------------------------------------------------------------
   // Everything set goes through these two, so clearSettings removes exactly what was set.
@@ -1638,7 +1642,8 @@
   };
 
   const applySettings = () => {
-    const s = settings;
+    looked = lookHere();
+    const s = (worn = GZ_COURSE_LOOK(settings, courseId()));
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);

@@ -259,6 +259,8 @@
   'Reset': 'Resetten',
   'Tint inside {name}': 'Tinten binnen {name}',
   'Tint': 'Tinten',
+  'Your theme': 'Je eigen thema',
+  'Look for {name}': 'Stijl voor {name}',
   'Theme code copied.': 'Themacode gekopieerd.',
   'Copy the code from the box.': 'Kopieer de code uit het vak.',
   'a solid background': 'een effen achtergrond',

@@ -259,6 +259,8 @@
   'Reset': 'Réinitialiser',
   'Tint inside {name}': 'Teinter dans {name}',
   'Tint': 'Teinter',
+  'Your theme': 'Votre thème',
+  'Look for {name}': 'Style pour {name}',
   'Theme code copied.': 'Code du thème copié.',
   'Copy the code from the box.': 'Copiez le code depuis le champ.',
   'a solid background': 'un arrière-plan uni',

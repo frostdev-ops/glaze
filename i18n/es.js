@@ -259,6 +259,8 @@
   'Reset': 'Restablecer',
   'Tint inside {name}': 'Teñir dentro de {name}',
   'Tint': 'Teñir',
+  'Your theme': 'Tu tema',
+  'Look for {name}': 'Estilo para {name}',
   'Theme code copied.': 'Código del tema copiado.',
   'Copy the code from the box.': 'Copia el código del cuadro.',
   'a solid background': 'un fondo sólido',

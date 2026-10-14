@@ -182,7 +182,7 @@ test('theme codes are untrusted: anything off refuses the whole code', async () 
 });
 
 test('course tint is off and empty until configured; junk is dropped', () => {
-  assert.deepEqual(G.GZ_DEFAULTS.courses, { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60 });
+  assert.deepEqual(G.GZ_DEFAULTS.courses, { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {} });
   const c = G.GZ_SANITIZE({ courses: { tint: 'yes', tinted: ['2', '2', '11', 3, 'x', '10', '_53708_1', '_x_1', '_53708_1'], strength: 500 } }).courses;
   assert.deepEqual([c.tint, c.tinted, c.strength], [false, ['2', '10', '_53708_1'], 60]);
 });

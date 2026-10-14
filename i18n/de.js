@@ -259,6 +259,8 @@
   'Reset': 'Zurücksetzen',
   'Tint inside {name}': 'In {name} einfärben',
   'Tint': 'Tönen',
+  'Your theme': 'Dein Design',
+  'Look for {name}': 'Design für {name}',
   'Theme code copied.': 'Designcode kopiert.',
   'Copy the code from the box.': 'Kopiere den Code aus dem Feld.',
   'a solid background': 'einfarbiger Hintergrund',
