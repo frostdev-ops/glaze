@@ -24,7 +24,9 @@ html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
   --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
-html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; background: transparent !important; }
+/* Clipped to its own box: a panel that starts below a bar (a discussion, under its back-and-breadcrumb
+   header) would otherwise paint its viewport-sized layer over that bar. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; clip-path: inset(0); background: transparent !important; }
 /* :where() keeps this base layer at element specificity, so the per-kind rules below refine it. */
 html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before,
 html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offcanvas-panel):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before {
