@@ -841,7 +841,7 @@
   // it. Anything you do first (wheel, touch, a key, a click) ends that; given up after ten seconds.
   const OUTLINE = /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/;
   const ROWS = '.content-list-item[data-content-id]';
-  let place = null; // { cid, open (folder ids), top, seen (id → open), away, loaded, back: { at, opened, clicked, quiet } | null }
+  let place = null; // { cid, open (folder ids), top, seen (id → open), away, loaded, back: { at, opened, clicked, quiet, scrolled, steady } | null }
   let tapped = null; // { id, at }: the row of your last click
   const scrollerOf = (el) => {
     for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) if (/auto|scroll|overlay/.test(getComputedStyle(p).overflowY)) return p;
@@ -877,12 +877,21 @@
       }
       b.quiet = busy ? 0 : b.quiet + 1;
       if (b.quiet >= 2 || Date.now() - b.at > 10000) {
-        // Scrolled back only from the top; moved already (by you, or Ultra's own memory), that's the place now.
         const sc = scrollerOf(rows[0]);
-        if (p.top && sc.scrollTop < 1) sc.scrollTop = p.top;
-        else if (Math.round(sc.scrollTop) !== p.top) { p.top = Math.round(sc.scrollTop); savePlace(); }
-        p.back = null;
-        return;
+        // Scrolled back only from the top; moved already (by you, or Ultra's own memory), that's the place now.
+        if (!b.scrolled && (!p.top || sc.scrollTop >= 1)) {
+          if (Math.round(sc.scrollTop) !== p.top) { p.top = Math.round(sc.scrollTop); savePlace(); }
+          p.back = null;
+          return;
+        }
+        // An unfolded module's contents slide open over ~0.4 s and rows can still arrive, so the outline
+        // grows under the scroll (clamping it, then anchoring shifts it): set again until it holds there
+        // twice running, for three seconds at most. Nothing is saved meanwhile.
+        b.scrolled ||= Date.now();
+        const there = Math.abs(sc.scrollTop - p.top) < 2;
+        b.steady = there ? (b.steady || 0) + 1 : 0;
+        if (b.steady >= 2 || Date.now() - b.scrolled > 3000) { p.back = null; return; }
+        if (!there) sc.scrollTop = p.top;
       }
     }
     setTimeout(backTo, 200);
