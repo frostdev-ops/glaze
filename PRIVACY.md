@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze for Blackboard Ultra
 
-_Last updated: 2026-10-13_
+_Last updated: 2026-10-14_
 
 ## What Glaze stores
 
@@ -13,6 +13,17 @@ _Last updated: 2026-10-13_
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 - **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
   you've opened, the ids of its items, so new-content badges know what's new.
+- **Where you were in each course** (the "Remember your place" Extra, on by default), in
+  `chrome.storage.local`, on this device only: for up to 30 courses, which folders of its content you
+  left open and how far down you had scrolled, so coming back opens and scrolls them again. A copy of
+  the same is kept in that browser tab's session storage on your Blackboard site, so a reload finds it
+  even right after Glaze updates; the browser clears it when the tab closes.
+- **Scores you try in the what-if calculator**, in `chrome.storage.local`, on this device only: for up
+  to 20 courses, the hypothetical scores you typed for work not graded yet. A score is removed once the
+  item has a real grade or is gone, and "Clear scores" removes a course's.
+- **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
+  time of each item due in the next seven days, from Blackboard's own To Do list, so the popup can list
+  them. It is replaced each time it's fetched.
 - **What you type in Blackboard's editors** (the "Back up what you type" Extra, on by default), in
   `chrome.storage.local`, on this device only. While you write a post, reply, journal entry, message or
   assignment text, Glaze keeps a copy so it can offer it back if the page reloads or your session times
@@ -36,6 +47,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
   site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
   session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
+- **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
+  Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
+  asks for, with your existing session, and keeps it as above. Picking an item in the command palette
+  asks for that course's items to find its address. Nothing is sent anywhere else.
+- **Calendar colours.** On Blackboard's Calendar page, Glaze asks your own Blackboard site for your
+  calendar entries (six weeks back, ten ahead), as the calendar itself does, to tell which course an entry
+  belongs to and paint it in that course's colour. The answer is kept in memory only.
 - **Folder previews** (an Extra, on by default; switch it off under Extras). Hovering a folder asks your own Blackboard site for the
   folder's contents, using the same internal address Blackboard's own page uses. The request goes to the
   site you are on, with your existing session, and the answer is kept in memory for a minute. Nothing is
@@ -81,7 +99,7 @@ The only link in the extension is the footer link to the project's GitHub page, 
 
 ## Permissions
 
-- `storage` — to save the settings, course names and typed-text backups described above.
+- `storage` — to save the settings, course names, places, what-if scores, due list and typed-text backups described above.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is
   self-hosted per institution on arbitrary domains, always under the `/ultra/` path, so the match
   pattern cannot name a fixed host. Glaze reads and restyles the page in your browser only.

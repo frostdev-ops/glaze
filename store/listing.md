@@ -31,7 +31,10 @@ Then shape the rest:
   a drifting aurora; your own image; or one of eight animated scenes, from northern lights to a lava lamp,
   with one Intensity slider for how much it stands out. In your palette's colors or your own.
 • Motion — Off, Subtle or Expressive. Reduced-motion settings are respected automatically.
-• Course colors — Ultra's course stripes blended into your palette, or chosen one by one
+• Looks — eight ready-made combinations of palette, fonts, shape and background, one click each; give a
+  course a Look of its own and its pages wear it
+• Course colors — every course its own color, even where Ultra repeats one: blended into your palette or
+  chosen one by one, on course pages, Messages, Grades and the calendar
 
 Glaze also tidies Ultra itself: clearer buttons, a visible selected state on toggles, a readable
 calendar, grade bands in the gradebook, and calmer assignment pages.
@@ -46,7 +49,9 @@ At-a-glance helpers, on from the start:
 • Course progress: how much of a course you've completed
 • New-grade badges on gradebook rows and course cards
 • New-content badges: what your instructor added since you last looked, in the outline and on course cards
-• What-if grade calculator: try scores for ungraded work, or see what you need for a target grade
+• What-if grade calculator: try scores for ungraded work, or see what you need for a target grade; your scores are kept until you clear them
+• Due this week: what's left to do in the next seven days, in the popup and the command palette
+• Remember your place: come back to a course and its folders are open and scrolled where you left them
 • Typing backup: if the page reloads or your session times out before you post, get back what you wrote
 • Focus mode for course documents: just the document, a reading-progress line and the reading time
 
@@ -65,11 +70,12 @@ your settings as a file.
 Glaze works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
 Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed list of universities.
 
-Privacy: Glaze stores your settings in Chrome's sync storage, and your course names, which grades you've seen and a backup of what you type
-(until it's posted, 14 days at most) on your device. It
+Privacy: Glaze stores your settings in Chrome's sync storage, and your course names, which grades you've seen, where you were in
+each course, your what-if scores, what's due this week and a backup of what you type (until it's posted, 14 days at most) on your
+device. It
 collects nothing and has no server. The only requests it makes go to your own Blackboard site, for folder
-previews, for the files in a folder you choose to download, for which items you've submitted, opened or had graded, and for your overall grade in each
-course; to Google Fonts or jsDelivr for a web
+previews, for the files in a folder you choose to download, for which items you've submitted, opened or had graded, for your overall grade in each
+course, for your course list and To Do list, and for calendar entries on the Calendar page; to Google Fonts or jsDelivr for a web
 font you choose; and to a background image you choose. The source is open at
 https://github.com/frostdev-ops/glaze.
 
@@ -81,7 +87,7 @@ endorsed by, or sponsored by Anthology Inc.
 Glaze has one purpose: to customise how Blackboard Ultra pages look and read, according to the user's
 chosen colors, layout, motion and display preferences, and to help the user keep track of and keep
 their own coursework on those pages. The optional helpers (due-date status, grade badges, previews,
-progress, shortcuts) only present information already on the user's Blackboard pages; Download all saves
+progress, due list, shortcuts) only present information already on the user's Blackboard pages; Download all saves
 files the user can already open there, and the typing backup keeps a local copy of what the user writes
 on those pages until it is posted. Every permission and every line of code serves that purpose.
 
@@ -91,7 +97,9 @@ on those pages until it is posted. Every permission and every line of code serve
 Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and
 devices; the names of the user's courses in `chrome.storage.local`, so the editor can list them for
 recolouring; which grades and course items the user has seen, in `chrome.storage.local`, so new ones
-can be marked;
+can be marked; which folders were open and how far down the user was in each course's content, so
+coming back restores it; hypothetical scores typed into the what-if calculator; and the user's own To
+Do list for the next seven days, so the popup can show it;
 and, with the typing backup on, a copy of what the user is writing in Blackboard's editors in
 `chrome.storage.local`, deleted once it is posted or after 14 days. No other data is stored, and
 nothing is sent anywhere.
@@ -109,7 +117,9 @@ gradebook which of the user's items are submitted, late or graded, and new-grade
 grades are new in the courses listed on the page, and card grades ask it for the user's overall grade
 in each course shown on the Courses page. The command palette asks the site for the user's
 course list and the current course's items, and new-content badges ask it for the items of the course
-being viewed and of courses shown on the Courses and Grades pages. Apart from a web font the user picks (downloaded from Google
+being viewed and of courses shown on the Courses and Grades pages. The due list asks it for the user's
+To Do list for the next seven days, and on the Calendar page Glaze asks for the user's calendar entries
+to color each by its course. Apart from a web font the user picks (downloaded from Google
 Fonts or jsDelivr, without cookies or the page's address), nothing is sent anywhere else.
 
 **web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**
@@ -148,6 +158,15 @@ real Borealis background):
 ## Privacy policy URL
 
 https://github.com/frostdev-ops/glaze/blob/main/PRIVACY.md
+
+## What's new in 2.1.4
+
+For the Mac App Store's "What's New" field; the Chrome Web Store has none.
+
+> What's due this week, in the popup and the command palette. Give a course a Look of its own. Coming
+> back to a course reopens your folders where you left them, and the what-if calculator keeps your
+> scores. Every course its own color, on the calendar too. Slide switches in the editor, and rounder
+> corners throughout.
 
 ## What's new in 2.1
 
