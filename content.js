@@ -1532,7 +1532,12 @@
   // Canvas's global navigation, and the one extra there is to switch (the palette itself isn't listed, as on Ultra).
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { overall: 'Grades on course cards' };
-  const go = (path) => () => location.assign(location.origin + path);
+  // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
+  const go = (url) => () => {
+    let u;
+    try { u = new URL(url, location.origin); } catch { return; }
+    if (u.protocol === 'https:' || u.protocol === 'http:') location.assign(u.href);
+  };
   const pages = () => (ultra ? TOOLS : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
   const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
