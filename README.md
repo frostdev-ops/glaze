@@ -58,8 +58,15 @@ the frosted-glass blur needs Safari 18.
 2. Glaze opens Safari's Extensions settings and shows an illustrated guide: tick Glaze, then allow it
    on your Blackboard site. The guide ticks off the first step as soon as Safari turns Glaze on.
 
+The downloaded Mac app checks `https://frostdev.io/projects/glaze/appcast.xml` about once a day
+while Glaze is in use and downloads updates from GitHub. Sparkle system profiling is disabled.
+Background checks stay silent and skip updates that need user interaction; opening Glaze yourself
+can show the standard updater interface. An installation previously prepared through that interface
+may still show its existing progress window when a background check finishes it. The Mac App Store
+and iPhone/iPad apps use App Store updates and include no Sparkle updater.
+
 Safari loads Glaze from this Mac app. The Xcode project is in `safari/`; to build the app yourself
-you need Xcode:
+you need Xcode and the public key from [Mac update release setup](#mac-update-release-setup):
 
 ```sh
 sh scripts/build-safari.sh
@@ -87,6 +94,37 @@ screenshots and review submission happen in App Store Connect.
 
 `scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
 Use it only when you mean to regenerate the project. It doesn't know about the iPhone and iPad targets below.
+
+### Mac update release setup
+
+The Developer ID build stages Sparkle 2.10.0 in a temporary Mac project through
+`scripts/stage-safari-dmg.py`; the checked-in App Store project stays free of Sparkle.
+Once, run the [Sparkle distribution's key generator](https://sparkle-project.org/documentation/#eddsa-ed25519-signatures)
+yourself:
+
+```sh
+/path/to/Sparkle/bin/generate_keys
+export SAFARI_UPDATE_PUBLIC_KEY='paste the printed public key here'
+```
+
+The generator saves the private signing key in your login Keychain; keep it safe. The build passes
+the public key into `SUPublicEDKey` in the staged Mac app's `Glaze/Info.plist`, replacing
+`REPLACE_WITH_SPARKLE_EDDSA_PUBLIC_KEY`. Staging without a key leaves updates disabled; a release
+build rejects that placeholder. Keep this environment variable set when running the build above.
+
+After building and notarizing a release, generate its signed update entry locally (replace
+`<version>` with the manifest version):
+
+```sh
+sh scripts/safari-appcast.sh "release/glaze-<version>-safari-macos.dmg" /path/to/Sparkle/bin
+```
+
+The helper verifies the notarized DMG and app, checks that the Keychain signing key matches the
+app's public key, and writes `release/appcast.xml`, preserving older entries. It does not publish
+anything. Upload the DMG to its GitHub release before publishing that feed at
+`https://frostdev.io/projects/glaze/appcast.xml` (the frostdev.io path is `/projects/glaze/appcast.xml`).
+Use the same Sparkle Keychain account for key generation and appcast signing; if you choose a
+custom account, set `SAFARI_UPDATE_KEY_ACCOUNT` to it when running the helper.
 
 ### iPhone and iPad
 
@@ -157,11 +195,14 @@ Glaze stores your settings in `chrome.storage.sync`, including the course nickna
 you set in a course's menu. These follow Chrome sync when it's on; Safari keeps them on this device only.
 It keeps the course names your LMS lists, which grades and course
 items you've seen and a backup of what you type in Blackboard's editors (until it's posted, 14 days at most) on your own
-device. It collects nothing. The only requests it makes go to your own Blackboard site
+device. It has no analytics. The extension's requests go to your own Blackboard site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards;
 your course list and a course's items for the command palette and new-content badges), to Google Fonts or jsDelivr for a web
-font you choose, and to a background image you choose. See [PRIVACY.md](PRIVACY.md).
+font you choose, and to a background image you choose. The downloaded Mac app also checks
+`https://frostdev.io/projects/glaze/appcast.xml` about once a day and downloads updates from GitHub,
+with system profiling disabled. These services receive ordinary network requests, including your IP
+address. See [PRIVACY.md](PRIVACY.md).
 
 ## License
 

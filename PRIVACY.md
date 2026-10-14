@@ -33,18 +33,20 @@ _Last updated: 2026-10-14_
   out before it's posted. Each copy is deleted once the post shows up on the page, when you clear the
   editor or dismiss the offer, and after 14 days at most. Switching the Extra off deletes them all. The
   text is never sent anywhere.
+- **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
+  that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
 Uninstalling the extension removes all of it.
 
 ## What Glaze collects
 
-Nothing. Glaze does not collect, log, transmit, or sell any data — not personal information, not
-browsing history, not page content, not your Blackboard coursework, grades, or credentials. It has no
-analytics and no server of its own.
+Glaze has no analytics and does not collect, log, or sell your browsing history, page content,
+Blackboard coursework, grades, or credentials. The network requests below reach the requested
+services, which receive ordinary connection information such as your IP address.
 
 ## Network requests
 
-Glaze ships as static files and loads no remote code. Its built-in fonts and three.js (used by the
+The browser extension ships as static files and loads no remote scripts. Its built-in fonts and three.js (used by the
 animated backgrounds) are bundled. It makes requests in these cases:
 
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
@@ -103,6 +105,12 @@ animated backgrounds) are bundled. It makes requests in these cases:
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
+- **Mac app updates.** The downloaded Mac DMG app checks
+  `https://frostdev.io/projects/glaze/appcast.xml` about once a day while Glaze is in use and downloads
+  updates from GitHub. Sparkle system profiling is disabled: no system profile, coursework, settings,
+  or browsing history is sent. Frostdev.io and GitHub receive the update requests and ordinary
+  connection information such as your IP address. The Mac App Store and iPhone/iPad apps include no
+  Sparkle updater; their updates come through the App Store.
 
 The only link in the extension is the footer link to the project's GitHub page, which you click yourself.
 
@@ -112,7 +120,10 @@ To recognize Canvas on any school's domain, Glaze checks the head of each https 
 
 ## Permissions
 
-- `storage` — to save the settings, course names, places, what-if scores, due list and typed-text backups described above.
+- `storage` — to save the settings, course names, places, what-if scores, due list, typed-text backups
+  and Safari update-check timestamp described above.
+- `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
+  apps ignore this request. Chrome does not request this permission.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is
   self-hosted per institution on arbitrary domains, always under the `/ultra/` path, so the match
   pattern cannot name a fixed host. Glaze reads and restyles the page in your browser only.

@@ -27,17 +27,11 @@ cleanup() {
 }
 trap cleanup EXIT
 app="$stage/DerivedData/Build/Products/Release/Glaze.app"
-cp -R safari/Glaze "$stage/Glaze"
-# The downloaded app copies itself into Applications. macOS won't run an app a sandboxed app wrote,
-# so this build's app runs unsandboxed; the extension stays sandboxed, and the App Store build is unchanged.
-/usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$stage/Glaze/Glaze/Release.entitlements"
-perl -0pi -e 's/ENABLE_APP_SANDBOX = YES;(?=(?:(?!buildSettings).)*?PRODUCT_BUNDLE_IDENTIFIER = io\.frostdev\.Glaze;)/ENABLE_APP_SANDBOX = NO;/gs' \
-  "$stage/Glaze/Glaze.xcodeproj/project.pbxproj"
-resources="$stage/Glaze/Glaze Extension/Resources"
-rm -rf "$resources"
-mkdir -p "$resources"
-unzip -q "dist/glaze-v$version.zip" -d "$resources"
-sh scripts/safari-manifest.sh "$resources/manifest.json"
+# Only the DMG project contains Sparkle. Stage-only usage never reaches signing/notarization.
+python3 scripts/stage-safari-dmg.py "$stage"
+case "${SAFARI_UPDATE_PUBLIC_KEY:-}" in
+  ''|REPLACE_*) echo "build-safari: set SAFARI_UPDATE_PUBLIC_KEY from Sparkle generate_keys before releasing." >&2; exit 1 ;;
+esac
 
 mkdir -p release
 if ! xcodebuild -project "$stage/Glaze/Glaze.xcodeproj" \
@@ -47,13 +41,21 @@ if ! xcodebuild -project "$stage/Glaze/Glaze.xcodeproj" \
   CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   'CODE_SIGN_ENTITLEMENTS=$(SRCROOT)/$(TARGET_NAME)/Release.entitlements' \
   'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO MACOSX_DEPLOYMENT_TARGET=12.0 \
-  MARKETING_VERSION="$version" build > release/safari-build.log 2>&1; then
+  MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$version" build > release/safari-build.log 2>&1; then
   tail -n 60 release/safari-build.log >&2
   exit 1
 fi
 
+# Check package integration and URL registration before final re-signing and packaging.
+test -d "$app/Contents/Frameworks/Sparkle.framework" || { echo "build-safari: Sparkle framework is missing" >&2; exit 1; }
+/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$app/Contents/Info.plist" | grep -qx 'io.frostdev.glaze-update'
+
 extension="$app/Contents/PlugIns/Glaze Extension.appex"
-for bundle in "$extension" "$app"; do
+# Re-sign Sparkle's nested helpers inside out; never use --deep for signing.
+sparkle="$app/Contents/Frameworks/Sparkle.framework/Versions/B"
+for bundle in "$sparkle/XPCServices/Downloader.xpc" "$sparkle/XPCServices/Installer.xpc" \
+  "$sparkle/Autoupdate" "$sparkle/Updater.app" "$app/Contents/Frameworks/Sparkle.framework" \
+  "$extension" "$app"; do
   codesign --force --sign "$identity" --timestamp --options runtime \
     --preserve-metadata=identifier,entitlements,requirements,flags "$bundle"
 done

@@ -6,6 +6,8 @@ python3 - "$1" <<'PY'
 import json, sys
 path = sys.argv[1]
 manifest = json.load(open(path))
+if 'nativeMessaging' not in manifest.setdefault('permissions', []):
+    manifest['permissions'].append('nativeMessaging')
 manifest.get('options_ui', {}).pop('open_in_tab', None)
 manifest['description'] = 'Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras on Ultra.'
 for entry in manifest.get('web_accessible_resources', []):

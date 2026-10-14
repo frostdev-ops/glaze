@@ -7,6 +7,9 @@
 
 import SafariServices
 import os.log
+#if os(macOS) && GLAZE_DMG
+import AppKit
+#endif
 
 class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
@@ -26,6 +29,22 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         } else {
             message = request?.userInfo?["message"]
         }
+
+        #if os(macOS) && GLAZE_DMG
+        if let command = message as? [String: String], command == ["type": "check-updates"] {
+            // Address this extension's containing app explicitly; never route a caller-supplied URL.
+            let app = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = false
+            NSWorkspace.shared.open([URL(string: "io.frostdev.glaze-update://check")!],
+                                    withApplicationAt: app, configuration: configuration) { _, error in
+                let response = NSExtensionItem()
+                response.userInfo = [SFExtensionMessageKey: ["accepted": error == nil]]
+                context.completeRequest(returningItems: [response], completionHandler: nil)
+            }
+            return
+        }
+        #endif
 
         os_log(.default, "Received message from browser.runtime.sendNativeMessage: %@ (profile: %@)", String(describing: message), profile?.uuidString ?? "none")
 
