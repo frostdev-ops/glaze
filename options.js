@@ -256,7 +256,7 @@ GZ_UI.load().then((s) => {
 
   // ---- fonts: one list for three slots (text, headings, code), each card drawn in its own face ----
   let slot = 'font';
-  const AUTO = { head: 'Same as text', mono: 'As Blackboard has it' };
+  const AUTO = { head: 'Same as text', mono: 'As the site has it' };
   // A few built-in names are words ("Serif", "System"); the rest are the fonts' own names.
   const fontName = (f) => t(f.name);
   const fontLabel = (sl) => (s.look[sl] === 'auto' ? t(AUTO[sl]) : (GZ_FONTS.resolve(s.look[sl]) && fontName(GZ_FONTS.resolve(s.look[sl]))) || s.look[sl]);
@@ -286,7 +286,7 @@ GZ_UI.load().then((s) => {
   const renderFonts = () => {
     fontLabels();
     const groups = new Map();
-    if (slot !== 'font') groups.set('', [card('auto', t(AUTO[slot]), t(slot === 'head' ? 'Follows the text font' : "Ultra's monospace"), 'inherit')]);
+    if (slot !== 'font') groups.set('', [card('auto', t(AUTO[slot]), t(slot === 'head' ? 'Follows the text font' : "The site's monospace"), 'inherit')]);
     const own = GZ_FONTS.custom(s.look[slot]) ? [GZ_FONTS.resolve(s.look[slot])] : [];
     for (const f of [...GZ_FONTS.LIST, ...own]) {
       if (!groups.has(f.group)) groups.set(f.group, []);
