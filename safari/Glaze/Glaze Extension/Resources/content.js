@@ -1728,7 +1728,8 @@
       try { chrome.storage.local.set({ courseSlots }); } catch { /* reloaded */ }
     }
     const { tint, tinted: picked } = settings.courses;
-    if (!tint) return null;
+    // Cut off by a reload or update of Glaze (no runtime id), ticks since removed never arrive: no tint.
+    if (!tint || !chrome.runtime?.id) return null;
     // The editor's preview is its first ticked course: the section carries that course's slot and color.
     if (!cid) return isPreview && slot && picked.length ? { key: `${slot};${sec.style.cssText}`, slot, vars: sec.style.cssText } : null;
     // Ticked by id; a slot number is a tick from before each course had its own.
@@ -1749,8 +1750,10 @@
   };
   let tinted = null; // the key of the course whose color is painted now
   let palette = GZ_DEFAULTS.colors; // the colors painted, tint included
-  // A course given a look of its own wears it on its pages (GZ_COURSE_LOOK); flush() re-checks.
-  const lookHere = () => settings.courses.looks[courseId()] || null;
+  // A course given a look of its own wears it on its pages (GZ_COURSE_LOOK); flush() re-checks. Once
+  // Glaze is reloaded or updated under the tab, this script is cut off from storage (no runtime id) and
+  // would keep switching to looks since removed: it wears none until the page loads again.
+  const lookHere = () => (chrome.runtime?.id && settings.courses.looks[courseId()]) || null;
   let looked = null; // the course look painted now
   let worn = settings; // the settings painted now: the student's, or a course's look over them
 
@@ -1776,7 +1779,7 @@
 
   const applySettings = () => {
     looked = lookHere();
-    const s = (worn = GZ_COURSE_LOOK(settings, courseId()));
+    const s = (worn = looked ? GZ_COURSE_LOOK(settings, courseId()) : settings);
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);

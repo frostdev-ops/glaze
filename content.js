@@ -1728,7 +1728,8 @@
       try { chrome.storage.local.set({ courseSlots }); } catch { /* reloaded */ }
     }
     const { tint, tinted: picked } = settings.courses;
-    if (!tint) return null;
+    // Cut off by a reload or update of Glaze (no runtime id), ticks since removed never arrive: no tint.
+    if (!tint || !chrome.runtime?.id) return null;
     // The editor's preview is its first ticked course: the section carries that course's slot and color.
     if (!cid) return isPreview && slot && picked.length ? { key: `${slot};${sec.style.cssText}`, slot, vars: sec.style.cssText } : null;
     // Ticked by id; a slot number is a tick from before each course had its own.
