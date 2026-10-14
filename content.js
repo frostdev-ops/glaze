@@ -2264,6 +2264,23 @@
     img.src = url;
   };
 
+  // Canvas page changes: every click is a full navigation, so both pages opt in to a cross-document view
+  // transition (Chrome 126+, Safari 18.2+): the old page stays up until the new one has painted, then they
+  // crossfade (canvas.css, Page transitions). An at-rule can't sit under an attribute selector, so the opt-in is
+  // a style element that exists only while motion and entrances are on. A page that is revealed inside a
+  // transition is marked, so its own entrances (a second movement) stay off; sticky, because letting go would
+  // restart them.
+  let fade = null;
+  const syncPageFade = () => {
+    const want = !ultra && links.length && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-enter');
+    if (want && !fade) {
+      fade = document.createElement('style');
+      fade.textContent = '@view-transition { navigation: auto; }';
+      (document.head || html).appendChild(fade);
+    } else if (!want && fade) { fade.remove(); fade = null; }
+  };
+  if (!ultra) addEventListener('pagereveal', (e) => { if (e.viewTransition) setAttr('data-gz-vt-in', true); });
+
   const applySettings = () => {
     looked = lookHere();
     const s = (worn = looked ? GZ_COURSE_LOOK(settings, courseId()) : settings);
@@ -2330,6 +2347,7 @@
     setAttr('data-gz-no-trans', !s.motion.transitions);
     setAttr('data-gz-no-enter', !s.motion.enter);
     setAttr('data-gz-no-hover', !s.motion.hover);
+    syncPageFade();
     setAttr('data-gz-footer', s.footer);
     // Extras: CSS is gated on these; a switch turned on needs one pass over what is already there.
     const was = enhanced;
@@ -2413,6 +2431,14 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
         const l = document.createElement('link');
         l.rel = 'stylesheet';
         l.href = chrome.runtime.getURL(f);
+        // Canvas: hold the first paint until the sheets are in. A script-inserted sheet doesn't block rendering
+        // on its own, so a page's first paint was Canvas's own, white. Chrome 105+, Safari 18.2+; ignored
+        // elsewhere, and only counts while the document has no body (as here, at document_start). A sheet that
+        // fails lets go at once; one that never answers would hold the page forever, so it lets go after 1 s.
+        if (!ultra && !document.body) {
+          l.setAttribute('blocking', 'render');
+          setTimeout(() => l.removeAttribute('blocking'), 1000);
+        }
         // The tint reads the course color theme.css resolves: none before it loads.
         l.addEventListener('load', () => { if (tintKey() !== tinted) reapply(); }, { once: true });
         (document.head || html).appendChild(l);
@@ -2441,6 +2467,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     for (const l of links) l.remove();
     links = [];
     themeEditors();
+    syncPageFade();
     stopScene();
     stopSweep();
     clearSettings();
@@ -2454,7 +2481,16 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     try {
       chrome.storage.sync.get(null, (raw) => res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw)));
     } catch { res(GZ_SANITIZE()); }
+  }).then((s) => {
+    // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
+    if (!ultra) try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
+    return s;
   });
+  // Canvas: the settings are kept in this tab's sessionStorage too, and the next page starts from them. Its
+  // first paint waits for the sheets (enable), and storage can answer after that: a light look's page
+  // flashed the default dark palette first.
+  const KEPT = 'gz-settings';
+  if (!ultra) try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
   // Theme on before storage answers: most people leave it on, and this way the first paint is
   // already themed. If it turns out to be off, it comes straight back off.
   enable();

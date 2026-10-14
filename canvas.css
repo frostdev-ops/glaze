@@ -259,9 +259,28 @@ html:not([data-gz-dark-theme]) #header .ic-app-header__logomark { filter: invert
 /* ---- focus: always the accent, whatever ring Canvas draws ---- */
 :is(:focus, :focus-visible) { outline-color: var(--gz-accent) !important; } /* InstUI draws its ring on :focus, in its brand blue */
 
-/* ---- entrances: a page fades up once it loads (the cards stagger, below). Canvas loads a page at a time,
-   so unlike Ultra there is no route change to hold or crossfade. ---- */
+/* ---- entrances: a page fades up once it loads (the cards stagger, below). Canvas loads a page at a time;
+   a page reached inside a view transition skips this (Page transitions, below). ---- */
 #content, #right-side { animation: var(--gz-enter-page); }
+
+/* ---- Page transitions ----
+   While motion and entrances are on, content.js opts both pages of a navigation into a cross-document view
+   transition (@view-transition, in a style element): the old page stays up until the new one has painted, then
+   the two crossfade, so a page change never shows Canvas's own white page or a half-built one. Chrome 126+,
+   Safari 18.2+; elsewhere a page just loads and keeps its own fade-up above. The page is the root snapshot;
+   the rail and the course navigation are groups of their own, so they stay put while what is between them
+   changes. Timing is --gz-t-page, which motion.css already puts on the root group. */
+html:not([data-gz-motion="off"], [data-gz-no-enter]) #header { view-transition-name: gz-rail; }
+html:not([data-gz-motion="off"], [data-gz-no-enter]) #left-side { view-transition-name: gz-course-nav; }
+::view-transition-group(*) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
+/* Expressive: the new page also resolves from a blur. Replacing the UA's animation drops its plus-lighter blend,
+   without which the two half-faded pages let what is under them show through mid-fade: set it here. */
+html[data-gz-motion="expressive"]::view-transition-new(root) { animation-name: gz-vt-focus; }
+html[data-gz-motion="expressive"]::view-transition-old(root), html[data-gz-motion="expressive"]::view-transition-new(root) { mix-blend-mode: plus-lighter; }
+@keyframes gz-vt-focus { from { opacity: 0; filter: blur(var(--gz-reveal-blur)); } }
+/* A page revealed inside the transition is brought in by it (content.js marks it): its own fade-up and the
+   cards' stagger would be a second movement. */
+:root[data-gz-vt-in] { --gz-enter-page: none; --gz-enter: none; --gz-stagger: 0s; }
 
 /* ---- the long tail: content.js tags anything still painted light / with dark text. (Only on a dark
    palette: on a light one Canvas's white is already the surface.) The footer tags (data-gz-fixed-bottom,
