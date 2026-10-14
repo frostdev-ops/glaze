@@ -14,7 +14,7 @@
   const C = GZ_COLOR;
   const html = document.documentElement;
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -60,6 +60,17 @@
   // theme they glow. Their size is only known once loaded.
   const isRule = (img) => img.naturalHeight > 0 && img.naturalHeight <= 40 && img.naturalWidth >= 8 * img.naturalHeight;
   const tagRule = (img) => { if (isRule(img)) img.setAttribute('data-gz-rule', ''); };
+  // Canvas: InstUI writes its brand blue (#2B7ABC, and darker shades) into its buttons, links and icons as a literal, so no
+  // variable reaches it. Cool blues on InstUI's own (css-hash) elements are tagged, and canvas.css paints them the accent;
+  // an instructor's blue text, which has no such class, is left as written. The fills, text and icons it sweeps are
+  // read here for that alone, so it runs on a light palette too.
+  const instBlue = (c) => !!c && c.a >= 0.5 && c.b > c.g + 25 && c.g > c.r + 25;
+  const tagBrand = (cs, tags) => {
+    if (instBlue(C.parse(cs.backgroundColor))) tags.push('data-gz-brand-bg');
+    if (instBlue(C.parse(cs.color))) tags.push('data-gz-brand-fg');
+  };
+  // A field's own text is its value, not a text node; on Canvas an InstUI field in a modal (a portal, outside #application) keeps Canvas's dark ink.
+  const FIELD = /^(input|textarea|select)$/i;
   const sweepEls = (els) => {
     const pending = [];
     for (const e of els) {
@@ -68,9 +79,15 @@
         else e.addEventListener('load', () => tagRule(e), { once: true });
         continue;
       }
+      // An InstUI icon's colour is on the <svg> itself, which the sweep otherwise skips.
+      if (!ultra && e.tagName === 'svg') {
+        if (e.getAttribute('class')?.includes('css-') && instBlue(C.parse(getComputedStyle(e).color))) pending.push([e, ['data-gz-brand-fg']]);
+        continue;
+      }
       if (!e.isConnected || SKIP.test(e.tagName) || e.id.startsWith('gz-') || e.closest('svg, [id^="gz-"]')) continue;
       const cs = getComputedStyle(e);
       const tags = [];
+      if (!ultra && e.getAttribute('class')?.includes('css-')) tagBrand(cs, tags);
       // Light paper and dark text only clash with a dark theme. On a light preset Ultra's white is
       // already close to the surface, and repainting it would flatten the chips and badges on it.
       if (darkTheme) {
@@ -79,7 +96,7 @@
         const fg = C.parse(cs.color);
         // Dark text on a coloured fill (Submit, filled chips) is meant to be dark.
         const onFill = (bg && bg.a >= 0.5 && C.saturated(bg)) || C.same(fg, accentInk);
-        if (fg && fg.a >= 0.5 && !C.saturated(fg) && C.brightness(fg) < 0.35 && !onFill && hasText(e)) tags.push('data-gz-dark');
+        if (fg && fg.a >= 0.5 && !C.saturated(fg) && C.brightness(fg) < 0.35 && !onFill && (hasText(e) || (!ultra && FIELD.test(e.tagName)))) tags.push('data-gz-dark');
       }
       const r = e.getBoundingClientRect();
       // Fixed to the bottom of the VIEWPORT (Ultra's action bars, the help button): outside the
@@ -374,7 +391,7 @@
     const roots = outermost(dirty);
     dirty.clear();
     if (full) { full = false; sweepAll(); if (ultra) tagExtras([document.body]); } else { sweepRoots(roots); if (ultra) tagExtras(roots); }
-    if (!ultra) { tagCards(); return placeScene(); } // Canvas: the sweep, the card grades and the scene; everything below is Ultra's
+    if (!ultra) { tagCards(); themeEditors(); return placeScene(); } // Canvas: the sweep, the card grades, the editor frames and the scene; everything below is Ultra's
     if (tip && ultraTipShown()) hideTip();
     paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
@@ -2310,12 +2327,51 @@
     if (!s.look.tooltips) hideTip();
     if (observer) syncDocTools();
     syncScene();
+    themeEditors();
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
     for (const k of attrs) html.removeAttribute(k);
     vars.clear();
     attrs.clear();
+  };
+
+  // ---- Canvas: the rich text editor's writing area ---------------------------------------------
+  // TinyMCE (discussion replies, text submissions, the inbox) writes in a same-origin iframe that it fills by script.
+  // The content script isn't injected there (about:blank, and the manifest doesn't ask for it), and canvas.css doesn't
+  // reach into it, so it would stay white. The page reaches in instead: the frame gets one small <style>, the palette's
+  // values copied from <html> (the --gz-* vars, color-scheme) and the few rules a writing area needs. It is rewritten
+  // on every sweep pass (a new editor is an added node), by applySettings (a palette change reaches an open editor),
+  // and on the frame's load, for a frame TinyMCE hadn't filled yet when the pass saw it. It is in the frame's <head>;
+  // what Canvas posts is the body's HTML, so none of it is saved. disable() calls this after dropping the links: it removes it.
+  const EDITOR_CSS = `html, body.mce-content-body { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+body.mce-content-body { caret-color: var(--gz-accent); }
+body.mce-content-body[data-mce-placeholder]::before { color: var(--gz-ink-faint) !important; }
+body.mce-content-body a { color: var(--gz-accent); }
+body.mce-content-body blockquote { border-left: 3px solid var(--gz-accent); color: var(--gz-ink-muted); }
+body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-strong); }
+::selection { background: var(--gz-accent-soft); color: var(--gz-ink); }`;
+  const waiting = new WeakSet();
+  const themeEditors = () => {
+    if (ultra) return;
+    for (const frame of document.querySelectorAll('iframe.tox-edit-area__iframe')) {
+      let doc;
+      try { doc = frame.contentDocument; } catch { continue; }
+      let style = doc?.getElementById('gz-editor');
+      if (!links.length) { style?.remove(); continue; }
+      if (!doc?.body?.classList.contains('mce-content-body')) {
+        if (!waiting.has(frame)) { waiting.add(frame); frame.addEventListener('load', themeEditors, { once: true }); }
+        continue;
+      }
+      const css = `:root { ${[...vars].map((k) => `${k}: ${html.style.getPropertyValue(k)}`).join('; ')} }\n${EDITOR_CSS}`
+        + (darkTheme ? '\nbody.mce-content-body img:not(:hover) { filter: brightness(0.88); }' : '');
+      if (!style) {
+        style = doc.createElement('style');
+        style.id = 'gz-editor';
+        (doc.head || doc.documentElement).append(style);
+      }
+      if (style.textContent !== css) style.textContent = css;
+    }
   };
 
   const enable = () => {
@@ -2352,6 +2408,7 @@
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    themeEditors();
     stopScene();
     stopSweep();
     clearSettings();
