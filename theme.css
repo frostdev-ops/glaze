@@ -272,6 +272,8 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 aside, .todo-panel { background: var(--gz-ground) !important; border-left: 1px solid var(--gz-line) !important; }
 /* A course gradebook's student header is an <aside> too, but not a side panel. */
 aside.student-grade-overview { border-left: 0 !important; }
+/* Table header bands (the gradebook's) end in rounded corners; collapsed tables ignore border-radius. */
+#site-wrap thead:has(.MuiTableCell-head) { clip-path: inset(0 round var(--gz-radius-sm)); }
 .MuiAccordion-root { overflow: hidden; }
 .MuiAccordion-root, .MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
 .MuiAccordionDetails-root { border-top: 1px solid var(--gz-line) !important; }
