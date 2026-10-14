@@ -848,9 +848,16 @@
     return document.scrollingElement;
   };
   const outlineRows = (cid) => (OUTLINE.test(location.pathname) && courseId() === cid ? document.querySelectorAll(ROWS) : []);
+  // Also kept in this tab's sessionStorage, so a reload finds it even when storage.local can't be
+  // reached: an extension updated or reloaded under the tab leaves the tab's old script without it.
+  const tabPlace = (cid) => `gz-place:${cid}`;
   const savePlace = () => {
     const p = place;
-    if (p?.loaded) local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, { open: [...p.open], top: p.top }, Date.now()) })));
+    if (!p?.loaded) return;
+    const v = { open: [...p.open], top: p.top };
+    const now = Date.now();
+    try { sessionStorage.setItem(tabPlace(p.cid), JSON.stringify(GZ_PAGE.place(null, p.cid, v, now)[p.cid])); } catch { /* blocked or full */ }
+    local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, v, now) })));
   };
   const backTo = () => {
     const p = place;
@@ -888,13 +895,17 @@
     if (!place || place.away || place.cid !== cid) {
       const p = { cid, open: new Set(), top: 0, seen: new Map(), back: { at: Date.now(), opened: new Set(), clicked: 0, quiet: 0 } };
       place = p;
-      local((s) => s.get('coursePlace', (r) => {
-        const was = r?.coursePlace?.[cid];
+      // The newer of what this device and this tab kept.
+      let tab = null;
+      try { tab = JSON.parse(sessionStorage.getItem(tabPlace(cid))); } catch { /* none */ }
+      const got = (kept) => {
+        const was = tab?.at > (kept?.at || 0) ? tab : kept;
         p.open = new Set([...(Array.isArray(was?.open) ? was.open : []), ...p.open]);
-        if (was?.top > 0) p.top = was.top;
+        if (was?.top > 0) p.top = +was.top;
         p.loaded = true;
         if (p.back) { p.back.ready = true; backTo(); }
-      }));
+      };
+      try { chrome.storage.local.get('coursePlace', (r) => got(r?.coursePlace?.[cid])); } catch { got(null); }
     }
     let changed = false;
     for (const row of rows) {
