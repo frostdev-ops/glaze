@@ -170,18 +170,19 @@
   // names each Ultra item's course (a Canvas item brings its own, and its address, which Ultra's never do).
   let dueSoon = null;
   const dueWeek = () => (dueSoon ||= new Promise((res) => {
-    try { chrome.storage.local.get(['dueWeek', 'dueWeekAt'], res); } catch { res({}); }
+    try { chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'dueWeekFrom'], res); } catch { res({}); }
   }).then((r) => {
     const now = Date.now();
-    // A list kept by the other site (someone with both open) is no use here: its items open nothing.
-    const other = !(r?.dueWeek || []).every((d) => !d.url === ultra);
+    // A list kept by another site (someone with Blackboard and Canvas, or two schools' Canvas, open) is no use
+    // here: its items open nothing, or the wrong school's. Even an empty one says nothing about this site.
+    const other = r?.dueWeekFrom !== location.origin;
     const kept = other ? [] : r?.dueWeek || [];
     if (!other && now - (r?.dueWeekAt || 0) < 600000) return kept;
     const at = (days) => new Date(now + days * 864e5).toISOString();
     const ask = ultra ? api(`/calendars/todo/studentItems?since=${at(0)}&until=${at(7)}`).then((j) => GZ_DUE_WEEK(j, now))
       : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
     return ask.then((list) => {
-      try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now() }); } catch { /* reloaded */ }
+      try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now(), dueWeekFrom: location.origin }); } catch { /* reloaded */ }
       return list;
     }, () => kept);
   }));
