@@ -262,7 +262,7 @@
   // serves every card, asked once a page load; the command palette's course list is that answer too.
   // ponytail: the first 100 courses, no paging.
   let canvasList = null;
-  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&per_page=100')
+  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&per_page=100')
     .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
   const tagCanvasCards = () => {
     if (!document.querySelector('.ic-DashboardCard')) return;
