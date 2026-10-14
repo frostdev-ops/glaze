@@ -1,4 +1,4 @@
-# Privacy Policy — Glaze for Blackboard Ultra
+# Privacy Policy — Glaze
 
 _Last updated: 2026-10-14_
 
@@ -96,6 +96,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
   typed, like any image on a web page. That site sees an ordinary image request.
 
 The only link in the extension is the footer link to the project's GitHub page, which you click yourself.
+
+## Recognizing Canvas
+
+To recognize Canvas on any school's domain, Glaze checks the head of each https page for Canvas's own stylesheet link and stops at the page body; nothing is read beyond that, and nothing leaves the browser. When it finds Canvas, it remembers that site so it can style it from the start next time.
 
 ## Permissions
 

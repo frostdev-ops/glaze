@@ -2,13 +2,13 @@
 
 ## Name
 
-Glaze for Blackboard Ultra
+Glaze
 
 ## Short summary (132 char max)
 
-> Make Blackboard Ultra yours: palettes, fonts, animated backgrounds and due-date countdowns. Works on any institution's Ultra.
+> Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras on Ultra. Works at any school.
 
-(125 characters.)
+(126 characters.)
 
 ## Category
 
@@ -67,7 +67,7 @@ Everything lives in one editor page with a live preview; the popup keeps the qui
 your theme as a code a classmate can paste (it previews before it applies), and back up and restore
 your settings as a file.
 
-Glaze works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
+Glaze works on Blackboard Ultra and Canvas. On Canvas it themes the page (palettes, fonts, backgrounds, motion); the extras are for Ultra. It works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
 Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed list of universities.
 
 Privacy: Glaze stores your settings in Chrome's sync storage, and your course names, which grades you've seen, where you were in
