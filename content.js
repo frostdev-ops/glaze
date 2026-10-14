@@ -71,9 +71,22 @@
     if (instBlue(C.parse(cs.backgroundColor))) tags.push('data-gz-brand-bg');
     if (instBlue(C.parse(cs.color))) tags.push('data-gz-brand-fg');
   };
+  const sweepColors = (e, cs) => {
+    if (cs.transitionDuration === '0s') return cs;
+    const colors = { backgroundColor: cs.backgroundColor, color: cs.color };
+    // InstUI's transition can still show the old state after its class changes.
+    for (const a of e.getAnimations()) {
+      const k = a.transitionProperty === 'background-color' ? 'backgroundColor' : a.transitionProperty === 'color' ? 'color' : null;
+      if (k) colors[k] = a.effect?.getKeyframes().at(-1)?.[k] || colors[k];
+    }
+    return colors;
+  };
   // A field's own text is its value, not a text node; on Canvas an InstUI field in a modal (a portal, outside #application) keeps Canvas's dark ink.
   const FIELD = /^(input|textarea|select)$/i;
+  const SWEEP_TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-brand-bg', 'data-gz-brand-fg'];
   const sweepEls = (els) => {
+    // Read the site's current state, without our previous pass's overrides.
+    for (const e of els) for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a);
     const pending = [];
     for (const e of els) {
       if (e.tagName === 'IMG') {
@@ -83,19 +96,21 @@
       }
       // An InstUI icon's colour is on the <svg> itself, which the sweep otherwise skips.
       if (!ultra && e.tagName === 'svg') {
-        if (e.getAttribute('class')?.includes('css-') && instBlue(C.parse(getComputedStyle(e).color))) pending.push([e, ['data-gz-brand-fg']]);
+        if (e.getAttribute('class')?.includes('css-') && instBlue(C.parse(sweepColors(e, getComputedStyle(e)).color))) pending.push([e, ['data-gz-brand-fg']]);
         continue;
       }
       if (!e.isConnected || SKIP.test(e.tagName) || e.id.startsWith('gz-') || e.closest('svg, [id^="gz-"]')) continue;
       const cs = getComputedStyle(e);
+      const instui = !ultra && e.getAttribute('class')?.includes('css-');
+      const colors = instui ? sweepColors(e, cs) : cs;
       const tags = [];
-      if (!ultra && e.getAttribute('class')?.includes('css-')) tagBrand(cs, tags);
+      if (instui) tagBrand(colors, tags);
       // Light paper and dark text only clash with a dark theme. On a light preset Ultra's white is
       // already close to the surface, and repainting it would flatten the chips and badges on it.
       if (darkTheme) {
-        const bg = C.parse(cs.backgroundColor);
+        const bg = C.parse(colors.backgroundColor);
         if (bg && bg.a >= 0.5 && !C.saturated(bg) && C.brightness(bg) > 0.4 && cs.backgroundImage === 'none') tags.push('data-gz-light');
-        const fg = C.parse(cs.color);
+        const fg = C.parse(colors.color);
         // Dark text on a coloured fill (Submit, filled chips) is meant to be dark.
         const onFill = (bg && bg.a >= 0.5 && C.saturated(bg)) || C.same(fg, accentInk);
         if (fg && fg.a >= 0.5 && !C.saturated(fg) && C.brightness(fg) < 0.35 && !onFill && (hasText(e) || (!ultra && FIELD.test(e.tagName)))) tags.push('data-gz-dark');
@@ -2413,7 +2428,8 @@
   // on every sweep pass (a new editor is an added node), by applySettings (a palette change reaches an open editor),
   // and on the frame's load, for a frame TinyMCE hadn't filled yet when the pass saw it. It is in the frame's <head>;
   // what Canvas posts is the body's HTML, so none of it is saved. disable() calls this after dropping the links: it removes it.
-  const EDITOR_CSS = `html, body.mce-content-body { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+  // Canvas compares this default token to the selection's colour before deciding to save a foreground.
+  const EDITOR_CSS = `html, body.mce-content-body { --ic-brand-font-color-dark: var(--gz-ink) !important; background: var(--gz-surface) !important; color: var(--ic-brand-font-color-dark) !important; }
 body.mce-content-body { caret-color: var(--gz-accent); }
 body.mce-content-body[data-mce-placeholder]::before { color: var(--gz-ink-faint) !important; }
 body.mce-content-body a { color: var(--gz-accent); }
