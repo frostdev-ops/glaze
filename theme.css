@@ -337,6 +337,9 @@ th { background: var(--gz-surface) !important; }
 #site-wrap .messages-header .summary { border-bottom: 1px solid var(--gz-line) !important; }
 #site-wrap .messages-container-summary .summary { background: transparent !important; border: 0 !important; }
 #site-wrap .messages-container-summary { border-radius: var(--gz-radius) !important; overflow: hidden; }
+/* Courses list/grid switch: Ultra's grey inset ring and 2px corners around rounded buttons. */
+#site-wrap [class*="makeStylestoggleContainer-"] { box-shadow: none !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap [class*="makeStylestoggleContainer-"] > * { border-radius: var(--gz-radius-sm) !important; }
 /* Empty-state copy is Noto Serif in Ultra and usernames are Open Sans; the theme is one sans everywhere. */
 #site-wrap :where(p, .main, bb-ui-username, bb-ui-username *, bb-username, bb-username *) { font-family: inherit !important; }
 /* Headings take the heading font (content.js sets it to inherit when it follows the text), code the
