@@ -113,6 +113,10 @@
     .field.wide { grid-template-columns: minmax(0, 1fr); }
     .field > span:first-child { grid-column: 1 / -1; }
     .seg { flex-wrap: wrap; border-radius: 14px; }
+    /* A course's name gets the line beside its swatch; its Look, Tint and Reset wrap under it. */
+    .courses { gap: 0.9rem; }
+    .courses li { display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; }
+    .courses .name { flex: 1 1 calc(100% - 4rem); white-space: normal; overflow-wrap: anywhere; }
   }
 </style>
 </head>

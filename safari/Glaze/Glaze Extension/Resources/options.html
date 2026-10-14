@@ -56,7 +56,7 @@
   .mine li { display: flex; align-items: center; gap: 0.6rem; }
   .mine input[type="text"] { flex: 1; }
   .courses { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
-  .courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 0.75rem; align-items: center; }
+  .courses li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 0.75rem; align-items: center; }
   .courses .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
@@ -113,6 +113,10 @@
     .field.wide { grid-template-columns: minmax(0, 1fr); }
     .field > span:first-child { grid-column: 1 / -1; }
     .seg { flex-wrap: wrap; border-radius: 14px; }
+    /* A course's name gets the line beside its swatch; its Look, Tint and Reset wrap under it. */
+    .courses { gap: 0.9rem; }
+    .courses li { display: flex; flex-wrap: wrap; gap: 0.4rem 0.75rem; }
+    .courses .name { flex: 1 1 calc(100% - 4rem); white-space: normal; overflow-wrap: anywhere; }
   }
 </style>
 </head>
@@ -299,6 +303,8 @@
           <span class="desc">Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.previews"><span>Folder previews</span>
           <span class="desc">Hover a closed folder in course content to see what is inside, what is done and what is due.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.place"><span>Remember your place</span>
+          <span class="desc">Coming back to a course, its content opens the folders you left open and scrolls back to where you were. Kept on this device.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.progress"><span>Course progress</span>
           <span class="desc">A bar at the top of course content adding up how much of the course you have completed.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.newgrades"><span>New-grade badges</span>
