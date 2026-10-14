@@ -2,6 +2,7 @@
 // render the promo tiles from store/promo.html. Runs the real extension in a throwaway Chromium
 // profile; no Blackboard account or real coursework. Animated backgrounds hold still (reduced motion).
 //   NODE_PATH=/path/to/node_modules node scripts/store-screenshots.js     (needs playwright + its chromium)
+//   CHROME=/path/to/chrome runs that browser instead (a Chrome for Testing build, say).
 const { chromium } = require('playwright');
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
@@ -40,7 +41,7 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
   const base = `chrome-extension://${extensionId(ext)}`;
 
   const context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-    channel: 'chromium', headless: true, viewport: size, deviceScaleFactor: 1,
+    ...(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chromium' }), headless: true, viewport: size, deviceScaleFactor: 1,
     colorScheme: 'dark', reducedMotion: 'reduce',
     // SwiftShader: WebGL for the animated backgrounds in headless mode.
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
@@ -63,12 +64,19 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
     await apply(opts);
     const file = path.join(out, `${name}.jpg`);
     if (target === 'popup') {
-      // The popup is a 320px page; show it over a themed course, where Chrome would open it.
+      // The popup is a 360px page; show it over a themed course, where Chrome would open it. Its due
+      // tile reads what the content script last saw: the sample course's own items.
+      await page.evaluate((now) => chrome.storage.local.set({
+        dueWeekAt: now,
+        seenCourses: { _1_1: { name: 'FA26-CS101-01', slot: '2' } },
+        dueWeek: [['Quiz: Programs and Apps', 1], ['Assignment 1: Creating a Presentation with Pictures', 3], ['Discussion: Software Piracy', 5]]
+          .map(([title, days]) => ({ title, due: now + days * 864e5, cid: '_1_1' })),
+      }), clock.getTime());
       await page.goto(`${base}/preview.html`);
       await settle();
       const course = path.join(tmp, 'course.png');
       await page.screenshot({ path: course });
-      await page.setViewportSize({ width: 320, height: 800 });
+      await page.setViewportSize({ width: 360, height: 800 });
       await page.goto(`${base}/popup.html`);
       await settle();
       const popup = path.join(tmp, 'popup.png');
