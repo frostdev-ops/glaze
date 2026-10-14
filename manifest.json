@@ -5,7 +5,11 @@
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
-    "storage"
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*/*"
   ],
   "minimum_chrome_version": "113",
   "browser_specific_settings": {
@@ -61,6 +65,19 @@
       ],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "https://*/*"
+      ],
+      "exclude_matches": [
+        "https://*/ultra/*",
+        "https://*.instructure.com/*"
+      ],
+      "js": [
+        "lib/detect.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [

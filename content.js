@@ -43,8 +43,9 @@
   // `https://*/ultra/*` matches any host with that path, so confirm this is really Blackboard
   // Ultra before touching the page. Checked once, when the body exists.
   const isUltra = () => !!document.querySelector('#site-wrap, [class*="bb-"], [id*="bb-"], base[href*="ultra"]');
-  // Likewise `https://*.instructure.com/*` is every page and frame on that host. Canvas's own pages sit
-  // in this wrapper; a tool framed inside one doesn't, and stays as it is.
+  // Likewise `https://*.instructure.com/*`, and each school's own Canvas host that lib/detect.js found, is
+  // every page and frame on that host. Canvas's own pages sit in this wrapper; a tool framed inside one
+  // doesn't, and stays as it is.
   const isCanvas = () => !!document.querySelector('#application.ic-app');
 
   // ---- long tail -------------------------------------------------------------------------------

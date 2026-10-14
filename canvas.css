@@ -1,6 +1,6 @@
-/* Glaze — Canvas LMS. The stylesheet content.js loads on Canvas pages (https://*.instructure.com) in place
-   of theme.css and extras.css, which are written against Blackboard Ultra's markup. motion.css loads
-   beside it, so the motion knobs (--gz-t, --gz-ease, --gz-enter…) are here to read.
+/* Glaze — Canvas LMS. The stylesheet content.js loads on Canvas pages (*.instructure.com and schools' own
+   hosts) in place of theme.css and extras.css, which are written against Blackboard Ultra's markup.
+   motion.css loads beside it, so the motion knobs (--gz-t, --gz-ease, --gz-enter…) are here to read.
    Like theme.css it is matched on what content.js puts on <html>: the --gz-* vars (the palette, look
    values, fonts, background) and the data-gz-* attributes (data-gz-dark-theme, data-gz-density,
    data-gz-bg, data-gz-motion…), plus the tags the sweep adds to elements (data-gz-light, data-gz-dark…).
