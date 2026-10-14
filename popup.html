@@ -5,61 +5,112 @@
 <title translate="no">Glaze</title>
 <link rel="stylesheet" href="ui.css">
 <style>
-  body { width: 320px; padding: 0.875rem 1rem 1rem; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
-  section { padding: 0.75rem 0; border-top: 1px solid var(--gz-line); }
-  body.off section { opacity: 0.45; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem 0.75rem; flex-wrap: wrap; }
-  .row h2 { margin: 0; }
-  #editor { width: 100%; margin-top: 0.25rem; }
-  .hint { margin-top: 0.6rem; }
+  /* Tiles, Control Center style: the switch, the look, what's due, palette, motion and the editor,
+     all in view at once; the editor is the wide tile at the bottom. */
+  body { width: 360px; box-sizing: border-box; padding: 14px; }
+  .top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .tile {
+    box-sizing: border-box; min-width: 0; margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+    font: inherit; text-align: left; color: var(--gz-ink); background: var(--gz-surface);
+    border: 1px solid var(--gz-line); border-radius: 18px;
+    transition: transform 0.2s var(--gz-ease), border-color 0.2s var(--gz-ease), background 0.2s var(--gz-ease);
+  }
+  button.tile:hover { color: var(--gz-ink); border-color: var(--gz-line-strong); transform: translateY(-1px); }
+  .wide { grid-column: span 2; }
+  .tile b { font-size: 15px; }
+  .cap { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-faint); }
+  .power { min-height: 116px; justify-content: space-between; align-items: flex-start; }
+  .power[aria-pressed="true"], .power[aria-pressed="true"]:hover { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: transparent; }
+  .power .icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, currentColor 14%, transparent); }
+  .power small { font-weight: 600; opacity: 0.75; }
+  .tile > span:last-child:not(.icon) { display: flex; flex-direction: column; min-width: 0; }
+  .look { min-height: 116px; padding: 8px; }
+  .look > span:last-child { padding: 0 4px; }
+  .look b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thumb { height: 52px; border-radius: 11px; border: 1px solid; display: flex; align-items: flex-end; padding: 5px 8px; box-sizing: border-box; font-weight: 700; font-size: 18px; }
+  .due { flex-direction: row; align-items: center; gap: 14px; min-height: 96px; }
+  .due .count { display: flex; flex-direction: column; flex: none; width: 74px; }
+  .due .count b { font-size: 34px; line-height: 1; color: var(--gz-accent); }
+  .due .count small { font-size: 12px; color: var(--gz-ink-muted); }
+  .due ul { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--gz-line); display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; flex: 1; min-width: 0; }
+  .due li { display: flex; justify-content: space-between; gap: 8px; }
+  .due li b { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .due li small { font-size: 12px; color: var(--gz-ink-muted); white-space: nowrap; }
+  .due li:first-child small { color: var(--gz-accent); }
+  .due li.note { display: block; color: var(--gz-ink-muted); }
+  .palette .swatches { gap: 8px; }
+  .motion { justify-content: space-between; }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 24px; }
+  .bars i { width: 8px; border-radius: 3px; background: var(--gz-line-strong); transition: background 0.2s var(--gz-ease); }
+  .bars i:nth-child(1) { height: 8px; } .bars i:nth-child(2) { height: 16px; } .bars i:nth-child(3) { height: 24px; }
+  .motion[data-level="subtle"] .bars i:nth-child(-n+2), .motion[data-level="expressive"] .bars i { background: var(--gz-accent); }
+  .editor { flex-direction: row; align-items: center; gap: 14px; background: var(--gz-accent-soft); border-color: color-mix(in srgb, var(--gz-accent) 40%, transparent); }
+  .editor .icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--gz-accent-ink); background: var(--gz-accent); }
+  .editor .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .editor small { font-size: 12px; color: var(--gz-ink-muted); }
   /* Notes for this version not seen yet: a dot, nothing on the toolbar icon. */
-  #editor.new::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 0.45rem; border-radius: 50%; background: currentColor; vertical-align: middle; }
-  /* Due this week: what the content script last saw, soonest first. */
-  .due { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
-  .due li { display: grid; grid-template-columns: 1fr auto; gap: 0 0.5rem; }
-  .due b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .due span { grid-column: 1 / -1; font-size: 11px; color: var(--gz-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .due small { font-size: 11px; color: var(--gz-accent); white-space: nowrap; }
+  .editor.new b::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 0.45rem; border-radius: 50%; background: var(--gz-accent); vertical-align: middle; }
+  .hint { margin: 10px 2px 0; }
+  body.off .tiles > :not(.power, .editor) { opacity: 0.45; }
+  /* All eight looks, over the tiles. */
+  #sheet { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 14px; border: 0; color: var(--gz-ink); background: var(--gz-surface-2); }
+  #sheet header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+  #sheet .back { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; }
+  #sheet .looks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* Safari on iPhone shows the popup as a full-width sheet; on iPad, a popover sized to this minimum. */
-  @media (hover: none) and (pointer: coarse) { body { width: auto; min-width: 340px; } }
+  @media (hover: none) and (pointer: coarse) { body { width: auto; min-width: 360px; } .tile { padding: 12px 14px; } }
+  @media (hover: none) { button.tile:hover { transform: none; } }
 </style>
 </head>
 <body>
-  <header>
+  <header class="top">
+    <svg width="18" height="24" viewBox="26 16 76 102" aria-hidden="true"><defs><linearGradient id="drop" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#6fdcff"/><stop offset="1" stop-color="#17c8f4"/></linearGradient></defs><path d="M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z" fill="url(#drop)"/><ellipse cx="79" cy="76" rx="10" ry="15" transform="rotate(20 79 76)" fill="#fff" opacity="0.5"/></svg>
     <h1 translate="no">Glaze</h1>
-    <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
   </header>
 
-  <section id="due" hidden>
-    <h2>Due this week</h2>
-    <ul class="due" id="due-list"></ul>
-  </section>
+  <main class="tiles">
+    <button type="button" class="tile power" id="enabled" aria-label="Theme on / off" aria-pressed="true">
+      <span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></svg></span>
+      <span><b>Theme</b><small id="power-state">On</small></span>
+    </button>
 
-  <section>
-    <h2>Looks</h2>
-    <div class="looks" id="looks"></div>
-  </section>
-  <section>
-    <h2>Palette</h2>
-    <div class="swatches" id="presets"></div>
-  </section>
+    <button type="button" class="tile look" id="look" aria-haspopup="dialog">
+      <span class="thumb" id="look-thumb" aria-hidden="true" translate="no">Aa</span>
+      <span><span class="cap">Look</span><b id="look-name" translate="no"></b></span>
+    </button>
 
-  <section>
-    <div class="row">
-      <h2>Motion</h2>
-      <div class="seg" id="motion" role="radiogroup" aria-label="Motion level">
-        <label><input type="radio" name="motion" value="off">Off</label>
-        <label><input type="radio" name="motion" value="subtle">Subtle</label>
-        <label><input type="radio" name="motion" value="expressive">Expressive</label>
-      </div>
+    <section class="tile wide due" id="due" aria-label="Due this week">
+      <span class="count"><b id="due-n">0</b><small>Due this week</small></span>
+      <ul id="due-list"></ul>
+    </section>
+
+    <div class="tile palette">
+      <span class="cap">Palette</span>
+      <div class="swatches" id="presets"></div>
     </div>
-  </section>
 
-  <section>
-    <button type="button" class="primary" id="editor">Open the editor</button>
-    <p class="hint" id="hint">Changes apply to open Blackboard Ultra tabs immediately.</p>
-  </section>
+    <button type="button" class="tile motion" id="motion">
+      <span class="cap">Motion</span>
+      <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+      <b id="motion-name"></b>
+    </button>
+
+    <button type="button" class="tile wide editor" id="editor">
+      <span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>
+      <span class="text"><b>Open the editor</b><small>Every setting, with a live preview</small></span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </main>
+  <p class="hint" id="hint" hidden></p>
+
+  <dialog id="sheet" aria-labelledby="sheet-title">
+    <header>
+      <button type="button" class="back" id="back" aria-label="Back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <h2 id="sheet-title">Looks</h2>
+    </header>
+    <div class="looks" id="looks"></div>
+  </dialog>
 
   <script src="lib/color.js"></script>
   <script src="lib/fonts.js"></script>

@@ -25,6 +25,8 @@ All notable changes to Glaze are documented here. The format follows
 
 - **Calendar course colours:** a calendar entry takes its course's own colour when its title belongs to
   one course, so courses sharing a Blackboard colour no longer look the same there.
+- **A new popup:** tiles, all in view at once: the theme switch, the Look you're wearing (tap for all
+  eight), what's due this week, palette, motion, and Open the editor across the bottom.
 - **Slide switches:** every checkbox in the editor is a switch that slides on and off. On a phone, a
   course's name gets its own line, with its Look and Tint under it.
 
