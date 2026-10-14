@@ -40,7 +40,9 @@
   const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css'] : ['canvas.css', 'motion.css'];
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
-  const onBody = (fn) => (document.body ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
+  // On Canvas, the whole document: put on a school's own host by lib/background.js mid-load, the body can be
+  // there before Canvas's wrapper (isCanvas) is.
+  const onBody = (fn) => (document.body && (ultra || document.readyState !== 'loading') ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
   // `https://*/ultra/*` matches any host with that path, so confirm this is really Blackboard
   // Ultra before touching the page. Checked once, when the body exists.
   const isUltra = () => !!document.querySelector('#site-wrap, [class*="bb-"], [id*="bb-"], base[href*="ultra"]');
