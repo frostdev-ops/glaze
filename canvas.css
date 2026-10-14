@@ -237,10 +237,10 @@ html:not([data-gz-dark-theme]) #header .ic-app-header__logomark { filter: invert
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
   border-bottom: 1px solid var(--gz-line);
 }
-#application nav#breadcrumbs { background: transparent; }
-#application nav#breadcrumbs a { color: var(--gz-ink-muted); transition: color var(--gz-t) var(--gz-ease); }
-#application nav#breadcrumbs a:hover { color: var(--gz-accent); }
-#application nav#breadcrumbs :is(li:last-child, .ellipsible:last-child) { color: var(--gz-ink); }
+#application #breadcrumbs { background: transparent; }
+#application #breadcrumbs :is(a, a *) { color: var(--gz-ink-muted) !important; transition: color var(--gz-t) var(--gz-ease); }
+#application #breadcrumbs :is(a:hover, a:hover *) { color: var(--gz-accent) !important; }
+#application #breadcrumbs :is(li:last-child, li:last-child *, [aria-current="page"]) { color: var(--gz-ink) !important; }
 
 /* ---- course navigation ---- */
 #section-tabs-header-subtitle { color: var(--gz-ink-faint); font-style: normal; }
@@ -302,7 +302,7 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
    still tagged light). Anything inline-coloured that the sweep would misread as paper (a dark course
    hero, a mid-grey one) is kept out of the sweep by giving it a background-image: it only tags fills
    with none. */
-#application :is(.item-group-container, .header-bar, .ic-Action-header, .ic-Dashboard-header, nav#breadcrumbs, .ui-tabs, .ui-tabs-panel, .ic-app-main-content,
+#application :is(.item-group-container, .header-bar, .ic-Action-header, .ic-Dashboard-header, #breadcrumbs, .ui-tabs, .ui-tabs-panel, .ic-app-main-content,
   .discussions-v2__container-image, #calendar-list-holder, #minical, .ic-Layout-contentMain > div:not([class])) {
   background: transparent !important;
 }
