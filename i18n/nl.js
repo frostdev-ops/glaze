@@ -228,6 +228,8 @@
   'Turn on {name|lower}': '{name} aanzetten',
   'Glaze extra': 'Glaze-extra',
   'Turn the theme off': 'Het thema uitzetten',
+  'Glaze settings': 'Glaze-instellingen',
+  'Opens the editor': 'Opent de editor',
   'Loading…': 'Laden…',
   'Nothing matches.': 'Niets gevonden.',
   'Go to': 'Ga naar',

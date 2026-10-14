@@ -228,6 +228,8 @@
   'Turn on {name|lower}': '{name} einschalten',
   'Glaze extra': 'Glaze-Extra',
   'Turn the theme off': 'Design ausschalten',
+  'Glaze settings': 'Glaze-Einstellungen',
+  'Opens the editor': 'Öffnet den Editor',
   'Loading…': 'Wird geladen…',
   'Nothing matches.': 'Keine Treffer.',
   'Go to': 'Gehe zu',

@@ -228,6 +228,8 @@
   'Turn on {name|lower}': 'Ativar {name|lower}',
   'Glaze extra': 'Extra do Glaze',
   'Turn the theme off': 'Desligar o tema',
+  'Glaze settings': 'Configurações do Glaze',
+  'Opens the editor': 'Abre o editor',
   'Loading…': 'Carregando…',
   'Nothing matches.': 'Nenhum resultado.',
   'Go to': 'Ir para',

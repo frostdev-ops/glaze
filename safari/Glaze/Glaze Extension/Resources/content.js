@@ -132,6 +132,21 @@
       });
     } catch { /* extension reloaded under the tab */ }
   };
+  // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, for the command
+  // palette and the popup (which can't ask Blackboard, so it reads what's kept here). Asked once a page
+  // load and at most every ten minutes, like the course list, which names each item's course.
+  let dueSoon = null;
+  const dueWeek = () => (dueSoon ||= new Promise((res) => {
+    try { chrome.storage.local.get(['dueWeek', 'dueWeekAt'], res); } catch { res({}); }
+  }).then((r) => {
+    const now = Date.now();
+    if (now - (r?.dueWeekAt || 0) < 600000) return r.dueWeek || [];
+    return api(`/calendars/todo/studentItems?since=${new Date(now).toISOString()}&until=${new Date(now + 7 * 864e5).toISOString()}`).then((j) => {
+      const list = GZ_DUE_WEEK(j, now);
+      try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now() }); } catch { /* reloaded */ }
+      return list;
+    }, () => r?.dueWeek || []);
+  }));
 
   // Where Ultra writes a due date, in any language: a course item's grade line and an assignment's own
   // page (its .due-date-container). Its English details lists put the label one element up:
@@ -299,10 +314,11 @@
     if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
     if (tip && ultraTipShown()) hideTip();
     paintCourses();
-    if (tintKey() !== tinted) applySettings();
+    if (tintKey() !== tinted || lookHere() !== looked) applySettings();
     placeScene();
     renderProgress();
     renderNew();
+    keepPlace();
     renderCalc();
     watchDrafts();
     syncDownloads();
@@ -377,6 +393,7 @@
     tagExtras([document.body]);
     watchDrafts();
     recordCourses();
+    if (window.top === window) dueWeek();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -815,11 +832,110 @@
     }
   };
 
+  // ---- your place in a course (Extras) --------------------------------------------------------
+  // Ultra keeps a course's open folders and last-clicked item in memory only: gone with a reload, a
+  // new visit or another course's content. Glaze keeps them per course on this device (storage.local
+  // coursePlace, lib/page.js): a folder once it unfolds, forgotten once you fold it yourself (Ultra
+  // folds some itself), and how far down you were. Each time the outline comes back, folders still
+  // closed are unfolded as the jump above does, each once, then it scrolls back if nothing has moved
+  // it. Anything you do first (wheel, touch, a key, a click) ends that; given up after ten seconds.
+  const OUTLINE = /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/;
+  const ROWS = '.content-list-item[data-content-id]';
+  let place = null; // { cid, open (folder ids), top, seen (id → open), away, loaded, back: { at, opened, clicked, quiet } | null }
+  let tapped = null; // { id, at }: the row of your last click
+  const scrollerOf = (el) => {
+    for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) if (/auto|scroll|overlay/.test(getComputedStyle(p).overflowY)) return p;
+    return document.scrollingElement;
+  };
+  const outlineRows = (cid) => (OUTLINE.test(location.pathname) && courseId() === cid ? document.querySelectorAll(ROWS) : []);
+  const savePlace = () => {
+    const p = place;
+    if (p?.loaded) local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, { open: [...p.open], top: p.top }, Date.now()) })));
+  };
+  const backTo = () => {
+    const p = place;
+    const b = p?.back;
+    if (!b) return;
+    const rows = outlineRows(p.cid);
+    if (!rows.length) { p.back = null; return; }
+    if (b.ready && !held.size) {
+      let busy = false;
+      for (const row of rows) {
+        const id = row.dataset.contentId;
+        const tg = p.open.has(id) && toggleOf(row);
+        if (!tg || tg.getAttribute('aria-expanded') !== 'false') continue;
+        if (!b.opened.has(id)) { b.opened.add(id); b.clicked = Date.now(); tg.click(); }
+        // A folder that never opens (restricted, say) is waited for two seconds.
+        busy ||= Date.now() - b.clicked < 2000;
+      }
+      b.quiet = busy ? 0 : b.quiet + 1;
+      if (b.quiet >= 2 || Date.now() - b.at > 10000) {
+        // Scrolled back only from the top; moved already (by you, or Ultra's own memory), that's the place now.
+        const sc = scrollerOf(rows[0]);
+        if (p.top && sc.scrollTop < 1) sc.scrollTop = p.top;
+        else if (Math.round(sc.scrollTop) !== p.top) { p.top = Math.round(sc.scrollTop); savePlace(); }
+        p.back = null;
+        return;
+      }
+    }
+    setTimeout(backTo, 200);
+  };
+  const keepPlace = () => {
+    if (!settings.enhance.place) { place = null; return; }
+    const cid = window.top === window && observer && courseId();
+    const rows = cid ? outlineRows(cid) : [];
+    if (!rows.length) { if (place) place.away = true; return; }
+    if (!place || place.away || place.cid !== cid) {
+      const p = { cid, open: new Set(), top: 0, seen: new Map(), back: { at: Date.now(), opened: new Set(), clicked: 0, quiet: 0 } };
+      place = p;
+      local((s) => s.get('coursePlace', (r) => {
+        const was = r?.coursePlace?.[cid];
+        p.open = new Set([...(Array.isArray(was?.open) ? was.open : []), ...p.open]);
+        if (was?.top > 0) p.top = was.top;
+        p.loaded = true;
+        if (p.back) { p.back.ready = true; backTo(); }
+      }));
+    }
+    let changed = false;
+    for (const row of rows) {
+      const tg = toggleOf(row);
+      if (!tg) continue;
+      const id = row.dataset.contentId;
+      const open = tg.getAttribute('aria-expanded') === 'true';
+      const was = place.seen.get(id);
+      place.seen.set(id, open);
+      if (was === open) continue;
+      if (open) place.open.add(id);
+      else if (was && tapped?.id === id && Date.now() - tapped.at < 3000) place.open.delete(id);
+      else continue;
+      changed = true;
+    }
+    if (changed) savePlace();
+  };
+  document.addEventListener('click', (e) => { if (e.isTrusted && e.target instanceof Element) tapped = { id: e.target.closest(ROWS)?.dataset.contentId, at: Date.now() }; }, true);
+  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (e.isTrusted && place) place.back = null; }, { capture: true, passive: true });
+  // How far down, read at most every half second while scrolling; not while being put back, or once the
+  // outline is gone (a page shrinking under it scrolls it too).
+  let placeTimer = 0;
+  document.addEventListener('scroll', () => {
+    if (!place || place.back || placeTimer) return;
+    placeTimer = setTimeout(() => {
+      placeTimer = 0;
+      const rows = place && !place.back && !place.away ? outlineRows(place.cid) : [];
+      const top = rows.length && scrollerOf(rows[0]).scrollTop;
+      if (rows.length && top !== place.top) { place.top = top; savePlace(); }
+    }, 500);
+  }, { capture: true, passive: true });
+
   // ---- what-if calculator (Extras) -----------------------------------------------------------
   // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make,
   // and a target gives the even share of the remaining points it needs. The recipe is the course's own
   // overall grade (lib/grades.js), and it must reproduce Blackboard's figure first; otherwise it says so.
-  const whatIf = new Map(); // cid → { overrides: Map columnId → score, target }
+  // The scores are kept on this device (storage.local, whatIf) until cleared, or the item is graded or gone.
+  const whatIf = new Map(); // cid → { overrides: Map columnId → score, target }, or null while loading
+  const keepCalc = (cid, overrides) => {
+    try { chrome.storage.local.get('whatIf', (r) => chrome.storage.local.set({ whatIf: GZ_GRADES.storeScores(r?.whatIf, cid, overrides) })); } catch { /* extension reloaded under the tab */ }
+  };
   // Cut, not rounded, to two places: how Ultra writes its own overall grade (82.456 is 82.45%).
   const asPct = (p) => (p == null ? '–' : GZ_I18N.pct(Math.floor(p * 100 + 1e-9) / 100, locale()));
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
@@ -832,9 +948,17 @@
     if (!b.results) return;
     const key = `${cid} ${b.key} ${locale()}`;
     if (old?.dataset.key === key && old.previousElementSibling === host) return;
-    const m = GZ_GRADES.model(b.results);
-    if (!whatIf.has(cid)) whatIf.set(cid, { overrides: new Map(), target: '' });
+    if (!whatIf.has(cid)) {
+      whatIf.set(cid, null);
+      const got = (r) => whatIf.set(cid, { overrides: new Map(Object.entries(r?.whatIf?.[cid] || {})), target: '' });
+      try { chrome.storage.local.get('whatIf', (r) => { got(r); renderCalc(); }); } catch { got(); }
+    }
     const st = whatIf.get(cid);
+    if (!st) return;
+    const m = GZ_GRADES.model(b.results);
+    // Graded, exempted or gone since: its score goes.
+    const kept = GZ_GRADES.keptScores(st.overrides, m.items);
+    if (kept.size !== st.overrides.size) { st.overrides = kept; keepCalc(cid, kept); }
     const now = make('b', { textContent: m.kind === 'unsupported' ? '' : asPct(m.percent()) });
     const box = make('details', { id: 'gz-calc', open: !!old?.open },
       make('summary', {}, make('span', { textContent: t('What-if calculator') }), now));
@@ -849,7 +973,9 @@
       need.setAttribute('aria-live', 'polite');
       const target = make('input', { type: 'number', min: 0, max: 100, step: 'any', value: st.target, placeholder: '90' });
       target.setAttribute('aria-label', t('Target overall grade, in percent'));
+      const clear = make('button', { type: 'button', className: 'gz-calc-clear', textContent: t('Clear scores') });
       const update = () => {
+        clear.hidden = !st.overrides.size;
         const p = m.percent(st.overrides);
         out.textContent = st.overrides.size ? t('With those scores: {pct} overall.', { n: st.overrides.size, pct: asPct(p) }) : t(left.length ? 'Type a score to see where it would leave you.' : 'Everything here is graded.');
         const goal = parseFloat(st.target);
@@ -866,15 +992,23 @@
         input.addEventListener('input', () => {
           const v = parseFloat(input.value);
           if (Number.isFinite(v) && v >= 0) st.overrides.set(i.id, v); else st.overrides.delete(i.id);
+          keepCalc(cid, st.overrides);
           update();
         });
         return make('li', {}, make('span', { className: 'gz-calc-name', textContent: i.name }), make('span', { className: 'gz-calc-score' }, input, ` / ${GZ_I18N.num(i.possible, locale())}`));
       });
       target.addEventListener('input', () => { st.target = target.value; update(); });
+      clear.addEventListener('click', () => {
+        st.overrides.clear();
+        keepCalc(cid, st.overrides);
+        for (const r of rows) r.querySelector('input').value = '';
+        update();
+        rows[0].querySelector('input').focus(); // the button hides, so focus can't stay on it
+      });
       if (rows.length) box.append(make('h3', { textContent: t('Not graded yet') }), make('ul', {}, ...rows));
       // The box sits where {target} is in the sentence.
       const [before, after] = t('Aim for {target}% overall').split('{target}');
-      box.append(out, make('label', { className: 'gz-calc-target' }, before, target, after), need);
+      box.append(out, clear, make('label', { className: 'gz-calc-target' }, before, target, after), need);
       update();
     }
     if (old) old.replaceWith(box); else host.after(box);
@@ -1301,19 +1435,26 @@
     // A tab's name without its count badge ("Announcements 12").
     const tabName = (a) => { const c = a.cloneNode(true); for (const b of c.querySelectorAll('[class*="badge" i]')) b.remove(); return c.textContent.trim(); };
     const here = cid ? [...document.querySelectorAll('.bb-ui-navigation-list-horizontal a[href]')].map((a) => ({ label: tabName(a), hint: t('This course'), group: 'Go to', run: () => a.click() })).filter((c) => c.label) : [];
-    const [courses, items] = await Promise.all([myCourses(), cid ? paletteItems(cid) : []]);
+    const [courses, items, due] = await Promise.all([myCourses(), cid ? paletteItems(cid) : [], dueWeek()]);
     const s = settings;
+    const now = new Date();
+    const lang = GZ_I18N.locale(locale());
     return [
       ...here,
       ...pages(),
       ...courses.filter((m) => m.course).sort((a, b) => !!a.course.isClosed - !!b.course.isClosed)
         .map((m) => ({ label: m.course.name, hint: m.course.isOrganization ? t('Organization') : m.course.isClosed ? t('Closed course') : m.course.courseId || t('Course'), group: 'Courses', run: go(`/ultra/courses/${m.courseId}/outline`) })),
+      // "in 2 days · Thu 11:59 PM · ENG1001". Each opens its item, at the address the content API gives it
+      // (as "In this course" does), or its course when it has none.
+      ...due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' }), courseList[d.cid]?.name].filter(Boolean).join(' · '), group: 'Due this week',
+        run: () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(all.find((c) => c.id === d.content)?.links?.[0]?.href.replace(/^https?:\/\/[^/]+/, '') || `/ultra/courses/${d.cid}/outline`)()) })),
       ...items,
       ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L)) })),
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
       ...Object.entries(EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
       { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
+      { label: t('Glaze settings'), hint: t('Opens the editor'), group: 'Glaze', run: () => { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } },
     ];
   };
   let cmd = null; // { box, input, list, all, shown, active, back }
@@ -1500,22 +1641,22 @@
     sceneCanvas = null;
   };
   const sceneOpts = () => {
-    const { dim, amount, pace } = GZ_SCENE_LOOK(settings.bg.intensity);
+    const { dim, amount, pace } = GZ_SCENE_LOOK(worn.bg.intensity);
     return {
-      name: settings.bg.scene,
+      name: worn.bg.scene,
       ground: palette['--gz-surface-2'],
-      colors: GZ_BG_COLORS(settings.bg.colors, palette),
+      colors: GZ_BG_COLORS(worn.bg.colors, palette),
       dim,
       amount,
       speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
     };
   };
   const syncScene = () => {
-    if (!settings.enabled || !links.length || settings.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
+    if (!settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
     if (scene) return scene.update(sceneOpts());
     sceneLoad ||= import(chrome.runtime.getURL('lib/scene.js'));
     sceneLoad.then((mod) => {
-      if (scene || !links.length || settings.bg.kind !== 'scene') return;
+      if (scene || !links.length || worn.bg.kind !== 'scene') return;
       sceneCanvas = document.createElement('canvas');
       sceneCanvas.id = 'gz-scene';
       sceneCanvas.setAttribute('aria-hidden', 'true');
@@ -1542,11 +1683,25 @@
     });
   } catch { /* extension reloaded under the tab */ }
   // A course's own color on everything of it Glaze can tell is it: a course's section, a Messages card
-  // (data-course-id), a Grades row (a link into the course), anything on the course's own pages.
-  // Calendar entries name no course, so they keep their slot's color.
+  // (data-course-id), a Grades row (a link into the course), anything on the course's own pages, a
+  // calendar entry by its title (calendarCourse).
   const courseOf = (el) => el.getAttribute('bb-course-membership-markups') || el.closest('[data-course-id]')?.dataset.courseId
     || (el.closest('a[href*="/courses/_"]') || el.querySelector('a[href*="/courses/_"]'))?.getAttribute('href').match(/\/courses\/(_\d+_\d+)/)?.[1]
-    || courseId();
+    || courseId() || calendarCourse(el);
+  // Calendar entries name no course: on the calendar, an entry is the course's whose item title it shows,
+  // when no other course sharing its slot has an item by that title (GZ_CAL_COURSE); otherwise it keeps
+  // its slot's color. The items are the calendar's own list, asked for once a page load.
+  // ponytail: six weeks back to ten on; entries outside that keep their slot's color.
+  let calItems = null;
+  const calendarCourse = (el) => {
+    if (!location.pathname.startsWith('/ultra/calendar')) return null;
+    if (!calItems) {
+      calItems = [];
+      const at = (days) => new Date(Date.now() + days * 864e5).toISOString();
+      api(`/calendars/calendarItems?since=${at(-42)}&until=${at(70)}`).then((j) => { calItems = j.results || []; paintCourses(); }, () => {});
+    }
+    return GZ_CAL_COURSE(el.textContent, el.className.match?.(/course-color-(\d+)/)?.[1], calItems, courseList);
+  };
   const paintCourses = () => {
     if (isPreview) return;
     const colors = courseColors();
@@ -1594,6 +1749,10 @@
   };
   let tinted = null; // the key of the course whose color is painted now
   let palette = GZ_DEFAULTS.colors; // the colors painted, tint included
+  // A course given a look of its own wears it on its pages (GZ_COURSE_LOOK); flush() re-checks.
+  const lookHere = () => settings.courses.looks[courseId()] || null;
+  let looked = null; // the course look painted now
+  let worn = settings; // the settings painted now: the student's, or a course's look over them
 
   // ---- settings → <html> ----------------------------------------------------------------------
   // Everything set goes through these two, so clearSettings removes exactly what was set.
@@ -1616,7 +1775,8 @@
   };
 
   const applySettings = () => {
-    const s = settings;
+    looked = lookHere();
+    const s = (worn = GZ_COURSE_LOOK(settings, courseId()));
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);

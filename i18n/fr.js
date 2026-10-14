@@ -228,6 +228,8 @@
   'Turn on {name|lower}': 'Activer : {name}',
   'Glaze extra': 'Extra Glaze',
   'Turn the theme off': 'Désactiver le thème',
+  'Glaze settings': 'Réglages de Glaze',
+  'Opens the editor': 'Ouvre l\'éditeur',
   'Loading…': 'Chargement…',
   'Nothing matches.': 'Aucun résultat.',
   'Go to': 'Aller à',
