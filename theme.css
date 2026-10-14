@@ -263,6 +263,10 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
   border-color: var(--gz-line-strong) !important;
 }
 .course-banner, .status-bar { border-radius: var(--gz-radius) 0 0 var(--gz-radius) !important; }
+/* Courses grid: the banner is the card's top, not its left. */
+.multi-column-view .course-banner { border-radius: calc(var(--gz-radius) - 1px) calc(var(--gz-radius) - 1px) 0 0 !important; }
+/* Ultra's 4px frame around each top-level outline card drew a second, squarer outline outside it. */
+#site-wrap .content-list-item [class*="makeStylesparentItem-"] { border: 0 !important; box-shadow: none !important; border-radius: var(--gz-radius) !important; }
 /* Course outline: one card per top-level folder; everything nested is a flat row with a hairline. */
 #site-wrap .content-list-item .itemContainer { overflow: hidden; }
 #site-wrap .content-list-item .content-list-item .itemContainer { background: transparent !important; border: 0 !important; border-top: 1px solid var(--gz-line) !important; border-radius: 0 !important; }
@@ -339,6 +343,7 @@ th { background: var(--gz-surface) !important; }
 #site-wrap .messages-header .summary { border-bottom: 1px solid var(--gz-line) !important; }
 #site-wrap .messages-container-summary .summary { background: transparent !important; border: 0 !important; }
 #site-wrap .messages-container-summary { border-radius: var(--gz-radius) !important; overflow: hidden; }
+#site-wrap .send-message-button { border-radius: var(--gz-radius-sm) !important; }
 /* Courses list/grid switch: Ultra's grey inset ring and 2px corners around rounded buttons. */
 #site-wrap [class*="makeStylestoggleContainer-"] { box-shadow: none !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap [class*="makeStylestoggleContainer-"] > * { border-radius: var(--gz-radius-sm) !important; }
