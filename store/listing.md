@@ -165,8 +165,8 @@ For the Mac App Store's "What's New" field; the Chrome Web Store has none.
 
 > What's due this week, in the popup and the command palette. Give a course a Look of its own. Coming
 > back to a course reopens your folders where you left them, and the what-if calculator keeps your
-> scores. Every course its own color, on the calendar too. Slide switches in the editor, and rounder
-> corners throughout.
+> scores. Every course its own color, on the calendar too. A new tiled popup, slide switches in the
+> editor, and rounder corners throughout.
 
 ## What's new in 2.1
 
