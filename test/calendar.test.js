@@ -69,3 +69,18 @@ test('Canvas due this week: events, announcements and personal notes are not wor
   // Marked incomplete again, or sent back for a redo: a handed-in assignment is work to do once more.
   assert.deepEqual(left({ submissions: flags({ submitted: true }), planner_override: { marked_complete: false } }, { submissions: flags({ submitted: true, redo_request: true }) }, { planner_override: { marked_complete: false } }), ['Item 0', 'Item 1', 'Item 2']);
 });
+
+test('Canvas due this week: done as Canvas reckons it, the planner mark first, then peer reviews, then the submission', () => {
+  const now = Date.parse('2026-10-14T12:00:00Z');
+  const at = '2026-10-16T03:59:00Z';
+  const left = (...os) => D.GZ_CANVAS_DUE_WEEK(os.map((o, i) => plan('assignment', `Item ${i}`, at, o)), now).map((d) => d.title);
+  // An explicit mark wins either way: incomplete keeps graded or excused work, complete drops work not handed in.
+  assert.deepEqual(left({ submissions: flags({ graded: true }), planner_override: { marked_complete: false } }, { submissions: flags({ excused: true }), planner_override: { marked_complete: false } },
+    { planner_override: { marked_complete: true } }, { submissions: flags({ redo_request: true }), planner_override: { marked_complete: true } }), ['Item 0', 'Item 1']);
+  // Sent back to redo: still due, graded or not.
+  assert.deepEqual(left({ submissions: flags({ graded: true, redo_request: true }) }, { submissions: flags({ submitted: true, graded: true, redo_request: true }) }, { submissions: flags({ graded: true }) }), ['Item 0', 'Item 1']);
+  // A peer review has nothing to hand in (submissions: false); Canvas marks the review itself completed.
+  const review = (workflow_state, o = {}) => plan('assessment_request', `Review ${workflow_state}`, at, { submissions: false, plannable: { title: `Review ${workflow_state}`, workflow_state }, ...o });
+  assert.deepEqual(D.GZ_CANVAS_DUE_WEEK([review('assigned'), review('completed'), review('completed', { plannable: { title: 'Review again', workflow_state: 'completed' }, planner_override: { marked_complete: false } })], now).map((d) => d.title),
+    ['Review assigned', 'Review again']);
+});

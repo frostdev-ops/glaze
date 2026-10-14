@@ -437,15 +437,18 @@ const GZ_DUE_WEEK = (todo, now) => [...(todo?.dueTodayItems || []), ...(todo?.fu
 // context_name, html_url, submissions, planner_override, plannable: { title } }). Course work still to do:
 // assignments, quizzes, discussions, pages with a to-do date, peer reviews. Not events or announcements (nothing
 // to do), and not the student's own planner notes: no course, no page Canvas can open (its html_url is empty),
-// and their own reminders already live in the planner. Done is marked complete there, excused, graded, or handed
-// in, unless marked incomplete again or sent back to redo. [{ title, cid, due (ms), course (name), url (a path) }].
+// and their own reminders already live in the planner. Done is as Canvas's planner reckons it (isComplete in its
+// ui/shared/planner/utilities/apiUtils.js): the student's own mark in the planner, complete or not, wins; a peer
+// review is done once Canvas marks it completed; other work once handed in, or graded or excused, unless sent back
+// to redo. [{ title, cid, due (ms), course (name), url (a path) }].
 // ponytail: the first 100 items, no paging; a week with more shows the soonest 100.
 const GZ_CANVAS_DUE_WEEK = (items, now) => (Array.isArray(items) ? items : [])
   .filter((i) => i?.course_id && !/^(calendar_event|announcement|planner_note)$/.test(i.plannable_type))
   .filter((i) => {
+    if (i.planner_override) return !i.planner_override.marked_complete;
+    if (i.plannable_type === 'assessment_request') return i.plannable?.workflow_state !== 'completed';
     const s = i.submissions || {}; // false for work with nothing to hand in
-    const marked = i.planner_override?.marked_complete;
-    return !(marked === true || s.excused || s.graded || (s.submitted && !s.redo_request && marked !== false));
+    return !(s.excused || ((s.submitted || s.graded) && !s.redo_request));
   })
   .map((i) => {
     const path = String(i.html_url || '').replace(/^https?:\/\/[^/]+/, ''); // never leaves the site it was found on
