@@ -107,6 +107,11 @@ To recognize Canvas on any school's domain, Glaze checks the head of each https 
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is
   self-hosted per institution on arbitrary domains, always under the `/ultra/` path, so the match
   pattern cannot name a fixed host. Glaze reads and restyles the page in your browser only.
+- Host access to `https://*.instructure.com/*` — to apply the theme on Canvas, which Instructure hosts
+  for most schools under that domain.
+- Host access to `https://*/*` and `scripting` — Canvas also runs on schools' own domains. The Canvas check
+  described above runs on https pages for that reason; when it finds Canvas, Glaze styles that site, and
+  only that site, the same way. The hostname is kept in the extension's local storage on your device.
 
 ## Hosting
 

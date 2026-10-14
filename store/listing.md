@@ -122,7 +122,21 @@ To Do list for the next seven days, and on the Calendar page Glaze asks for the 
 to color each by its course. Apart from a web font the user picks (downloaded from Google
 Fonts or jsDelivr, without cookies or the page's address), nothing is sent anywhere else.
 
-**web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**
+**Host access: `https://*.instructure.com/*`**
+Most schools' Canvas LMS is hosted by Instructure under `*.instructure.com`. On those pages the content
+script injects Glaze's Canvas stylesheet, sets CSS custom properties on `<html>` and tags elements with
+`data-gz-*` attributes so they can be restyled. On Canvas it makes no network requests.
+
+**Host access: `https://*/*`, `scripting`**
+Some schools serve Canvas from their own domain (for example `canvas.example.edu`), so no match pattern
+can name it. A small content script (`lib/detect.js`) runs on https pages and checks only whether the
+page's `<head>` links Canvas's own stylesheet (a path containing `/dist/brandable_css/`), stopping when
+the body begins. When it does, the background injects the same theme script into that page with
+`scripting.executeScript` and registers it for that one host with `scripting.registerContentScripts`, so
+later pages there are themed from the first paint. The detector reads nothing else and sends no page
+content; the only thing kept is that hostname, in `chrome.storage.local`. Nothing is sent anywhere.
+
+**web_accessible_resources: `theme.css`, `motion.css`, `extras.css`, `canvas.css`, `fonts/*.woff2`, `lib/scene.js`, `lib/three.min.js`**
 The content script injects the stylesheets as `<link>`s it owns, so the master switch can add and remove
 the theme without reloading the page; the stylesheets load the bundled fonts. When the user picks an
 animated background, the content script imports `lib/scene.js`, which draws it with the bundled three.js

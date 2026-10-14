@@ -31,7 +31,7 @@ domain, and on Canvas, which Glaze recognizes on any school's domain.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
 - **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
-- **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration.
+- **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain.
 
 ## Install
 
