@@ -20,6 +20,12 @@
    The sweep only runs on a dark palette. On a light one Canvas's white is already the surface, so every frame
    and fill that should be the ground, a card or a band is set explicitly, not left to the sweep. */
 
+/* Bundled faces, as in theme.css (which Canvas doesn't load): the fonts Inter and Atkinson Hyperlegible, and the
+   Clear look's. Relative URLs resolve against this sheet's own chrome-extension:// URL; fonts/ is web-accessible. */
+@font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+
 /* Colors and look values are NOT defaulted here: defaults.js is the one place a default lives,
    and content.js writes every --gz-* value inline on <html> before this sheet is even added.
    What lives here is only what is derived from them. */
