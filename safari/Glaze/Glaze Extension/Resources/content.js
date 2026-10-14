@@ -878,12 +878,9 @@
       b.quiet = busy ? 0 : b.quiet + 1;
       if (b.quiet >= 2 || Date.now() - b.at > 10000) {
         const sc = scrollerOf(rows[0]);
-        // Scrolled back only from the top; moved already (by you, or Ultra's own memory), that's the place now.
-        if (!b.scrolled && (!p.top || sc.scrollTop >= 1)) {
-          if (Math.round(sc.scrollTop) !== p.top) { p.top = Math.round(sc.scrollTop); savePlace(); }
-          p.back = null;
-          return;
-        }
+        // Anything you do ends this above, so what moved the outline meanwhile is Ultra (it scrolls a
+        // module it unfolds into view): the place kept wins.
+        if (!p.top) { p.back = null; return; }
         // An unfolded module's contents slide open over ~0.4 s and rows can still arrive, so the outline
         // grows under the scroll (clamping it, then anchoring shifts it): set again until it holds there
         // twice running, for three seconds at most. Nothing is saved meanwhile.
