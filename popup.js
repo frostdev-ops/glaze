@@ -60,7 +60,7 @@ GZ_UI.load().then((s) => {
   render();
 });
 
-// Due this week, as Blackboard last told the content script (the popup can't ask it): the count and
+// Due this week, as Blackboard or Canvas last told the content script (the popup can't ask them): the count and
 // the next three, to read. A list over a day old is left out; it would miss what was added since.
 chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'seenCourses'], (r) => {
   const now = new Date();
@@ -68,11 +68,11 @@ chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'seenCourses'], (r) => {
   const due = fresh ? (r.dueWeek || []).filter((d) => d.due >= now) : [];
   $('#due-n').textContent = fresh ? due.length : '–';
   const note = (text) => Object.assign(document.createElement('li'), { className: 'note', textContent: text });
-  $('#due-list').replaceChildren(...(!fresh ? [note(t('Open a Blackboard page to see what is due.'))] : !due.length ? [note(t('Nothing due in the next seven days.'))]
+  $('#due-list').replaceChildren(...(!fresh ? [note(t("Open Blackboard or Canvas to see what's due."))] : !due.length ? [note(t('Nothing due in the next seven days.'))]
     : due.slice(0, 3).map((d) => {
       const { rel, sub } = GZ_PAGE.describe(new Date(d.due), true, now, GZ_I18N.ui());
       const li = document.createElement('li');
-      li.title = [d.title, r.seenCourses?.[d.cid]?.name, sub].filter(Boolean).join(' · ');
+      li.title = [d.title, d.course || r.seenCourses?.[d.cid]?.name, sub].filter(Boolean).join(' · ');
       li.append(Object.assign(document.createElement('b'), { textContent: d.title }), Object.assign(document.createElement('small'), { textContent: rel }));
       return li;
     })));

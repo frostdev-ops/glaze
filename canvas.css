@@ -9,3 +9,46 @@
 
 /* Placeholder: proves the sheet loads. */
 html[data-gz-dark-theme] body { background: var(--gz-surface-2); }
+
+/* ---- Extras on Canvas ---- */
+/* Three of Ultra's extras run on Canvas; their styles are copies of extras.css's, with Canvas's markup. */
+
+/* Grades on course cards: content.js tags the card's course-code line with the course's current score
+   (data-gz-grade) and its band (data-gz-chip), as it does Ultra's status line. The chip has a surface of its
+   own, so the palette's green, amber and red read on it whatever the card is painted. */
+html[data-gz-enhance-overall] .ic-DashboardCard [data-gz-grade]::after {
+  content: attr(data-gz-grade);
+  display: inline-block; margin-left: 0.5em; padding: 0 0.5em; border-radius: 999px;
+  font-size: 0.85em; font-weight: 600; line-height: 1.6; vertical-align: 0.05em;
+  color: var(--gz-chip, var(--gz-ink-muted));
+  background: color-mix(in srgb, var(--gz-chip, var(--gz-ink-muted)) 14%, var(--gz-surface));
+}
+.ic-DashboardCard [data-gz-chip="graded-hi"] { --gz-chip: var(--gz-ok); }
+.ic-DashboardCard [data-gz-chip="graded-mid"] { --gz-chip: var(--gz-warn); }
+.ic-DashboardCard [data-gz-chip="graded-lo"] { --gz-chip: var(--gz-err); }
+
+/* Command palette (Ctrl+K). The shadow is the palette's depth when canvas.css gives one. */
+#gz-cmd {
+  position: fixed; inset: 0; z-index: 2147483003; display: grid; justify-items: center; align-items: start; padding-top: min(14vh, 120px);
+  background: color-mix(in srgb, var(--gz-surface-2) 55%, transparent); backdrop-filter: blur(4px);
+  animation: gz-fade var(--gz-t) var(--gz-ease) both;
+}
+#gz-cmd .gz-cmd-panel {
+  width: min(600px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden; font: 14px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow, 0 12px 32px color-mix(in srgb, #000 40%, transparent));
+  animation: var(--gz-enter-panel);
+}
+#gz-cmd input {
+  box-sizing: border-box; width: 100%; height: auto; margin: 0; padding: 0.9rem 1.1rem; font: inherit; font-size: 16px; color: var(--gz-ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--gz-line); border-radius: 0; outline: none; box-shadow: none;
+}
+#gz-cmd input::placeholder { color: var(--gz-ink-faint); }
+#gz-cmd ul { list-style: none; margin: 0; padding: 0.35rem; overflow: auto; overscroll-behavior: contain; }
+#gz-cmd li { display: flex; align-items: baseline; gap: 0.75rem; margin: 0; padding: 0.45rem 0.75rem; border-radius: calc(var(--gz-radius) * 2 / 3); cursor: pointer; }
+#gz-cmd li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-cmd li small { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-faint); }
+#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
+#gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
+#gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
+#gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-line); }

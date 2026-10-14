@@ -232,6 +232,19 @@ test('the overall grade for course cards', () => {
   assert.equal(P.overall(undefined), null);
 });
 
+test('the current score for Canvas course cards', () => {
+  // As /api/v1/courses?include[]=total_scores gives it, ids as strings.
+  const course = (id, o = {}, e = {}) => ({ id, name: `Course ${id}`, hide_final_grades: false, enrollments: [{ type: 'student', computed_current_score: 83.5, computed_current_grade: null, ...e }], ...o });
+  assert.deepEqual(P.canvasOverall([course('9'), course('10', {}, { computed_current_score: 91.234, computed_current_grade: 'A-' }), course('11', {}, { computed_current_score: 61 })]),
+    { 9: { label: '83.5%', tone: 'graded-mid' }, 10: { label: 'A-', tone: 'graded-hi' }, 11: { label: '61%', tone: 'graded-lo' } });
+  assert.equal(P.canvasOverall([course(9, {}, { computed_current_score: 83.5 })], 'fr')[9].label, '83,5\u00a0%');
+  // Hidden grades, no score yet, no student enrollment (a teacher, an observer), or nothing at all: no chip.
+  assert.deepEqual(P.canvasOverall([course('1', { hide_final_grades: true }), course('2', {}, { computed_current_score: null }), course('3', { enrollments: [{ type: 'teacher' }] }),
+    course('4', { enrollments: undefined }), { id: '5', access_restricted_by_date: true }, null]), {});
+  assert.deepEqual(P.canvasOverall({ errors: [] }), {});
+  assert.deepEqual(P.canvasOverall(undefined), {});
+});
+
 test('files in content items, as the content API sends them', () => {
   const o = 'https://learn.example.edu';
   // A File item.

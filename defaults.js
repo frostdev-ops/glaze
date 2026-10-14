@@ -379,6 +379,26 @@ const GZ_DUE_WEEK = (todo, now) => [...(todo?.dueTodayItems || []), ...(todo?.fu
   .map((i) => ({ title: String(i?.title || '').slice(0, 200), cid: i?.column?.courseId, content: COURSE_ID.test(i?.column?.contentId) ? i.column.contentId : null, due: Date.parse(i?.dueDate) }))
   .filter((i) => i.title && COURSE_ID.test(i.cid) && i.due >= now && i.due < now + 7 * 864e5)
   .sort((a, b) => a.due - b.due);
+// The same list on Canvas, from its planner (/api/v1/planner/items: { plannable_type, plannable_date, course_id,
+// context_name, html_url, submissions, planner_override, plannable: { title } }). Course work still to do:
+// assignments, quizzes, discussions, pages with a to-do date, peer reviews. Not events or announcements (nothing
+// to do), and not the student's own planner notes: no course, no page Canvas can open (its html_url is empty),
+// and their own reminders already live in the planner. Done is marked complete there, excused, graded, or handed
+// in, unless marked incomplete again or sent back to redo. [{ title, cid, due (ms), course (name), url (a path) }].
+// ponytail: the first 100 items, no paging; a week with more shows the soonest 100.
+const GZ_CANVAS_DUE_WEEK = (items, now) => (Array.isArray(items) ? items : [])
+  .filter((i) => i?.course_id && !/^(calendar_event|announcement|planner_note)$/.test(i.plannable_type))
+  .filter((i) => {
+    const s = i.submissions || {}; // false for work with nothing to hand in
+    const marked = i.planner_override?.marked_complete;
+    return !(marked === true || s.excused || s.graded || (s.submitted && !s.redo_request && marked !== false));
+  })
+  .map((i) => {
+    const path = String(i.html_url || '').replace(/^https?:\/\/[^/]+/, ''); // never leaves the site it was found on
+    return { title: String(i.plannable?.title || '').slice(0, 200), cid: String(i.course_id), due: Date.parse(i.plannable_date), course: String(i.context_name || '').slice(0, 80), url: path.startsWith('/') ? path : `/courses/${i.course_id}` };
+  })
+  .filter((i) => i.title && i.due >= now && i.due < now + 7 * 864e5)
+  .sort((a, b) => a.due - b.due);
 
 // ---- course tint ------------------------------------------------------------------------------
 // Inside a course picked for it, the accent family takes the course's hue, and `t` (0-1) of the way
@@ -414,5 +434,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }

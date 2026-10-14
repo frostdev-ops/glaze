@@ -4,7 +4,8 @@
 // --gz-* vars, everything else as data-gz-* attributes — so the CSS never branches here,
 // (3) the long tail: tag what no selector can reach and let the CSS restyle the tag.
 // It runs on two sites: Blackboard Ultra, which gets all of that plus its extras (everything marked
-// Extras below), and Canvas LMS, which gets (1) to (3) alone, with its own stylesheet.
+// Extras below), and Canvas LMS, which gets (1) to (3), with its own stylesheet, and three extras: Due this
+// week, the command palette and grades on the dashboard's course cards (marked Canvas below).
 (() => {
   // Only HTML pages: an /ultra/ address can also be an XML error from Ultra's CDN, or a raw script.
   if (window.__gzGlaze || !/html/.test(document.contentType)) return;
@@ -146,20 +147,26 @@
       });
     } catch { /* extension reloaded under the tab */ }
   };
-  // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, for the command
-  // palette and the popup (which can't ask Blackboard, so it reads what's kept here). Asked once a page
-  // load and at most every ten minutes, like the course list, which names each item's course.
+  // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, or on Canvas from
+  // its planner (GZ_CANVAS_DUE_WEEK), for the command palette and the popup (which can't ask the site, so it
+  // reads what's kept here). Asked once a page load and at most every ten minutes, like the course list, which
+  // names each Ultra item's course (a Canvas item brings its own, and its address, which Ultra's never do).
   let dueSoon = null;
   const dueWeek = () => (dueSoon ||= new Promise((res) => {
     try { chrome.storage.local.get(['dueWeek', 'dueWeekAt'], res); } catch { res({}); }
   }).then((r) => {
     const now = Date.now();
-    if (now - (r?.dueWeekAt || 0) < 600000) return r.dueWeek || [];
-    return api(`/calendars/todo/studentItems?since=${new Date(now).toISOString()}&until=${new Date(now + 7 * 864e5).toISOString()}`).then((j) => {
-      const list = GZ_DUE_WEEK(j, now);
+    // A list kept by the other site (someone with both open) is no use here: its items open nothing.
+    const other = !(r?.dueWeek || []).every((d) => !d.url === ultra);
+    const kept = other ? [] : r?.dueWeek || [];
+    if (!other && now - (r?.dueWeekAt || 0) < 600000) return kept;
+    const at = (days) => new Date(now + days * 864e5).toISOString();
+    const ask = ultra ? api(`/calendars/todo/studentItems?since=${at(0)}&until=${at(7)}`).then((j) => GZ_DUE_WEEK(j, now))
+      : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
+    return ask.then((list) => {
       try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now() }); } catch { /* reloaded */ }
       return list;
-    }, () => r?.dueWeek || []);
+    }, () => kept);
   }));
 
   // Where Ultra writes a due date, in any language: a course item's grade line and an assignment's own
@@ -177,8 +184,11 @@
   // asked of their own Blackboard (same origin, their session) the way Ultra's Grades page asks: at
   // most once a minute per course, and only for courses on the page where one of those is showing.
   // Absolute URLs: Ultra's <base href> points at its CDN.
-  const api = (path, base = '/learn/api/v1') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' } })
-    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+  // Canvas's REST API is the same thing under /api/v1 (capi): its string-id JSON keeps long ids exact, and an
+  // older Canvas starts a response with `while(1);`.
+  const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept } })
+    .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
+  const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
   // One /users/me for everything that asks at once; asked again only if it failed.
   let meId = null;
   const me = () => (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meId = null; throw e; }));
@@ -206,7 +216,7 @@
     return Promise.all([excepted, ...dates]).then(([exc, ...when]) => new Set(waiting.filter((g, i) => !exc(g.columnId) && GZ_GRADES.late(when[i], g.column.dueDate)).map((g) => g.columnId)));
   };
 
-  // ---- grades on course cards (Extras) -------------------------------------------------------
+  // ---- grades on course cards (Extras; Canvas below) -----------------------------------------
   // On the Courses page each card's status line ("Open") gains the course's overall grade, drawn by CSS
   // from attributes. Grid and list views share one card; the Recent Courses strip has its own. A card's
   // book is asked for only once the card is on screen.
@@ -217,7 +227,9 @@
     tagCards();
   });
   const tagCards = () => {
-    if (!observer || !settings.enhance.overall || location.pathname !== '/ultra/course') return;
+    if (!observer || !settings.enhance.overall) return;
+    if (!ultra) return tagCanvasCards();
+    if (location.pathname !== '/ultra/course') return;
     for (const el of document.querySelectorAll(CARD_STATUS)) cardsIO.observe(el);
     for (const el of onScreen) {
       if (!el.isConnected) { onScreen.delete(el); cardsIO.unobserve(el); continue; }
@@ -226,6 +238,26 @@
       if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); }
       else if (g === null) { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
     }
+  };
+  // Canvas: the dashboard's cards (card view) get the same chip, on the course code's line: the course's current
+  // score (GZ_PAGE.canvasOverall), drawn by canvas.css from the same attributes. One course list with scores
+  // serves every card, asked once a page load; the command palette's course list is that answer too.
+  // ponytail: the first 100 courses, no paging.
+  let canvasList = null;
+  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&per_page=100')
+    .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
+  const tagCanvasCards = () => {
+    if (!document.querySelector('.ic-DashboardCard')) return;
+    canvasCourses().then((list) => {
+      if (!observer) return; // switched off while it was asked
+      const grades = GZ_PAGE.canvasOverall(list, locale());
+      for (const card of document.querySelectorAll('.ic-DashboardCard')) {
+        const el = card.querySelector('.ic-DashboardCard__header-subtitle, .ic-DashboardCard__header-term');
+        if (!el) continue;
+        const g = grades[card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/([^/?#]+)/)?.[1]];
+        if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); } else { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
+      }
+    });
   };
   // cid → { at, pending, results, grades (by content item), overall, late (column ids), key }. Lateness is
   // asked only by the due-date chips (late = true), so a course card never costs attempt requests. An
@@ -326,7 +358,7 @@
     const roots = outermost(dirty);
     dirty.clear();
     if (full) { full = false; sweepAll(); if (ultra) tagExtras([document.body]); } else { sweepRoots(roots); if (ultra) tagExtras(roots); }
-    if (!ultra) return placeScene(); // Canvas: the sweep and the scene; everything below is Ultra's
+    if (!ultra) { tagCards(); return placeScene(); } // Canvas: the sweep, the card grades and the scene; everything below is Ultra's
     if (tip && ultraTipShown()) hideTip();
     paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
@@ -406,11 +438,11 @@
     sweepAll();
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
-    if (!ultra) return; // Canvas: the sweep is all it gets; the rest is Ultra's extras and its /learn/api
+    if (window.top === window) dueWeek();
+    if (!ultra) return tagCards(); // Canvas: the sweep, Due this week and the card grades; the rest is Ultra's extras and its /learn/api
     tagExtras([document.body]);
     watchDrafts();
     recordCourses();
-    if (window.top === window) dueWeek();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -1448,47 +1480,73 @@
     }, true);
   }
 
-  // ---- command palette (Extras) --------------------------------------------------------------
+  // ---- command palette (Extras; Canvas too) --------------------------------------------------
   // Ctrl+K (⌘K on a Mac) opens one search over Blackboard's pages, your courses, this course's tabs
   // and items, and Glaze's own switches. Never while typing (Ultra's editor uses Ctrl+K for links),
   // top frame only. Courses and items are asked of Ultra's own APIs once per page, when it first opens.
+  // On Canvas it searches Canvas's pages, your courses, this course's tabs, what is due and Glaze's switches.
   const TOOLS = [['/ultra/course', 'Courses'], ['/ultra/calendar', 'Calendar'], ['/ultra/grades', 'Grades'], ['/ultra/messages', 'Messages'],
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
     previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator' };
+  // Canvas's global navigation, and the one extra there is to switch (the palette itself isn't listed, as on Ultra).
+  const CANVAS_TOOLS = [['/', 'Dashboard'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
+  const CANVAS_EXTRAS = { overall: 'Grades on course cards' };
   const go = (path) => () => location.assign(location.origin + path);
-  const pages = () => TOOLS.map(([path, label]) => ({ label: t(label), hint: 'Blackboard', group: 'Go to', run: go(path) }));
+  const pages = () => (ultra ? TOOLS : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
   const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
     const title = new Map(all.map((c) => [c.id, c.title]));
     return all.filter((c) => c.links?.[0]?.href).map((c) => ({ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(c.links[0].href.replace(/^https?:\/\/[^/]+/, '')) }));
   });
+  // The due items, "in 2 days · Thu 11:59 PM · ENG1001", each opening its item: on Canvas at its own address, on Ultra
+  // at the address the content API gives it (as "In this course" does), or its course when it has none.
+  const dueCmds = (due) => {
+    const now = new Date();
+    const lang = GZ_I18N.locale(locale());
+    return due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' }), d.course || courseList[d.cid]?.name].filter(Boolean).join(' · '), group: 'Due this week',
+      run: d.url ? go(d.url) : () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(all.find((c) => c.id === d.content)?.links?.[0]?.href.replace(/^https?:\/\/[^/]+/, '') || `/ultra/courses/${d.cid}/outline`)()) }));
+  };
+  // Glaze's own switches, the same on both sites but for the extras.
+  const glazeCmds = () => {
+    const s = settings;
+    return [
+      ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L)) })),
+      ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
+      ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
+      ...Object.entries(ultra ? EXTRAS : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
+      { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
+      { label: t('Glaze settings'), hint: t('Opens the editor'), group: 'Glaze', run: () => { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } },
+    ];
+  };
+  // On Canvas: its pages, this course's tabs, your courses and what is due. Each is a plain page load.
+  const canvasCommands = async () => {
+    const cid = location.pathname.match(/^\/courses\/([^/]+)/)?.[1];
+    const [courses, tabs, due] = await Promise.all([canvasCourses(), cid ? capi(`/courses/${cid}/tabs`).catch(() => []) : [], dueWeek()]);
+    return [
+      ...tabs.filter((x) => x.label && !x.hidden).map((x) => ({ label: x.label, hint: t('This course'), group: 'Go to', run: go(x.html_url) })),
+      ...pages(),
+      ...courses.filter((c) => c.name).map((c) => ({ label: c.friendly_name || c.name, hint: c.course_code || t('Course'), group: 'Courses', run: go(`/courses/${c.id}`) })),
+      ...dueCmds(due),
+      ...glazeCmds(),
+    ];
+  };
   // Everything the palette can do, built when it opens.
   const commands = async () => {
+    if (!ultra) return canvasCommands();
     const cid = courseId();
     // A tab's name without its count badge ("Announcements 12").
     const tabName = (a) => { const c = a.cloneNode(true); for (const b of c.querySelectorAll('[class*="badge" i]')) b.remove(); return c.textContent.trim(); };
     const here = cid ? [...document.querySelectorAll('.bb-ui-navigation-list-horizontal a[href]')].map((a) => ({ label: tabName(a), hint: t('This course'), group: 'Go to', run: () => a.click() })).filter((c) => c.label) : [];
     const [courses, items, due] = await Promise.all([myCourses(), cid ? paletteItems(cid) : [], dueWeek()]);
-    const s = settings;
-    const now = new Date();
-    const lang = GZ_I18N.locale(locale());
     return [
       ...here,
       ...pages(),
       ...courses.filter((m) => m.course).sort((a, b) => !!a.course.isClosed - !!b.course.isClosed)
         .map((m) => ({ label: m.course.name, hint: m.course.isOrganization ? t('Organization') : m.course.isClosed ? t('Closed course') : m.course.courseId || t('Course'), group: 'Courses', run: go(`/ultra/courses/${m.courseId}/outline`) })),
-      // "in 2 days · Thu 11:59 PM · ENG1001". Each opens its item, at the address the content API gives it
-      // (as "In this course" does), or its course when it has none.
-      ...due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' }), courseList[d.cid]?.name].filter(Boolean).join(' · '), group: 'Due this week',
-        run: () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(all.find((c) => c.id === d.content)?.links?.[0]?.href.replace(/^https?:\/\/[^/]+/, '') || `/ultra/courses/${d.cid}/outline`)()) })),
+      ...dueCmds(due),
       ...items,
-      ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L)) })),
-      ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
-      ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
-      ...Object.entries(EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
-      { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
-      { label: t('Glaze settings'), hint: t('Opens the editor'), group: 'Glaze', run: () => { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } },
+      ...glazeCmds(),
     ];
   };
   let cmd = null; // { box, input, list, all, shown, active, back }
@@ -1578,10 +1636,11 @@
     showCmd();
     commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(); });
   };
-  if (ultra && window.top === window) {
+  if (window.top === window) {
     document.addEventListener('keydown', (e) => {
       if (e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
-      if (cmd) { e.preventDefault(); closeCmd(); return; }
+      // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
+      if (cmd) { e.preventDefault(); e.stopPropagation(); closeCmd(); return; }
       if (typing(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -1882,7 +1941,8 @@
     const was = enhanced;
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
-    // The attributes above are set on Canvas too (canvas.css may read them); the work they switch on is Ultra's.
+    // The attributes above are set on Canvas too (canvas.css may read them); the work they switch on is Ultra's,
+    // but for the card grades.
     if (ultra) {
       if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
       if (observer) { renderProgress(); renderCalc(); syncDownloads(); }
@@ -1890,7 +1950,7 @@
       if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
       if (observer) renderNew();
       if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
-    }
+    } else if (observer && s.enhance.overall && !was.overall) tagCards();
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
