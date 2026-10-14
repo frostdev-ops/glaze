@@ -168,6 +168,9 @@ html, body, #drawer-layout-content, #drawer-layout-mount-point, #application, #w
 html:not([data-gz-font="blackboard"]) :is(body, #drawer-layout-content, #application, #header, #flash_message_holder) { font-family: var(--gz-font); }
 html:not([data-gz-font="blackboard"]) [class*="css-"] { font-family: var(--gz-font); }
 html:not([data-gz-font="blackboard"]) :is(button, input, select, textarea) { font-family: inherit; }
+/* What Glaze draws itself (the command palette) reads --gz-font; "The site's own" is Open Sans in the catalog,
+   which is Ultra's: here it is Canvas's face. !important: content.js writes the var inline, and this beats it. */
+html[data-gz-font="blackboard"] { --gz-font: LatoWeb, "Lato Extended", Lato, "Helvetica Neue", Helvetica, Arial, sans-serif !important; }
 ::selection { background: var(--gz-accent-soft); color: var(--gz-ink); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--gz-line-strong); border-radius: 999px; border: 2px solid var(--gz-surface-2); }
@@ -475,6 +478,41 @@ li[class*="optionItem"] > [role="option"][aria-selected="true"] { color: var(--g
 #application #minical .fc-button { background: transparent; border: 0; color: var(--gz-ink-muted); }
 #application #minical .fc-button:hover { color: var(--gz-accent); }
 #application .context-list-toggle-box { border-radius: 3px; }
+
+/* ---- Course colors ----
+   Canvas draws each course in the color its student chose. Here it is toned as theme.css tones Ultra's
+   course-color-N: 70% the course's own color, 30% a grey as light as the muted ink, mixed in OKLab so each hue
+   stays its own (--gz-course). data-gz-raw-courses (toning off) gives Canvas's own color back, as drawn. Canvas
+   hands the color over in two ways, and the way decides how it is read, which is also what stays right when
+   Canvas draws again or the color is changed on the page:
+   1. As `color`, by a class rule (.group_course_N: calendar chips, sidebar swatches, agenda lines; the My
+      Courses swatch). Nothing is written back to `color`, so currentColor is always Canvas's own and
+      --gz-course (a token stream, resolved where it is used) tones it in place: no script, nothing to go stale.
+   2. Inline on some other property (the dashboard card's hero background, the list view group's border),
+      which no selector can read: content.js copies it into --gz-course-raw on the card or group (liftCourses;
+      Canvas's inline value is never overwritten, only overridden here, so a re-read is always Canvas's).
+      The [style*=] guards leave Canvas's own color showing until it has.
+   Course picks (settings.courses.colors) are Ultra's for now. */
+html { --gz-course: color-mix(in oklab, currentColor 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+html[data-gz-raw-courses] { --gz-course: currentColor; }
+:is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+html[data-gz-raw-courses] :is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
+/* Calendar: the chips of the month and week grids (restyled in the calendar section above; here they take the
+   toned color), the swatches of the sidebar's checked calendars (an unchecked one is Canvas's grey), the agenda's lines. */
+#application .fc-event { background: color-mix(in srgb, var(--gz-course) 12%, var(--gz-surface)) !important; border-color: color-mix(in srgb, var(--gz-course) 40%, var(--gz-line)); border-left-color: var(--gz-course); }
+#application .fc-event:hover { background: color-mix(in srgb, var(--gz-course) 24%, var(--gz-surface)) !important; }
+#application .fc-event :is(.fc-title, .fc-time) { color: color-mix(in srgb, var(--gz-course) 45%, var(--gz-ink)); }
+#application .context_list_context.checked .context-list-toggle-box[class*="group_"] { background-color: var(--gz-course) !important; border-color: var(--gz-course) !important; }
+#application .agenda-event__icon[class*="group_"] > i { color: var(--gz-course); }
+#application .agenda-event__title[class*="group_"] { -webkit-text-fill-color: var(--gz-course); } /* its own color is the course's: the fill is what's left to change */
+#application .course-color-block::before { color: var(--gz-course); }
+/* Dashboard cards: the hero's color layer (an image card keeps its image under it) and the title. */
+#application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: var(--gz-course) !important; }
+#application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: var(--gz-course) !important; }
+/* List view (the planner): the group's banner and edge, and the icon (the avatar, for a personal to-do) of each item. */
+#application .planner-grouping[style*="--gz-course-raw"] > ol { border-color: var(--gz-course) !important; }
+#application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__overlay"] { background-color: var(--gz-course) !important; }
+#application .planner-grouping[style*="--gz-course-raw"] :is([class*="PlannerItem-styles__icon"], [class*="PlannerItem-styles__avatar"]) { color: var(--gz-course) !important; }
 
 /* ---- portals: the trays, popovers, menus, dialogs and tooltips mount on <body>, outside #application,
    so everything scoped to it misses them. The sweep has already made them dark; what is left is their edges,

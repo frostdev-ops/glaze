@@ -259,6 +259,22 @@
       }
     });
   };
+  // Canvas: its course colors come inline on the card's hero and the list view's group (canvas.css, Course colors),
+  // where no selector can read them: copied into --gz-course-raw on the card or group, which canvas.css tones. The
+  // source is the inline value, never computed: canvas.css overrides it with !important and never writes it, so
+  // what is read is always Canvas's own (a color changed on the page re-renders it, and the style mutation brings
+  // us back here). Run from the mutation callback, so a new card is toned before its first paint. Only on change:
+  // our own write is a mutation too. Not /users/self/colors: Canvas picks a default color in the browser for a course
+  // with none and saves it only after painting, and a color changed on the page never reaches a list asked for once.
+  const COURSE_BOXES = [['.ic-DashboardCard', '.ic-DashboardCard__header_hero', 'backgroundColor'], ['.planner-grouping', ':scope > ol', 'borderColor']];
+  const liftCourses = () => {
+    for (const [box, src, prop] of COURSE_BOXES) {
+      for (const el of document.querySelectorAll(box)) {
+        const c = el.querySelector(src)?.style[prop];
+        if (c && el.style.getPropertyValue('--gz-course-raw') !== c) el.style.setProperty('--gz-course-raw', c);
+      }
+    }
+  };
   // cid → { at, pending, results, grades (by content item), overall, late (column ids), key }. Lateness is
   // asked only by the due-date chips (late = true), so a course card never costs attempt requests. An
   // answer that changes anything re-tags the page.
@@ -409,6 +425,7 @@
   // Throttle, not debounce: Ultra never stops mutating (ripples, popper repositioning), and a
   // debounce that restarts on every record would put the sweep off indefinitely.
   const schedule = (records) => {
+    if (!ultra) liftCourses();
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {
         if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true'
@@ -439,7 +456,7 @@
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
     if (window.top === window) dueWeek();
-    if (!ultra) return tagCards(); // Canvas: the sweep, Due this week and the card grades; the rest is Ultra's extras and its /learn/api
+    if (!ultra) { liftCourses(); return tagCards(); } // Canvas: the sweep, the course colors, Due this week and the card grades; the rest is Ultra's extras and its /learn/api
     tagExtras([document.body]);
     watchDrafts();
     recordCourses();
@@ -455,6 +472,7 @@
     cardsIO.disconnect();
     onScreen.clear();
     clearTags(TAGS);
+    if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
   };
 
   // ---- hover fills ------------------------------------------------------------------------------
@@ -1878,7 +1896,8 @@
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);
     // Course colors and tint read Ultra's color slots (course-color-N, the course list recordCourses keeps):
-    // none on Canvas for now. `colors` is the palette painted: the base one, tinted inside a picked course.
+    // none on Canvas for now (its own course colors are toned by canvas.css from data-gz-raw-courses; liftCourses).
+    // `colors` is the palette painted: the base one, tinted inside a picked course.
     let colors = base;
     if (ultra) {
       // A slot's own course's pick colors the slot, so what Glaze can't tell apart (the calendar) agrees.
