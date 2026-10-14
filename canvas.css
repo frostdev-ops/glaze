@@ -508,6 +508,9 @@ html[data-gz-raw-courses] :is(.ic-DashboardCard, .planner-grouping)[style*="--gz
 #application .course-color-block::before { color: var(--gz-course); }
 /* Dashboard cards: the hero's color layer (an image card keeps its image under it) and the title. */
 #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: var(--gz-course) !important; }
+/* On a dark palette the hero is a whole slab of color, and the light grey the toning leans on turns it chalky: there it
+   is Canvas's own color sunk toward the ground instead, so it keeps its hue and sits in the palette. */
+html[data-gz-dark-theme]:not([data-gz-raw-courses]) #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: color-mix(in oklab, var(--gz-course-raw) 62%, var(--gz-surface-2)) !important; }
 #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: var(--gz-course) !important; }
 /* List view (the planner): the group's banner and edge, and the icon (the avatar, for a personal to-do) of each item. */
 #application .planner-grouping[style*="--gz-course-raw"] > ol { border-color: var(--gz-course) !important; }
