@@ -275,6 +275,8 @@
   'Colour and look for {name}': 'Farbe und Design für {name}',
   'Tint pages inside this course': 'Seiten in diesem Kurs einfärben',
   'Nickname': 'Spitzname',
+  'Not saved. Try again in a moment.': 'Nicht gespeichert. Versuch es gleich noch einmal.',
+  'Too much to sync. Shorten a nickname or clear one.': 'Zu viel zum Synchronisieren. Kürze einen Spitznamen oder lösche einen.',
   'Purple': 'Lila',
   'Cyan': 'Cyan',
   'Yellow': 'Gelb',

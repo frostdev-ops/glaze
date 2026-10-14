@@ -273,3 +273,25 @@ test('nicknames: by course id, one trimmed line of at most 60 characters, string
   assert.ok(Object.keys(all.names).length >= 10, 'some are kept');
   assert.ok(new TextEncoder().encode(JSON.stringify(all)).length + 'courses'.length < 8192, 'the item fits sync storage');
 });
+
+test('nicknames: the budget is the whole courses item, colors, ticks and looks included', () => {
+  const bytes = (c) => new TextEncoder().encode('courses' + JSON.stringify(c)).length;
+  const ids = Array.from({ length: 90 }, (_, i) => `_${1000000 + i}_1`);
+  const raw = { courses: {
+    colors: Object.fromEntries(ids.map((id) => [id, '#abcdef'])), tint: true, tinted: ids, looks: Object.fromEntries(ids.map((id) => [id, 'Aurora Night'])),
+    names: Object.fromEntries(ids.map((id) => [id, 'é'.repeat(60)])),
+  } };
+  const c = G.GZ_SANITIZE(raw).courses;
+  assert.equal(Object.keys(c.looks).length, 90, 'the looks are all kept');
+  const n = Object.keys(c.names).length;
+  assert.ok(n > 0 && n < 90, `some nicknames are kept (${n})`);
+  assert.ok(bytes(c) <= 8192, `the item fits sync storage (${bytes(c)} bytes)`);
+  // Exactly as many as fit: one more would not.
+  const more = { ...c, names: { ...c.names, [ids[n]]: 'é'.repeat(60) } };
+  assert.ok(bytes(more) > 8192, 'one more would not fit');
+  assert.equal(G.GZ_SYNC_BYTES('courses', c), bytes(c));
+  // Without the rest, the nicknames get its room.
+  assert.equal(Object.keys(G.GZ_SANITIZE({ courses: { names: raw.courses.names } }).courses.names).length, 59);
+  // What fits is kept as it is: sanitizing again changes nothing.
+  assert.deepEqual(G.GZ_SANITIZE({ courses: c }).courses, c);
+});

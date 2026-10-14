@@ -275,6 +275,8 @@
   'Colour and look for {name}': 'Color y estilo para {name}',
   'Tint pages inside this course': 'Teñir las páginas de este curso',
   'Nickname': 'Apodo',
+  'Not saved. Try again in a moment.': 'No se guardó. Inténtalo de nuevo en un momento.',
+  'Too much to sync. Shorten a nickname or clear one.': 'Demasiado para sincronizar. Acorta un apodo o borra uno.',
   'Purple': 'Morado',
   'Cyan': 'Cian',
   'Yellow': 'Amarillo',

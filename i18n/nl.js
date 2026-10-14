@@ -275,6 +275,8 @@
   'Colour and look for {name}': 'Kleur en stijl voor {name}',
   'Tint pages inside this course': "Pagina's in deze cursus tinten",
   'Nickname': 'Bijnaam',
+  'Not saved. Try again in a moment.': 'Niet opgeslagen. Probeer het zo opnieuw.',
+  'Too much to sync. Shorten a nickname or clear one.': 'Te veel om te synchroniseren. Maak een bijnaam korter of wis er een.',
   'Purple': 'Paars',
   'Cyan': 'Cyaan',
   'Yellow': 'Geel',

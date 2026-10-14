@@ -182,18 +182,20 @@ const cleanName = (n) => (typeof n === 'string' ? n.trim().slice(0, 40) : '');
 // A course's nickname: one line, 60 characters at most (counted as people count them, not as UTF-16 units).
 const GZ_NICK_MAX = 60;
 const cleanNick = (n) => (typeof n === 'string' ? [...n.replace(/\s+/g, ' ').trim()].slice(0, GZ_NICK_MAX).join('').trim() : '');
-// All of them share settings.courses' one sync item (8 KB at most, with the colors, ticks and looks): the first
-// GZ_NICK_BUDGET bytes of them are kept, about 50 nicknames of 60 characters, many more of usual length.
-// ponytail: a nickname past the budget is dropped when read back, not refused when typed; warn in the menu if it bites.
-const GZ_NICK_BUDGET = 3500;
-const cleanNicks = (raw) => {
+// All of them share settings.courses' one sync item with its colors, ticks and looks, and Chrome refuses an item
+// over 8 KB, its key and JSON counted in bytes (GZ_SYNC_BYTES): the nicknames get the room the rest leaves, first
+// come first kept, so a stored item read back always fits. The course menu checks an edit fits before saving it.
+const GZ_SYNC_ITEM_MAX = 8192;
+const GZ_SYNC_BYTES = (key, v) => new TextEncoder().encode(key + JSON.stringify(v)).length;
+const cleanNicks = (raw, room) => {
   let bytes = 0;
   const out = {};
   for (const [id, v] of isObj(raw) ? Object.entries(raw) : []) {
     const n = cleanNick(v);
     if (!COURSE_ID.test(id) || !n) continue;
-    bytes += new TextEncoder().encode(JSON.stringify([id, n])).length;
-    if (bytes > GZ_NICK_BUDGET || Object.keys(out).length >= 200) break;
+    // "id":"name", and a comma before every one but the first.
+    bytes += new TextEncoder().encode(`${JSON.stringify(id)}:${JSON.stringify(n)}`).length + (bytes ? 1 : 0);
+    if (bytes > room || Object.keys(out).length >= 200) break;
     out[id] = n;
   }
   return out;
@@ -297,8 +299,9 @@ const GZ_SANITIZE = (raw) => {
     tinted: Array.isArray(rc.tinted) ? [...new Set(rc.tinted.filter((n) => typeof n === 'string' && (COURSE_ID.test(n) || COURSE_SLOT.test(n))))].slice(0, 200) : [],
     strength: cleanValue(rc.strength, 60, [10, 100]),
     looks: Object.fromEntries(isObj(rc.looks) ? Object.entries(rc.looks).filter(([id, n]) => COURSE_ID.test(id) && GZ_LOOKS.some((L) => L.name === n)).slice(0, 200) : []),
-    names: cleanNicks(rc.names),
+    names: {},
   };
+  out.courses.names = cleanNicks(rc.names, GZ_SYNC_ITEM_MAX - GZ_SYNC_BYTES('courses', out.courses));
   out.footer = typeof raw.footer === 'boolean' ? raw.footer : GZ_DEFAULTS.footer;
   out.presets = GZ_SANITIZE_PRESETS(raw.presets);
   // 1.0 stored no preset name: recover it from the palette, so the popup can mark it.
@@ -491,5 +494,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }

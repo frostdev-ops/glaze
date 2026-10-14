@@ -1904,7 +1904,7 @@
   const CARD = COURSE_CARDS[0][0];
   // Ultra's course-color-1…10 in order, by hue, for the swatches' names.
   const TONES = ['Purple', 'Cyan', 'Yellow', 'Orange', 'Mint', 'Pink', 'Green', 'Teal', 'Magenta', 'Blue'];
-  let menu = null; // { box, btn, cid, nick, custom, reset, tint, grid, sw, looks } while the popover is open
+  let menu = null; // { box, btn, cid, nick, edited, note, custom, reset, tint, grid, sw, looks } while the popover is open
 
   // The nickname given to a course, while the Extra is on; '' for none. Only Glaze's own surfaces and the page's
   // course names call this: Blackboard's real name is always the course list's (recordCourses), never the page's.
@@ -1923,17 +1923,30 @@
     const c = structuredClone(settings.courses);
     for (const fn of edits.values()) fn(c);
     edits.clear();
-    try { chrome.storage.sync.set({ version: 2, courses: c }, () => void chrome.runtime.lastError); } catch { /* extension reloaded under the tab */ }
+    try {
+      chrome.storage.sync.set({ version: 2, courses: c }, () => { if (chrome.runtime.lastError) menuNote(t('Not saved. Try again in a moment.')); });
+    } catch { /* extension reloaded under the tab */ }
   };
+  // An edit that would take the courses item past what sync storage keeps (8 KB) is refused, said in the menu,
+  // and leaves the page as it was: false.
   const editCourse = (key, fn, soon = false) => {
     const c = structuredClone(settings.courses);
     fn(c);
+    if (GZ_SYNC_BYTES('courses', c) > GZ_SYNC_ITEM_MAX) {
+      menuNote(t('Too much to sync. Shorten a nickname or clear one.'));
+      if (menu) paintMenu(); // a swatch or tick back as it is kept
+      return false;
+    }
+    menuNote('');
     settings = { ...settings, courses: c };
     applySettings();
     edits.set(key, fn);
     clearTimeout(editTimer);
     if (soon) editTimer = setTimeout(saveEdits, 500); else saveEdits();
+    return true;
   };
+  // A short line in the open menu, read out when it changes; '' clears it.
+  const menuNote = (text) => { if (menu) { menu.note.textContent = text; menu.note.hidden = !text; } };
   addEventListener('pagehide', saveEdits);
 
   // -- nicknames: swapped into the page's own text, and put back exactly --
@@ -2049,6 +2062,8 @@
     for (const b of m.sw) b.setAttribute('aria-pressed', String(cur.picked && C.same(C.parse(b.dataset.hex), C.parse(cur.color))));
     m.custom.toggleAttribute('data-on', cur.picked && !m.sw.some((b) => b.getAttribute('aria-pressed') === 'true'));
     if (m.custom.value !== now) m.custom.value = now; // not while it is being dragged to the same
+    // The nickname as kept, unless the student is changing it: another tab's save shows here, and isn't undone.
+    if (!m.edited && m.nick.value !== (c.names[cid] || '')) m.nick.value = c.names[cid] || '';
     m.reset.hidden = !cur.picked;
     m.tint.checked = GZ_COURSE_TINTED(c, cid, courseList);
     for (const b of m.looks) b.setAttribute('aria-pressed', String((c.looks[cid] || '') === b.dataset.look));
@@ -2068,10 +2083,16 @@
   };
   // One tab stop per group; arrow keys walk it.
   const rove = (group, active) => { for (const b of group.querySelectorAll('button, input')) b.tabIndex = b === active ? 0 : -1; };
+  // Only what the student typed: an untouched field may be behind a nickname saved elsewhere since. One that doesn't
+  // fit stays in the field, still theirs to shorten, with the menu's note saying why.
   const commitNick = (m = menu) => {
-    if (!m || m.nick.value.trim() === (settings.courses.names[m.cid] || '')) return;
+    if (!m?.edited) return;
     const v = m.nick.value;
-    editCourse(`name ${m.cid}`, (c) => GZ_COURSE_EDIT.name(c, m.cid, v));
+    const was = settings.courses.names[m.cid] || '';
+    const c = structuredClone(settings.courses);
+    GZ_COURSE_EDIT.name(c, m.cid, v);
+    if ((c.names[m.cid] || '') !== was && !editCourse(`name ${m.cid}`, (x) => GZ_COURSE_EDIT.name(x, m.cid, v))) return;
+    m.edited = false;
     m.nick.value = settings.courses.names[m.cid] || ''; // as kept: one trimmed line
   };
   const closeMenu = (refocus = true) => {
@@ -2103,7 +2124,10 @@
 
     // The nickname: what the field shows empty is the real name. Saved on Enter, on leaving it, and on closing.
     const nick = make('input', { type: 'text', id: 'gz-cm-nick', className: 'gz-cm-nick', maxLength: GZ_NICK_MAX, placeholder: real, title: real, value: settings.courses.names[cid] || '', autocomplete: 'off', spellcheck: false });
+    nick.addEventListener('input', () => { if (menu?.nick === nick) menu.edited = true; });
     nick.addEventListener('change', () => commitNick());
+    const note = make('p', { className: 'gz-cm-note', hidden: true });
+    note.setAttribute('role', 'status');
 
     // Colors: Ultra's ten as Glaze tones them (the very colors its cards show: a pick is used as is, so a swatch picked
     // is what its card then shows), and the theme's accent. Ultra's ten cover the hues except red and grey, which the
@@ -2151,12 +2175,12 @@
     const lookGrid = group('gz-cm-look', ...looks);
     lookGrid.className = 'gz-cm-looks';
 
-    box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick,
+    box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
       make('div', { className: 'gz-cm-colorhead' }, cap(t('Colors'), 'gz-cm-colors'), reset), grid,
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')),
       cap(t('Look'), 'gz-cm-look'), lookGrid);
     document.body.append(box);
-    menu = { box, btn, cid, nick, custom, reset, tint, grid, sw, looks };
+    menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
     btn.setAttribute('aria-expanded', 'true');
     paintMenu();
     rove(grid, sw.find((b) => b.getAttribute('aria-pressed') === 'true') || sw[0]);

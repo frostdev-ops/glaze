@@ -402,6 +402,9 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 }
 #gz-cm input.gz-cm-nick::placeholder { color: var(--gz-ink-faint); }
 #gz-cm input.gz-cm-nick:focus { border-color: var(--gz-accent) !important; outline: none; }
+/* An edit that couldn't be saved, said under the field. */
+#gz-cm .gz-cm-note { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-cm .gz-cm-note[hidden] { display: none; }
 
 /* Colors: Reset sits on the caption's line; the swatches are six to a row. */
 #gz-cm .gz-cm-colorhead { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.4rem; min-height: 24px; }
