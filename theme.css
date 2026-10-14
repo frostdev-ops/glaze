@@ -650,16 +650,17 @@ html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, h
 /* ---- course colors ----
    Ultra marks anything course-scoped with .course-color-1…10 and paints a stripe in that hue
    (a ::before bar, a top border, a calendar chip border). Its ten hues are fully saturated and
-   clash with every palette; harmonised, each is pulled 30% toward the muted ink so they sit in
-   the palette but stay telling apart. A colour picked for a course (content.js sets --gz-pick-N
-   on <html>) is used as is; an unset --gz-pick-N leaves --gz-pick invalid, so the fallback applies.
-   data-gz-raw-courses keeps Ultra's originals. */
+   clash with every palette; harmonised, each is pulled 30% toward a grey as light as the muted ink
+   so they sit in the palette but stay telling apart. In oklab toward a grey, each keeps its hue
+   (in oklch toward the ink itself, the hue swung toward the ink's: yellow went green). A colour
+   picked for a course (content.js sets --gz-pick-N on <html>) is used as is; an unset --gz-pick-N
+   leaves --gz-pick invalid, so the fallback applies. data-gz-raw-courses keeps Ultra's originals. */
 .course-color-1 { --gz-course-raw: #c473d4; --gz-pick: var(--gz-pick-1); } .course-color-2 { --gz-course-raw: #2fd9fc; --gz-pick: var(--gz-pick-2); }
 .course-color-3 { --gz-course-raw: #ffe12b; --gz-pick: var(--gz-pick-3); } .course-color-4 { --gz-course-raw: #ff6417; --gz-pick: var(--gz-pick-4); }
 .course-color-5 { --gz-course-raw: #89f3db; --gz-pick: var(--gz-pick-5); } .course-color-6 { --gz-course-raw: #fe5b91; --gz-pick: var(--gz-pick-6); }
 .course-color-7 { --gz-course-raw: #85f472; --gz-pick: var(--gz-pick-7); } .course-color-8 { --gz-course-raw: #22c7cc; --gz-pick: var(--gz-pick-8); }
 .course-color-9 { --gz-course-raw: #ca22ad; --gz-pick: var(--gz-pick-9); } .course-color-10 { --gz-course-raw: #157afb; --gz-pick: var(--gz-pick-10); }
-[class*="course-color-"] { --gz-course: var(--gz-pick, color-mix(in oklch, var(--gz-course-raw) 70%, var(--gz-ink-muted))); }
+[class*="course-color-"] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); }
 html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
 [class*="course-color-"]::before, .element-card.element-card-deadline[class*="course-color-"]::after,
 .calendar-wrapper .event-dot[class*="course-color-"] { background-color: var(--gz-course) !important; }
