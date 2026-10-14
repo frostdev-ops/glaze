@@ -6,6 +6,10 @@ const m = require('../manifest.json');
 
 const [glaze, detector] = m.content_scripts;
 
+test('Ultra matches its bare entry and descendants without matching lookalike paths', () => {
+  assert.deepEqual(glaze.matches.filter((pattern) => pattern.includes('/ultra')), ['https://*/ultra', 'https://*/ultra/*']);
+});
+
 // lib/background.js injects and registers content_scripts[0].js for hosts the detector finds.
 test('the first content script is Glaze, and the detector covers the rest of https', () => {
   assert.equal(glaze.js.at(-1), 'content.js');

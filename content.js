@@ -30,9 +30,9 @@
   // The options page shows a mock of Ultra (preview.html) that runs this same script.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
   // Which site this is, from the address: at document_start there is no body to look at yet. Ultra lives
-  // under /ultra/ (the preview's mock of it too); the manifest matches nothing else but Canvas. Every
+  // at /ultra or below it (the preview's mock of it too); other addresses are checked for Canvas below. Every
   // Ultra-only part below is switched off on Canvas where it is entered, by this.
-  const ultra = isPreview || location.pathname.startsWith('/ultra/');
+  const ultra = isPreview || /^\/ultra(\/|$)/.test(location.pathname);
   // Canvas wears canvas.css instead of theme.css and extras.css, which are written against Ultra's markup.
   // motion.css comes along: it is mostly the motion knobs (--gz-t, --gz-enter…, set per level by
   // html[data-gz-motion] and the three switches) that any sheet's animations read, so canvas.css doesn't
@@ -43,7 +43,7 @@
   // On Canvas, the whole document: put on a school's own host by lib/background.js mid-load, the body can be
   // there before Canvas's wrapper (isCanvas) is.
   const onBody = (fn) => (document.body && (ultra || document.readyState !== 'loading') ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
-  // `https://*/ultra/*` matches any host with that path, so confirm this is really Blackboard
+  // Ultra's address patterns match any host with those paths, so confirm this is really Blackboard
   // Ultra before touching the page. Checked once, when the body exists.
   const isUltra = () => !!document.querySelector('#site-wrap, [class*="bb-"], [id*="bb-"], base[href*="ultra"]');
   // Likewise `https://*.instructure.com/*`, and each school's own Canvas host that lib/detect.js found, is
