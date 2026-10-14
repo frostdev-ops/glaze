@@ -15,6 +15,12 @@
   .hint { margin-top: 0.6rem; }
   /* Notes for this version not seen yet: a dot, nothing on the toolbar icon. */
   #editor.new::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 0.45rem; border-radius: 50%; background: currentColor; vertical-align: middle; }
+  /* Due this week: what the content script last saw, soonest first. */
+  .due { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+  .due li { display: grid; grid-template-columns: 1fr auto; gap: 0 0.5rem; }
+  .due b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .due span { grid-column: 1 / -1; font-size: 11px; color: var(--gz-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .due small { font-size: 11px; color: var(--gz-accent); white-space: nowrap; }
   /* Safari on iPhone shows the popup as a full-width sheet; on iPad, a popover sized to this minimum. */
   @media (hover: none) and (pointer: coarse) { body { width: auto; min-width: 340px; } }
 </style>
@@ -24,6 +30,11 @@
     <h1 translate="no">Glaze</h1>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
   </header>
+
+  <section id="due" hidden>
+    <h2>Due this week</h2>
+    <ul class="due" id="due-list"></ul>
+  </section>
 
   <section>
     <h2>Looks</h2>
@@ -60,6 +71,7 @@
   <script src="i18n/nl.js"></script>
   <script src="i18n/pt-BR.js"></script>
   <script src="lib/i18n.js"></script>
+  <script src="lib/page.js"></script>
   <script src="ui.js"></script>
   <script src="popup.js"></script>
 </body>

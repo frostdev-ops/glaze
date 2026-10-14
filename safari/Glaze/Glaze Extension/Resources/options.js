@@ -455,7 +455,16 @@ GZ_UI.load().then((s) => {
         save(['courses']);
       });
       tint.append(box, t('Tint'));
-      li.append(input, name, tint, reset);
+      // Its own look on its pages, or the student's theme. Look names are names: not translated.
+      const look = Object.assign(document.createElement('select'), { title: t('Look for {name}', { name: c.name }) });
+      look.setAttribute('aria-label', look.title);
+      look.append(new Option(t('Your theme'), ''), ...GZ_LOOKS.map((L) => Object.assign(new Option(L.name, L.name), { translate: false })));
+      look.value = cc.looks[id] || '';
+      look.addEventListener('change', () => {
+        if (look.value) cc.looks[id] = look.value; else delete cc.looks[id];
+        save(['courses']);
+      });
+      li.append(input, name, look, tint, reset);
       return li;
     };
     const orgs = all.filter(([, c]) => c.org);

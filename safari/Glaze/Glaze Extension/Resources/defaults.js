@@ -66,6 +66,8 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'],
+    // place: a course's content reopens where you left it (open folders, scroll).
+    place: [true, 'bool'],
     // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
     // document buttons themselves.
     darkDocs: [false, 'bool'], toggles: [true, 'bool'],
@@ -81,7 +83,8 @@ const GZ_DEFAULTS = {
   ...Object.fromEntries(Object.entries(GZ_SPEC).map(([g, keys]) => [g, Object.fromEntries(Object.entries(keys).map(([k, [d]]) => [k, d]))])),
   // colors: picked by course id (a slot number is a pick from before 2.1.3). tint: inside a course
   // listed in `tinted` (course ids, or slots likewise), its color tints the palette, `strength` %.
-  courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60 },
+  // looks: a look's name by course id, worn on that course's pages instead of the student's theme.
+  courses: { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {} },
   footer: true,
   presets: [],
 };
@@ -243,6 +246,11 @@ const GZ_LOOK_ON = (s, L) => {
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   return !s.auto.on && same(s.colors, want.colors) && Object.keys(want.look).every((k) => same(s.look[k], want.look[k])) && Object.keys(want.bg).every((k) => same(s.bg[k], want.bg[k]));
 };
+// The settings to paint on course `cid`'s pages: its own look (courses.looks) over `s`, or `s` itself.
+const GZ_COURSE_LOOK = (s, cid) => {
+  const L = cid && GZ_LOOKS.find((l) => l.name === s.courses.looks[cid]);
+  return L ? { ...s, ...GZ_LOOK_APPLY(s, L) } : s;
+};
 const GZ_PRESET = (name, custom) => GZ_ALL_PRESETS(custom).find(([n]) => n === name)?.[1] || null;
 const GZ_MATCH_PRESET = (colors, custom) => GZ_ALL_PRESETS(custom).find(([, c]) => sameColors(c, colors))?.[0] || null;
 
@@ -266,6 +274,7 @@ const GZ_SANITIZE = (raw) => {
     tint: cleanValue(rc.tint, false, 'bool'),
     tinted: Array.isArray(rc.tinted) ? [...new Set(rc.tinted.filter((n) => typeof n === 'string' && (COURSE_ID.test(n) || COURSE_SLOT.test(n))))].slice(0, 200) : [],
     strength: cleanValue(rc.strength, 60, [10, 100]),
+    looks: Object.fromEntries(isObj(rc.looks) ? Object.entries(rc.looks).filter(([id, n]) => COURSE_ID.test(id) && GZ_LOOKS.some((L) => L.name === n)).slice(0, 200) : []),
   };
   out.footer = typeof raw.footer === 'boolean' ? raw.footer : GZ_DEFAULTS.footer;
   out.presets = GZ_SANITIZE_PRESETS(raw.presets);
@@ -354,6 +363,23 @@ const GZ_COURSE_COLORS = (courses, picks = {}) => {
 // --gz-pick: initial drops a slot's picked color, so the course's raw color is toned like Ultra's.
 const GZ_COURSE_VARS = (c) => (!c || c.own ? {} : c.picked ? { '--gz-pick': c.color } : { '--gz-pick': 'initial', '--gz-course-raw': c.color });
 
+// ---- the calendar ------------------------------------------------------------------------------
+// Ultra's calendar items (/learn/api/v1/calendars/calendarItems): calendarId is the course's id (or
+// PERSONAL, INSTITUTION), with the item's title and its dates.
+// A calendar entry's course, from the entry's text and its slot: the one course of that slot (or not yet
+// listed) with an item whose title is in the text. Null when none is, or two are (a title they share).
+const GZ_CAL_COURSE = (text, slot, items, courses = {}) => {
+  const ids = new Set((items || []).filter((i) => i?.title && COURSE_ID.test(i.calendarId) && (courses[i.calendarId]?.slot ?? slot) === slot && text.includes(i.title)).map((i) => i.calendarId));
+  return ids.size === 1 ? [...ids][0] : null;
+};
+// What is left to do from `now` to a week on, soonest first, from Ultra's To Do list
+// (/learn/api/v1/calendars/todo/studentItems: { overdueItems, dueTodayItems, futureDueItems }, each
+// { title, dueDate, column: { courseId, contentId } }), overdue work left out: [{ title, cid, content, due (ms) }].
+const GZ_DUE_WEEK = (todo, now) => [...(todo?.dueTodayItems || []), ...(todo?.futureDueItems || [])]
+  .map((i) => ({ title: String(i?.title || '').slice(0, 200), cid: i?.column?.courseId, content: COURSE_ID.test(i?.column?.contentId) ? i.column.contentId : null, due: Date.parse(i?.dueDate) }))
+  .filter((i) => i.title && COURSE_ID.test(i.cid) && i.due >= now && i.due < now + 7 * 864e5)
+  .sort((a, b) => a.due - b.due);
+
 // ---- course tint ------------------------------------------------------------------------------
 // Inside a course picked for it, the accent family takes the course's hue, and `t` (0-1) of the way
 // from the palette's lightness and colorfulness to the course color's own: any strength reads as
@@ -388,5 +414,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_TINT };
 }
