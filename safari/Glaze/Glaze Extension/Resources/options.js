@@ -256,7 +256,7 @@ GZ_UI.load().then((s) => {
 
   // ---- fonts: one list for three slots (text, headings, code), each card drawn in its own face ----
   let slot = 'font';
-  const AUTO = { head: 'Same as text', mono: 'As Blackboard has it' };
+  const AUTO = { head: 'Same as text', mono: 'As the site has it' };
   // A few built-in names are words ("Serif", "System"); the rest are the fonts' own names.
   const fontName = (f) => t(f.name);
   const fontLabel = (sl) => (s.look[sl] === 'auto' ? t(AUTO[sl]) : (GZ_FONTS.resolve(s.look[sl]) && fontName(GZ_FONTS.resolve(s.look[sl]))) || s.look[sl]);
@@ -286,7 +286,7 @@ GZ_UI.load().then((s) => {
   const renderFonts = () => {
     fontLabels();
     const groups = new Map();
-    if (slot !== 'font') groups.set('', [card('auto', t(AUTO[slot]), t(slot === 'head' ? 'Follows the text font' : "Ultra's monospace"), 'inherit')]);
+    if (slot !== 'font') groups.set('', [card('auto', t(AUTO[slot]), t(slot === 'head' ? 'Follows the text font' : "The site's monospace"), 'inherit')]);
     const own = GZ_FONTS.custom(s.look[slot]) ? [GZ_FONTS.resolve(s.look[slot])] : [];
     for (const f of [...GZ_FONTS.LIST, ...own]) {
       if (!groups.has(f.group)) groups.set(f.group, []);
@@ -377,7 +377,7 @@ GZ_UI.load().then((s) => {
   // ---- generic controls: data-key is the settings path; radios use it as their name ----
   for (const el of $$('[data-key]')) {
     const key = el.dataset.key;
-    if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); refresh(); save([group(key)]); });
+    if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'enhance.coursemenu') renderCourses(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { set(key, +el.value); refresh(); save([group(key)], true); });
       el.addEventListener('change', () => save([group(key)]));
@@ -438,13 +438,17 @@ GZ_UI.load().then((s) => {
     const colors = GZ_COURSE_COLORS(courses, cc.colors);
     const row = ([id, c]) => {
       const li = document.createElement('li');
+      // A nickname (set from the course's card on Blackboard) heads the row, with Blackboard's name under it.
+      const nick = (s.enhance.coursemenu && cc.names[id]) || '';
+      c = { ...c, real: c.name, name: nick || c.name };
       const input = Object.assign(document.createElement('input'), { type: 'color', value: colors[id].color });
       input.setAttribute('aria-label', t('Colour for {name}', { name: c.name }));
       const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Reset'), hidden: !cc.colors[id] });
       input.addEventListener('input', () => { cc.colors[id] = input.value; reset.hidden = false; refresh(); save(['courses'], true); });
       input.addEventListener('change', () => save(['courses']));
       reset.addEventListener('click', () => { delete cc.colors[id]; renderCourses(); refresh(); save(['courses']); });
-      const name = Object.assign(document.createElement('span'), { className: 'name', textContent: c.name, title: c.name });
+      const name = Object.assign(document.createElement('span'), { className: 'name', textContent: c.name, title: nick ? c.real : c.name });
+      if (nick) name.append(Object.assign(document.createElement('small'), { textContent: c.real }));
       const tint = Object.assign(document.createElement('label'), { className: 'check', hidden: !cc.tint });
       tint.dataset.tint = '';
       const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: cc.tinted.includes(id) });

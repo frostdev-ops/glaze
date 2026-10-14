@@ -35,6 +35,7 @@
 		3B8EDAB6307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
 		3B8EDAB7307C30D500B0DD77 /* motion.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA7307C30D500B0DD77 /* motion.css */; };
 		3B8EDAB8307C30D500B0DD77 /* defaults.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA8307C30D500B0DD77 /* defaults.js */; };
+		3B8EDAB9307C30D500B0DD77 /* canvas.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA9307C30D600B0DD77 /* canvas.css */; };
 		3B8EDC1A307C30D500B0DD77 /* GlazeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8EDC05307C30D500B0DD77 /* GlazeApp.swift */; };
 		3B8EDC1B307C30D500B0DD77 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDC06307C30D500B0DD77 /* Main.html */; };
 		3B8EDC1C307C30D500B0DD77 /* iOS.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDC07307C30D500B0DD77 /* iOS.css */; };
@@ -62,6 +63,7 @@
 		3B8EDC30307C30D500B0DD77 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA6307C30D500B0DD77 /* fonts */; };
 		3B8EDC31307C30D500B0DD77 /* motion.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA7307C30D500B0DD77 /* motion.css */; };
 		3B8EDC32307C30D500B0DD77 /* defaults.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA8307C30D500B0DD77 /* defaults.js */; };
+		3B8EDC33307C30D500B0DD77 /* canvas.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA9307C30D600B0DD77 /* canvas.css */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -134,6 +136,7 @@
 		3B8EDAA6307C30D500B0DD77 /* fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fonts; path = Resources/fonts; sourceTree = "<group>"; };
 		3B8EDAA7307C30D500B0DD77 /* motion.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = motion.css; path = Resources/motion.css; sourceTree = "<group>"; };
 		3B8EDAA8307C30D500B0DD77 /* defaults.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = defaults.js; path = Resources/defaults.js; sourceTree = "<group>"; };
+		3B8EDAA9307C30D600B0DD77 /* canvas.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = canvas.css; path = Resources/canvas.css; sourceTree = "<group>"; };
 		3B8EDC03307C30D500B0DD77 /* Glaze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glaze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B8EDC04307C30D500B0DD77 /* Glaze Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Glaze Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B8EDC05307C30D500B0DD77 /* GlazeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlazeApp.swift; sourceTree = "<group>"; };
@@ -242,6 +245,7 @@
 				3B8EDAA6307C30D500B0DD77 /* fonts */,
 				3B8EDAA7307C30D500B0DD77 /* motion.css */,
 				3B8EDAA8307C30D500B0DD77 /* defaults.js */,
+				3B8EDAA9307C30D600B0DD77 /* canvas.css */,
 			);
 			name = Resources;
 			path = "Glaze Extension";
@@ -415,6 +419,7 @@
 				3B8EDAAB307C30D500B0DD77 /* theme.css in Resources */,
 				3B8EDAAC307C30D500B0DD77 /* popup.js in Resources */,
 				3B8EDAB8307C30D500B0DD77 /* defaults.js in Resources */,
+				3B8EDAB9307C30D500B0DD77 /* canvas.css in Resources */,
 				3B8EDAB4307C30D500B0DD77 /* options.html in Resources */,
 			);
 		};
@@ -450,6 +455,7 @@
 				3B8EDC30307C30D500B0DD77 /* fonts in Resources */,
 				3B8EDC31307C30D500B0DD77 /* motion.css in Resources */,
 				3B8EDC32307C30D500B0DD77 /* defaults.js in Resources */,
+				3B8EDC33307C30D500B0DD77 /* canvas.css in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */
