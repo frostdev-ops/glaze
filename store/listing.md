@@ -71,7 +71,7 @@ Glaze works on Blackboard Ultra and Canvas. On Canvas it themes the page (palett
 Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed list of universities.
 
 Privacy: Glaze stores your settings in Chrome's sync storage, including the course nicknames, colours, looks and tint you set, which
-follow your Chrome sync; and the course names your LMS lists, which grades you've seen, where you were in
+follow your Chrome sync when it's on; and the course names your LMS lists, which grades you've seen, where you were in
 each course, your what-if scores, what's due this week and a backup of what you type (until it's posted, 14 days at most) on your
 device. It
 collects nothing and has no server. The only requests it makes go to your own Blackboard site, for folder
@@ -95,9 +95,9 @@ on those pages until it is posted. Every permission and every line of code serve
 ## Permission justifications
 
 **storage**
-Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and
-devices, including the per-course colours, looks, tint and nicknames the user sets (nicknames are typed by
-the user and follow Chrome sync); the names of the user's courses as the LMS lists them in
+Saves the user's theme settings in `chrome.storage.sync`, so the theme persists across sessions and follows
+Chrome sync between devices when it's on, including the per-course colours, looks, tint and nicknames the user sets
+(nicknames are typed by the user); the names of the user's courses as the LMS lists them in
 `chrome.storage.local`, on the device only, so the editor can list them for
 recolouring; which grades and course items the user has seen, in `chrome.storage.local`, so new ones
 can be marked; which folders were open and how far down the user was in each course's content, so

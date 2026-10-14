@@ -65,7 +65,7 @@ test('Canvas due this week: events, announcements and personal notes are not wor
   const left = (...os) => D.GZ_CANVAS_DUE_WEEK(os.map((o, i) => plan('assignment', `Item ${i}`, at, o)), now).map((d) => d.title);
   assert.deepEqual(D.GZ_CANVAS_DUE_WEEK([plan('calendar_event', 'Lab section', at, { submissions: false }), plan('announcement', 'News', at, { submissions: false }),
     { ...plan('planner_note', 'Buy goggles', at, { submissions: false }), course_id: null, context_name: undefined, html_url: undefined }, { ...plan('assignment', 'Group work', at), course_id: undefined }], now), []);
-  assert.deepEqual(left({}, { submissions: flags({ submitted: true }) }, { planner_override: { marked_complete: true } }, { submissions: flags({ excused: true }) }, { submissions: flags({ graded: true }) }), ['Item 0']);
+  assert.deepEqual(left({}, { submissions: flags({ submitted: true }) }, { planner_override: { marked_complete: true } }, { submissions: flags({ excused: true }) }, { submissions: flags({ graded: true }) }), ['Item 0', 'Item 3', 'Item 4']);
   // Marked incomplete again, or sent back for a redo: a handed-in assignment is work to do once more.
   assert.deepEqual(left({ submissions: flags({ submitted: true }), planner_override: { marked_complete: false } }, { submissions: flags({ submitted: true, redo_request: true }) }, { planner_override: { marked_complete: false } }), ['Item 0', 'Item 1', 'Item 2']);
 });
@@ -78,9 +78,17 @@ test('Canvas due this week: done as Canvas reckons it, the planner mark first, t
   assert.deepEqual(left({ submissions: flags({ graded: true }), planner_override: { marked_complete: false } }, { submissions: flags({ excused: true }), planner_override: { marked_complete: false } },
     { planner_override: { marked_complete: true } }, { submissions: flags({ redo_request: true }), planner_override: { marked_complete: true } }), ['Item 0', 'Item 1']);
   // Sent back to redo: still due, graded or not.
-  assert.deepEqual(left({ submissions: flags({ graded: true, redo_request: true }) }, { submissions: flags({ submitted: true, graded: true, redo_request: true }) }, { submissions: flags({ graded: true }) }), ['Item 0', 'Item 1']);
+  assert.deepEqual(left({ submissions: flags({ graded: true, redo_request: true }) }, { submissions: flags({ submitted: true, graded: true, redo_request: true }) }, { submissions: flags({ graded: true }) }), ['Item 0', 'Item 1', 'Item 2']);
   // A peer review has nothing to hand in (submissions: false); Canvas marks the review itself completed.
   const review = (workflow_state, o = {}) => plan('assessment_request', `Review ${workflow_state}`, at, { submissions: false, plannable: { title: `Review ${workflow_state}`, workflow_state }, ...o });
   assert.deepEqual(D.GZ_CANVAS_DUE_WEEK([review('assigned'), review('completed'), review('completed', { plannable: { title: 'Review again', workflow_state: 'completed' }, planner_override: { marked_complete: false } })], now).map((d) => d.title),
     ['Review assigned', 'Review again']);
+});
+
+test('Canvas due this week: a posted zero without a submission is still work to do', () => {
+  const now = Date.parse('2026-10-14T12:00:00Z');
+  const list = D.GZ_CANVAS_DUE_WEEK([plan('assignment', 'Online assignment with posted zero', '2026-10-16T12:00:00Z', {
+    submissions: flags({ submitted: false, graded: true, redo_request: false }),
+  })], now);
+  assert.deepEqual(list.map((d) => d.title), ['Online assignment with posted zero']);
 });

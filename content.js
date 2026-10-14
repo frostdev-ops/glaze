@@ -1923,34 +1923,49 @@
   // (sync storage allows ~120 a minute).
   const edits = new Map();
   let editTimer = 0;
+  // Roll back only our still-current batch; a newer value from another tab wins.
+  let editStored = null;
+  let editCourses = null;
+  const refuseEdits = () => {
+    edits.clear();
+    const restore = settings.courses === editCourses;
+    if (restore) settings = { ...settings, courses: editStored };
+    editCourses = null;
+    if (restore) applySettings();
+    menuNote(t('Too much to sync. Shorten a nickname or clear one.'));
+    if (menu) paintMenu();
+    return false;
+  };
   const saveEdits = () => {
     clearTimeout(editTimer);
     editTimer = 0;
-    if (!edits.size) return;
+    if (!edits.size) return true;
     const c = structuredClone(settings.courses);
     for (const fn of edits.values()) fn(c);
+    if (GZ_SYNC_BYTES('courses', c) > GZ_SYNC_ITEM_MAX) return refuseEdits();
     edits.clear();
+    editCourses = null;
     try {
       chrome.storage.sync.set({ version: 2, courses: c }, () => { if (chrome.runtime.lastError) menuNote(t('Not saved. Try again in a moment.')); });
     } catch { /* extension reloaded under the tab */ }
+    return true;
   };
   // An edit that would take the courses item past what sync storage keeps (8 KB) is refused, said in the menu,
   // and leaves the page as it was: false.
   const editCourse = (key, fn, soon = false) => {
     const c = structuredClone(settings.courses);
+    for (const edit of edits.values()) edit(c);
     fn(c);
-    if (GZ_SYNC_BYTES('courses', c) > GZ_SYNC_ITEM_MAX) {
-      menuNote(t('Too much to sync. Shorten a nickname or clear one.'));
-      if (menu) paintMenu(); // a swatch or tick back as it is kept
-      return false;
-    }
+    if (GZ_SYNC_BYTES('courses', c) > GZ_SYNC_ITEM_MAX) return refuseEdits();
     menuNote('');
+    if (settings.courses !== editCourses) editStored = settings.courses;
+    editCourses = c;
     settings = { ...settings, courses: c };
     applySettings();
     edits.set(key, fn);
     clearTimeout(editTimer);
-    if (soon) editTimer = setTimeout(saveEdits, 500); else saveEdits();
-    return true;
+    if (soon) { editTimer = setTimeout(saveEdits, 500); return true; }
+    return saveEdits();
   };
   // A short line in the open menu, read out when it changes; '' clears it.
   const menuNote = (text) => { if (menu) { menu.note.textContent = text; menu.note.hidden = !text; } };
@@ -2040,15 +2055,15 @@
     // The popover goes with its card: gone, hidden, or the extra switched off.
     if (menu && !menu.btn.isConnected) {
       const again = document.getElementById(`gz-cm-${menu.cid}`); // a card Ultra drew again
-      if (again) menu.btn = again; else closeMenu(false);
+      if (again) menu.btn = again; else closeMenu(false, true);
     }
-    if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false);
+    if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false, true);
     if (menu) paintMenu();
     syncNames();
   };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
-    closeMenu(false);
+    closeMenu(false, true);
     for (const b of document.querySelectorAll('.gz-cm-btn')) b.remove();
     for (const p of document.querySelectorAll('[data-gz-real]')) unname(p);
   };
@@ -2079,7 +2094,7 @@
     if (!menu) return;
     const { box, btn } = menu;
     const r = btn.getBoundingClientRect();
-    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return closeMenu(false);
+    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return closeMenu(false, true);
     const w = box.offsetWidth;
     const h = box.offsetHeight;
     let top = r.bottom + 6;
@@ -2093,30 +2108,32 @@
   // Only what the student typed: an untouched field may be behind a nickname saved elsewhere since. One that doesn't
   // fit stays in the field, still theirs to shorten, with the menu's note saying why.
   const commitNick = (m = menu) => {
-    if (!m?.edited) return;
+    if (!m?.edited) return true;
     const v = m.nick.value;
     const was = settings.courses.names[m.cid] || '';
     const c = structuredClone(settings.courses);
     GZ_COURSE_EDIT.name(c, m.cid, v);
-    if ((c.names[m.cid] || '') !== was && !editCourse(`name ${m.cid}`, (x) => GZ_COURSE_EDIT.name(x, m.cid, v))) return;
+    if ((c.names[m.cid] || '') !== was && !editCourse(`name ${m.cid}`, (x) => GZ_COURSE_EDIT.name(x, m.cid, v))) return false;
     m.edited = false;
     m.nick.value = settings.courses.names[m.cid] || ''; // as kept: one trimmed line
+    return true;
   };
-  const closeMenu = (refocus = true) => {
+  const closeMenu = (refocus = true, teardown = false) => {
     const m = menu;
-    if (!m) return;
+    if (!m) return true;
+    if (teardown) menu = null; // no dialog to keep when its card or the extra has gone
+    if ((!commitNick(m) || !saveEdits()) && !teardown) return false;
     menu = null;
-    commitNick(m);
-    saveEdits();
     m.box.remove();
     m.btn.setAttribute('aria-expanded', 'false');
     if (refocus && m.btn.isConnected) m.btn.focus({ preventScroll: true });
+    return true;
   };
   const openMenu = (btn) => {
     const cid = btn.dataset.cid;
     const real = courseList[cid]?.name;
     if (!real) return;
-    closeMenu(false);
+    if (!closeMenu(false)) return;
     const name = nickOf(cid) || real;
     const box = make('div', { id: 'gz-cm' });
     for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t('Colour and look for {name}', { name })]]) box.setAttribute(k, v);
@@ -2203,6 +2220,7 @@
     const b = e.target instanceof Element && e.target.closest('.gz-cm-btn');
     if (!b) return;
     e.stopPropagation();
+    if (e.type === 'pointerdown') e.preventDefault(); // don't blur the nickname before the click commits it
     if (e.type !== 'click') return;
     e.preventDefault();
     if (menu?.btn === b) closeMenu(); else openMenu(b);
@@ -2214,7 +2232,7 @@
     if (!menu) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); return; }
     if (!(e.target instanceof Element) || !menu.box.contains(e.target)) return;
-    if (e.key === 'Enter' && e.target === menu.nick) { e.preventDefault(); commitNick(); return; }
+    if (e.key === 'Enter' && e.target === menu.nick) { e.preventDefault(); if (commitNick()) saveEdits(); return; }
     if (e.key === 'Tab') {
       const tabs = [...menu.box.querySelectorAll('button, input')].filter((x) => x.tabIndex >= 0 && x.getClientRects().length);
       const to = tabs[tabs.indexOf(e.target) + (e.shiftKey ? -1 : 1)] || tabs[e.shiftKey ? tabs.length - 1 : 0];
@@ -2237,7 +2255,8 @@
   }, true);
   // An outside press closes it; its own button toggles it (above). Focus stays where the press put it.
   document.addEventListener('pointerdown', (e) => {
-    if (menu && e.target instanceof Node && !menu.box.contains(e.target) && !menu.btn.contains(e.target)) closeMenu(false);
+    if (e.target instanceof Element && e.target.closest('.gz-cm-btn')) return;
+    if (menu && e.target instanceof Node && !menu.box.contains(e.target) && !menu.btn.contains(e.target) && !closeMenu(false)) e.preventDefault();
   }, true);
   let placing = 0;
   const follow = () => { if (menu && !placing) placing = requestAnimationFrame(() => { placing = 0; placeMenu(); }); };

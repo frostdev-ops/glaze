@@ -154,7 +154,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Privacy
 
 Glaze stores your settings in `chrome.storage.sync`, including the course nicknames, colours, looks and tint
-you set in a course's menu, so they follow your browser's sync; and the course names your LMS lists, which grades and course
+you set in a course's menu. These follow Chrome sync when it's on; Safari keeps them on this device only.
+It keeps the course names your LMS lists, which grades and course
 items you've seen and a backup of what you type in Blackboard's editors (until it's posted, 14 days at most) on your own
 device. It collects nothing. The only requests it makes go to your own Blackboard site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and

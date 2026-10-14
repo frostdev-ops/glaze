@@ -6,9 +6,8 @@ _Last updated: 2026-10-14_
 
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
   background, motion, course colour and extras choices, and what you set for a course in its course menu:
-  its colour, look, tint and the **nickname you type for it**. When your browser's sync is on, it syncs
-  them to your own account so your theme follows you between devices; nicknames go with them, so they
-  are not device-only.
+  its colour, look, tint and the **nickname you type for it**. When Chrome sync is on, these follow
+  your own account between devices. Safari keeps them on this device only.
 - **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
   lists it and which of Ultra's ten colour slots it is in, so the editor can list them for you to
   recolour or tint.
