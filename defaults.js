@@ -362,17 +362,19 @@ const GZ_COURSE_COLORS = (courses, picks = {}) => {
 const GZ_COURSE_VARS = (c) => (!c || c.own ? {} : c.picked ? { '--gz-pick': c.color } : { '--gz-pick': 'initial', '--gz-course-raw': c.color });
 
 // ---- the calendar ------------------------------------------------------------------------------
-// Ultra's calendar items (/learn/api/v1/calendars/calendarItems, dueDateCalendarItems): calendarId is the
-// course's id (or PERSONAL, INSTITUTION), with the item's title and its dates.
+// Ultra's calendar items (/learn/api/v1/calendars/calendarItems): calendarId is the course's id (or
+// PERSONAL, INSTITUTION), with the item's title and its dates.
 // A calendar entry's course, from the entry's text and its slot: the one course of that slot (or not yet
 // listed) with an item whose title is in the text. Null when none is, or two are (a title they share).
 const GZ_CAL_COURSE = (text, slot, items, courses = {}) => {
   const ids = new Set((items || []).filter((i) => i?.title && COURSE_ID.test(i.calendarId) && (courses[i.calendarId]?.slot ?? slot) === slot && text.includes(i.title)).map((i) => i.calendarId));
   return ids.size === 1 ? [...ids][0] : null;
 };
-// What is due from `now` to a week on, soonest first: [{ title, cid, course, due (ms) }].
-const GZ_DUE_WEEK = (items, now) => (items || [])
-  .map((i) => ({ title: String(i?.title || '').slice(0, 200), cid: i?.calendarId, course: String(i?.calendarNameLocalizable?.rawValue || '').slice(0, 80), due: Date.parse(i?.endDate) }))
+// What is left to do from `now` to a week on, soonest first, from Ultra's To Do list
+// (/learn/api/v1/calendars/todo/studentItems: { overdueItems, dueTodayItems, futureDueItems }, each
+// { title, dueDate, column: { courseId, contentId } }), overdue work left out: [{ title, cid, content, due (ms) }].
+const GZ_DUE_WEEK = (todo, now) => [...(todo?.dueTodayItems || []), ...(todo?.futureDueItems || [])]
+  .map((i) => ({ title: String(i?.title || '').slice(0, 200), cid: i?.column?.courseId, content: COURSE_ID.test(i?.column?.contentId) ? i.column.contentId : null, due: Date.parse(i?.dueDate) }))
   .filter((i) => i.title && COURSE_ID.test(i.cid) && i.due >= now && i.due < now + 7 * 864e5)
   .sort((a, b) => a.due - b.due);
 

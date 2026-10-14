@@ -132,17 +132,17 @@
       });
     } catch { /* extension reloaded under the tab */ }
   };
-  // What's due in the next seven days (GZ_DUE_WEEK), from the list behind Ultra's own Due Dates view, for
-  // the command palette and the popup (which can't ask Blackboard, so it reads what's kept here). Asked
-  // once a page load and at most every ten minutes, like the course list.
+  // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, for the command
+  // palette and the popup (which can't ask Blackboard, so it reads what's kept here). Asked once a page
+  // load and at most every ten minutes, like the course list, which names each item's course.
   let dueSoon = null;
   const dueWeek = () => (dueSoon ||= new Promise((res) => {
     try { chrome.storage.local.get(['dueWeek', 'dueWeekAt'], res); } catch { res({}); }
   }).then((r) => {
     const now = Date.now();
     if (now - (r?.dueWeekAt || 0) < 600000) return r.dueWeek || [];
-    return api(`/calendars/dueDateCalendarItems?since=${new Date(now).toISOString()}&until=${new Date(now + 7 * 864e5).toISOString()}`).then((j) => {
-      const list = GZ_DUE_WEEK(j.results, now);
+    return api(`/calendars/todo/studentItems?since=${new Date(now).toISOString()}&until=${new Date(now + 7 * 864e5).toISOString()}`).then((j) => {
+      const list = GZ_DUE_WEEK(j, now);
       try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now() }); } catch { /* reloaded */ }
       return list;
     }, () => r?.dueWeek || []);
@@ -1348,8 +1348,10 @@
       ...pages(),
       ...courses.filter((m) => m.course).sort((a, b) => !!a.course.isClosed - !!b.course.isClosed)
         .map((m) => ({ label: m.course.name, hint: m.course.isOrganization ? t('Organization') : m.course.isClosed ? t('Closed course') : m.course.courseId || t('Course'), group: 'Courses', run: go(`/ultra/courses/${m.courseId}/outline`) })),
-      // Each opens its course: "in 2 days · ENG1001 · Thu 11:59 PM".
-      ...due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, d.course, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' })].filter(Boolean).join(' · '), group: 'Due this week', run: go(`/ultra/courses/${d.cid}/outline`) })),
+      // "in 2 days · Thu 11:59 PM · ENG1001". Each opens its item, at the address the content API gives it
+      // (as "In this course" does), or its course when it has none.
+      ...due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' }), courseList[d.cid]?.name].filter(Boolean).join(' · '), group: 'Due this week',
+        run: () => (d.content ? courseItems(d.cid).p : Promise.resolve([])).then((all) => go(all.find((c) => c.id === d.content)?.links?.[0]?.href.replace(/^https?:\/\/[^/]+/, '') || `/ultra/courses/${d.cid}/outline`)()) })),
       ...items,
       ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L)) })),
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),

@@ -313,7 +313,7 @@ html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([dat
 #gz-cmd ul { list-style: none; margin: 0; padding: 0.35rem; overflow: auto; overscroll-behavior: contain; }
 #gz-cmd li { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.45rem 0.75rem; border-radius: calc(var(--gz-radius) * 2 / 3); cursor: pointer; }
 #gz-cmd li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#gz-cmd li small { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-faint); }
+#gz-cmd li small { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-faint); }
 #gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
 #gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }

@@ -42,7 +42,7 @@ GZ_UI.load().then((s) => {
 
 // Due this week, as Blackboard last told the content script (the popup can't ask it): a list to read,
 // nothing more. A list over a day old is left out; it would miss what was added since.
-chrome.storage.local.get(['dueWeek', 'dueWeekAt'], (r) => {
+chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'seenCourses'], (r) => {
   const now = new Date();
   const due = now - (r?.dueWeekAt || 0) < 864e5 ? (r.dueWeek || []).filter((d) => d.due >= now) : [];
   $('#due').hidden = !due.length;
@@ -50,7 +50,7 @@ chrome.storage.local.get(['dueWeek', 'dueWeekAt'], (r) => {
     const { rel, sub } = GZ_PAGE.describe(new Date(d.due), true, now, GZ_I18N.ui());
     const li = document.createElement('li');
     li.append(Object.assign(document.createElement('b'), { textContent: d.title }), Object.assign(document.createElement('small'), { textContent: rel }),
-      Object.assign(document.createElement('span'), { textContent: [d.course, sub].filter(Boolean).join(' · ') }));
+      Object.assign(document.createElement('span'), { textContent: [r.seenCourses?.[d.cid]?.name, sub].filter(Boolean).join(' · ') }));
     return li;
   }));
 });
