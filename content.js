@@ -539,7 +539,7 @@
       if (!ultra) {
         const easing = el.getAnimations().filter((a) => a.transitionProperty?.startsWith('background'));
         if (easing.length) {
-          Promise.all(easing.map((a) => a.finished)).then(() => (el.matches(focus ? ':focus' : ':hover') ? judgeHover(el) : seen.delete(el)), () => seen.delete(el));
+          Promise.all(easing.map((a) => a.finished)).then(() => (darkTheme && observer && el.isConnected && el.matches(focus ? ':focus' : ':hover') ? judgeHover(el) : seen.delete(el)), () => seen.delete(el));
           continue;
         }
       }

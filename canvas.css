@@ -753,8 +753,9 @@ html[data-gz-dark-theme] .user_content img:not([data-gz-rule], :hover) { filter:
 }
 /* Keyboard focus: outside the element, clear of its fill. Fields keep the ring of the forms section, the
    global nav its inset one; a row's ring sits inside, where its card would clip it. */
-body :focus-visible:not(input, textarea, select, [contenteditable], .ic-app-header__menu-list-link) { outline: 2px solid var(--gz-accent) !important; outline-offset: 2px; }
-body :is(tr, li, .ig-row, .ic-item-row, .day_wrapper, [role="row"], [role="menuitem"], [role="option"]):focus-visible { outline-offset: -2px; }
+body :focus-visible:not(input, textarea, select, [contenteditable], .ic-app-header__menu-list-link, .tox-tbtn, .tox-mbtn, .mobile-header-hamburger) { outline: 2px solid var(--gz-accent) !important; outline-offset: 2px; }
+body :is(.ic-DashboardCard__link, tr, li, .ig-row, .ic-item-row, .day_wrapper, [role="row"], [role="menuitem"], [role="option"]):focus-visible { outline-offset: -2px; }
+#application .ic-DashboardCard__link { display: block; }
 /* Canvas's buttons ring themselves on :focus with an inset box-shadow (white on primary and on a card's ⋯);
    the ring above is the one ring. */
 :is(#application, .ui-dialog) :is(.btn, .Button):is(:focus, :hover) { box-shadow: none; }
@@ -800,6 +801,9 @@ body :is(tr, li, .ig-row, .ic-item-row, .day_wrapper, [role="row"], [role="menui
 /* Canvas's plain buttons that the sweep tagged as paper on a dark palette: the tag's !important outranked their
    hover fill above, so they never answered the pointer. */
 :is(#application, .ui-dialog) :is(.btn, .Button)[data-gz-light]:is(:hover, :focus-visible) { background-color: var(--gz-hover-fill) !important; }
+
+/* InstUI menu items carry a static class, so their native hover is masked by the dark sweep's paper tag. */
+html[data-gz-dark-theme] [data-cid~="MenuItem"]:not([aria-disabled="true"]):is(:hover, :focus) { background-color: var(--gz-row-hover) !important; }
 
 /* jQuery UI tab strips (the people page's groups): jQuery UI marks the tab it is over or focused with a white
    ui-state class; the tab washes like a row instead. */
