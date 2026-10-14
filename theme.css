@@ -242,6 +242,10 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 }
 /* The tools row sits inside the header: no second blur, no second rule under the title. */
 #site-wrap .base-header-tools { background: transparent !important; border: 0 !important; backdrop-filter: none; }
+/* The course header's toolbar is inset 16px inside it: a second glass box there showed square edges. */
+.bb-course-navigation course-page-header > header [class*="makeStylestoolbar"] { background: transparent !important; border: 0 !important; backdrop-filter: none; }
+/* The outline's "Course Content" header is a box inside the content column, not a page header. */
+#site-wrap header.outline-header { border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important; }
 
 /* ---- cards ---- */
 .element-card, .MuiPaper-root:not(.MuiDrawer-paper), .MuiCard-root, .panel, .todo-item, article,
@@ -266,6 +270,9 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 .content-list-item a, .content-list-item [role=button] { color: var(--gz-ink) !important; }
 .content-list-item a:hover { color: var(--gz-accent) !important; }
 aside, .todo-panel { background: var(--gz-ground) !important; border-left: 1px solid var(--gz-line) !important; }
+/* A course gradebook's student header is an <aside> too, but not a side panel. */
+aside.student-grade-overview { border-left: 0 !important; }
+.MuiAccordion-root { overflow: hidden; }
 .MuiAccordion-root, .MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
 .MuiAccordionDetails-root { border-top: 1px solid var(--gz-line) !important; }
 .MuiAccordionDetails-root > div { background: var(--gz-surface-2) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm); }
@@ -329,6 +336,7 @@ th { background: var(--gz-surface) !important; }
 #site-wrap .messages-header, #site-wrap .messages-header .summary, #site-wrap .messages-container { background: var(--gz-ground) !important; border-color: var(--gz-line) !important; }
 #site-wrap .messages-header .summary { border-bottom: 1px solid var(--gz-line) !important; }
 #site-wrap .messages-container-summary .summary { background: transparent !important; border: 0 !important; }
+#site-wrap .messages-container-summary { border-radius: var(--gz-radius) !important; overflow: hidden; }
 /* Empty-state copy is Noto Serif in Ultra and usernames are Open Sans; the theme is one sans everywhere. */
 #site-wrap :where(p, .main, bb-ui-username, bb-ui-username *, bb-username, bb-username *) { font-family: inherit !important; }
 /* Headings take the heading font (content.js sets it to inherit when it follows the text), code the
