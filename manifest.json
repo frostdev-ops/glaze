@@ -7,7 +7,7 @@
   "permissions": [
     "storage"
   ],
-  "minimum_chrome_version": "121",
+  "minimum_chrome_version": "113",
   "browser_specific_settings": {
     "gecko": {
       "id": "glaze@frostdev.io",
@@ -31,10 +31,7 @@
     }
   },
   "background": {
-    "service_worker": "lib/background.js",
-    "scripts": [
-      "lib/background.js"
-    ]
+    "service_worker": "lib/background.js"
   },
   "options_ui": {
     "page": "options.html",
