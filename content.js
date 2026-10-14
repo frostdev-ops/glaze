@@ -3,6 +3,8 @@
 // toggle them without a reload), (2) push settings onto <html> — colors and look values as inline
 // --gz-* vars, everything else as data-gz-* attributes — so the CSS never branches here,
 // (3) the long tail: tag what no selector can reach and let the CSS restyle the tag.
+// It runs on two sites: Blackboard Ultra, which gets all of that plus its extras (everything marked
+// Extras below), and Canvas LMS, which gets (1) to (3) alone, with its own stylesheet.
 (() => {
   // Only HTML pages: an /ultra/ address can also be an XML error from Ultra's CDN, or a raw script.
   if (window.__gzGlaze || !/html/.test(document.contentType)) return;
@@ -10,7 +12,6 @@
 
   const C = GZ_COLOR;
   const html = document.documentElement;
-  const SHEETS = ['theme.css', 'motion.css', 'extras.css'];
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
   const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
@@ -21,18 +22,30 @@
   let links = [];
   let observer = null;
   let timer = 0;
-  let notUltra = false;
+  let notUltra = false; // the page isn't the site its address says (Ultra or Canvas): stays off
   let darkTheme = true;
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
   // The options page shows a mock of Ultra (preview.html) that runs this same script.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
+  // Which site this is, from the address: at document_start there is no body to look at yet. Ultra lives
+  // under /ultra/ (the preview's mock of it too); the manifest matches nothing else but Canvas. Every
+  // Ultra-only part below is switched off on Canvas where it is entered, by this.
+  const ultra = isPreview || location.pathname.startsWith('/ultra/');
+  // Canvas wears canvas.css instead of theme.css and extras.css, which are written against Ultra's markup.
+  // motion.css comes along: it is mostly the motion knobs (--gz-t, --gz-enter…, set per level by
+  // html[data-gz-motion] and the three switches) that any sheet's animations read, so canvas.css doesn't
+  // redo them. Its Ultra-named rules (.route-view-container, .element-card…) match nothing in Canvas.
+  const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css'] : ['canvas.css', 'motion.css'];
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
   const onBody = (fn) => (document.body ? fn() : document.addEventListener('DOMContentLoaded', fn, { once: true }));
   // `https://*/ultra/*` matches any host with that path, so confirm this is really Blackboard
   // Ultra before touching the page. Checked once, when the body exists.
   const isUltra = () => !!document.querySelector('#site-wrap, [class*="bb-"], [id*="bb-"], base[href*="ultra"]');
+  // Likewise `https://*.instructure.com/*` is every page and frame on that host. Canvas's own pages sit
+  // in this wrapper; a tool framed inside one doesn't, and stays as it is.
+  const isCanvas = () => !!document.querySelector('#application.ic-app');
 
   // ---- long tail -------------------------------------------------------------------------------
   // Read everything first, write after: setting an attribute mid-loop invalidates layout and the
@@ -311,7 +324,8 @@
     timer = 0;
     const roots = outermost(dirty);
     dirty.clear();
-    if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
+    if (full) { full = false; sweepAll(); if (ultra) tagExtras([document.body]); } else { sweepRoots(roots); if (ultra) tagExtras(roots); }
+    if (!ultra) return placeScene(); // Canvas: the sweep and the scene; everything below is Ultra's
     if (tip && ultraTipShown()) hideTip();
     paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
@@ -363,7 +377,7 @@
   // debounce that restarts on every record would put the sweep off indefinitely.
   const schedule = (records) => {
     for (const r of records) {
-      if (r.attributeName === 'aria-checked') {
+      if (ultra && r.attributeName === 'aria-checked') {
         if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true'
           && html.getAttribute('data-gz-motion') === 'expressive' && r.target.matches('.js-review-state-icon-button')) celebrate(r.target);
         // A circle that changes changes its item's due-date chip.
@@ -376,6 +390,7 @@
       for (const n of r.addedNodes) {
         if (n.nodeType !== 1) continue;
         dirty.add(n);
+        if (!ultra) continue; // holding a page while it loads is Ultra's
         if (n.matches(GATE)) hold(n);
         else if (n.firstElementChild) for (const c of n.querySelectorAll(GATE)) hold(c);
       }
@@ -390,6 +405,7 @@
     sweepAll();
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
+    if (!ultra) return; // Canvas: the sweep is all it gets; the rest is Ultra's extras and its /learn/api
     tagExtras([document.body]);
     watchDrafts();
     recordCourses();
@@ -520,7 +536,7 @@
     return null;
   };
   const onTip = (e) => {
-    if (!settings.look.tooltips || !observer || !(e.target instanceof HTMLElement)) return;
+    if (!ultra || !settings.look.tooltips || !observer || !(e.target instanceof HTMLElement)) return;
     const titled = e.target.closest('[title], [data-gz-title]');
     if (titled && titled === tipFor) return;
     const hinted = !titled && settings.look.hints ? hintFor(e.target) : null;
@@ -613,7 +629,7 @@
     peek.style.top = `${Math.min(Math.max(8, right ? r.top : r.bottom + 8), innerHeight - w.height - 8)}px`;
   };
   document.addEventListener('pointerover', (e) => {
-    if (!settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
+    if (!ultra || !settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
     const item = e.target.closest('.content-list-item[data-content-id]');
     if (item === peekFor) return;
     hidePeek();
@@ -1065,7 +1081,7 @@
   };
   // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
   const onWrite = (e) => {
-    const ed = settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(EDITOR);
+    const ed = ultra && settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(EDITOR);
     if (!ed) return;
     clearTimeout(saveTimers.get(ed));
     saveTimers.set(ed, setTimeout(() => saveDraft(ed), 1000));
@@ -1320,7 +1336,7 @@
     try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
-    const on = window.top === window && observer && settings.enhance.toggles;
+    const on = ultra && window.top === window && observer && settings.enhance.toggles;
     const doc = on && document.querySelector('#site-wrap .document-content-root');
     if (focusAt && focusAt !== doc) setFocus(false);
     for (const f of document.querySelectorAll(PREVIEWS)) {
@@ -1405,7 +1421,7 @@
     document.body.append(keysBox);
   };
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
-  if (window.top === window) {
+  if (ultra && window.top === window) {
     document.addEventListener('keydown', (e) => {
       if (!settings.enhance.keys || !observer || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
       if (e.key === 'Escape' && keysBox) { closeKeys(); return; }
@@ -1561,7 +1577,7 @@
     showCmd();
     commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(); });
   };
-  if (window.top === window) {
+  if (ultra && window.top === window) {
     document.addEventListener('keydown', (e) => {
       if (e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
       if (cmd) { e.preventDefault(); closeCmd(); return; }
@@ -1578,7 +1594,7 @@
   // page in a view transition until the next one exists, then crossfades into it: when the address has
   // changed and the new page is being held while it loads (see page loads), or has been still for
   // 120 ms, or after 500 ms at most. Top frame only, and only while entrances are on.
-  if (window.top === window && document.startViewTransition) {
+  if (ultra && window.top === window && document.startViewTransition) {
     const PAGE_LINKS = '#base_tools a, .bb-ui-navigation-list-horizontal a';
     const settled = (from) => new Promise((done) => {
       const t0 = performance.now();
@@ -1617,7 +1633,7 @@
   // A full-width bar, top frame only. theme.css shrinks the app by --gz-footer-h so the bar sits
   // below everything rather than over it.
   const syncFooter = () => {
-    const want = links.length && settings.footer && window.top === window && document.body;
+    const want = ultra && links.length && settings.footer && window.top === window && document.body;
     const have = document.getElementById('gz-footer');
     if (want && !have) {
       const f = document.createElement('footer');
@@ -1644,9 +1660,10 @@
   let sceneFailed = false; // no WebGL, or the module was blocked: the gradient under it stays
   // ponytail: the last visible layer in document order is taken as the top one, which holds while
   // Ultra stacks panels in DOM order. Compare z-index if a panel ever opens under the canvas.
+  // LAYERS is Ultra's; Canvas has no layer picked yet, so its scene goes in the body (canvas.css places it).
   const placeScene = () => {
     if (!sceneCanvas) return;
-    const home = [...document.querySelectorAll(LAYERS)].filter((e) => e.getClientRects().length).pop() || document.body;
+    const home = (ultra && [...document.querySelectorAll(LAYERS)].filter((e) => e.getClientRects().length).pop()) || document.body;
     if (sceneCanvas.parentNode === home) return;
     home.append(sceneCanvas);
     scene?.draw();
@@ -1800,22 +1817,27 @@
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);
-    // A slot's own course's pick colors the slot, so what Glaze can't tell apart (the calendar) agrees.
-    const own = {};
-    for (const [id, c] of Object.entries(courseColors())) if (c.own && c.picked) own[courseList[id].slot] = c.color;
-    for (let n = 1; n <= 10; n++) {
-      const c = own[n] || s.courses.colors[n];
-      if (c) setVar(`--gz-pick-${n}`, c);
-      else html.style.removeProperty(`--gz-pick-${n}`);
+    // Course colors and tint read Ultra's color slots (course-color-N, the course list recordCourses keeps):
+    // none on Canvas for now. `colors` is the palette painted: the base one, tinted inside a picked course.
+    let colors = base;
+    if (ultra) {
+      // A slot's own course's pick colors the slot, so what Glaze can't tell apart (the calendar) agrees.
+      const own = {};
+      for (const [id, c] of Object.entries(courseColors())) if (c.own && c.picked) own[courseList[id].slot] = c.color;
+      for (let n = 1; n <= 10; n++) {
+        const c = own[n] || s.courses.colors[n];
+        if (c) setVar(`--gz-pick-${n}`, c);
+        else html.style.removeProperty(`--gz-pick-${n}`);
+      }
+      // The course color is worked out from the untinted palette set above, then painted over it.
+      const on = tintOf();
+      const course = on && courseColor(on.slot, on.vars);
+      tinted = course ? on.key : null;
+      colors = course ? GZ_TINT(base, course, s.courses.strength / 100) : base;
+      if (course) for (const [v] of GZ_COLORS) setVar(v, colors[v]);
+      paintCourses();
     }
-    // The course color is worked out from the untinted palette set above, then painted over it.
-    const on = tintOf();
-    const course = on && courseColor(on.slot, on.vars);
-    tinted = course ? on.key : null;
-    const colors = course ? GZ_TINT(base, course, s.courses.strength / 100) : base;
-    if (course) for (const [v] of GZ_COLORS) setVar(v, colors[v]);
     palette = colors;
-    paintCourses();
     const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
     accentInk = C.parse(colors['--gz-accent-ink']);
     setVar('color-scheme', dark ? 'dark' : 'light');
@@ -1859,12 +1881,15 @@
     const was = enhanced;
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
-    if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (observer) { renderProgress(); renderCalc(); syncDownloads(); }
-    if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
-    if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
-    if (observer) renderNew();
-    if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
+    // The attributes above are set on Canvas too (canvas.css may read them); the work they switch on is Ultra's.
+    if (ultra) {
+      if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
+      if (observer) { renderProgress(); renderCalc(); syncDownloads(); }
+      if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
+      if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
+      if (observer) renderNew();
+      if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
+    }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
@@ -1903,7 +1928,7 @@
     applySettings();
     onBody(() => {
       if (!links.length) return;
-      if (!isUltra()) { disable(); notUltra = true; return; }
+      if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
       syncFooter();
       startSweep();
       syncScene();
@@ -1939,7 +1964,7 @@
   enable();
   load().then((s) => {
     settings = s;
-    tidyDrafts();
+    if (ultra) tidyDrafts();
     if (!s.enabled) disable();
     else if (links.length) applySettings();
   });
