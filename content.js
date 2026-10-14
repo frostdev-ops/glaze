@@ -88,6 +88,7 @@
     // Read the site's current state, without our previous pass's overrides.
     for (const e of els) for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a);
     const pending = [];
+    const canvasInk = !ultra && new Map();
     for (const e of els) {
       if (e.tagName === 'IMG') {
         if (e.complete) tagRule(e);
@@ -109,11 +110,43 @@
       // already close to the surface, and repainting it would flatten the chips and badges on it.
       if (darkTheme) {
         const bg = C.parse(colors.backgroundColor);
-        if (bg && bg.a >= 0.5 && !C.saturated(bg) && C.brightness(bg) > 0.4 && cs.backgroundImage === 'none') tags.push('data-gz-light');
         const fg = C.parse(colors.color);
+        let fill = null, fillColor = null;
+        if (!ultra && e.closest('.user_content')) {
+          // Keep an instructor's light coloured highlight, and only repair ink that cannot read on it.
+          // shortcut: opaque inline fills only; add compositing for translucent or gradient highlights when seen.
+          for (let p = e; p; p = p.parentElement) {
+            const fillStyle = p === e ? cs : getComputedStyle(p);
+            const authored = p.style.backgroundColor && C.parse(fillStyle.backgroundColor);
+            if (p.style.backgroundImage && fillStyle.backgroundImage !== 'none') break;
+            if (authored && authored.a > 0) {
+              if (authored.a === 1 && C.luminance(authored) > 0.45
+                && Math.max(authored.r, authored.g, authored.b) !== Math.min(authored.r, authored.g, authored.b)) { fill = p; fillColor = authored; }
+              break;
+            }
+            if (p.classList.contains('user_content')) break;
+          }
+          if (fill && fg) {
+            let inkColor = fg;
+            const paletteInk = C.parse(getComputedStyle(document.documentElement).getPropertyValue('--gz-ink')) || fg;
+            for (let p = e; p; p = p.parentElement) {
+              if (p !== e && canvasInk.get(p) === '') { inkColor = paletteInk; break; }
+              if (p.style.color) break;
+              // On enable the stylesheet may still be loading; un-authored inherited ink becomes palette ink.
+              if (p.classList.contains('user_content')) { inkColor = paletteInk; break; }
+            }
+            const ink = `rgb(${['r', 'g', 'b'].map((k) => inkColor[k] * inkColor.a + fillColor[k] * (1 - inkColor.a)).join(', ')})`;
+            if (C.contrast(ink, C.hex(fillColor)) < 4.5) canvasInk.set(e, 'highlight');
+          }
+          const line = e.tagName === 'HR' && e.style.borderTopColor && C.parse(cs.borderTopColor);
+          if (line && line.a === 1 && C.same(line, C.parse('#000'))) canvasInk.set(e, 'rule');
+        }
+        if (bg && bg.a >= 0.5 && !C.saturated(bg) && C.brightness(bg) > 0.4 && cs.backgroundImage === 'none' && fill !== e) tags.push('data-gz-light');
         // Dark text on a coloured fill (Submit, filled chips) is meant to be dark.
-        const onFill = (bg && bg.a >= 0.5 && C.saturated(bg)) || C.same(fg, accentInk);
+        const onFill = fill || (bg && bg.a >= 0.5 && C.saturated(bg)) || C.same(fg, accentInk);
         if (fg && fg.a >= 0.5 && !C.saturated(fg) && C.brightness(fg) < 0.35 && !onFill && (hasText(e) || (!ultra && FIELD.test(e.tagName)))) tags.push('data-gz-dark');
+        if (!ultra && canvasInk.has(e)) tags.push('data-gz-dark');
+        if (!ultra && tags.includes('data-gz-dark') && !canvasInk.has(e)) canvasInk.set(e, '');
       }
       const r = e.getBoundingClientRect();
       // Fixed to the bottom of the VIEWPORT (Ultra's action bars, the help button): outside the
@@ -123,7 +156,7 @@
       if (Math.abs(r.height - innerHeight) <= 1) tags.push('data-gz-vh');
       if (tags.length) pending.push([e, tags]);
     }
-    for (const [e, tags] of pending) for (const a of tags) e.setAttribute(a, '');
+    for (const [e, tags] of pending) for (const a of tags) e.setAttribute(a, (!ultra && a === 'data-gz-dark' && canvasInk.get(e)) || '');
   };
   const sweepAll = () => {
     const all = document.body.querySelectorAll('*');

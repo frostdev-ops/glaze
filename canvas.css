@@ -392,6 +392,8 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 #application .ic-DashboardCard__header-button { color: var(--gz-ink); }
 /* Recent feedback fades its long lines out with a white gradient. */
 #right-side .event-details::after { display: none; }
+#right-side .recent_feedback_icon .event-details p { color: var(--gz-ink-muted); }
+#right-side .recent_feedback_icon .event-details strong { color: var(--gz-ink); }
 #application .ic-DashboardCard__action-container a { color: var(--gz-ink-muted); transition: color var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring); }
 #application .ic-DashboardCard__action-container a:hover { color: var(--gz-accent); transform: var(--gz-pop); }
 
@@ -609,12 +611,17 @@ html :is(body > .event-details, .ui-kyle-menu) { background-color: var(--gz-surf
 
 /* ---- user content: what instructors write (pages, assignments, syllabus, topics) ---- */
 .user_content { color: var(--gz-ink); }
+/* Art stays around the reading areas; their ink needs the palette's solid surface behind it. */
+html[data-gz-dark-theme][data-gz-bg]:not([data-gz-bg="solid"]) .user_content { background-color: var(--gz-surface); }
+html[data-gz-dark-theme][data-gz-bg]:not([data-gz-bg="solid"]) #right-side { --gz-ground: var(--gz-surface); }
+html[data-gz-dark-theme] :is(.user_content, .user_content *)[data-gz-dark="highlight"] { color: #14181f !important; }
 .user_content, .user_content :where(p, li, td, th, div, span) { line-height: var(--gz-leading); }
 .user_content :where(a) { color: var(--gz-accent); text-underline-offset: 0.2em; }
 .user_content :where(a):hover { color: var(--gz-accent-hi); }
 #application .user_content :where(table, th, td) { border-color: var(--gz-line-strong); }
 .user_content :where(blockquote) { border-left: 3px solid var(--gz-accent); color: var(--gz-ink-muted); background: transparent; }
 .user_content :where(hr) { border-color: var(--gz-line-strong); }
+html[data-gz-dark-theme] .user_content hr[data-gz-dark="rule"] { border-color: var(--gz-line-strong) !important; }
 .user_content :where(img) { border-radius: var(--gz-radius-sm); }
 /* Pictures in it are made for a white page: on a dark palette a little dimmer until pointed at. */
 .user_content :where(img) { transition: filter var(--gz-t) var(--gz-ease); }
