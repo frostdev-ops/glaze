@@ -361,6 +361,21 @@ const GZ_COURSE_COLORS = (courses, picks = {}) => {
 // --gz-pick: initial drops a slot's picked color, so the course's raw color is toned like Ultra's.
 const GZ_COURSE_VARS = (c) => (!c || c.own ? {} : c.picked ? { '--gz-pick': c.color } : { '--gz-pick': 'initial', '--gz-course-raw': c.color });
 
+// ---- the calendar ------------------------------------------------------------------------------
+// Ultra's calendar items (/learn/api/v1/calendars/calendarItems, dueDateCalendarItems): calendarId is the
+// course's id (or PERSONAL, INSTITUTION), with the item's title and its dates.
+// A calendar entry's course, from the entry's text and its slot: the one course of that slot (or not yet
+// listed) with an item whose title is in the text. Null when none is, or two are (a title they share).
+const GZ_CAL_COURSE = (text, slot, items, courses = {}) => {
+  const ids = new Set((items || []).filter((i) => i?.title && COURSE_ID.test(i.calendarId) && (courses[i.calendarId]?.slot ?? slot) === slot && text.includes(i.title)).map((i) => i.calendarId));
+  return ids.size === 1 ? [...ids][0] : null;
+};
+// What is due from `now` to a week on, soonest first: [{ title, cid, course, due (ms) }].
+const GZ_DUE_WEEK = (items, now) => (items || [])
+  .map((i) => ({ title: String(i?.title || '').slice(0, 200), cid: i?.calendarId, course: String(i?.calendarNameLocalizable?.rawValue || '').slice(0, 80), due: Date.parse(i?.endDate) }))
+  .filter((i) => i.title && COURSE_ID.test(i.cid) && i.due >= now && i.due < now + 7 * 864e5)
+  .sort((a, b) => a.due - b.due);
+
 // ---- course tint ------------------------------------------------------------------------------
 // Inside a course picked for it, the accent family takes the course's hue, and `t` (0-1) of the way
 // from the palette's lightness and colorfulness to the course color's own: any strength reads as
@@ -395,5 +410,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_TINT };
 }

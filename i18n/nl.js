@@ -215,6 +215,7 @@
   'Organization': 'Organisatie',
   'Closed course': 'Gesloten cursus',
   'Course': 'Cursus',
+  'Due this week': 'Deze week in te leveren',
   'Looks': 'Stijlen',
   'A palette, fonts, shape and background that go together, in one click.': 'Een palet, lettertypen, vorm en achtergrond die bij elkaar passen, met één klik.',
   'Look: {name}': 'Stijl: {name}',

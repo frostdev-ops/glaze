@@ -132,6 +132,21 @@
       });
     } catch { /* extension reloaded under the tab */ }
   };
+  // What's due in the next seven days (GZ_DUE_WEEK), from the list behind Ultra's own Due Dates view, for
+  // the command palette and the popup (which can't ask Blackboard, so it reads what's kept here). Asked
+  // once a page load and at most every ten minutes, like the course list.
+  let dueSoon = null;
+  const dueWeek = () => (dueSoon ||= new Promise((res) => {
+    try { chrome.storage.local.get(['dueWeek', 'dueWeekAt'], res); } catch { res({}); }
+  }).then((r) => {
+    const now = Date.now();
+    if (now - (r?.dueWeekAt || 0) < 600000) return r.dueWeek || [];
+    return api(`/calendars/dueDateCalendarItems?since=${new Date(now).toISOString()}&until=${new Date(now + 7 * 864e5).toISOString()}`).then((j) => {
+      const list = GZ_DUE_WEEK(j.results, now);
+      try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now() }); } catch { /* reloaded */ }
+      return list;
+    }, () => r?.dueWeek || []);
+  }));
 
   // Where Ultra writes a due date, in any language: a course item's grade line and an assignment's own
   // page (its .due-date-container). Its English details lists put the label one element up:
@@ -377,6 +392,7 @@
     tagExtras([document.body]);
     watchDrafts();
     recordCourses();
+    if (window.top === window) dueWeek();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -1323,13 +1339,17 @@
     // A tab's name without its count badge ("Announcements 12").
     const tabName = (a) => { const c = a.cloneNode(true); for (const b of c.querySelectorAll('[class*="badge" i]')) b.remove(); return c.textContent.trim(); };
     const here = cid ? [...document.querySelectorAll('.bb-ui-navigation-list-horizontal a[href]')].map((a) => ({ label: tabName(a), hint: t('This course'), group: 'Go to', run: () => a.click() })).filter((c) => c.label) : [];
-    const [courses, items] = await Promise.all([myCourses(), cid ? paletteItems(cid) : []]);
+    const [courses, items, due] = await Promise.all([myCourses(), cid ? paletteItems(cid) : [], dueWeek()]);
     const s = settings;
+    const now = new Date();
+    const lang = GZ_I18N.locale(locale());
     return [
       ...here,
       ...pages(),
       ...courses.filter((m) => m.course).sort((a, b) => !!a.course.isClosed - !!b.course.isClosed)
         .map((m) => ({ label: m.course.name, hint: m.course.isOrganization ? t('Organization') : m.course.isClosed ? t('Closed course') : m.course.courseId || t('Course'), group: 'Courses', run: go(`/ultra/courses/${m.courseId}/outline`) })),
+      // Each opens its course: "in 2 days · ENG1001 · Thu 11:59 PM".
+      ...due.filter((d) => d.due >= now).map((d) => ({ label: d.title, hint: [GZ_PAGE.describe(new Date(d.due), true, now, lang).rel, d.course, new Date(d.due).toLocaleString(lang, { weekday: 'short', hour: 'numeric', minute: '2-digit' })].filter(Boolean).join(' · '), group: 'Due this week', run: go(`/ultra/courses/${d.cid}/outline`) })),
       ...items,
       ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L)) })),
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
@@ -1564,11 +1584,25 @@
     });
   } catch { /* extension reloaded under the tab */ }
   // A course's own color on everything of it Glaze can tell is it: a course's section, a Messages card
-  // (data-course-id), a Grades row (a link into the course), anything on the course's own pages.
-  // Calendar entries name no course, so they keep their slot's color.
+  // (data-course-id), a Grades row (a link into the course), anything on the course's own pages, a
+  // calendar entry by its title (calendarCourse).
   const courseOf = (el) => el.getAttribute('bb-course-membership-markups') || el.closest('[data-course-id]')?.dataset.courseId
     || (el.closest('a[href*="/courses/_"]') || el.querySelector('a[href*="/courses/_"]'))?.getAttribute('href').match(/\/courses\/(_\d+_\d+)/)?.[1]
-    || courseId();
+    || courseId() || calendarCourse(el);
+  // Calendar entries name no course: on the calendar, an entry is the course's whose item title it shows,
+  // when no other course sharing its slot has an item by that title (GZ_CAL_COURSE); otherwise it keeps
+  // its slot's color. The items are the calendar's own list, asked for once a page load.
+  // ponytail: six weeks back to ten on; entries outside that keep their slot's color.
+  let calItems = null;
+  const calendarCourse = (el) => {
+    if (!location.pathname.startsWith('/ultra/calendar')) return null;
+    if (!calItems) {
+      calItems = [];
+      const at = (days) => new Date(Date.now() + days * 864e5).toISOString();
+      api(`/calendars/calendarItems?since=${at(-42)}&until=${at(70)}`).then((j) => { calItems = j.results || []; paintCourses(); }, () => {});
+    }
+    return GZ_CAL_COURSE(el.textContent, el.className.match?.(/course-color-(\d+)/)?.[1], calItems, courseList);
+  };
   const paintCourses = () => {
     if (isPreview) return;
     const colors = courseColors();

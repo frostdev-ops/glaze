@@ -215,6 +215,7 @@
   'Organization': 'Organisation',
   'Closed course': 'Geschlossener Kurs',
   'Course': 'Kurs',
+  'Due this week': 'Diese Woche fällig',
   'Looks': 'Designs',
   'A palette, fonts, shape and background that go together, in one click.': 'Ein Design: Palette, Schriften, Form und Hintergrund, die zusammenpassen, mit einem Klick.',
   'Look: {name}': 'Design: {name}',
