@@ -190,7 +190,7 @@ html :is(h1, h2, h3, h4, h5, h6, [class*="css-"][class*="-heading"]) { font-fami
 html[data-gz-font-mono] :is(code, pre, kbd, samp, .keycode) { font-family: var(--gz-font-mono); }
 /* Where Canvas writes its own muted greys as literals rather than through the variable above. */
 #application :is(.ic-DashboardCard__header-term, .ic-DashboardCard__header-subtitle, .ToDoSidebarItem__Info, .event-details__context,
-  .ig-details, .ig-details__item, .subtitle, .ic-item-row__meta-content, .submitted) { color: var(--gz-ink-muted); }
+  .ig-details, .ig-details__item, .subtitle, .ic-item-row__meta-content, .submitted, .ToDoSidebarItem__Info [class*="css-"][class*="-text"]) { color: var(--gz-ink-muted); }
 :is(code, pre, kbd) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); border-color: var(--gz-line); }
 
 /* ---- global nav ----
@@ -205,9 +205,9 @@ html[data-gz-font-mono] :is(code, pre, kbd, samp, .keycode) { font-family: var(-
   margin: 2px 6px;
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring);
 }
-#header .ic-app-header__menu-list-link:is(:hover, :focus) { background: var(--gz-surface); }
+#header .ic-app-header__menu-list-link:is(:hover, :focus) { background: var(--gz-row-hover); }
 #header .ic-app-header__menu-list-link:hover { transform: var(--gz-nudge); }
-#header .ic-app-header__menu-list-link:is(:hover, :focus) :is(.menu-item__text, .menu-item-icon-container) { color: var(--gz-ink); }
+#header .ic-app-header__menu-list-link:is(:hover, :focus) :is(.menu-item__text, .menu-item-icon-container) { color: var(--gz-accent-hi); }
 #header .ic-app-header__menu-list-link:focus { box-shadow: inset 0 0 0 2px var(--gz-accent); }
 /* The current section: a soft accent wash with a short bar and glow on its edge (Canvas paints it a white tab). */
 #header .ic-app-header__menu-list-item--active > .ic-app-header__menu-list-link {
@@ -250,7 +250,7 @@ html:not([data-gz-dark-theme]) #header .ic-app-header__logomark { filter: invert
   padding-left: 8px; margin-left: -8px;
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring);
 }
-#application #section-tabs li a:hover { background: var(--gz-row-hover); color: var(--gz-ink); transform: var(--gz-nudge); }
+#application #section-tabs li a:hover { background: var(--gz-row-hover); color: var(--gz-accent-hi); transform: var(--gz-nudge); }
 #application #section-tabs li a.active {
   color: var(--gz-accent); font-weight: 600; background: color-mix(in srgb, var(--gz-accent-soft) 55%, transparent);
   box-shadow: inset 3px 0 0 var(--gz-accent);
@@ -736,6 +736,75 @@ html[data-gz-dark-theme] .user_content img:not([data-gz-rule], :hover) { filter:
 #mobileContextNavContainer a { color: var(--gz-ink) !important; transition: color var(--gz-t) var(--gz-ease); }
 #mobileContextNavContainer a:hover { color: var(--gz-accent) !important; }
 #mobileContextNavContainer [class*="gridRow"] { padding-block: 0.2rem; }
+
+/* ---- Hover, focus and pressed ----
+   One language for every state, from the palette, as theme.css speaks it on Ultra: a row takes a soft accent
+   wash, a link the bright accent and an underline, a button a step of ink over whatever it is filled with, an
+   icon button a round accent tint, a card lifts (by the depth setting, from motion.css's knobs), the navs wash
+   and turn accent, and keyboard focus is one accent ring. What this replaces is Canvas's own: InstUI's
+   #f2f4f4 hover grey (near white on a dark palette), its blues, the white focus rings on its buttons, and the
+   many controls that set `outline: none` and draw no focus at all. Sections above keep their own hovers
+   (cards, module rows, menus, tabs); these rules fill the gaps between them. */
+:root {
+  --gz-step: color-mix(in srgb, var(--gz-ink) 8%, transparent); /* lighter on a dark palette, darker on a light one */
+  --gz-step-press: color-mix(in srgb, var(--gz-ink) 15%, transparent);
+  --gz-icon-hover: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent);
+  --gz-ink-muted-lift: color-mix(in srgb, var(--gz-ink-muted), var(--gz-ink) 35%); /* a hovered row's muted ink */
+}
+/* Keyboard focus: outside the element, clear of its fill. Fields keep the ring of the forms section, the
+   global nav its inset one; a row's ring sits inside, where its card would clip it. */
+body :focus-visible:not(input, textarea, select, [contenteditable], .ic-app-header__menu-list-link) { outline: 2px solid var(--gz-accent) !important; outline-offset: 2px; }
+body :is(tr, li, .ig-row, .ic-item-row, .day_wrapper, [role="row"], [role="menuitem"], [role="option"]):focus-visible { outline-offset: -2px; }
+/* Canvas's buttons ring themselves on :focus with an inset box-shadow (white on primary and on a card's ⋯);
+   the ring above is the one ring. */
+:is(#application, .ui-dialog) :is(.btn, .Button):is(:focus, :hover) { box-shadow: none; }
+
+/* Links: the bright accent and an underline. :where() keeps this at the id's weight, so a link that is ink
+   (a module item, a discussion) and turns accent keeps its own rule; it only gains the underline. Things
+   drawn as links that are not text links (buttons, tabs, nav, cards, chips) are left out. */
+#application :where(a:not(.btn, .Button, [class*="baseButton"], [role="button"], [role="tab"], [role="menuitem"], .ui-tabs-anchor,
+  .ic-DashboardCard__link, .ic-app-header__menu-list-link, #section-tabs a, .fc-event, .day_wrapper a)):hover {
+  color: var(--gz-accent-hi); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.2em;
+}
+/* InstUI's links turn its own dark blue on focus. */
+:is(a, button)[class*="css-"][class*="-link"]:not([class*="baseButton"]):focus { color: var(--gz-accent-hi) !important; }
+/* The grades page's score-details and comments toggles: grey icons that turn a Canvas grey. */
+#application :is(a.toggle_score_details_link, a.toggle_comments_link, a.toggle_rubric_assessments_link):is(:hover, :focus-visible) { color: var(--gz-accent) !important; }
+
+/* Rows: the wash. Any table body row (the files list, the syllabus, the roster, grades; not the calendar's
+   grid, which is a table too), the To Do list, the mini calendar's days. The cells carry it, as the tables
+   section paints them. The wash takes a little contrast from the row's muted ink and links, so a hovered
+   row lifts them a step toward the ink and the bright accent. */
+#application table:not(.user_content *, .fc *) tbody tr:not([role="presentation"]):hover > :is(td, th) { background: var(--gz-row-hover) !important; }
+#application :is(li:has(> .ToDoSidebarItem), .day_wrapper) { border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease); }
+#application :is(li:has(> .ToDoSidebarItem), .day_wrapper):hover { background: var(--gz-row-hover); }
+#application :is(table:not(.user_content *, .fc *) tbody tr:not([role="presentation"]), li:has(> .ToDoSidebarItem)):hover {
+  --gz-ink-muted: var(--gz-ink-muted-lift); --ic-link-color: var(--gz-accent-hi);
+}
+/* InstUI's sort headers and disclosure toggles, and the calendar's month title, show nothing: the accent. */
+#application :is(button[class*="colHeader__button"], button[class*="toggleDetails__toggle"], .navigation_title_text) { transition: color var(--gz-t) var(--gz-ease); }
+#application :is(button[class*="colHeader__button"], button[class*="toggleDetails__toggle"], .navigation_title_text):hover { color: var(--gz-accent); }
+#application button[class*="toggleDetails__toggle"]:hover :where(*) { color: inherit; }
+
+/* InstUI buttons. Its data-cid names the kind: a Button is filled (InstUI's grey, or a colour) and takes a step
+   of ink over its fill, deeper while pressed; an icon or close button is bare and takes the round accent tint
+   Canvas's own icon buttons take above. !important: the sweep's data-gz-light / data-gz-hover tags are. */
+[data-cid~="Button"]:not([disabled], [aria-disabled="true"]):hover > [class*="baseButton__content"] { background-image: linear-gradient(var(--gz-step), var(--gz-step)); }
+[data-cid~="BaseButton"]:not([disabled], [aria-disabled="true"]):active > [class*="baseButton__content"] { background-image: linear-gradient(var(--gz-step-press), var(--gz-step-press)); }
+:is([data-cid~="IconButton"], [data-cid~="CloseButton"]):not([disabled], [aria-disabled="true"]):hover > [class*="baseButton__content"] {
+  background-color: var(--gz-icon-hover) !important; color: var(--gz-accent) !important;
+}
+#application a[data-cid~="BaseButton"]:active { scale: var(--gz-press); }
+/* The chosen segment of a segmented control (calendar Week / Month / Agenda) keeps its tint and takes the step. */
+#application :is(.btn, .Button):is(.active, [aria-pressed="true"]):hover, #application .calendar_view_buttons .ui-state-active:hover { background-image: linear-gradient(var(--gz-step), var(--gz-step)); }
+/* Canvas's plain buttons that the sweep tagged as paper on a dark palette: the tag's !important outranked their
+   hover fill above, so they never answered the pointer. */
+:is(#application, .ui-dialog) :is(.btn, .Button)[data-gz-light]:is(:hover, :focus-visible) { background-color: var(--gz-hover-fill) !important; }
+
+/* jQuery UI tab strips (the people page's groups): jQuery UI marks the tab it is over or focused with a white
+   ui-state class; the tab washes like a row instead. */
+.ui-tabs .ui-tabs-nav li:is(.ui-state-hover, .ui-state-focus, :focus-within):not(.ui-tabs-active) { background: var(--gz-row-hover) !important; }
+.ui-tabs .ui-tabs-nav li a:hover { color: var(--gz-accent); }
 
 /* ---- Extras on Canvas ---- */
 /* Three of Ultra's extras run on Canvas; their styles are copies of extras.css's, with Canvas's markup. */

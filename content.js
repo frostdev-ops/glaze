@@ -526,15 +526,32 @@
     if (!darkTheme || !observer) return;
     const focus = e.type === 'focusin';
     const seen = focus ? focusSeen : hoverSeen;
-    for (let el = e.target, i = 0; el instanceof HTMLElement && i < (focus ? 1 : 6); el = el.parentElement, i++) {
+    // Canvas: InstUI's icon buttons are mostly <svg>, so the pointer lands on a path, not an HTMLElement, and the
+    // walk below stopped before it reached the button whose fill lights up. Start at the svg's parent instead.
+    let start = e.target;
+    if (!ultra && start instanceof SVGElement) start = start.closest('svg')?.parentElement;
+    for (let el = start, i = 0; el instanceof HTMLElement && i < (focus ? 1 : 6); el = el.parentElement, i++) {
       if (seen.has(el)) continue;
       seen.add(el);
-      const cs = getComputedStyle(el);
-      const bg = C.parse(cs.backgroundColor);
-      if (!bg || bg.a < 0.5 || C.saturated(bg) || C.brightness(bg) <= 0.4) continue;
-      if (el.matches(CLICKABLE) || cs.cursor === 'pointer') el.setAttribute('data-gz-hover', '');
-      else if (cs.backgroundImage === 'none') el.setAttribute('data-gz-light', '');
+      // Canvas eases its hover fills in (a roster row, InstUI's buttons), so at pointerover the fill read is still
+      // the resting one, and the row was marked seen without its light fill ever being tagged. Judge it once the
+      // transition lands instead; if it is cut short (the pointer left), the next contact looks again.
+      if (!ultra) {
+        const easing = el.getAnimations().filter((a) => a.transitionProperty?.startsWith('background'));
+        if (easing.length) {
+          Promise.all(easing.map((a) => a.finished)).then(() => (el.matches(focus ? ':focus' : ':hover') ? judgeHover(el) : seen.delete(el)), () => seen.delete(el));
+          continue;
+        }
+      }
+      judgeHover(el);
     }
+  };
+  const judgeHover = (el) => {
+    const cs = getComputedStyle(el);
+    const bg = C.parse(cs.backgroundColor);
+    if (!bg || bg.a < 0.5 || C.saturated(bg) || C.brightness(bg) <= 0.4) return;
+    if (el.matches(CLICKABLE) || cs.cursor === 'pointer') el.setAttribute('data-gz-hover', '');
+    else if (cs.backgroundImage === 'none') el.setAttribute('data-gz-light', '');
   };
   document.addEventListener('pointerover', checkHover, { capture: true, passive: true });
   document.addEventListener('focusin', checkHover, true);
