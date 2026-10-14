@@ -5,10 +5,539 @@
    values, fonts, background) and the data-gz-* attributes (data-gz-dark-theme, data-gz-density,
    data-gz-bg, data-gz-motion…), plus the tags the sweep adds to elements (data-gz-light, data-gz-dark…).
    The animated background scene is a bare <canvas id="gz-scene"> appended to <body>; it takes its
-   position and size from rules in here (Ultra's live in extras.css), so Canvas has none until they are. */
+   position and size from a rule in here (Ultra's lives in extras.css).
+   How Canvas is reached, cheapest first:
+   1. Canvas's own brand variables (--ic-brand-*, ~225 uses in its legacy stylesheets) are set from the
+      palette below, which recolors buttons, links, the global nav and more with no selector at all.
+   2. Its page frame is a handful of stable ids (#header, #breadcrumbs, #left-side, #content, #right-side)
+      and legacy classes (ig-*, ic-*, fc-*), restyled directly. The #application prefix outranks Canvas's
+      own class rules, so !important is only for what sets a colour inline or on a deeper id.
+   3. InstUI (inbox, discussions, files, the grades table…) hashes its classes (css-<hash>-<name>) and
+      writes literal colours into them. The part after the hash is stable, so [class*="-name"] reaches it
+      where it must be reached; everything else is left to the sweep's data-gz-light / data-gz-dark tags.
+   4. Trays, popovers, menus, dialogs and tooltips mount on <body>, outside #application, and get their own
+      section (portals); the jQuery UI widgets Canvas still uses there are restyled by class.
+   The sweep only runs on a dark palette. On a light one Canvas's white is already the surface, so every frame
+   and fill that should be the ground, a card or a band is set explicitly, not left to the sweep. */
 
-/* Placeholder: proves the sheet loads. */
-html[data-gz-dark-theme] body { background: var(--gz-surface-2); }
+/* Colors and look values are NOT defaulted here: defaults.js is the one place a default lives,
+   and content.js writes every --gz-* value inline on <html> before this sheet is even added.
+   What lives here is only what is derived from them. */
+:root {
+  --gz-radius-sm: calc(var(--gz-radius) * 2 / 3);
+  /* Derived, not black: on a light preset surface-2 is off-white, so the shadow lands as a soft
+     grey instead of a hard smudge. Depth 0-3 picks the size; 0 is flat. */
+  --gz-shadow-ink: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 55%) 35%, transparent);
+  --gz-shadow: 0 8px 24px var(--gz-shadow-ink);
+  /* The page ground, and the fill of a card or list on it. A background picture swaps both below. */
+  --gz-ground: var(--gz-surface-2);
+  --gz-panel: var(--gz-surface);
+  --gz-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* A band that sits on a panel (a module's title row, a table header): a hint of ink, so it steps
+     lighter on a dark palette and darker on a light one. */
+  --gz-band: color-mix(in srgb, var(--gz-ink) 5%, var(--gz-panel));
+  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface));
+  --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
+  --gz-tip-bg: color-mix(in srgb, var(--gz-surface) 78%, var(--gz-line-strong));
+}
+/* Depth: --gz-shadow is for lifted things (hover, menus, dialogs); --gz-rest-shadow sits under every
+   card at rest, and only from depth 2. */
+html { --gz-rest-shadow: none; }
+html[data-gz-depth="0"] { --gz-shadow: none; }
+html[data-gz-depth="2"] { --gz-shadow: 0 12px 32px var(--gz-shadow-ink), 0 2px 6px var(--gz-shadow-ink); --gz-rest-shadow: 0 1px 3px var(--gz-shadow-ink); }
+html[data-gz-depth="3"] { --gz-shadow: 0 20px 48px var(--gz-shadow-ink), 0 4px 12px var(--gz-shadow-ink); --gz-rest-shadow: 0 4px 14px var(--gz-shadow-ink); }
+/* Density scales the padding of Canvas's rows and cells: compact, cozy (Canvas as shipped), roomy. */
+html { --gz-space: 1; }
+html[data-gz-density="compact"] { --gz-space: 0.6; }
+html[data-gz-density="roomy"] { --gz-space: 1.4; }
+/* Text size: Canvas sizes text in rem off the root, so the root alone scales all of it. */
+html { font-size: calc(100% * var(--gz-scale, 1)) !important; }
+
+/* ---- Canvas's own palette, remapped. Canvas's theme editor writes these on :root from a brand
+   stylesheet that loads after this one, so the doubled :root outranks it. The shades it computes
+   (-darkened-5, -lightened-10…) are literal hex there; a hover in Glaze is the bright accent, on every
+   palette, so both directions land on it. ---- */
+:root:root {
+  --ic-brand-primary: var(--gz-accent);
+  --ic-brand-primary-darkened-5: color-mix(in srgb, var(--gz-accent), var(--gz-accent-hi) 33%);
+  --ic-brand-primary-darkened-10: color-mix(in srgb, var(--gz-accent), var(--gz-accent-hi) 66%);
+  --ic-brand-primary-darkened-15: var(--gz-accent-hi);
+  --ic-brand-primary-lightened-5: color-mix(in srgb, var(--gz-accent), var(--gz-accent-hi) 33%);
+  --ic-brand-primary-lightened-10: color-mix(in srgb, var(--gz-accent), var(--gz-accent-hi) 66%);
+  --ic-brand-primary-lightened-15: var(--gz-accent-hi);
+  --ic-brand-font-color-dark: var(--gz-ink);
+  --ic-brand-font-color-dark-lightened-15: color-mix(in srgb, var(--gz-ink), var(--gz-ink-muted) 45%);
+  --ic-brand-font-color-dark-lightened-28: var(--gz-ink-muted);
+  --ic-link-color: var(--gz-accent);
+  --ic-link-color-darkened-10: var(--gz-accent-hi);
+  --ic-link-color-lightened-10: var(--gz-accent-hi);
+  --ic-brand-button--primary-bgd: var(--gz-accent);
+  --ic-brand-button--primary-bgd-darkened-5: var(--gz-accent-hi);
+  --ic-brand-button--primary-bgd-darkened-15: var(--gz-accent-hi);
+  --ic-brand-button--primary-text: var(--gz-accent-ink);
+  /* Canvas's secondary button is a solid dark one; here it is a surface with an edge, like a tonal button. */
+  --ic-brand-button--secondary-bgd: var(--gz-surface);
+  --ic-brand-button--secondary-bgd-darkened-5: var(--gz-hover-fill);
+  --ic-brand-button--secondary-bgd-darkened-15: var(--gz-hover-fill);
+  --ic-brand-button--secondary-text: var(--gz-ink);
+  /* Global nav: the bar itself is painted by the glass rule below; the logo's box and the rest are clear. */
+  --ic-brand-global-nav-bgd: var(--gz-surface-2);
+  --ic-brand-global-nav-logo-bgd: transparent;
+  --ic-brand-global-nav-ic-icon-svg-fill: var(--gz-ink-muted);
+  --ic-brand-global-nav-ic-icon-svg-fill--active: var(--gz-accent);
+  --ic-brand-global-nav-menu-item__text-color: var(--gz-ink-muted);
+  --ic-brand-global-nav-menu-item__text-color--active: var(--gz-accent);
+  --ic-brand-global-nav-avatar-border: var(--gz-line-strong);
+  --ic-brand-global-nav-menu-item__badge-bgd: var(--gz-accent);
+  --ic-brand-global-nav-menu-item__badge-bgd--active: var(--gz-accent);
+  --ic-brand-global-nav-menu-item__badge-text: var(--gz-accent-ink);
+  --ic-brand-global-nav-menu-item__badge-text--active: var(--gz-accent-ink);
+}
+
+/* ---- backgrounds ----
+   One fixed layer, drawn by ::before on <html>, behind a page whose frame is see-through. (Ultra
+   needs one per full-screen panel; Canvas loads a page at a time.) The ground goes transparent so the
+   layer shows, and a card keeps most of its surface.
+   Layer = dim tint over grain over the picture, then blurred. The picture is the gradient content.js
+   builds from the user's shape settings (--gz-bg-grad, colors --gz-bg-1/2/3); an image or the
+   aurora replaces it, and an animated scene draws over it. */
+html[data-gz-bg]:not([data-gz-bg="solid"]) {
+  --gz-ground: transparent;
+  --gz-panel: color-mix(in srgb, var(--gz-surface) 88%, transparent);
+  --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) var(--gz-bg-dim, 60%), transparent);
+  --gz-bg-art: var(--gz-bg-grad), var(--gz-surface-2);
+  --gz-bg-grain: linear-gradient(transparent, transparent);
+  background: var(--gz-surface-2) !important;
+}
+/* Fine grey noise a few percent strong: it breaks up the 8-bit banding of soft gradients. Under the
+   tint, so dimming quiets it too. */
+html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
+  --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
+html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before {
+  content: "";
+  position: fixed;
+  inset: calc(var(--gz-bg-blur, 0px) * -2);
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain), var(--gz-bg-art);
+  filter: blur(var(--gz-bg-blur, 0px));
+}
+/* Aurora: richer art, and in Expressive the whole layer drifts. It moves by transform only, so
+   the GPU slides the already-painted layer instead of repainting gradients every frame; the layer
+   is oversized so the drift never shows an edge. */
+html[data-gz-bg="aurora"]::before {
+  inset: -18%;
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
+    radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-bg-1) 46%, transparent), transparent 70%),
+    radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-bg-2) 36%, transparent), transparent 70%),
+    radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
+    radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
+    var(--gz-surface-2);
+  animation: gz-aurora 42s ease-in-out infinite alternate;
+  animation-play-state: var(--gz-ambient);
+  will-change: transform;
+}
+@keyframes gz-aurora {
+  0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
+  50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
+  100% { transform: translate3d(-2%, 5%, 0) rotate(-2deg) scale(1.02); }
+}
+/* Scene: content.js puts one three.js canvas in <body>, above the ::before and below the page.
+   Until it draws, or without WebGL, the ::before shows the gradient. Drawn small and stretched. */
+#gz-scene {
+  position: fixed;
+  left: calc(var(--gz-bg-blur, 0px) * -2);
+  top: calc(var(--gz-bg-blur, 0px) * -2);
+  width: calc(100% + var(--gz-bg-blur, 0px) * 4);
+  height: calc(100% + var(--gz-bg-blur, 0px) * 4);
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(var(--gz-bg-blur, 0px));
+}
+
+/* ---- ground ---- */
+html, body, #drawer-layout-content, #drawer-layout-mount-point, #application, #wrapper, #main, #not_right_side,
+#content-wrapper, #content, #right-side-wrapper, #right-side, #left-side, .ic-Layout-wrapper {
+  background: var(--gz-ground) !important;
+  color: var(--gz-ink);
+}
+/* Canvas sets its face on the body and again, as LatoWeb, on the wrapper, and InstUI writes it into every
+   hashed class; "Blackboard's own" font (Ultra's) keeps Canvas's Lato. */
+html:not([data-gz-font="blackboard"]) :is(body, #drawer-layout-content, #application, #header, #flash_message_holder) { font-family: var(--gz-font); }
+html:not([data-gz-font="blackboard"]) [class*="css-"] { font-family: var(--gz-font); }
+html:not([data-gz-font="blackboard"]) :is(button, input, select, textarea) { font-family: inherit; }
+::selection { background: var(--gz-accent-soft); color: var(--gz-ink); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--gz-line-strong); border-radius: 999px; border: 2px solid var(--gz-surface-2); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- ink ----
+   Text inherits from the body (--ic-brand-font-color-dark is the ink), so most of Canvas needs nothing.
+   Headings take the heading font (content.js sets it to inherit when it follows the text), code the
+   code font once one is chosen. */
+html :is(h1, h2, h3, h4, h5, h6, [class*="css-"][class*="-heading"]) { font-family: var(--gz-font-head, inherit); }
+html[data-gz-font-mono] :is(code, pre, kbd, samp, .keycode) { font-family: var(--gz-font-mono); }
+/* Where Canvas writes its own muted greys as literals rather than through the variable above. */
+#application :is(.ic-DashboardCard__header-term, .ic-DashboardCard__header-subtitle, .ToDoSidebarItem__Info, .event-details__context,
+  .ig-details, .ig-details__item, .subtitle, .ic-item-row__meta-content, .submitted) { color: var(--gz-ink-muted); }
+:is(code, pre, kbd) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); border-color: var(--gz-line); }
+
+/* ---- global nav ----
+   The rail down the left: glass over the ground, labels muted, the current section in the accent. */
+#header {
+  background: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
+  border-right: 1px solid var(--gz-line);
+}
+#header .ic-app-header__menu-list-link {
+  border-radius: var(--gz-radius-sm);
+  margin: 2px 6px;
+  transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring);
+}
+#header .ic-app-header__menu-list-link:is(:hover, :focus) { background: var(--gz-surface); }
+#header .ic-app-header__menu-list-link:hover { transform: var(--gz-nudge); }
+#header .ic-app-header__menu-list-link:is(:hover, :focus) :is(.menu-item__text, .menu-item-icon-container) { color: var(--gz-ink); }
+#header .ic-app-header__menu-list-link:focus { box-shadow: inset 0 0 0 2px var(--gz-accent); }
+/* The current section: a soft accent wash with a short bar and glow on its edge (Canvas paints it a white tab). */
+#header .ic-app-header__menu-list-item--active > .ic-app-header__menu-list-link {
+  background: radial-gradient(120% 140% at 0% 50%, color-mix(in srgb, var(--gz-accent) 20%, transparent), transparent 70%), color-mix(in srgb, var(--gz-accent-soft) 55%, transparent);
+  box-shadow: none;
+}
+#header .ic-app-header__menu-list-item--active > .ic-app-header__menu-list-link:focus { box-shadow: inset 0 0 0 2px var(--gz-accent); }
+#header .ic-app-header__menu-list-item--active > .ic-app-header__menu-list-link::before {
+  content: ""; position: absolute; left: -6px; top: 24%; bottom: 24%; width: 3px;
+  border-radius: 999px; background: var(--gz-accent);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--gz-accent) 85%, transparent), 0 0 18px 5px color-mix(in srgb, var(--gz-accent) 35%, transparent);
+}
+/* The rail is a fixed 84px: its labels keep their size when the text size scales, or they wrap. */
+#header .menu-item__text { font-size: 12px; }
+#header .ic-avatar { border-color: var(--gz-line-strong); }
+#header .ic-app-header__menu-list-item--active .ic-avatar { border-color: var(--gz-accent); }
+/* The logomark is white, drawn for Canvas's dark rail: dark on a light palette, hues kept. */
+html:not([data-gz-dark-theme]) #header .ic-app-header__logomark { filter: invert(1) hue-rotate(180deg); }
+#skip_navigation_link { background: var(--gz-accent); color: var(--gz-accent-ink); }
+/* The unread count: Canvas makes it white and fills it in later, which the sweep can catch in between. */
+#header .menu-item__badge { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+
+/* ---- breadcrumbs: the bar above a page, glass like the rail ---- */
+#application .ic-app-nav-toggle-and-crumbs {
+  margin: 0 !important; padding: 0 24px; /* full-width pages (discussions) keep a left margin with more weight */
+  background: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
+  border-bottom: 1px solid var(--gz-line);
+}
+#application nav#breadcrumbs { background: transparent; }
+#application nav#breadcrumbs a { color: var(--gz-ink-muted); transition: color var(--gz-t) var(--gz-ease); }
+#application nav#breadcrumbs a:hover { color: var(--gz-accent); }
+#application nav#breadcrumbs :is(li:last-child, .ellipsible:last-child) { color: var(--gz-ink); }
+
+/* ---- course navigation ---- */
+#section-tabs-header-subtitle { color: var(--gz-ink-faint); font-style: normal; }
+#application #section-tabs li a {
+  color: var(--gz-ink-muted);
+  border-left: 0; border-radius: var(--gz-radius-sm);
+  padding-left: 8px; margin-left: -8px;
+  transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring);
+}
+#application #section-tabs li a:hover { background: var(--gz-row-hover); color: var(--gz-ink); transform: var(--gz-nudge); }
+#application #section-tabs li a.active {
+  color: var(--gz-accent); font-weight: 600; background: color-mix(in srgb, var(--gz-accent-soft) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--gz-accent);
+}
+
+/* ---- focus: always the accent, whatever ring Canvas draws ---- */
+:focus-visible { outline-color: var(--gz-accent) !important; }
+
+/* ---- entrances: a page fades up once it loads (the cards stagger, below). Canvas loads a page at a time,
+   so unlike Ultra there is no route change to hold or crossfade. ---- */
+#content, #right-side { animation: var(--gz-enter-page); }
+
+/* ---- the long tail: content.js tags anything still painted light / with dark text. (Only on a dark
+   palette: on a light one Canvas's white is already the surface.) The footer tags (data-gz-fixed-bottom,
+   data-gz-vh) are Ultra's; Canvas has no footer. ---- */
+[data-gz-light] { background-color: var(--gz-surface) !important; }
+[data-gz-dark] { color: var(--gz-ink) !important; }
+/* Fills Canvas lights up only on hover or focus; content.js tags them on first contact. */
+[data-gz-hover]:is(:hover, :focus, :focus-visible) { background-color: var(--gz-hover-fill) !important; }
+/* Decorative divider images (thin, wide, made for a white page) — content.js tags them. */
+html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg); opacity: 0.5; }
+
+/* ---- borders: every border under the page is a theme line; the few that mean something are restated.
+   :where() keeps the universal part at the weight of the id alone, so any rule below can restate one. ---- */
+#application :where(*) { border-color: var(--gz-line); }
+
+/* ---- see-through frames ----
+   Wrappers Canvas paints white around content that is itself drawn as cards, rows or bars below. They are
+   clear here, with !important so they also beat the sweep's own (a frame that loads before this sheet is
+   still tagged light). Anything inline-coloured that the sweep would misread as paper (a dark course
+   hero, a mid-grey one) is kept out of the sweep by giving it a background-image: it only tags fills
+   with none. */
+#application :is(.item-group-container, .header-bar, .ic-Action-header, .ic-Dashboard-header, nav#breadcrumbs, .ui-tabs, .ui-tabs-panel, .ic-app-main-content,
+  .discussions-v2__container-image, #calendar-list-holder, #minical, .ic-Layout-contentMain > div:not([class])) {
+  background: transparent !important;
+}
+/* The dashboard title bar sticks while the cards scroll under it, so it is glass, not clear. */
+#application .ic-Dashboard-header__layout {
+  background: color-mix(in srgb, var(--gz-surface-2) 40%, transparent) !important;
+  backdrop-filter: blur(max(var(--gz-glass), 10px)) saturate(1.4);
+  border-bottom: 1px solid var(--gz-line);
+}
+
+/* ---- page frame ---- */
+#application :is(.header-bar, .ic-Action-header) { border-color: var(--gz-line); }
+#application :where(h1, h2, h3) { color: var(--gz-ink); }
+#application :is(.ic-Layout-contentMain h1, .page-title) { letter-spacing: -0.01em; }
+/* The right column: its section titles are labels, not headings. */
+#right-side :is(h2, h3) { color: var(--gz-ink-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--gz-line); padding-bottom: 0.5rem; }
+#right-side a { color: var(--gz-accent); }
+
+/* ---- lists: modules, assignments, quizzes ----
+   A module or an assignment group is one card: a band for its title, rows with hairlines under it. */
+#application :is(.context_module, .assignment_group, .item-group-container > .item-group-condensed, [class*="discussions-v2__wrapper"]) {
+  background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+  transition: var(--gz-card-transition); animation: var(--gz-enter);
+}
+#application :is(.context_module, .assignment_group, .item-group-container > .item-group-condensed) { padding: 0; }
+#application [class*="discussions-v2__wrapper"] { margin-bottom: calc(1rem * var(--gz-space)); }
+#application :is(.context_module, .assignment_group, .item-group-container > .item-group-condensed):hover { border-color: var(--gz-line-strong); }
+#application .ig-header {
+  background: var(--gz-band); color: var(--gz-ink); border: 0; border-bottom: 1px solid var(--gz-line); margin: 0;
+  border-radius: calc(var(--gz-radius) - 1px) calc(var(--gz-radius) - 1px) 0 0;
+}
+/* Canvas lifts a module's title with a white text-shadow, which doubles the text once it is light. */
+#application .ig-header :where(.ig-header-title, h2, button, .name) { color: var(--gz-ink); text-shadow: none; }
+#application .context_module { padding: 0; margin-top: calc(1.25rem * var(--gz-space)); }
+/* A collapsed module is its title band alone: no rule under it, and its own corners. */
+#application .collapsed_module > .ig-header { border-bottom: 0; border-radius: calc(var(--gz-radius) - 1px); }
+#application .ig-row { background: transparent; border-width: 0 0 1px; color: var(--gz-ink-muted); transition: background var(--gz-t) var(--gz-ease); }
+#application .ig-row:hover { background: var(--gz-row-hover); }
+#application li:last-child > .ig-row, #application .ig-row:last-child { border-bottom-width: 0; }
+#application .ig-title { color: var(--gz-ink); transition: color var(--gz-t) var(--gz-ease); }
+#application a.ig-title:hover { color: var(--gz-accent); }
+#application :is(.ig-type-icon, .module-item-status-icon, .ig-info .icon-mini-arrow-down) { color: var(--gz-ink-faint); }
+#application .ig-header .icon-check, #application .ig-row .icon-check { color: var(--gz-ok); }
+/* Density: the vertical padding of rows, bands and cells (Canvas's own is cozy). */
+#application :is(.ig-row, .ig-header) { padding-block: calc(12px * var(--gz-space)); }
+#application .ic-item-row { padding-block: calc(16px * var(--gz-space)); }
+#application #section-tabs li a { padding-block: calc(8px * var(--gz-space)); }
+#application .ic-Table td { padding-block: calc(0.6em * var(--gz-space)); }
+#application .ic-Table th { padding-block: calc(0.6em * var(--gz-space)) calc(0.4em * var(--gz-space)); }
+#application .ic-DashboardCard { margin: calc(36px * var(--gz-space)) 0 0 calc(36px * var(--gz-space)); }
+/* Discussion and announcement rows draw their edges with box-shadows: a hairline under each, no frame. */
+#application .ic-item-row { background: transparent; box-shadow: inset 0 -1px 0 var(--gz-line); transition: background var(--gz-t) var(--gz-ease); }
+#application .ic-item-row:hover { background: var(--gz-row-hover); }
+#application .ic-item-row :is(a, .ic-item-row__content-link) { color: var(--gz-ink); }
+#application .ic-item-row a:hover { color: var(--gz-accent); }
+/* The "Complete All Items" pill. */
+#application ul.pill { border-color: var(--gz-line-strong); background: var(--gz-accent-soft); }
+#application ul.pill li { color: var(--gz-accent); }
+/* Stagger the cards like Ultra's course cards. */
+#application :is(.context_module, .assignment_group, .ic-DashboardCard):nth-child(2) { animation-delay: calc(var(--gz-stagger) * 1); }
+#application :is(.context_module, .assignment_group, .ic-DashboardCard):nth-child(3) { animation-delay: calc(var(--gz-stagger) * 2); }
+#application :is(.context_module, .assignment_group, .ic-DashboardCard):nth-child(4) { animation-delay: calc(var(--gz-stagger) * 3); }
+#application :is(.context_module, .assignment_group, .ic-DashboardCard):nth-child(n+5) { animation-delay: calc(var(--gz-stagger) * 4); }
+
+/* Expressive: a lifted card picks up a faint accent edge, and a soft light follows the pointer across it
+   (content.js feeds --gz-mx/--gz-my in viewport pixels, hence the fixed attachment). */
+html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .context_module, .assignment_group, .item-group-container > .item-group-condensed):hover {
+  box-shadow: var(--gz-hover-shadow), 0 0 0 1px color-mix(in srgb, var(--gz-accent) 40%, transparent);
+}
+html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):hover {
+  background-image: radial-gradient(240px circle at var(--gz-mx, -999px) var(--gz-my, -999px), color-mix(in srgb, var(--gz-accent) 12%, transparent), transparent 70%);
+  background-attachment: fixed;
+}
+
+/* ---- dashboard cards ---- */
+#application .ic-DashboardCard {
+  background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+  overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter);
+}
+#application .ic-DashboardCard:hover { transform: var(--gz-lift); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-line-strong); }
+#application .ic-DashboardCard__header_content { background: transparent; border-color: transparent; }
+/* The hero is the course's colour, set inline; its box and edge are Canvas's, invisible on white, a frame here. */
+#application .ic-DashboardCard__header_hero { border-color: transparent; background-image: linear-gradient(transparent, transparent); }
+/* A hero the sweep read as paper (a mid grey) when this sheet was late: a tint of the accent, not the card's own fill. */
+#application .ic-DashboardCard__header_hero[data-gz-light] { background-color: color-mix(in srgb, var(--gz-accent) 30%, var(--gz-surface)) !important; opacity: 1; }
+#application .ic-DashboardCard__header-button-bg { background: color-mix(in srgb, var(--gz-surface-2) 70%, transparent) !important; backdrop-filter: blur(6px); }
+#application .ic-DashboardCard__header-button { color: var(--gz-ink); }
+/* Recent feedback fades its long lines out with a white gradient. */
+#right-side .event-details::after { display: none; }
+#application .ic-DashboardCard__action-container a { color: var(--gz-ink-muted); transition: color var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring); }
+#application .ic-DashboardCard__action-container a:hover { color: var(--gz-accent); transform: var(--gz-pop); }
+
+/* ---- tables: header row a label, rows on hairlines, hover and stripes a tint ---- */
+/* An instructor's own tables (user content, below) keep their shading; the sweep recolors it on a dark palette. */
+#application table:not(.user_content *) :is(th, td) { background: transparent !important; border-color: var(--gz-line); color: inherit; }
+#application :is(#content, #right-side) table:not([class*="-view-table"]) :is(thead th, th[scope="col"]) {
+  color: var(--gz-ink-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  border-bottom: 1px solid var(--gz-line-strong);
+}
+#application .ic-Table--striped tbody tr:nth-child(odd) td { background: color-mix(in srgb, var(--gz-ink) 4%, transparent) !important; }
+#application :is(.ic-Table--hover-row, .ic-Table) tbody tr { transition: background var(--gz-t) var(--gz-ease); }
+#application :is(.ic-Table--hover-row tbody tr, #grades_summary tr.student_assignment):hover td { background: var(--gz-row-hover) !important; }
+#application :is(a.toggle_score_details_link, .score_details_table) { color: var(--gz-ink-muted); }
+
+/* ---- buttons ----
+   Canvas's own buttons read the brand variables above (primary, secondary, their hovers); what is left
+   is the shape, and the plain default one, which is a grey literal. */
+:is(#application, .ui-dialog) :where(.btn, .Button, a.button-sidebar-wide):not(.btn-primary, .Button--primary, .btn-secondary, .Button--secondary, .btn-danger, .Button--danger, .btn-link, .Button--link, .btn-success, .btn-warning) {
+  background: var(--gz-surface); color: var(--gz-ink); border: 1px solid var(--gz-line-strong);
+}
+:is(#application, .ui-dialog) :where(.btn, .Button):not(.btn-primary, .Button--primary, .btn-secondary, .Button--secondary, .btn-danger, .Button--danger, .btn-link, .Button--link, .btn-success, .btn-warning):is(:hover, :focus-visible) { background: var(--gz-hover-fill); }
+:is(#application, .ui-dialog) :is(.btn, .Button, .btn-small, .ui-button) {
+  border-radius: var(--gz-radius-sm); text-shadow: none;
+  transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), filter var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring), scale var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease);
+}
+:is(#application, .ui-dialog) :is(.btn, .Button, button):active { scale: var(--gz-press); }
+:is(#application, .ui-dialog) :is(.btn-primary, .Button--primary):hover { filter: var(--gz-hover-filter); }
+:is(#application, .ui-dialog) :is(.btn-danger, .Button--danger) { background: var(--gz-err); border-color: var(--gz-err); color: var(--gz-accent-ink); }
+:is(#application, .ui-dialog) :is(.btn-link, .Button--link) { background: transparent; border-color: transparent; color: var(--gz-accent); }
+:is(#application, .ui-dialog) :is(.btn:disabled, .btn.disabled, .Button--disabled, .btn-primary[disabled]) { opacity: 0.5; }
+/* Icon-only buttons and the ⋯ menus: a round tint behind the icon. */
+:is(#application, .ui-dialog) :is(.Button--icon-action, .al-trigger, .ic-DashboardCard__header-button, .btn-link.icon-only) { border-radius: 999px; transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
+:is(#application, .ui-dialog) :is(.Button--icon-action, .al-trigger, .ic-DashboardCard__header-button):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent); color: var(--gz-accent); }
+
+/* ---- forms: fields are surfaces with an edge, the accent ring while you type ---- */
+:is(#application, .ui-dialog) :is(input:not([type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="file"], [type="range"], [type="color"], [type="image"]), textarea, select),
+:is(#application, .ui-dialog) :is([class*="textInput__facade"], [class*="select__facade"], [class*="-textArea"], [class*="selectField"]) {
+  background: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); border-radius: var(--gz-radius-sm);
+  transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease);
+}
+:is(#application, .ui-dialog) :is(input, textarea, select):focus, :is(#application, .ui-dialog) [class*="textInput__facade"]:focus-within {
+  border-color: var(--gz-accent); box-shadow: 0 0 0 3px var(--gz-accent-soft); outline: 0;
+}
+:is(#application, .ui-dialog) ::placeholder { color: var(--gz-ink-faint); opacity: 1; }
+:is(#application, .ui-dialog) :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--gz-accent); }
+:is(#application, .ui-dialog) :is([class*="checkboxFacade__facade"], [class*="toggleFacade"]) { border-color: var(--gz-line-strong); }
+:is(#application, .ui-dialog) label, :is(#application, .ui-dialog) legend { color: var(--gz-ink); }
+
+/* ---- badges and pills: the accent with dark ink on it. !important, because Canvas turns a badge white when
+   its tab is the open one, and a white fill that the sweep tagged would put dark ink on a dark fill. ---- */
+#application :is(.nav-badge, .ic-unread-badge, .unread_dot, .ic-DashboardCard__action-badge, [class*="-badge"]:not([class*="badge__"])) { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+
+/* ---- alerts and notices (an admin's announcement, the flash at the top of the page): a surface with an edge
+   and an icon block in the status colour, which Canvas hard-codes per kind ---- */
+:is(#application, #flash_message_holder) :is(.ic-notification, .ic-flash-info, .ic-flash-success, .ic-flash-warning, .ic-flash-error) {
+  --gz-status: var(--gz-accent);
+  background: var(--gz-surface); color: var(--gz-ink); border: 2px solid var(--gz-status); border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow);
+}
+:is(#application, #flash_message_holder) :is(.ic-notification--success, .ic-flash-success) { --gz-status: var(--gz-ok); }
+:is(#application, #flash_message_holder) :is(.ic-notification--alert, .ic-flash-warning) { --gz-status: var(--gz-warn); }
+:is(#application, #flash_message_holder) :is(.ic-notification--danger, .ic-flash-error) { --gz-status: var(--gz-err); }
+:is(#application, #flash_message_holder) :is(.ic-notification__icon, .ic-flash__icon) { background: var(--gz-status); color: var(--gz-accent-ink); }
+:is(#application, #flash_message_holder) :is(.ic-notification__content, .ic-flash-info, .ic-flash-success, .ic-flash-warning, .ic-flash-error) :where(h2, h3, a, span) { color: inherit; }
+
+/* ---- InstUI: its links and avatars are literal Canvas blues; the part after the hash is all that is stable ---- */
+:is(a, button)[class*="css-"][class*="-link"]:not([class*="baseButton"]) { color: var(--gz-accent); }
+:is(a, button)[class*="css-"][class*="-link"]:not([class*="baseButton"]):hover { color: var(--gz-accent-hi); }
+#application [class*="avatar__initials"], #application [class*="view--inlineBlock-avatar"] { color: var(--gz-accent); }
+/* Segmented controls and toggles (calendar Week/Month/Agenda, Show by date): the chosen one is marked. */
+#application :is(.btn, .Button).active:not(.btn-primary, .Button--primary), #application :is(.btn, .Button)[aria-pressed="true"], #application .calendar_view_buttons .ui-state-active {
+  background: var(--gz-accent-soft); color: var(--gz-accent); border-color: var(--gz-accent);
+}
+/* An InstUI dropdown's highlighted row is filled Canvas blue with white text. */
+li[class*="optionItem"]:has(> [role="option"][aria-selected="true"]) { background: var(--gz-accent-soft); }
+li[class*="optionItem"] > [role="option"][aria-selected="true"] { color: var(--gz-accent); }
+/* Previous / Next under a page: a glass bar, as the other bars are. */
+#application .module-sequence-footer-content {
+  background: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); border-color: var(--gz-line);
+}
+
+/* ---- calendar (FullCalendar 3 draws both the month grid and the mini calendar beside it) ----
+   The grid is one card; a due date is a chip tinted with its course's colour, which Canvas sets as the
+   chip's text colour, so currentColor carries it without knowing which course it is. */
+#application #calendar-app .fc-view-container { background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); overflow: hidden; box-shadow: var(--gz-rest-shadow); }
+#application #calendar-app :is(.fc-body, .fc-head, .fc-widget-header, .fc-widget-content, .fc-view, .fc-day-grid, .fc-scroller, .fc-row) { background: transparent !important; border-color: var(--gz-line); }
+#application .fc-day-header { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); padding: 0.6rem 0; }
+#application .fc-day-number { color: var(--gz-ink-muted); transition: color var(--gz-t) var(--gz-ease); }
+#application .fc-other-month .fc-day-number, #application .fc-day-top.fc-other-month .fc-day-number { color: var(--gz-ink-faint); }
+#application td.fc-today { background: color-mix(in srgb, var(--gz-accent-soft) 60%, transparent) !important; }
+#application td.fc-day-top.fc-today .fc-day-number { color: var(--gz-accent); font-weight: 700; }
+#application #calendar-app td.fc-day.fc-today { box-shadow: inset 0 0 0 1px var(--gz-accent); }
+#application .fc-event {
+  background: color-mix(in srgb, currentColor 12%, var(--gz-surface)) !important;
+  border: 1px solid color-mix(in srgb, currentColor 40%, var(--gz-line)); border-left: 3px solid currentColor; border-radius: 4px;
+  transition: background var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring);
+}
+#application .fc-event:hover { background: color-mix(in srgb, currentColor 24%, var(--gz-surface)) !important; transform: var(--gz-lift); }
+#application .fc-event :is(.fc-title, .fc-time) { color: color-mix(in srgb, currentColor 45%, var(--gz-ink)); }
+#application .fc-more { color: var(--gz-accent); font-weight: 600; }
+/* Mini calendar: no grid, a ring round the days that have something due, today filled. */
+#application :is(#minical, #calendar-list-holder) { border-color: transparent; }
+#application #minical :is(td, th, table, .fc-row, .fc-scroller, .fc-view) { border-color: transparent; }
+#application #minical .fc-day-number { text-align: center !important; float: none !important; }
+#application #minical td.fc-day.event::after { border: 1px solid var(--gz-accent); border-radius: 999px; left: 50%; top: 3px; transform: translateX(-50%); }
+#application #minical td.fc-today { background: var(--gz-accent-soft) !important; border-radius: 999px; box-shadow: none; }
+#application #minical :is(.fc-center h2, h2) { color: var(--gz-ink-muted); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
+#application #minical .fc-button { background: transparent; border: 0; color: var(--gz-ink-muted); }
+#application #minical .fc-button:hover { color: var(--gz-accent); }
+#application .context-list-toggle-box { border-radius: 3px; }
+
+/* ---- portals: the trays, popovers, menus, dialogs and tooltips mount on <body>, outside #application,
+   so everything scoped to it misses them. The sweep has already made them dark; what is left is their edges,
+   the jQuery UI chrome Canvas still uses (dialogs, menus, tooltips, tabs) and the links. ---- */
+#nav-tray-portal, #nav-tray-portal :where(*), body > :is(.ui-dialog, .ui-menu, .ui-datepicker, .ui-tooltip, span:not([class])),
+body > :is(.ui-dialog, .ui-menu, .ui-datepicker, span:not([class])) :where(*) { border-color: var(--gz-line); }
+.ui-dialog {
+  background: var(--gz-surface); color: var(--gz-ink); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  overflow: hidden;
+}
+.ui-dialog :is(.ui-dialog-titlebar, .ui-dialog-buttonpane) { background: transparent; border-color: var(--gz-line); color: var(--gz-ink); }
+.ui-dialog .ui-dialog-title { color: var(--gz-ink); }
+.ui-dialog :is(.ui-dialog-titlebar-close, .ui-dialog-titlebar-close *) { color: var(--gz-ink-muted); }
+.ui-dialog .ui-dialog-titlebar-close:hover { color: var(--gz-ink); }
+/* Tab strips (a dialog's, the people page's): a rail with the open tab lifted out of it. */
+.ui-tabs .ui-tabs-nav { background: transparent; border: 0; border-bottom: 1px solid var(--gz-line); padding: 0; }
+.ui-tabs .ui-tabs-nav li { background: transparent; border: 0; border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0; margin-bottom: -1px; transition: background var(--gz-t) var(--gz-ease); }
+.ui-tabs .ui-tabs-nav li a { color: var(--gz-ink-muted); transition: color var(--gz-t) var(--gz-ease); }
+.ui-tabs .ui-tabs-nav li:hover { background: var(--gz-row-hover); }
+.ui-tabs .ui-tabs-nav li.ui-tabs-active { background: transparent; box-shadow: inset 0 -2px 0 var(--gz-accent); }
+.ui-tabs .ui-tabs-nav li.ui-tabs-active a, .ui-tabs .ui-tabs-nav li a:hover { color: var(--gz-ink); }
+.ui-tabs .ui-tabs-panel { color: var(--gz-ink); }
+/* Menus and the date picker. Canvas fills the chosen row with the brand colour and writes the text white. */
+.ui-menu, .ui-datepicker, .ui-autocomplete { background: var(--gz-surface); color: var(--gz-ink); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); }
+.ui-menu .ui-menu-item a, .ui-menu .ui-menu-item .ui-menu-item-wrapper { color: var(--gz-ink); background: transparent; border: 0; }
+.ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active, .ui-state-hover), .ui-menu .ui-menu-item a:is(:hover, :focus) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 0; }
+.ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active) * { color: inherit !important; }
+.ui-datepicker :is(.ui-datepicker-header, .ui-datepicker-title, th, td a, td span) { background: transparent; color: var(--gz-ink); border-color: transparent; }
+.ui-datepicker td a:hover { background: var(--gz-accent-soft); color: var(--gz-accent); }
+.ui-datepicker td a.ui-state-active, .ui-datepicker td.ui-datepicker-today a { background: var(--gz-accent); color: var(--gz-accent-ink); }
+/* Tooltips and the popovers built on them (a calendar event's card): the one tooltip language of theme.css,
+   a surface with an edge and a shadow. Canvas fills them with a 2-class chain, opacity .8, and draws a caret
+   as a border triangle in its own colours; the caret goes. (Its class .tooltip marks the thing you point
+   at, not the tip, so it is not here.) */
+html .ui-widget.ui-tooltip {
+  background-color: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); color: var(--gz-ink); border: 1px solid var(--gz-line-strong);
+  border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); backdrop-filter: blur(var(--gz-glass)); opacity: 1; animation: var(--gz-tip-in);
+}
+html .ui-widget.ui-tooltip.popover { background-color: var(--gz-surface); color: var(--gz-ink); border-radius: var(--gz-radius); }
+.ui-tooltip::before, .ui-tooltip::after { display: none !important; }
+.ui-tooltip :is(*, .ui-tooltip-content) { color: inherit; background-color: transparent; }
+.ui-tooltip :is(a, .ui-tooltip-content a) { color: var(--gz-accent); }
+/* The older popovers (a calendar event's card, the ⋯ menus) are one surface, with a caret made of two border
+   triangles, one for the edge and one for the fill. */
+html :is(body > .event-details, .ui-kyle-menu) { background-color: var(--gz-surface); color: var(--gz-ink); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
+.ui-menu-carat { border-color: var(--gz-line-strong) transparent !important; }
+.ui-menu-carat span { border-color: var(--gz-surface) transparent !important; }
+/* The dark that falls behind a modal, tinted by the palette rather than black. */
+.ui-widget-overlay { background: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 45%) 70%, transparent) !important; opacity: 1 !important; }
+
+/* ---- user content: what instructors write (pages, assignments, syllabus, topics) ---- */
+.user_content { color: var(--gz-ink); }
+.user_content, .user_content :where(p, li, td, th, div, span) { line-height: var(--gz-leading); }
+.user_content :where(a) { color: var(--gz-accent); text-underline-offset: 0.2em; }
+.user_content :where(a):hover { color: var(--gz-accent-hi); }
+#application .user_content :where(table, th, td) { border-color: var(--gz-line-strong); }
+.user_content :where(blockquote) { border-left: 3px solid var(--gz-accent); color: var(--gz-ink-muted); background: transparent; }
+.user_content :where(hr) { border-color: var(--gz-line-strong); }
+.user_content :where(img) { border-radius: var(--gz-radius-sm); }
+/* Pictures in it are made for a white page: on a dark palette a little dimmer until pointed at. */
+.user_content :where(img) { transition: filter var(--gz-t) var(--gz-ease); }
+html[data-gz-dark-theme] .user_content img:not([data-gz-rule], :hover) { filter: brightness(0.88); }
+.user_content :where(pre, code) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); color: var(--gz-ink); border-color: var(--gz-line); border-radius: var(--gz-radius-sm); }
 
 /* ---- Extras on Canvas ---- */
 /* Three of Ultra's extras run on Canvas; their styles are copies of extras.css's, with Canvas's markup. */
