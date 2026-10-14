@@ -78,6 +78,12 @@ animated backgrounds) are bundled. It makes requests in these cases:
   shares the answer), and on the Courses and Grades pages for each course you've opened before whose
   card is on screen: at most once every five minutes per course, with your existing session. The list
   is kept in memory; only the items' ids are stored, as above. Nothing is sent anywhere else.
+- **On Canvas.** At most every ten minutes, Glaze asks your own Canvas site for your planner items for the
+  next seven days, the same list Canvas's own planner and To Do list show, and keeps what's still to do as
+  the due list above. On the Dashboard (Grades on course cards) and when you open the command palette, it
+  asks for your active courses with their current scores and, inside a course, that course's navigation
+  tabs. These go to the site you are on, with your existing session; apart from the due list, the answers
+  are kept in memory only. Nothing is sent anywhere else.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an

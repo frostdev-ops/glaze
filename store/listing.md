@@ -67,7 +67,7 @@ Everything lives in one editor page with a live preview; the popup keeps the qui
 your theme as a code a classmate can paste (it previews before it applies), and back up and restore
 your settings as a file.
 
-Glaze works on Blackboard Ultra and Canvas. On Canvas it themes the page (palettes, fonts, backgrounds, motion); the extras are for Ultra. It works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
+Glaze works on Blackboard Ultra and Canvas. On Canvas it themes the page (palettes, fonts, backgrounds, motion) and brings Due this week, the command palette and grades on course cards; the other extras are for Ultra. It works on any Blackboard Ultra deployment. Institutions self-host Ultra on their own domains, so
 Glaze matches the path every Ultra install shares (/ultra/) rather than a fixed list of universities.
 
 Privacy: Glaze stores your settings in Chrome's sync storage, and your course names, which grades you've seen, where you were in
@@ -125,7 +125,11 @@ Fonts or jsDelivr, without cookies or the page's address), nothing is sent anywh
 **Host access: `https://*.instructure.com/*`**
 Most schools' Canvas LMS is hosted by Instructure under `*.instructure.com`. On those pages the content
 script injects Glaze's Canvas stylesheet, sets CSS custom properties on `<html>` and tags elements with
-`data-gz-*` attributes so they can be restyled. On Canvas it makes no network requests.
+`data-gz-*` attributes so they can be restyled. With its helpers on, it asks the same Canvas site, with
+the user's session, for the user's planner items for the next seven days (the due list, kept in
+`chrome.storage.local`), the user's active courses with their current scores (grades on course cards,
+the command palette) and the current course's navigation tabs (the command palette). Nothing is sent
+anywhere else.
 
 **Host access: `https://*/*`, `scripting`**
 Some schools serve Canvas from their own domain (for example `canvas.example.edu`), so no match pattern
