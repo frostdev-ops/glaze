@@ -5,10 +5,13 @@ _Last updated: 2026-10-14_
 ## What Glaze stores
 
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
-  background, motion, course colour and extras choices. Chrome syncs them to your own Google account so
-  your theme follows you between devices.
-- **Your courses**, in `chrome.storage.local`, on this device only: each course's name and which of
-  Ultra's ten colour slots it is in, so the editor can list them for you to recolour or tint.
+  background, motion, course colour and extras choices, and what you set for a course in its course menu:
+  its colour, look, tint and the **nickname you type for it**. When your browser's sync is on, it syncs
+  them to your own account so your theme follows you between devices; nicknames go with them, so they
+  are not device-only.
+- **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
+  lists it and which of Ultra's ten colour slots it is in, so the editor can list them for you to
+  recolour or tint.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 - **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
@@ -22,8 +25,9 @@ _Last updated: 2026-10-14_
   to 20 courses, the hypothetical scores you typed for work not graded yet. A score is removed once the
   item has a real grade or is gone, and "Clear scores" removes a course's.
 - **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
-  time of each item due in the next seven days, from Blackboard's own To Do list, so the popup can list
-  them. It is replaced each time it's fetched.
+  time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner),
+  and the address of the site it came from, so the popup can list them. It is replaced each time it's
+  fetched.
 - **What you type in Blackboard's editors** (the "Back up what you type" Extra, on by default), in
   `chrome.storage.local`, on this device only. While you write a post, reply, journal entry, message or
   assignment text, Glaze keeps a copy so it can offer it back if the page reloads or your session times
