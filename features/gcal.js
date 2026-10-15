@@ -30,7 +30,7 @@
       await ctx.need('features/calexport.js', () => globalThis.GZ_CAL_UI);
       const c = await GZ_CAL_UI.compose(null, () => ctx.on());
       if (!c || !await c.recheck()) return;
-      const r = await chrome.runtime.sendMessage({ type: 'glaze:gcal', op: 'sync', src, events: c.events, from: c.from, first: c.first });
+      const r = await chrome.runtime.sendMessage({ type: 'glaze:gcal', op: 'sync', src, events: c.events, from: c.from, first: c.first, consent: c.consent });
       if (r?.error === 'off') off = true;
       if (r?.more) { next = 6e4; again = true; }
     } catch { /* Canvas or the worker didn't answer: the next turn tries again */ } finally {

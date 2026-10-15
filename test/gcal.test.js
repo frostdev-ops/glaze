@@ -117,7 +117,7 @@ withMock('conflict rule: an edited deadline is written over, a deleted one stays
   const moved = NOW + 2 * DAY;
   mock.edit(cal, focus, { start: { dateTime: new Date(moved).toISOString() }, end: { dateTime: new Date(moved + 25 * 6e4).toISOString() } });
   const got = [];
-  await run(e, cal, st, EVENTS, { plans: async (x) => { got.push(...x); } });
+  await run(e, cal, st, EVENTS, { plans: async (x) => { got.push(...x); return true; } });
   assert.equal(mock.calendars.get(cal).events.get(lab).summary, 'Lab 1', 'Canvas wins');
   assert.equal(mock.calendars.get(cal).events.get(hol).status, 'cancelled', 'not recreated');
   assert.ok(st.gone.includes(hol));
@@ -130,7 +130,7 @@ withMock('conflict rule: an edited deadline is written over, a deleted one stays
   // Deleting a plan's event clears the plan.
   mock.del(cal, on);
   const gone = [];
-  await run(e, cal, st, EVENTS, { plans: async (x) => { gone.push(...x); } });
+  await run(e, cal, st, EVENTS, { plans: async (x) => { gone.push(...x); return true; } });
   assert.deepEqual(gone.map((x) => x.edits), [[['on', 'assignment:1', null]]]);
   // The deleted deadline is still not written, even though the page still has it.
   assert.equal(mock.calendars.get(cal).events.get(hol).status, 'cancelled');
@@ -262,18 +262,25 @@ const vm = require('node:vm');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 // on: the build-time switch (lib/gcal.js ON) turned on in the worker's copy, as scripts/dev-gcal.sh does.
 const switched = (src, on) => (on ? src.replace('  const ON = false;\n', '  const ON = true;\n') : src);
-const worker = (mock, { on = true, local = {} } = {}) => {
-  const store = { local, sync: { enabled: true } };
+// failSet(patch): a storage write that fails, as a full disk or a quota does. identity.hold: what getAuthToken waits on.
+const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
+  const store = { local, sync };
   const area = (s) => ({
     get: async (k) => structuredClone(k == null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))),
-    set: async (v) => { Object.assign(s, structuredClone(v)); },
+    set: async (v) => { if (failSet(v)) throw new Error('QUOTA_BYTES quota exceeded'); Object.assign(s, structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
   });
   const listeners = [], asked = [];
   let registered = [];
   const identity = {
     cleared: 0, removed: [],
-    getAuthToken: async ({ interactive }) => { assert.equal(interactive, false, 'the worker never prompts'); return { token: 'tok-1', grantedScopes: [G.SCOPE] }; },
+    asked: 0, hold: null,
+    getAuthToken: async ({ interactive }) => {
+      assert.equal(interactive, false, 'the worker never prompts');
+      identity.asked++;
+      await identity.hold;
+      return { token: 'tok-1', grantedScopes: [G.SCOPE] };
+    },
     removeCachedAuthToken: async ({ token }) => { identity.removed.push(token); },
     clearAllCachedAuthTokens: async () => { identity.cleared++; },
   };
@@ -303,6 +310,11 @@ const worker = (mock, { on = true, local = {} } = {}) => {
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(structuredClone(m), sender, (r) => res(structuredClone(r))); });
   return { store, identity, asked, send, registered: () => registered, install: () => listeners.installed() };
 };
+// What the page sends with its batch (lib/calexport.js consent), worked out from the worker's storage as it is now.
+const D = require('../defaults.js');
+const T = require('../lib/todo.js');
+const X = require('../lib/calexport.js');
+const consentOf = (w, who = SITE_SRC) => { const z = D.GZ_SANITIZE(w.store.sync); return X.consent(z, z.todo, w.store.local.gradescope, who); };
 const EDITOR = { id: 'glaze', url: 'chrome-extension://x/options.html#gcal' };
 const PAGE = { id: 'glaze', tab: { id: 4 }, frameId: 0, url: 'https://school.instructure.com/courses/7' };
 const SITE_SRC = 'https://school.instructure.com/3';
@@ -310,7 +322,7 @@ const settle = (ms = 30) => new Promise((res) => setTimeout(res, ms));
 
 withMock('worker: only the editor connects; a page syncs only its own site\'s account; plans moved in Google reach Better To Do; Glaze off stops it', async (mock) => {
   const w = worker(mock);
-  const sync = (more = {}) => w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, ...more }, PAGE);
+  const sync = (more = {}) => w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, consent: consentOf(w), ...more }, PAGE);
   assert.deepEqual(await sync(), { ok: false, error: 'off' }, 'not connected');
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'connect' }, PAGE), { ok: false, error: 'sender' });
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'connect', tz: 'America/New_York' }, EDITOR), { ok: true });
@@ -323,13 +335,14 @@ withMock('worker: only the editor connects; a page syncs only its own site\'s ac
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR), { ok: false, error: 'connected' }, 'one calendar per connection');
   assert.deepEqual(await sync({ src: 'https://other.instructure.com/3' }), { ok: false, error: 'sender' });
   assert.deepEqual(await sync({ src: SITE_SRC, from: 'soon' }), { ok: false, error: 'sender' });
+  // The plans the page's events carry are the ones Better To Do holds (a page's plan that isn't there any more is skipped).
+  const key = `todo:${SITE_SRC}`;
+  w.store.local[key] = { tasks: [], items: { 'assignment:1': { on: '2026-10-17', sessions: [{ at: NOW + DAY, min: 50 }] } } };
   assert.deepEqual(await sync(), { ok: true, wrote: 5, more: false });
   assert.equal(mock.live(cal).length, 5);
   assert.ok(w.store.local.gcal.last[SITE_SRC] > 0 && w.store.local.gcal.error === '');
   assert.equal(Object.keys(w.store.local.gcalSync.map).length, 5);
   // The student moves the "do on" day in Google Calendar: Better To Do's plan follows, through the broker.
-  const key = `todo:${SITE_SRC}`;
-  w.store.local[key] = { tasks: [], items: { 'assignment:1': { on: '2026-10-17' } } };
   const on = mock.live(cal).find((x) => x.summary === 'Do: Lab 1').id;
   mock.edit(cal, on, { start: { date: '2026-10-21' }, end: { date: '2026-10-22' } });
   assert.equal((await sync()).ok, true);
@@ -346,7 +359,7 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   const cal = w.store.local.gcal.cal;
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, PAGE), { ok: false, error: 'sender' });
   mock.fail(3, 503); // a run in backoff when Disconnect comes
-  const running = w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST }, PAGE);
+  const running = w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, consent: consentOf(w) }, PAGE);
   while (!mock.log.some(([m, p]) => m === 'GET' && p.includes('/events'))) await settle(1);
   const bye = await w.send({ type: 'glaze:gcal', op: 'disconnect', drop: true }, EDITOR);
   assert.deepEqual(await running, { ok: false, error: 'stopped' });
@@ -414,4 +427,134 @@ test('the store package leaves Google sync out while the switch is off; scripts/
     assert.match(fs.readFileSync(path.join(dir, 'dev/lib/gcal.js'), 'utf8'), /\n {2}const ON = true;\n/);
     assert.equal(G.ON, false, "the repo's switch is untouched");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- review (Codex, W13): each failed before its fix ----
+const eventWrites = (mock) => mock.log.filter(([m, p]) => m !== 'GET' && p.includes('/events'));
+const holdToken = (w) => { let open; w.identity.hold = new Promise((r) => { open = r; }); return () => { w.identity.hold = null; open(); }; };
+const until = async (f) => { for (let i = 0; i < 500 && !f(); i++) await settle(2); assert.ok(f(), 'timed out'); };
+
+withMock('review: a plan deleted in Google stays deleted, in the same run and from a page that read the plan before', async (mock) => {
+  const e = env(mock);
+  const { cal } = await G.connect(e);
+  const st = G.fresh();
+  const data = T.clean({ tasks: [], items: { 'assignment:1': { on: '2026-10-17', sessions: [{ at: NOW + DAY, min: 50 }] } } });
+  const opts = { plans: async (x) => { for (const ed of G.still(data, x)) T.edit(data, ed); return true; }, mine: async () => T.clean(data) };
+  await run(e, cal, st, EVENTS, opts);
+  const id = (summary) => mock.live(cal).find((x) => x.summary === summary).id;
+  const on = id('Do: Lab 1'), focus = id('Focus: Lab 1');
+  mock.del(cal, on);
+  mock.del(cal, focus);
+  // EVENTS still has both plans: what a page read before the deletion came back.
+  await run(e, cal, st, EVENTS, opts);
+  assert.deepEqual(T.clean(data).items, {}, 'the plans are cleared here');
+  await run(e, cal, st, EVENTS, opts);
+  assert.deepEqual([mock.calendars.get(cal).events.get(on).status, mock.calendars.get(cal).events.get(focus).status], ['cancelled', 'cancelled'], 'and not recreated');
+  // Planned again here, it goes back.
+  T.edit(data, ['on', 'assignment:1', '2026-10-17']);
+  await run(e, cal, st, EVENTS, opts);
+  assert.equal(mock.calendars.get(cal).events.get(on).status, 'confirmed');
+});
+
+withMock('review: Glaze turned off while the token is awaited: the run stops and writes nothing', async (mock) => {
+  const w = worker(mock);
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const open = holdToken(w);
+  const n = w.identity.asked;
+  const running = w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, consent: consentOf(w) }, PAGE);
+  await until(() => w.identity.asked > n);
+  w.store.sync.enabled = false;
+  open();
+  assert.deepEqual(await running, { ok: false, error: 'stopped' });
+  assert.deepEqual(eventWrites(mock), []);
+  assert.ok(!mock.log.some(([, p]) => p.includes('/events')), 'not even a read');
+  assert.ok(!w.store.local.gcal.last[SITE_SRC], 'nor its own state');
+});
+
+withMock('review: syncs in flight and queued when Disconnect comes stop before it revokes, and nothing is written after', async (mock) => {
+  const w = worker(mock);
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const cal = w.store.local.gcal.cal;
+  const open = holdToken(w);
+  const n = w.identity.asked;
+  const sync = () => w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, consent: consentOf(w) }, PAGE);
+  const a = sync();
+  await until(() => w.identity.asked > n);
+  const b = sync();
+  await settle();
+  const bye = w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR);
+  open();
+  assert.deepEqual([await a, await b], [{ ok: false, error: 'stopped' }, { ok: false, error: 'stopped' }]);
+  assert.deepEqual(await bye, { ok: true, revoked: true, had: true });
+  assert.deepEqual(eventWrites(mock), []);
+  assert.equal(mock.live(cal).length, 0);
+  assert.ok(!('gcal' in w.store.local) && !('gcalSync' in w.store.local));
+});
+
+withMock('review: a plan change that can\'t be written here isn\'t taken as done: the next run tries again, and Google keeps the move', async (mock) => {
+  const key = `todo:${SITE_SRC}`;
+  let full = false;
+  const w = worker(mock, { local: { [key]: { tasks: [], items: { 'assignment:1': { on: '2026-10-17' } } } }, failSet: (v) => full && key in v });
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const cal = w.store.local.gcal.cal;
+  const sync = () => w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, consent: consentOf(w) }, PAGE);
+  assert.equal((await sync()).ok, true);
+  const on = mock.live(cal).find((x) => x.summary === 'Do: Lab 1').id;
+  mock.edit(cal, on, { start: { date: '2026-10-21' }, end: { date: '2026-10-22' } });
+  const cursor = w.store.local.gcalSync.sync;
+  full = true;
+  assert.deepEqual(await sync(), { ok: false, error: 'local' });
+  assert.equal(w.store.local[key].items['assignment:1'].on, '2026-10-17');
+  assert.equal(w.store.local.gcalSync.sync, cursor, 'the cursor stays where it was');
+  assert.equal(mock.calendars.get(cal).events.get(on).start.date, '2026-10-21');
+  full = false;
+  assert.equal((await sync()).ok, true);
+  assert.equal(w.store.local[key].items['assignment:1'].on, '2026-10-21', 'the move lands here on the next run');
+  assert.equal(mock.calendars.get(cal).events.get(on).start.date, '2026-10-21', 'and is never written over from here');
+});
+
+// The page's own compose (features/calexport.js, as features/gcal.js calls it), reading the same storage as the worker.
+const composer = (store) => {
+  const get = (area) => (keys, cb) => { const all = structuredClone(store[area]); cb(keys === null ? all : Object.fromEntries([keys].flat().filter((k) => k in all).map((k) => [k, all[k]]))); };
+  const planner = [{ plannable_type: 'assignment', plannable_id: '1', course_id: '7', context_name: 'Biology', plannable: { title: 'Lab 1' }, plannable_date: '2026-10-20T03:59:00Z', html_url: '/courses/7/assignments/1' }];
+  const c = vm.createContext({
+    TextEncoder, URL, Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
+    location: { origin: 'https://school.instructure.com', host: 'school.instructure.com' },
+    chrome: { runtime: {}, storage: { sync: { get: get('sync') }, local: { get: get('local') } } },
+    fetch: async (url) => ({ ok: true, headers: { get: () => null }, text: async () => JSON.stringify(url.includes('start_date=2026-10-15') ? planner : []) }),
+    GZ_CTX: { t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need: async () => {}, settings: () => D.GZ_SANITIZE(store.sync),
+      profile: async () => ({ id: '3', time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '7', name: 'Biology' }] },
+  });
+  vm.runInContext('globalThis.globalThis = this; Date.UTC = Object.getPrototypeOf(Date).UTC; Date.parse = Object.getPrototypeOf(Date).parse;', c);
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'lib/classes.js', 'features/calexport.js']) vm.runInContext(read(f), c);
+  return () => c.GZ_CAL_UI.compose(null, () => true);
+};
+
+withMock('review (P1): the Gradescope answer taken back while the token is awaited: the batch composed under it is never sent', async (mock) => {
+  const ACCT = 'a'.repeat(24);
+  const gradescope = {
+    acct: { id: ACCT, name: 'Sam' }, map: { 11: { to: 'canvas:https://school.instructure.com/7', name: 'BIO' } },
+    courses: { 11: { at: NOW, bad: 0, rows: [{ id: '55', title: 'HW 3', due: Date.parse('2026-10-20T03:59:00Z'), late: null, sub: false, graded: false, score: null, points: 10, lateSub: false }] } },
+    bind: { [SITE_SRC]: { id: ACCT, show: true } },
+  };
+  const w = worker(mock, { local: { gradescope }, sync: { version: 2, enabled: true, enhance: { gradescope: true } } });
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const cal = w.store.local.gcal.cal;
+  const compose = composer(w.store);
+  const send = (c) => w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: c.events, from: c.from, first: c.first, consent: c.consent }, PAGE);
+  const c = await compose();
+  assert.ok(c.events.some((e) => e.summary === 'HW 3') && await c.recheck(), 'composed and rechecked while the answer was yes');
+  const open = holdToken(w);
+  const n = w.identity.asked;
+  const running = send(c);
+  await until(() => w.identity.asked > n);
+  w.store.local.gradescope.bind[SITE_SRC].show = false; // "Not here", as lib/gradescope.js keeps it
+  open();
+  assert.deepEqual(await running, { ok: false, error: 'stopped' });
+  assert.deepEqual(eventWrites(mock), [], 'neither HW 3 nor anything else from that batch');
+  // The page's next batch is composed without it, and goes.
+  const next = await compose();
+  assert.ok(!next.events.some((e) => e.summary === 'HW 3'));
+  assert.equal((await send(next)).ok, true);
+  assert.deepEqual(mock.live(cal).map((e) => e.summary), ['Lab 1']);
 });
