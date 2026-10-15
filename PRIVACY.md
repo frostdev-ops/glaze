@@ -104,6 +104,23 @@ _Last updated: 2026-10-15_
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
   it ends, so it keeps running from page to page. The widgets' settings (timer
   lengths, chime, quote choices, breathing lengths) are in `chrome.storage.sync` with your other settings (`widgets`).
+- **Notes** (Canvas, the notes app; the Notes switch, off by default), on this device only, per Canvas site and signed-in user id. The
+  library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name Canvas showed),
+  when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'
+  names, courses and order. Each note's text and the pictures and attachments you add are in the extension's own
+  IndexedDB, which only Glaze's background worker opens. Neither is in the school page's own storage (its
+  `localStorage` or IndexedDB), so your school's Canvas pages can't read them. Notes opens, and its buttons, lists and
+  menus act, only on your own clicks and key presses; clicks and keys the page's scripts fake are ignored, even on a
+  control they move out of the view. While the Notes view is open, what it shows (the list and the note on screen) is
+  part of the page, like anything shown there: the page's scripts can read it, and could type into it while you use it. Pictures are kept as PNG, JPEG, GIF or WebP, up to 5 MB each;
+  attachments up to 20 MB each, kept as bytes and only ever offered as a download; 200 MB in all on this device. Links to
+  Canvas files, pages and module items are kept as their address and title only; the file itself is never copied. A note
+  or folder in the trash is deleted for good after 30 days, or when you empty the trash; its id and the time are kept
+  30 days more, so a change still on its way from another tab can't bring it back. A step that fails (a deletion
+  interrupted, say) is finished the next time Notes opens, so nothing deleted stays behind. Glaze doesn't ask for unlimited
+  storage, so the browser may clear this storage if the device runs very short of space: **Export all** saves a copy
+  (a zip of Markdown files, the pictures and attachments, and the notes as HTML for importing back) through your
+  browser's own download, and **Import** reads such a zip on your device.
 - **Reminders and streak** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site
   and signed-in user id: which reminders have been shown (so another tab doesn't show them again; while one tab is
   showing one, a random id for that tab holds it for 30 seconds), the ones you
@@ -314,6 +331,12 @@ animated backgrounds) are bundled. It makes requests in these cases:
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
   day's planner items, a read-only GET, at most every two minutes per day you look at. Nothing is written to Canvas.
+- **Notes** (Canvas, off by default). Glaze uses your profile and course list (as the other extras do). When you choose
+  **Canvas link** in a note, it lists one course's files, pages or modules with their items from your own Canvas site:
+  read-only GETs with your existing session, the next page asked for only on your own site, never following a redirect,
+  and stopped when you close the picker or the view. Only the link and title you pick go in the note. Opening a note
+  loads nothing from anywhere: a picture from another site, pasted into a note, becomes a link to it instead. Links in
+  notes open in a new tab without telling the site where you came from. Nothing about your notes is sent anywhere.
 - **Music widget** (Canvas, off by default). Glaze contacts no music service until you press **Load player**, on each
   page. Then your browser loads that service's player inside the widget, from **Spotify** (`open.spotify.com`),
   **YouTube** or **YouTube Music** (both from `www.youtube-nocookie.com`, YouTube's privacy-enhanced mode) or **Apple
@@ -394,7 +417,10 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 ## Permissions
 
 - `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
-  typed-text backups, Looks history and favorites, Dashboard notes and widgets, and Safari update-check timestamp described above.
+  typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, and Safari update-check timestamp described above.
+  Notes' text, pictures and attachments are in the extension's own IndexedDB.
+- `unlimitedStorage` — so the browser never clears your notes, pictures and attachments to free space. Nothing more is
+  stored or sent because of it; Chrome shows no warning for it.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is

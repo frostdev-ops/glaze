@@ -70,7 +70,7 @@ const GZ_SPEC = {
     urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
-    download: [true, 'bool'], todo: [false, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
+    download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
     notes: [false, 'bool'], widgets: [false, 'bool'], // and lib/widgets.js
     // place: a course's content reopens where you left it (open folders, scroll).
     place: [true, 'bool'],
@@ -132,7 +132,7 @@ const GZ_PRESETS = [
     '#ffffff', '#f4f5f7', '#14181f', '#5b6472', '#848b96', '#e3e6ea', '#c8cdd4',
     '#15803d', '#b45309', '#b91c1c')],
   ['Rose', GZ_PALETTE(
-    '#c026d3', '#a21caf', '#fbe3fb', '#ffffff',
+    '#b31fc4', '#a21caf', '#fbe3fb', '#ffffff',
     '#fff7fa', '#fdeef4', '#2a1622', '#6d4d61', '#997d8d', '#f4dbe6', '#e5bfd1',
     '#15803d', '#b45309', '#be123c')],
 ];

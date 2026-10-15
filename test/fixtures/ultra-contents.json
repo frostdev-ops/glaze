@@ -1,0 +1,166 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See parity/spikes/B0.md.",
+ "results": [
+  {
+   "id": "_720_1",
+   "parentId": "_700_1",
+   "title": "Week 1: Cells",
+   "created": "2026-08-25T12:00:00.000Z",
+   "modified": "2026-09-01T12:00:00.000Z",
+   "position": 0,
+   "launchInNewWindow": false,
+   "reviewable": false,
+   "availability": {
+    "available": "Yes",
+    "allowGuests": false,
+    "allowObservers": false,
+    "adaptiveRelease": {}
+   },
+   "contentHandler": {
+    "id": "resource/x-bb-folder",
+    "isBbPage": false
+   },
+   "links": [
+    {
+     "href": "/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_720_1&parentId=_700_1",
+     "rel": "alternate",
+     "title": "User Interface View",
+     "type": "text/html"
+    }
+   ],
+   "hasChildren": true
+  },
+  {
+   "id": "_721_1",
+   "parentId": "_720_1",
+   "title": "Reading: The cell membrane",
+   "created": "2026-08-25T12:00:00.000Z",
+   "modified": "2026-09-01T12:00:00.000Z",
+   "position": 0,
+   "launchInNewWindow": false,
+   "reviewable": false,
+   "availability": {
+    "available": "Yes",
+    "allowGuests": false,
+    "allowObservers": false,
+    "adaptiveRelease": {}
+   },
+   "contentHandler": {
+    "id": "resource/x-bb-document",
+    "isBbPage": true
+   },
+   "links": [
+    {
+     "href": "/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_721_1&parentId=_720_1",
+     "rel": "alternate",
+     "title": "User Interface View",
+     "type": "text/html"
+    }
+   ],
+   "body": "<p>Read chapter 3 on the cell membrane.</p><p><a href=\"https://lms.example.edu/bbcswebdav/xid-1_1\" data-bbfile=\"{&quot;linkName&quot;:&quot;chapter3.pdf&quot;,&quot;mimeType&quot;:&quot;application/pdf&quot;}\">chapter3.pdf</a></p>"
+  },
+  {
+   "id": "_703_1",
+   "parentId": "_720_1",
+   "title": "Lab Report 3",
+   "created": "2026-08-25T12:00:00.000Z",
+   "modified": "2026-09-01T12:00:00.000Z",
+   "position": 0,
+   "launchInNewWindow": false,
+   "reviewable": false,
+   "availability": {
+    "available": "Yes",
+    "allowGuests": false,
+    "allowObservers": false,
+    "adaptiveRelease": {}
+   },
+   "contentHandler": {
+    "id": "resource/x-bb-asmt-test-link",
+    "assessmentId": "_501_1",
+    "gradeColumnId": "_603_1",
+    "instructions": "",
+    "proctoring": {
+     "secureBrowserRequiredToTake": false,
+     "secureBrowserRequiredToReview": false,
+     "webcamRequired": false
+    },
+    "password": {
+     "enabled": false
+    },
+    "isLateAttemptCreationDisallowed": false
+   },
+   "links": [
+    {
+     "href": "/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_703_1&parentId=_720_1",
+     "rel": "alternate",
+     "title": "User Interface View",
+     "type": "text/html"
+    }
+   ],
+   "hasGradebookColumns": true
+  },
+  {
+   "id": "_706_1",
+   "parentId": "_720_1",
+   "title": "Publisher Homework 4",
+   "created": "2026-08-25T12:00:00.000Z",
+   "modified": "2026-09-01T12:00:00.000Z",
+   "position": 0,
+   "launchInNewWindow": false,
+   "reviewable": false,
+   "availability": {
+    "available": "Yes",
+    "allowGuests": false,
+    "allowObservers": false,
+    "adaptiveRelease": {}
+   },
+   "contentHandler": {
+    "id": "resource/x-bb-blti-link",
+    "url": "https://publisher.example.com/lti/launch",
+    "customParameters": {
+     "submission_due_date": "2026-10-18"
+    }
+   },
+   "links": [
+    {
+     "href": "/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_706_1&parentId=_720_1",
+     "rel": "alternate",
+     "title": "User Interface View",
+     "type": "text/html"
+    }
+   ]
+  },
+  {
+   "id": "_722_1",
+   "parentId": "_720_1",
+   "title": "Cell diagram",
+   "created": "2026-08-25T12:00:00.000Z",
+   "modified": "2026-09-01T12:00:00.000Z",
+   "position": 0,
+   "launchInNewWindow": false,
+   "reviewable": false,
+   "availability": {
+    "available": "Yes",
+    "allowGuests": false,
+    "allowObservers": false,
+    "adaptiveRelease": {}
+   },
+   "contentHandler": {
+    "id": "resource/x-bb-file",
+    "file": {
+     "fileName": "cell.jpg",
+     "mimeType": "image/jpeg"
+    },
+    "fileAssociationMode": "Embed"
+   },
+   "links": [
+    {
+     "href": "/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_722_1&parentId=_720_1",
+     "rel": "alternate",
+     "title": "User Interface View",
+     "type": "text/html"
+    }
+   ]
+  }
+ ]
+}
