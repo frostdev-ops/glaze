@@ -66,8 +66,10 @@ const ultra = (answers) => {
   return { f, asked };
 };
 
-test("an Ultra page's due items: one read per range however many features ask, the page's own student and courses, links on the site", async () => {
+test("an Ultra page's reads, all through lib/ultra.js's reader: the student and courses once a page, what's due once per range however many features ask, links on the site", async () => {
   const { f, asked } = ultra({
+    '/learn/api/v1/users/me': { id: '_900_1' },
+    '/learn/api/v1/users/_900_1/memberships': load('memberships'),
     '/learn/api/v1/calendars/todo/studentItems': load('todo'),
     '/learn/api/v1/calendars/calendarItems': load('calendar-items'),
     '/learn/api/v1/courses/_101_1/gradebook/grades': load('grades'),
@@ -79,21 +81,21 @@ test("an Ultra page's due items: one read per range however many features ask, t
   globalThis.location = { origin: o };
   globalThis.fetch = f;
   try {
-    let profiles = 0, lists = 0;
-    // GZ_CTX on an Ultra page: content-ultra.js asks for the student and their memberships once a page.
-    const ctx = { profile: async () => { profiles++; return { id: '_900_1' }; }, myCourses: async () => { lists++; return load('memberships').results; } };
     const range = [LATER - 14 * DAY, LATER + 14 * DAY];
-    const [a, b, c] = await Promise.all([U.pageDue(ctx, ...range), U.pageDue(ctx, ...range), U.pageDue(ctx, range[0], range[1] + DAY)]);
+    const [p, l] = await Promise.all([U.page.profile(), U.page.courses()]);
+    assert.equal(p.id, '_900_1');
+    assert.equal(p.time_zone, Intl.DateTimeFormat().resolvedOptions().timeZone, "the browser's zone, by name");
+    assert.deepEqual(l.map((c) => c.id), ['_101_1', '_102_1', '_103_1', '_104_1']);
+    const [a, b, c] = await Promise.all([U.page.due(...range), U.page.due(...range), U.page.due(range[0], range[1] + DAY)]);
     assert.equal(a, b, 'the To Do list, the cards and the reminders asking at once get one answer');
     assert.notEqual(a, c, 'another range is its own read');
     assert.equal(a.complete, true);
     assert.deepEqual(a.items.map((i) => i.id).sort(), ['_603_1', '_605_1', '_606_1', '_613_1']);
     for (const i of a.items) assert.ok(i.url.startsWith(`${o}/ultra/`), i.url);
     assert.ok(asked.every(({ url, init }) => url.startsWith(`${o}/learn/api/`) && init.method === 'GET' && init.redirect === 'error'));
-    assert.ok(!asked.some(({ url }) => /\/users\/(me|_900_1\/memberships)/.test(url)), 'the page already has the student and their courses');
-    assert.equal(profiles, 2);
+    assert.equal(asked.filter(({ url }) => /\/users\/(me|_900_1\/memberships)/.test(url)).length, 2, 'the student and their courses, once a page');
     const n = asked.length;
-    await U.pageDue(ctx, ...range);
+    await U.page.due(...range);
     assert.ok(asked.length > n, 'a read that has come back is asked again next time: nothing is kept here');
   } finally { Object.assign(globalThis, had); }
 });
@@ -156,12 +158,23 @@ const worker = () => {
   return { store, send };
 };
 
-test("the worker takes an Ultra page's planning writes for its own site's accounts only", async () => {
+test("the worker takes an Ultra page's planning writes for its own site's accounts only, on a host Glaze found Ultra on", async () => {
   const w = worker();
-  const page = { id: 'glaze', tab: {}, url: `${o}/ultra/courses/_101_1/outline` };
+  const page = { id: 'glaze', tab: {}, frameId: 0, url: `${o}/ultra/courses/_101_1/outline` };
   const nope = { ok: false, error: 'sender' };
   const todo = (key) => ({ type: 'glaze:todo', key, edits: [['task', { id: 'n', title: 'Read chapter 3' }]] });
   const own = `todo:${o}/_900_1`;
+  const until = async (f) => { for (let i = 0; i < 100 && !f(); i++) await new Promise((r) => setTimeout(r, 2)); };
+  // An /ultra address alone isn't Ultra: only a host where Glaze's detection found it (content-ultra.js says so as it starts).
+  assert.deepEqual(await w.send(todo(own), page), nope, 'a host Glaze has not found Ultra on');
+  await w.send({ type: 'glaze:ultra' }, { ...page, frameId: 2 });
+  await w.send({ type: 'glaze:ultra' }, { ...page, url: 'http://bb.example.edu/ultra/course' });
+  await w.send({ type: 'glaze:ultra' }, { ...page, url: `${o}/webapps/portal/frameset.jsp` });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(w.store.local.ultra, undefined, 'a frame, http or a page outside /ultra records nothing');
+  await w.send({ type: 'glaze:ultra' }, page);
+  await until(() => w.store.local.ultra);
+  assert.deepEqual(w.store.local.ultra, [o]);
   assert.equal((await w.send(todo(own), page)).ok, true);
   assert.deepEqual(w.store.local[own].tasks.map((x) => x.title), ['Read chapter 3']);
   assert.deepEqual(await w.send(todo('todo:https://other.example.edu/_900_1'), page), nope, "another site's account");

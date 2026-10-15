@@ -2,11 +2,11 @@
 // list on the Dashboard and a course's home page; on Blackboard Ultra, of Ultra's own To Do on the Courses page, and on a
 // course's outline it's a block of its own in the right column (that course only). The site's part loads this (need) and
 // calls sync(on) from content.js's passes; the logic is lib/todo.js, loaded from here. The site's own list is hidden by
-// apps.css only while this one is on the page, right before it (#gz-todo ~ …), so if anything here fails, it comes back.
+// features/apps.css only while this one is on the page, right before it (#gz-todo ~ …), so if anything here fails, it comes back.
 //
 // What it asks Canvas for, with the student's session: their profile (id, time zone), their planner items (Link
 // paging), and, for a teacher, /users/self/todo and each listed assignment's submission summary. On Ultra: the student,
-// their courses, To Do and the calendar joined with each course's gradebook (lib/ultra.js pageDue), in the browser's time
+// their courses, To Do and the calendar joined with each course's gradebook (lib/ultra.js page.due), in the browser's time
 // zone. One answer serves the site's pages (and, on Canvas, the popup's due list), kept in storage.local and asked again
 // after two minutes, only when the page is shown or focused: no polling. The one write is a mark, and only on Canvas with
 // todo.sync on: Canvas's planner override, exactly as Canvas's own List View checkbox sends it. Ultra has nothing like it,
@@ -98,7 +98,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const now = Date.now();
     if (ultra) {
       const { start, end } = L.fetchRange(o(), now, who.tz);
-      const r = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.pageDue(ctx, Date.parse(start), Date.parse(end)));
+      const r = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.due(Date.parse(start), Date.parse(end)));
       // complete: false, the calendar couldn't be read whole: the list says some work may be missing.
       return [{ key, at: now, start, end, teach: o().teacher, progress: o().progress, items: r.items, complete: r.complete, grading: [], sums: {} }, undefined];
     }

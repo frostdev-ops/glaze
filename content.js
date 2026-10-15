@@ -51,9 +51,12 @@
   let darkTheme = true;
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
-  // Canvas wears canvas.css instead of theme.css and extras.css (written against Ultra's markup); motion.css, mostly the
-  // motion knobs any sheet's animations read, comes along. apps.css is what Glaze draws itself, on both (not Moodle).
-  const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css', 'apps.css'] : [`${site}.css`, 'motion.css', ...(moodle ? [] : ['apps.css'])];
+  // Canvas wears canvas.css instead of theme.css and extras.css, which are written against Ultra's markup.
+  // motion.css comes along: it is mostly the motion knobs (--gz-t, --gz-enter…, set per level by
+  // html[data-gz-motion] and the three switches) that any sheet's animations read, so canvas.css doesn't
+  // redo them. Its Ultra-named rules (.route-view-container, .element-card…) match nothing in Canvas.
+  // features/apps.css: Glaze's own apps, the same on Ultra and Canvas (the notes app, the widgets); Moodle has none.
+  const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'] : [`${site}.css`, 'motion.css', ...(site === 'canvas' ? ['features/apps.css'] : [])];
   // What only one site does: its part puts its own over these ("the site's own part", below). They're Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, still: no, stop: no, renderProgress: no,

@@ -74,8 +74,6 @@
 		B0B1000000000000000000C4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
 		B0B1000000000000000000C5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
-		B0B1000000000000000000A6 /* apps.css in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F6 /* apps.css */; };
-		B0B1000000000000000000C6 /* apps.css in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F6 /* apps.css */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -160,7 +158,6 @@
 		B0B1000000000000000000F3 /* moodle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = moodle.css; path = Resources/moodle.css; sourceTree = "<group>"; };
 		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
 		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
-		B0B1000000000000000000F6 /* apps.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = apps.css; path = Resources/apps.css; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -269,7 +266,6 @@
 				B0B1000000000000000000F3 /* moodle.css */,
 				B0B1000000000000000000F4 /* features */,
 				B0B1000000000000000000F5 /* assets */,
-				B0B1000000000000000000F6 /* apps.css */,
 			);
 			name = Resources;
 			path = "Glaze Extension";
@@ -450,7 +446,6 @@
 				B0B1000000000000000000A3 /* moodle.css in Resources */,
 				B0B1000000000000000000A4 /* features in Resources */,
 				B0B1000000000000000000A5 /* assets in Resources */,
-				B0B1000000000000000000A6 /* apps.css in Resources */,
 			);
 		};
 		3B8EDC0D307C30D500B0DD77 /* Resources */ = {
@@ -491,7 +486,6 @@
 				B0B1000000000000000000C3 /* moodle.css in Resources */,
 				B0B1000000000000000000C4 /* features in Resources */,
 				B0B1000000000000000000C5 /* assets in Resources */,
-				B0B1000000000000000000C6 /* apps.css in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */

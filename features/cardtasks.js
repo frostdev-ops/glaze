@@ -61,7 +61,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     let c, due;
     if (ultra) {
       // Ultra: no teachers' grading, and no popup list from here (content.js keeps Ultra's own).
-      const r = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.pageDue(ctx, Date.parse(start), Date.parse(end)));
+      const r = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.due(Date.parse(start), Date.parse(end)));
       c = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);

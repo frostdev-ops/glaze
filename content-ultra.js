@@ -3,6 +3,8 @@
 // state (I) and puts what it returns over its defaults (X). A second copy keeps the first; it ends on its value (loadable).
 var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const { C, html, isPreview, need, t, locale, api, courseId, markDue, drawProgress, cardBadge, cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled } = I;
+  // Glaze's detection found Ultra here: the worker keeps the host, so this site's Ultra pages may write (lib/background.js fromUltra).
+  if (window.top === window && !isPreview) try { chrome.runtime.sendMessage({ type: 'glaze:ultra' }).catch(() => {}); } catch { /* reloaded */ }
 
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
@@ -36,11 +38,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   let memberships = null;
   const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`)).then((j) => j.results || []).catch(() => (memberships = null, [])));
   // ---- planning (features/todo.js, cardtasks.js, reminders.js, calexport.js, classes.js), as Canvas's part answers it ----
-  // The student (Ultra keeps no time zone: the browser's) and their courses in Canvas's shape (lib/ultra.js list); what's
-  // due is lib/ultra.js pageDue. Better To Do on the Courses page and a course's outline, tasks on the Courses page's
-  // cards, reminders on any page; each loaded once it's on.
-  const profile = () => me().then((id) => ({ id, time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
-  const canvasCourses = () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(myCourses).then((ms) => GZ_ULTRA.list(ms, { origin: location.origin }));
+  // The student and their courses in Canvas's shape, and what's due: lib/ultra.js page, through its reader. Better To Do
+  // on the Courses page and a course's outline, tasks on the Courses page's cards, reminders on any page; each loaded once on.
+  const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, name) => (on ? need(file, () => globalThis[name]).then(() => globalThis[name].sync(on), () => {}) : globalThis[name]?.sync(false));
   const top = () => I.links.length && window.top === window;
   const syncTodo = () => load(top() && I.settings.enhance.todo && /^\/ultra\/(course\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
@@ -560,7 +560,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     renderProgress, renderNew, renderCalc, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
     syncTodo, syncCardTasks, syncRemind,
-    ctx: { myCourses, courseItems, bookFor, courseColor, profile, canvasCourses },
+    ctx: { myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
   };
 });
 

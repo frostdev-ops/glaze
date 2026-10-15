@@ -559,7 +559,7 @@ withMock('review (P1): the Gradescope answer taken back while the token is await
   assert.deepEqual(mock.live(cal).map((e) => e.summary), ['Lab 1']);
 });
 
-// Blackboard Ultra pages are a source too (B2): the page composes from Ultra's due items (lib/ultra.js pageDue, as
+// Blackboard Ultra pages are a source too (B2): the page composes from Ultra's due items (lib/ultra.js page.due, as
 // content-ultra.js gives them: links whole, on the site), and the worker takes the batch only from an Ultra page of that
 // account's own site.
 const ULTRA = 'https://bb.example.edu', ULTRA_SRC = `${ULTRA}/_900_1`;
@@ -573,7 +573,7 @@ const ultraComposer = (store) => {
     location: { origin: ULTRA, host: 'bb.example.edu' },
     chrome: { runtime: {}, storage: { sync: { get: get('sync') }, local: { get: get('local') } } },
     fetch: async () => { throw new Error('an Ultra page asks lib/ultra.js, never Canvas'); },
-    GZ_ULTRA: { pageDue: async (ctx, from, to) => { asked.push([from, to]); return { items: items.filter((i) => i.at >= from && i.at < to), complete: true }; } },
+    GZ_ULTRA: { page: { due: async (from, to) => { asked.push([from, to]); return { items: items.filter((i) => i.at >= from && i.at < to), complete: true }; } } },
     GZ_CTX: { site: 'ultra', t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need: async () => {}, settings: () => D.GZ_SANITIZE(store.sync),
       profile: async () => ({ id: '_900_1', time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '_101_1', name: 'Biology' }] },
   });
@@ -592,6 +592,8 @@ withMock('Ultra pages sync too: the page composes from Ultra\'s due items, and t
   assert.deepEqual(JSON.parse(JSON.stringify(c.events.map((e) => [e.summary, e.url]))), [['Lab 1', `${ULTRA}/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_1003_1`]]);
   const page = { id: 'glaze', tab: { id: 5 }, frameId: 0, url: `${ULTRA}/ultra/course` };
   const send = (src, sender) => w.send({ type: 'glaze:gcal', op: 'sync', src, events: c.events, from: c.from, first: c.first, consent: consentOf(w, src) }, sender);
+  assert.deepEqual(await send(ULTRA_SRC, page), { ok: false, error: 'sender' }, 'a host Glaze has not found Ultra on');
+  w.store.local.ultra = [ULTRA]; // as the worker keeps it once content-ultra.js says Glaze found Ultra there
   assert.deepEqual(await send('https://other.example.edu/_900_1', page), { ok: false, error: 'sender' }, "another site's account");
   assert.deepEqual(await send(ULTRA_SRC, { ...page, url: 'http://bb.example.edu/ultra/course' }), { ok: false, error: 'sender' }, 'not over https');
   assert.deepEqual(await send(ULTRA_SRC, { ...page, url: `${ULTRA}/webapps/login/` }), { ok: false, error: 'sender' }, 'not an Ultra page');

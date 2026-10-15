@@ -55,7 +55,7 @@ class E {
   get text() { return [this.textContent || '', ...this.children.map((c) => (c && typeof c === 'object' ? c.text : c ? String(c) : ''))].filter(Boolean).join(' '); }
 }
 
-// Ultra's answer for the student's work (lib/ultra.js pageDue's shape): links whole, on the site.
+// Ultra's answer for the student's work (lib/ultra.js page.due's shape): links whole, on the site.
 const item = (id, cid, title, at, sub = null) => ({ type: 'assignment', id, cid, course: cid === '_101_1' ? 'Biology' : 'History', title, at, url: `${O}/ultra/redirect?redirectType=nautilus&courseId=${cid}&contentId=_9${id}`, sub, ov: null, aid: id, read: false, note: '', ws: '', allDay: false });
 const ITEMS = [item('_603_1', '_101_1', 'Lab report', NOW + 5 * H), item('_604_1', '_104_1', 'Essay', NOW + 30 * H)];
 
@@ -80,7 +80,7 @@ const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}
     console, URL, Intl, Date, Set, Map, JSON, Promise, Error, CSS: { escape: (x) => x }, crypto: { randomUUID: () => '12345678-abcd-ef00' },
     GZ_TODO: T, GZ_REMIND: R, GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
     GZ_CANVAS_DUE_WEEK: () => { throw new Error("Canvas's due list is never made on Ultra"); },
-    GZ_ULTRA: { pageDue: async (ctx, from, to) => { due.push([from, to]); return { items: local(ITEMS), complete }; } },
+    GZ_ULTRA: { page: { due: async (from, to) => { due.push([from, to]); return { items: local(ITEMS), complete }; } } },
     GZ_CTX: {
       site: 'ultra', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', need: async () => {}, celebrate() {},
       courseId: () => course || undefined, canvasCourseId: () => { throw new Error("Canvas's course id is never asked on Ultra"); },
@@ -122,7 +122,7 @@ const page = ({ path = '/ultra/course', course = '', complete = true, prefs = {}
 };
 const probe = (src, fields) => src.replace(/( {2}return \{\s*sync,)/, `$1 probe: { ${fields} },`).replace(/var (GZ_\w+) = globalThis\.\1 \|\|/, 'var $1 =');
 
-test('Better To Do on Ultra\'s Courses page: right before Ultra\'s own To Do (hidden by apps.css only while it\'s there), from Ultra only', async () => {
+test('Better To Do on Ultra\'s Courses page: right before Ultra\'s own To Do (hidden by features/apps.css only while it\'s there), from Ultra only', async () => {
   const p = page({ complete: false });
   vm.runInContext(probe(read('features/todo.js'), 'get: () => ({ box, cache, who, key })'), p.c);
   const L = p.c.GZ_TODO_UI;
@@ -143,7 +143,7 @@ test('Better To Do on Ultra\'s Courses page: right before Ultra\'s own To Do (hi
   // The kept answer has no due list of Canvas's (the popup's is content.js's own on Ultra), and the CSS hides Ultra's list
   // only while Glaze's is right before it.
   assert.equal(p.sent.find((m) => m.cache).due, undefined);
-  assert.match(read('apps.css'), /#gz-todo ~ :is\([^)]*\bbb-todo\b[^)]*\) \{ display: none !important; \}/);
+  assert.match(read('features/apps.css'), /#gz-todo ~ :is\([^)]*\bbb-todo\b[^)]*\) \{ display: none !important; \}/);
   // Turned off: it goes, and Ultra's own list is all that's left.
   L.sync(false);
   assert.deepEqual(p.panel.children.map((x) => x.tagName), ['BB-TODO']);

@@ -134,11 +134,11 @@ const HOOKS = [
   '.ef-file-preview-stretch', '.file_preview', '#doc_preview',
 ];
 
-// The classes and ids canvas.css and apps.css (what Glaze draws itself, on Canvas and Ultra) key on, read from their
-// selectors: Glaze's own gz-* aside, and apps.css's Ultra markup (ULTRA_CSS).
+// The classes and ids canvas.css and features/apps.css (what Glaze draws itself, on Canvas and Ultra) key on, read from
+// their selectors: Glaze's own gz-* aside, and features/apps.css's Ultra markup (ULTRA_CSS).
 const ULTRA_CSS = new Set(['#site-wrap', '.todo-panel', '.outline-actions']);
 const cssNames = () => {
-  const css = ['canvas.css', 'apps.css'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = ['canvas.css', 'features/apps.css'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
   const selectors = css.replace(/\{[^{}]*\}/g, '{}').replace(/@[^{]*\{/g, '').replace(/url\([^)]*\)/g, '');
   return new Set([...selectors.matchAll(/([.#])(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1] + m[2]).filter((n) => !/^[.#]gz-/.test(n) && !ULTRA_CSS.has(n)));
 };

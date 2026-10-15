@@ -6,7 +6,7 @@
 // and a hub from the To Do header and the command palette. One setTimeout to the next reminder, set again when the page is
 // shown or focused, and at most ten minutes long (a timer stalls while the computer sleeps): never a poll.
 // It reads the shared planner answer (storage.local todoCache) and asks the site itself (Canvas's planner; Ultra's To
-// Do, calendar and gradebooks, lib/ultra.js pageDue) only when that is missing or ten minutes old and neither the To Do
+// Do, calendar and gradebooks, lib/ultra.js page.due) only when that is missing or ten minutes old and neither the To Do
 // list nor the card tasks are on the page to ask. What's seen, snoozed, muted and the streak are kept on this device
 // (storage.local remind:<site>/<user>) through the worker's queue (lib/background.js 'glaze:remind'), apart from the
 // site's own read state, which nothing here touches.
@@ -82,7 +82,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const { start, end } = T.fetchRange(todoO, now, who.tz);
     let c, due;
     if (ultra) {
-      const u = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.pageDue(ctx, Date.parse(start), Date.parse(end)));
+      const u = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.due(Date.parse(start), Date.parse(end)));
       c = { key: todoKey, at: now, start, end, teach: todoO.teacher, progress: todoO.progress, items: u.items, complete: u.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);

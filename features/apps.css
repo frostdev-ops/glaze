@@ -1,6 +1,6 @@
-/* Glaze — what Glaze draws itself on Canvas and Ultra pages (its own panels, lists and dialogs), linked by content.js on both. */
-/* Its colors and sizes are the palette's (--gz-*), as content.js writes them on <html> and theme.css or canvas.css derive the
-   rest; a token only canvas.css derives has its fallback here. */
+/* ---- Planning (B2): Better To Do, the Gradescope line, tasks on course cards, reminders and the calendar file's dialog,
+   on Canvas and Ultra. Colors and sizes are the palette's --gz-* tokens; a token only canvas.css derives has its
+   fallback here. */
 
 /* ---- Better To Do on Ultra: in the Courses page's To Do column, the column's own inset; on a course's outline, a block
    of the right column (Ultra's outline-action-block spaces it). */
