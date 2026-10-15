@@ -23,6 +23,9 @@
 //   --perf <runs>      no screenshots: load each page <runs> times at 4x CPU throttling, from a dark blank tab (first page
 //                      of a tab) and from another Canvas page (the next one), and report the frames painted light, when
 //                      the page turned dark, first paint and main-thread script time. JSON in <out>/perf.json
+//   --eval <js>        run this in each page once it has loaded, before the shot: sample content put in client side
+//                      (never saved to Canvas), e.g. "document.querySelector('.user_content').insertAdjacentHTML(…)"
+//   --wait <seconds>   hold each page that long before its shot: a timer firing, a scheduled boundary passing
 //   path ...           pages to shoot instead of the default set (dashboard, calendar, inbox, grades and
 //                      BIO 1100's course pages); {bio} {eng} {math} {hist} stand for course ids.
 //                      name=/path names the output; /path@selector clicks that first (a modal, the editor);
@@ -82,6 +85,7 @@ const parse = () => {
       look: { type: 'string', multiple: true }, settings: { type: 'string' }, out: { type: 'string' },
       width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' }, full: { type: 'boolean' }, 'course-menu': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
       user: { type: 'string', default: 'student' }, html: { type: 'string' }, audit: { type: 'boolean' }, perf: { type: 'string' },
+      eval: { type: 'string' }, wait: { type: 'string', default: '0' },
     } });
   } catch (e) { die(`${e.message}\nSee --help.`); }
   const { values: opt, positionals } = parsed;
@@ -100,7 +104,8 @@ const parse = () => {
   const html = opt.html && path.resolve(opt.html);
   const perf = opt.perf === undefined ? 0 : +opt.perf;
   if (!(perf >= 0 && Number.isInteger(perf))) die('--perf takes a number of runs.');
-  return { size, positionals, full: !!opt.full, courseMenu: !!opt['course-menu'], out, looks, user: opt.user, html, audit: !!opt.audit, perf };
+  if (!(+opt.wait >= 0)) die('--wait takes seconds.');
+  return { evalJs: opt.eval, wait: +opt.wait * 1000, size, positionals, full: !!opt.full, courseMenu: !!opt['course-menu'], out, looks, user: opt.user, html, audit: !!opt.audit, perf };
 };
 
 // The extension as it is in the working copy, with localhost added to where it runs and what it exposes.
@@ -163,6 +168,7 @@ const probe = () => ({
   title: document.title,
   css: [...document.querySelectorAll('link')].some((l) => l.href.startsWith('chrome-extension://')) ? 'yes' : window.__gzLinked ? 'no (added, then removed)' : 'no (never added)',
   attrs: document.documentElement.getAttributeNames().filter((n) => n.startsWith('data-gz-')).length,
+  surface: document.documentElement.style.getPropertyValue('--gz-surface') || '-',
 });
 // Page reveal: Glaze holds a page back (data-gz-loading) and lets it in (data-gz-reveal) once it is built.
 const revealed = () => !document.querySelector('[data-gz-loading], [data-gz-reveal]');
@@ -221,7 +227,7 @@ const watch = (page) => {
 };
 
 // Load a page, let it settle, save the screenshot; gives its diagnostics line.
-const shoot = async ({ page, errors }, { label, settings, out, courseMenu, html, audit, ...view }, [name, url, click]) => {
+const shoot = async ({ page, errors }, { label, settings, out, courseMenu, html, audit, evalJs, wait, ...view }, [name, url, click]) => {
   errors.length = 0;
   let note = '';
   try {
@@ -251,6 +257,8 @@ const shoot = async ({ page, errors }, { label, settings, out, courseMenu, html,
         await label.evaluate((e) => { e.textContent = 'Lab report 1: Cells and membranes'; });
       }
     }
+    if (evalJs) await page.evaluate(evalJs);
+    if (evalJs || wait) await page.waitForTimeout(wait || 400);
     const p = await page.evaluate(probe);
     let found;
     await capture(page, path.join(out, `${label}-${name}.png`), view, async () => {
@@ -263,7 +271,7 @@ const shoot = async ({ page, errors }, { label, settings, out, courseMenu, html,
     });
     if (html) note += ` html=${Math.round(await saveHtml(page, path.join(html, `canvas-${name}.html`), url) / 1024)}KB`;
     const errs = [...new Set(errors)];
-    return { ok: true, audit: found && { look: label, page: name, url, issues: found }, line: `  ${url}  "${p.title}"  glaze-css=${p.css}  data-gz=${p.attrs}  errors=${errs.length ? `${errs.length}: ${errs.slice(0, 2).map((e) => e.slice(0, 100)).join(' | ')}` : 0}${note}` };
+    return { ok: true, audit: found && { look: label, page: name, url, issues: found }, line: `  ${url}  "${p.title}"  glaze-css=${p.css}  data-gz=${p.attrs}  surface=${p.surface}  errors=${errs.length ? `${errs.length}: ${errs.slice(0, 2).map((e) => e.slice(0, 100)).join(' | ')}` : 0}${note}` };
   } catch (e) { return { ok: false, line: `  ${url}  FAILED: ${e.message.split('\n')[0]}` }; }
 };
 
@@ -359,7 +367,7 @@ const eachTab = async (tabs, items, fn) => {
 };
 
 (async () => {
-  const { size, positionals, full, courseMenu, out, looks, user, html, audit, perf } = parse();
+  const { evalJs, wait, size, positionals, full, courseMenu, out, looks, user, html, audit, perf } = parse();
   fs.mkdirSync(out, { recursive: true });
   if (html) fs.mkdirSync(html, { recursive: true });
   console.log(`Screenshots go to ${out}`);
@@ -418,7 +426,7 @@ const eachTab = async (tabs, items, fn) => {
         }
         continue;
       }
-      const results = await eachTab(tabs, pages, (tab, p) => shoot(tab, { label, settings, out, size, full, courseMenu, html, audit }, p));
+      const results = await eachTab(tabs, pages, (tab, p) => shoot(tab, { label, settings, out, size, full, courseMenu, html, audit, evalJs, wait }, p));
       for (const r of results) console.log(r.line);
       audits.push(...results.map((r) => r.audit).filter(Boolean));
       failed += results.filter((r) => !r.ok).length;
