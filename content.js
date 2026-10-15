@@ -908,7 +908,7 @@
     peeks.set(key, { at: Date.now(), p });
     return p;
   };
-  const moduleItems = (cid, mid) => canvasPeek(`/courses/${cid}/modules/${mid}/items?include[]=content_details`);
+  const moduleItems = (cid, mid, fresh = false) => (fresh ? canvasPeekList : canvasPeek)(`/courses/${cid}/modules/${mid}/items?include[]=content_details`);
   const canvasPeekFor = async (item) => {
     const cid = canvasCourseId();
     const mid = item.closest('.context_module[data-module-id]')?.dataset.moduleId;
@@ -1849,9 +1849,42 @@
   // A button on each folder and learning module in course content saves the files inside, subfolders
   // included, as one zip named after it. Listed with the content API, fetched from the site you are on
   // (Blackboard redirects the bytes to its file CDN, which allows it), zipped here, saved through a blob
-  // link. Ultra items you haven't opened are left out, so downloading never marks those viewed.
-  // Canvas module downloads follow its native file semantics: an explicit download can satisfy must-view.
+  // link. Items with unmet view requirements are left out. Canvas authorizes signed URLs only on a click;
+  // credential-free background reads have no student file_access_user, protecting other module references
+  // to the same attachment too. Neither passive previews nor downloads mark those references viewed.
   const MAX_ZIP = 250 * 2 ** 20; // ponytail: the whole zip is built in memory; stream to disk if folders outgrow it
+  const canvasBytes = (signal) => {
+    const port = chrome.runtime.connect({ name: 'canvas-zip' });
+    let pending = null, closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true; clearInterval(ping); signal.removeEventListener('abort', close); port.disconnect();
+      pending?.reject(signal.reason || new DOMException('Aborted', 'AbortError')); pending = null;
+    };
+    // Active messages, rather than an idle open port, keep an MV3 worker alive during slow streams.
+    const ping = setInterval(() => { if (!closed) port.postMessage({ type: 'ping' }); }, 15000);
+    signal.addEventListener('abort', close, { once: true });
+    port.onDisconnect.addListener(() => { void chrome.runtime.lastError; if (!closed) { pending?.resolve(null); pending = null; close(); } });
+    port.onMessage.addListener((m) => {
+      if (!pending) return;
+      if (m.type === 'chunk') {
+        const raw = atob(m.data), data = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+        pending.chunks.push(data); pending.size += data.length;
+        port.postMessage({ type: 'ack' });
+      } else if (m.type === 'done') {
+        const data = new Uint8Array(pending.size); let at = 0;
+        for (const c of pending.chunks) { data.set(c, at); at += c.length; }
+        pending.resolve(data); pending = null;
+      } else if (m.type === 'error') {
+        if (m.code === 'limit') pending.reject(Object.assign(new Error('limit'), { limit: true })); else pending.resolve(null);
+        pending = null;
+      }
+    });
+    return { close, read: (url) => new Promise((resolve, reject) => {
+      if (closed || signal.aborted) return reject(signal.reason || new DOMException('Aborted', 'AbortError'));
+      pending = { resolve, reject, chunks: [], size: 0 }; port.postMessage({ type: 'file', url });
+    }) };
+  };
   const jobs = new Map(); // folder id -> { ctl, label, pct, done }
   const paintDl = (fid) => {
     const b = document.getElementById(`gz-dl-${fid}`);
@@ -1868,6 +1901,7 @@
     const cid = ultra ? courseId() : canvasCourseId();
     const ctl = new AbortController();
     const job = { ctl, label: t('Finding files · Cancel'), pct: 0 };
+    const bridge = ultra ? null : canvasBytes(ctl.signal);
     jobs.set(fid, job);
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
@@ -1893,13 +1927,19 @@
     const tooBig = (label) => Object.assign(new Error(label), { said: true });
     try {
       if (ultra) await walk(fid, '');
-      else for (const id of GZ_ZIP.canvasFiles(await moduleItems(cid, fid))) {
-        ctl.signal.throwIfAborted();
-        const f = await capi(`/files/${id}`).catch(() => null);
-        ctl.signal.throwIfAborted();
-        const url = GZ_ZIP.canvasURL(f, location.origin);
-        if (!url) { unavailable++; continue; }
-        found.push({ name: f.display_name || f.filename, size: f.size, url, dir: '' });
+      else {
+        const items = await moduleItems(cid, fid, true); // Refresh requirements at the click; a preview can be a minute old.
+        skipped = GZ_ZIP.canvasUnopened(items).size;
+        for (const id of GZ_ZIP.canvasFiles(items)) {
+          ctl.signal.throwIfAborted();
+          const f = await capi(`/files/${id}`).catch(() => null);
+          ctl.signal.throwIfAborted();
+          const signed = f && !f.locked_for_user && !f.hidden_for_user ? await capi(`/files/${id}/public_url`).catch(() => null) : null;
+          ctl.signal.throwIfAborted();
+          const url = GZ_ZIP.canvasURL({ ...f, url: signed?.public_url }, location.origin);
+          if (!url) { unavailable++; continue; }
+          found.push({ name: f.display_name || f.filename, size: f.size, url, dir: '' });
+        }
       }
       const known = found.reduce((n, f) => n + (f.size || 0), 0);
       if (known > MAX_ZIP) throw tooBig(t('Too big: {size}, over {max}', { size: mb(known), max: mb(MAX_ZIP) }));
@@ -1909,10 +1949,13 @@
       let failed = unavailable;
       for (const [i, f] of found.entries()) {
         say(t('{i} of {n} · Cancel', { i: i + 1, n: found.length }), (i / found.length) * 100);
-        const r = await fetch(f.url, { credentials: 'same-origin', ...(ultra ? {} : { mode: 'same-origin' }), signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
-        // Canvas can redirect an expired session to a successful HTML login page.
-        if (!r?.ok || (!ultra && /^\/login(?:\/|$)/.test(new URL(r.url).pathname))) { failed += 1; continue; }
-        const data = new Uint8Array(await r.arrayBuffer());
+        let data;
+        if (ultra) {
+          const r = await fetch(f.url, { credentials: 'same-origin', signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
+          if (!r?.ok) { failed += 1; continue; }
+          data = new Uint8Array(await r.arrayBuffer());
+        } else data = await bridge.read(f.url);
+        if (!data) { failed += 1; continue; }
         bytes += data.length;
         if (bytes > MAX_ZIP) throw tooBig(t('Too big: over {max}', { max: mb(MAX_ZIP) }));
         out.push({ name: GZ_ZIP.unique(f.dir + GZ_ZIP.safeName(f.name), taken), data });
@@ -1926,8 +1969,9 @@
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
       say(t('Saved {n} files', { n: out.length }) + left + (failed ? ` · ${t('{n} failed', { n: failed })}` : ''));
     } catch (e) {
-      say(ctl.signal.aborted ? t('Cancelled') : e.said ? e.message : t('Download failed'));
+      say(ctl.signal.aborted ? t('Cancelled') : e.limit ? t('Too big: over {max}', { max: mb(MAX_ZIP) }) : e.said ? e.message : t('Download failed'));
     } finally {
+      bridge?.close();
       job.done = true;
       paintDl(fid);
       setTimeout(() => { if (jobs.get(fid) === job) { jobs.delete(fid); paintDl(fid); } }, 6000);
@@ -1938,7 +1982,7 @@
     if (!settings.enhance.previews || (peekFor && !peekFor.isConnected)) hidePeek();
     if (!ultra) {
       const cid = canvasCourseId();
-      if (!settings.enhance.download || !cid || !/^\/courses\/\d+\/modules\/?$/.test(location.pathname)) {
+      if (!settings.enhance.download || typeof chrome.runtime.connect !== 'function' || !cid || !/^\/courses\/\d+(?:\/modules)?\/?$/.test(location.pathname)) {
         for (const j of jobs.values()) j.ctl.abort();
         for (const b of document.querySelectorAll('.gz-dl')) b.remove();
         for (const item of document.querySelectorAll('.context_module')) canvasDlChecked.delete(item);
@@ -1957,9 +2001,10 @@
           if (!list.some((c) => c.type === 'File')) return old?.remove();
           if (old) return;
           const b = document.createElement('button');
-          b.type = 'button'; b.id = `gz-dl-${fid}`; b.className = 'gz-dl'; b.title = t('Download all');
+          b.type = 'button'; b.id = `gz-dl-${fid}`; b.className = 'gz-dl'; b.title = t("Download all: save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.");
           b.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (!e.isTrusted) return;
             const j = jobs.get(fid);
             if (j && !j.done) j.ctl.abort(); else download(fid, item.querySelector('.name')?.textContent.trim());
           });

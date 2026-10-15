@@ -22,10 +22,11 @@ function worker({ protocol = 'safari-web-extension:', stored = {}, get, set, sen
   };
   const context = vm.createContext({
     URL, console, Date: { now: () => now },
+    importScripts: (file) => vm.runInContext(fs.readFileSync(require.resolve(`../lib/${file}`), 'utf8'), context),
     chrome: {
       runtime: {
         getURL: () => `${protocol}//extension/`,
-        onMessage: listener, onInstalled: listener, onStartup: listener,
+        onMessage: listener, onInstalled: listener, onStartup: listener, onConnect: listener,
         sendNativeMessage(app, message) {
           calls.push(['send', app, message]);
           return send ? send(app, message) : Promise.resolve({});
