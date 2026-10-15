@@ -286,7 +286,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const onScroll = (e) => {
     if (go) { go.changed = performance.now(); return; }
-    if (e.isTrusted) { clearTimeout(capTimer); capTimer = 0; later(700); }
+    if (e.isTrusted) { dbg('scroll'); clearTimeout(capTimer); capTimer = 0; later(700); }
     const cid = ctx.courseId();
     const sc = e.target === document ? document.scrollingElement : e.target;
     const x = cid && sc === pageScroller() && tabs.find((y) => y.cid === cid);
@@ -308,7 +308,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const split = (path) => { const i = path.indexOf('?'); return i < 0 ? [path, ''] : [path.slice(0, i), path.slice(i + 1)]; };
   let shooting = null, shotAt = -1e9;
   const shoot = (cid = ctx.courseId(), path = safePath()) => {
-    const no = (why) => { html.dataset.gzShotDebug = `${Math.round(performance.now())} ${why}`; return Promise.resolve(null); };
+    const no = (why) => { dbg(why); return Promise.resolve(null); };
+    dbg('shoot?');
     if (shooting) return shooting;
     if (!on || signedOut || go || !cid || !path || preview) return no('state');
     if (ctx.holding()) return no('holding');
@@ -326,7 +327,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const tips = [...document.querySelectorAll('.gz-tip')];
     for (const t of tips) t.style.visibility = 'hidden';
     shooting = new Promise((ok) => requestAnimationFrame(() => setTimeout(ok))).then(() => send({ op: 'shot', cid, path, strip: box ? [box.top, box.left, box.width].map(Math.round) : null, size: [innerWidth, innerHeight] }))
-      .then((x) => { html.dataset.gzShotDebug = `${Math.round(performance.now())} ${x?.snap ? 'ok' : 'worker-null'}`; if (x?.snap?.cid === cid && x.snap.path === path) keep(x.snap); return x?.snap || null; }, () => null)
+      .then((x) => { dbg(x?.snap ? 'ok' : 'worker-null'); if (x?.snap?.cid === cid && x.snap.path === path) keep(x.snap); return x?.snap || null; }, () => null)
       .finally(() => { shooting = null; for (const t of tips) t.style.visibility = ''; });
     return shooting;
   };
@@ -337,6 +338,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // A picture is shown only for the page it was taken of, at the window size it was taken at.
   const fits = (s, url) => !!s && s.path === url && s.size?.[0] === innerWidth && s.size?.[1] === innerHeight && safePath(...split(url)) === url;
+  const dbg = (w) => { html.dataset.gzShotDebug = `${html.dataset.gzShotDebug || ''}|${Math.round(performance.now())} ${w}`.slice(-400); };
   let capTimer = 0;
   let capWhere = '';
   let capAt = 0;
