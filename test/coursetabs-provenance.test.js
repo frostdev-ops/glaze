@@ -37,7 +37,7 @@ test('native route and Back preserve the old saved place and scroll until new ma
   f.url(next); f.api.observeView(); f.api.notePlace('_71_1'); f.api.onScroll({ target: f.sc });
   assert.equal(f.tab.path, first, 'the new URL cannot relabel outgoing main metadata');
   assert.equal(f.tab.top, 430, 'an outgoing scroll event cannot overwrite the remembered scroll');
-  f.native([f.page, { childElementCount: 0, textContent: '' }, null]);
+  f.native([f.page, { childElementCount: 0, textContent: '', childNodes: [] }, null]);
   f.api.observeView(); f.api.notePlace('_71_1');
   assert.equal(f.tab.path, first, 'a temporarily empty main is not destination evidence');
   f.native([f.page, { childElementCount: 1, textContent: 'Second reading' }, {}]);
@@ -52,7 +52,7 @@ test('native route and Back preserve the old saved place and scroll until new ma
 
 test('capture refuses changed or empty routed main even when its URL equals the last accepted URL', () => {
   const f = fixture();
-  f.native([f.page, { childElementCount: 0, textContent: '' }, null]);
+  f.native([f.page, { childElementCount: 0, textContent: '', childNodes: [] }, null]);
   f.api.capture();
   assert.equal(f.counts().copies, 0, 'last accepted path alone cannot certify current native nodes');
   f.native([f.page, f.oldMain, f.oldChild]); f.api.capture();
@@ -75,6 +75,18 @@ test('appending a Glaze root cannot certify outgoing native main as replacement 
   const before = api.view();
   main.lastElementChild = { id: 'gz-fixture-owned', previousElementSibling: native };
   assert.equal(api.sameView(api.view(), before), true, 'owned UI cannot release the cached view or change capture provenance');
+});
+
+test('an emptied native main containing only a Glaze root cannot establish destination readiness', () => {
+  const f = fixture();
+  f.url(next);
+  f.native([f.page, { childElementCount: 1, textContent: 'Helper UI', childNodes: [{ nodeType: 1, id: 'gz-owned', textContent: 'Helper UI' }] }, undefined]);
+  f.api.observeView(); f.api.notePlace('_71_1'); f.sc.scrollTop = 0; f.api.onScroll({ target: f.sc });
+  assert.equal(f.tab.path, first, 'owned-only content cannot relabel the previous native route');
+  assert.equal(f.tab.top, 430);
+  f.native([f.page, { childElementCount: 0, textContent: 'Native prose', childNodes: [{ nodeType: 3, textContent: 'Native prose' }] }, undefined]);
+  f.api.observeView(); f.api.notePlace('_71_1');
+  assert.equal(f.tab.path, next, 'native main text remains legitimate content without an element wrapper');
 });
 
 test('a previously captured overview cannot be recorded in the worker after its positive subtype is lost', () => {

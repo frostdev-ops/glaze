@@ -85,7 +85,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     return page && [page, main, child];
   };
   const sameView = (a, b) => !!a && !!b && a[1] === b[1] && a[2] === b[2];
-  const readyView = (v) => !!v?.[1] && shown(v[1]) && (v[1].childElementCount > 0 || !!v[1].textContent.trim()) && !loading(v[0]);
+  const readyView = (v) => !!v?.[1] && shown(v[1]) && (!!v[2] || [...v[1].childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) && !loading(v[0]);
   let liveView = null;
   const observeView = () => {
     const v = view();

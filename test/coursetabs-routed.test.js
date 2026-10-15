@@ -106,7 +106,7 @@ test('header-only and reused-header transitions cannot certify or capture the ol
   api.observeView(); assert.equal(api.live(), previous, 'a new root/header around old content cannot relabel capture provenance');
   current = [{}, null, null]; api.check(); assert.equal(ended, 0, 'a header appearing before main is not ready');
   api.observeView(); assert.equal(api.live(), previous);
-  current = [{}, { childElementCount: 0, textContent: '' }, null]; api.check(); assert.equal(ended, 0);
+  current = [{}, { childElementCount: 0, textContent: '', childNodes: [] }, null]; api.check(); assert.equal(ended, 0);
   api.observeView(); assert.equal(api.live(), previous);
   current = [{}, newMain, {}]; api.observeView(); assert.equal(api.live().path, pathname);
   api.check(); assert.equal(ended, 1);
