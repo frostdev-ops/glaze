@@ -60,3 +60,18 @@ test('at most four frames stay running: the least recently shown go, never the o
   assert.equal(frames.get('_2_1').el.style.visibility, 'hidden');
   assert.equal(frames.get('_2_1').el.inert, true, 'a hidden frame takes no input');
 });
+
+test('the worker takes a course tab\'s frame as its Ultra page: its origin stands in for the about:blank it reports', () => {
+  const bg = fs.readFileSync(path.join(__dirname, '..', 'lib/background.js'), 'utf8');
+  const block = bg.slice(bg.indexOf('const addressOf = '), bg.indexOf('const fromUltra = '));
+  const { ultraAt, ultraPage } = vm.runInNewContext(`${block}\n({ ultraAt, ultraPage });`, { chrome: { runtime: { id: 'glaze' } }, URL });
+  const tab = { id: 1, url: `${origin}/ultra/courses/_1_1/outline` };
+  const frame = { id: 'glaze', tab, frameId: 7, url: 'about:blank', origin };
+  assert.equal(ultraAt(frame), origin);
+  assert.equal(ultraPage(frame), true);
+  assert.equal(ultraAt({ ...frame, origin: 'https://other.test' }), null, 'a frame of another origin is not this tab\'s page');
+  assert.equal(ultraPage({ ...frame, origin: 'https://other.test' }), false);
+  assert.equal(ultraAt({ ...frame, origin: 'null' }), null, 'an opaque frame never stands in');
+  assert.equal(ultraAt({ id: 'glaze', tab, frameId: 0, url: 'about:blank', origin }), null, 'the top frame is taken by its own address');
+  assert.equal(ultraPage({ id: 'glaze', tab: { id: 1, url: 'https://other.test/x' }, frameId: 7, url: `${origin}/ultra/course`, origin }), false, 'an Ultra frame in another site\'s tab is not its page');
+});
