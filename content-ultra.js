@@ -16,6 +16,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
           const seen = GZ_COURSES(ms);
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
+          // Its site and code, to place Gradescope courses with (lib/gradescope.js).
+          for (const m of ms) if (seen[m.courseId]) Object.assign(seen[m.courseId], { site: location.origin, code: String(m.course.displayId || '').slice(0, 80) });
           try { chrome.storage.local.get('seenCourses', (r) => {
             const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k]) => k.includes(':')));
             chrome.storage.local.set({ seenCourses: { ...canvas, ...seen }, seenCoursesAt: Date.now(), courseSlots });
@@ -33,6 +35,18 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // due-date exception setting.
   let memberships = null;
   const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`)).then((j) => j.results || []).catch(() => (memberships = null, [])));
+  // ---- planning (features/todo.js, cardtasks.js, reminders.js, calexport.js, classes.js), as Canvas's part answers it ----
+  // The student (Ultra keeps no time zone: the browser's) and their courses in Canvas's shape (lib/ultra.js list); what's
+  // due is lib/ultra.js pageDue. Better To Do on the Courses page and a course's outline, tasks on the Courses page's
+  // cards, reminders on any page; each loaded once it's on.
+  const profile = () => me().then((id) => ({ id, time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+  const canvasCourses = () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(myCourses).then((ms) => GZ_ULTRA.list(ms, { origin: location.origin }));
+  const load = (on, file, name) => (on ? need(file, () => globalThis[name]).then(() => globalThis[name].sync(on), () => {}) : globalThis[name]?.sync(false));
+  const top = () => I.links.length && window.top === window;
+  const syncTodo = () => load(top() && I.settings.enhance.todo && /^\/ultra\/(course\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
+  const syncCardTasks = () => load(top() && I.settings.enhance.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && !!document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
+  const syncRemind = () => load(top() && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]), 'features/reminders.js', 'GZ_REMIND_UI');
+
   // Submitted late: the latest attempt against the due date, for work waiting to be graded. An
   // attempt's date never changes, so each is asked once. Nothing is called late in a course that
   // gives this student due-date exceptions, or for an item with one of its own.
@@ -545,7 +559,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
-    ctx: { myCourses, courseItems, bookFor, courseColor },
+    syncTodo, syncCardTasks, syncRemind,
+    ctx: { myCourses, courseItems, bookFor, courseColor, profile, canvasCourses },
   };
 });
 

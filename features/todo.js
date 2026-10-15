@@ -1,13 +1,16 @@
-// Better To Do (Canvas): Glaze's own To Do list in place of Canvas's sidebar list, on the Dashboard and a course's home
-// page, when the student turns it on (enhance.todo). content.js loads this (need) and calls sync(on) from its passes; the
-// logic is lib/todo.js, loaded from here. Canvas's list is hidden by canvas.css only while this one is on the page
-// (#gz-todo ~ .Sidebar__TodoListContainer), so if anything here fails, Canvas's comes back.
+// Better To Do: Glaze's own To Do list, on by default (enhance.todo). On Canvas it takes the place of Canvas's sidebar
+// list on the Dashboard and a course's home page; on Blackboard Ultra, of Ultra's own To Do on the Courses page, and on a
+// course's outline it's a block of its own in the right column (that course only). The site's part loads this (need) and
+// calls sync(on) from content.js's passes; the logic is lib/todo.js, loaded from here. The site's own list is hidden by
+// apps.css only while this one is on the page, right before it (#gz-todo ~ …), so if anything here fails, it comes back.
 //
 // What it asks Canvas for, with the student's session: their profile (id, time zone), their planner items (Link
-// paging), and, for a teacher, /users/self/todo and each listed assignment's submission summary. One answer serves
-// the Dashboard, course pages and the popup's due list, kept in storage.local and asked again after two minutes,
-// only when the page is shown or focused: no polling. The one write is a mark, and only with todo.sync on: Canvas's
-// planner override, exactly as Canvas's own List View checkbox sends it.
+// paging), and, for a teacher, /users/self/todo and each listed assignment's submission summary. On Ultra: the student,
+// their courses, To Do and the calendar joined with each course's gradebook (lib/ultra.js pageDue), in the browser's time
+// zone. One answer serves the site's pages (and, on Canvas, the popup's due list), kept in storage.local and asked again
+// after two minutes, only when the page is shown or focused: no polling. The one write is a mark, and only on Canvas with
+// todo.sync on: Canvas's planner override, exactly as Canvas's own List View checkbox sends it. Ultra has nothing like it,
+// so there a tick stays on this device (owner decision).
 // Loaded on demand: a second injection into the same frame keeps the first.
 var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -47,6 +50,10 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
   const json = async (r) => { if (!r.ok) throw new Error(String(r.status)); return JSON.parse((await r.text()).replace(/^while\(1\);/, '')); };
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
+  const ultra = ctx.site === 'ultra';
+  // The course whose page this is ('' elsewhere), and whether ticks go to the site: only Canvas has a planner for them.
+  const here = () => (ultra ? ctx.courseId() : ctx.canvasCourseId()) || '';
+  const toSite = () => !ultra && o().sync;
 
   // ---- Canvas ------------------------------------------------------------------------------------------------
   // A list over every page Canvas's Link header names, on this site only. ponytail: ten pages (1,000 items).
@@ -89,6 +96,12 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // the grading is asked for. Not when the list asks again on purpose (force).
   const load = async (reuse) => {
     const now = Date.now();
+    if (ultra) {
+      const { start, end } = L.fetchRange(o(), now, who.tz);
+      const r = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.pageDue(ctx, Date.parse(start), Date.parse(end)));
+      // complete: false, the calendar couldn't be read whole: the list says some work may be missing.
+      return [{ key, at: now, start, end, teach: o().teacher, progress: o().progress, items: r.items, complete: r.complete, grading: [], sums: {} }, undefined];
+    }
     const own = reuse && cache?.teach === null && covers({ ...cache, teach: o().teacher, progress: o().progress }, now) ? cache : null;
     const { start, end } = own || L.fetchRange(o(), now, who.tz);
     const [raw, list] = await Promise.all([own ? null : pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
@@ -129,14 +142,14 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     }, () => {
       if (g !== gen) return;
       if (!cache) return fail();
-      note(t("Couldn't refresh your To Do from Canvas."));
+      note(ultra ? t("Couldn't refresh your To Do from Blackboard.") : t("Couldn't refresh your To Do from Canvas."));
     }).finally(() => { if (g !== gen) return; setBusy(false); if (typing()) drawn = ''; else render(true); }));
   };
   // The courses the Dashboard list shows: active ones Canvas lets the student into. canvasCourses() answers [] both
   // when the student has none and when the request failed (its other callers want that), so an empty answer filters
   // nothing either way: nothing is hidden on a guess.
   const coursesIn = (list) => {
-    const live = list.filter((c) => /^\d+$/.test(String(c.id)) && c.name && !c.access_restricted_by_date);
+    const live = list.filter((c) => L.ID.test(String(c.id)) && c.name && !c.access_restricted_by_date);
     courses = { cids: live.length ? new Set(live.map((c) => String(c.id))) : null, names: Object.fromEntries(live.map((c) => [String(c.id), c.name])), list: live };
   };
 
@@ -215,7 +228,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!r.url) { title.dataset.act = 'more'; title.dataset.focus = `${fk} title`; title.setAttribute('aria-expanded', String(open.has(r.key))); title.setAttribute('aria-controls', `${firstIds.get(r.key)}-d`); } else title.dataset.focus = `${fk} title`;
     const plan = planText(r, now);
     const meta = make('div', { className: 'gz-todo-meta', id: `${id}-m` },
-      r.course && !ctx.canvasCourseId() && make('span', { textContent: r.course }),
+      r.course && !here() && make('span', { textContent: r.course }),
       dueText(r, now),
       r.status && chip(t(r.status), TONE[r.status]),
       r.gs?.points != null && make('span', { textContent: t('{got} of {n} points', { got: r.gs.score, n: r.gs.points }) }),
@@ -315,7 +328,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   const grade = (r) => make('li', { className: 'gz-todo-item gz-todo-grade' }, make('div', { className: 'gz-todo-main' },
     make('a', { href: r.url || `/courses/${r.cid}/gradebook`, className: 'gz-todo-title', textContent: r.title }),
-    make('div', { className: 'gz-todo-meta' }, r.course && !ctx.canvasCourseId() && make('span', { textContent: r.course }), chip(t('{n} to grade', { n: r.n })))));
+    make('div', { className: 'gz-todo-meta' }, r.course && !here() && make('span', { textContent: r.course }), chip(t('{n} to grade', { n: r.n })))));
   const taskForm = () => {
     const x = form;
     const due = x.due?.at ? L.inputs(x.due.at, who.tz) : { date: x.due?.day || '', time: '' };
@@ -342,15 +355,16 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const render = (force = false) => {
     if (!box || !L || !who) return;
     const now = Date.now();
-    const sig = JSON.stringify([prefs, lang(), Math.floor(now / 6e4)]);
+    // here(): Ultra moves the list between its Courses page and a course's outline without a page load.
+    const sig = JSON.stringify([prefs, lang(), Math.floor(now / 6e4), here()]);
     if (!force && (sig === drawn || typing())) return;
     drawn = sig;
     // What's typed in the task form so far survives the redraw.
     const f = box.querySelector('.gz-todo-form');
     if (f && form) form.draft = Object.fromEntries([...new FormData(f)].map(([k, v]) => [k, String(v)]));
-    const course = ctx.canvasCourseId() || '';
+    const course = here();
     gs ||= L.gradescope(() => { drawn = ''; render(); });
-    const out = L.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: o().sync });
+    const out = L.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: toSite() });
     firstIds = new Map();
     shown = new Map([...out.groups.flatMap(([, l]) => l), ...out.done, ...out.graded].map((r) => [r.key, r]));
     // The focused control, found again in the new tree by what it was for; if that went out of sight (a ticked item
@@ -367,6 +381,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       ...(globalThis.GZ_REMIND_UI?.head() || []), ics, add); // the streak and reminders (features/reminders.js), when on
     const parts = [form && taskForm()];
     parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
+    if (cache?.complete === false) parts.push(make('p', { className: 'gz-todo-hint', textContent: t('Blackboard sent only part of your calendar, so some work may be missing.') }));
     if (!cache) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Loading…') }));
     else if (!out.groups.length && !out.grading.length) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Nothing to do. Enjoy it.') }));
     for (const [kind, rows] of out.groups) parts.push(section(kind, t(LABEL[kind]), rows, now));
@@ -397,7 +412,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const want = el.checked;
     const said = want ? t('{title} is done.', { title: r.title }) : t('{title} is back on your list.', { title: r.title });
     const burst = () => { if (want && document.documentElement.getAttribute('data-gz-motion') === 'expressive') ctx.celebrate?.(el); };
-    if (r.custom || r.type === 'gradescope' || !o().sync) {
+    if (r.custom || r.type === 'gradescope' || !toSite()) {
       // The burst where the box is now: the redraw moves a done item into the Done section.
       burst();
       // A mark that agrees with Canvas is no mark (null): the item follows Canvas again (handed in later, say).
@@ -426,7 +441,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!el || el.tagName === 'INPUT' || el.tagName === 'FORM') return;
     const act = el.dataset.act;
     const k = el.closest('[data-key]')?.dataset.key;
-    if (act === 'add') { form = form ? null : { cid: ctx.canvasCourseId() || '' }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
+    if (act === 'add') { form = form ? null : { cid: here() }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
     if (act === 'cancel') { form = null; render(true); box.querySelector('[data-focus="add"]')?.focus(); return; }
     if (act === 'ics') { ctx.need('features/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => note(t("Couldn't make the calendar. Try again in a moment."))); return; }
     if (act === 'all') { open.add(`group:${el.dataset.group}`); render(true); return; }
@@ -518,7 +533,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       L = globalThis.GZ_TODO;
       const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
       if (g !== gen) return;
-      if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
+      if (!L.ID.test(String(p?.id))) throw new Error('no profile');
       who = { uid: String(p.id), tz: L.zone(p.time_zone) };
       coursesIn(list);
       key = L.storeKey(location.origin, who.uid);
@@ -533,11 +548,17 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (g === gen) fail();
     }
   };
+  // Where the list goes: right before this. Canvas: its list, the React one, or (a teacher's, server-drawn) a heading and
+  // a list. Ultra: its own To Do on the Courses page (anything Glaze puts first in that column stays above), or, on a
+  // course's outline, the right column's Details & Actions block.
+  const anchor = () => {
+    if (ultra) return document.querySelector(here() ? 'aside.outline-actions > .js-details-and-actions' : 'div.todo-panel > bb-todo');
+    const native = document.querySelector('#right-side .Sidebar__TodoListContainer') || document.querySelector('#right-side ul.to-do-list');
+    return native?.previousElementSibling?.matches('.todo-list-header') ? native.previousElementSibling : native;
+  };
   const sync = (on) => {
     if (!on || dead) return off();
-    // Canvas's list: the React one, or (a teacher's, server-drawn) a heading and a list.
-    let native = document.querySelector('#right-side .Sidebar__TodoListContainer') || document.querySelector('#right-side ul.to-do-list');
-    if (native?.previousElementSibling?.matches('.todo-list-header')) native = native.previousElementSibling;
+    const native = anchor();
     if (!native) return;
     if (!box) {
       head = make('div', { className: 'gz-todo-head' });
@@ -555,6 +576,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       setBusy(true);
     }
+    // On a course's outline, a block of Ultra's right column, spaced as its own are.
+    if (ultra) box.className = here() ? 'gz-todo outline-action-block' : 'gz-todo';
     if (box.nextElementSibling !== native) native.before(box);
     if (!started) started = start();
     else if (who) render();
@@ -573,7 +596,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // "Add task" from the palette: the form, open and focused.
   const add = () => {
     if (!box || !who) return false;
-    form = { cid: ctx.canvasCourseId() || '' };
+    form = { cid: here() };
     render(true);
     box.scrollIntoView({ block: 'nearest' });
     box.querySelector('[data-focus="form title"]')?.focus();

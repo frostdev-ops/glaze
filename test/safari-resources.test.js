@@ -34,7 +34,7 @@ test('and everything the manifest, the loader, the stylesheets and the preview n
     ...m.web_accessible_resources.flatMap((w) => w.resources).flatMap((r) => shipped.filter((f) => new RegExp(`^${r.replace(/[.]/g, '\\.').replace(/\*/g, '[^/]*')}$`).test(f))),
     // On demand (lib/background.js LOADABLE), and each site's stylesheets (content.js SHEETS: theme, motion, extras; `${site}.css`).
     ...JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"')),
-    'theme.css', 'motion.css', 'extras.css', 'canvas.css', 'moodle.css',
+    'theme.css', 'motion.css', 'extras.css', 'canvas.css', 'moodle.css', 'apps.css',
     ...[...read('preview.html').matchAll(/<script src="([^"]+)"/g)].map((x) => x[1]),
   ];
   assert.ok(named.includes('content-canvas.js') && named.includes('assets/art/pets/cat/sprites.webp') && named.includes('features/lookx.css'));

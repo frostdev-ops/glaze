@@ -1,14 +1,16 @@
-// Export calendar (.ics) (Canvas): a file the student saves and imports into Google Calendar, Outlook or Apple Calendar
-// themselves. Opened from Better To Do's header or the command palette (Ctrl+K); the options page keeps the same choices.
-// Made entirely here, on the device: Canvas's planner is read for the range with the student's own session, as Better To
-// Do reads it, and the file goes to the browser's own download through a blob link (no downloads permission). Nothing
-// is sent anywhere. What goes in it is lib/calexport.js; lib/ics.js writes it.
+// Export calendar (.ics) (Canvas and Blackboard Ultra): a file the student saves and imports into Google Calendar, Outlook
+// or Apple Calendar themselves. Opened from Better To Do's header or the command palette (Ctrl+K); the options page keeps
+// the same choices. Made entirely here, on the device: the site is read for the range with the student's own session, as
+// Better To Do reads it (Canvas's planner; Ultra's To Do, calendar and gradebooks, lib/ultra.js pageDue), and the file
+// goes to the browser's own download through a blob link (no downloads permission). Nothing is sent anywhere. What goes
+// in it is lib/calexport.js; lib/ics.js writes it.
 // Loaded on demand: a second injection keeps the first.
 var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   const ctx = globalThis.GZ_CTX;
   const t = (k, v) => ctx.t(k, v);
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter(Boolean)); return e; };
   const DAY = 864e5;
+  const ultra = ctx.site === 'ultra';
   let box = null, opener = null, say = null, busy = false;
 
   const readTodo = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } });
@@ -57,11 +59,11 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     // Every chosen source is read strictly: one that can't be loaded or read stops the export, and nothing is saved.
     if (ctx.settings().enhance.gradescope && o.icsGs !== false) await ctx.need('lib/gradescope.js', () => globalThis.GZ_GRADESCOPE);
     const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses()]);
-    if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
+    if (!L.ID.test(String(p?.id))) throw new Error('no profile');
     const uid = String(p.id), tz = L.zone(p.time_zone), now = Date.now();
     // The courses Better To Do shows: active ones the student can open. An empty answer (none, or the request failed)
     // filters nothing, as there.
-    const live = list.filter((c) => /^\d+$/.test(String(c.id)) && c.name && !c.access_restricted_by_date);
+    const live = list.filter((c) => L.ID.test(String(c.id)) && c.name && !c.access_restricted_by_date);
     const names = Object.fromEntries(live.map((c) => [String(c.id), c.name]));
     const r = X.range(o.icsRange, now, tz, live);
     const key = L.storeKey(location.origin, uid);
@@ -70,8 +72,11 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     // Planner items through eight weeks past the range, so a plan in the range for work due later has its title; and,
     // for plans whose work isn't among them (overdue work planned for later), half a year back, as far as Better To Do
     // looks. Past deadlines themselves stay out of the file; any plan still without its item goes in untitled.
+    // Ultra: what it couldn't read whole (complete: false) is said beside the saved file.
     const iso = (ms) => new Date(ms).toISOString();
-    const ask = (a, b) => pages(`/api/v1/planner/items?start_date=${iso(a)}&end_date=${iso(b)}&per_page=100`).then((x) => x.map(L.slim));
+    let whole = true;
+    const ask = (a, b) => (ultra ? ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.pageDue(ctx, a, b)).then((x) => { whole &&= x.complete; return x.items; })
+      : pages(`/api/v1/planner/items?start_date=${iso(a)}&end_date=${iso(b)}&per_page=100`).then((x) => x.map(L.slim)));
     let items = o.icsDue || o.icsPlan ? await ask(r.from, r.to + 56 * DAY) : [];
     if (o.icsPlan) {
       const read = new Set(items.map((i) => `${i.type}:${i.id}`));
@@ -102,7 +107,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     const text = GZ_ICS.write({ name: 'Glaze', events }, { now });
     const b = await state(key, uid);
     if (!alive() || !b?.on || b.sig !== a.sig) return null;
-    return { n: events.length, name: events.length ? save(text) : '', guessed: r.guessed };
+    return { n: events.length, name: events.length ? save(text) : '', guessed: r.guessed, whole };
   };
 
   const save = (text) => {
@@ -130,8 +135,9 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     line.textContent = t('Making your calendar…');
     try {
       const r = await run(o, () => box === mine && !!mine?.open, save);
-      line.textContent = !r ? '' : !r.n ? t('Nothing to export in that range.')
-        : [t('Saved {file}', { file: r.name }), r.guessed && t('Canvas gives no end date for this term, so this covers the next 16 weeks.')].filter(Boolean).join(' ');
+      line.textContent = !r ? '' : [!r.n ? t('Nothing to export in that range.') : t('Saved {file}', { file: r.name }),
+        r.n && r.guessed && (ultra ? t('Blackboard gives no end date for this term, so this covers the next 16 weeks.') : t('Canvas gives no end date for this term, so this covers the next 16 weeks.')),
+        !r.whole && t('Blackboard sent only part of your calendar, so some work may be missing.')].filter(Boolean).join(' ');
     } catch (err) {
       line.textContent = err?.message === 'classes' ? t("Couldn't read your class schedule. Nothing was saved.") : t("Couldn't make the calendar. Try again in a moment.");
     } finally { busy = false; }
@@ -151,7 +157,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     const form = make('form', {},
       make('h2', { id: 'gz-ics-title', textContent: t('Export calendar (.ics)') }),
       make('p', { className: 'gz-ics-desc', textContent: t('Made on this device. The file holds your course and assignment names: import it into Google Calendar, Outlook or Apple Calendar yourself. Importing a newer file updates the same events where your calendar supports it.') }),
-      make('fieldset', {}, check('icsDue', t('Canvas due dates')), check('icsTasks', t('Your tasks with a due date')), check('icsPlan', t('Do-on days and focus sessions')), check('icsClasses', t('Your class schedule')),
+      make('fieldset', {}, check('icsDue', ultra ? t('Blackboard due dates') : t('Canvas due dates')), check('icsTasks', t('Your tasks with a due date')), check('icsPlan', t('Do-on days and focus sessions')), check('icsClasses', t('Your class schedule')),
         ctx.settings().enhance.gradescope && check('icsGs', t('Gradescope work'))),
       make('label', { className: 'gz-ics-range' }, make('span', { textContent: t('Range') }), range),
       say,

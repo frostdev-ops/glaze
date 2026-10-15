@@ -127,6 +127,7 @@
         "extras.css",
         "canvas.css",
         "moodle.css",
+        "apps.css",
         "fonts/*.woff2",
         "assets/art/pets/*/sprites.webp",
         "assets/art/stickers/*/*.webp",

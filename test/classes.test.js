@@ -445,7 +445,7 @@ test('the worker\'s writes: an older save after Delete all, a deletion or a newe
 
 test('the worker allows a page its own site\'s schedules only', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../lib/background.js'), 'utf8');
-  assert.match(src, /classes: \{\s*allow: async \(m, s\) => typeof m\.key === 'string' && GZ_CLASSES\.STORE_KEY\.test\(m\.key\) && m\.key\.startsWith\(`classes:\$\{await fromCanvas\(s\)\}\/`\)/);
+  assert.match(src, /classes: \{\s*allow: async \(m, s\) => typeof m\.key === 'string' && GZ_CLASSES\.STORE_KEY\.test\(m\.key\) && m\.key\.startsWith\(`classes:\$\{\(await fromCanvas\(s\)\) \|\| fromUltra\(s\)\}\/`\)/);
   assert.match(src, /importScripts\([^)]*'classes\.js'/);
   for (const f of ['lib/classes.js', 'features/classes.js', 'lib/ics.js', 'lib/doctext.js']) assert.ok(src.includes(`'${f}'`), `LOADABLE: ${f}`);
 });

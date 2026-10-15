@@ -1,15 +1,19 @@
-// Class schedule (Canvas, W14), loaded on demand: the command palette ("Class schedule"), the agenda tile and the reminders
-// hub open it (open()). A schedule is read on this device from an .ics file or a calendar link on this Canvas site, a
-// registrar's page saved as HTML, a Word file or pasted text (lib/classes.js reads it; lib/ics.js and lib/doctext.js
-// turn files into text). Every class it finds is shown for review, each field editable and each guess marked, matched to
-// one of the student's Canvas courses where the code or name says so; nothing is kept until Save. Kept in storage.local
-// (classes:<site>/<user>) through the worker's queue ('glaze:classes'). Nothing is sent anywhere: a calendar link is read
-// only when it is on this Canvas site. Classic script, through GZ_CTX; a second injection keeps the first.
+// Class schedule (W14), on Canvas and Blackboard Ultra, loaded on demand: the command palette ("Class schedule"), the
+// agenda tile and the reminders hub open it (open()). A schedule is read on this device from an .ics file or a calendar
+// link on this site (Ultra's own "Share calendar" link pasted by the student, say), a registrar's page saved as HTML, a
+// Word file or pasted text (lib/classes.js reads it; lib/ics.js and lib/doctext.js turn files into text). Every class it
+// finds is shown for review, each field editable and each guess marked, matched to one of the student's courses on this
+// site by code first, then name; nothing is kept until Save. Kept in storage.local (classes:<site>/<user>) through the
+// worker's queue ('glaze:classes'). Nothing is sent anywhere: a calendar link is read only when it is on this site.
+// Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   const ctx = globalThis.GZ_CTX;
   const t = (k, v) => ctx.t(k, v);
   const MAX = 5 << 20; // bytes read from a file or link
   let C = null, key = '', tz, courses = [], store = { courses: [] };
+  const ultra = ctx.site === 'ultra';
+  // A course's own page on this site: Ultra's <base href> is its CDN, so the address is whole.
+  const courseUrl = (id) => (/^\d+$/.test(id) ? `/courses/${id}` : /^_\d+_\d+$/.test(id) ? `${location.origin}/ultra/courses/${id}/outline` : '');
   let box = null, opener = null, view = null; // view: what's drawn ('list', 'import' or 'review'), redrawn on a change
   // Each drawing of the dialog (a view, or the dialog opened again) is a new generation: an answer that comes back after
   // it moved on (a file or link still being read, a write the worker hadn't answered) changes nothing on screen.
@@ -64,8 +68,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       button(t('Cancel'), () => { confirmAll.hidden = true; all.focus(); }));
     const all = button(t('Delete all'), () => { confirmAll.hidden = false; confirmAll.querySelector('button').focus(); });
     const items = store.courses.map((c) => {
-      const canvas = /^\d+$/.test(c.id);
-      const name = canvas ? make('a', { href: `/courses/${c.id}`, textContent: c.name }) : make('span', { textContent: c.name });
+      const name = courseUrl(c.id) ? make('a', { href: courseUrl(c.id), textContent: c.name }) : make('span', { textContent: c.name });
       return make('li', {}, make('div', { className: 'gz-cl-main' }, make('strong', {}, name, c.code && !c.name.includes(c.code) && make('span', { className: 'gz-cl-faint', textContent: ` · ${c.code}` })),
         ...c.periods.map((p) => make('span', { className: 'gz-cl-faint', textContent: describe(p) }))),
       make('div', { className: 'gz-cl-row' },
@@ -95,7 +98,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       throw new Error(t('Glaze reads .ics, .html, .docx and .txt files.'));
     }
     if (link) {
-      // Only this Canvas site's own addresses (its calendar feed): Glaze asks nothing of anywhere else.
+      // Only this site's own addresses (its calendar feed): Glaze asks nothing of anywhere else.
       let u;
       try { u = new URL(link.replace(/^webcals?:\/\//i, 'https://'), location.origin); } catch { u = null; }
       if (!u || u.origin !== location.origin) throw new Error(t('Glaze only reads calendar links on {site}. Download the .ics file instead and choose it above.', { site: location.host }));
@@ -112,7 +115,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     view = 'import';
     const file = make('input', { type: 'file', accept: '.ics,.ical,.html,.htm,.docx,.txt,text/calendar,text/html,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
     const text = make('textarea', { rows: 7, placeholder: t(`Copy your schedule from your school's registration page and paste it here, or type it: one class per line, like "BIO 110 TR 1:30-2:45pm Life Sciences 120".`) });
-    const link = make('input', { type: 'url', placeholder: `${location.origin}/feeds/calendars/….ics` });
+    const link = make('input', { type: 'url', placeholder: `${location.origin}${ultra ? '/' : '/feeds/calendars/'}….ics` });
     const go = button(t('Read schedule'), async () => {
       if (!file.files[0] && !text.value.trim() && !link.value.trim()) return say(t('Choose a file, paste your schedule or give a calendar link.'), true);
       go.disabled = true;
@@ -164,12 +167,12 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   };
   const entry = (e, i, opts) => {
     const keep = make('input', { type: 'checkbox', checked: true });
-    const sel = make('select', {}, make('option', { value: '', textContent: t('Not a Canvas course') }),
+    const sel = make('select', {}, make('option', { value: '', textContent: ultra ? t('Not a Blackboard course') : t('Not a Canvas course') }),
       ...courses.map((c) => make('option', { value: String(c.id), textContent: labelOf(c), selected: String(c.id) === e.id })));
     const name = make('input', { type: 'text', value: e.name || e.label || '', maxLength: 200 });
     const named = field(t('Name'), name, !opts.manual && !e.id && e.periods.some((p) => p.unsure.includes('label')));
     if (opts.edit) sel.disabled = true;
-    if (opts.edit && /^\d+$/.test(e.id) && !courses.some((c) => String(c.id) === e.id)) sel.append(make('option', { value: e.id, textContent: e.name, selected: true }));
+    if (opts.edit && courseUrl(e.id) && !courses.some((c) => String(c.id) === e.id)) sel.append(make('option', { value: e.id, textContent: e.name, selected: true }));
     const sync = () => { named.hidden = !!sel.value; };
     sel.addEventListener('change', sync);
     sync();
@@ -185,7 +188,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     const title = make('legend', { textContent: e.label || e.name || t('New class') });
     const el = make('fieldset', { className: 'gz-cl-entry' }, title,
       !opts.edit && !opts.manual && make('label', { className: 'gz-cl-keep' }, keep, make('span', { textContent: t('Keep this class') })),
-      field(t('Canvas course'), sel), named, periods,
+      field(ultra ? t('Blackboard course') : t('Canvas course'), sel), named, periods,
       button(t('Add a time'), () => addPeriod({ days: [], start: 540, end: 590, loc: '', from: '', to: '', skip: [], unsure: [] }).el.querySelector('input').focus()));
     keep.addEventListener('change', () => el.toggleAttribute('data-off', !keep.checked));
     let bad = null;
@@ -197,7 +200,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
         if (!keep.checked) return null;
         const c = courses.find((x) => String(x.id) === sel.value);
         const nm = c ? c.friendly_name || c.name : name.value.trim();
-        if (!nm) { bad = name; return t('Give the class a name, or choose its Canvas course.'); }
+        if (!nm) { bad = name; return ultra ? t('Give the class a name, or choose its Blackboard course.') : t('Give the class a name, or choose its Canvas course.'); }
         const ps = [];
         for (const part of parts) {
           const p = part.value();
@@ -273,10 +276,10 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     await Promise.all([ctx.need('lib/todo.js', () => globalThis.GZ_TODO), ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES)]);
     C = globalThis.GZ_CLASSES;
     const [p, list0] = await Promise.all([ctx.profile(), ctx.canvasCourses()]);
-    if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
+    if (!GZ_TODO.ID.test(String(p?.id))) throw new Error('no profile');
     tz = GZ_TODO.zone(p.time_zone);
     key = C.storeKey(location.origin, String(p.id));
-    courses = list0.filter((c) => /^\d+$/.test(String(c.id)) && c.name);
+    courses = list0.filter((c) => GZ_TODO.ID.test(String(c.id)) && c.name);
     store = await new Promise((res) => { try { chrome.storage.local.get(key, (r) => res(C.clean(r?.[key]))); } catch { res(C.clean(null)); } });
     if (box) return true;
     opener = document.activeElement;
@@ -351,7 +354,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
 #gz-cl .gz-cl-say[role="alert"] { color: var(--gz-err, #b42318); font-weight: 600; }
 #gz-cl [hidden] { display: none !important; }`;
 
-  // The command palette's entry, on any Canvas page.
+  // The command palette's entry, on any Canvas or Ultra page.
   const cmds = () => [{ label: t('Class schedule'), hint: 'Glaze', group: 'Glaze', run: () => open().catch(() => {}) }];
   return { open, cmds };
 })();
