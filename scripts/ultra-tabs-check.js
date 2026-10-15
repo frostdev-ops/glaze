@@ -120,6 +120,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       const root = document.querySelector('.course-content-container section.course');
       root.append(document.createElement('b8-snapshot-probe'));
       root.append(document.createElement('b8-late-snapshot-probe'));
+      window.__snapshotBuiltinConstructors = 0;
+      customElements.define('b8-snapshot-button', class extends HTMLButtonElement { constructor() { super(); window.__snapshotBuiltinConstructors++; } }, { extends: 'button' });
+      root.append(document.createElement('button', { is: 'b8-snapshot-button' }));
+      root.append(document.createElement('button', { is: 'b8-late-snapshot-button' }));
       const box = document.createElement('div'); box.dataset.token = 'invented-secret'; box.style.backgroundImage = 'url(https://cdn.school.test/fixture/background.png)'; root.append(box);
       for (const origin of [location.origin, 'https://cdn.school.test']) {
         const img = new Image(); img.src = origin + '/fixture/image.png'; root.append(img); await img.decode();
@@ -131,7 +135,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.click('a[href="/ultra/courses/_102_1/outline"]');
     await settled('_102_1');
     await open('_103_1');
-    await page.evaluate(() => { window.__lateSnapshotConstructors = 0; customElements.define('b8-late-snapshot-probe', class extends HTMLElement { constructor() { super(); window.__lateSnapshotConstructors++; } }); });
+    await page.evaluate(() => { window.__lateSnapshotConstructors = 0; customElements.define('b8-late-snapshot-probe', class extends HTMLElement { constructor() { super(); window.__lateSnapshotConstructors++; } }); window.__lateBuiltinConstructors = 0; customElements.define('b8-late-snapshot-button', class extends HTMLButtonElement { constructor() { super(); window.__lateBuiltinConstructors++; } }, { extends: 'button' }); });
     ok(await order() === '_101_1 _102_1 _103_1', `each course opened gets a tab, in order (${await order()})`);
 
     console.log('isolated platform: ' + JSON.stringify(await isolated(() => ({ nullRegistry: customElements === null, styleIterator: typeof document.documentElement.style[Symbol.iterator] }))));
@@ -152,6 +156,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     ok(requests.length === before, `no request for the switch (${requests.slice(before).join(', ') || 'none'})`);
     ok(await page.evaluate(() => window.__lateSnapshotConstructors === 0), 'a tag registered after capture runs no constructor when replay connects');
     ok(await page.evaluate(() => window.__snapshotConstructors === 1), 'capturing/replaying a defined custom element runs no constructor');
+    const builtinCounts = await page.evaluate(() => ({ defined: __snapshotBuiltinConstructors, late: __lateBuiltinConstructors }));
+    ok(builtinCounts.defined === 1 && builtinCounts.late === 0, `customized built-ins run no capture or replay constructors (${JSON.stringify(builtinCounts)})`);
     const copies = Object.values(await session()).filter((v) => v?.layers).map((v) => JSON.stringify(v));
     ok(!copies.some((x) => x.includes('invented-secret')), 'snapshots discard arbitrary data attributes and credentials');
     if (process.env.GZ_B8_FOCUSED) {
@@ -424,11 +430,11 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       }
       for (const name of ['addListener', 'removeListener']) {
         const native = chrome.storage.onChanged[name];
-        chrome.storage.onChanged[name] = (...args) => { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addListener' ? 'storeAdds' : 'storeRemoves']++; return native(...args); };
+        chrome.storage.onChanged[name] = (...args) => { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addListener' ? 'storeAdds' : 'storeRemoves']++; return native.apply(chrome.storage.onChanged, args); };
       }
       for (const name of ['addListener', 'removeListener']) {
         const native = chrome.runtime.onMessage[name];
-        chrome.runtime.onMessage[name] = (...args) => { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addListener' ? 'runtimeAdds' : 'runtimeRemoves']++; return native(...args); };
+        chrome.runtime.onMessage[name] = (...args) => { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addListener' ? 'runtimeAdds' : 'runtimeRemoves']++; return native.apply(chrome.runtime.onMessage, args); };
       }
       const schedule = setTimeout, cancel = clearTimeout;
       globalThis.setTimeout = (f, ms, ...a) => {

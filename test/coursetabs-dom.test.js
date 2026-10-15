@@ -59,3 +59,56 @@ test('neutral custom tags keep ordinary native CSS type selectors, without chang
   assert.equal(L.selectors(unchanged, tags), unchanged);
   assert.equal(L.selectors('course-page-header:hover', new Set(['x.*'])), 'course-page-header:hover');
 });
+
+
+// Replay records a native link, then follows it only when that same link exists in the live page.
+function replay(href) {
+  const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8');
+  const remember = source.slice(source.indexOf('  const remember = '), source.indexOf('  const fade = '));
+  const end = source.slice(source.indexOf('  const end = '), source.indexOf("  // The tab's scroll"));
+  const anchor = { getAttribute: () => href, textContent: 'Content', getBoundingClientRect: () => ({ left: 0, right: 10, top: 0, bottom: 10 }) };
+  const document = { querySelectorAll: () => [anchor] }, routed = [];
+  vm.runInNewContext(remember + end + '\nremember(document, {clientX:5,clientY:5});end();', {
+    L, document, go: {}, URL, location: { origin: 'https://bb.school.test' }, shown: () => true,
+    clearTimeout() {}, place() {}, draw() {}, route: (url) => routed.push(url),
+  });
+  return routed;
+}
+
+test('snapshot click replay keeps full own-origin native links', () => {
+  assert.deepEqual(replay('https://bb.school.test/ultra/courses/_1_1/outline?courseId=_1_1'), ['/ultra/courses/_1_1/outline?courseId=_1_1']);
+});
+
+test('snapshot click replay routes only the allowlisted query', () => {
+  assert.deepEqual(replay('/ultra/courses/_1_1/outline?launch=lti&courseId=_1_1'), ['/ultra/courses/_1_1/outline?courseId=_1_1']);
+});
+
+test('snapshot click replay rejects external origins and assessment routes', () => {
+  assert.deepEqual(replay('https://cdn.school.test/ultra/courses/_1_1/outline'), []);
+  assert.deepEqual(replay('//other.test/ultra/courses/_1_1/outline'), []);
+  assert.deepEqual(replay('/ultra/courses/_1_1/outline/assessment/_2_1/overview'), []);
+});
+
+
+test('customized built-ins are recreated without their internal upgrade name and keep native selectors', () => {
+  const doc = { root: null }, make = (tag) => new Element(tag, doc);
+  const container = make('div'), button = make('button'), nested = make('button');
+  button.setAttribute('is', 'known-button'); nested.setAttribute('is', 'late-button');
+  button.append(nested); container.append(button); doc.root = container;
+  const created = [];
+  const document = {
+    createElement(tag) { created.push(tag); return make(tag); },
+    createTreeWalker(root) { const nodes = [root, ...root.all()]; let i = 0; return { currentNode: root, nextNode: () => nodes[++i] || null }; },
+  };
+  const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8');
+  const a = source.indexOf('  const sanitize = '), b = source.indexOf('  // A copy of `live`', a);
+  const sanitize = vm.runInNewContext(source.slice(a, b) + '\nsanitize;', {
+    L, document, customElements: null, NodeFilter: { SHOW_ELEMENT: 1, SHOW_COMMENT: 128 }, styleText: () => '',
+  });
+  const safe = sanitize(button);
+  assert.notEqual(safe, button, 'a new native element has no internal custom-element name');
+  assert.notEqual(safe.children[0], nested);
+  assert.equal(safe.localName, 'button'); assert.equal(safe.children[0].localName, 'button');
+  assert.equal(safe.hasAttribute('is'), false); assert.equal(safe.children[0].hasAttribute('is'), false);
+  assert.deepEqual(created, ['button', 'button']);
+});

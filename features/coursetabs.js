@@ -259,26 +259,29 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // Nothing that runs, loads or takes input (lib/coursetabs.js DROP, keepAttr); hidden parts left out.
   const sanitize = (root) => {
     if (L.DROP.has(root.localName.toLowerCase())) return null;
-    if (own(root)) root = asDiv(root);
+    if (own(root)) root = asPlain(root);
     const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_COMMENT);
     const drop = [], defined = [];
     for (let n = w.currentNode; n; n = w.nextNode()) {
       if (n.nodeType === 8 || L.DROP.has(n.localName.toLowerCase()) || n.hasAttribute('hidden') || n.classList.contains('ng-hide') || n.style?.display === 'none' || n.style?.visibility === 'hidden') { if (n !== root) drop.push(n); continue; }
+      const special = own(n);
       for (const a of [...n.attributes]) if (!L.keepAttr(a.name, a.value, n.localName)) n.removeAttribute(a.name);
       if (n.hasAttribute('style')) n.style.cssText = styleText(n.style);
-      if (own(n)) defined.push(n);
+      if (special) defined.push(n);
     }
     for (const n of drop) n.remove();
-    for (const n of defined) if (n !== root && root.contains(n)) asDiv(n);
+    for (const n of defined) if (n !== root && root.contains(n)) asPlain(n);
     return root;
   };
   // Chrome's isolated world has no custom-element registry. Every custom name becomes a div before connection,
-  // including tags registered after capture; data-gz-tag lets readable CSS keep matching its ordinary type selectors.
-  const own = (e) => e.localName.includes('-');
-  const asDiv = (y) => {
-    const d = document.createElement('div');
-    for (const a of y.attributes) d.setAttribute(a.name, a.value);
-    d.setAttribute('data-gz-tag', y.localName);
+  // including tags registered after capture; data-gz-tag keeps ordinary readable type selectors. A customized built-in
+  // must be recreated too: removing its is attribute leaves an internal upgrade name behind.
+  const own = (e) => e.localName.includes('-') || e.hasAttribute('is');
+  const asPlain = (y) => {
+    const custom = y.localName.includes('-');
+    const d = document.createElement(custom ? 'div' : y.localName);
+    for (const a of y.attributes) if (a.name !== 'is') d.setAttribute(a.name, a.value);
+    if (custom) d.setAttribute('data-gz-tag', y.localName);
     d.append(...y.childNodes);
     y.replaceWith(d);
     return d;
@@ -319,7 +322,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       ph.style.height = `${gap[1]}px`;
       gap[0].replaceWith(ph);
     }
-    for (const y of defined) if (y !== c && c.contains(y)) asDiv(y);
+    for (const y of defined) if (y !== c && c.contains(y)) asPlain(y);
     return sanitize(c).outerHTML;
   };
   const capture = (cid = ctx.courseId(), path = L.safe(location.pathname, location.search)) => {
@@ -478,8 +481,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!go) return;
     const hit = [...root.querySelectorAll('a[href]')].reverse().find((a) => { const r = a.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; });
     const href = hit?.getAttribute('href') || '';
-    const [p, q] = href.split('?');
-    if (hit && L.safe(p, q)) go.click = { href, text: hit.textContent.trim() };
+    let url;
+    try { const u = new URL(href, location.origin); if (u.origin === location.origin) url = L.safe(u.pathname, u.search); } catch { /* malformed native link */ }
+    if (hit && url) go.click = { href, url, text: hit.textContent.trim() };
   };
   const fade = (over) => {
     over.inert = true;
@@ -548,7 +552,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     draw();
     if (cut) return;
     if (g.top) scrollBack(g.top);
-    if (g.click && [...document.querySelectorAll('a[href]')].some((a) => a.getAttribute('href') === g.click.href && a.textContent.trim() === g.click.text && shown(a))) route(g.click.href);
+    if (g.click && [...document.querySelectorAll('a[href]')].some((a) => a.getAttribute('href') === g.click.href && a.textContent.trim() === g.click.text && shown(a))) route(g.click.url);
   };
   // The tab's scroll, put back until it holds; anything the student does first ends it. On the outline with "Your place"
   // on, features/place.js does this (with the open folders).
