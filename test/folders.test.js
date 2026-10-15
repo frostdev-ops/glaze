@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const F = require('../lib/folders.js');
+const F = require(process.env.GZ_B9_LIB || '../lib/folders.js');
 const T = require('../lib/todo.js');
 const C = require('../lib/cards.js');
 const D = require('../defaults.js');
@@ -48,7 +48,7 @@ test('global course cap and backup validation bound imported device data', async
   assert.equal((await F.change({ key: F.key('https://bb.example.edu', '_7_1', '_900_1'), show: true }, a)).error, 'cap');
   const raw = { ...a.store, bad: { ids: ['_1_1'] }, [key]: { ids: ['_1_1', '_1_1', 'bad'], show: 'yes' } };
   const cleaned = F.backup(raw);
-  assert.equal(Object.keys(cleaned).length, F.MAX_KEYS);
+  assert.equal(Object.keys(cleaned).length, F.MAX_KEYS - 1);
   assert.equal(cleaned.bad, undefined);
   assert.deepEqual(F.clean(raw[key]), { ids: ['_1_1'], show: false });
 });
@@ -93,4 +93,20 @@ test('the byte cap bounds both imported records and new single-folder writes', a
   assert.equal((await F.change({ key: next, show: true }, a)).error, 'cap');
   assert.deepEqual(a.store[next], { ids, show: false });
   for (const k of Object.keys(before)) assert.deepEqual(a.store[k], before[k]);
+});
+test('folder operations reject coerced IDs and keys before touching storage', async () => {
+  const a = storage();
+  for (const id of [['_1_1'], { toString: () => '_1_1' }]) {
+    assert.equal((await F.change({ key, id, hidden: true }, a)).error, 'bad');
+  }
+  assert.equal((await F.change({ key: [key], show: true }, a)).error, 'bad');
+  assert.deepEqual(a.store, {});
+  assert.equal(F.key('https://bb.example.edu', ['_7_1'], '_8_1'), '');
+});
+test('malformed backup records cannot clear existing folder choices', async () => {
+  for (const record of [{}, { ids: '_1_1', show: true }, { ids: ['_2_1'], show: 'yes' }, { ids: [['_2_1']], show: true }, { ids: Array(F.MAX_IDS + 1).fill('_2_1'), show: true }]) {
+    const a = storage(); a.store[key] = { ids: ['_1_1'], show: true };
+    assert.equal((await F.restore({ folders: { [key]: record }, settings: {} }, { local: a.local, sync: { set: async () => true } }, T)).ok, true);
+    assert.deepEqual(a.store[key], { ids: ['_1_1'], show: true });
+  }
 });

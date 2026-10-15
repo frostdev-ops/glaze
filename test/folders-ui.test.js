@@ -1,6 +1,6 @@
 // Synthetic Ultra outline: real B9 module, inert DOM and extension storage, no network surface.
 const test = require('node:test'), assert = require('node:assert/strict'), vm = require('node:vm'), fs = require('node:fs');
-const F = require('../lib/folders.js');
+const F = require(process.env.GZ_B9_LIB || '../lib/folders.js');
 const ROW = '.content-list-item[data-content-id]';
 class E {
   constructor(tag = 'div') { this.tagName = tag; this.children = []; this.dataset = {}; this.attrs = {}; this.listeners = {}; this.textContent = ''; }
@@ -37,7 +37,7 @@ const fixture = () => {
   const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { constructor(f) { mutations = f; } observe() {} } });
   vm.runInContext(fs.readFileSync(process.env.GZ_B9_FEATURE || require.resolve('../features/folders.js'), 'utf8'), c);
   const ui = c.GZ_FOLDER_UI;
-  const click = async (el, type = 'click') => { const e = { preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }; el.listeners[type](e); await settle(); return e; };
+  const click = async (el, type = 'click', isTrusted = true) => { const e = { isTrusted, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }; el.listeners[type](e); await settle(); return e; };
   return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => mutations(),
     identity: Promise.resolve('_900_1'), setOn: (v) => { on = v; }, setEnabled: (v) => { enabled = v; }, fail: (v) => { failed = v; }, hold: (v) => { held = v; }, change: (v) => { cid = v; location.pathname = `/ultra/courses/${v}/outline`; }, path: (v) => { location.pathname = v; }, changed: () => changed.forEach((f) => f({ [F.key(location.origin, '_900_1', cid)]: {} }, 'local')) };
 };
@@ -103,4 +103,34 @@ test('a cross-tab storage change invalidates an older in-flight read', async () 
   release({ [key]: { ids: ['_101_1'], show: false } }); await settle();
   assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
   assert.equal(e.child.getAttribute('data-gz-folder-hidden'), 'show');
+});
+test('page-generated eye and show-toggle clicks cannot save folder choices', async () => {
+  const e = fixture(); e.ui.sync(true, e.identity); await settle();
+  await e.click(eye(e.parent), 'click', false);
+  assert.equal(e.sent.length, 0);
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
+  await e.click(eye(e.parent));
+  await e.click(e.document.getElementById('gz-folders-toggle'), 'click', false);
+  assert.equal(e.sent.length, 1);
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), 'hide');
+});
+test('reused native rows discard old controls and hidden attributes when their identity or type changes', async () => {
+  const e = fixture(); e.ui.sync(true, e.identity); await settle();
+  await e.click(eye(e.parent));
+  const toggle = e.parent.querySelector('#folder-title-_101_1');
+  e.parent.dataset.contentId = '_201_1'; toggle.id = 'folder-title-_201_1'; toggle.textContent = 'Replacement';
+  e.redraw(); await settle();
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
+  assert.equal(e.document.getElementById('gz-folder-eye-_101_1'), null);
+  assert.ok(eye(e.parent)); assert.ok(eye(e.child));
+  await e.click(eye(e.parent));
+  assert.deepEqual(e.store[F.key('https://bb.example.edu', '_900_1', '_800_1')].ids, ['_101_1', '_201_1']);
+  toggle.id = 'document-title-_201_1'; e.redraw(); await settle();
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
+  assert.equal(eye(e.parent), null); assert.ok(eye(e.child));
+});
+test('malformed cached identities cannot bind another account through string coercion', async () => {
+  const e = fixture();
+  e.ui.sync(true, Promise.resolve(['_900_1'])); await settle();
+  assert.equal(eye(e.parent), null); assert.deepEqual(e.sent, []);
 });

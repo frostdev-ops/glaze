@@ -35,6 +35,15 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     assert.equal(await page.locator('.gz-folder-eye').count(), 3);
     assert.deepEqual(await page.locator('.gz-folder-eye').evaluateAll((es) => es.map((e) => getComputedStyle(e).opacity)), ['1', '1', '1'], 'all touch controls are always visible');
     await page.waitForTimeout(400);
+    await page.evaluate(() => {
+      window.folderMutations = 0;
+      window.folderProbe = new MutationObserver((ms) => { window.folderMutations += ms.filter((m) => m.target.closest?.('.gz-folder-eye, #gz-folders-toggle') || [...m.addedNodes, ...m.removedNodes].some((n) => n.matches?.('.gz-folder-eye, #gz-folders-toggle, #gz-folder-style'))).length; });
+      window.folderProbe.observe(document.body, { childList: true, subtree: true });
+    });
+    await page.waitForTimeout(250);
+    assert.equal(await page.evaluate(() => window.folderMutations), 0, 'idle folder UI does not feed its own observer');
+    assert.deepEqual(await page.locator('.content-list-item').evaluateAll((rs) => rs.filter((r) => r.querySelector(`#folder-title-${r.dataset.contentId}, #learning-module-title-${r.dataset.contentId}`)).map((r) => [...r.querySelectorAll('.gz-folder-eye')].filter((b) => b.closest('.content-list-item') === r).length)), [1, 1, 1]);
+    await page.evaluate(() => window.folderProbe.disconnect());
     const requestBefore = requests;
     const eye = (title) => page.getByRole('button', { name: title, exact: true });
     await eye('Hide folder: Optional reading').focus(); await page.keyboard.press('Enter');
@@ -58,14 +67,25 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     await page.reload();
     await page.waitForFunction(() => document.querySelector('[data-content-id="_102_1"]').getAttribute('data-gz-folder-hidden') === 'hide');
     await eye('Show hidden folders (1)').click();
+    const touchChecks = [], touch = await context.newCDPSession(page);
     // Keep hidden rows dimmed for the four review screenshots.
     for (const width of [1280, 375]) for (const preset of ['Paper', 'Frost']) {
       const entry = D.GZ_PRESETS.find(([n]) => n === preset) || D.GZ_PRESETS[width === 1280 ? 0 : 1];
       await opts.evaluate(async ({ colors, preset }) => chrome.storage.sync.set({ colors, preset }), { colors: entry[1], preset: entry[0] });
-      await page.setViewportSize({ width, height: 900 }); await page.waitForTimeout(250);
+      await page.setViewportSize({ width, height: 900 });
+      await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+      await page.waitForTimeout(250);
       await page.locator('.gz-folder-eye').first().focus();
-      assert.equal(await page.locator('.gz-folder-eye').first().evaluate((e) => getComputedStyle(e).opacity), '1');
       await page.screenshot({ path: path.join(out, `${preset.toLowerCase()}-${width}.png`), fullPage: true });
+      const controls = await page.locator('.gz-folder-eye').evaluateAll((es) => es.map((e) => {
+        const r = e.getBoundingClientRect(), s = getComputedStyle(e), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return { name: e.getAttribute('aria-label'), opacity: s.opacity, display: s.display, width: r.width, height: r.height, reachable: !!hit && e.contains(hit) };
+      }));
+      touchChecks.push({ width, preset, controls, media: await page.evaluate(() => ({ coarse: matchMedia('(any-pointer: coarse)').matches, hoverNone: matchMedia('(hover: none)').matches })) });
+      fs.writeFileSync(path.join(out, 'touch-checks.json'), JSON.stringify(touchChecks, null, 2) + '\n');
+      assert.ok(touchChecks.at(-1).media.coarse && touchChecks.at(-1).media.hoverNone, 'screenshot uses touch media after reload/viewport changes');
+      assert.equal(controls.length, 3);
+      assert.ok(controls.every((e) => e.opacity === '1' && e.display !== 'none' && e.width >= 32 && e.height >= 32 && e.reachable), JSON.stringify(touchChecks.at(-1)));
     }
     // Shared worker operations merge with another tab's edits; storage events update both tabs.
     const other = await context.newPage(); await other.goto(page.url());
@@ -91,7 +111,7 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     await page.waitForTimeout(200);
     assert.equal(requests, unknownAt, 'unknown identity never triggers a profile request');
     await other.close();
-    const results = { ok: true, controls: 3, screenshots: 4, touch: true, requestBefore, requests, errors };
+    const results = { ok: true, controls: 3, screenshots: 4, touch: true, touchChecks, requestBefore, requests, errors };
     fs.writeFileSync(path.join(out, 'assertions.json'), JSON.stringify(results, null, 2) + '\n');
     console.log(JSON.stringify(results));
   } finally { if (context) await context.close(); fs.rmSync(temp, { recursive: true, force: true }); }

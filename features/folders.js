@@ -35,16 +35,20 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     if (!current() || !data) return clear();
     if (!style.isConnected) document.head.append(style);
     const ids = new Set(data?.ids || []), rows = [...document.querySelectorAll(ROW)];
+    for (const b of document.querySelectorAll('.gz-folder-eye')) {
+      const row = b.closest(ROW);
+      if (!row || !toggleOf(row) || b.id !== `gz-folder-eye-${row.dataset.contentId}`) b.remove();
+    }
     for (const row of rows) {
       const toggle = toggleOf(row), id = row.dataset.contentId;
-      if (!toggle || !GZ_FOLDERS.ID.test(id)) continue;
+      if (!toggle || !GZ_FOLDERS.ID.test(id)) { row.removeAttribute('data-gz-folder-hidden'); continue; }
       const hidden = ids.has(id);
       const value = hidden ? data.show ? 'show' : 'hide' : null;
       if (row.getAttribute('data-gz-folder-hidden') !== value) { if (value) row.setAttribute('data-gz-folder-hidden', value); else row.removeAttribute('data-gz-folder-hidden'); }
       let b = row.querySelector(`#gz-folder-eye-${id}`);
       if (!b) {
         b = button(); b.className = 'gz-folder-eye'; b.id = `gz-folder-eye-${id}`;
-        b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (current() && row.isConnected) send({ id, hidden: !data?.ids.includes(id) }); });
+        b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (e.isTrusted && b.isConnected && current() && row.isConnected && row.dataset.contentId === id && toggleOf(row)) send({ id, hidden: !data?.ids.includes(id) }); });
         const heading = row.querySelector('h3');
         if (heading) heading.after(b); else row.append(b);
       }
@@ -57,7 +61,7 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     if (!ids.size) return control?.remove();
     if (!control) {
       control = button(); control.id = 'gz-folders-toggle';
-      control.addEventListener('click', (e) => { e.stopPropagation(); send({ show: !data?.show }); });
+      control.addEventListener('click', (e) => { e.stopPropagation(); if (e.isTrusted) send({ show: !data?.show }); });
     }
     const bar = document.getElementById('gz-progress');
     if (bar) { if (control.parentElement !== bar) bar.append(control); }
@@ -85,7 +89,7 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     if (cached && cached !== identity && cached !== revoked) {
       identity = cached; user = ''; epoch++; key = ''; data = null; loading = false;
       Promise.resolve(cached).then((id) => {
-        if (identity !== cached || revoked === cached || !current() || !GZ_FOLDERS.ID.test(id)) return;
+        if (identity !== cached || revoked === cached || !current() || typeof id !== 'string' || !GZ_FOLDERS.ID.test(id)) return;
         user = id; sync(active, cached);
       }, () => {});
     }
@@ -97,7 +101,7 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
   chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && key && Object.hasOwn(changes, key)) { epoch++; loading = false; data = null; read(); } });
   // Mutation callbacks run before paint, including rows inserted when a folder is unfolded.
   const observer = new MutationObserver(() => { if (active) sync(active, identity); });
-  observer.observe(document.body, { subtree: true, childList: true });
+  observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-content-id', 'id'] });
   return { sync };
 })();
 GZ_FOLDER_UI;
