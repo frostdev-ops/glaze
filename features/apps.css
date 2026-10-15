@@ -447,3 +447,227 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-rm .gz-rm-pick { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: 1.5rem; color: var(--gz-ink-muted); }
 #gz-rm select { width: auto; max-width: 100%; margin: 0; padding: 0.2rem 0.4rem; height: auto; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); }
 #gz-rm .gz-rm-set > button { justify-self: start; margin-top: 0.3rem; }
+
+/* The what-if calculator above a course's grades (Ultra: under its overall grade) and the GPA on the Dashboard (Ultra:
+   on Grades), features/grades.js: panels in the course-progress box's language. */
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) {
+  margin: 0 0 calc(1.25rem * var(--gz-space)); padding: 0.2rem 1rem; font-size: 0.875rem; color: var(--gz-ink-muted);
+  background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius);
+}
+:is(#application, #site-wrap) #gz-gpa { margin-top: calc(1.25rem * var(--gz-space)); padding: 0.8rem 1rem; }
+:is(#application, #site-wrap) #gz-calc[open] { padding-bottom: 0.9rem; }
+:is(#application, #site-wrap) #gz-calc > summary { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.55rem 0; cursor: pointer; color: var(--gz-ink); font-weight: 600; }
+:is(#application, #site-wrap) #gz-calc > summary b { margin-inline-start: auto; font-variant-numeric: tabular-nums; color: var(--gz-accent); }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) :is(summary, button, input, select):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input:is([type="number"], [type="text"]), :is(#application, #site-wrap) #gz-gpa select {
+  width: 5.5em; height: auto; margin: 0; padding: 0.15rem 0.45rem; font: inherit; font-variant-numeric: tabular-nums; box-shadow: none;
+  color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 6px;
+}
+:is(#application, #site-wrap) #gz-calc input[type="number"] { text-align: end; }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input[aria-invalid="true"] { border-color: var(--gz-err); }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) input[type="checkbox"] { margin: 0; accent-color: var(--gz-accent); }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) :is(.gz-calc-note, .gz-gpa-note) { margin: 0.3rem 0 0.5rem; color: var(--gz-ink-muted); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-note:empty { display: none; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-gone { margin: 0.3rem 0 0.6rem; padding: 0.5rem 0.75rem; list-style: none; color: var(--gz-ink); background: var(--gz-accent-soft); border-radius: 8px; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-totals { display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; margin: 0.4rem 0 0.8rem; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-totals dt { font-size: 0.75rem; font-weight: 600; color: var(--gz-ink-muted); }
+:is(#application, #site-wrap) #gz-calc .gz-calc-totals dd { margin: 0; font-size: 1.15rem; font-weight: 600; color: var(--gz-ink); font-variant-numeric: tabular-nums; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-totals div:nth-child(2) dd { color: var(--gz-accent); }
+:is(#application, #site-wrap) #gz-calc .gz-calc-group { margin: 0.6rem 0 0; padding: 0; border: 0; min-width: 0; }
+:is(#application, #site-wrap) #gz-calc legend {
+  display: flex; width: 100%; gap: 0.75rem; margin: 0 0 0.35rem; padding: 0 0 0.25rem; border-bottom: 1px solid var(--gz-line);
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gz-ink-muted);
+}
+:is(#application, #site-wrap) #gz-calc legend b { margin-inline-start: auto; color: var(--gz-ink); font-variant-numeric: tabular-nums; }
+:is(#application, #site-wrap) #gz-calc ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+:is(#application, #site-wrap) #gz-calc li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 0.6rem; align-items: center; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-calc li:has(input[type="checkbox"]:not(:checked)) .gz-calc-name { color: var(--gz-ink-muted); text-decoration: line-through; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-pname { width: 100%; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-score { font-variant-numeric: tabular-nums; white-space: nowrap; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-tag { padding: 0 0.5em; border-radius: 999px; font-size: 0.75rem; font-weight: 600; color: var(--gz-ink-muted); background: var(--gz-accent-soft); }
+:is(#application, #site-wrap) #gz-calc .gz-calc-tag[hidden] { display: none; }
+:is(#application, #site-wrap) :is(#gz-calc, #gz-gpa) :is(.gz-calc-btn, .gz-calc-x) {
+  padding: 0.15rem 0.7rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
+  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-line-strong); border-radius: 999px;
+}
+:is(#application, #site-wrap) #gz-calc .gz-calc-x { padding: 0 0.5rem; font-size: 14px; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-group > .gz-calc-btn { margin-top: 0.45rem; }
+:is(#application, #site-wrap) #gz-calc :is(.gz-calc-btn, .gz-calc-x):hover { color: var(--gz-ink); border-color: var(--gz-accent); }
+:is(#application, #site-wrap) #gz-calc .gz-calc-target { display: flex; align-items: center; gap: 0.4rem; margin: 0.9rem 0 0; font-weight: 400; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-calc .gz-calc-out { margin: 0.4rem 0 0; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-calc .gz-calc-out:empty { display: none; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0.2rem; }
+:is(#application, #site-wrap) #gz-gpa h2 { margin: 0 0 0.5rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-muted); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-figs { display: flex; flex-wrap: wrap; gap: 0.75rem 2rem; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-fig { display: grid; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-fig b { font-size: 1.9rem; line-height: 1.15; font-weight: 700; color: var(--gz-ink); font-variant-numeric: tabular-nums; transition: filter var(--gz-t) var(--gz-ease); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-fig:first-child b { color: var(--gz-accent); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-fig small { color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-more { margin-top: 0.6rem; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-more > summary { cursor: pointer; color: var(--gz-ink); font-weight: 600; padding: 0.3rem 0; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-switches { display: flex; flex-wrap: wrap; gap: 0.3rem 1.25rem; margin: 0.4rem 0 0.6rem; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-switches label { display: flex; align-items: center; gap: 0.35rem; margin: 0; font-weight: 400; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-scroll { overflow-x: auto; }
+:is(#application, #site-wrap) #gz-gpa table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+:is(#application, #site-wrap) #gz-gpa :is(th, td) { padding: 0.35rem 0.5rem; text-align: start; vertical-align: middle; border-bottom: 1px solid var(--gz-line); }
+:is(#application, #site-wrap) #gz-gpa thead th { font-size: 0.75rem; font-weight: 600; color: var(--gz-ink-muted); }
+:is(#application, #site-wrap) #gz-gpa tbody th { font-weight: 600; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-gpa tbody th small { display: block; font-weight: 400; color: var(--gz-ink-muted); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-grade { white-space: nowrap; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-gpa td input[type="text"] { width: 14em; }
+/* Past terms, trends and goal (features/gpaterms.js): the chart in the palette's accent and muted ink. */
+:is(#application, #site-wrap) #gz-gpa h3 { margin: 1rem 0 0.4rem; font-size: 0.95rem; font-weight: 600; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-gpa h4 { margin: 0.6rem 0 0.3rem; font-size: 0.875rem; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-gpa caption { padding: 0.3rem 0; text-align: start; font-weight: 600; color: var(--gz-ink-muted); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-chart { display: block; width: 100%; max-width: 44rem; height: auto; overflow: visible; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-chart .gz-grid { stroke: var(--gz-line); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-chart text { fill: var(--gz-ink-muted); font: 11px var(--gz-font); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-chart polyline { fill: none; stroke-width: 2.5; stroke-linejoin: round; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-chart .gz-term { stroke: var(--gz-accent); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-chart .gz-cum { stroke: var(--gz-ink-muted); stroke-dasharray: 6 4; stroke-width: 2; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-chart circle { fill: var(--gz-accent); stroke: var(--gz-panel); stroke-width: 2; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-chart circle.gz-now { fill: var(--gz-panel); stroke: var(--gz-accent); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-key { display: flex; gap: 1.25rem; margin: 0.2rem 0 0.4rem; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-key span::before { content: ""; display: inline-block; width: 1.4em; margin-inline-end: 0.4em; vertical-align: middle; border-top: 3px solid var(--gz-accent); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-key .gz-cum::before { border-top: 2px dashed var(--gz-ink-muted); }
+:is(#application, #site-wrap) #gz-gpa :is(.gz-gpa-term, .gz-gpa-review) { margin: 0.4rem 0; padding: 0.2rem 0.75rem; border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-term > summary { cursor: pointer; padding: 0.35rem 0; color: var(--gz-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-term legend { padding: 0 0.3rem; font-weight: 600; color: var(--gz-ink); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-review { border-color: var(--gz-accent); padding-bottom: 0.6rem; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-edit td input[type="text"] { width: 16em; }
+:is(#application, #site-wrap) #gz-gpa h4[tabindex="-1"]:focus { outline: none; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-hist-body select { width: auto; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-edit td.gz-gpa-grade input[type="text"] { width: 4em; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-why { display: block; color: var(--gz-ink-muted); white-space: normal; }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-up { font-weight: 700; color: var(--gz-accent); }
+:is(#application, #site-wrap) #gz-gpa .gz-gpa-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+:is(#application, #site-wrap) #gz-gpa textarea { display: block; width: 100%; box-sizing: border-box; margin: 0.3rem 0; padding: 0.4rem 0.5rem; font: 13px/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 6px; }
+:is(#application, #site-wrap) #gz-gpa :is(textarea, input[type="file"]):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+:is(#application, #site-wrap) #gz-gpa .gz-calc-out { margin: 0.4rem 0; color: var(--gz-ink); }
+/* Insights (features/insights.js): its Dashboard button (Ultra: in Glaze's panel or the Courses header) and its dialog; charts in the palette's accent and status colors. */
+#dashboard_header_container .gz-ins-open { margin-inline-end: 0.5rem; }
+#gz-ins {
+  box-sizing: border-box; width: min(860px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-ins::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-ins .gz-ins-head { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 1rem 1.25rem 0.5rem; background: var(--gz-surface); border-bottom: 1px solid var(--gz-line); }
+#gz-ins h2 { margin: 0; font: 600 18px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-ins h2:focus { outline: none; }
+#gz-ins h3 { margin: 0 0 0.5rem; font: 600 11px/1.3 var(--gz-font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-muted); }
+#gz-ins p { margin: 0; }
+#gz-ins .gz-ins-term, #gz-ins .gz-ins-say, #gz-ins .gz-ins-note { font-size: 12px; color: var(--gz-ink-muted); }
+#gz-ins .gz-ins-say { padding: 0.5rem 1.25rem 0; }
+#gz-ins .gz-ins-say:empty { display: none; }
+#gz-ins .gz-ins-body { display: grid; gap: 1.5rem; padding: 1rem 1.25rem 1.25rem; }
+#gz-ins .gz-ins-sec { display: grid; gap: 0.6rem; }
+#gz-ins .gz-ins-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+#gz-ins button { margin: 0; padding: 0.3rem 0.8rem; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; box-shadow: none; }
+#gz-ins button:hover { border-color: var(--gz-accent); }
+#gz-ins :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-ins .gz-ins-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+#gz-ins .gz-ins-tiles li { display: grid; align-content: start; gap: 0.15rem; padding: 0.75rem 0.9rem; background: var(--gz-surface-2); border-radius: var(--gz-radius-sm); }
+#gz-ins .gz-ins-tiles strong { font: 700 26px/1.1 var(--gz-font-head, var(--gz-font)); color: var(--gz-accent); font-variant-numeric: tabular-nums; }
+#gz-ins .gz-ins-tiles small { color: var(--gz-ink-muted); }
+#gz-ins .gz-ins-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+#gz-ins .gz-ins-table caption { padding: 0 0 0.3rem; text-align: start; font-weight: 600; color: var(--gz-ink); }
+#gz-ins .gz-ins-table :is(th, td) { padding: 0.3rem 0.5rem; text-align: start; vertical-align: middle; border-bottom: 1px solid var(--gz-line); }
+#gz-ins .gz-ins-table thead th { font-weight: 600; color: var(--gz-ink-muted); }
+#gz-ins .gz-ins-table :is(tbody, tfoot) th { font-weight: 600; color: var(--gz-ink); }
+#gz-ins .gz-ins-table tfoot :is(th, td) { border-bottom: 0; }
+#gz-ins .gz-ins-bar { display: block; width: 7rem; height: 0.5rem; background: var(--gz-line); border-radius: 999px; overflow: hidden; }
+#gz-ins .gz-ins-bar .gz-on { fill: var(--gz-ok); }
+#gz-ins .gz-ins-bar .gz-late { fill: var(--gz-warn); }
+#gz-ins .gz-ins-bar .gz-missing { fill: var(--gz-err); }
+#gz-ins .gz-ins-spark { display: block; width: 7.5rem; height: 1.75rem; overflow: visible; }
+#gz-ins .gz-ins-spark polyline { fill: none; stroke: var(--gz-accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+#gz-ins .gz-ins-spark circle { fill: var(--gz-accent); }
+#gz-ins .gz-ins-weeks { display: block; width: 100%; height: 5rem; }
+#gz-ins .gz-ins-weeks rect { fill: var(--gz-ink-muted); }
+#gz-ins .gz-ins-weeks rect.gz-past { fill: var(--gz-line-strong); }
+#gz-ins .gz-ins-weeks rect.gz-now { fill: var(--gz-ink); stroke: var(--gz-ink); stroke-width: 2; vector-effect: non-scaling-stroke; }
+#gz-ins .gz-ins-weeks rect.gz-now.gz-heavy { fill: var(--gz-accent); }
+#gz-ins .gz-ins-axis { display: flex; justify-content: space-between; margin-top: -0.3rem; font-size: 11px; color: var(--gz-ink-muted); }
+#gz-ins .gz-ins-weeks rect.gz-heavy { fill: var(--gz-accent); }
+#gz-ins .gz-ins-facts { display: grid; grid-template-columns: auto auto; justify-content: start; gap: 0.25rem 1.25rem; margin: 0; }
+#gz-ins .gz-ins-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+#gz-ins .gz-ins-more > summary { cursor: pointer; color: var(--gz-accent); }
+#gz-ins .gz-ins-more .gz-ins-table { margin-top: 0.6rem; }
+#gz-ins .gz-ins-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--gz-line); }
+/* ---- syllabus import (features/syllabus.js): a card on the course home (Ultra: on its outline), a line above Canvas's Syllabus, and the review dialog ---- */
+#gz-syl { margin: 0 0 1rem; padding: 0.75rem 0.9rem; font-size: 0.875rem; line-height: 1.45; color: var(--gz-ink); background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); }
+#gz-syl.gz-syl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+#gz-syl.gz-syl-bar p { flex: 1 1 18rem; margin: 0; color: var(--gz-ink-muted); }
+#gz-syl h2 { margin: 0 0 0.5rem; font: 600 1rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-syl dl { display: grid; gap: 0.1rem; margin: 0; }
+#gz-syl dt { margin-top: 0.4rem; font-size: 0.75rem; font-weight: 600; color: var(--gz-ink-muted); }
+#gz-syl dd { margin: 0; overflow-wrap: anywhere; }
+#gz-syl a { color: var(--gz-accent); }
+:is(#gz-syl, #gz-syl-dlg) .gz-syl-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+#gz-syl.gz-syl-bar .gz-syl-actions { margin: 0; }
+:is(#gz-syl, #gz-syl-dlg) :is(button, input, select, textarea) { font: inherit; }
+:is(#gz-syl, #gz-syl-dlg) button {
+  margin: 0; padding: 0.3rem 0.75rem; font-size: 0.8125rem; color: var(--gz-ink); background: var(--gz-surface-2);
+  border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; box-shadow: none;
+}
+:is(#gz-syl, #gz-syl-dlg) button:hover { border-color: var(--gz-accent); }
+:is(#gz-syl, #gz-syl-dlg) .gz-syl-main { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+:is(#gz-syl, #gz-syl-dlg) :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-syl h2:focus { outline: none !important; box-shadow: none !important; } /* focused only to move the reader there after a save */
+#gz-syl-dlg {
+  box-sizing: border-box; width: min(720px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-syl-dlg::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-syl-dlg * { box-sizing: border-box; }
+#gz-syl-dlg .gz-syl-in { display: grid; gap: 0.8rem; padding: 1rem 1.1rem 1.1rem; }
+#gz-syl-dlg .gz-syl-top { display: flex; align-items: center; gap: 0.75rem; }
+#gz-syl-dlg h2 { flex: 1; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-syl-dlg .gz-syl-x { flex: none; width: 1.75rem; height: 1.75rem; padding: 0; font-size: 16px; line-height: 1; }
+#gz-syl-dlg :is(.gz-syl-desc, small, .gz-syl-status) { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-syl-dlg .gz-syl-status:empty { display: none; }
+#gz-syl-dlg .gz-syl-f { display: grid; gap: 0.2rem; }
+#gz-syl-dlg .gz-syl-lab { display: flex; align-items: center; gap: 0.5rem; }
+#gz-syl-dlg label { font-weight: 600; color: var(--gz-ink); }
+#gz-syl-dlg :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%; min-height: 2rem; height: auto; margin: 0; padding: 0.3rem 0.5rem; color: var(--gz-ink); background: var(--gz-surface-2);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); box-shadow: none; color-scheme: inherit;
+}
+#gz-syl-dlg textarea { resize: vertical; }
+#gz-syl-dlg [aria-invalid="true"] { border-color: var(--gz-err); outline: 1px solid var(--gz-err); }
+#gz-syl-dlg input[type="checkbox"] { margin: 0; accent-color: var(--gz-accent); }
+#gz-syl-dlg .gz-syl-conf { padding: 0 0.45rem; font-size: 11px; font-weight: 600; border-radius: 999px; color: var(--gz-ink-muted); background: var(--gz-surface-2); }
+#gz-syl-dlg .gz-syl-check { color: var(--gz-ink); background: color-mix(in srgb, var(--gz-warn) 30%, transparent); }
+#gz-syl-dlg .gz-syl-src { font-style: italic; overflow-wrap: anywhere; }
+#gz-syl-dlg .gz-syl-issues { margin: 0; padding: 0.4rem 0.6rem; font-size: 12px; color: var(--gz-ink); background: color-mix(in srgb, var(--gz-warn) 22%, transparent); border-radius: var(--gz-radius-sm); }
+#gz-syl-dlg .gz-syl-set { display: grid; gap: 0.5rem; min-width: 0; margin: 0; padding: 0.6rem 0.75rem 0.75rem; border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); }
+#gz-syl-dlg legend { width: auto; margin: 0; padding: 0 0.3rem; font: 600 13px/1.4 var(--gz-font); color: var(--gz-ink); border: 0; }
+#gz-syl-dlg :is(.gz-syl-set, .gz-syl-in) > button { justify-self: start; }
+#gz-syl-dlg .gz-syl-rows { display: grid; gap: 0.5rem; }
+#gz-syl-dlg .gz-syl-rows:empty { display: none; }
+#gz-syl-dlg .gz-syl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--gz-line); }
+#gz-syl-dlg .gz-syl-row:last-child { padding-bottom: 0; border-bottom: 0; }
+#gz-syl-dlg .gz-syl-row > :is(.gz-syl-conf, .gz-syl-src) { flex-basis: 100%; }
+#gz-syl-dlg .gz-syl-row > .gz-syl-conf { flex-basis: auto; }
+#gz-syl-dlg .gz-syl-row .gz-syl-label { flex: 1 1 10rem; width: auto; }
+#gz-syl-dlg .gz-syl-row :is(input[type="time"], input[type="date"], select) { width: auto; }
+#gz-syl-dlg .gz-syl-row .gz-syl-loc { flex: 1 1 8rem; width: auto; }
+#gz-syl-dlg .gz-syl-days { display: inline-flex; gap: 0.15rem; }
+#gz-syl-dlg .gz-syl-days label { display: grid; justify-items: center; gap: 0.1rem; min-width: 1.6rem; font-size: 11px; font-weight: 500; color: var(--gz-ink-muted); cursor: pointer; }
+#gz-syl-dlg :is(.gz-syl-todo, .gz-syl-check-row) { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; cursor: pointer; }
+#gz-syl-dlg .gz-syl-read pre { max-height: 14rem; overflow: auto; margin: 0.4rem 0 0; padding: 0.5rem; font-size: 12px; white-space: pre-wrap; background: var(--gz-surface-2); border-radius: var(--gz-radius-sm); }
+#gz-syl-dlg .gz-syl-read summary { cursor: pointer; color: var(--gz-ink-muted); }
+/* Ultra's own for these: Glaze's panels are its surface (no --gz-panel there); the what-if sits under the overall grade's
+   bar, the GPA above the terms, syllabus import is one of the outline's blocks, and theme.css's clearing of the text in
+   Ultra's own legends (MUI's notched outlines) leaves Glaze's alone. Insights' header button when Glaze's panel is off. */
+#site-wrap :is(#gz-calc, #gz-gpa, #gz-syl) { --gz-panel: var(--gz-surface); }
+#site-wrap #gz-calc { margin-top: calc(14px * var(--gz-space)); }
+#site-wrap #gz-gpa { margin-bottom: calc(1.25rem * var(--gz-space)); }
+#site-wrap .outline-actions #gz-syl { margin: 0 0 calc(14px * var(--gz-space)); }
+#site-wrap :is(#gz-calc, #gz-gpa) legend * { color: inherit !important; }
+.base-header-tools .gz-ins-open { margin: 0; padding: 0.35rem 0.9rem; font: 600 13px/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; }
+.base-header-tools .gz-ins-open:hover { border-color: var(--gz-accent); }
+.base-header-tools .gz-ins-open:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }

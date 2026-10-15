@@ -372,15 +372,13 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
-  // ---- what-if calculator (Extras) -----------------------------------------------------------
-  // features/whatif.js (with lib/gradecalc.js), loaded on a course's Grades once its grades are in.
-  const renderCalc = () => {
-    if (globalThis.GZ_WHATIF) return GZ_WHATIF.render();
-    const cid = courseId();
-    if (I.settings.enhance.calc && I.observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview') && bookFor(cid).results) {
-      need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(() => need('features/whatif.js', () => globalThis.GZ_WHATIF)).then(() => GZ_WHATIF.render(), () => {});
-    }
-  };
+  // ---- grades (Extras): features/grades.js (what-if, GPA), syllabus.js (outline), insights.js (Courses) ----
+  const loadIf = (want, f, name, run) => (globalThis[name] || (I.observer && want)) && need(`features/${f}.js`, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
+  const onPath = (re) => re.test(location.pathname);
+  const renderCalc = () => { const e = I.settings.enhance; loadIf((e.calc && onPath(/^\/ultra\/courses\/_\d+_\d+\/grades/)) || (e.gpa && onPath(/^\/ultra\/grades\/?$/)), 'grades', 'GZ_GRADES_UI', (g) => g.render()); };
+  const sylHere = () => window.top === window && I.settings.enhance.syllabus && onPath(/^\/ultra\/courses\/_\d+_\d+\/outline/);
+  const syncSyl = () => loadIf(sylHere(), 'syllabus', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
+  const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
   // ---- code on demand ------------------------------------------------------------------------------
   // Dashboard notes and widgets (features/widgets.js): Glaze's panel on the Courses page, floating tiles anywhere. The
@@ -581,7 +579,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 
   return {
     paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
-    renderProgress, renderNew, renderCalc, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
+    renderProgress, renderNew, renderCalc, syncSyl, syncInsights, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
     syncTodo, syncCardTasks, syncRemind, syncWidgets,
     ctx: { myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
