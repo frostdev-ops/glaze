@@ -134,9 +134,11 @@ class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_N
 const ultraPage = () => {
   const S = { enabled: true, enhance: { insights: true, streak: false } };
   const asked = [], sent = [];
-  const tools = new El('div');
+  // Ultra's header tools, and B5's panel bar (features/widgets.js) with its What Glaze can do.
+  const tools = new El('div'), bar = new El('div');
+  bar.append(Object.assign(new El('button'), { textContent: 'What Glaze can do' }));
   const doc = { body: new El('body'), activeElement: null, createElement: (t) => new El(t), createElementNS: (ns, t) => new El(t),
-    querySelector: (sel) => (sel === 'div.base-courses-header-container div.base-header-tools' ? tools : null) };
+    querySelector: (sel) => ({ 'div.base-courses-header-container div.base-header-tools': tools, '#gz-panel .gz-dash-bar': bar })[sel] || null };
   const books = { _101_1: ufix('grades'), _102_1: ufix('grades-status') };
   const context = vm.createContext({
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => true, settings: () => S, need: () => Promise.resolve(), myCourses: async () => ufix('memberships').results },
@@ -155,14 +157,18 @@ const ultraPage = () => {
   context.window.top = context.window;
   vm.runInContext(fs.readFileSync(require.resolve('../lib/ultra.js'), 'utf8'), context);
   const ui = vm.runInContext(source, context);
-  return { ui, asked, sent, tools };
+  return { ui, asked, sent, tools, bar, S };
 };
 
 test("on Ultra: a button in the Courses page's header, and this term read from Ultra, each course's gradebook", async () => {
   const p = ultraPage();
   p.ui.sync();
-  assert.equal(p.tools.children[0]?.textContent, 'Insights');
-  assert.equal(p.tools.children[0].className, 'gz-ins-open');
+  assert.equal(p.tools.children[0]?.textContent, 'Insights', 'no panel (notes and widgets off): in the header');
+  assert.equal(p.tools.children[0].className, 'gz-w-small gz-ins-open');
+  // With Glaze's panel on, in its bar, after What Glaze can do (append moves it: one button).
+  p.S.enhance.widgets = true;
+  p.ui.sync();
+  assert.deepEqual(p.bar.children.map((b) => b.textContent), ['What Glaze can do', 'Insights']);
   p.ui.open();
   await settle(30);
   // Every request a GET to this Ultra's API, redirects refused: the four courses' gradebooks, and one course's due-date

@@ -1509,4 +1509,5 @@
   "Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.": "Desconectado neste dispositivo. O Google não confirmou que removeu o acesso do Glaze: você pode removê-lo em myaccount.google.com/connections.",
   "Disconnected.": "Desconectado.",
   "Test": "Teste",
+  "Not saved: this page now shows another course.": "Não salvo: esta página agora mostra outro curso.",
 };

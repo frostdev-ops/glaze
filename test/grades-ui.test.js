@@ -639,8 +639,12 @@ const ufix = (n) => JSON.parse(read(`test/fixtures/ultra-${n}.json`));
 const U_NOW = Date.parse('2026-10-15T12:00:00Z'); // in the fixtures' Fall 2026 term
 class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_NOW])); } static now() { return U_NOW; } }
 // features/grades.js on an Ultra page, with B4's anchors: a course's overall grade header, or the Grades page's terms.
-// books: what content-ultra.js's bookFor has for each course; answers: Ultra's API by a part of the address.
-const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {} } = {}) => {
+// books: what content-ultra.js's bookFor has for each course (a new array is a new answer, with a new key); answers:
+// Ultra's API by a part of the address. held: this tab's storage reads wait while held.on. failGet(keys, n): whether
+// the page's nth storage.local read (of keys) fails, as Chrome's do (runtime.lastError, no answer). loc: the page's
+// address, which the test may change (Ultra moves between pages in one document).
+const bookIds = new WeakMap();
+const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false } = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(/\/outline/.test(path) ? el(doc, 'aside', { className: 'outline-actions' }, el(doc, 'div', { className: 'js-details-and-actions outline-action-block' }), el(doc, 'div', { className: 'conditional-block' }))
@@ -659,20 +663,30 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
   };
   // Promise or callback, as Chrome answers either.
   const sendMessage = (m, cb) => { const r = store.send(m, sender); if (cb) r.then(cb); return r; };
-  const chrome = { runtime: { sendMessage }, storage: { local: store.tab({}), sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
+  const tab = store.tab(held);
+  let reads = 0;
+  const local = { ...tab, get: (k, cb) => {
+    if (!failGet([].concat(k), ++reads)) return tab.get(k, cb);
+    const run = () => { chrome.runtime.lastError = { message: 'read failed' }; try { cb(undefined); } finally { delete chrome.runtime.lastError; } };
+    if (held.on) held.queue.push(run); else Promise.resolve().then(run);
+  } };
+  const chrome = { runtime: { sendMessage }, storage: { local, sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
+  const loc = { pathname: path, search: '', hash: '', origin: UO };
+  const bookKey = (a) => { if (!bookIds.has(a)) bookIds.set(a, bookIds.n = (bookIds.n || 0) + 1); return bookIds.get(a); };
   ctx = vm.createContext({
-    document: doc, location: { pathname: path, search: '', hash: '', origin: UO }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-    CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome, TextEncoder, fetch, Date: FixedDate,
+    document: doc, location: loc, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome, TextEncoder, fetch, Date: FixedDate, File: class File {}, AbortController,
     GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES,
     GZ_CTX: {
       site: 'ultra', t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', need, settings: () => state.settings, on: () => true,
-      courseId: () => path.match(/_\d+_\d+/)?.[0], myCourses: () => Promise.resolve(ufix('memberships').results),
-      bookFor: (cid) => (books[cid] ? { results: books[cid], key: `k${cid}` } : { key: '' }),
+      courseId: () => loc.pathname.match(/\/courses\/(_\d+_\d+)/)?.[1], myCourses: () => Promise.resolve(ufix('memberships').results),
+      bookFor: (cid) => (books[cid] ? { results: books[cid], key: `k${cid}:${bookKey(books[cid])}` } : { key: '' }),
     },
   });
   vm.runInContext(read('lib/gradecalc.js'), ctx);
   vm.runInContext(read('features/grades.js'), ctx);
-  return { doc, state, store, ctx, UI: ctx.GZ_GRADES_UI, box: () => doc.getElementById('gz-calc'), gpa: () => doc.getElementById('gz-gpa') };
+  const release = () => { held.on = false; while (held.queue.length) held.queue.shift()(); };
+  return { doc, state, store, ctx, loc, books, held, release, UI: ctx.GZ_GRADES_UI, box: () => doc.getElementById('gz-calc'), gpa: () => doc.getElementById('gz-gpa') };
 };
 
 test("Ultra what-if: under the overall grade, by the course's own recipe (Blackboard's 88%), kept by site and user", async () => {
@@ -712,6 +726,111 @@ test("Ultra what-if: Glaze 2.2's saved scores move over, the graded one goes wit
   assert.deepEqual(store.data.whatIf, { _777_1: { _1_1: 5 } }, "only this course's leave the old store");
 });
 
+// The fixture course's gradebook as Ultra answers it later: some items graded (score) since, and Blackboard's overall.
+const regraded = (scores, overall) => ufix('grades').results.map((r) => (r.column.externalGrade ? { ...r, displayGrade: { ...r.displayGrade, score: overall } }
+  : r.columnId in scores ? { ...r, status: 'GRADED', displayGrade: { isOverride: false, score: scores[r.columnId] } } : r));
+const typeScore = async (p, id, v) => { const i = find(p.box(), (e) => e.dataset.f === `s:${id}`); i.value = String(v); i.fire('input'); await settle(10); };
+
+test('Ultra what-if: a gradebook Ultra answers anew while the calculator is open is read in (Codex B4 #1)', async () => {
+  const p = ultraPage();
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  await typeScore(p, '_603_1', 100);
+  assert.deepEqual(totals(p), ['88%', '90%', '77.33%']);
+  // The same answer again (Ultra's page asks once a minute): nothing is redrawn.
+  const box = p.box();
+  p.UI.render();
+  await settle(10);
+  assert.equal(p.box(), box, 'same generation, same box');
+  // Lab Report 3 graded 50, and Blackboard's overall now 80: the open view follows, and the what-if for it goes.
+  p.books._101_1 = regraded({ _603_1: 50 }, 80);
+  p.UI.render();
+  await settle(10);
+  assert.deepEqual(totals(p), ['80%', '80%', '70.66%'], 'as a fresh page shows it');
+  assert.match(p.box().textContent, /Your grade for Lab Report 3 is in, so your what-if score for it is gone\./);
+  assert.equal(p.store.data[UKEY]?._101_1?.s?._603_1, undefined, 'and it leaves the store');
+  // What you typed since the page loaded stays; a real grade that changes takes away the what-if typed over it.
+  await typeScore(p, '_602_1', 80);
+  await typeScore(p, '_601_1', 100);
+  p.books._101_1 = regraded({ _603_1: 50, _601_1: 95 }, 81);
+  p.UI.render();
+  await settle(10);
+  assert.match(p.box().textContent, /Your grade for Lab Report 1 changed, so your what-if score for it is gone\./);
+  assert.deepEqual(totals(p), ['81%', '82%', '82%'], 'Lab Report 2 at 80 still counts');
+  assert.deepEqual(Object.keys(p.store.data[UKEY]._101_1.s), ['_602_1']);
+});
+
+// Codex B4 #2: Glaze 2.2's scores move in one step in the worker, or not at all.
+const LEGACY = () => ({ _101_1: { _603_1: 100 }, _777_1: { _1_1: 5 } });
+const ACCOUNT = () => ({ _101_1: { s: { _601_1: [45, 90] }, h: ['_602_1'], p: [], c: 95, at: 1 } });
+test('Ultra what-if migration: with every read working, other scores, work left out and the GPA grade stay; only the moved entry leaves the old store', async () => {
+  const store = shared({ whatIf: LEGACY(), [UKEY]: ACCOUNT() });
+  const p = ultraPage({ store });
+  p.UI.render();
+  await settle(14);
+  const rec = store.data[UKEY]._101_1;
+  assert.deepEqual(Object.fromEntries(Object.entries(rec.s).map(([k, v]) => [k, v.slice(0, 2)])), { _601_1: [45, 90], _603_1: [100, null] });
+  assert.deepEqual([rec.h, rec.c], [['_602_1'], 95]);
+  assert.deepEqual(store.data.whatIf, { _777_1: { _1_1: 5 } });
+});
+
+test('Ultra what-if migration: a failed read of your record changes nothing, and is tried again later', async () => {
+  const store = shared({ whatIf: LEGACY(), [UKEY]: ACCOUNT() });
+  const p = ultraPage({ store, failGet: (keys) => keys.includes(UKEY) });
+  p.UI.render();
+  await settle(14);
+  assert.deepEqual(store.data[UKEY], ACCOUNT(), 'your scores and the work you left out are still there');
+  assert.deepEqual(store.data.whatIf, LEGACY(), 'and nothing left the old store');
+  assert.equal(p.box(), null, 'no calculator over a record that could not be read');
+});
+
+test("Ultra what-if migration: a failed read of the old store moves nothing and deletes nothing of it", async () => {
+  const store = shared({ whatIf: LEGACY(), [UKEY]: ACCOUNT() });
+  const p = ultraPage({ store, failGet: (keys) => keys.includes('whatIf') });
+  p.UI.render();
+  await settle(14);
+  assert.deepEqual(store.data.whatIf, LEGACY());
+  assert.deepEqual(store.data[UKEY], ACCOUNT());
+});
+
+test("Ultra what-if migration: a failed second read of the old store (the clean-up's) never deletes another course's scores", async () => {
+  let n = 0;
+  const store = shared({ whatIf: LEGACY(), [UKEY]: ACCOUNT() });
+  const p = ultraPage({ store, failGet: (keys) => keys.includes('whatIf') && ++n === 2 });
+  p.UI.render();
+  await settle(14);
+  assert.deepEqual(store.data.whatIf?._777_1, { _1_1: 5 }, 'the course not opened keeps its score');
+});
+
+test('Ultra what-if migration: a write that fails keeps both stores as they were', async () => {
+  const store = shared({ whatIf: LEGACY(), [UKEY]: ACCOUNT() });
+  store.fail.add(UKEY);
+  const p = ultraPage({ store });
+  p.UI.render();
+  await settle(14);
+  assert.deepEqual(store.data.whatIf, LEGACY());
+  assert.deepEqual(store.data[UKEY], ACCOUNT());
+});
+
+test('Ultra what-if migration: a Clear all made while the old store was being read keeps those scores cleared', async () => {
+  const store = shared({ whatIf: LEGACY() });
+  const held = { on: true, queue: [] };
+  const p = ultraPage({ store, held });
+  p.UI.render(); // reads asked at U_NOW, held
+  await settle(10);
+  const clear = await store.send({ type: 'glaze:whatif', op: 'clear', key: UKEY, at: U_NOW + 100 }, { id: WORKER_ID, tab: { id: 2 }, frameId: 0, url: `${UO}/ultra/grades` });
+  assert.deepEqual(clear, { ok: true });
+  p.release(); // the old read answers after the clear
+  await settle(14);
+  assert.equal(store.data[UKEY]?._101_1?.s?._603_1, undefined, 'not brought back past the clear');
+  await open(p);
+  await settle(10);
+  assert.equal(totals(p)[1], '88%');
+  assert.deepEqual(store.data.whatIf, { _777_1: { _1_1: 5 } }, 'cleared, so gone from the old store too; other courses stay');
+});
+
 test('Ultra what-if: a course with no overall grade is an estimate from the share of points, and says so', async () => {
   const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
   p.UI.render();
@@ -726,7 +845,8 @@ test('Ultra what-if: a course with no overall grade is an estimate from the shar
 });
 
 test("Ultra GPA: on Grades, above the terms, this term's courses with Blackboard's grade or an estimate, schemas asked once", async () => {
-  const p = ultraPage({ path: '/ultra/grades', enhance: { gpa: true }, books: { _101_1: ufix('grades').results, _102_1: ufix('grades-status').results }, answers: { '/gradebook/schemas': { results: [] } } });
+  // Each course's gradebook through lib/ultra.js's reader (not the page's own requests); the page's own answers aren't used.
+  const p = ultraPage({ path: '/ultra/grades', enhance: { gpa: true }, books: {}, answers: { '/gradebook/schemas': { results: [] }, '/courses/_101_1/gradebook/grades?': { results: ufix('grades').results }, '/courses/_102_1/gradebook/grades?': { results: ufix('grades-status').results }, '/gradebook/grades?': { results: [] } } });
   p.UI.render();
   await settle(12);
   p.UI.render();
@@ -739,7 +859,10 @@ test("Ultra GPA: on Grades, above the terms, this term's courses with Blackboard
   assert.deepEqual(cells, ['B+ · 88% · 3.30', 'B · 85% · 3.00 · Estimate', 'No grade yet', 'No grade yet']);
   assert.match(box.textContent, /From your current grades in Blackboard/);
   const schemas = p.state.asked.filter(([, , u]) => /schemas/.test(u));
-  assert.deepEqual(schemas, [['GET', 'error', '/learn/api/public/v1/courses/_101_1/gradebook/schemas?limit=200'], ['GET', 'error', '/learn/api/public/v1/courses/_102_1/gradebook/schemas?limit=200']]);
+  assert.deepEqual(schemas, [['GET', 'error', '/learn/api/public/v1/courses/_101_1/gradebook/schemas?limit=200']], 'only for a course with an overall grade');
+  const books = p.state.asked.filter(([, , u]) => /gradebook\/grades/.test(u));
+  assert.equal(books.length, 4, 'each course once');
+  assert.ok(books.every(([m, r, u]) => m === 'GET' && r === 'error' && u.startsWith('/learn/api/v1/courses/')));
 });
 
 // The public content API's answer for a course, as B4 measured it: id, parentId, title, body, contentHandler.id and
@@ -781,6 +904,50 @@ test('Ultra syllabus import: on the outline under Ultra\'s details, from a docum
   assert.ok(kept, 'kept under this site, user and course');
   assert.deepEqual(kept.scale, [['A', 93], ['B', 83], ['C', 73], ['D', 63], ['F', 0]]);
   assert.match(dlg.textContent, /Blackboard's own weights are the ones that count/);
+});
+
+// Codex B4 #3: Ultra moves from course to course in one document; what's saved belongs to the course on the page.
+const sylPage = () => {
+  const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': { results: [] } } });
+  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  return { ...p, S: p.ctx.GZ_SYL_UI, dlg: () => p.doc.getElementById('gz-syl-dlg') };
+};
+const pasteAndRead = async (p, text) => {
+  p.doc.getElementById('gz-syl-file').files = [];
+  p.doc.getElementById('gz-syl-paste').value = text;
+  byText(p.dlg(), 'Read it').fire('click');
+  await settle(12);
+};
+test('Ultra syllabus import after moving to another course saves under that course, with its GPA scale (Codex B4 #3)', async () => {
+  const p = sylPage();
+  p.S.sync(true);
+  await settle(12);
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.S.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  await pasteAndRead(p, 'Instructor: Dr. Course Two\nGrading scale: A 90, B 80, C 70, D 60, F 0');
+  byText(p.dlg(), 'Save').fire('click');
+  await settle(20);
+  assert.match(p.store.data[`syllabus:${UO}/_900_1/_102_1`]?.prof?.name || '', /Course Two/);
+  assert.equal(p.store.data[`syllabus:${UO}/_900_1/_101_1`], undefined, 'nothing under the course the page showed before');
+});
+
+test('Ultra syllabus import: a review left open while the page moved to another course is not saved', async () => {
+  const p = sylPage();
+  p.S.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  await pasteAndRead(p, 'Instructor: Dr. Course One');
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.S.sync(true);
+  await settle(12);
+  byText(p.dlg(), 'Save').fire('click');
+  await settle(20);
+  assert.equal(Object.keys(p.store.data).filter((k) => k.startsWith('syllabus:')).length, 0, 'saved under neither course');
+  assert.match(p.dlg().textContent, /Not saved: this page now shows another course\./);
 });
 
 test('an Ultra page may change only its own site’s grade records, by its own ids', async () => {

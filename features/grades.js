@@ -28,6 +28,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const label = (el, text) => { el.setAttribute('aria-label', text); return el; };
   const getArea = (area, key) => new Promise((res) => { try { chrome.storage[area].get(key, (r) => res(r?.[key])); } catch { res(undefined); } });
+  // A read that says whether it worked ({ ok, v }): a failed one (runtime.lastError, no answer) is no empty store.
+  const readArea = (area, key) => new Promise((res) => {
+    try { chrome.storage[area].get(key, (r) => res(chrome.runtime.lastError || !r || typeof r !== 'object' ? { ok: false } : { ok: true, v: r[key] })); } catch { res({ ok: false }); }
+  });
   // Ultra writes a grade cut, not rounded, to two places (82.456 is 82.45%); Canvas rounds it.
   const pct = (x) => GZ_I18N.pct(ultra ? Math.floor(x * 100 + 1e-9) / 100 : C.round2(x), locale());
   const two = (x) => (x == null ? '–' : new Intl.NumberFormat(GZ_I18N.locale(locale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x));
@@ -92,29 +96,52 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // from your course list, and what Glaze 2.2's Ultra what-if kept for the course (whatIf), to move over.
   const begin = async (st) => {
     st.status = 'asking';
+    const at = Date.now(); // before anything is read: the old store's scores are moved as of then, never later
     const row = ultra ? { id: st.cid, enrollments: [{ type: 'student', user_id: (await X.myCourses()).find((m) => m?.courseId === st.cid)?.userId }] }
       : (await canvasCourses()).find((c) => String(c.id) === st.cid);
     const me = studentIn(row);
-    if (!me || (ultra && !/^_\d+_\d+$/.test(me.user_id || ''))) { Object.assign(st, { status: 'none', at: Date.now(), tries: (st.tries || 0) + 1 }); return; }
+    const none = () => Object.assign(st, { status: 'none', at: Date.now(), tries: (st.tries || 0) + 1 });
+    if (!me || (ultra && !/^_\d+_\d+$/.test(me.user_id || ''))) return none();
     Object.assign(st, { row, me, key: whatIfKey(me), status: 'idle' });
     // With the weights the student's syllabus lists, if one was imported (features/syllabus.js): shown, never used.
-    const [saved, syl, old] = await Promise.all([getArea('local', st.key), getArea('local', `syllabus:${location.origin}/${me.user_id}/${st.cid}`), ultra ? getArea('local', 'whatIf') : null]);
-    st.saved = saved?.[st.cid];
+    const [saved, syl, old] = await Promise.all([readArea('local', st.key), getArea('local', `syllabus:${location.origin}/${me.user_id}/${st.cid}`), ultra ? readArea('local', 'whatIf') : {}]);
+    // What you saved couldn't be read: no calculator over it (a change from here would replace it), asked again later.
+    if (!saved.ok) return none();
+    st.saved = saved.v?.[st.cid];
     st.syl = Array.isArray(syl?.weights) ? syl.weights : [];
-    st.old = old?.[st.cid];
+    // The old store couldn't be read: nothing moves now; the next page tries again.
+    st.old = old.ok ? old.v?.[st.cid] : undefined;
+    st.oldAt = at;
     // Ultra's page has the course's gradebook already (bookFor): no request, so its figure is shown at once, closed.
     if (st.saved || st.old || (ultra && X.bookFor(st.cid).results)) load(st); else whatIf();
   };
-  // Ultra: the course's gradebook as the page already has it (content-ultra.js bookFor), else asked through lib/ultra.js;
-  // the titles of its categories only when one in the recipe has no work to name it. → GZ_ULTRA.grade().
+  // Ultra: the course's gradebook as its own Grades page already has it (content-ultra.js bookFor, asked there anyway),
+  // else asked through lib/ultra.js; the titles of its categories only when one in the recipe has no work to name it.
+  // → { g: GZ_ULTRA.grade(), book: the page's answer it came from (its key), or null }.
   const reader = () => GZ_ULTRA.read({ origin: location.origin, live: () => live() });
-  const ultraGrade = async (cid, uid) => {
+  const pageBook = (cid) => (GRADES.test(location.pathname) && courseHere() === cid ? X.bookFor(cid) : {});
+  const ultraGrade = async (st) => {
     await ultraIn();
-    const rows = X.bookFor(cid).results || await reader().grades(cid, uid);
+    const b = pageBook(st.cid);
+    const rows = b.results || await reader().grades(st.cid, st.me.user_id);
     const g = GZ_ULTRA.grade(rows);
-    if (g.kind !== 'weighted' || !g.course.groups.some((x) => !x.name)) return g;
-    const cats = await reader().all(`/learn/api/v1/courses/${cid}/gradebook/categories`).catch(() => []);
-    return GZ_ULTRA.grade(rows, [], Object.fromEntries(cats.map((c) => [c?.id, String(c?.title || '').slice(0, 100)])));
+    st.names = {};
+    if (g.kind === 'weighted' && g.course.groups.some((x) => !x.name)) {
+      const cats = await reader().all(`/learn/api/v1/courses/${st.cid}/gradebook/categories`).catch(() => []);
+      st.names = Object.fromEntries(cats.map((c) => [c?.id, String(c?.title || '').slice(0, 100)]));
+    }
+    return { g: GZ_ULTRA.grade(rows, [], st.names), book: b.results ? b.key : null };
+  };
+  // Ultra's page asked for the course's gradebook again (content-ultra.js, at most once a minute) and the answer changed:
+  // the course is read anew and what you have now (not what was saved when the page loaded) is checked against it as at
+  // load. A grade that arrived or changed takes the what-if typed for it away, with a word, and the record is kept so.
+  const rebuild = (st, rows, book) => {
+    const g = GZ_ULTRA.grade(rows, [], st.names);
+    const r = C.reconcile(st.rec, g.course);
+    const changed = JSON.stringify(r.kept) !== JSON.stringify(st.rec);
+    Object.assign(st, { g, course: g.course, book, rec: r.kept, what: r.what, gone: [...st.gone, ...r.gone], v: st.v + 1 });
+    if (r.gone.length) st.open = true;
+    if (changed) keep(st);
   };
   const load = (st) => {
     if (st.status === 'loading' || st.status === 'ready') return st.p;
@@ -123,15 +150,16 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     whatIf();
     const { cid, row } = st;
     if (ultra) {
-      return (st.p = Promise.all([ultraGrade(cid, st.me.user_id), calcIn()]).then(([g]) => {
-        Object.assign(st, { g, course: g.course, scheme: C.SCHEME, period: null, truth: null, anon: false });
-        // Glaze 2.2's scores come over beside anything saved since, saved against no grade (C.oldScores): reconcile then
-        // drops those whose grade has come in, and says so. The old record goes once the new one is kept.
-        const moved = st.old ? C.oldScores({ [cid]: st.old }, cid) : {};
-        const r = C.reconcile({ ...st.saved, s: { ...moved, ...st.saved?.s } }, st.course);
-        Object.assign(st, { rec: r.kept, what: r.what, gone: r.gone, status: 'ready' });
-        if (r.gone.length) st.open = true;
-        if (r.gone.length || st.old) keep(st).then((x) => { if (x?.ok && st.old) dropOld(cid); });
+      return (st.p = Promise.all([ultraGrade(st), calcIn()]).then(([{ g, book }]) => {
+        Object.assign(st, { g, course: g.course, book, scheme: C.SCHEME, period: null, truth: null, anon: false });
+        const r = C.reconcile(st.saved, st.course);
+        // Glaze 2.2's scores, saved against no grade (C.oldScores): those whose grade has come in are gone, with a word.
+        const old = C.oldScores({ [cid]: st.old }, cid);
+        const was = C.reconcile({ s: old }, st.course);
+        Object.assign(st, { rec: r.kept, what: r.what, gone: [...r.gone, ...was.gone], status: 'ready' });
+        if (st.gone.length) st.open = true;
+        if (r.gone.length) keep(st);
+        if (Object.keys(old).length) migrate(st, old, Object.keys(was.kept.s));
       }, () => { st.status = 'failed'; }).then(() => { st.v++; whatIf(); }));
     }
     return (st.p = Promise.all([
@@ -161,15 +189,19 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const rec = st.rec;
     return send({ op: 'course', key: st.key, cid: st.cid, rec: { s: rec.s, h: rec.h, p: rec.p } });
   };
-  // The course's scores leave Glaze 2.2's store (whatIf, by course id alone), and the store goes with its last course.
-  const dropOld = (cid) => {
-    try {
-      chrome.storage.local.get('whatIf', (r) => {
-        const { [cid]: _, ...rest } = r?.whatIf && typeof r.whatIf === 'object' ? r.whatIf : {};
-        if (Object.keys(rest).length) chrome.storage.local.set({ whatIf: rest }); else chrome.storage.local.remove('whatIf');
-      });
-    } catch { /* reloaded */ }
-  };
+  // Glaze 2.2's scores for the course move in the worker, in one step with leaving its old store (whatIf, by course id
+  // alone), as of before they were read (st.oldAt) and against the record's last Clear all (lib/gradecalc.js moveLegacy):
+  // seen, as read; keep, those still waiting for a grade. Shown here only once the worker says which came in; a failure
+  // leaves both stores as they were, for the next page to try again.
+  const migrate = (st, old, keep) => send({ op: 'legacy', key: st.key, cid: st.cid, at: st.oldAt, seen: Object.fromEntries(Object.entries(old).map(([id, [v]]) => [id, v])), keep })
+    .then((x) => {
+      const add = (x?.ok ? x.moved || [] : []).filter((id) => old[id] && !(id in st.rec.s));
+      if (!add.length) return;
+      for (const id of add) st.rec.s[id] = old[id];
+      st.what = C.whatOf(st.rec);
+      st.v++;
+      whatIf();
+    });
 
   const whatIf = () => {
     const old = document.getElementById('gz-calc');
@@ -181,6 +213,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (!st) { W.set(cid, (st = { cid, status: 'start', v: 0, open: false, target: '' })); begin(st); }
     if (st.status === 'none' && again(st)) begin(st);
     if (['start', 'asking', 'none'].includes(st.status)) return old?.remove();
+    if (ultra && st.status === 'ready') { const b = pageBook(cid); if (b.results && b.key !== st.book) rebuild(st, b.results, b.key); }
     const key = `${cid} ${st.v} ${locale()}`;
     if (old?.dataset.key === key && (ultra ? old.previousElementSibling === anchor : old.nextElementSibling === anchor)) return;
     const box = old?.dataset.key === key ? old : drawWhatIf(st);
@@ -372,8 +405,17 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // course's letter: the scale you gave it, else Canvas's letter where the course has a scheme, else Canvas's
   // default scheme on its current score. Choices per course sync (gpaCourses); what-if grades stay on this device.
   // Ultra: on its Grades page, this term's courses (lib/ultra.js current) in the shape of Canvas's list, each one's grade
-  // read from its gradebook as the page has it (ultraRow); its letter cut-offs are its overall column's grading schema.
-  const D = { status: 'start', v: 0, tries: 0, schemes: new Map(), raw: new Map() };
+  // from its gradebook (ultraRow), read once a page through lib/ultra.js as Canvas's course list is (D.books: course id →
+  // rows, null while asked, [] when it couldn't be read); its letter cut-offs are its overall column's grading schema.
+  const D = { status: 'start', v: 0, tries: 0, schemes: new Map(), raw: new Map(), books: new Map() };
+  const bookOf = (c) => {
+    if (!D.books.has(c.id)) {
+      D.books.set(c.id, null);
+      const got = (rows) => { D.books.set(c.id, rows); D.v++; gpa(); };
+      ultraIn().then(() => reader().grades(c.id, c.enrollments[0].user_id)).then(got, () => got([]));
+    }
+    return D.books.get(c.id);
+  };
   const ultraList = async () => {
     await ultraIn();
     return GZ_ULTRA.current(await X.myCourses(), Date.now()).courses.filter((c) => /^_\d+_\d+$/.test(c.m.userId || ''))
@@ -382,10 +424,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // A course's grade as Canvas's enrollment gives it: Blackboard's own overall figure and the letter it writes (or the
   // schema's letter for it), else the share of points, marked est; none until the course's gradebook is in.
   const ultraRow = (c) => {
-    const rows = X.bookFor(c.id).results;
+    const rows = bookOf(c);
     const e = c.enrollments[0];
     if (!rows) return e;
-    schemeFor(c.id);
+    if (rows.some((r) => r?.column?.externalGrade)) schemeFor(c.id); // a scale is its overall column's, so only with one
     const g = GZ_ULTRA.grade(rows, D.raw.get(c.id) || []);
     if (D.raw.get(c.id)) D.schemes.set(c.id, g.scale || false);
     const score = g.overall ?? g.percent();
@@ -486,8 +528,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     // Ultra: asked for from another page (the command palette), once.
     if (ultra && sessionStorage.getItem('gz-gpa-open')) { sessionStorage.removeItem('gz-gpa-open'); D.hist = D.scroll = true; }
     if (D.status !== 'ready') return;
-    // On Ultra a course's grade arrives with its gradebook, after the list (content-ultra.js bookFor).
-    const key = `${D.v} ${locale()} ${e.gpaPlus} ${e.gpaWeighted}${ultra ? D.list.map((c) => ` ${X.bookFor(c.id).key}`).join('') : ''}`;
+    const key = `${D.v} ${locale()} ${e.gpaPlus} ${e.gpaWeighted}`;
     const placed = (e.gpaAfter ? anchor.nextElementSibling : anchor.previousElementSibling) === old;
     if (old?.dataset.key === key && placed) return;
     const box = old?.dataset.key === key ? old : drawGpa(e);

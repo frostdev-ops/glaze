@@ -20,6 +20,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   let who = null; // { uid, cid, key, course }
   let rec = null; // what is kept for this course, or null
   let dlg = null, opener = null;
+  let opened = null; // the course (who) the open dialog is for
   let reading = null; // the AbortController of a PDF or picture being read: another step or closing the dialog calls it off
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false && k !== '')); return e; };
@@ -43,12 +44,13 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
   // ---- who and what -----------------------------------------------------------------------------------------------
-  const start = async () => {
+  // Who you are in which course: Ultra moves from course to course in one document, so each course is started on its own
+  // (ready), an answer for a course the page has left is dropped, and every action keeps the course it began in.
+  const start = async (cid) => {
     // W14's day and time reader first: the extractor reads class times with it.
     await need('lib/classes.js', () => globalThis.GZ_CLASSES);
     await need('lib/syllabus.js', () => globalThis.GZ_SYLLABUS);
     L = globalThis.GZ_SYLLABUS;
-    const cid = cidHere();
     // Ultra: you are the course list's user; the course's term (its start dates the syllabus's) is lib/ultra.js's reading.
     if (ultra) await need('lib/ultra.js', () => globalThis.GZ_ULTRA);
     const mem = ultra && await X.myCourses();
@@ -56,14 +58,17 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       : await Promise.all([X.profile(), X.canvasCourses()]);
     if (!cid || !(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no course or profile');
     const course = list.find((c) => String(c.id) === cid) || null;
-    who = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course };
-    rec = L.tidy(await get('local', who.key));
+    const w = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course };
+    const kept = L.tidy(await get('local', w.key));
+    if (cid !== cidHere()) throw new Error('another course now');
+    [who, rec] = [w, kept];
   };
   const ready = () => {
-    if (who && who.cid === cidHere()) return Promise.resolve();
-    if (!starting || (failedAt && Date.now() - failedAt > 60000)) {
+    const cid = cidHere();
+    if (who && who.cid === cid) return Promise.resolve();
+    if (!starting || starting.cid !== cid || (failedAt && Date.now() - failedAt > 60000)) {
       failedAt = 0;
-      starting = start().catch((e) => { failedAt = Date.now(); throw e; });
+      starting = Object.assign(start(cid).catch((e) => { failedAt = Date.now(); throw e; }), { cid });
     }
     return starting;
   };
@@ -95,7 +100,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const old = document.getElementById('gz-syl');
     const place = on && who && X.on() && where();
     if (!place) { old?.remove(); drawn = ''; return; }
-    const sig = `${JSON.stringify(rec)} ${locale()} ${!!page()}`;
+    const sig = `${who.cid} ${JSON.stringify(rec)} ${locale()} ${!!page()}`;
     if (old && !force && sig === drawn) return;
     drawn = sig;
     const box = rec ? card() : bar();
@@ -129,20 +134,20 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     if (r.scale.length) row(t('Grading scale'), r.scale.map(([l, v]) => `${l} ${v}`).join(', '));
     const h = make('h2', { id: 'gz-syl-h', tabIndex: -1, textContent: t('From your syllabus') });
     const box = make('section', { id: 'gz-syl', className: `gz-syl-card${ultra ? ' outline-action-block' : ''}` }, h, make('dl', {}, ...rows),
-      make('div', { className: 'gz-syl-actions' }, button(t('Edit'), 'edit', () => open(r)), button(t('Delete'), 'delete', remove)));
+      make('div', { className: 'gz-syl-actions' }, button(t('Edit'), 'edit', () => open(r)), button(t('Delete'), 'delete', remove(who))));
     return attr(box, { 'aria-labelledby': 'gz-syl-h' });
   };
-  const remove = async () => {
-    if (!confirm(t('Delete what Glaze kept from this syllabus? Your GPA scale and To Do tasks stay.'))) return;
-    const r = await send({ type: 'glaze:syllabus', key: who.key, rec: null, at: Date.now() });
-    if (r?.ok) { rec = null; draw(true); document.querySelector('#gz-syl button')?.focus(); }
+  const remove = (w) => async () => {
+    if (!confirm(t('Delete what Glaze kept from this syllabus? Your GPA scale and To Do tasks stay.')) || w !== who) return;
+    const r = await send({ type: 'glaze:syllabus', key: w.key, rec: null, at: Date.now() });
+    if (r?.ok && w === who) { rec = null; draw(true); document.querySelector('#gz-syl button')?.focus(); }
   };
 
   // ---- reading ----------------------------------------------------------------------------------------------------
   const fromPage = () => open(null, true);
   // ocr: what came from a picture (features/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
   const extract = (text, ocr) => {
-    const c = who.course;
+    const c = opened.course;
     const startAt = Date.parse(c?.term?.start_at || c?.start_at || '');
     const r = L.extract(text, { start: Number.isFinite(startAt) ? startAt : Date.now(), md: monthFirst(), hint: locale() });
     if (!ocr) return r;
@@ -161,6 +166,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     if (usePage) await docIn().catch(() => {});
     if (!allowed(cid)) return;
     opener = document.activeElement;
+    opened = who;
     dlg?.close();
     dlg = attr(make('dialog', { id: 'gz-syl-dlg' }), { 'aria-labelledby': 'gz-syl-title' });
     dlg.addEventListener('close', () => { reading?.abort(); dlg?.remove(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
@@ -220,12 +226,13 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       say);
     first(file);
   };
-  // Ultra: a document of the course's, read from the public content API (its text and its blocks'; reading it there marks
-  // nothing as opened), listed once the dialog asks, syllabus-like titles first. Shown only when the course has one.
+  // Ultra: a document of the course's, read from the public content API (its text and its blocks'; a list of metadata and text, which
+  // [I] marks nothing as opened: not measured), listed once the dialog asks, syllabus-like titles first. Shown only when the
+  // course has one.
   const SYL = /syllab|course (outline|info)|programa|lehrplan|plan de cours|studiewijzer/i;
   const docPicker = (say) => {
     const box = make('div', { className: 'gz-syl-f', hidden: true });
-    const cid = who.cid, mine = dlg;
+    const cid = opened.cid, mine = dlg;
     need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, live: () => dlg === mine && allowed(cid) })
       .all(`/learn/api/public/v1/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,availability.available`)).then((all) => {
       const avail = all.filter((c) => c?.availability?.available === 'Yes'); // not items held back from you (B0)
@@ -309,6 +316,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   };
 
   const review = (r, read) => {
+    const w = opened; // the course this dialog is for, whatever the page shows by the time it is saved
     const saved = !!r.saved;
     const p = r.prof;
     const say = status();
@@ -356,14 +364,16 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const out = L.tidy({ prof: { name: name.value, email: email.value, office: office.value, note: hoursNote.value },
         hours: times(hours).map(strip), meetings: times(meets).map(strip), dates: ds.map(({ row, task, ...d }) => d), scale: sc, weights: ws, at: Date.now() });
       if (!out) { say.textContent = t('There is nothing to save.'); return; }
-      const res = await send({ type: 'glaze:syllabus', key: who.key, rec: out, at: out.at });
+      // Refused when the page has moved to another course since this review began (Ultra moves in one document).
+      if (w !== who || w.cid !== cidHere()) { say.textContent = t('Not saved: this page now shows another course.'); return; }
+      const res = await send({ type: 'glaze:syllabus', key: w.key, rec: out, at: out.at });
       if (!res?.ok) { say.textContent = t('Not saved. Try again in a moment.'); return; }
-      rec = L.tidy(res.rec);
+      if (w === who) rec = L.tidy(res.rec);
       const notes = [];
-      const scaleSaid = useScale.checked && sc.length ? await gpaScale(C, sc) : '';
+      const scaleSaid = useScale.checked && sc.length ? await gpaScale(C, sc, w) : '';
       if (scaleSaid) notes.push(scaleSaid);
       const tasks = ds.filter((d) => d.task);
-      if (tasks.length && !await addTasks(tasks)) notes.push(t('The dates could not be added to To Do.'));
+      if (tasks.length && !await addTasks(tasks, w)) notes.push(t('The dates could not be added to To Do.'));
       if (notes.length) { say.textContent = `${t('Saved.')} ${notes.join(' ')}`; return; }
       dlg.close();
       draw(true);
@@ -391,15 +401,15 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // The scale becomes the course's own in the GPA's synced choices (gpaCourses), set by the worker for this course alone
   // on what is stored then ('glaze:gpa', which the GPA table uses too), so two courses saved at once both keep theirs.
   // → '' when it's in, else the words to show.
-  const gpaScale = async (C, sc) => {
-    const r = await send({ type: 'glaze:gpa', key: `${ultra ? 'ultra' : 'canvas'}:${location.origin}/${who.cid}`, patch: { s: C.schemeText(sc) } });
+  const gpaScale = async (C, sc, w) => {
+    const r = await send({ type: 'glaze:gpa', key: `${ultra ? 'ultra' : 'canvas'}:${location.origin}/${w.cid}`, patch: { s: C.schemeText(sc) } });
     return r?.ok ? '' : r?.error === 'full' ? t('Not saved: too many course settings are stored. Clear a course you no longer need.') : t('The scale could not be given to your GPA.');
   };
   // Dates become the student's own To Do tasks (lib/todo.js importTask), one id per date and title, so saving again updates
   // them and keeps whether they're done and their steps.
-  const addTasks = async (list) => {
-    const key = `todo:${location.origin}/${who.uid}`;
-    const edits = list.map((d) => ['importTask', { id: L.taskId(who.cid, d), title: d.title, cid: who.cid, due: { day: d.day }, notes: t('From your syllabus'), done: 0, at: Date.now() }]);
+  const addTasks = async (list, w) => {
+    const key = `todo:${location.origin}/${w.uid}`;
+    const edits = list.map((d) => ['importTask', { id: L.taskId(w.cid, d), title: d.title, cid: w.cid, due: { day: d.day }, notes: t('From your syllabus'), done: 0, at: Date.now() }]);
     for (let i = 0; i < edits.length; i += 20) if (!(await send({ type: 'glaze:todo', key, edits: edits.slice(i, i + 20) }))?.ok) return false;
     return true;
   };

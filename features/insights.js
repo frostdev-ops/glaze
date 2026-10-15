@@ -55,17 +55,22 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
 
   // ---- the Dashboard's button --------------------------------------------------------------------------------------
   let btn = null;
-  // Ultra: in the Courses page's header, where Ultra keeps its own header tools (B4 [M]: empty but for a hidden catalog link).
-  const ultraBar = () => document.querySelector('div.base-courses-header-container div.base-header-tools');
+  // Ultra: in Glaze's panel on the Courses page (features/widgets.js), beside What Glaze can do, where the panel is on
+  // (notes or widgets); otherwise in the page's header, where Ultra keeps its own header tools (B4 [M]: empty but for a
+  // hidden catalog link). Chosen by the switches, so the button never moves once the panel arrives.
+  const ultraBar = () => {
+    const e = ctx.settings().enhance;
+    return document.querySelector(e.widgets || e.notes ? '#gz-panel .gz-dash-bar' : 'div.base-courses-header-container div.base-header-tools');
+  };
   const sync = () => {
     const on = alive();
     const bar = on && window.top === window && (ultra ? location.pathname === '/ultra/course' && ultraBar()
       : location.pathname === '/' && document.querySelector('#dashboard_header_container .ic-Dashboard-header__actions'));
     if (!bar) btn?.remove();
     else {
-      if (!btn) { btn = make('button', { type: 'button', className: ultra ? 'gz-ins-open' : 'Button gz-ins-open' }); btn.addEventListener('click', open); }
+      if (!btn) { btn = make('button', { type: 'button', className: ultra ? 'gz-w-small gz-ins-open' : 'Button gz-ins-open' }); btn.addEventListener('click', open); }
       if (btn.textContent !== t('Insights')) btn.textContent = t('Insights');
-      if (btn.parentNode !== bar) bar.prepend(btn);
+      if (btn.parentNode !== bar) { if (ultra) bar.append(btn); else bar.prepend(btn); }
     }
     if (!on) box?.close();
   };

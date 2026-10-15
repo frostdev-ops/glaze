@@ -38,7 +38,10 @@ _Last updated: 2026-10-15_
   courses" everything, and the time of the last Clear all is kept per site and user so a change from another open
   tab can't bring them back. Nothing of this
   is sent to Canvas, Blackboard or anywhere else. Scores typed in Glaze 2.2's Blackboard calculator (kept by course id
-  alone) move into this record the first time you open that course's grades, and their old entry is deleted.
+  alone) move into this record the first time you open that course's grades, in one step that deletes exactly those
+  entries from the old store; after a Clear all courses on that site they are deleted instead, and a read or write that
+  fails changes neither store. The old store names no site or account, so taking a course's scores into the account
+  whose course has the same ids is Glaze's inference.
 - **Past terms and a GPA goal** (Canvas and Blackboard, the GPA Extra), in `chrome.storage.local`, on this device only,
   per site and signed-in user id: up to 40 terms you typed in or imported, each with its name, plus/minus or whole-letter
   scale and up to 40 courses (the name, credits, grade as written, honors/AP level, left out or not), and your goal
@@ -243,7 +246,8 @@ you import) are bundled. It makes requests in these cases:
 - **Syllabus import on Blackboard** (off by default). On a course's outline Glaze uses your course list (as above) for
   your user id and the course's term. When you open Import a syllabus, it asks your own Blackboard site's public
   content API for the course's items with their titles and text, to list its documents; the answer stays in memory
-  while the dialog is open. Reading a document there marks nothing as opened. Files you pick are read on this device.
+  while the dialog is open. Glaze expects that reading a document there marks nothing as opened, since it only lists the
+  course's items and opens none, but that hasn't been measured. Files you pick are read on this device.
 - **Command palette** (an Extra, on by default). When you open it, Glaze asks your own Blackboard site
   for your list of courses and, inside a course, that course's items, using Blackboard's own addresses
   with your existing session. The answers are kept in memory only.

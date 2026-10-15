@@ -133,6 +133,27 @@ test("the old Ultra what-if's saved scores move into the what-if store, and go o
   assert.equal(all._1_1.p[0].g, '_6_1');
 });
 
+test('the old store moves in one step: never over a part already there, never past a Clear all, and only what was seen leaves', () => {
+  const legacy = { _1_1: { _3_1: 100, _4_1: 50, _5_1: 7 }, _2_1: { _9_1: 1 } };
+  const stored = { _1_1: { s: { _4_1: [60, null, 9] }, h: ['_6_1'], ht: { _6_1: 9 }, p: [], at: 9 } };
+  // Seen: _3_1 and _4_1 as read, and _5_1 with a value that has changed since (left alone). Waiting: _3_1, _4_1.
+  const m = { cid: '_1_1', at: 5, seen: { _3_1: 100, _4_1: 50, _5_1: 8 }, keep: ['_3_1', '_4_1'] };
+  const r = C.moveLegacy(m, stored, legacy, 0);
+  assert.deepEqual(r.moved, ['_3_1'], "_4_1 already has a score: that one stays");
+  assert.deepEqual(r.all._1_1.s, { _4_1: [60, null, 9], _3_1: [100, null, 1] });
+  assert.deepEqual([r.all._1_1.h, r.all._1_1.ht], [['_6_1'], { _6_1: 9 }]);
+  assert.deepEqual(r.legacy, { _2_1: { _9_1: 1 }, _1_1: { _5_1: 7 } }, 'only the entries seen, with the values seen');
+  // Cleared since: nothing comes in, and what was seen still leaves the old store.
+  const c = C.moveLegacy(m, stored, legacy, 3);
+  assert.deepEqual(c.moved, []);
+  assert.equal(c.all._1_1.s._3_1, undefined);
+  assert.deepEqual(c.legacy, r.legacy);
+  // The last entry gone: nothing is left of the old store.
+  assert.equal(C.moveLegacy({ cid: '_2_1', seen: { _9_1: 1 }, keep: [] }, {}, { _2_1: { _9_1: 1 } }, 0).legacy, null);
+  // A part moved in is older than any later clear.
+  assert.deepEqual(Object.keys(C.applyWhatIf({ op: 'clear', at: 2 }, r.all, 0).all._1_1.s), ['_4_1']);
+});
+
 test('the same calculator: what-ifs, left-out work and pretend items on an Ultra course, by its own recipe', () => {
   const m = C.model(spanish());
   const base = C.calc(m.course, {});
