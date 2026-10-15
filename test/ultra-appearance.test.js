@@ -62,4 +62,17 @@ test('ordinary Ultra mutation flushes refresh late cards and replacement navigat
   mo.f(recs(600)); await runTimers();
   assert.ok(paints > before && navs > beforeNav, 'the full pass still refreshes appearance');
   const n = navs; mo.f(recs(1)); await runTimers(); assert.ok(navs > n, 'a replacement drawer refreshes names/tooltips on an ordinary pass');
+  const owned = new El('section'), child = new El('span');
+  owned.closest = child.closest = () => owned;
+  const inside = (target) => ({ type: 'childList', target, addedNodes: [new El('span')], removedNodes: [] });
+  const idle = navs;
+  mo.f([inside(owned), inside(child), { type: 'attributes', target: child, attributeName: 'style', oldValue: '' }]); await runTimers();
+  assert.equal(navs, idle, 'changes inside an owned root or its descendants do not rescan native navigation');
+  mo.f([{ type: 'childList', target: body, addedNodes: [], removedNodes: [owned] }]); await runTimers();
+  assert.ok(navs > idle, 'native-parent removal of an owned root still runs remount/teardown work');
+  const removed = navs;
+  mo.f([inside(child), ...recs(1), { type: 'attributes', target: body, attributeName: 'class', oldValue: '' }]); await runTimers();
+  assert.ok(navs > removed, 'native additions and attributes survive a mixed owned/native batch');
+  delete c.chrome.runtime.id;
+  assert.equal(c.GZ_CTX.on(), false, 'reload invalidation is visible before the next core mutation');
 });

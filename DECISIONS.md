@@ -694,6 +694,17 @@ becomes the Dashboard; landing there is opt-in. Evidence: `parity/spikes/B7.md`.
 | Polite, brief saved-action feedback and single-folder Undo held in memory, scoped to the current lifecycle | Whole-snapshot undo; success before acknowledgement | The saved action must succeed before it is announced. Storage refreshes do not cancel an acknowledgement; route/account/disable changes do. Undo preserves other folders and never re-hides an old snapshot. One cleared expiry timer waits while Undo has focus. |
 | Accept the exact 29-byte shared schema increase on Canvas/Moodle (owner-approved B9 exception) | A site-conditional schema or unrelated byte offsets | One sanitizer must preserve the setting in every editor/site. Heavy B9 code stays Ultra-only and on demand; the existing performance ratchets remain unchanged. |
 
+## Ultra route performance
+
+| Decision | Alternative | Reason |
+|---|---|---|
+| Native SPA content stays visible; retain only the initial document-start stylesheet gate | Hide every new route container for up to 2.5 seconds | Synthetic actual-extension measurements found a 256–474 ms visibility delay even with local fixture responses. The owner requested no SPA paint hold. |
+| Ignore mutation records inside an owned `gz-` root; retain native-parent removals and mixed batches | Run native selectors for every widget text update | Thirty owned updates caused four native course-color scans. The shared sweep already excludes these owned subtrees; native removal still needs feature remount/teardown. |
+| Record a successful empty late-status set before comparing gradebook content | Treat an unchanged gradebook as if lateness was never read | The next due-chip pass otherwise repeats the gradebook request. Failed reads retain their retry behavior; the one-minute freshness limit stays. |
+| Keep identity sharing unchanged | Add a second account cache interface | The measured sequence read `/users/me` only once, so the evidence does not justify an invasive cache refactor. |
+| Feature `on()` checks the live extension ID immediately; orphaned calendar timers and download ports stop | Wait until another core body mutation or retry extension calls forever | Old listeners/timers can run before the core observer notices a reload. Port close must settle pending bytes even when disconnect already throws. |
+| An optional caller-liveness callback stops and disposes an invalidated scene before another frame | Keep the old tab's rendering loop until the next page mutation | Core and editor preview pass extension liveness; the standalone store promo keeps its one-argument still-frame behavior. Stop is idempotent and removes the resize listener too. |
+| The shared `api()` JSON reader uses `redirect: 'error'` | Follow an authentication redirect | Every caller consumes JSON GET results. Media bytes and signed download URLs use separate flows and retain their behavior. |
 
 ### B7b fresh Codex delta fixes
 

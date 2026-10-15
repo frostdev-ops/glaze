@@ -2,6 +2,11 @@
 
 _Last updated: 2026-10-15_
 
+Ultra performance changes reuse the page's existing gradebook reads and ignore internal Glaze UI mutations. They add
+no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
+The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep
+their separate, existing URL handling.
+
 ## Optional encrypted share sessions
 
 Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's extension-owned Sessions page. That action requests the exact optional host `https://share.frostdev.io/*`. Glaze already requires broad HTTPS access for LMS detection, so this declaration does not technically reduce existing host access; the device-local consent switch gates every relay request. Pause aborts requests and closes the live connection. Backup/key restore never enables sharing. No relay connection runs without an open Notes, To Do or Sessions surface. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
