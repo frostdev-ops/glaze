@@ -83,3 +83,15 @@ test('E1 helper stays out of LMS startup, is cached for a worker restart and is 
   assert.deepEqual(safari.missing(['lib/relay.js']), []);
   assert.match(read('package.sh'), /defaults\.js lib i18n/);
 });
+
+test('E1 standalone Relay URL has visible field and keyboard-focus colors without editor tokens', () => {
+  const css = read('sharing/sessions.css');
+  // ID specificity must beat ui.css's input[type=url] and :is(...):focus-visible rules.
+  const field = css.match(/#relay-url\s*\{([^}]+)\}/)?.[1] || '';
+  const focus = css.match(/#relay-url:focus-visible\s*\{([^}]+)\}/)?.[1] || '';
+  assert.match(field, /background:\s*light-dark\(/);
+  assert.match(field, /border:\s*1px solid light-dark\(/);
+  assert.match(field, /color:\s*inherit/);
+  assert.match(focus, /outline:\s*3px solid light-dark\(/);
+  assert.doesNotMatch(field + focus, /var\(--gz-/);
+});
