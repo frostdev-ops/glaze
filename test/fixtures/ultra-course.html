@@ -264,20 +264,31 @@
   }
 
   function openFull(r) {
-    closeCourse();
+    const reuse = window.__b8bReuse && S.tool === 'full' && S.box;
+    if (!reuse) closeCourse();
     S.c = r.course; S.route = r; S.tool = 'full';
     site.hidden = true; baseMain.removeAttribute('id'); inner.removeAttribute('id');
     const fallback = r.full.id === '_8111_1';
-    const page = document.createElement('section');
+    const page = reuse || document.createElement('section');
+    const title = `${r.full.kind === 'document' ? 'Routed reading' : r.full.id === '_8120_1' ? 'Writing overview' : 'Unclassified overview'} — ${r.course.name}`;
     page.className = `routed-page route-view-container bb-offcanvas-container${r.full.kind === 'assessment' ? ' assessment-overview-modern-panel' : ''}${fallback ? ' routed-document-scroll' : ''}${r.full.id === '_8112_1' ? ' routed-main-scroll' : ''}`;
-    page.innerHTML = `<section class="makeStylespanelRoot-b8b js-skip-link-target route-view-container"><div class="makeStylesbaseBody-b8b"><div class="makeStylesheaderRoot-b8b"><div class="makeStylespanelHeaderContainerRoot-b8b"><a href="/ultra/courses/${r.course.id}/outline">Course Content</a><h1>${r.full.kind === 'document' ? 'Routed reading' : r.full.id === '_8120_1' ? 'Writing overview' : 'Unclassified overview'} — ${r.course.name}</h1></div></div><div class="routed-scroll">${SPINNER}</div></div></section>`;
+    if (reuse) {
+      $('h1', page).textContent = title;
+      $('a', page).setAttribute('href', `/ultra/courses/${r.course.id}/outline`);
+    } else page.innerHTML = `<section class="makeStylespanelRoot-b8b js-skip-link-target route-view-container"><div class="makeStylesbaseBody-b8b"><div class="makeStylesheaderRoot-b8b"><div class="makeStylespanelHeaderContainerRoot-b8b"><a href="/ultra/courses/${r.course.id}/outline">Course Content</a><h1>${title}</h1></div></div><div class="routed-scroll">${window.__b8bHeaderOnly ? '' : SPINNER}</div></div></section>`;
     S.box = page; document.body.append(page); S.loading = true;
     const my = ++S.tok;
+    window.__b8bStage = 'mount';
+    if (reuse || window.__b8bHeaderOnly) {
+      setTimeout(() => { if (my === S.tok) window.__b8bStage = reuse ? 'old-held' : 'header-held'; }, 200);
+      setTimeout(() => { if (my === S.tok) { $('.routed-scroll', page).replaceChildren(); window.__b8bStage = 'empty'; } }, 350);
+    }
     setTimeout(() => {
       if (my !== S.tok) return;
       $('.routed-scroll', page).innerHTML = `<main class="makeStylescontentGridArea-b8b"><p>${r.course.name}: invented reading for ${r.full.id}.</p>${Array.from({ length: 70 }, (_, i) => `<p>Reading section ${i + 1}. Synthetic content for scrolling and restoring a routed page.</p>`).join('')}${r.full.kind === 'assessment' ? '<button class="js-start-attempt">Start attempt</button>' : ''}</main>`;
       S.loading = false;
-    }, 250);
+      window.__b8bStage = 'ready';
+    }, reuse || window.__b8bHeaderOnly ? 650 : 250);
   }
 
   // Put a fresh route view with a spinner in the course, and swap the page in after ms.

@@ -83,10 +83,30 @@ test('a full routed switch waits for native content replacement, then settles wi
     go: g, performance: { now: () => 500 }, courseBar: () => null, shown: () => false,
     ctx: { courseId: () => '_71_1', holding: () => false }, view: () => current,
     sameView: (a, b) => a?.every((v, i) => v === b?.[i]), loading: () => false,
+    readyView: () => true,
     document: {}, location: { pathname: documentPath }, end: () => ended++,
   });
   check(); assert.equal(ended, 0, 'a URL update with the old native shell cannot release the copy');
   current = [old, next]; check(); assert.equal(ended, 1, 'new settled native content can release it');
+});
+
+test('header-only and reused-header transitions cannot certify or capture the old main under the destination', () => {
+  const helper = part('  const sameView = ', '  let liveView = ');
+  assert.ok(helper.includes('readyView'), 'a routed main needs readiness proof');
+  const oldMain = { childElementCount: 1, textContent: 'Old reading' }, newMain = { childElementCount: 1, textContent: 'New reading' };
+  let current = [{}, oldMain, {}], pathname = `${C}/document/_81_1`;
+  const api = vm.runInNewContext(helper + part('  let liveView = ', '  // A panel over the bar') + '\n({observeView, sameView, readyView, live:()=>liveView});', {
+    view: () => current, location: { get pathname() { return pathname; }, search: '' }, shown: () => true, loading: () => false,
+  });
+  api.observeView(); const previous = api.live();
+  pathname = `${C}/document/_86_1`;
+  current = [{}, oldMain, current[2]];
+  api.observeView(); assert.equal(api.live(), previous, 'a new root/header around old content cannot relabel capture provenance');
+  assert.equal(api.sameView(current, previous.nodes), true);
+  current = [{}, null, null]; api.observeView(); assert.equal(api.live(), previous);
+  assert.equal(api.readyView(current), false, 'a header appearing before main is not ready');
+  current = [{}, { childElementCount: 0, textContent: '' }, null]; api.observeView(); assert.equal(api.live(), previous);
+  current = [{}, newMain, {}]; api.observeView(); assert.equal(api.live().path, pathname);
 });
 
 test('disabled tabs never scan native routes or place a strip from the mutation hook', () => {

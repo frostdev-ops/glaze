@@ -76,15 +76,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     .filter((e) => shown(e) && !e.querySelector('.bb-course-navigation')).pop() || null;
   const routedHeader = (page) => page.querySelector('[class*="panelHeaderContainerRoot"], .panel-header, header') || page.querySelector('h1');
   const routedMain = (page) => page?.querySelector('main[class*="contentGridArea"], main, [role="main"]');
-  // A changed URL alone does not prove that Ultra replaced its old native page. Reused shells need a changed content
-  // node or heading; otherwise the existing bounded full-load fallback is safer than releasing a stale copy.
-  const view = () => { const page = routed(), main = routedMain(page); return page && [page, main, (main || page).lastElementChild, routedHeader(page)?.textContent]; };
-  const sameView = (a, b) => !!a && !!b && a.every((v, i) => v === b[i]);
+  // A URL or header change cannot prove that Ultra replaced the outgoing content. Require a populated main and a
+  // changed main/content node; otherwise the existing bounded full-load fallback keeps the old copy safe.
+  const view = () => { const page = routed(), main = routedMain(page); return page && [page, main, main?.lastElementChild]; };
+  const sameView = (a, b) => !!a && !!b && a[1] === b[1] && a[2] === b[2];
+  const readyView = (v) => !!v?.[1] && shown(v[1]) && (v[1].childElementCount > 0 || !!v[1].textContent.trim()) && !loading(v[0]);
   let liveView = null;
   const observeView = () => {
     const v = view();
     if (!v) { liveView = null; return; }
-    if (!loading(v[0]) && (!liveView || !sameView(v, liveView.nodes))) liveView = { nodes: v, path: location.pathname + location.search };
+    if (readyView(v) && (!liveView || !sameView(v, liveView.nodes))) liveView = { nodes: v, path: location.pathname + location.search };
   };
   // A panel over the bar: one holding the bar's middle (Glaze may inset panels a little from the window's edges).
   const covers = (a, b) => { const r = a.getBoundingClientRect(), s = b.getBoundingClientRect(), x = s.left + s.width / 2, y = s.top + s.height / 2; return r.left <= x && x <= r.right && r.top <= y && y <= r.bottom; };
@@ -186,6 +187,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     e.innerHTML = `<span class="gz-ctab-mark" aria-hidden="true"></span><span class="gz-ctab-name"></span><span class="gz-ctab-pin" aria-hidden="true">${ICON.pin}</span><span class="gz-ctab-x" aria-hidden="true">${ICON.x}</span>`;
     return e;
   };
+  const labelFor = (cid, name, code) => ctx.nickOf(cid) || (P().label === 'code' && code) || (P().label === 'short' ? L.shortName(name) : name);
   const draw = () => {
     if (!strip) return;
     const p = P();
@@ -196,7 +198,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const nick = ctx.nickOf(x.cid);
       const name = c.name || x.name || c.code || x.code || t('Course');
       const code = c.code || x.code || '';
-      return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: nick || (p.label === 'code' && code) || name, full: [nick || name, code !== name && code].filter(Boolean).join(' · '), slot: c.slot || x.slot || '' };
+      return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: labelFor(x.cid, name, code), full: [...new Set([nick, name, code].filter(Boolean))].join(' · '), slot: c.slot || x.slot || '' };
     });
     const k = JSON.stringify([rows, p, ctx.locale(), drag?.on && drag.cid]);
     if (k === drawn) return;
@@ -217,7 +219,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       set(e, 'tabindex', r.cid === roving ? '0' : '-1');
       set(e, 'data-pin', r.pin ? '' : null);
       set(e, 'data-drag', drag?.on && drag.cid === r.cid ? '' : null);
-      set(e, 'aria-label', r.pin ? t('{name}, pinned', { name: r.label }) : r.label);
+      set(e, 'aria-label', r.pin ? t('{name}, pinned', { name: r.full }) : r.full);
       set(e, 'title', r.full);
       const n = e.querySelector('.gz-ctab-name');
       if (n.textContent !== r.label) n.textContent = r.label;
@@ -251,7 +253,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (r.full) say(t('Close or unpin a tab to open another course tab.'));
     if (r.gone.length) {
       const g = r.gone[0];
-      say(t('Closed {name} to make room. Pin a tab to keep it open.', { name: ctx.nickOf(g.cid) || ctx.courseList()[g.cid]?.name || g.name || t('Course') }));
+      const c = ctx.courseList()[g.cid] || {};
+      say(t('Closed {name} to make room. Pin a tab to keep it open.', { name: labelFor(g.cid, c.name || g.name || c.code || g.code || t('Course'), c.code || g.code) }));
       for (const x of r.gone) { snaps.delete(x.cid); send({ op: 'forget', cid: x.cid }); }
     }
     save();
@@ -572,7 +575,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const dt = performance.now() - g.at;
     const bar = shown(courseBar()) ? courseBar() : null;
     const v = view();
-    const there = ctx.courseId() === g.cid && (bar ? shown(bar) && !otherCourse(bar, g.cid) : v && !sameView(v, g.before));
+    const there = ctx.courseId() === g.cid && (bar ? shown(bar) && !otherCourse(bar, g.cid) : readyView(v) && !sameView(v, g.before));
     if (there && dt > 120 && !ctx.holding() && !loading(bar?.closest('.panel-wrap, .bb-offcanvas-panel') || v?.[0] || document.body)) return end();
     // Ultra (or the student) went somewhere else: nothing to wait for.
     if (!location.pathname.startsWith(`/ultra/courses/${g.cid}/`)) return end(true);

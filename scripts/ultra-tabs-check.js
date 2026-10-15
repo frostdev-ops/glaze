@@ -18,11 +18,12 @@ require('../lib/coursetabs.js');
 const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-tabs-'));
 const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
-const PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-course.html'), 'utf8');
+let PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-course.html'), 'utf8');
 const SITE = 'https://bb.school.test';
 const CSS_URL = 'https://cdn.school.test/ultra/uiv4001.0.0-rel.37_abc/app.css';
 const COURSES = [['_101_1', 'Computer Science I', 'FA26-CS101-01', 1], ['_102_1', 'Spanish 110', 'FA26-SPAN110-02', 2], ['_103_1', 'Calculus II', 'FA26-MATH201-01', 4],
   ['_104_1', 'World History', 'FA26-HIST150-01', 6], ['_105_1', 'Biology Lab', 'FA26-BIO120-01', 8]];
+if (process.env.GZ_B8B_FOCUSED) { PAGE = PAGE.replace("name: 'Computer Science I'", "name: '209940-ZZ3456-007'"); COURSES[0][1] = '209940-ZZ3456-007'; }
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails++; };
@@ -119,6 +120,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     const routedChecks = async () => {
       // All reads below are native feature reads or fixture navigation; RESTORE labels only the active inert copy.
       await open('_101_1');
+      if (process.env.GZ_B8B_FOCUSED) {
+        const label = await page.locator('#gz-ctabs [data-course-id="_101_1"]').evaluate((e) => ({ text: e.querySelector('.gz-ctab-name').textContent, title: e.title, aria: e.getAttribute('aria-label') }));
+        ok(label.text === 'ZZ 3456' && label.title.includes('209940-ZZ3456-007') && label.aria.includes('209940-ZZ3456-007') && label.aria.includes('FA26-CS101-01'), `auto short label retains original metadata (${JSON.stringify(label)})`);
+      }
       await isolated(async () => {
         if (!globalThis.__b8bNet) {
           globalThis.__b8bNet = [];
@@ -143,17 +148,27 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
         (sc === document.body ? document.scrollingElement : sc).scrollTop = n;
       }, top);
-      const saved = (route, top) => opts.waitForFunction(async ({ route, top }) => {
+      const saved = (route, top, cid = '_101_1') => opts.waitForFunction(async ({ route, top, cid }) => {
         const all = await chrome.storage.local.get(null);
-        return Object.values(all).some((v) => v?.tabs?.some((t) => t.cid === '_101_1' && t.path === route && t.top === top));
-      }, { route, top });
-      const restore = async (route, top, label) => {
-        await switchTab('_102_1');
+        return Object.values(all).some((v) => v?.tabs?.some((t) => t.cid === cid && t.path === route && t.top === top));
+      }, { route, top, cid });
+      const restore = async (route, top, label, cid = '_101_1', delayed = '') => {
+        await switchTab(cid === '_101_1' ? '_102_1' : '_101_1');
         phase = `B8b:RESTORE:${label}`;
         const start = requestDetails.length;
-        await page.click('#gz-ctabs [data-course-id="_101_1"]');
+        await page.click(`#gz-ctabs [data-course-id="${cid}"]`);
         await page.waitForSelector('#gz-ctabs-snap', { timeout: 500 });
         ok(await isolated(() => GZ_CTABS.showing()), `${label} displays its inert copy immediately`);
+        if (delayed) {
+          await page.waitForFunction((stage) => window.__b8bStage === stage, delayed);
+          const held = { active: await isolated(() => GZ_CTABS.showing()), native: await page.evaluate(() => ({ page: location.href, stage: window.__b8bStage, main: document.querySelector('main[class*="contentGridArea"]')?.textContent.slice(0, 100), timeOrigin: performance.timeOrigin })) };
+          ok(held.active && (delayed !== 'header-held' || !held.native.main), `${label} waits for native main replacement (${JSON.stringify(held)})`);
+          await page.waitForFunction(() => window.__b8bStage === 'empty');
+          ok(await isolated(() => GZ_CTABS.showing()), `${label} stays held while the native main is absent`);
+          await saved(route, top, cid);
+          ok(true, `${label} does not overwrite the target's saved scroll before content arrives`);
+          fs.writeFileSync(path.join(out, `B8b-${label}.json`), JSON.stringify(held, null, 2));
+        }
         await isolated(async () => {
           const until = performance.now() + 10000;
           while (GZ_CTABS.showing() && performance.now() < until) await new Promise((r) => setTimeout(r, 5));
@@ -162,7 +177,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         });
         phase = `B8b:LIVE:${label}`;
         ok(requestDetails.length === start, `${label} restoration starts no requests (${JSON.stringify(requestDetails.slice(start))})`);
-        await settled('_101_1');
+        await settled(cid);
         await page.waitForFunction((n) => {
           const main = document.querySelector('main[class*="contentGridArea"]'); let sc = main;
           while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
@@ -177,7 +192,12 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       const doc = '/ultra/courses/_101_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
       phase = 'B8b:NATIVE:history'; await page.goBack(); await settled('_101_1');
       ok(await page.evaluate(() => location.pathname.endsWith('/outline')), 'Back from a routed document restores the native outline');
-      await page.waitForSelector('.b8b-folder[aria-expanded="true"]');
+      try { await page.waitForSelector('.b8b-folder[aria-expanded="true"]', { timeout: 5000 }); }
+      catch (error) {
+        const receipt = { native: await page.evaluate(() => ({ page: location.href, folder: document.querySelector('.b8b-folder')?.outerHTML, pagePlace: sessionStorage.getItem('gz-place:_101_1') })),
+          settings: await isolated(() => ({ enabled: GZ_CTX.on(), place: GZ_CTX.settings().enhance.place, loaded: typeof GZ_PLACE, acted: GZ_CTX.acted(), asked: GZ_CTX.placeAsked() })), local: await opts.evaluate(() => chrome.storage.local.get('coursePlace')) };
+        fs.writeFileSync(path.join(out, 'B8b-folder-failure.json'), JSON.stringify(receipt, null, 2)); throw error;
+      }
       ok(true, 'the existing Your place path restores the open folder after the routed document');
       await page.goForward(); await settled('_101_1');
       ok(await page.evaluate(() => location.pathname + location.search) === doc && (await strip())?.at === 'routed', 'Forward restores the routed document with its strip and query');
@@ -190,6 +210,16 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         ok(true, `routed header placement ${at}`);
       }
       await position(470); await saved(doc, 470); await restore(doc, 470, 'document-nested-scroll');
+      await switchTab('_102_1');
+      phase = 'B8b:NATIVE:second-document'; await page.click('a.b8b-document'); await settled('_102_1');
+      const second = '/ultra/courses/_102_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
+      await position(380); await saved(second, 380, '_102_1');
+      await page.evaluate(() => { window.__b8bHeaderOnly = true; });
+      await restore(doc, 470, 'header-before-main', '_101_1', 'header-held');
+      await page.evaluate(() => { window.__b8bHeaderOnly = false; window.__b8bReuse = true; });
+      await restore(second, 380, 'reused-header-old-main', '_102_1', 'old-held');
+      await page.evaluate(() => { window.__b8bReuse = false; });
+      await switchTab('_101_1');
       phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
       await native('a.b8b-document-self');
       const self = '/ultra/courses/_101_1/document/_8112_1?view=content&state=view';
