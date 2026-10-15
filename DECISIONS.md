@@ -788,3 +788,12 @@ synthetic Ultra, `test/fixtures/ultra-course.html`, and `scripts/ultra-tabs-chec
 - Ultra's agenda shares `GZ_ULTRA.page.profile()` and `page.planned()` with Next due: this account's covered To Do copy
   under ten minutes old, else the shared two-minute memo for that account and range. Failed reads can be retried, and
   planner links use the page's own origin despite Ultra's CDN base. Canvas keeps its existing profile and day memo.
+
+## E1 — scoped editor sections and faithful local previews
+
+| Decision | Instead of | Reason |
+|---|---|---|
+| Eight accessible tabs, `#tab/section` deep links, legacy element-ID aliases and cross-tab search | Duplicating controls under platform tabs | Every schema setting has one real control or logical picker group, including the final Ultra nav and course-tab modules. Shared settings have links from the platform sections. Arrow/Home/End handling is attached only to tab buttons. |
+| DOM-owned section resets, with preference-only global reset | Clearing picture stores, notes/tasks, bookmarks, presets or share keys | Reset uses the existing sanitizer defaults and save/broker paths. Stored navigation image IDs remain referenced so a preference reset cannot garbage-collect a local picture. Pending theme offers remain preview-only until Apply. |
+| A real 1280×900 or 375×812 iframe, scaled only by the editor presentation | Treating a narrow preview pane as a desktop viewport | Ultra retains its real CSS/nav/course-tab code, the desktop overlay correction and inner Typography measurement. Canvas/Moodle use local synthetic markup with real site CSS and shared pure painters; dashboard examples use the real apps styles. No extra body observer or LMS startup code is added. |
+| Allow only Relay Save/Test from the exact extension top-frame editor | Giving the editor general session operations | Existing validation, HTTP health timeout and Pause/generation rules remain in the worker. Test is explicit and neither saves the origin nor approves/enables session traffic. |

@@ -582,7 +582,7 @@
 </section>
 <section id="bb-declutter" data-editor-section="blackboard/declutter" data-sites="Blackboard Ultra · Canvas (supported items)" aria-labelledby="heading-blackboard-declutter">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/declutter" data-editor-alias>Declutter</a></p><div class="section-heading"><h2 id="heading-blackboard-declutter">Declutter</h2><button type="button" class="section-reset" data-reset-section="blackboard/declutter">Reset section</button></div>
-<p class="desc section-note">Reduce decorative elements while keeping course content.</p><p class="site-scope" translate="no">Blackboard Ultra · Canvas (supported items)</p>
+<p class="desc section-note">Reduce decorative elements while keeping course content.</p><p class="site-scope" translate="no">Blackboard Ultra · Canvas</p>
 <div class="group">
           <h3>Declutter</h3>
           <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
@@ -678,7 +678,7 @@
 </section>
 <section id="study-grades" data-editor-section="study/grades" data-sites="Canvas · Blackboard Ultra (grade displays)" aria-labelledby="heading-study-grades">
 <p class="section-path" data-editor-breadcrumb><a href="#study/grades" data-editor-alias>Grades and GPA</a></p><div class="section-heading"><h2 id="heading-study-grades">Grades and GPA</h2><button type="button" class="section-reset" data-reset-section="study/grades">Reset section</button></div>
-<p class="desc section-note">Choose grade displays and grade-point calculations.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra (grade displays)</p>
+<p class="desc section-note">Choose grade displays and grade-point calculations.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
 <label class="check"><input type="checkbox" data-key="enhance.inline"><span>Due-date status and percentages</span>
           <span class="desc">Beside each due date in course content, where the work stands: "in 2 days · Unopened", "Submitted", "Graded · 18/20". Elsewhere, how long is left. And the percentage inside every grade.</span></label>
 <label class="check"><input type="checkbox" data-key="enhance.overall"><span>Grades on course cards</span>
@@ -807,7 +807,7 @@
 </section>
 <section id="extras" data-editor-section="study/tools" data-sites="Canvas · Blackboard Ultra · Moodle (supported tools)" aria-labelledby="heading-study-tools">
 <p class="section-path" data-editor-breadcrumb><a href="#study/tools" data-editor-alias>Reading and navigation</a></p><div class="section-heading"><h2 id="heading-study-tools">Reading and navigation</h2><button type="button" class="section-reset" data-reset-section="study/tools">Reset section</button></div>
-<p class="desc section-note">Choose the small tools that help you move through coursework.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle (supported tools)</p>
+<p class="desc section-note">Choose the small tools that help you move through coursework.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
 <label class="check"><input type="checkbox" data-key="enhance.urgency"><span>Due-date urgency</span>
           <span class="desc">Marks items overdue, due today or due within three days.</span></label>
 <label class="check"><input type="checkbox" data-key="enhance.clamp"><span>Shorter descriptions</span>
@@ -851,15 +851,15 @@
           <span class="desc">Round buttons at the bottom right of course documents: dark documents, and focus mode (the document alone, with a reading-progress line and reading time; Esc leaves it).</span>
           <span class="desc">On Canvas: a bar above pages, assignments and file previews.</span></label>
 </section></div>
-<div id="panel-sharing" role="tabpanel" aria-labelledby="tab-sharing" data-editor-panel="sharing" hidden><nav class="section-links" aria-label="Sections"><a href="#sharing/sessions" data-editor-alias>Share sessions</a><a href="#sharing/relay" data-editor-alias>Relay</a><a href="#sharing/calendar" data-editor-alias>Google Calendar sync</a></nav>
+<div id="panel-sharing" role="tabpanel" aria-labelledby="tab-sharing" data-editor-panel="sharing" hidden><nav class="section-links" aria-label="Sections"><a href="#sharing/sessions" data-editor-alias>Share sessions</a><a href="#sharing/relay" data-editor-alias>Relay</a><a href="#sharing/calendar" data-editor-alias data-gcal-link hidden>Google Calendar sync</a></nav>
 <section id="sharing-sessions" data-editor-section="sharing/sessions" data-sites="Extension only" aria-labelledby="heading-sharing-sessions">
 <p class="section-path" data-editor-breadcrumb><a href="#sharing/sessions" data-editor-alias>Share sessions</a></p><div class="section-heading"><h2 id="heading-sharing-sessions">Share sessions</h2></div>
-<p class="desc section-note">Share selected notes, Looks or tasks with an explicit invite.</p><p class="site-scope" translate="no">Extension only</p>
+<p class="desc section-note">Share selected notes, Looks or tasks with an explicit invite.</p><p class="site-scope">On this device</p>
 <div class="group"><h3>Share sessions</h3><p class="desc">Invite only, end-to-end encrypted through your selected relay. Your local copies keep working without the server.</p><p class="desc">Off until you create or join. Pause or resume from Share sessions.</p><button type="button" id="share-sessions">Open Share sessions</button></div>
 </section>
 <section id="relay" data-editor-section="sharing/relay" data-sites="Extension only" aria-labelledby="heading-sharing-relay">
 <p class="section-path" data-editor-breadcrumb><a href="#sharing/relay" data-editor-alias>Relay</a></p><div class="section-heading"><h2 id="heading-sharing-relay">Relay</h2><button type="button" class="section-reset" data-reset-section="sharing/relay">Reset section</button></div>
-<p class="desc section-note">Choose the server for newly created share sessions.</p><p class="site-scope" translate="no">Extension only</p>
+<p class="desc section-note">Choose the server for newly created share sessions.</p><p class="site-scope">On this device</p>
 <p class="desc" id="relay-help">The relay applies to new sessions only. Existing sessions keep their own server. Saving never connects.</p>
 <label class="field wide"><span>Server for new sessions</span><select id="relay-kind" data-local><option value="default">frostdev.io (default)</option><option value="custom">Custom</option></select></label>
 <label class="field wide" id="relay-custom" hidden><span>Custom relay URL</span><input id="relay-url" type="url" maxlength="512" translate="no" placeholder="https://relay.example.edu" autocomplete="off" spellcheck="false" aria-describedby="relay-help relay-url-help" data-local></label>
@@ -868,8 +868,8 @@
 <div class="row"><button id="relay-save" type="button">Save relay</button><button id="relay-test" type="button">Test connection</button><a href="https://github.com/frostdev-ops/glaze/blob/main/server/README.md" target="_blank" rel="noopener noreferrer">Run your own</a></div>
 <p class="desc" id="relay-status" role="status" aria-live="polite"></p>
 </section>
-<section id="sharing-calendar" data-editor-section="sharing/calendar" data-sites="Google Chrome" aria-labelledby="heading-sharing-calendar">
-<p class="section-path" data-editor-breadcrumb><a href="#sharing/calendar" data-editor-alias>Google Calendar sync</a></p><div class="section-heading"><h2 id="heading-sharing-calendar">Google Calendar sync</h2></div>
+<section id="sharing-calendar" hidden data-editor-section="sharing/calendar" data-sites="Google Chrome" aria-labelledby="heading-sharing-calendar">
+<p class="section-path" data-editor-breadcrumb><a href="#sharing/calendar" data-editor-alias data-gcal-link hidden>Google Calendar sync</a></p><div class="section-heading"><h2 id="heading-sharing-calendar">Google Calendar sync</h2></div>
 <p class="desc section-note">Connect a calendar only when you choose to sign in.</p><p class="site-scope" translate="no">Google Chrome</p>
 <div class="group" id="gcal" hidden>
           <h3>Google Calendar sync</h3>
@@ -905,7 +905,7 @@
 <div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" hidden><nav class="section-links" aria-label="Sections"><a href="#backup/privacy" data-editor-alias>Backup and privacy</a></nav>
 <section id="data" data-editor-section="backup/privacy" data-sites="Extension only" aria-labelledby="heading-backup-privacy">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/privacy" data-editor-alias>Backup and privacy</a></p><div class="section-heading"><h2 id="heading-backup-privacy">Backup and privacy</h2></div>
-<p class="desc section-note">Export or import your settings, tasks and share keys.</p><p class="site-scope" translate="no">Extension only</p>
+<p class="desc section-note">Export or import your settings, tasks and share keys.</p><p class="site-scope">On this device</p>
 <div class="row">
           <button type="button" id="export">Export settings</button>
           <label class="row"><button type="button" id="import-btn">Import settings…</button><input type="file" id="import" accept="application/json,.json" hidden></label>
@@ -920,7 +920,7 @@
 <div id="panel-about" role="tabpanel" aria-labelledby="tab-about" data-editor-panel="about" hidden><nav class="section-links" aria-label="Sections"><a href="#about/glaze" data-editor-alias>About Glaze</a></nav>
 <section id="about-glaze" data-editor-section="about/glaze" data-sites="Extension only" aria-labelledby="heading-about-glaze">
 <p class="section-path" data-editor-breadcrumb><a href="#about/glaze" data-editor-alias>About Glaze</a></p><div class="section-heading"><h2 id="heading-about-glaze">About Glaze</h2></div>
-<p class="desc section-note">Version details, recent changes and a way to report problems.</p><p class="site-scope" translate="no">Extension only</p>
+<p class="desc section-note">Version details, recent changes and a way to report problems.</p><p class="site-scope">On this device</p>
 <p id="editor-version" translate="no"></p>
 <aside class="news" id="news" aria-labelledby="news-title" hidden>
       <h2 id="news-title"></h2>

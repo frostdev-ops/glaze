@@ -162,7 +162,11 @@ GZ_UI.load().then((s) => {
   $('#preview-toggle').addEventListener('click', () => { previewCollapsed = !previewCollapsed; showPreview(); });
   searchPreview = (on) => { if (on !== searchWasOn) { if (on) { beforeSearch = previewCollapsed; previewCollapsed = true; } else previewCollapsed = beforeSearch; searchWasOn = on; showPreview(); } };
   frame.addEventListener('load', preview);
-  addEventListener('message', (e) => { if (e.origin === location.origin && e.source === frame.contentWindow && e.data?.gzPreviewReady) preview(); });
+  addEventListener('message', (e) => {
+    if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
+    if (e.data?.gzPreviewReady) preview();
+    if (e.data?.gzPreviewFailed) $('#preview-note').textContent = t('Preview could not load. Try reloading settings.');
+  });
   const geometry = new ResizeObserver(() => { document.documentElement.style.setProperty('--editor-header', `${$('.top').getBoundingClientRect().height}px`); sizePreview(); });
   geometry.observe($('.top')); geometry.observe($('.preview-stage'));
 
@@ -569,7 +573,7 @@ GZ_UI.load().then((s) => {
       dimensions: ['size', 'width', 'icon', 'height', 'gap', 'padding', 'expandOnHover'],
       labels: ['labels', 'text', 'labelOverflow'],
       appearance: ['itemStyle', 'itemBackground', 'activeIndicator'],
-      branding: ['brand', 'li', 'logo', 'logoSize', 'logoAlign', 'footer'],
+      branding: ['brand', 'logo', 'logoSize', 'logoAlign', 'footer'],
     }[section];
     if (!keys) return;
     if (section === 'dimensions' || section === 'labels') {
@@ -582,7 +586,7 @@ GZ_UI.load().then((s) => {
   });
   $('#nav-reset').addEventListener('click', async () => {
     navLogoPick++; cancelLink(); if (!await writeNavItems(N.clean())) return;
-    for (const k of Object.keys(N.SPEC)) { s.nav[k] = GZ_DEFAULTS.nav[k]; pendingNav.add(k); }
+    for (const k of Object.keys(N.SPEC).filter((k) => k !== 'li')) { s.nav[k] = GZ_DEFAULTS.nav[k]; pendingNav.add(k); }
     for (const k of ['labels', 'size', 'collapsed', 'logo']) { s.nav[k] = GZ_DEFAULTS.nav[k]; pendingNav.add(k); }
     fill(); save(['nav']);
   });
@@ -839,7 +843,7 @@ GZ_UI.load().then((s) => {
   // ---- Google Calendar sync (lib/gcal.js, through the worker: 'glaze:gcal'), Chrome only ----
   // Behind the build-time switch (lib/gcal.js ON): off, the section stays hidden and nothing here runs.
   if (GZ_GCAL.ON) {
-    $('#gcal').hidden = false;
+    $('#gcal').hidden = false; $('#sharing-calendar').hidden = false; for (const link of $$('[data-gcal-link]')) link.hidden = false;
     // Offered where chrome.identity.getAuthToken signs in with the browser's own Google account: Google Chrome (and plain
     // Chromium). Edge doesn't support it, Brave has no Google sign-in, Safari and Firefox have no getAuthToken (S3 §1, §4):
     // those get a note pointing to the .ics export.
