@@ -59,6 +59,14 @@ test('capture refuses changed or empty routed main even when its URL equals the 
   assert.equal(f.counts().copies, 1, 'the still-populated accepted view can be copied');
 });
 
+test('the first native scroll after main replacement records its proven path before the next core pass', () => {
+  const f = fixture();
+  f.url(next); f.native([f.page, { childElementCount: 1, textContent: 'Second reading' }, {}]);
+  f.sc.scrollTop = 380; f.api.onScroll({ target: f.sc });
+  assert.equal(f.tab.path, next, 'the populated changed native main can establish its own first scroll event');
+  assert.equal(f.tab.top, 380);
+});
+
 test('appending a Glaze root cannot certify outgoing native main as replacement content', () => {
   const native = { id: 'native-reading' }, main = { lastElementChild: native }, page = {};
   const api = vm.runInNewContext(part('  const view = ', '  const readyView = ') + '\n({view,sameView});', {

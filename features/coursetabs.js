@@ -292,7 +292,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const cid = !go && ctx.courseId();
     const sc = e.target === document ? document.scrollingElement : e.target;
     const x = cid && sc === pageScroller() && tabs.find((y) => y.cid === cid);
-    if (!x || !safePath() || !atView()) return;
+    if (!x || !safePath()) return;
+    observeView();
+    if (!atView()) return;
+    notePlace(cid);
     x.top = Math.round(sc.scrollTop);
     save();
   };

@@ -61,7 +61,7 @@ test('a routed content scroller need not contain the strip to save its position'
   vm.runInNewContext(part('  const onScroll = ', '  // ---- snapshots') + '\nonScroll({target:sc});', {
     go: null, ctx: { courseId: () => '_71_1' }, document: {}, sc, Element: Object, strip: {}, tabs: [tab],
     location: { pathname: documentPath, search: '?view=content&state=view' }, L,
-    pageScroller: () => sc, safePath: () => documentPath, atView: () => true, save: () => saves++,
+    pageScroller: () => sc, safePath: () => documentPath, observeView() {}, atView: () => true, notePlace() {}, save: () => saves++,
   });
   assert.equal(tab.top, 610); assert.equal(saves, 1);
 });
