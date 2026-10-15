@@ -347,9 +347,9 @@ test('palette: turned off while the search code is still loading, or before it l
   assert.ok(!q.cmd.found);
 });
 
-// content.js's palette list (showCmd), sliced from the source with a stand-in DOM: where search results go.
+// The palette's list (features/palette.js showCmd), sliced from the source with a stand-in DOM: where search results go.
 const rows = () => {
-  const src = fs.readFileSync(path.join(__dirname, '../content.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '../features/palette.js'), 'utf8');
   const a = src.indexOf('  let cmd = null; // {'), b = src.indexOf('  const openCmd = () => {', a);
   assert.ok(a > 0 && b > a, 'palette markers');
   const el = () => ({

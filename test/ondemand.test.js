@@ -82,34 +82,49 @@ const dom = () => {
   return doc;
 };
 
-test('the keyboard help, opened before the page\'s words arrived, is redrawn in them', () => {
+// features/keys.js on Canvas, as content.js hands it keys, with the stand-in DOM.
+const keys = (words = { de: false }, site = 'canvas') => {
   const document = dom();
-  const words = { de: false };
+  const wordsIn = new Set();
   const ctx = vm.createContext({
-    ultra: false, document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, settings: { enhance: { palette: true } },
-    window: {}, Element: class {}, wordsIn: new Set(),
-    t: (k) => (words.de && k === 'Keyboard shortcuts' ? 'Tastenkürzel' : k),
+    document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../lib/page.js'),
+    GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing: () => false, wordsIn,
+      t: (k) => (words.de && k === 'Keyboard shortcuts' ? 'Tastenkürzel' : k) },
   });
-  ctx.window.top = {};
-  vm.runInContext(`${block('  // ---- keyboard shortcuts (Extras)', '  const typing = ')}; globalThis.api = { openKeys, get box() { return keysBox; } };`, ctx);
+  vm.runInContext(fs.readFileSync(require.resolve('../features/keys.js'), 'utf8'), ctx);
+  const press = (key) => ctx.GZ_KEYS.key({ key, target: document.body, preventDefault() {}, stopImmediatePropagation() {} });
+  const shown = () => document.body.children.filter((c) => c.isConnected);
+  return { document, wordsIn, press, shown };
+};
+
+test('the keyboard help, opened before the page\'s words arrived, is redrawn in them', () => {
+  const words = { de: false };
+  const k = keys(words);
   const back = { focus() {}, isConnected: true };
-  document.activeElement = back;
-  ctx.api.openKeys();
-  assert.equal(ctx.api.box.attrs['aria-label'], 'Keyboard shortcuts');
+  k.document.activeElement = back;
+  k.press('g');
+  k.press('?');
+  assert.equal(k.shown().length, 1);
+  assert.equal(k.shown()[0].attrs['aria-label'], 'Keyboard shortcuts');
   words.de = true;
-  for (const f of ctx.wordsIn) f();
-  assert.equal(ctx.api.box.attrs['aria-label'], 'Tastenkürzel');
-  assert.equal(document.body.children.filter((c) => c.isConnected).length, 1, 'one dialog, the old one gone');
+  for (const f of k.wordsIn) f();
+  assert.equal(k.shown()[0].attrs['aria-label'], 'Tastenkürzel');
+  assert.equal(k.shown().length, 1, 'one dialog, the old one gone');
+});
+
+test('on Ultra, "?" alone shows and hides the keyboard help, which has no Dismiss button', () => {
+  const k = keys(undefined, 'ultra');
+  k.press('?');
+  assert.equal(k.shown().length, 1);
+  assert.equal(k.shown()[0].querySelector('button'), null);
+  k.press('?');
+  assert.equal(k.shown().length, 0);
 });
 
 test('a closed keyboard help stays closed when the words arrive', () => {
-  const document = dom();
-  const ctx = vm.createContext({ ultra: false, document, location: { pathname: '/' }, navigator: { platform: '' }, settings: { enhance: {} }, window: {}, Element: class {}, wordsIn: new Set(), t: (k) => k });
-  ctx.window.top = {};
-  vm.runInContext(`${block('  // ---- keyboard shortcuts (Extras)', '  const typing = ')}; globalThis.api = { get box() { return keysBox; } };`, ctx);
-  for (const f of ctx.wordsIn) f();
-  assert.equal(ctx.api.box, null);
-  assert.equal(document.body.children.length, 0);
+  const k = keys();
+  for (const f of k.wordsIn) f();
+  assert.equal(k.document.body.children.length, 0);
 });
 
 // The draft backup on Ultra, while lib/drafts.js is on its way.

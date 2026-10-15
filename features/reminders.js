@@ -24,6 +24,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   let on = false, starting = null, asking = null, failed = 0, timer = 0, writing = false, sig = '';
   let busy = false, wait = 0; // a claim in flight; no new one before wait (the worker didn't answer)
   let unacked = null; // { ids, lease }: a toast drawn whose acknowledgement the worker hasn't kept yet
+  const drawn = new Set(); // every reminder this page has drawn, for the page's life
   const tab = crypto.randomUUID(); // this page, to the worker's leases (lib/remind.js claim and confirm)
   let live = null, hub = null, opener = null, run = null; // run: the streak as reckoned last
   const sources = new Map(); // reminders other packages add (class start W14, study W18): name -> () => events
@@ -107,8 +108,10 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     paintHead();
     if (hub) drawHub();
     const p = reminding() ? R.pending(evs, st, now, tab) : { show: [], next: Infinity };
-    // A toast drawn but not yet acknowledged: only the acknowledgement is sent again, never the toast.
-    if (unacked) { if (!busy && now >= wait) retry(); } else if (p.show.length && !quiet() && !busy && now >= wait) fire(p);
+    // A toast drawn but not yet acknowledged: only the acknowledgement is sent again, never the toast. Nothing this page
+    // has drawn is drawn here again, acknowledged or not.
+    const fresh = p.show.filter((e) => !drawn.has(e.id));
+    if (unacked) { if (!busy && now >= wait) retry(); } else if (fresh.length && !quiet() && !busy && now >= wait) fire({ ...p, show: fresh, ids: p.ids.filter((id) => !drawn.has(id)) });
     const next = Math.min(p.next, wait > now ? wait : Infinity, en().streak ? T.midnight(T.dayOf(now, who.tz) + 1, who.tz) : Infinity);
     if (next < Infinity) timer = setTimeout(arm, Math.max(1000, Math.min(next - now, OLD)));
   };
@@ -117,13 +120,29 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   // by then, on a quiz, or turned off, it shows nothing and confirms nothing, and the lease runs out for this tab or
   // another to show it later. An answer that came after its lease ended shows nothing either: by then another tab may
   // hold and have shown it. A worker that doesn't answer is asked again after a lease's length, not at once.
-  const ack = () => send({ op: 'confirm', ids: unacked.ids, lease: unacked.lease, tab }).then((c) => {
+  // An answer that keeps none of them is not an acknowledgement. What's left once seen ones and ones another tab now
+  // holds are dropped is this page's lease gone past its grace: it takes a new one, quietly (nothing is drawn), and
+  // confirms under that, once; anything still left is asked again a lease later.
+  const ack = async (again = true) => {
+    const c = await send({ op: 'confirm', ids: unacked.ids, lease: unacked.lease, tab });
     if (!c?.ok) return false;
-    // Kept, or refused because another claim has replaced this lease: either way there's nothing more to say.
     st = R.clean(c.data);
-    unacked = null;
-    return true;
-  });
+    const now = Date.now();
+    const kept = new Set(c.confirmed || []);
+    let left = unacked.ids.filter((id) => !kept.has(id) && !st.seen[id] && !(st.held[id] && st.held[id].by !== tab && st.held[id].until > now));
+    if (left.length && again) {
+      const r = await send({ op: 'claim', ids: left, tab });
+      if (r?.ok) {
+        st = R.clean(r.data);
+        left = left.filter((id) => r.claimed.includes(id));
+        if (!left.length) { unacked = null; return true; }
+        unacked = { ids: left, lease: r.lease };
+        return ack(false);
+      }
+    }
+    unacked = left.length ? { ids: left, lease: unacked.lease } : null;
+    return !unacked;
+  };
   const settled = (ok) => { busy = false; if (!ok) wait = Date.now() + R.LEASE; if (on) arm(); };
   const fire = (p) => {
     busy = true;
@@ -136,11 +155,21 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
       const show = p.show.filter((e) => mine.has(e.id));
       if (!show.length || !on || quiet() || !(Date.now() < r.until)) return;
       toast(show[0], p.show.length - 1);
+      for (const id of mine) drawn.add(id); // the toast stands for all of them ("N more")
       unacked = { ids: [...mine], lease: r.lease };
+      tries = 0;
       return ack().then((x) => { ok = x; });
     }).finally(() => settled(ok));
   };
-  const retry = () => { busy = true; ack().then(settled, () => settled(false)); };
+  // At most ACKS retries, a lease apart; then this page lets it go. It never draws it again; a later page may.
+  const ACKS = 5;
+  let tries = 0;
+  const retry = () => {
+    busy = true;
+    tries++;
+    const done = (ok) => { if (!ok && tries >= ACKS) unacked = null; settled(ok); };
+    ack().then(done, () => done(false));
+  };
   const keepStreak = (b, now) => {
     const s = R.streak(b, st.streak, T.dayOf(now, who.tz));
     run = s;
