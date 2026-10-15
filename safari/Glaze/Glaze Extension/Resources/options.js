@@ -418,7 +418,7 @@ GZ_UI.load().then((s) => {
   // A row per course, organizations apart, each in its own color (GZ_COURSE_COLORS) with its own tint.
   const renderCourses = (next = courses) => {
     courses = next || {};
-    const all = Object.entries(courses).filter(([, c]) => c?.slot)
+    const all = Object.entries(courses).filter(([, c]) => c?.slot || c?.canvas)
       .sort(([, a], [, b]) => a.name.localeCompare(b.name, undefined, { numeric: true }));
     // Picks and ticks from before each course had its own were by slot: a pick becomes the slot's own
     // course's, a tick every course in the slot.
@@ -439,15 +439,17 @@ GZ_UI.load().then((s) => {
     const row = ([id, c]) => {
       const li = document.createElement('li');
       // A nickname (set from the course's card on Blackboard) heads the row, with Blackboard's name under it.
-      const nick = (s.enhance.coursemenu && cc.names[id]) || '';
+      const nick = (!c.canvas && s.enhance.coursemenu && cc.names[id]) || '';
       c = { ...c, real: c.name, name: nick || c.name };
-      const input = Object.assign(document.createElement('input'), { type: 'color', value: colors[id].color });
+      const input = Object.assign(document.createElement('input'), { type: 'color', value: c.canvas ? c.color || '#808080' : colors[id].color });
       input.setAttribute('aria-label', t('Colour for {name}', { name: c.name }));
+      if (c.canvas) { input.disabled = true; input.title = t('Change the colour and nickname in Canvas’s own card menu.'); }
       const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Reset'), hidden: !cc.colors[id] });
       input.addEventListener('input', () => { cc.colors[id] = input.value; reset.hidden = false; refresh(); save(['courses'], true); });
       input.addEventListener('change', () => save(['courses']));
       reset.addEventListener('click', () => { delete cc.colors[id]; renderCourses(); refresh(); save(['courses']); });
       const name = Object.assign(document.createElement('span'), { className: 'name', textContent: c.name, title: nick ? c.real : c.name });
+      if (c.canvas) name.append(Object.assign(document.createElement('small'), { textContent: t('Change the colour and nickname in Canvas’s own card menu.') }));
       if (nick) name.append(Object.assign(document.createElement('small'), { textContent: c.real }));
       const tint = Object.assign(document.createElement('label'), { className: 'check', hidden: !cc.tint });
       tint.dataset.tint = '';
@@ -468,7 +470,8 @@ GZ_UI.load().then((s) => {
         if (look.value) cc.looks[id] = look.value; else delete cc.looks[id];
         save(['courses']);
       });
-      li.append(input, name, look, tint, reset);
+      li.append(input, name, look, tint);
+      if (!c.canvas) li.append(reset);
       return li;
     };
     const orgs = all.filter(([, c]) => c.org);

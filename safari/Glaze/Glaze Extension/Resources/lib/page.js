@@ -170,8 +170,9 @@ const GZ_PAGE = (() => {
   // A hover hint for a date: { title, sub, rel, past } or null, in Ultra's language. x is Ultra's text in
   // its locale, or a Date from its data. isDue: whether it's a due date; English text says so itself.
   // "Due date: 10/13/26, 11:59 PM" → { title: 'Due in 2 days', sub: 'Tuesday, October 13 at 11:59 PM', rel: 'in 2 days', past: false }
+  // x may also be canvasDate()'s { at, timed }.
   const when = (x, now = new Date(), locale, isDue = typeof x === 'string' && /\bdue\b/i.test(x)) => {
-    const m = x instanceof Date ? !Number.isNaN(x.getTime()) && { at: x, timed: true } : read(x, locale, now);
+    const m = x instanceof Date ? !Number.isNaN(x.getTime()) && { at: x, timed: true } : x?.at instanceof Date ? x : read(x, locale, now);
     if (!m) return null;
     const { rel, sub } = describe(m.at, m.timed, now, locale);
     const past = !(m.at > now);
@@ -244,6 +245,72 @@ const GZ_PAGE = (() => {
     return { label: circle ? `${w.rel} · ${where}` : w.rel, tone: due(date, now, locale) || 'later' };
   };
 
+  // ---- Canvas ----
+  // A date as Canvas's English formats write it: "Oct 16 at 11:59pm", "Sep 26 by 11:59pm", "Oct 2, 2025 at 9am",
+  // "Oct 14, 2026, 9:00 AM", "Sep 26" (the year left out in the current one). { at, timed } or null, which when()
+  // takes as it is. Canvas in another language writes CLDR's dates, read as Ultra's are (read()).
+  const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  // Case matters: "11:59pmOct 19" is a time then the next copy's date.
+  const CANVAS_DATE = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?!\d)(?:,?\s+(\d{4}))?(?:,?\s+(?:at\s+|by\s+)?(\d{1,2})(?::(\d{2}))?\s*([apAP])\.?[mM](?![a-z]))?/;
+  const canvasDate = (text, locale, now = new Date()) => {
+    if (locale && !/^en(?:-US)?$/i.test(locale)) return read(text, locale, now);
+    const m = CANVAS_DATE.exec(text || '');
+    if (!m) return null;
+    const [, mo, d, y = now.getFullYear(), h, mi = 0, ap] = m;
+    const timed = h !== undefined;
+    const at = new Date(+y, MONTHS.indexOf(mo.toLowerCase()), +d, timed ? (h % 12) + (/p/i.test(ap) ? 12 : 0) : 0, +mi);
+    return at.getDate() === +d && (!timed || (h <= 12 && mi <= 59)) ? { at, timed } : null;
+  };
+
+  // A score as Canvas lists it: "18 / 20" (the course Grades page), "18/20 pts" (the Assignments index), "90%",
+  // "88.5% (B+)": score()'s { ratio, band } with { got, max }, max null for a percentage. Letters (a course that
+  // restricts quantitative data), "-/20" (not graded) and "EX": null.
+  // ponytail: a comma is read as a decimal point ("18,5 / 20"); a thousands separator ("1,000") is misread.
+  const canvasScore = (text) => {
+    const m = /(\d+(?:[.,]\d+)?)\s*(?:\/\s*(\d+(?:[.,]\d+)?)|%)/.exec(text || '');
+    const [got, max] = m ? [m[1], m[2]].map((x) => x && +x.replace(',', '.')) : [];
+    const sc = m && score(got, max ?? 100);
+    return sc ? { ...sc, got, max: max ?? null } : null;
+  };
+
+  // A Canvas assignment from /courses/:id/assignments?include[]=submission as the gradebook record status() reads.
+  // A grade not posted yet comes without one, as work waiting to be graded; a course that restricts quantitative
+  // data leaves its grade to Canvas, which converts raw points to its letter. Not submitted and not missing (not due yet, or nothing to hand in): unknown.
+  const canvasGrade = (a) => {
+    const s = a?.submission;
+    if (!s) return undefined;
+    if (s.excused) return { isExempt: true };
+    const rqd = !!a.restrict_quantitative_data;
+    if (s.workflow_state === 'graded' && s.grade != null) {
+      return { status: 'GRADED', pointsPossible: a.points_possible, displayGrade: { text: !rqd && a.grading_type !== 'points' ? s.grade : undefined, score: rqd ? undefined : s.score } };
+    }
+    if (s.submitted_at) return { status: 'NEEDS_GRADING' };
+    return s.missing ? { status: 'NONE' } : undefined;
+  };
+  // The chip beside a Canvas assignment's due date: status() of canvasGrade(), with Canvas's word for excused.
+  // index: on the Assignments index, which already writes the score, "Excused" and "Not Yet Graded" beside the
+  // date, the chip says only what Canvas doesn't: how long is left, late, past due.
+  const canvasStatus = (a, now = new Date(), locale, index = false) => {
+    if (!a?.due_at) return null;
+    const g = canvasGrade(a);
+    if (g?.isExempt) return index ? null : { label: I.t('Excused', {}, locale), tone: 'muted' };
+    const at = new Date(a.due_at);
+    if (index && (g?.status === 'GRADED' || (g?.status === 'NEEDS_GRADING' && !a.submission.late && at <= now))) return null;
+    return status(at, null, g, now, !!a.submission?.late, locale);
+  };
+
+  // The whole of a title InstUI's TruncateText cut short ("Lab report 3: Photosy…"), from its link's label, which
+  // Canvas writes as the item's type, then the title ("Assignment, Lab report 3: Photosynthesis"), in any language:
+  // the label from where the shown part starts. Past the label's start where it can be, so a title that begins with
+  // its type's word ("Assignment, Assignment 12") isn't read from the type. null when nothing was cut or it isn't there.
+  const uncut = (shown, label) => {
+    const stem = /(?:…|\.\.\.)$/.test(shown?.trim() || '') && shown.trim().replace(/(?:…|\.\.\.)$/, '').trim();
+    if (!stem || !label) return null;
+    const at = label.indexOf(stem, 1);
+    const i = at > 0 ? at : label.startsWith(stem) ? 0 : -1;
+    return i < 0 ? null : label.slice(i);
+  };
+
   // Focus mode: minutes to read a document's text at 230 words a minute (0 under half a minute), and how
   // far down its scroller the reader is, 0-1.
   const readMinutes = (text) => {
@@ -303,16 +370,33 @@ const GZ_PAGE = (() => {
     return score - t.length * 0.01;
   };
 
+  // Canvas's "Complete One Item" alternatives together count as one requirement.
+  const canvasProgress = (mods) => {
+    if (mods.length >= 100 || mods.some((m) => !Array.isArray(m.items))) return null;
+    let done = 0, total = 0;
+    for (const m of mods) {
+      const cr = m.items.map((i) => i.completion_requirement).filter(Boolean);
+      const n = cr.filter((c) => c.completed).length;
+      const one = m.requirement_type === 'one';
+      total += one ? Math.min(1, cr.length) : cr.length;
+      done += one ? Math.min(1, n) : n;
+    }
+    return { done, total };
+  };
+
   // Where you were in each course's content (storage.local coursePlace): { cid: { open: [folder ids],
-  // top, at } }. `all` with course `cid` set to { open, top } at `now`: the 30 courses most recently
-  // left kept, each with its last 100 open folders.
-  const place = (all, cid, { open, top }, now) => {
-    const out = { [cid]: { open: [...new Set(open)].filter((id) => /^_\d+_\d+$/.test(id)).slice(-100), top: Math.max(0, Math.round(top) || 0), at: now } };
+  // top, item?, at } }. `all` with course `cid` set to { open, top, item } at `now`: the 30 courses most
+  // recently left kept, each with its last 100 open folders. `item` is Canvas's: the module item last opened.
+  const place = (all, cid, { open, top, item }, now) => {
+    const out = { [cid]: { open: [...new Set(open)].filter((id) => /^_\d+_\d+$/.test(id)).slice(-100), top: Math.max(0, Math.round(top) || 0), ...(/^\d+$/.test(item) && { item }), at: now } };
     const rest = Object.entries(all || {}).filter(([k, v]) => k !== cid && v?.at > 0).sort((a, b) => b[1].at - a[1].at).slice(0, 29);
     return Object.assign(out, Object.fromEntries(rest));
   };
 
-  return { due, score, read, when, describe, gradesByContent, overall, canvasOverall, isDone, status, fuzzy, files, readMinutes, readShare, completion, place };
+  // Only audited reading/global pages: discussions own g/c; Files, quizzes and gradebooks have their own keys.
+  const canvasKeys = (path) => /^(?:\/(?:courses|calendar|conversations|grades)?\/?|\/courses\/\d+(?:\/?|\/(?:pages\/[^/]+|assignments\/\d+)\/?))$/.test(path) && !/\/pages\/(?:new|edit)$/.test(path);
+
+  return { due, score, read, when, describe, gradesByContent, overall, canvasOverall, canvasProgress, isDone, status, canvasDate, canvasScore, canvasGrade, canvasStatus, uncut, fuzzy, files, readMinutes, readShare, completion, place, canvasKeys };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_PAGE;

@@ -138,6 +138,188 @@ void main() {
   gl_FragColor = vec4(dither(c), 1.);
 }`;
 
+// Halloween: two little night scenes drawn from shapes, each a signed distance (negative inside) that
+// cover() turns into smooth-edged coverage. Characters are about one unit across in their own space.
+const SPOOKY = `${FLAT}
+float cover(float d) { float w = fwidth(d) + 1e-4; return 1. - smoothstep(-w, w, d); }
+float box(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.)) + min(max(d.x, d.y), 0.); }
+float seg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
+mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
+// Twinkling stars, only up in the sky.
+float stars(vec2 p) {
+  vec2 g = p * 34., id = floor(g);
+  float h = hash(id);
+  float d = length(fract(g) - .5 - (vec2(hash(id + 3.1), hash(id + 7.7)) - .5) * .6);
+  return step(.955, h) * (1. - smoothstep(.03, .1, d)) * (.55 + .45 * sin(uTime * (1. + 2. * h) + h * 40.)) * smoothstep(.45, .8, p.y);
+}
+// A bat, its wings at f (1 up, -1 down), with two little eyes.
+float bat(vec2 p, float f) {
+  p.x = abs(p.x);
+  vec2 w = rot(.5 * f) * (p - vec2(.1, .02));
+  float wing = max(length((w - vec2(.32, .03)) * vec2(1., 2.6)) - .32, -(length(vec2(mod(w.x, .16) - .08, w.y + .11)) - .07));
+  return min(min(length(p * vec2(1.4, 1.)) - .16, wing), seg(p, vec2(.04, .08), vec2(.1, .22)) - .04);
+}
+vec3 bats(vec3 c, vec2 p, vec3 k, vec3 eye) {
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    vec2 o = vec2(mod(uTime * (.045 + .02 * fi) + fi * .9, uAspect + .6) - .3, .6 + .11 * fi + .04 * sin(uTime * .8 + fi * 2.));
+    vec2 q = (p - o) / (.034 - .006 * fi);
+    c = mix(c, k, amt(cover(bat(q, sin(uTime * 9. + fi * 2.))) * .95));
+    c = mix(c, eye, amt(cover(length(vec2(abs(q.x) - .055, q.y - .03)) - .028) * .9));
+  }
+  return c;
+}
+// Fireflies or wisps: n soft lights drifting low over the ground, each pulsing on its own beat.
+vec3 lights(vec3 c, vec2 p, vec3 k, float lo, float hi) {
+  for (int i = 0; i < 7; i++) {
+    float fi = float(i), h = hash(vec2(fi, 9.));
+    vec2 o = vec2(mod(h * 7. + uTime * (.01 + .01 * h), 1.) * uAspect + .04 * sin(uTime * .6 + fi), mix(lo, hi, hash(vec2(fi, 4.))) + .03 * sin(uTime * .9 + fi * 3.));
+    float d = length(p - o);
+    c = mix(c, k, amt((exp(-d * d * 9000.) * .9 + exp(-d * 40.) * .15) * (.5 + .5 * sin(uTime * 2. + fi * 5.))));
+  }
+  return c;
+}
+`;
+// A graveyard on a moonlit hill: bats, drifting fog, ghosts floating by, and a skeleton who peeks
+// out from behind a headstone now and then to wave.
+const GRAVEYARD = `${SPOOKY}
+float hill(float x) { return .27 + .03 * sin(x * 1.7 + .5) + .015 * sin(x * 4.3 + 1.); }
+float stone(vec2 p) { return min(box(p - vec2(0., -.3), vec2(.5, .6)), length(p - vec2(0., .3)) - .5); }
+float skull(vec2 p) { return min(length(p * vec2(1., 1.08)) - .42, box(p - vec2(0., -.38), vec2(.19, .12)) - .07); }
+float holes(vec2 p) {
+  float eyes = length(vec2(abs(p.x) - .16, p.y + .02) * vec2(1., .85)) - .12;
+  float nose = length((p - vec2(0., -.19)) * vec2(1.8, 1.)) - .05;
+  float teeth = max(abs(p.y + .4) - .07, max(abs(p.x) - .15, -(abs(fract(p.x * 10. + .5) - .5) - .38)));
+  return min(min(eyes, nose), teeth);
+}
+float ghost(vec2 p, float t) {
+  float body = max(box(p - vec2(0., -.12), vec2(.3, .3)), -.4 + .05 * sin(p.x * 20. + t * 5.) - p.y);
+  return min(length(p - vec2(0., .18)) - .3, body);
+}
+void main() {
+  vec2 p = vec2(vUv.x * uAspect, vUv.y);
+  float t = uTime;
+  vec3 c = mix(uGround, uC2, amt(smoothstep(.95, .2, p.y) * .4));
+  c = mix(c, uC3, amt(stars(p) * .8));
+  vec2 m = p - vec2(uAspect - .3, .78);
+  c = mix(c, uC3, amt(exp(-length(m) * 9.) * .3));
+  c = mix(c, uC3, amt(cover(length(m) - .07) * .9));
+  c = mix(c, uGround, amt((cover(length(m - vec2(.022, .015)) - .016) + cover(length(m + vec2(.024, .012)) - .011)) * .12));
+  c = bats(c, p, mix(uGround, uC2, .6), uC3);
+  float h = hill(p.x);
+  c = mix(c, mix(uGround, uC2, .2), amt(cover(p.y - h)));
+  float fog = smoothstep(.4, .14, p.y) * fbm(vec2(p.x * 1.4 - t * .04, p.y * 6. + t * .03));
+  c = mix(c, uC1, amt(fog * .22));
+  vec3 rock = mix(uGround, uC1, .2);
+  for (int i = 0; i < 7; i++) {
+    float fi = float(i);
+    float x = (fi + .5) / 7. * uAspect + (hash(vec2(fi, 1.)) - .5) * .1;
+    float s = .042 + .02 * hash(vec2(fi, 2.));
+    vec2 q = rot((hash(vec2(fi, 3.)) - .5) * .25) * (p - vec2(x, hill(x) - .02 + s * .9)) / s;
+    if (i == 3) {
+      // The skeleton: rises behind this stone, waves a while, and sinks back down, about every 14 s.
+      float ph = mod(t * .9, 14.);
+      float up = smoothstep(.5, 1.6, ph) * (1. - smoothstep(9., 10.2, ph));
+      float y = mix(-1.6, 0., up);
+      float wave = sin(ph * 7.) * smoothstep(2., 2.6, ph) * (1. - smoothstep(7.5, 8.2, ph));
+      float above = step(h, p.y);
+      vec2 k = (q - vec2(.24, .8 + y)) / .62;
+      vec2 S = vec2(.36, .3 + y), E = S + vec2(.32, .18), H = E + rot(wave * .55) * vec2(.06, .36);
+      float arm = min(seg(q, S, E), seg(q, E, H)) - .055;
+      vec2 hq = rot(wave * .55) * (q - H);
+      arm = min(arm, length(hq) - .08);
+      for (int j = 0; j < 3; j++) arm = min(arm, seg(hq, vec2(0.), vec2(-.08 + .08 * float(j), .17)) - .03);
+      c = mix(c, uC3, amt(cover(min(skull(k) * .62, arm)) * above));
+      c = mix(c, uGround, amt(cover(holes(k)) * cover(skull(k)) * above * .9));
+    }
+    c = mix(c, rock, amt(cover(stone(q))));
+    float cross = min(box(q - vec2(0., .12), vec2(.06, .32)), box(q - vec2(0., .26), vec2(.22, .06)));
+    c = mix(c, uGround, amt(cover(cross) * step(.4, hash(vec2(fi, 5.))) * .5));
+  }
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    vec2 o = vec2(mod(t * (.02 + .008 * fi) + (fi + .3) * (uAspect + .4) / 3., uAspect + .4) - .2, .4 + .1 * fi + .025 * sin(t * 1.3 + fi * 2.));
+    vec2 q = (p - o) / (.075 - .012 * fi);
+    float g = cover(ghost(q, t + fi));
+    c = mix(c, uC1, amt(g * .8));
+    float face = min(length(vec2(abs(q.x) - .11, q.y - .2) * vec2(1., .7)) - .05, length((q - vec2(0., .04)) * vec2(1., .8)) - .045);
+    c = mix(c, uGround, amt(cover(face) * g * .85));
+    c = mix(c, uC2, amt(cover(length(vec2(abs(q.x) - .2, q.y - .08)) - .045) * g * .35));
+  }
+  c = mix(c, uC1, amt(smoothstep(.2, .02, p.y) * fbm(vec2(p.x * 2. + t * .05, t * .05)) * .3));
+  c = mix(c, mix(uGround, uC2, .08), amt(cover(p.y - (.09 + .02 * sin(p.x * 2.3 + 2.)))));
+  c = lights(c, p, uC1, .12, .32);
+  gl_FragColor = vec4(dither(c), 1.);
+}`;
+// A pumpkin patch at dusk: a crescent moon, bats, a crooked fence, falling leaves, fireflies, and a row
+// of pumpkins that sway a little; some are jack-o'-lanterns flickering, some just have happy faces.
+const PUMPKINS = `${SPOOKY}
+float field(float x) { return .2 + .02 * sin(x * 1.9 + 1.) + .01 * sin(x * 5.1); }
+float pumpkin(vec2 p) { return min(length(p * vec2(1., 1.25)) - .42, length(vec2(abs(p.x) - .25, p.y) * vec2(1.1, 1.25)) - .36); }
+float tri(vec2 p, float w, float h) { p.x = abs(p.x); return max(-p.y, (p.x * h + p.y * w - w * h) / length(vec2(h, w))); }
+float lantern(vec2 p) {
+  float eyes = tri(vec2(abs(p.x) - .16, p.y - .02), .09, .14);
+  float nose = tri(p - vec2(0., -.08), .05, .07);
+  float mouth = max(length(p - vec2(0., -.02)) - .28, -(length(p - vec2(0., .1)) - .3));
+  mouth = max(mouth, -box(vec2(abs(p.x) - .09, p.y + .16), vec2(.035, .05)));
+  return min(min(eyes, nose), mouth);
+}
+float happy(vec2 p) {
+  float eyes = length(vec2(abs(p.x) - .14, p.y - .04) * vec2(1., .8)) - .055;
+  float smile = max(abs(length(p - vec2(0., -.02)) - .12) - .022, p.y + .02);
+  return min(eyes, smile);
+}
+void main() {
+  vec2 p = vec2(vUv.x * uAspect, vUv.y);
+  float t = uTime;
+  vec3 c = mix(uGround, uC2, amt(smoothstep(1., .3, p.y) * .32));
+  c = mix(c, uC1, amt(smoothstep(.55, .22, p.y) * .28));
+  c = mix(c, uC3, amt(stars(p) * .75));
+  vec2 m = p - vec2(.32, .8);
+  c = mix(c, uC3, amt(exp(-length(m) * 10.) * .22));
+  c = mix(c, uC3, amt(cover(max(length(m) - .065, -(length(m - vec2(.03, .018)) - .058))) * .9));
+  c = bats(c, p, mix(uGround, uC2, .45), uC1);
+  float back = .3 + .035 * sin(p.x * 1.3 + 1.) + .018 * sin(p.x * 3.7);
+  vec3 dark = mix(uGround, uC2, .22);
+  c = mix(c, dark, amt(cover(p.y - back)));
+  float post = box(vec2(mod(p.x, .11) - .055, p.y - back - .028), vec2(.007, .035)) - .002;
+  float rail = abs(p.y - back - .035 - .006 * sin(p.x * 9.)) - .0035;
+  c = mix(c, mix(uGround, uC2, .38), amt(cover(min(post, rail)) * smoothstep(.2, .6, fbm(vec2(p.x * 2., 3.)))));
+  float f = field(p.x);
+  c = mix(c, mix(uGround, uC2, .12), amt(cover(p.y - f)));
+  vec3 vine = mix(uGround, vec3(.3, .55, .25), .55);
+  c = mix(c, vine, amt(cover(abs(p.y - f + .05 + .012 * sin(p.x * 13. + 1.)) - .003) * .8));
+  for (int i = 0; i < 9; i++) {
+    float fi = float(i), h = hash(vec2(fi, 1.));
+    float s = .045 + .035 * hash(vec2(fi, 2.));
+    float x = (fi + .5) / 9. * uAspect + (h - .5) * .08;
+    vec2 q = rot(.06 * sin(t * 1.2 + fi * 1.7)) * (p - vec2(x, f - .07 - .05 * hash(vec2(fi, 3.)) + s * .42)) / s;
+    float d = pumpkin(q);
+    float glow = .75 + .25 * noise(vec2(t * 4., fi * 3.));
+    bool lit = h > .45;
+    if (lit) c = mix(c, uC3, amt(exp(-max(d, 0.) * 3.) * .25 * glow));
+    vec3 skin = mix(mix(uC1, uGround, .4 * smoothstep(.1, -.45, q.y)), uC3, .25 * smoothstep(.1, .45, q.y - q.x * .4));
+    skin = mix(skin, mix(uC1, uGround, .45), cover(abs(abs(q.x) - .2) - .018) * cover(d + .05));
+    c = mix(c, skin, amt(cover(d)));
+    c = mix(c, vine, amt(cover(box(rot(.25) * (q - vec2(.03, .46)), vec2(.05, .09)) - .02)));
+    if (lit) c = mix(c, uC3, amt(cover(lantern(q)) * glow));
+    else {
+      c = mix(c, uGround, amt(cover(happy(q)) * .85));
+      c = mix(c, uC3, amt(cover(length(vec2(abs(q.x) - .125, q.y - .07)) - .018) * .9));
+      c = mix(c, uC2, amt(cover(length(vec2(abs(q.x) - .26, q.y + .06)) - .05) * .4));
+    }
+  }
+  for (int i = 0; i < 8; i++) {
+    float fi = float(i), h = hash(vec2(fi, 6.));
+    vec2 o = vec2(fract(h * 3.7) * uAspect + .06 * sin(t * .8 + fi * 2.), 1.1 - mod(t * (.02 + .015 * h) + h, 1.3));
+    vec2 q = rot(t * (.6 + h) + fi) * (p - o) / .014;
+    vec3 leaf = mix(uC1, i == 2 || i == 5 ? uC2 : uC3, h * .7);
+    c = mix(c, leaf, amt(cover(length(q * vec2(1., 2.3)) - .55) * .85));
+  }
+  c = lights(c, p, uC3, .08, .3);
+  gl_FragColor = vec4(dither(c), 1.);
+}`;
+
 // Point scenes: soft round dots in 3D, moved in the vertex shader.
 const DOT = `
 varying vec3 vColor;
@@ -203,6 +385,8 @@ const SCENES = {
   lava: flat(0.25, LAVA),
   contours: flat(0.5, CONTOURS),
   horizon: flat(0.5, HORIZON),
+  graveyard: flat(0.6, GRAVEYARD),
+  pumpkins: flat(0.6, PUMPKINS),
   waves: { scale: 0.5, make: (m) => [new Points(grid(), m(WAVES, DOT, true)), perspective(1.1, 0, -1.5)] },
   dust: { scale: 0.5, make: (m) => [new Points(motes(), m(DUST, DOT, true)), perspective(0, 0, -2)] },
 };

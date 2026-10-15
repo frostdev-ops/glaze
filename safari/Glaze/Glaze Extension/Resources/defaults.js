@@ -52,7 +52,7 @@ const GZ_SPEC = {
     // The gradient's shape: style, direction (degrees), blend (100 melts the colors together, 0 is
     // hard bands) and spread (how much of the screen the change of color covers, in %).
     style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
-    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon']], intensity: [50, [0, 100]],
+    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins']], intensity: [50, [0, 100]],
   },
   motion: {
     level: ['subtle', ['off', 'subtle', 'expressive']],
@@ -176,7 +176,8 @@ const GZ_SCENE_LOOK = (intensity) => {
 const HEX = /^#[0-9a-f]{6}$/i;
 // Ultra gives each course one of ten colour slots (.course-color-1…10), the same on every page.
 const COURSE_SLOT = /^([1-9]|10)$/;
-const COURSE_ID = /^_\d+_\d+$/;
+// Canvas keys include the origin: two schools can both have a course 25.
+const COURSE_ID = /^(?:_\d+_\d+|canvas:https?:\/\/[a-z\d.-]+(?::\d+)?\/\d+)$/i;
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 const cleanName = (n) => (typeof n === 'string' ? n.trim().slice(0, 40) : '');
 // A course's nickname: one line, 60 characters at most (counted as people count them, not as UTF-16 units).
@@ -254,6 +255,15 @@ const GZ_LOOKS = [
   ['Clear', 'Frost', { font: 'atkinson', scale: 1.1, leading: 1.7, density: 'roomy', glass: 0, radius: 10 }, { kind: 'solid' }],
   ['Lagoon', 'Frost', { font: 'figtree', radius: 14, glass: 14 }, { kind: 'gradient', style: 'mesh', colors: ['#22d3ee', '#6366f1', '#34d399'], dim: 70 }],
   ['Rose Garden', 'Rose', { font: 'nunito', head: 'lora', radius: 18 }, { kind: 'aurora', colors: ['#f472b6', '#a78bfa', '#fb923c'], dim: 75 }],
+  // Halloween: a moonlit graveyard and a pumpkin patch at dusk, with Fredoka's round, friendly headings.
+  ['Graveyard', GZ_PALETTE(
+    '#6ee7b7', '#a7f3d0', '#12352e', '#05201a',
+    '#171a2e', '#0c0e1d', '#eef0ff', '#a6abc9', '#767b9e', '#262a45', '#3a3f63',
+    '#4ade80', '#fbbf24', '#fb7185'), { font: 'nunito', head: 'fredoka', radius: 18, glass: 16, depth: 2 }, { kind: 'scene', scene: 'graveyard', intensity: 60, colors: ['#c4f1e4', '#7c5cff', '#fde68a'] }],
+  ['Pumpkin Patch', GZ_PALETTE(
+    '#fb923c', '#fdba74', '#3d1d0c', '#1f0d03',
+    '#1e1426', '#120b18', '#fdf2e9', '#c9b2a6', '#8e7b86', '#2f2236', '#47334f',
+    '#a3e635', '#facc15', '#f87171'), { font: 'nunito', head: 'fredoka', radius: 20, glass: 16, depth: 2 }, { kind: 'scene', scene: 'pumpkins', intensity: 60, colors: ['#fb923c', '#a855f7', '#fde047'] }],
 ].map(([name, palette, look, bg]) => ({ name, palette: typeof palette === 'string' ? palette : null, colors: typeof palette === 'string' ? GZ_PRESETS.find(([n]) => n === palette)[1] : palette, look, bg }));
 // The settings a look changes, from settings `s`: { colors, preset, auto, look, bg }. A look with its own
 // colors (Synthwave) has no preset name, like any unsaved palette.
