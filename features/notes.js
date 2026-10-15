@@ -53,7 +53,13 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const fail = (r) => t(ERR[r?.error] || "Couldn't save. Try again in a moment.");
 
   // ---- the Course notes button on a course's home -----------------------------------------------------------------
-  const sync = (on = alive()) => {
+  // The button shows when the stored switches say Glaze and Notes are on (on a course's home, Glaze runs whenever it is on:
+  // Keep quizzes light never applies there); it doesn't wait for the page's own copy of the settings, or for Glaze to
+  // finish starting on the page. Opening still needs both (alive). want: the last answer, for a redraw in new words.
+  let want = false;
+  const shows = (s) => s.enabled !== false && !!s.enhance.notes;
+  const sync = (on = want) => {
+    want = on;
     const m = on && window.top === window && location.pathname.match(/^\/courses\/(\d+)\/?$/);
     const side = m && document.getElementById('course_show_secondary');
     let b = document.getElementById('gz-nt-course');
@@ -68,16 +74,22 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   };
   ctx.wordsIn?.add(() => sync());
   // The course-home hook (features/notes-home.js), which the worker also puts into a course home already open when Notes
-  // is turned on: the switch is read from storage now, as the page's own copy of the settings may not have caught up.
-  const home = () => new Promise((res) => { try { chrome.storage.sync.get(['enabled', 'enhance'], (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } })
-    .then((r) => r && sync(alive(GZ_SANITIZE(r))));
+  // is turned on: the switches are read from storage now. A change that comes while that read is on its way supersedes
+  // it (seen), so an older answer can't bring the button back after Notes was turned off.
+  let seen = 0;
+  const home = () => {
+    const my = ++seen;
+    return new Promise((res) => { try { chrome.storage.sync.get(['enabled', 'enhance'], (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } })
+      .then((r) => { if (r && my === seen) sync(shows(GZ_SANITIZE(r))); });
+  };
   // Switched off (or on) in another tab or the editor: read from the change itself, as the page's own copy of the
   // settings may not have caught up yet.
   try {
     chrome.storage.onChanged.addListener((ch, area) => {
       if (area !== 'sync' || !(ch.enhance || ch.enabled)) return;
+      seen++;
       const s = ctx.settings();
-      sync(alive(GZ_SANITIZE({ enabled: ch.enabled ? ch.enabled.newValue : s.enabled, enhance: ch.enhance ? ch.enhance.newValue : s.enhance })));
+      sync(shows(GZ_SANITIZE({ enabled: ch.enabled ? ch.enabled.newValue : s.enabled, enhance: ch.enhance ? ch.enhance.newValue : s.enhance })));
     });
   } catch { /* extension reloaded */ }
   const canvasId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1] || '';

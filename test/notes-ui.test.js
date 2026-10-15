@@ -122,9 +122,11 @@ class El {
 // A Canvas course home with Glaze and Notes on; the worker is lib/notes.js run over memory, its answers and storage's
 // change events arriving later, as in a browser. env.activation: navigator.userActivation.isActive; env.hold(m): a
 // promise the worker waits for before it runs m; env.zipHold: a promise loading lib/zip.js waits for. on: the page's own
-// copy of the Notes switch; stored: the switch in storage.sync (the two differ just after it is turned on elsewhere).
+// copy of the Notes switch; stored: the switch in storage.sync (the two differ just after it is turned on elsewhere);
+// live: whether Glaze has finished starting on the page (GZ_CTX.on()). env.syncHold: a promise a storage.sync read
+// answers after (with what was stored when it was asked); env.changeSync(enhance): that change, as storage reports it.
 const D = require('../defaults.js');
-const page = ({ on = true, stored = on } = {}) => {
+const page = ({ on = true, stored = on, live = true } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => new El(t, doc);
   doc.root = make('html');
@@ -158,7 +160,8 @@ const page = ({ on = true, stored = on } = {}) => {
   const idb = { get: async (s, k) => db[s].get(k), put: async (s, k, v) => { db[s].set(k, v); }, del: async (s, ks) => { for (const k of ks) db[s].delete(k); },
     scan: async (s, p) => [...db[s]].filter(([k]) => k.startsWith(p)), keys: async (s, p) => [...db[s].keys()].filter((k) => k.startsWith(p)), estimate: async () => ({ usage: 1, quota: 1e9 }) };
   const sent = [], blobs = [];
-  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null };
+  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null, live, stored, syncHold: null };
+  env.changeSync = (enhance) => { env.stored = enhance.notes; for (const f of changed) f({ enhance: { newValue: enhance } }, 'sync'); };
   const URLs = Object.assign(function () {}, { createObjectURL: (b) => { blobs.push(b); return `blob:x/${blobs.length}`; }, revokeObjectURL() {} });
   const context = vm.createContext({
     document: doc, window: {}, location: { origin: 'https://school.instructure.com', pathname: '/courses/7', href: 'https://school.instructure.com/courses/7' },
@@ -170,7 +173,7 @@ const page = ({ on = true, stored = on } = {}) => {
     GZ_NOTES: N, GZ_DOCTEXT: require('../lib/doctext.js'), GZ_ZIP: require('../lib/zip.js'), GZ_I18N: require('../lib/i18n.js'), GZ_PAGE: require('../lib/page.js'),
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_LOOKS: D.GZ_LOOKS, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY,
     GZ_CTX: {
-      t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => true, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
+      t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => env.live, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
       profile: async () => ({ id: 5 }), canvasCourses: async () => [{ id: 7, name: 'Biology' }, { id: 9, name: 'History' }],
       need: (file) => (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
       // What the command palette (features/palette.js) asks of the page.
@@ -178,7 +181,7 @@ const page = ({ on = true, stored = on } = {}) => {
     },
     chrome: {
       runtime: { sendMessage: (m, cb) => { sent.push(m); Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => cb(JSON.parse(JSON.stringify(r)))); } },
-      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => cb({ enhance: { notes: stored } }) }, onChanged: { addListener: (f) => changed.push(f) } },
+      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { const r = { enhance: { notes: env.stored } }; Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
     },
   });
   context.window.top = context.window;
@@ -191,7 +194,7 @@ const page = ({ on = true, stored = on } = {}) => {
   env.say = () => env.box().querySelector('.gz-nt-say').textContent;
   env.fire = doc.fire;
   env.seed = async (list) => { for (const n of list) await N.run({ key: 'notesIdx:https://school.instructure.com/5', op: 'save', base: 0, sid: `s${n.id}`, copy: id(999), ...n }, { local }, idb); await wait(10); };
-  env.openView = async () => { env.ui.sync(); env.fire(doc.getElementById('gz-nt-course'), 'click'); await settle(); };
+  env.openView = async () => { await env.ui.home(); env.fire(doc.getElementById('gz-nt-course'), 'click'); await settle(); };
   return env;
 };
 const zipNotes = async (blob) => JSON.parse(await require('../lib/doctext.js').unzip(new Uint8Array(await blob.arrayBuffer())).text('notes.json')).notes;
@@ -199,7 +202,7 @@ const zipNotes = async (blob) => JSON.parse(await require('../lib/doctext.js').u
 test("the page's scripts can't open Notes or pick a note: a faked click, change or typing is ignored", async () => {
   const P = page();
   await P.seed([{ id: id(1), title: 'Biology notes', course: '7', html: '<p>bio</p>' }, { id: id(2), title: 'Secret history', course: '9', html: '<p>Previously closed private text</p>' }]);
-  P.ui.sync();
+  await P.ui.home();
   const button = P.doc.getElementById('gz-nt-course');
   assert.ok(button, 'the Course notes button is on the course home');
   P.fire(button, 'click', { trusted: false });
@@ -487,4 +490,58 @@ test('the Course notes button costs the first script nothing: the worker registe
     assert.deepEqual(asked, want ? ['features/notes.js'] : [], pathname);
   }
   assert.ok(!read('content.js').includes('notes.js'), 'content.js has no notes hook');
+});
+
+test('Course notes appears even when the hook runs before Glaze has finished starting on the page', async () => {
+  const P = page({ on: false, stored: true, live: false });
+  P.run(read('features/notes-home.js'));
+  await settle();
+  assert.ok(P.doc.getElementById('gz-nt-course'), 'there before the page is live');
+  // Opening still waits for Glaze to be running on the page.
+  P.fire(P.doc.getElementById('gz-nt-course'), 'click');
+  await settle();
+  assert.equal(P.box(), null);
+  P.live = true;
+  P.fire(P.doc.getElementById('gz-nt-course'), 'click');
+  await settle();
+  assert.equal(P.box(), null, "and for the page's own copy of the switch");
+});
+
+test('an older read of the switch, answered after Notes was turned off, does not bring the button back', async () => {
+  const P = page();
+  await P.ui.home();
+  assert.ok(P.doc.getElementById('gz-nt-course'));
+  const late = later();
+  P.syncHold = late;
+  const asked = P.ui.home(); // reads Notes on, held
+  P.changeSync({ notes: false }); // turned off meanwhile
+  assert.equal(P.doc.getElementById('gz-nt-course'), null, 'gone at the change');
+  late.resolve();
+  await asked;
+  await settle();
+  assert.equal(P.doc.getElementById('gz-nt-course'), null, 'the older answer is dropped');
+  P.syncHold = null;
+  await P.ui.home();
+  assert.equal(P.doc.getElementById('gz-nt-course'), null);
+  P.changeSync({ notes: true });
+  assert.ok(P.doc.getElementById('gz-nt-course'), 'and back when it is turned on');
+});
+
+test("restoring a deleted note whose deletion's clean-up failed keeps the file staged for it", async () => {
+  const store = {}, db = { bodies: new Map(), files: new Map(), blobs: new Map() };
+  const local = { get: async (k) => (k in store ? { [k]: structuredClone(store[k]) } : {}), set: async (o) => { Object.assign(store, structuredClone(o)); return true; } };
+  const idb = { get: async (s, k) => db[s].get(k), put: async (s, k, v) => { db[s].set(k, v); }, del: async (s, ks) => { for (const k of ks) db[s].delete(k); },
+    scan: async (s, p) => [...db[s]].filter(([k]) => k.startsWith(p)), keys: async (s, p) => [...db[s].keys()].filter((k) => k.startsWith(p)), estimate: async () => null };
+  const run = (m, at, d = idb) => N.run({ key: 'notesIdx:https://school.instructure.com/5', ...m }, { local }, d, at);
+  const png = N.b64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]));
+  const t = Date.UTC(2026, 9, 1), A = id(1), F = id(20);
+  await run({ op: 'file', id: F, kind: 'image', name: 'a.png', data: png, note: A }, t);
+  await run({ op: 'save', id: A, base: 0, sid: 'a', html: `<p><img data-gz-file="${F}"></p>`, title: 'A', copy: id(90) }, t + 1);
+  await run({ op: 'trash', ids: [A] }, t + 2);
+  assert.equal((await run({ op: 'purge', ids: [A] }, t + 3, { ...idb, del: async () => { throw new Error('io'); } })).ok, true, "committed; its clean-up didn't finish");
+  assert.equal((await run({ op: 'file', id: F, kind: 'image', name: 'a.png', data: png, note: A }, t + 10)).ok, true, 'the backup stages it again');
+  await run({ op: 'tidy' }, t + 11);
+  assert.deepEqual(await run({ op: 'import', notes: [{ id: A, title: 'A', created: t, at: t + 1, html: `<p><img data-gz-file="${F}"></p>` }] }, t + 12), { ok: true, done: 1, skipped: 0 });
+  assert.equal((await run({ op: 'getFile', id: F }, t + 13)).ok, true);
+  assert.equal(db.files.size, 1, 'one file, the same id');
 });
