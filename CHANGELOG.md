@@ -138,8 +138,19 @@ All notable changes to Glaze are documented here. The format follows
   when the search is done. Turning it off while the palette is open stops it at once. It waits for a 150 ms pause, cancels what's still running on
   the next keystroke, asks six lists at a time, and keeps answers in memory for five minutes. Read-only, to your own
   Canvas only.
+- **Canvas's document viewer in your palette** (on by default): PDFs and other files Canvas shows in its own viewer get
+  your palette's background, toolbar and thumbnails, instead of the whole viewer being turned negative. The pages stay
+  as the document has them unless you dim or invert them. A signed-in student's annotation tools keep Canvas's look.
+- **Pen, highlighter and eraser on documents** (Canvas, off by default): draw and highlight on files in Canvas's
+  document viewer in any color and size, with undo and redo (Ctrl/⌘+Z), clear page, export and import as a file, and
+  a page saved as a picture. Free, no account. Marks are kept on this device per Canvas site, account and file, and
+  never sent anywhere; they keep their place at any zoom and come back as you scroll. Works with a mouse, a pen or
+  touch (once an Apple Pencil draws, fingers scroll). Canvas's own annotations are left alone.
 
 ### Changed
+
+- **Dark documents** is now a choice: off, dimmed (pictures stay true) or inverted (as before). If you had it on, it
+  stays inverted. The moon button beside a preview switches between dimmed and off.
 
 - **Lighter on every page:** Glaze loads about 38% less code on Canvas and Blackboard pages. Its words in your
   language, Download all and draft backup now load only on the pages that use them.

@@ -21,7 +21,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     try {
       const d = f.contentDocument;
       const old = d?.getElementById('gz-unflip');
-      const on = html.matches('[data-gz-dark-theme][data-gz-enhance-darkDocs]'); // as extras.css
+      const on = html.matches('[data-gz-dark-theme][data-gz-enhance-docPages="dark"]'); // as extras.css
       if (!d?.documentElement || on === !!old) return;
       if (old) return old.remove();
       const s = d.createElement('style');
@@ -58,6 +58,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     if (!ultra) docTools?.querySelector('[data-gz="focus"]')?.focus({ preventScroll: true });
   };
   const sync = () => {
+    tellDocs();
     const on = window.top === window && ctx.on() && ctx.settings().enhance.toggles;
     const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
     if (focusAt && (focusAt !== doc || focusPath !== location.pathname)) setFocus(false);
@@ -81,7 +82,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
       docTools.setAttribute('aria-label', t('Document'));
       const time = document.createElement('span');
       time.className = 'gz-doc-time';
-      docTools.append(time, docButton('dark', t('Dark documents'), () => setDark(!ctx.settings().enhance.darkDocs)), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
+      docTools.append(time, docButton('dark', t('Dark documents'), () => setDark(ctx.settings().enhance.docPages === 'plain' ? 'dim' : 'plain')), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
       document.body.append(docTools);
     }
     if (!ultra) {
@@ -96,7 +97,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     const read = mins && t('{n} min read', { n: mins });
     if (mins && time.textContent !== read) time.textContent = read;
     darkB.hidden = !dark;
-    darkB.setAttribute('aria-pressed', String(ctx.settings().enhance.darkDocs));
+    darkB.setAttribute('aria-pressed', String(ctx.settings().enhance.docPages !== 'plain'));
     focusB.hidden = !doc;
     focusB.setAttribute('aria-pressed', String(!!focusAt));
     html.setAttribute('data-gz-doc-tools', '');
@@ -114,7 +115,38 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     e.stopImmediatePropagation();
     setFocus(false);
   };
-  return { sync, esc };
+  // ---- Canvas's document viewer ----------------------------------------------------------------------------------
+  // features/docviewer.js, in a canvadocs frame of this page, asks (content.js hands the message here) for the palette,
+  // the switches, which file and whose (the frame's /api/v1/canvadoc_session blob names both; else this page's file),
+  // and Glaze's words. Answered at that frame's origin only, never '*'; told again when any of it changes (every sync:
+  // content.js calls it from applySettings and disable) and once the words are in.
+  const docFrames = new Map(); // a DocViewer frame's window -> what tells it
+  const tellDocs = () => { for (const [w, tell] of docFrames) if (w.closed) docFrames.delete(w); else tell(); };
+  const ask = (e) => {
+    const q = e.data;
+    if (q?.gz !== 'docs?' || !/^https:\/\/canvadocs(-[\w-]+)?\.instructure\.com$/.test(e.origin)) return;
+    const f = [...document.getElementsByTagName('iframe')].find((x) => x.contentWindow === e.source);
+    if (!f) return;
+    let b = {};
+    try { b = JSON.parse(new URL(f.src, location.href).searchParams.get('blob')) || {}; } catch { /* another address */ }
+    const id = (v) => (/^\d{1,20}$/.test(v) ? String(v) : '');
+    const file = id(b.attachment_id) || id(location.pathname.match(/\/files\/(\d+)/)?.[1]) || id(new URLSearchParams(location.search).get('preview'));
+    const asked = (Array.isArray(q.words) ? q.words : []).filter((w) => typeof w === 'string' && w.length < 100).slice(0, 40);
+    let said = '';
+    const tell = () => {
+      const s = ctx.settings().enhance;
+      const msg = { gz: 'docs', on: ctx.on(), dark: ctx.darkTheme(), colors: Object.fromEntries(GZ_COLORS.map(([v]) => [v, html.style.getPropertyValue(v)])),
+        theme: s.docTheme, pages: s.docPages, ink: s.docInk, file, user: id(b.user_id), words: Object.fromEntries(asked.map((w) => [w, t(w)])) };
+      const j = JSON.stringify(msg);
+      if (j === said) return; // sync runs on every pass; the frame hears only changes
+      said = j;
+      try { e.source.postMessage(msg, e.origin); } catch { docFrames.delete(e.source); }
+    };
+    docFrames.set(e.source, tell);
+    tell();
+    ctx.wordsIn.add(tell);
+  };
+  return { sync, esc, ask };
 })();
 
 GZ_DOCS;

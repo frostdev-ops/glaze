@@ -322,10 +322,11 @@ html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([dat
 #gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
 #gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-line); }
-/* Dark documents: the preview frame inverted, with hues turned back, on dark palettes only. 0.9 so
+/* Documents in a dark palette (enhance.docPages): the preview frame dimmed, or inverted with hues turned back. 0.9 so
    white paper lands near the surface rather than on pure black. */
 #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { transition: filter var(--gz-t-slow) var(--gz-ease); }
-html[data-gz-dark-theme][data-gz-enhance-darkDocs] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: invert(0.9) hue-rotate(180deg); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: brightness(0.8); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: invert(0.9) hue-rotate(180deg); }
 
 /* Document buttons: a column of round buttons in the bottom-right gutter. Where the window is too
    narrow for a gutter, the document makes room for one instead of sitting under them. */

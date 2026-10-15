@@ -76,9 +76,9 @@ const GZ_SPEC = {
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
     coursemenu: [true, 'bool'],
-    // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
-    // document buttons themselves.
-    darkDocs: [false, 'bool'], toggles: [true, 'bool'],
+    // docPages: previews in a dark palette, plain, dimmed or inverted (the floating button too); toggles: the floating
+    // document buttons. Canvas's document viewer: docTheme its palette, docInk the pen.
+    docPages: ['plain', ['plain', 'dim', 'dark']], toggles: [true, 'bool'], docTheme: [true, 'bool'], docInk: [false, 'bool'],
     quizLight: [false, 'bool'],
     // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
     gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'],
@@ -312,6 +312,8 @@ const GZ_SANITIZE = (raw) => {
     const src = isObj(raw[g]) ? raw[g] : {};
     out[g] = Object.fromEntries(Object.entries(keys).map(([k, [d, rule]]) => [k, cleanValue(src[k], d, rule)]));
   }
+  // 2.2's darkDocs inverted.
+  if (isObj(raw.enhance) && raw.enhance.docPages === undefined && raw.enhance.darkDocs === true) out.enhance.docPages = 'dark';
   // 1.0 had only the three motion switches: all off meant "no motion".
   if (!raw.version && isObj(raw.motion) && raw.motion.level === undefined) {
     out.motion.level = out.motion.enter || out.motion.hover || out.motion.transitions ? 'subtle' : 'off';

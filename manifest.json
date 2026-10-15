@@ -57,6 +57,9 @@
         "defaults.js",
         "content.js"
       ],
+      "exclude_matches": [
+        "https://canvadocs.instructure.com/*"
+      ],
       "run_at": "document_start",
       "all_frames": true
     },
@@ -82,6 +85,17 @@
       "js": [
         "lib/gallery.js"
       ]
+    },
+    {
+      "matches": [
+        "https://canvadocs.instructure.com/*"
+      ],
+      "js": [
+        "lib/ink.js",
+        "features/docviewer.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [

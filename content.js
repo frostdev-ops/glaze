@@ -1479,9 +1479,9 @@
     b.addEventListener('click', onClick);
     return b;
   };
-  const setDark = (on) => {
-    settings = { ...settings, enhance: { ...settings.enhance, darkDocs: on } };
-    setAttr('data-gz-enhance-darkDocs', on);
+  const setDark = (v) => {
+    settings = { ...settings, enhance: { ...settings.enhance, docPages: v } };
+    setAttr('data-gz-enhance-docPages', v);
     syncDocTools();
     try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
   };
@@ -1492,6 +1492,8 @@
       need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
     }
   };
+  // A canvadocs frame (features/docviewer.js) asking for the palette and its file: features/docs.js answers.
+  if (!ultra && !moodle) addEventListener('message', (e) => { if (e.data?.gz === 'docs?' && /^https:\/\/canvadocs(-[\w-]+)?\.instructure\.com$/.test(e.origin)) need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.ask(e), () => {}); });
   // Here, so it is first to see the key: Esc leaves focus mode, and the site doesn't also act on it.
   addEventListener('keydown', (e) => globalThis.GZ_DOCS?.esc(e), true);
 

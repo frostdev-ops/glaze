@@ -469,8 +469,14 @@
         <label class="check"><input type="checkbox" data-key="enhance.drafts"><span>Back up what you type</span>
           <span class="desc">Keeps a copy of what you write in Blackboard's editors on this device until it's posted, and offers it back if the page reloads or your session times out. Copies are deleted after 14 days.</span>
           <span class="desc">On Canvas: new Inbox messages; Canvas recovers its own editors.</span></label>
-        <label class="check"><input type="checkbox" data-key="enhance.darkDocs"><span>Dark documents</span>
-          <span class="desc">PDFs and file previews turned dark to match a dark palette, colors kept. Also switched from the moon button beside a preview.</span></label>
+        <div class="row">
+          <label>Dark documents <select data-key="enhance.docPages"><option value="plain">Off</option><option value="dim">Dimmed</option><option value="dark">Inverted</option></select></label>
+        </div>
+        <p class="desc">How PDFs and file previews look with a dark palette. Dimmed keeps pictures true; inverted turns white paper dark, colors kept. The moon button beside a preview switches between dimmed and off.</p>
+        <label class="check"><input type="checkbox" data-key="enhance.docTheme"><span>Document viewer in your palette</span>
+          <span class="desc">On Canvas: the document viewer's background, toolbar and thumbnails in your palette. The pages stay as they are, unless dimmed or inverted above.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.docInk"><span>Pen and highlighter on documents</span>
+          <span class="desc">On Canvas: draw, highlight and erase on files in the document viewer, in any color and size, with undo. Your marks are kept on this device only, per file, and never sent anywhere; export them as a file to keep or move them, or save a page with them as a picture. Canvas's own annotations are left as they are.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.toggles"><span>Document buttons</span>
           <span class="desc">Round buttons at the bottom right of course documents: dark documents, and focus mode (the document alone, with a reading-progress line and reading time; Esc leaves it).</span>
           <span class="desc">On Canvas: a bar above pages, assignments and file previews.</span></label>
