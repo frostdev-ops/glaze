@@ -23,9 +23,27 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const studentIn = (c) => c?.enrollments?.find((e) => e.type === 'student');
   // Only while Glaze runs in this frame and is switched on: work that finishes after that draws nothing.
   const live = () => X.on() && S().enabled !== false;
-  // Saved what-ifs go through one writer per user's item, so a clear can't be undone by a change already on its way.
-  let saver = null;
-  const saves = () => (saver ||= C.writer(chrome.storage.local));
+  // Saved what-ifs are changed by the service worker, in the one queue every tab shares (lib/background.js
+  // 'glaze:whatif'): a change made before a Clear all, in this tab or another, can't bring records back.
+  const send = (m) => { try { Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:whatif', at: Date.now(), ...m })).catch(() => {}); } catch { /* extension reloaded */ } };
+  // A Clear all from any tab empties what this tab shows for that user too.
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      const marks = area === 'local' && changes.whatIfCleared?.newValue;
+      if (!marks) return;
+      const was = changes.whatIfCleared.oldValue || {};
+      const cleared = (key) => key && marks[key] !== was[key];
+      for (const s of W.values()) {
+        if (!s.rec || !cleared(s.key)) continue;
+        Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [] });
+        s.what = C.whatOf(s.rec);
+        s.v++;
+      }
+      if (cleared(D.wkey)) { D.wi = {}; D.v++; }
+      whatIf();
+      gpa();
+    });
+  } catch { /* extension reloaded */ }
   // A course list that didn't come (content.js asks again a minute later) is tried again, three times at most.
   const again = (s) => s.tries < 3 && Date.now() - s.at > 60000;
   const whatIfKey = (me) => `whatIf:${location.origin}:${me.user_id}`;
@@ -97,7 +115,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const keep = (st) => {
     st.what = C.whatOf(st.rec);
     const rec = st.rec;
-    try { saves().change(st.key, (all) => C.store(all, st.cid, rec)); } catch { /* extension reloaded under the tab */ }
+    send({ op: 'course', key: st.key, cid: st.cid, rec });
   };
 
   const whatIf = () => {
@@ -261,7 +279,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     clear.addEventListener('click', () => { st.rec = { s: {}, h: [], p: [], c: null }; st.focus = 'summary'; redraw(); });
     const clearAll = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Clear all courses') });
     clearAll.addEventListener('click', () => {
-      try { saves().clear(st.key); } catch { /* reloaded */ }
+      send({ op: 'clear', key: st.key });
       // Every course this page holds for that user is emptied with it.
       for (const s of W.values()) {
         if (s.key !== st.key || !s.rec) continue;
@@ -305,9 +323,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (D.schemes.has(id)) return;
     D.schemes.set(id, null);
     capi(`/courses/${id}?include[]=grading_scheme`).then((j) => {
-      const s = C.schemeOf(j?.grading_scheme);
-      if (!s) return;
-      D.schemes.set(id, s);
+      // No scheme in the answer counts as none: the note below says so, rather than waiting for ever.
+      D.schemes.set(id, C.schemeOf(j?.grading_scheme) || false);
       D.v++;
       gpa();
     }, () => { D.schemes.set(id, false); D.v++; gpa(); });
@@ -376,7 +393,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     };
     const saveWhatIf = (id, c) => {
       D.wi = C.withCourseGrade(D.wi, id, c);
-      try { saves().change(D.wkey, (all) => C.withCourseGrade(all, id, c)); } catch { /* reloaded */ }
+      send({ op: 'grade', key: D.wkey, cid: String(id), c });
       figures();
     };
 

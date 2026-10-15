@@ -256,33 +256,35 @@ test('GPA: one scale turns any percentage into a letter, so a what-if equal to t
   assert.deepEqual([plain.letter, plain.pts, plain.wpts, plain.wiLetter, plain.credits], ['A-', 3.7, 4.7, 'B', 4]);
 });
 
-test('storage writer: a clear drops every change asked for before it, even one already reading', async () => {
-  const data = { k: { 1: { s: {} }, 2: { s: {} } } };
-  const reads = [];
-  const area = {
-    get: (key, cb) => reads.push(() => cb({ [key]: data[key] })),
-    set: (o, cb) => { Object.assign(data, o); cb(); },
-    remove: (key, cb) => { delete data[key]; cb(); },
-  };
-  const w = G.writer(area);
-  const settle = () => new Promise(setImmediate);
-  w.change('k', (all) => ({ ...all, 3: { s: {} } }));
-  await settle();
-  assert.equal(reads.length, 1, 'the change is reading');
-  w.clear('k');
-  reads.shift()(); // the read answers after the clear was asked for
-  await settle();
-  assert.equal(data.k, undefined, 'nothing cleared comes back');
-  w.change('k', (all) => ({ ...all, 4: { s: {} } }));
-  await settle();
-  reads.shift()();
-  await settle();
-  assert.deepEqual(data.k, { 4: { s: {} } }, 'a change after the clear goes through');
-  w.change('k', () => ({}));
-  await settle();
-  reads.shift()();
-  await settle();
-  assert.equal(data.k, undefined, 'an empty result removes the item');
+test('what-if changes from any tab: one made before a Clear all is dropped, however late it arrives', () => {
+  const rec = (c) => ({ s: { 175: [90, null] }, h: [], p: [], c });
+  let r = G.applyWhatIf({ op: 'course', cid: '25', rec: rec(null), at: 100 }, {}, 0);
+  assert.deepEqual(Object.keys(r.all), ['25']);
+  assert.equal(r.all['25'].at, 100);
+  r = G.applyWhatIf({ op: 'grade', cid: '26', c: 80, at: 150 }, r.all, r.cleared);
+  assert.deepEqual(Object.keys(r.all).sort(), ['25', '26']);
+  // Clear all at 200 (tab B); then tab A's change made at 120 arrives.
+  r = G.applyWhatIf({ op: 'clear', at: 200 }, { ...r.all, 27: { ...rec(null), at: 250 } }, r.cleared);
+  assert.deepEqual([Object.keys(r.all), r.cleared], [['27'], 200], 'what was changed after the clear was asked for stays');
+  const late = G.applyWhatIf({ op: 'course', cid: '25', rec: rec(null), at: 120 }, r.all, r.cleared);
+  assert.deepEqual(Object.keys(late.all), ['27'], 'the late one is dropped');
+  const after = G.applyWhatIf({ op: 'course', cid: '25', rec: rec(70), at: 300 }, r.all, r.cleared);
+  assert.deepEqual(Object.keys(after.all).sort(), ['25', '27']);
+  assert.deepEqual(G.applyWhatIf({ op: 'course', cid: '25', rec: { s: {}, h: [], p: [], c: null }, at: 400 }, { 25: { ...rec(null), at: 1 } }, 0).all, {}, 'an emptied course goes');
+});
+
+test('what a tab sends is cleaned before it is stored', () => {
+  const r = G.cleanRecord({
+    s: { 175: [90, null], 176: [-1, null], 177: [5, 'x'], '<b>': [1, null], 178: [5, 'nonsense'] },
+    h: ['175', 7, 'x'.repeat(40)],
+    p: [{ id: 'p1', g: '67', n: 'Q'.repeat(300), s: 9, pp: 10, pd: '1' }, { id: 'bad', g: '67', s: 1, pp: 1 }, { id: 'p2', g: '67', s: -1, pp: 1 }],
+    c: 2000, extra: 'gone',
+  });
+  assert.deepEqual(r.s, { 175: [90, null], 177: [5, 'x'] });
+  assert.deepEqual(r.h, ['175']);
+  assert.deepEqual(r.p.map((x) => [x.id, x.n.length, x.pd]), [['p1', 100, '1']]);
+  assert.equal(r.c, null);
+  assert.deepEqual(G.cleanRecord('junk'), { s: {}, h: [], p: [], c: null });
 });
 
 test('the Dashboard sets a course’s what-if grade without touching the rest of its record', () => {
