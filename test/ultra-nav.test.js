@@ -13,6 +13,8 @@ const memory = (start = {}, fail = false) => {
 
 test('Ultra nav links reject executable URLs, credentials, unknown icons and unbounded input', () => {
   for (const u of ['javascript:alert(1)', 'data:text/html,hi', '//example.com', 'ftp://example.com', 'https://user:pass@example.com']) assert.equal(N.link({ id: 'aaaaaaaaaaaa', n: 'Name', u }), null, u);
+  assert.equal(N.link({ id: 123456789012, n: 'Name', u: 'https://example.com' }), null);
+  assert.equal(N.link({ id: 'organization', n: 'Name', u: 'https://example.com' }), null);
   const link = N.link({ id: 'aaaaaaaaaaaa', n: '  My   link  ', u: 'http://example.com/a"b', i: '__proto__', tab: true });
   assert.equal(link.n, 'My link'); assert.equal(link.u, 'http://example.com/a%22b'); assert.equal(link.i, 'link'); assert.equal(link.tab, true);
   const config = N.clean({ links: Array.from({ length: 100 }, (_, i) => ({ id: String(i).padStart(12, '0'), n: 'é'.repeat(500), u: `https://example.com/${'x'.repeat(450)}` })), hidden: ['course', 'logout', '__proto__'], order: ['course', 'course', 'unknown'], widgets: [{ id: 'timer', on: true, at: 'top' }, { id: 'timer', on: false }] });
@@ -114,4 +116,52 @@ test('presets and precise Ultra sizes stay separate from Canvas preferences', ()
   assert.equal(N.dimensions({ ...n, detailed: true }).width, 310);
   assert.equal(N.dimensions({ ...n, detailed: true }).text, 18);
   assert.equal(n.size, 'small');
+});
+
+
+test('the Ultra first-paint helper is idempotent and native MUI colors stay scoped to the rail', () => {
+  const vm = require('node:vm');
+  const ctx = vm.createContext({ GZ_SPEC: { nav: {} }, GZ_DEFAULTS: { nav: {} } });
+  const source = fs.readFileSync(require.resolve('../lib/nav.js'), 'utf8');
+  const first = vm.runInContext(source, ctx); assert.equal(vm.runInContext(source, ctx), first);
+  const css = fs.readFileSync(require.resolve('../theme.css'), 'utf8');
+  assert.match(css, /nav\[class\*="makeStylesnavigation"\] a\.MuiListItemButton-root \{ color: var\(--gz-ink-muted\) !important/);
+  assert.match(css, /gz-nav-pet-level \{ display: inline/);
+});
+
+test('Canvas picture writes count protected nav logos without collecting them as card orphans', async () => {
+  const data = 'data:image/png;base64,AAAA';
+  const area = { sync: memory(), local: memory({ 'navLogo:aaaaaaaaaaaa': 'x'.repeat(K.IMG_TOTAL) }) };
+  assert.equal((await K.change({ key: 'canvas:https://school.test/1', style: { k: 'image' }, image: data }, area)).error, 'cap');
+  await K.change({ key: 'canvas:https://school.test/1', style: null }, area);
+  assert.equal(area.local.values['navLogo:aaaaaaaaaaaa'].length, K.IMG_TOTAL);
+});
+
+test('the wrong-LMS-host fallback injects the nav schema before Ultra once with the same target', async () => {
+  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
+  const start = source.indexOf('const SAFARI = new URL'), end = source.indexOf('// Canvas page reads', start);
+  let listener, scripts = [];
+  const ctx = vm.createContext({ URL, chrome: { runtime: { id: 'glaze', getURL: () => 'chrome-extension://glaze/', onMessage: { addListener: (f) => { listener ||= f; } } }, scripting: { executeScript: async (v) => { scripts.push(v); return [{ result: {} }]; } } } });
+  // Stop after the load handler; the neighboring reader handler belongs to a separate feature.
+  const loadEnd = source.indexOf('return true; // the reply comes once the files have run', start);
+  vm.runInContext(source.slice(start, source.indexOf('\n});', loadEnd) + 4), ctx);
+  const request = (files, sender = { id: 'glaze', tab: { id: 8 }, frameId: 0, documentId: 'doc-1' }) => new Promise((r) => listener({ type: 'glaze:load', files }, sender, r));
+  assert.equal((await request(['content-ultra.js', 'lib/nav.js', 'content-ultra.js'])).ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(scripts[0].files)), ['lib/nav.js', 'content-ultra.js']);
+  assert.deepEqual(JSON.parse(JSON.stringify(scripts[0].target)), { tabId: 8, documentIds: ['doc-1'] });
+  const before = scripts.length;
+  assert.equal((await request(['../../secret'])).ok, false); assert.equal(scripts.length, before);
+  assert.equal((await request(['content-ultra.js'], { id: 'other', tab: { id: 8 }, frameId: 0 })).ok, false);
+});
+
+test('static preview arrival starts nav despite an earlier cached rejected injection', async () => {
+  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../content-ultra.js'), 'utf8');
+  const a = source.indexOf('  const syncNav = () =>'), b = source.indexOf('\n  // A host registered', a);
+  let starts = 0, asks = 0;
+  const failed = Promise.reject(new Error('not in the preview')); failed.catch(() => {});
+  const ctx = vm.createContext({ isPreview: true, I: { links: [1] }, need: (file) => { if (file === 'features/nav.js') asks++; return failed; }, location: { pathname: '/preview.html' }, window: {} });
+  const sync = vm.runInContext(source.slice(a, b) + '\nsyncNav;', ctx);
+  sync(); await new Promise(setImmediate);
+  ctx.GZ_NAV_UI = { sync: () => starts++ };
+  sync(); assert.equal(starts, 1); assert.equal(asks, 1, 'present nav skips its stale rejected injection promise');
 });

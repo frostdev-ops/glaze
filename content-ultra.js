@@ -573,10 +573,20 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   const syncNav = () => {
     if (!isPreview && window.top !== window) return;
-    if (I.links.length) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
-    else globalThis.GZ_NAV_UI?.sync();
+    if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
+    else if (I.links.length) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
     if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
   };
+  // A host registered for another LMS may answer settings before Ultra's schema arrives.
+  if (!('brand' in I.settings.nav)) {
+    const nav = I.settings.nav;
+    Object.assign(nav, { ...GZ_DEFAULTS.nav, ...nav });
+    try { chrome.storage.sync.get('nav', (raw) => {
+      if (I.settings.nav !== nav || chrome.runtime.lastError) return;
+      Object.assign(nav, GZ_SANITIZE(raw).nav);
+      if (I.links.length) { paintNav(I.worn.nav); syncNav(); }
+    }); } catch { /* reloaded; keep defaults */ }
+  }
 
   return {
     paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },

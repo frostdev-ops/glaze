@@ -93,17 +93,17 @@ function GZ_ULTRA_RAIL(X) {
   };
   const restore = () => {
     clearTimeout(clock); clock = 0;
-    const focused = document.activeElement, managed = [...captured.keys(), ...custom.values()].some((a) => a === focused || a.contains(focused));
-    const fallback = [...captured.keys()].find((a) => !captured.get(a).hidden);
+    const focused = document.activeElement, managed = [...captured.keys(), ...[...custom.values()].map((r) => r.a)].some((a) => a === focused || a.contains(focused));
+    const fallback = [...captured.keys()].find((a) => a.isConnected && !captured.get(a).hidden);
     for (const [a, r] of captured) {
-      if (r.mark.isConnected) { r.mark.after(r.unit); r.mark.remove(); }
+      if (r.mark.isConnected && r.unit.isConnected) r.mark.after(r.unit); r.mark.remove();
       r.unit.hidden = r.hidden; delete r.unit.dataset.gzNavId;
       if (r.label && r.label.textContent === X.t('Dashboard')) r.label.textContent = r.text;
       if (r.aria === null) a.removeAttribute('aria-label'); else a.setAttribute('aria-label', r.aria);
       r.icon?.classList.remove('gz-nav-native-icon'); r.own?.remove();
     }
     captured.clear();
-    for (const a of custom.values()) a.remove(); custom.clear();
+    for (const r of custom.values()) r.unit.remove(); custom.clear();
     top?.remove(); bottom?.remove(); top = bottom = host = null; signature = '';
     logoId = ''; if (logo) URL.revokeObjectURL(logo); logo = null;
     document.documentElement.style.removeProperty('--gz-nav-logo');
@@ -219,15 +219,18 @@ function GZ_ULTRA_RAIL(X) {
     active = on;
     if (!on) { rev++; restore(); widgetNodes.clear(); return; }
     const root = document.querySelector(roots);
-    if (!root) return;
+    if (!root) { if (host) restore(); return; }
     const list = root.querySelector(':scope > #base_tools, :scope > ul') || root;
     if (host !== list) { restore(); host = list; top = make('div', { className: 'gz-nav-widgets' }); bottom = make('div', { className: 'gz-nav-widgets' }); list.before(top); list.after(bottom); }
     for (const a of list.querySelectorAll('a:not(.gz-nav-link)')) {
-      const id = N.native(a.getAttribute('href')); if (!id || captured.has(a)) continue;
+      const id = N.native(a.getAttribute('href')); if (!id) continue;
+      if (captured.has(a)) { const r = captured.get(a); if (!r.mark.isConnected) r.unit.before(r.mark); continue; }
       const unit = a.parentElement.tagName === 'LI' ? a.parentElement : a;
-      const mark = document.createComment('glaze-nav'); unit.before(mark);
+      const prior = [...captured].find(([, r]) => r.unit === unit);
+      if (prior) { captured.delete(prior[0]); prior[1].icon?.classList.remove('gz-nav-native-icon'); prior[1].own?.remove(); }
+      const mark = prior?.[1].mark || document.createComment('glaze-nav'); if (!mark.isConnected) unit.before(mark);
       const label = a.querySelector('.MuiListItemText-root, .MuiTypography-root, span:not(:has(svg))');
-      const r = { id, unit, mark, hidden: unit.hidden, label, text: label?.textContent, aria: a.getAttribute('aria-label') };
+      const r = { id, unit, mark, hidden: prior?.[1].hidden ?? unit.hidden, label, text: label?.textContent, aria: a.getAttribute('aria-label') };
       captured.set(a, r); unit.dataset.gzNavId = id;
       if (id === 'institution-page') { r.icon = a.querySelector('svg'); r.icon?.classList.add('gz-nav-native-icon'); r.own = icon('dashboard'); a.prepend(r.own); }
     }
@@ -235,16 +238,17 @@ function GZ_ULTRA_RAIL(X) {
       r.unit.hidden = r.hidden || config.hidden.includes(r.id);
       if (r.id === 'institution-page') { if (r.label) setText(r.label, X.t('Dashboard')); a.setAttribute('aria-label', X.t('Dashboard')); }
     }
-    for (const [id, a] of custom) if (!config.links.some((l) => l.id === id)) { a.remove(); custom.delete(id); }
+    for (const [id, r] of custom) if (!config.links.some((l) => l.id === id)) { r.unit.remove(); custom.delete(id); }
     for (const l of config.links) {
-      let a = custom.get(l.id);
-      if (!a) { a = make('a', { className: 'MuiButtonBase-root MuiListItemButton-root base-navigation-button-content gz-nav-link' }, icon(l.i), make('span', { className: 'MuiListItemText-root' })); a.dataset.gzNavId = l.id; custom.set(l.id, a); }
+      let a = custom.get(l.id)?.a;
+      if (!a) { a = make('a', { className: 'MuiButtonBase-root MuiListItemButton-root base-navigation-button-content gz-nav-link' }, icon(l.i), make('span', { className: 'MuiListItemText-root' })); const unit = list.tagName === 'UL' ? make('li', {}, a) : a; unit.dataset.gzNavId = l.id; custom.set(l.id, { a, unit }); }
       a.href = l.u; a.target = l.tab ? '_blank' : '_self'; a.rel = l.tab ? 'noopener noreferrer' : ''; a.title = l.n; a.setAttribute('aria-label', l.n);
       setText(a.lastElementChild, l.n);
       if (a.dataset.icon !== l.i) { a.firstElementChild.replaceWith(icon(l.i)); a.dataset.icon = l.i; }
     }
-    const units = new Map([...captured.values()].filter((r) => r.unit.isConnected).map((r) => [r.id, r.unit]));
-    for (const [id, a] of custom) units.set(id, a);
+    const originals = [...captured.values()].filter((r) => r.unit.isConnected).sort((a, b) => a.mark.compareDocumentPosition(b.mark) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+    const units = new Map(originals.map((r) => [r.id, r.unit]));
+    for (const [id, r] of custom) units.set(id, r.unit);
     const order = N.sequence([...units.keys()], config);
     if (JSON.stringify([...list.children].map((e) => e.dataset.gzNavId).filter(Boolean)) !== JSON.stringify(order)) { const focused = document.activeElement; for (const id of order) list.append(units.get(id)); if (list.contains(focused)) focused.focus({ preventScroll: true }); }
     mountWidgets(); loadLogo();
@@ -262,7 +266,7 @@ function GZ_ULTRA_RAIL(X) {
   addEventListener('pagehide', () => { active = false; rev++; restore(); });
   document.addEventListener('visibilitychange', () => { if (active) drawWidgets(); });
   addEventListener('message', (e) => { if (e.origin === location.origin && e.source === parent && e.data?.gzNavPreview) { config = N.clean(e.data.gzNavPreview); if (active) sync(true); } });
-  X.need('lib/cards.js', () => globalThis.GZ_CARDS).then(() => { icons = GZ_CARDS.ICONS; signature = ''; if (active) { for (const a of custom.values()) a.dataset.icon = ''; sync(true); } }).catch(() => {});
+  X.need('lib/cards.js', () => globalThis.GZ_CARDS).then(() => { icons = GZ_CARDS.ICONS; signature = ''; if (active) { for (const { a } of custom.values()) a.dataset.icon = ''; sync(true); } }).catch(() => {});
   load();
   return { sync };
 }
