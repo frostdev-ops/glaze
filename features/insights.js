@@ -315,6 +315,9 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
   const picture = (e) => {
     if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true) || !box || !me?.view) return;
     const list = tiles(me.view);
+    // A summary that left work out says so on the picture too, as the dialog does.
+    const part = me.view.left.names.length || me.view.left.courses ? t("Some work couldn't be counted, so these figures leave it out.") : '';
+    const head = part ? 196 : 150;
     const cs = getComputedStyle(box);
     const col = (name, fallback) => cs.getPropertyValue(name).trim() || fallback;
     const font = cs.fontFamily || 'system-ui, sans-serif';
@@ -322,7 +325,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     const rows = Math.ceil(list.length / 2);
     const c = document.createElement('canvas');
     c.width = W;
-    c.height = P + 150 + rows * (TH + GAP) + 70;
+    c.height = P + head + rows * (TH + GAP) + 70;
     const g = c.getContext('2d');
     const fill = (name, fallback) => { g.fillStyle = fallback; g.fillStyle = col(name, fallback); };
     const fit = (s, size, weight, max) => { let n = size; do g.font = `${weight} ${n}px ${font}`; while (g.measureText(s).width > max && --n > 12); };
@@ -335,8 +338,9 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     fill('--gz-ink-muted', '#6b7280');
     fit(me.rec.name || t('This term'), 30, 400, W - 2 * P);
     g.fillText(me.rec.name || t('This term'), P, P + 76);
+    if (part) { fill('--gz-ink', '#1f2937'); fit(part, 26, 600, W - 2 * P); g.fillText(part, P, P + 130); }
     list.forEach((x, i) => {
-      const left = P + (i % 2) * (TW + GAP), top = P + 150 + Math.floor(i / 2) * (TH + GAP);
+      const left = P + (i % 2) * (TW + GAP), top = P + head + Math.floor(i / 2) * (TH + GAP);
       fill('--gz-surface-2', '#f3f4f6');
       g.beginPath();
       g.roundRect(left, top, TW, TH, 24);
