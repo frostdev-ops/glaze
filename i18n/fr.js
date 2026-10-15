@@ -1724,4 +1724,12 @@
 
   "Only the first {n} items are listed.": "Seuls les {n} premiers éléments sont affichés.",
 
+  "Hide them again ({n})": "Masquer à nouveau ({n})",
+  "Hidden": "Masqué",
+  "Folder hidden.": "Dossier masqué.",
+  "Folder shown.": "Dossier affiché.",
+  "Showing {n} hidden folders.": "Affichage de {n} dossiers masqués.",
+  "Hiding {n} folders.": "Masquage de {n} dossiers.",
+  "Showing 1 hidden folder.": "Affichage de 1 dossier masqué.",
+  "Hiding 1 folder.": "Masquage de 1 dossier.",
 };

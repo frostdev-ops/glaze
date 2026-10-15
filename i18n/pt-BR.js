@@ -1724,4 +1724,12 @@
 
   "Only the first {n} items are listed.": "Apenas os primeiros {n} itens são exibidos.",
 
+  "Hide them again ({n})": "Ocultar novamente ({n})",
+  "Hidden": "Oculto",
+  "Folder hidden.": "Pasta oculta.",
+  "Folder shown.": "Pasta exibida.",
+  "Showing {n} hidden folders.": "Exibindo {n} pastas ocultas.",
+  "Hiding {n} folders.": "Ocultando {n} pastas.",
+  "Showing 1 hidden folder.": "Exibindo 1 pasta oculta.",
+  "Hiding 1 folder.": "Ocultando 1 pasta.",
 };

@@ -2,6 +2,11 @@
 
 _Last updated: 2026-10-15_
 
+Ultra performance changes reuse the page's existing gradebook reads and ignore internal Glaze UI mutations. They add
+no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
+The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep
+their separate, existing URL handling.
+
 ## Optional encrypted share sessions
 
 Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's extension-owned Sessions page. That action requests the exact optional host `https://share.frostdev.io/*`. Glaze already requires broad HTTPS access for LMS detection, so this declaration does not technically reduce existing host access; the device-local consent switch gates every relay request. Pause aborts requests and closes the live connection. Backup/key restore never enables sharing. No relay connection runs without an open Notes, To Do or Sessions surface. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
@@ -15,11 +20,6 @@ The relay receives ciphertext and necessary metadata: random session/file identi
 Invite keys live in the link fragment, which browsers do not send in HTTP requests. Glaze leads with pasting into its extension page and renders no invite in LMS DOM/storage. Opening an invite in a browser can retain its fragment in history or expose it to a changed landing page; keep links private. The Sessions page has a no-referrer policy. No new `/j` page script is installed by S6b.
 
 Sessions remain until creator deletion unless the creator opts into deletion after a year unused. Relay deletion does not erase device copies or older operator/infrastructure backups. Removing a note/file from a session is narrower: old encrypted log data may remain until compaction and files remain until session deletion/expiry; recipients keep copies. Removing one recipient requires a fresh session and link. Re-upload retained files is an explicit recovery action after a relay restore; it republishes encrypted references from bytes this device still has. No analytics, accounts, remote configuration or server credentials are introduced.
-
-Ultra performance changes reuse the page's existing gradebook reads and ignore internal Glaze UI mutations. They add
-no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
-The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep
-their separate, existing URL handling.
 
 ## What Glaze stores
 
@@ -614,4 +614,4 @@ admin@frostdev.io
 
 ### Hidden Ultra folders
 
-Hidden folder/module IDs and the Show hidden folders switch are stored in `storage.local`, separately for each HTTPS site, known Ultra account and course. No titles or content are stored. Limits are 500 IDs per course, 200 account/course records and 256 KiB across them. Unknown identity or failed storage leaves the outline untouched. The feature makes no requests, including no profile request; it reuses only the existing page identity cache. Export all includes validated records; imports retain their account/site/course keys and ignore malformed records without replacing existing choices. Only your own clicks or keyboard activation save a choice. Search, Download all, progress and new-item counts are unaffected.
+Hidden folder/module IDs and the Show hidden folders switch are stored in `storage.local`, separately for each HTTPS site, known Ultra account and course. No titles or content are stored. Limits are 500 IDs per course, 200 account/course records and 256 KiB across them. Unknown identity or failed storage leaves the outline untouched. The feature makes no requests, including no profile request; it reuses only the existing page identity cache. Export all includes validated records; imports retain their account/site/course keys and ignore malformed records without replacing existing choices. Only your own clicks or keyboard activation save a choice. The brief status and Undo are held only in memory, cleared on navigation, account changes or disabling, and store no additional data. Undo changes only the folder just hidden. Search, Download all, progress and new-item counts are unaffected.
