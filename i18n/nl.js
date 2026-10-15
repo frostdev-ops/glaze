@@ -1494,6 +1494,8 @@
   "Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.": "Ontkoppeld op dit apparaat. Google heeft niet bevestigd dat de toegang van Glaze is ingetrokken: je kunt die intrekken via myaccount.google.com/connections.",
   "Disconnected.": "Ontkoppeld.",
   "Test": "Toets",
+  "Some of this course's content couldn't be listed.": "Een deel van de inhoud van deze cursus kon niet worden weergegeven.",
+
 
 
 
