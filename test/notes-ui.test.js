@@ -35,6 +35,39 @@ test("the worker takes a page's notes changes for its own site's index only", as
   ]) assert.deepEqual(await send(m, sender), { ok: false, error: 'sender' }, why);
   assert.deepEqual(await send({ ...m, key: 'notesIdx:https://school.instructure.com/5/../6' }, page('https://school.instructure.com/')), { ok: false, error: 'sender' }, 'a key outside the pattern');
   assert.deepEqual(await send(m, page('https://school.instructure.com/courses/1')), { ok: false, error: 'db' }, 'its own site: past the check, and the database it lacks fails it');
+  // Blackboard Ultra: a page under /ultra on https, on a site Glaze has found to be Ultra (content-ultra.js reports it
+  // once it has started there), for its own origin's accounts (Ultra's ids are _N_N).
+  const u = { ...m, key: 'notesIdx:https://school.blackboard.test/_5_1' };
+  // Codex B5 review: an /ultra address alone isn't Ultra.
+  assert.deepEqual(await send(u, page('https://school.blackboard.test/ultra/courses/_7_1/outline')), { ok: false, error: 'sender' }, 'not yet found to be Ultra');
+  const found = (url, frameId = 0) => send({ type: 'glaze:ultra' }, { ...page(url), frameId }).then(() => new Promise((r) => setTimeout(r, 20)));
+  await found('https://school.blackboard.test/ultra/course', 3);
+  await found('https://school.blackboard.test/webapps/login/');
+  await found('http://school.blackboard.test/ultra/course');
+  await send({ type: 'glaze:ultra' }, { id: 'other', tab: {}, frameId: 0, url: 'https://school.blackboard.test/ultra/course' });
+  assert.deepEqual(store.local, {}, 'only a top frame of Glaze in a tab, on an https /ultra page, reports a site');
+  await found('https://school.blackboard.test/ultra/course');
+  assert.deepEqual(JSON.parse(JSON.stringify(store.local)), { ultra: ['https://school.blackboard.test'] }, 'its origin, once');
+  await found('https://school.blackboard.test/ultra/stream');
+  assert.deepEqual(JSON.parse(JSON.stringify(store.local)).ultra, ['https://school.blackboard.test']);
+  assert.deepEqual(await send(u, page('https://unrelated.example/ultra/course')), { ok: false, error: 'sender' }, 'a site never found to be Ultra');
+  assert.deepEqual(await send({ ...u, key: 'notesIdx:https://unrelated.example/_5_1' }, page('https://unrelated.example/ultra/course')), { ok: false, error: 'sender' }, 'not even for its own keys');
+  for (const [url, why] of [
+    ['https://other.blackboard.test/ultra/course', "another Ultra site's page"],
+    ['https://school.blackboard.test/webapps/portal/frameset.jsp', 'not an Ultra page'],
+    ['http://school.blackboard.test/ultra/course', 'not https'],
+    ['https://school.blackboard.test/ultrax/course', 'only /ultra itself'],
+  ]) assert.deepEqual(await send(u, page(url)), { ok: false, error: 'sender' }, why);
+  assert.deepEqual(await send({ ...u, key: 'notesIdx:https://school.blackboard.test/_5_1x' }, page('https://school.blackboard.test/ultra/course')), { ok: false, error: 'sender' }, 'a key outside the pattern');
+  assert.deepEqual(await send(u, page('https://school.blackboard.test/ultra/courses/_7_1/outline')), { ok: false, error: 'db' }, 'an Ultra page, its own site');
+  // The Dashboard notes' writes (lib/widgets.js saveNote), the same rule.
+  const d = { type: 'glaze:notes', key: 'notes:https://school.blackboard.test/_5_1', text: 'hi', at: 1 };
+  assert.deepEqual(await send(d, page('https://other.blackboard.test/ultra/course')), { ok: false, error: 'sender' }, "another Ultra site's notes");
+  assert.equal((await send(d, page('https://school.blackboard.test/ultra/course'))).ok, true, 'its own');
+  assert.deepEqual(JSON.parse(JSON.stringify(store.local))['notes:https://school.blackboard.test/_5_1'], { text: 'hi', at: 1 }, 'that note written');
+  assert.deepEqual(Object.keys(store.local).sort(), ['notes:https://school.blackboard.test/_5_1', 'ultra'], 'and nothing else');
+  delete store.local['notes:https://school.blackboard.test/_5_1'];
+  delete store.local.ultra;
   assert.deepEqual(store.local, {}, 'nothing written');
 });
 
@@ -60,65 +93,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const later = () => { let resolve; const p = new Promise((r) => { resolve = r; }); return Object.assign(p, { resolve }); };
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
-// Simple selectors only: tag, #id, .class and [attr] or [attr="v"] compounds, joined by spaces or > (both as descendant).
-const one = (el, part) => {
-  const m = part.match(/^([a-z0-9]+|\*)?((?:[#.][\w-]+|\[[^\]]+\])*)$/i);
-  if (!m || !el.tagName || (m[1] && m[1] !== '*' && el.tagName !== m[1].toUpperCase())) return false;
-  return (m[2].match(/[#.][\w-]+|\[[^\]]+\]/g) || []).every((x) => {
-    if (x[0] === '#') return el.id === x.slice(1);
-    if (x[0] === '.') return String(el.className).split(/\s+/).includes(x.slice(1));
-    const [, k, v] = x.match(/^\[([\w-]+)(?:="([^"]*)")?\]$/);
-    const a = el.getAttribute(k);
-    return a != null && (v == null || a === v);
-  });
-};
-const matches = (el, sel) => sel.split(',').some((alt) => {
-  const parts = alt.trim().split(/\s*>\s*|\s+/);
-  if (!one(el, parts.at(-1))) return false;
-  let i = parts.length - 2;
-  for (let p = el.parentNode; i >= 0 && p; p = p.parentNode) if (one(p, parts[i])) i--;
-  return i < 0;
-});
-const camel = (k) => k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-class El {
-  constructor(tag, doc) { Object.assign(this, { tagName: tag.toUpperCase(), doc, children: [], parentNode: null, attrs: {}, dataset: {}, listeners: [], className: '', id: '', hidden: false, _html: '', style: { setProperty() {} } }); }
-  get isConnected() { let p = this; while (p.parentNode) p = p.parentNode; return p === this.doc.root; }
-  kids(list) { return list.filter((k) => k != null && k !== false).map((k) => (k instanceof El ? k : { nodeType: 3, textContent: String(k) })); }
-  adopt(k) { if (k instanceof El && k.parentNode) k.parentNode.children.splice(k.parentNode.children.indexOf(k), 1); k.parentNode = this; return k; }
-  append(...k) { for (const x of this.kids(k)) this.children.push(this.adopt(x)); }
-  prepend(...k) { this.children.unshift(...this.kids(k).map((x) => this.adopt(x))); }
-  replaceChildren(...k) { for (const c of this.children) c.parentNode = null; this.children = []; this._html = ''; this.append(...k); }
-  after(x) { const p = this.parentNode, k = this.kids([x])[0]; p.adopt(k); p.children.splice(p.children.indexOf(this) + 1, 0, k); }
-  remove() { if (this.parentNode) { this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); this.parentNode = null; } }
-  replaceWith(...k) { const p = this.parentNode, at = p.children.indexOf(this); this.remove(); p.children.splice(at, 0, ...this.kids(k).map((x) => p.adopt(x))); }
-  get previousElementSibling() { const s = this.parentNode?.children || []; return s.slice(0, s.indexOf(this)).filter((x) => x instanceof El).at(-1) || null; }
-  get lastChild() { return this.children.at(-1) || null; }
-  setAttribute(k, v) { if (k === 'id') this.id = String(v); else if (k === 'class') this.className = String(v); else if (k.startsWith('data-')) this.dataset[camel(k)] = String(v); else this.attrs[k] = String(v); }
-  getAttribute(k) { if (k === 'id') return this.id || null; if (k === 'class') return this.className || null; if (k === 'hidden') return this.hidden ? '' : null; if (k.startsWith('data-')) return this.dataset[camel(k)] ?? null; return this.attrs[k] ?? null; }
-  hasAttribute(k) { return this.getAttribute(k) != null; }
-  removeAttribute(k) { if (k.startsWith('data-')) delete this.dataset[camel(k)]; else delete this.attrs[k]; }
-  get textContent() { return this._html ? this._html.replace(/<[^>]*>/g, '') : this.children.map((c) => c.textContent).join(''); }
-  set textContent(v) { this.replaceChildren(...(String(v) ? [String(v)] : [])); }
-  get innerHTML() { return this._html || this.children.map((c) => (c instanceof El ? `<${c.tagName.toLowerCase()}>${c.innerHTML}</${c.tagName.toLowerCase()}>` : c.textContent)).join(''); }
-  set innerHTML(v) { this.replaceChildren(); this._html = String(v); }
-  get value() { return this.tagName === 'SELECT' ? (this._value ?? (this.children.find((o) => o.selected) || this.children[0])?.value ?? '') : this._value ?? ''; }
-  set value(v) { this._value = v; }
-  cloneNode() { const c = new El(this.tagName, this.doc); c._html = this.innerHTML; return c; }
-  all() { return this.children.filter((c) => c instanceof El).flatMap((c) => [c, ...c.all()]); }
-  querySelectorAll(sel) { return this.all().filter((e) => matches(e, sel)); }
-  querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
-  closest(sel) { for (let p = this; p && p.tagName; p = p.parentNode) if (matches(p, sel)) return p; return null; }
-  contains(e) { for (let p = e; p; p = p.parentNode) if (p === this) return true; return false; }
-  addEventListener(type, f, capture) { this.listeners.push({ type, f, capture: !!capture }); }
-  removeEventListener(type, f) { this.listeners = this.listeners.filter((l) => l.type !== type || l.f !== f); }
-  dispatchEvent(ev) { for (const l of this.listeners.filter((x) => x.type === ev.type)) l.f(ev); return true; }
-  focus() { this.doc.activeElement = this; }
-  scrollIntoView() {}
-  click() { this.doc.fire(this, 'click', { trusted: false }); }
-  showModal() { this.open = true; }
-  close() { if (!this.open) return; this.open = false; this.dispatchEvent({ type: 'close' }); }
-  getBoundingClientRect() { return { left: 0, right: 100, top: 0, bottom: 20 }; }
-}
+const { El } = require('./stand-in-dom.js');
+
 // A Canvas course home with Glaze and Notes on; the worker is lib/notes.js run over memory, its answers and storage's
 // change events arriving later, as in a browser. env.activation: navigator.userActivation.isActive; env.hold(m): a
 // promise the worker waits for before it runs m; env.zipHold: a promise loading lib/zip.js waits for. on: the page's own
@@ -128,14 +104,18 @@ class El {
 // env.changeSync(patch): those items changed in storage.sync, reported as storage reports them (only what changed).
 // env.syncFail: a storage.sync read throws (the extension reloaded, or storage failed).
 const D = require('../defaults.js');
-const page = ({ on = true, stored = on, live = true, enabled = true } = {}) => {
+// ultra: an Ultra course outline instead (its right column, the student's _N_N id, Ultra's course list and the
+// course's content items as content-ultra.js hands them over).
+const ULTRA = 'https://school.blackboard.test';
+const U = require('../lib/ultra.js');
+const page = ({ on = true, stored = on, live = true, enabled = true, ultra = false, items = [] } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => new El(t, doc);
   doc.root = make('html');
   doc.body = make('body');
   doc.root.append(doc.body);
-  const side = make('div');
-  side.id = 'course_show_secondary';
+  const side = make(ultra ? 'aside' : 'div');
+  if (ultra) { side.className = 'outline-actions'; const d = make('div'); d.className = 'js-details-and-actions'; side.append(d); } else side.id = 'course_show_secondary';
   doc.body.append(side);
   doc.activeElement = doc.body;
   // Events: capture from the top down to the target, then bubbling back up, as the DOM does.
@@ -162,19 +142,29 @@ const page = ({ on = true, stored = on, live = true, enabled = true } = {}) => {
   const idb = { get: async (s, k) => db[s].get(k), put: async (s, k, v) => { db[s].set(k, v); }, del: async (s, ks) => { for (const k of ks) db[s].delete(k); },
     scan: async (s, p) => [...db[s]].filter(([k]) => k.startsWith(p)), keys: async (s, p) => [...db[s].keys()].filter((k) => k.startsWith(p)), estimate: async () => ({ usage: 1, quota: 1e9 }) };
   const sent = [], blobs = [];
-  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null, live, syncHold: null, sync: { enabled: true, enhance: { notes: stored } } };
+  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null, live, syncHold: null, sync: { enabled: true, enhance: { notes: stored } }, fetched: [], contentsHold: null };
+  const ultraFetch = async (url, init) => {
+    env.fetched.push({ url, init });
+    const p = new URL(url).pathname;
+    const body = p.endsWith('/users/me') ? { id: '_5_1' }
+      : p.endsWith('/memberships') ? { results: [{ courseId: '_7_1', course: { id: '_7_1', name: 'Biology' } }, { courseId: '_9_1', course: { id: '_9_1', name: 'History' } }] }
+        : { results: p.includes('/_7_1/contents') ? items : [] };
+    if (p.endsWith('/contents')) await env.contentsHold;
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
   env.changeSync = (patch) => {
     Object.assign(env.sync, structuredClone(patch));
     for (const f of changed) f(Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, { newValue: structuredClone(v) }])), 'sync');
   };
   const URLs = Object.assign(function () {}, { createObjectURL: (b) => { blobs.push(b); return `blob:x/${blobs.length}`; }, revokeObjectURL() {} });
   const context = vm.createContext({
-    document: doc, window: {}, location: { origin: 'https://school.instructure.com', pathname: '/courses/7', href: 'https://school.instructure.com/courses/7' },
+    document: doc, window: {}, location: ultra ? { origin: ULTRA, pathname: '/ultra/courses/_7_1/outline', href: `${ULTRA}/ultra/courses/_7_1/outline` }
+      : { origin: 'https://school.instructure.com', pathname: '/courses/7', href: 'https://school.instructure.com/courses/7' },
     navigator: { platform: 'MacIntel', get userActivation() { return { isActive: env.activation }; } },
     getSelection: () => ({ rangeCount: 0, anchorNode: null, isCollapsed: true, removeAllRanges() {}, addRange() {} }),
     // The view's minute-long timers (revoking a download's address) mustn't keep the test process waiting.
     setTimeout: (f, ms) => { const h = setTimeout(f, ms); if (ms >= 1000) h.unref(); return h; },
-    addEventListener() {}, URL: URLs, Blob, Date, clearTimeout, crypto: globalThis.crypto, Promise, JSON, structuredClone,
+    addEventListener() {}, URL: URLs, Blob, Date, clearTimeout, crypto: globalThis.crypto, Promise, JSON, structuredClone, AbortController,
     GZ_NOTES: N, GZ_DOCTEXT: require('../lib/doctext.js'), GZ_ZIP: require('../lib/zip.js'), GZ_I18N: require('../lib/i18n.js'), GZ_PAGE: require('../lib/page.js'),
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_LOOKS: D.GZ_LOOKS, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY,
     GZ_CTX: {
@@ -183,7 +173,11 @@ const page = ({ on = true, stored = on, live = true, enabled = true } = {}) => {
       need: (file) => (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
       // What the command palette (features/palette.js) asks of the page.
       site: 'canvas', capi: async () => [], canvasCourseId: () => '7', dueWeek: async () => [], nickOf: () => '', courseList: () => ({}),
+      // Ultra: everything asked of Blackboard goes through lib/ultra.js's reader; the old helpers aren't there.
+      ...(ultra && { site: 'ultra', profile: undefined, canvasCourses: undefined, myCourses: undefined, courseItems: undefined }),
     },
+    // The real reader over a stand-in fetch that records what it was asked and how (env.fetched).
+    ...(ultra && { GZ_ULTRA: { ...U, read: (o) => U.read({ ...o, f: ultraFetch }) } }),
     chrome: {
       runtime: { sendMessage: (m, cb) => { sent.push(m); Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => cb(JSON.parse(JSON.stringify(r)))); } },
       storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { if (env.syncFail) throw new Error('Extension context invalidated.'); const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
@@ -587,4 +581,70 @@ test("a switch change whose read fails takes the button away and closes the view
   await settle();
   assert.equal(P.doc.getElementById('gz-nt-course'), null, 'no button');
   assert.equal(P.box(), null, 'the view is closed');
+});
+
+test("Ultra: Course notes at the end of a course outline's right column, the Ultra account's notes, and links from the course's content", async () => {
+  const items = [
+    { id: '_1_1', title: 'Week 1', links: [{ rel: 'alternate', href: '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_1_1' }] },
+    { id: '_2_1', parentId: '_1_1', title: 'Lab sheet', links: [{ rel: 'alternate', href: `${ULTRA}/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_2_1&parentId=_1_1` }] },
+    { id: '_3_1', parentId: '_1_1', title: 'Elsewhere', links: [{ rel: 'alternate', href: 'https://evil.example/ultra/x' }] },
+    { id: '_4_1', title: 'No link' },
+  ];
+  const P = page({ ultra: true, items });
+  const inserted = [];
+  P.doc.execCommand = (cmd, ui, v) => { inserted.push([cmd, v]); return true; };
+  P.ui.sync(true);
+  const side = P.doc.querySelector('aside.outline-actions');
+  assert.equal(side.children.at(-1).id, 'gz-nt-block', "a block of its own at the end, after Ultra's details");
+  assert.equal(side.children[0].className, 'js-details-and-actions', "Ultra's own stays first");
+  P.ui.sync(true);
+  assert.equal(side.querySelectorAll('#gz-nt-course').length, 1, 'once, however often the pass runs');
+  const button = P.doc.getElementById('gz-nt-course');
+  P.fire(button, 'click', { trusted: false });
+  await settle();
+  assert.equal(P.box(), null, 'a faked click opens nothing');
+  P.fire(button, 'click');
+  await settle();
+  assert.ok(P.box()?.open, "the student's own click opens it");
+  assert.ok(P.sent.length && P.sent.every((m) => m.key === `notesIdx:${ULTRA}/_5_1`), "kept under this Ultra site and the student's _N_N id");
+  assert.equal(P.box().querySelector('.gz-nt-filters select').value, '_7_1', "this course's notes");
+  P.fire(P.button('New note'), 'click');
+  await settle();
+  P.fire(P.button('Blackboard link'), 'click');
+  await settle();
+  const pick = P.box().querySelector('.gz-nt-pick');
+  assert.ok(pick, 'the picker');
+  assert.ok(!pick.querySelectorAll('span').some((s) => s.textContent === 'Kind'), "no Kind: Ultra's content is one list");
+  assert.deepEqual(pick.querySelectorAll('.gz-nt-picks button').map((b) => b.textContent), ['Week 1', 'Lab sheetWeek 1'], "only this site's Ultra addresses, each under its folder");
+  P.fire(pick.querySelectorAll('.gz-nt-picks button')[1], 'click');
+  assert.deepEqual(inserted.at(-1), ['insertHTML', `<a href="${ULTRA}/ultra/redirect?redirectType=nautilus&amp;courseId=_7_1&amp;contentId=_2_1&amp;parentId=_1_1" data-gz-kind="item">Lab sheet</a>&nbsp;`]);
+  // Codex B5 review: every request through the reader: GET, Ultra's API on this site, redirects refused; the content's
+  // with the picker's signal, so closing the picker stops it.
+  assert.ok(P.fetched.length >= 3);
+  for (const { url, init } of P.fetched) {
+    assert.ok(url.startsWith(`${ULTRA}/learn/api/`), url);
+    assert.deepEqual([init.method, init.redirect, init.credentials], ['GET', 'error', 'same-origin'], url);
+  }
+  const contents = P.fetched.filter((x) => x.url.includes('/contents'));
+  assert.equal(contents.length, 1);
+  assert.match(contents[0].url, /\/learn\/api\/public\/v1\/courses\/_7_1\/contents\?.*fields=id,parentId,title,availability,links$/);
+  assert.equal(contents[0].init.signal.aborted, true, 'the picker closed when a link was picked: its signal is aborted');
+  // A picker closed while its read is on its way: the read is aborted, and nothing is listed.
+  let release;
+  P.contentsHold = new Promise((r) => { release = r; });
+  P.fire(P.button('Blackboard link'), 'click');
+  await settle();
+  const second = P.fetched.at(-1);
+  P.fire(P.box().querySelector('.gz-nt-pick').querySelectorAll('button').find((b) => b.textContent === 'Cancel'), 'click');
+  assert.equal(second.init.signal.aborted, true, 'Cancel aborts the request itself');
+  release();
+  await settle();
+  assert.equal(P.box().querySelector('.gz-nt-pick'), null);
+  // Ultra moves to another page without loading one: the button goes, the open notes stay; Notes off closes them.
+  P.run("location.pathname = '/ultra/course'");
+  P.ui.sync(true);
+  assert.equal(P.doc.getElementById('gz-nt-block'), null);
+  assert.ok(P.box()?.open);
+  P.ui.sync(false);
+  assert.ok(!P.box()?.open);
 });

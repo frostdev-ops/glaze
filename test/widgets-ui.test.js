@@ -26,7 +26,8 @@ class E {
   remove() {}
 }
 
-const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC' } = {}) => {
+// ultra: Blackboard Ultra instead, its planner (lib/ultra.js) answering with ultra.items and recording what it was asked.
+const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC', ultra = null } = {}) => {
   const held = []; // replies the test lets through by hand (hold)
   const FakeDate = class extends Date {};
   FakeDate.now = () => clock.t;
@@ -39,8 +40,10 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     console, URL, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
     GZ_TODO: require('../lib/todo.js'), GZ_CLASSES: require('../lib/classes.js'),
-    GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, capi: async () => [], settings: () => ({ enhance: { notes: true, widgets: true } }), profile: async () => ({ id: '3', time_zone: tz }) },
-    location: { origin: 'https://canvas.test', pathname: '/' },
+    GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, capi: async () => [], settings: () => ({ enhance: { notes: true, widgets: true } }), profile: async () => ({ id: '3', time_zone: tz }),
+      ...(ultra && { site: 'ultra', capi: () => { throw new Error('not on Ultra'); }, profile: () => { throw new Error('not on Ultra'); } }) },
+    ...(ultra && { GZ_ULTRA: { read: ({ origin }) => ({ origin, me: async () => '_5_1' }), planner: async (r, range) => { ultra.asked.push({ origin: r.origin, ...range }); return { items: ultra.items, complete: true }; } } }),
+    location: ultra ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     setTimeout: (f, ms) => { timers.set(++n, { f, ms }); return n; },
     clearTimeout: (id) => timers.delete(id),
     addEventListener() {}, removeEventListener() {},
@@ -57,10 +60,10 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
   c.globalThis = c;
   vm.createContext(c);
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, hub: open, register };', '  return { sync, hub: open, probe: { WIDGETS, set: (w, s, m) => { W = w; o = s; me = m; } } };');
+  const src = read('features/widgets.js').replace('  return { sync, hub: open, register };', '  return { sync, hub: open, register, probe: { WIDGETS, set: (w, s, m) => { W = w; o = s; me = m; } } };');
   assert.notEqual(src, read('features/widgets.js'));
   const ui = vm.runInContext(src, c);
-  ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: '3', tz: 'UTC' });
+  ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
   const answer = () => { while (reads.length) reads.shift()(); };
   return { ui, timers, answer, sent, listeners, local, clock, held };
 };
@@ -136,7 +139,7 @@ test('a note is stamped when it is typed, not when it is saved', async () => {
 });
 
 test('a floating widget is never wider or taller than the window, whatever its size', () => {
-  const css = read('canvas.css');
+  const css = read('features/apps.css');
   for (const sel of ['#gz-float .gz-w {', '#gz-float .gz-w[data-size="m"] {', '#gz-float .gz-w[data-size="l"] {']) {
     const rule = css.slice(css.indexOf(sel), css.indexOf('}', css.indexOf(sel)));
     assert.match(rule, /width: min\([^;]+, calc\(100vw - 24px\)\)/, sel);
@@ -146,7 +149,7 @@ test('a floating widget is never wider or taller than the window, whatever its s
 
 test('the grid shows tiles in their saved order, which is also the keyboard and screen-reader order', () => {
   // grid-auto-flow: dense would fill gaps with later tiles, so what you see would not be the order you set or tab through.
-  const css = read('canvas.css');
+  const css = read('features/apps.css');
   const rules = [...css.matchAll(/([^{}]*\.gz-dash-grid[^{}]*)\{([^}]*)\}/g)];
   assert.ok(rules.length);
   for (const [, sel, body] of rules) assert.doesNotMatch(body, /grid-auto-flow:\s*[^;]*dense/, sel.trim());
@@ -250,4 +253,32 @@ test('the agenda puts a class kept in another zone on the student\'s own day, at
   assert.match(nyThu, /Night lab/);
   assert.match(nyThu, /11:00\s?–\s?11:50\s?PM/);
   assert.doesNotMatch(nyFri, /Night lab/);
+});
+
+test("Ultra: the agenda reads the day from Ultra's To Do and calendar (lib/ultra.js), never Canvas's planner, and links into Ultra", async () => {
+  const text = (el) => [el.textContent || '', ...(el.children || []).map((c) => (typeof c === 'object' ? text(c) : String(c)))].join(' ');
+  const now = Date.parse('2026-10-15T16:00:00Z');
+  const ultra = { asked: [], items: [
+    { type: 'assignment', id: '_11_1', cid: '_7_1', course: 'Biology', title: 'Lab report', at: now + 36e5, url: '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_3_1', sub: { submitted: true }, ov: null, allDay: false },
+    { type: 'quiz', id: '_12_1', cid: '_7_1', course: 'Biology', title: 'Next week', at: now + 7 * 864e5, url: '/ultra/courses/_7_1/outline', sub: null, ov: null, allDay: false },
+  ] };
+  const p = page({ clock: { t: now }, ultra });
+  const body = new E();
+  p.ui.probe.WIDGETS.agenda(body);
+  for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+  const list = find(body, (e) => e.className === 'gz-w-agenda');
+  assert.match(text(list), /Lab report/);
+  assert.doesNotMatch(text(list), /Next week/, "only the day's");
+  const link = find(list, (e) => e.tagName === 'A');
+  assert.equal(link.href, '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_3_1');
+  assert.ok(find(list, (e) => e.tagName === 'LI' && 'done' in e.dataset), 'handed in: done');
+  assert.equal(ultra.asked.length, 1);
+  assert.equal(ultra.asked[0].origin, 'https://school.blackboard.test', "this Ultra site's own");
+  assert.equal(ultra.asked[0].to - ultra.asked[0].from, 864e5, 'one day');
+  // The day again within two minutes: not asked again.
+  find(body, (e) => e.attrs?.['aria-label'] === 'Next day').fire('click');
+  for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+  find(body, (e) => e.attrs?.['aria-label'] === 'Previous day').fire('click');
+  for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+  assert.equal(ultra.asked.length, 2, 'the next day once, today from memory');
 });
