@@ -253,8 +253,13 @@ test('the background worker takes card writes from this extension only, one at a
   const ultraStyle = { ...solid, key: 'ultra:https://bb.school.edu/_25_1' };
   assert.deepEqual(await send(ultraStyle, ultra), { ok: true, id: null }, 'Ultra saves only its own origin course key');
   for (const sender of [{ ...ultra, frameId: 1 }, { ...ultra, url: 'https://bb.other.edu/ultra/course' }, { ...ultra, url: 'https://bb.school.edu/login' }, { ...ultra, id: 'other' }]) assert.deepEqual(await send(ultraStyle, sender), nope);
-  for (const op of [{ reset: true }, { set: [] }, { replace: {} }, { nav: { collapsed: true } }]) assert.deepEqual(await send({ ...ultraStyle, ...op }, ultra), nope);
+  for (const op of [{ ultra: true }, { reset: true }, { set: [] }, { replace: {} }, { nav: { collapsed: true } }]) assert.deepEqual(await send({ ...ultraStyle, ...op }, ultra), nope);
   assert.deepEqual(await send(solid, ultra), nope, 'Ultra cannot edit Canvas styles');
+  assert.equal(store.sync.ucards[ultraStyle.key].c, '#123456');
+  assert.equal(store.sync.cards[ultraStyle.key], undefined, 'Ultra does not enter the old Canvas sync item');
+  assert.deepEqual(await send({ type: 'glaze:cards', ultra: true, reset: true }, editor), { ok: true }, 'the editor can reset the Ultra namespace');
+  assert.equal(store.sync.ucards, undefined);
+  assert.ok(store.sync.cards[C], 'an Ultra reset preserves Canvas pictures and styles');
   assert.deepEqual(await send({ type: 'glaze:cards', reset: true }), nope, 'a Canvas page cannot reset');
   assert.deepEqual(await send({ type: 'glaze:cards', set: [] }), nope, "or change a theme's set");
   assert.equal(await send({ type: 'glaze:toString', key: A }), 'ignored', 'only the kinds of write it names');
