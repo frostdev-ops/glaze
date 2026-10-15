@@ -224,8 +224,28 @@
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
+  let canvasRecorded = false;
+  const canvasCourseKey = (id = canvasCourseId()) => id ? `canvas:${location.origin}/${id}` : null;
   const recordCourses = () => {
-    if (!ultra) return;
+    if (!ultra) {
+      if (canvasRecorded || window.top !== window) return;
+      canvasRecorded = true;
+      Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
+        const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
+          name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
+        }]));
+        // Preserve Blackboard and other schools; Canvas ids alone are only unique within their own host.
+        chrome.storage.local.get('seenCourses', (r) => {
+          const all = { ...r?.seenCourses, ...seen };
+          chrome.storage.local.set({ seenCourses: all });
+          courseList = all;
+          paintCourses();
+          syncCourseMenu();
+          reapply();
+        });
+      }).catch(() => { canvasRecorded = false; });
+      return;
+    }
     if (window.top !== window) return;
     try {
       chrome.storage.local.get('seenCoursesAt', (r) => {
@@ -234,7 +254,10 @@
           const seen = GZ_COURSES(ms);
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
-          try { chrome.storage.local.set({ seenCourses: seen, seenCoursesAt: Date.now(), courseSlots }); } catch { /* reloaded */ }
+          try { chrome.storage.local.get('seenCourses', (r) => {
+            const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([, c]) => c?.canvas));
+            chrome.storage.local.set({ seenCourses: { ...canvas, ...seen }, seenCoursesAt: Date.now(), courseSlots });
+          }); } catch { /* reloaded */ }
         });
       });
     } catch { /* extension reloaded under the tab */ }
@@ -570,7 +593,7 @@
     full = false;
     cardsIO.disconnect();
     onScreen.clear();
-    clearTags(TAGS);
+    clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
   };
 
@@ -1981,7 +2004,45 @@
     return GZ_CAL_COURSE(el.textContent, el.className.match?.(/course-color-(\d+)/)?.[1], calItems, courseList);
   };
   const paintCourses = () => {
-    if (!ultra) return;
+    if (!ultra) {
+      const changed = {};
+      // A native color edit repaints the hero before a new API request would see it.
+      for (const card of document.querySelectorAll('.ic-DashboardCard')) {
+        const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1];
+        const c = courseList[canvasCourseKey(id)];
+        const raw = C.parse(card.querySelector('.ic-DashboardCard__header_hero')?.style.backgroundColor || '');
+        if (c && raw && c.color !== C.hex(raw)) { c.color = C.hex(raw); changed[canvasCourseKey(id)] = c; }
+      }
+      if (Object.keys(changed).length) try { chrome.storage.local.get('seenCourses', (r) => chrome.storage.local.set({ seenCourses: { ...r?.seenCourses, ...changed } })); } catch { /* reloaded */ }
+      const cid = canvasCourseKey();
+      const targets = new Map();
+      if (cid) for (const el of document.querySelectorAll('#breadcrumbs li:nth-child(2), #section-tabs')) targets.set(el, cid);
+      // Calendar and dashboard colors are native; Grades links and Inbox course labels have no color.
+      if (location.pathname === '/grades') for (const el of document.querySelectorAll('#content a[href*="/courses/"]')) {
+        targets.set(el, canvasCourseKey(el.getAttribute('href').match(/\/courses\/(\d+)/)?.[1]));
+      }
+      if (location.pathname === '/conversations') {
+        const list = Object.entries(courseList).filter(([id, c]) => id.startsWith(`canvas:${location.origin}/`) && c.color);
+        // MessageDetailItem’s second header field is the native context label, not the message body.
+        // Canvas supplies only its name; ambiguous names keep Canvas’s own styling.
+        for (const el of document.querySelectorAll('[data-testid^="message-detail-item-"] > :nth-child(2) > :first-child > :nth-child(2) > span')) {
+          if (el.children.length) continue;
+          const matches = list.filter(([, c]) => [c.name, c.code].includes(el.textContent.trim()));
+          if (matches.length === 1) targets.set(el, matches[0][0]);
+        }
+      }
+      for (const el of document.querySelectorAll('[data-gz-course-color]')) if (!targets.has(el) || !courseList[targets.get(el)]?.color) {
+        el.removeAttribute('data-gz-course-color');
+        el.style.removeProperty('--gz-course-raw');
+      }
+      for (const [el, id] of targets) {
+        const color = courseList[id]?.color;
+        if (!color) continue;
+        if (el.style.getPropertyValue('--gz-course-raw') !== color) el.style.setProperty('--gz-course-raw', color);
+        if (!el.hasAttribute('data-gz-course-color')) el.setAttribute('data-gz-course-color', '');
+      }
+      return;
+    }
     if (isPreview) return;
     const colors = courseColors();
     for (const el of document.querySelectorAll('[class*="course-color-"]')) {
@@ -1996,6 +2057,11 @@
   const varText = (v) => Object.entries(v).map(([k, x]) => `${k}:${x}`).join(';');
   // The course tinting the page now, as { key, slot, vars }, or null.
   const tintOf = () => {
+    if (!ultra) {
+      const id = canvasCourseKey();
+      const color = courseList[id]?.color;
+      return color && settings.courses.tint && settings.courses.tinted.includes(id) && chrome.runtime?.id ? { key: `${id};${color}`, color } : null;
+    }
     const cid = courseId();
     const sec = document.querySelector(COURSE);
     const slot = sec?.className.match(/course-color-(\d+)/)?.[1];
@@ -2032,7 +2098,7 @@
   // A course given a look of its own wears it on its pages (GZ_COURSE_LOOK); flush() re-checks. Once
   // Glaze is reloaded or updated under the tab, this script is cut off from storage (no runtime id) and
   // would keep switching to looks since removed: it wears none until the page loads again.
-  const lookHere = () => (chrome.runtime?.id && settings.courses.looks[courseId()]) || null;
+  const lookHere = () => (chrome.runtime?.id && settings.courses.looks[ultra ? courseId() : canvasCourseKey()]) || null;
   let looked = null; // the course look painted now
   let worn = settings; // the settings painted now: the student's, or a course's look over them
 
@@ -2163,13 +2229,13 @@
 
   // -- the button on each card --
   const syncCourseMenu = () => {
-    const on = ultra && !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
-    for (const card of document.querySelectorAll(CARD)) {
-      const cid = card.dataset.courseId || card.id.slice(19);
+    const on = !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
+    for (const card of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard')) {
+      const cid = ultra ? (card.dataset.courseId || card.id.slice(19)) : canvasCourseKey(card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1]);
       let b = card.querySelector(':scope > .gz-cm-btn');
       if (b && (!on || b.dataset.cid !== cid || !courseList[cid])) { b.remove(); b = null; }
       if (!on || !courseList[cid]) continue;
-      const label = t('Colour and look for {name}', { name: nickOf(cid) || courseList[cid].name });
+      const label = t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name: nickOf(cid) || courseList[cid].name });
       if (!b) {
         // Inside Ultra's card, positioned over its corner (extras.css); document-level capture listeners take
         // its events, below.
@@ -2193,7 +2259,7 @@
     }
     if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false, true);
     if (menu) paintMenu();
-    syncNames();
+    if (ultra) syncNames();
   };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
@@ -2211,6 +2277,9 @@
   const paintMenu = (m = menu) => {
     const { cid } = m;
     const c = settings.courses;
+    m.tint.checked = GZ_COURSE_TINTED(c, cid, courseList);
+    for (const b of m.looks) b.setAttribute('aria-pressed', String((c.looks[cid] || '') === b.dataset.look));
+    if (!ultra) return;
     const cur = courseColors()[cid];
     if (!cur) return;
     // The color the cards show for it now (a pick as is, else Ultra's toned): the custom picker starts there.
@@ -2221,8 +2290,6 @@
     // The nickname as kept, unless the student is changing it: another tab's save shows here, and isn't undone.
     if (!m.edited && m.nick.value !== (c.names[cid] || '')) m.nick.value = c.names[cid] || '';
     m.reset.hidden = !cur.picked;
-    m.tint.checked = GZ_COURSE_TINTED(c, cid, courseList);
-    for (const b of m.looks) b.setAttribute('aria-pressed', String((c.looks[cid] || '') === b.dataset.look));
   };
   const placeMenu = () => {
     if (!menu) return;
@@ -2270,7 +2337,7 @@
     if (!closeMenu(false)) return;
     const name = nickOf(cid) || real;
     const box = make('div', { id: 'gz-cm' });
-    for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t('Colour and look for {name}', { name })]]) box.setAttribute(k, v);
+    for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name })]]) box.setAttribute(k, v);
     const cap = (text, id) => make('div', { className: 'gz-cm-cap', id, textContent: text });
     const group = (labelledby, ...kids) => {
       const g = make('div', {}, ...kids);
@@ -2290,7 +2357,7 @@
     // Colors: Ultra's ten as Glaze tones them (the very colors its cards show: a pick is used as is, so a swatch picked
     // is what its card then shows), and the theme's accent. Ultra's ten cover the hues except red and grey, which the
     // custom picker is for. Then Reset, back to Blackboard's own.
-    const sw = swatches().map(([label, hex]) => {
+    const sw = (ultra ? swatches() : []).map(([label, hex]) => {
       const b = make('button', { type: 'button', className: 'gz-cm-sw', title: t(label) });
       b.setAttribute('aria-label', t(label));
       b.dataset.hex = hex;
@@ -2333,10 +2400,12 @@
     const lookGrid = group('gz-cm-look', ...looks);
     lookGrid.className = 'gz-cm-looks';
 
-    box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
+    if (ultra) box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
       make('div', { className: 'gz-cm-colorhead' }, cap(t('Colors'), 'gz-cm-colors'), reset), grid,
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')),
       cap(t('Look'), 'gz-cm-look'), lookGrid);
+    else box.append(note, make('p', { className: 'gz-cm-note', textContent: t('Change the colour and nickname in Canvas’s own card menu.') }),
+      make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid);
     document.body.append(box);
     menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
     btn.setAttribute('aria-expanded', 'true');
@@ -2344,7 +2413,7 @@
     rove(grid, sw.find((b) => b.getAttribute('aria-pressed') === 'true') || sw[0]);
     rove(lookGrid, looks.find((b) => b.getAttribute('aria-pressed') === 'true') || looks[0]);
     placeMenu();
-    grid.querySelector('[tabindex="0"]').focus({ preventScroll: true });
+    (ultra ? grid.querySelector('[tabindex="0"]') : tint).focus({ preventScroll: true });
   };
 
   // The button is taken at the document, in the capture phase, as the cards' counts are (openNew): Ultra's card
@@ -2436,12 +2505,12 @@
 
   const applySettings = () => {
     looked = lookHere();
-    const s = (worn = looked ? GZ_COURSE_LOOK(settings, courseId()) : settings);
+    const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey()) : settings);
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);
     // Course colors and tint read Ultra's color slots (course-color-N, the course list recordCourses keeps):
-    // none on Canvas for now (its own course colors are toned by canvas.css from data-gz-raw-courses; liftCourses).
+    // Canvas uses its native color directly for tint; its dashboard/calendar toning stays in canvas.css.
     // `colors` is the palette painted: the base one, tinted inside a picked course.
     let colors = base;
     if (ultra) {
@@ -2459,6 +2528,14 @@
       tinted = course ? on.key : null;
       colors = course ? GZ_TINT(base, course, s.courses.strength / 100) : base;
       if (course) for (const [v] of GZ_COLORS) setVar(v, colors[v]);
+      paintCourses();
+    } else {
+      const on = tintOf();
+      tinted = on?.key || null;
+      if (on) {
+        colors = GZ_TINT(base, on.color, s.courses.strength / 100);
+        for (const [v] of GZ_COLORS) setVar(v, colors[v]);
+      }
       paintCourses();
     }
     palette = colors;

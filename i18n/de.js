@@ -91,7 +91,6 @@
   "Inside each course ticked below, the accent takes the course's color and the background leans toward it, so you can tell at a glance which course you're in.": 'In jedem unten angehakten Kurs übernimmt der Akzent die Kursfarbe und der Hintergrund neigt sich ihr zu, damit du auf einen Blick siehst, in welchem Kurs du bist.',
   'Tint strength': 'Stärke der Tönung',
   'Organizations': 'Organisationen',
-  'Open Blackboard once and your courses show up here, each with a colour you can change.': 'Öffne einmal Blackboard, dann erscheinen deine Kurse hier, jeder mit einer Farbe, die du ändern kannst.',
   'On Canvas you get the theme, Due this week, the command palette and grades on course cards. The other extras are for Blackboard.': 'In Canvas bekommst du das Design, „Diese Woche fällig“, die Befehlspalette und Noten auf Kurskarten. Die anderen Extras sind für Blackboard.',
   'Due-date urgency': 'Dringlichkeit von Fristen',
   'Marks items overdue, due today or due within three days.': 'Markiert Elemente, die überfällig, heute fällig oder innerhalb von drei Tagen fällig sind.',
@@ -398,4 +397,7 @@
   "its overall grade uses rules Glaze can't read": 'sie nutzt Regeln, die Glaze nicht lesen kann',
   "its overall grade uses rules Glaze can't read, like dropped scores or single weighted items": 'sie nutzt Regeln, die Glaze nicht lesen kann, etwa gestrichene Noten oder einzeln gewichtete Elemente',
   "its overall grade names a category Glaze can't find": 'sie nennt eine Kategorie, die Glaze nicht findet',
+  "Tint and look for {name}": "Tönung und Aussehen für {name}",
+  "Change the colour and nickname in Canvas’s own card menu.": "Ändere die Farbe und den Spitznamen im Kartenmenü von Canvas.",
+  "Open Blackboard or Canvas once and your courses show up here. Change Canvas colours in its own card menu.": "Öffne Blackboard oder Canvas einmal, damit deine Kurse hier erscheinen. Ändere Canvas-Farben im eigenen Kartenmenü.",
 };
