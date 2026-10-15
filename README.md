@@ -84,7 +84,7 @@ entry reads Dashboard with its original destination while Glaze's Dashboard is e
 pet-level widgets can be ordered at the top or bottom. Export all includes the navigation settings and links; local
 pictures remain on their device, and Look codes carry only the existing appearance fields.
 Next due shares the agenda/Better To Do planner and account/cache rules, refreshing only while enabled and visible.
-Logos, sizes and Dashboard naming apply on the initial path; optional order/hiding, links and widgets settle after
+The bundled logo, sizes and Dashboard naming apply on the initial path; custom local pixels use that logo until ready. Optional order/hiding, links and widgets settle after
 their on-demand module arrives. A collapsed rail expands over the page on hover (optional), keyboard focus or its touch
 control; leaving it or tapping outside closes that temporary overlay without changing the saved collapsed preference.
 Narrow modal drawers keep Ultra's native width.
