@@ -576,8 +576,8 @@ html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:ha
 }
 /* A tab's switch: the course's copy on screen (an inert shadow tree) until Ultra's live page is built, the strip on top
    of it where it was, then a fade to the live page. Under Ultra's dialogs (MUI's 1300), over its panels. */
-/* Course tabs' live frames (features/coursetabs.js): over the page right of Ultra's menu, above Glaze's footer; shown only
-   while a tab's frame is picked. Floating widgets stay over them. */
+/* Course tabs' live frames (features/coursetabs.js): over the whole window, above Glaze's footer; shown only while a tab's
+   frame is picked. Floating widgets stay over them. */
 #gz-ctabs-frames { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1250; visibility: hidden; background: var(--gz-ground, Canvas); }
 #gz-ctabs-frames[data-on] { visibility: visible; }
 #gz-ctabs-frames > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }

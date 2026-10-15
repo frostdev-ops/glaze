@@ -301,13 +301,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // 'shot') while this tab is the one on screen, of whichever page is showing (this one or a tab's frame), once it has
   // finished building, without a tip of Glaze's. Taken as the student is about to leave it (a press on a tab or on a link
   // out of the course), after it changes or scrolls, and every 15 s while it stays; at most one each 0.6 s (the browser
-  // allows two a second). Shown only while a tab's frame first loads, at the window size and menu width it was taken at.
+  // allows two a second). Shown only while a tab's frame first loads, at the window size it was taken at.
   const loading = (el) => !!el && [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root')].some(shown);
   const split = (path) => { const i = path.indexOf('?'); return i < 0 ? [path, ''] : [path.slice(0, i), path.slice(i + 1)]; };
-  const edge = () => {
-    const r = document.querySelector('.MuiDrawer-root:has(nav[class*="makeStylesnavigation"], #base_tools)')?.getBoundingClientRect();
-    return r?.width ? Math.round(r.right) : 0;
-  };
   // What is on screen: a tab's frame, or this page.
   const surface = () => {
     const f = showing && frames.get(showing);
@@ -331,7 +327,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const tips = [...document.querySelectorAll('.gz-tip'), ...doc.querySelectorAll('.gz-tip')];
     for (const tip of tips) tip.style.visibility = 'hidden';
     shooting = new Promise((ok) => requestAnimationFrame(() => setTimeout(ok)))
-      .then(() => send({ op: 'shot', cid, path, strip: null, size: [innerWidth, innerHeight, edge()] }))
+      .then(() => send({ op: 'shot', cid, path, strip: null, size: [innerWidth, innerHeight] }))
       .then((x) => { if (x?.snap?.cid === cid && x.snap.path === path) keep(x.snap); return x?.snap || null; }, () => null)
       .finally(() => { shooting = null; for (const tip of tips) tip.style.visibility = ''; });
     return shooting;
@@ -341,7 +337,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     snaps.set(s.cid, s);
     for (const k of L.fit([...snaps.values()].map((x) => [x.cid, x.n, x.at]))) snaps.delete(k);
   };
-  const fits = (s, url) => !!s && s.path === url && s.size?.[0] === innerWidth && s.size?.[1] === innerHeight && s.size?.[2] === edge() && safePath(...split(url)) === url;
+  const fits = (s, url) => !!s && s.path === url && s.size?.[0] === innerWidth && s.size?.[1] === innerHeight && safePath(...split(url)) === url;
   let capTimer = 0;
   let capWhere = '';
   let capAt = 0;
@@ -371,8 +367,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
 
   // ---- live tabs ------------------------------------------------------------------------------------------------
-  // A tab picked from the strip runs in a frame of its own (#gz-ctabs-frames, over this page right of Ultra's menu, above
-  // its footer), named gz-ctab:<course> so Glaze there works as on a page of its own (content.js solo). Ultra draws no menu
+  // A tab picked from the strip runs in a frame of its own (#gz-ctabs-frames, over the whole window as a course in Ultra
+  // is, above Glaze's footer), named gz-ctab:<course> so Glaze there works as on a page of its own (content.js solo). Ultra draws no menu
   // in a frame. Frames stay running while hidden; at most LIVE of them, the least recently shown going first, and a
   // closed tab's at once. This page's own course is shown as itself. The strip in a frame sends its picks here (toTop):
   // a tab, a close, its page leaving its course (then this page goes there), its page changing (a fresh picture).
@@ -387,7 +383,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const lay = () => {
     if (!host) return;
     const foot = document.getElementById('gz-footer');
-    host.style.left = `${edge()}px`;
     host.style.bottom = `${shown(foot) ? Math.max(0, Math.round(innerHeight - foot.getBoundingClientRect().top)) : 0}px`;
   };
   const drop = (cid) => {
@@ -449,7 +444,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
       const img = Object.assign(document.createElement('img'), { src: snap.shot, alt: '', draggable: false });
-      img.style.cssText = `position:absolute;top:0;left:${-edge()}px;width:${innerWidth}px;height:${innerHeight}px;user-select:none`;
+      img.style.cssText = `position:absolute;top:0;left:0;width:${innerWidth}px;height:${innerHeight}px;user-select:none`;
       box.attachShadow({ mode: 'closed' }).append(img);
       for (const ev of ['wheel', 'pointerdown', 'touchstart']) box.addEventListener(ev, () => { f.el.style.visibility = ''; unpicture(); }, { passive: true });
       pic = box;
@@ -469,8 +464,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const show = async (cid) => {
     const me = ++showTurn;
     if (cid === showing) return;
-    // The picture of what goes under: what its tab shows if its frame has to start again.
-    await Promise.race([shoot(), new Promise((r) => setTimeout(r, 200))]);
+    // A picture of what goes under, if one is being taken (the press on a tab starts one), finishes first: taken after the
+    // switch, it would be of the wrong page.
+    if (shooting) await Promise.race([shooting, new Promise((r) => setTimeout(r, 200))]);
     if (me !== showTurn || (cid && !on)) return;
     const back = !!showing && !cid && (document.activeElement?.localName === 'iframe' || strip?.contains(document.activeElement));
     if (cid && !host) {
@@ -617,8 +613,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const el = tabOf(e);
     if (el && !e.button && !e.target.closest('.gz-ctab-x, .gz-ctab-pin')) {
       drag = { el, cid: el.dataset.courseId, x: e.clientX, id: e.pointerId, on: false };
-      // About to leave this page for another course's: its picture, now, before anything changes.
-      if (el.dataset.courseId !== ctx.courseId()) shoot();
+      // About to leave what is on screen for another course's: its picture, now, before anything changes.
+      if (el.dataset.courseId !== (showing || ctx.courseId())) shoot();
     }
   };
   const onMove = (e) => {
