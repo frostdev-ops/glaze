@@ -207,6 +207,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     else box.append(note, make('p', { className: 'gz-cm-note', textContent: t('Change the colour and nickname in Canvas’s own card menu.') }),
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
       make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));
+    if (ultra) box.append(make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));
     document.body.append(box);
     menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
     btn.setAttribute('aria-expanded', 'true');

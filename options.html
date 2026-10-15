@@ -146,7 +146,7 @@
     </div>
     <nav aria-label="Sections">
       <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
-      <a href="#motion">Motion</a><a href="#sidebar">Canvas sidebar</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
+      <a href="#motion">Motion</a><a href="#sidebar">Canvas and Blackboard navigation</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
     </nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
@@ -337,8 +337,8 @@
       </section>
 
       <section id="sidebar">
-        <h2>Canvas sidebar</h2>
-        <p class="desc">Style Canvas's own global navigation. Links and the site's navigation still work as usual.</p>
+        <h2>Canvas and Blackboard navigation</h2>
+        <p class="desc">Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.</p>
         <div id="nav-preview" aria-hidden="true"><span>Dashboard</span><span>Courses</span><span>Calendar</span></div>
         <label class="field"><span>Sidebar background</span><select data-key="nav.k"><option value="default">Palette default</option><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image">Picture</option></select></label>
         <div class="row" data-nav-kinds="solid gradient image">
@@ -377,7 +377,7 @@
 
       <section id="cards">
         <h2>Course cards</h2>
-        <p class="desc" id="cards-note">Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.</p>
+        <p class="desc" id="cards-note">Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.</p>
         <label class="field"><span>Card width</span><input type="range" data-key="card.width" min="200" max="420" step="2"><output data-for="card.width" data-format="px"></output></label>
         <label class="field"><span>Space between cards</span><input type="range" data-key="card.gap" min="-1" max="72" step="1"><output data-for="card.gap" data-format="themepx"></output></label>
         <label class="field"><span>Card corners</span><input type="range" data-key="card.radius" min="-1" max="32" step="1"><output data-for="card.radius" data-format="themepx"></output></label>

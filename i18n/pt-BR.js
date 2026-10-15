@@ -591,7 +591,6 @@
   // Course cards (W4).
   "Cards": "Cartões",
   "Course cards": "Cartões de curso",
-  "Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.": "Os cartões do painel do Canvas. Dê a um cartão sua própria cor, gradiente ou imagem, e favoritos, pelo menu do curso no painel.",
   "Card width": "Largura do cartão",
   "Space between cards": "Espaço entre cartões",
   "Card corners": "Cantos do cartão",
@@ -699,8 +698,6 @@
   "Tasks for {course}": "Tarefas de {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Tarefas nos cartões de curso: cada cartão de curso do Canvas mostra o que vence em seguida, se você ativar.",
   "Not cleared. Try again in a moment.": "Não foi limpo. Tente de novo daqui a pouco.",
-  "Canvas sidebar": "Barra lateral do Canvas",
-  "Style Canvas's own global navigation. Links and the site's navigation still work as usual.": "Personalize a navegação global do Canvas. Os links e a navegação do site continuam funcionando normalmente.",
   "Sidebar background": "Fundo da barra lateral",
   "Palette default": "Padrão da paleta",
   "First color": "Primeira cor",
@@ -1440,6 +1437,15 @@
   "Couldn't read that from Blackboard.": "Não foi possível ler isso do Blackboard.",
   "Your notes and widgets. Edit widgets adds, orders and sizes them; any of them can float over every Blackboard page.": "Suas notas e widgets. Em Editar widgets você adiciona, ordena e redimensiona; qualquer um pode flutuar sobre todas as páginas do Blackboard.",
   "Press Ctrl+K (⌘K on a Mac) anywhere in Blackboard to jump to a course, a page or a Glaze setting.": "Pressione Ctrl+K (⌘K no Mac) em qualquer lugar do Blackboard para ir a um curso, uma página ou uma configuração do Glaze.",
+  // Blackboard appearance (B6).
+  "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Use um endereço https:// ou um caminho neste site Blackboard. Os ícones dos favoritos são desenhados pelo Glaze.",
+  "Canvas and Blackboard navigation": "Navegação do Canvas e Blackboard",
+  "Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.": "Personalize a navegação global do Canvas e Blackboard Ultra. Os links e a navegação continuam funcionando normalmente.",
+  "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Personalize os cartões do Canvas e Blackboard Ultra pelo menu do curso. As linhas de lista do Ultra mantêm o layout; estilos de banner e cantos arredondados continuam aplicados.",
+
+  "Use course color for overlay": "Usar a cor do curso na sobreposição",
+  "Back to the course color": "Voltar à cor do curso",
+
   "Stop reading": "Parar a leitura",
   "Stopped.": "Interrompido.",
   "A file: .ics calendar, PDF, picture or screenshot, saved web page (.html), Word (.docx) or text": "Um arquivo: calendário .ics, PDF, imagem ou captura de tela, página da web salva (.html), Word (.docx) ou texto",
