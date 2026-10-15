@@ -1,0 +1,29 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See parity/spikes/B0.md.",
+ "results": [
+  {
+   "id": "_1101_1",
+   "title": "Discussion: Cells",
+   "available": true,
+   "gradable": true,
+   "groupDiscussion": false,
+   "createdDate": "2026-09-01T12:00:00.000Z",
+   "modifiedDate": "2026-09-01T12:00:00.000Z",
+   "topic": {
+    "id": "_1102_1",
+    "discussionId": "_1101_1",
+    "parentId": null,
+    "threadId": null,
+    "groupId": null,
+    "status": "Published",
+    "body": "<p>What surprised you about the cell?</p>",
+    "postDate": "2026-09-01T12:00:00.000Z",
+    "editDate": "2026-09-01T12:00:00.000Z",
+    "createdDate": "2026-09-01T12:00:00.000Z",
+    "modifiedDate": "2026-09-01T12:00:00.000Z",
+    "isRead": true
+   },
+   "gradebookColumnId": "_605_1"
+  }
+ ]
+}
