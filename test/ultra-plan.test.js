@@ -254,4 +254,7 @@ test('course tile writes belong to the recorded Ultra origin and to board surfac
   assert.equal((await w.send(msg(o), sender)).ok, true);
   for (const m of [msg('https://other.test'), msg(o, 'pages'), msg(o, 'canvas'), msg(o + '/bad')]) assert.equal((await w.send(m, sender)).ok, false);
   assert.equal((await w.send(msg(o), { ...sender, url: `${o}/course` })).ok, false);
+  const frame = { ...sender, frameId: 1, url: 'about:blank', origin: o, tab: { id: 7, url: `${o}/ultra/course` } };
+  assert.equal((await w.send({ type: 'glaze:widgetLayout', ops: [{ s: 'courses', id: 'quotes', set: { on: true } }] }, frame)).ok, true, 'accepted Ultra live frames retain ordinary widget writes');
+  assert.equal((await w.send(msg(o), frame)).ok, false, 'course boards remain top-frame only');
 });
