@@ -650,6 +650,16 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) I.setVar(`--gz-nav-${k}`, v);
     syncDashboard();
   };
+  // The nav's logo goes home in this tab: the Dashboard when it's on, else Courses (Ultra's opens "/" in a new tab).
+  document.addEventListener('click', (e) => {
+    if (!I.links.length || !I.settings.enabled || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest?.('.MuiDrawer-paper header.themed-logo-background-primary-fill a');
+    if (!a) return;
+    e.preventDefault(); e.stopPropagation();
+    const id = I.settings.enhance.dashboard ? 'institution-page' : 'course';
+    const link = document.querySelector(`.MuiDrawer-paper a[href$="/ultra/${id}"]`);
+    if (link) link.click(); else location.assign(`/ultra/${id}`);
+  }, true);
   let navRead = false, navItems = null;
   const syncNav = () => {
     globalThis.GZ_FOLDER_UI?.sync(!!top()?.hideFolders, meId);

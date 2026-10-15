@@ -172,3 +172,26 @@ test('static preview arrival starts nav despite an earlier cached rejected injec
   ctx.GZ_NAV_UI = { sync: () => starts++ };
   sync(); assert.equal(starts, 1); assert.equal(asks, 1, 'present nav skips its stale rejected injection promise');
 });
+
+test('the nav logo goes home in this tab: the Dashboard when it is on, else Courses', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'content-ultra.js'), 'utf8');
+  const block = src.slice(src.indexOf("  // The nav's logo goes home"), src.indexOf('  let navRead = false'));
+  const run = (dashboard, ev = {}, found = true) => {
+    let handler; const clicked = [], assigned = [];
+    const link = (id) => ({ click: () => clicked.push(id) });
+    const document = {
+      addEventListener: (type, fn) => { if (type === 'click') handler = fn; },
+      querySelector: (sel) => (found ? link(sel.match(/ultra\/([\w-]+)/)[1]) : null),
+    };
+    const I = { links: [1], settings: { enabled: true, enhance: { dashboard } } };
+    require('node:vm').runInNewContext(block, { document, I, location: { assign: (u) => assigned.push(u) } });
+    const e = { button: 0, target: { closest: () => ({}) }, preventDefault() { this.prevented = true; }, stopPropagation() {}, ...ev };
+    handler(e);
+    return { clicked, assigned, prevented: !!e.prevented };
+  };
+  assert.deepEqual(run(true), { clicked: ['institution-page'], assigned: [], prevented: true });
+  assert.deepEqual(run(false), { clicked: ['course'], assigned: [], prevented: true });
+  assert.deepEqual(run(false, {}, false), { clicked: [], assigned: ['/ultra/course'], prevented: true });
+  assert.deepEqual(run(true, { metaKey: true }), { clicked: [], assigned: [], prevented: false }, 'a modified click is the browser\'s');
+  assert.deepEqual(run(true, { target: { closest: () => null } }), { clicked: [], assigned: [], prevented: false }, 'only the logo');
+});
