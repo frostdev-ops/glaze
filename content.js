@@ -1143,7 +1143,7 @@
   const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
   for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, openNew, true);
   const renderNew = () => {
-    if (!ultra) return;
+    if (!ultra) return renderCanvasNew();
     const { newgrades, newcontent } = settings.enhance;
     if (!(newgrades || newcontent) || window.top !== window || !observer) return;
     if (!seen) return loadSeen();
@@ -1187,6 +1187,109 @@
       }
     }
   };
+
+  // Canvas keeps unread grade dots itself. A passive HTML GET reads those exact dots, without running
+  // the grade page's scripts. The submissions API's include[]=read_state would mark submissions read.
+  // Keep only counts and module ids, scoped to this host AND signed-in user; five-minute cache across pages.
+  // shortcut: first 100 modules; Canvas omits items in oversized modules. Don't guess at their contents.
+  let canvasNews = null, canvasNewsLoad = null, canvasNewsUser = null;
+  const canvasNewsPending = new Set(), canvasNewsShown = new Map();
+  const canvasNewsKey = (cid) => `${location.origin}/${canvasNewsUser}/${cid}`;
+  const canvasNewsStore = `canvasNews:${location.origin}`;
+  // One origin's map is one write boundary; hold its lock until storage's set callback completes.
+  let canvasNewsWrite = Promise.resolve();
+  const saveCanvasNews = (key, patch) => {
+    const write = () => new Promise((done) => {
+      try { chrome.storage.local.get(canvasNewsStore, (r) => {
+        const record = GZ_GRADES.canvasNewsRecord(r ? r[canvasNewsStore]?.[key] : canvasNews[key], patch);
+        canvasNews[key] = record;
+        try { chrome.storage.local.set({ [canvasNewsStore]: { ...r?.[canvasNewsStore], [key]: record } }, done); } catch { done(); }
+      }); } catch { canvasNews[key] = GZ_GRADES.canvasNewsRecord(canvasNews[key], patch); done(); } // extension reloaded under the tab
+    });
+    // shortcut: without usable Web Locks, writes are ordered within this tab only.
+    return canvasNewsWrite = canvasNewsWrite.then(() => navigator.locks?.request ? navigator.locks.request(`glaze:${canvasNewsStore}`, write).catch(write) : write());
+  };
+  const loadCanvasNews = () => {
+    canvasNewsLoad ||= Promise.all([capi('/users/self').then((u) => u.id), new Promise((resolve) => {
+      try { chrome.storage.local.get(canvasNewsStore, (r) => resolve(r?.[canvasNewsStore] || {})); } catch { resolve({}); }
+    })]).then(([id, kept]) => {
+      if (!id) throw new Error('No Canvas user');
+      canvasNewsUser = String(id); canvasNews = kept; renderNew();
+    }).catch(() => { setTimeout(() => { canvasNewsLoad = null; }, 60000); });
+  };
+  const askCanvasNews = (cid, kind) => {
+    const key = canvasNewsKey(cid), kept = canvasNews[key]?.[kind], pending = `${key}/${kind}`;
+    if (kept && Date.now() - kept.at < 300000 || canvasNewsPending.has(pending) || document.hidden) return kept;
+    canvasNewsPending.add(pending);
+    const p = kind === 'items' ? capi(`/courses/${cid}/modules?include[]=items&per_page=100`).then(GZ_GRADES.canvasItems)
+      : fetch(`${location.origin}/courses/${cid}/grades`, { credentials: 'same-origin', headers: { accept: 'text/html' } })
+        .then((r) => r.ok && new URL(r.url).origin === location.origin && new URL(r.url).pathname === `/courses/${cid}/grades` ? r.text() : Promise.reject())
+        .then((text) => {
+          const doc = new DOMParser().parseFromString(text, 'text/html');
+          // Restricted and upgraded React grade pages have no server-rendered table: fail closed.
+          return doc.querySelector('#grades_summary') ? doc.querySelectorAll('#grades_summary .unread_dot.grade_dot').length : null;
+        });
+    p.then((value) => saveCanvasNews(key, { [kind]: { at: Date.now(), value } }), () => saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } })).finally(() => {
+      canvasNewsPending.delete(pending);
+      if (observer && settings.enhance[kind === 'items' ? 'newcontent' : 'newgrades']) renderNew();
+    });
+    return kept;
+  };
+  const canvasNewsBadge = (host, cid, n, kind) => {
+    let pill = host.querySelector(`:scope > .gz-new[data-kind="${kind}"]`);
+    if (!n) return pill?.remove();
+    if (!pill) {
+      pill = document.createElement('a'); pill.className = 'gz-new'; pill.dataset.kind = kind;
+      pill.href = `/courses/${cid}/${kind === 'grades' ? 'grades' : 'modules'}`;
+      host.append(pill);
+    }
+    const text = t(kind === 'items' ? '{n} new items' : '{n} new', { n });
+    if (pill.textContent !== text) pill.textContent = text;
+    const label = t(KIND[kind], { n });
+    if (pill.getAttribute('aria-label') !== label) pill.setAttribute('aria-label', label);
+  };
+  const renderCanvasNew = () => {
+    const { newgrades, newcontent } = settings.enhance;
+    if (!(newgrades || newcontent) || !observer || document.hidden || window.top !== window) return;
+    const cid = canvasCourseId(), modules = cid && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.querySelector('#context_modules');
+    const grades = newgrades && cid && /^\/courses\/\d+\/grades\/?$/.test(location.pathname);
+    const cards = location.pathname === '/' && document.querySelectorAll('.ic-DashboardCard');
+    if (!(newcontent && modules || grades || cards?.length)) return;
+    if (!canvasNews) return loadCanvasNews();
+    // Native page scripts can mark grades read; refresh the passive count when the student returns.
+    if (grades && canvasNews[canvasNewsKey(cid)]?.grades?.at) saveCanvasNews(canvasNewsKey(cid), { grades: { at: 0, value: null } });
+    if (newcontent && modules) {
+      const key = canvasNewsKey(cid), items = askCanvasNews(cid, 'items')?.value;
+      if (items) {
+        const rows = [...document.querySelectorAll('.context_module_item[id^="context_module_item_"]')];
+        const looked = new Set(rows.filter((r) => r.getClientRects().length).map((r) => r.id.slice(20)));
+        const was = canvasNews[key]?.seen;
+        const { ids, seen: now } = GZ_GRADES.newItems(items, was, looked);
+        const shown = canvasNewsShown.get(key) || new Set();
+        for (const id of ids) shown.add(id);
+        canvasNewsShown.set(key, shown);
+        if (now !== was) saveCanvasNews(key, { seen: now });
+        for (const row of rows) {
+          const title = row.querySelector('.ig-title');
+          if (title) cardBadge(title, cid, shown.has(row.id.slice(20)) ? 1 : 0, 'item');
+        }
+      }
+    }
+    let n = 0;
+    for (const card of cards || []) {
+      const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1];
+      const host = card.querySelector('.ic-DashboardCard__header');
+      if (!id || !host) continue;
+      cardsInView.observe(host);
+      if (!inView.has(host) || n++ >= 12) continue;
+      if (newgrades) canvasNewsBadge(host, id, askCanvasNews(id, 'grades')?.value, 'grades');
+      if (newcontent && canvasNews[canvasNewsKey(id)]?.seen) {
+        const items = askCanvasNews(id, 'items')?.value;
+        canvasNewsBadge(host, id, GZ_GRADES.newItems(items, canvasNews[canvasNewsKey(id)].seen).ids.size, 'items');
+      }
+    }
+  };
+  document.addEventListener('visibilitychange', () => { if (!ultra && !document.hidden) renderNew(); });
 
   // ---- new content (Extras) -------------------------------------------------------------------
   // "New" on course items added (or made visible) since the course's content was last looked at here,
@@ -1424,6 +1527,7 @@
   const asPct = (p) => (p == null ? '–' : GZ_I18N.pct(Math.floor(p * 100 + 1e-9) / 100, locale()));
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const renderCalc = () => {
+    // Canvas already saves what-if scores and offers Show Saved / Revert. Theme its own controls in canvas.css.
     if (!ultra) return;
     const old = document.getElementById('gz-calc');
     const cid = courseId();

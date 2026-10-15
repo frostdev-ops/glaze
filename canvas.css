@@ -1151,3 +1151,23 @@ html[data-gz-raw-courses] [data-gz-course-color] { --gz-course: var(--gz-course-
 #gz-peek li[data-state="locked"]::before { border-radius: 2px; }
 #application .ig-header > .gz-dl { margin-left: auto; margin-right: 0.75rem; }
 html:not([data-gz-enhance-previews]) #gz-peek { display: none; }
+/* ---- new grades/content and Canvas's native what-if scores ---- */
+#application .gz-new {
+  display: inline-block; flex: none; padding: 0.1em 0.6em; border-radius: 999px;
+  background: var(--gz-accent); color: var(--gz-accent-ink) !important;
+  font-size: 0.72rem; line-height: 1.6; font-weight: 700; white-space: nowrap; text-decoration: none;
+}
+#application .ic-DashboardCard__header > .gz-new { margin: 0 0 0.7rem 1rem; }
+#application .ig-title > .gz-new { margin-inline-start: 0.6em; vertical-align: middle; }
+#application a.gz-new:hover { background: var(--gz-accent-hi); }
+#application a.gz-new:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 3px; }
+html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"],
+html:not([data-gz-enhance-newcontent]) .gz-new[data-kind="items"],
+html:not([data-gz-enhance-newcontent]) .gz-new[data-kind="item"] { display: none; }
+/* The course Grades page already labels its unread dots; preserve those indicators and Canvas's read behavior. */
+html[data-gz-enhance-newgrades] #application #grades_summary .grade_dot { background: var(--gz-accent); box-shadow: 0 0 0 2px var(--gz-panel); }
+/* Native what-if saves and restores through Canvas. Turning Glaze's switch off only drops this extra emphasis. */
+html[data-gz-enhance-calc] #application #grades_summary .student_assignment :is(.grade.changed, .grade.changed a) { color: var(--gz-accent) !important; }
+html[data-gz-enhance-calc] #application #grades_summary .grade.changed { background: var(--gz-accent-soft); border-radius: var(--gz-radius-sm); padding: 0.2em 0.4em; }
+html[data-gz-enhance-calc] #application :is(#student-grades-whatif, #student-grades-revert, #whatif-score-description) { background: var(--gz-band); border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); padding: 0.7rem; }
+html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surface-2); color: var(--gz-ink); border-color: var(--gz-accent); border-radius: var(--gz-radius-sm); box-shadow: 0 0 0 2px var(--gz-accent-soft); }
