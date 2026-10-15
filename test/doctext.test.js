@@ -117,3 +117,79 @@ Wed  9:00</pre><select><option>Fall</option></select><p>Done</p></body></html>`;
   assert.equal(D.html('plain text, no tags'), 'plain text, no tags');
   assert.equal(D.decode('&#0; &#xD800; &#128512; &lt;'), '� � 😀 <');
 });
+
+// Regression tests from the S4 review. Each failed (or ran far over budget) on the first version of lib/doctext.js.
+const u32 = (buf, at, v) => new DataView(buf.buffer, buf.byteOffset).setUint32(at, v, true);
+const u16 = (buf, at, v) => new DataView(buf.buffer, buf.byteOffset).setUint16(at, v, true);
+const central = (buf) => Buffer.from(buf).indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+const eocd = (buf) => Buffer.from(buf).lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+
+test('review: stored entries obey the per-entry cap, and a whole document has a budget', async () => {
+  const kib = 'x'.repeat(2048);
+  await assert.rejects(D.unzip(zipOf({ 'a.xml': kib }, ['a.xml']), { limits: { entry: 1024 } }).text('a.xml'), /too large/);
+  await assert.rejects(D.unzip(zipOf({ 'a.xml': kib }), { limits: { entry: 1024 } }).text('a.xml'), /too large/);
+  const z = D.unzip(zipOf({ 'a.xml': kib, 'b.xml': kib, 'c.xml': kib }), { limits: { total: 5000 } });
+  assert.equal((await z.text('a.xml')).length, 2048);
+  assert.equal((await z.text('a.xml')).length, 2048, 'a part read twice counts once');
+  await z.text('b.xml');
+  await assert.rejects(z.text('c.xml'), /document too large/);
+  assert.throws(() => D.unzip(zipOf({ 'a.xml': 'a' }), { limits: { input: 10 } }), /too large/);
+  // A slide listed three times is read once.
+  const deck = zipOf({
+    'ppt/presentation.xml': '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId id="1" r:id="rId2"/><p:sldId id="2" r:id="rId2"/><p:sldId id="3" r:id="rId2"/></p:sldIdLst></p:presentation>',
+    'ppt/_rels/presentation.xml.rels': rels(rel('rId2', 'slides/slide1.xml', 'slide')),
+    'ppt/slides/slide1.xml': slide(sp('title', r('Hello'))),
+  });
+  assert.deepEqual(await D.pptx(deck), [{ text: 'Hello', notes: '' }]);
+});
+
+test('review: malformed markup costs linear time', () => {
+  for (const unit of ['<a ', '<script ', '<p title="', '<!--', '<![CDATA[', '<b>x<i y=\'']) {
+    const src = unit.repeat(Math.ceil((300 << 10) / unit.length));
+    const t0 = performance.now();
+    D.html(src);
+    const ms = performance.now() - t0;
+    assert.ok(ms < 1500, `${JSON.stringify(unit)} × ${src.length} chars took ${ms.toFixed(0)} ms`);
+  }
+  assert.equal(D.html('a < b and <a href="x">link</a> <unfinished'), 'a < b and link <unfinished');
+  assert.throws(() => D.html('x'.repeat(100), { limits: { text: 50 } }), /too large/);
+});
+
+test('review: relationship and slide attributes in either quote style, with spaces around "="', async () => {
+  const deck = zipOf({
+    'ppt/presentation.xml': "<p:presentation xmlns:p='p' xmlns:r='r'><p:sldIdLst><p:sldId id='256' r:id = 'rId7'/><p:sldId id='257' r:id='rId9'/></p:sldIdLst></p:presentation>",
+    'ppt/_rels/presentation.xml.rels': "<Relationships><Relationship Id = 'rId7' Type='http://x/slide' Target='slides/slide3.xml'/><Relationship Id='rId9' Type='http://x/slide' Target='slides/gone.xml'/></Relationships>",
+    'ppt/slides/slide3.xml': slide(sp('title', r('Hello'))),
+    'ppt/slides/_rels/slide3.xml.rels': "<Relationships><Relationship Id='n' Type='http://x/notesSlide' Target='../notesSlides/n1.xml'/></Relationships>",
+    'ppt/notesSlides/n1.xml': slide("<p:sp><p:nvSpPr><p:nvPr><p:ph type='body'/></p:nvPr></p:nvSpPr><p:txBody><a:p>" + r('Say hi') + '</a:p></p:txBody></p:sp>'),
+  });
+  assert.deepEqual(await D.pptx(deck), [{ text: 'Hello', notes: 'Say hi' }, { text: '', notes: '', missing: true }]);
+});
+
+test('review: XML parts in UTF-16 or a declared legacy encoding decode', async () => {
+  const xml = W(p(t('Café · Grading scale')));
+  const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(xml.replace('UTF-8', 'UTF-16'), 'utf16le')]);
+  const beBytes = Buffer.from(xml.replace('UTF-8', 'UTF-16'), 'utf16le').swap16();
+  assert.equal(await D.docx(zipOf({ 'word/document.xml': le })), 'Café · Grading scale');
+  assert.equal(await D.docx(zipOf({ 'word/document.xml': Buffer.concat([Buffer.from([0xfe, 0xff]), beBytes]) })), 'Café · Grading scale');
+  assert.equal(await D.docx(zipOf({ 'word/document.xml': Buffer.from(xml.replace('UTF-8', 'UTF-16'), 'utf16le') })), 'Café · Grading scale', 'no BOM');
+  assert.equal(await D.docx(zipOf({ 'word/document.xml': Buffer.from(xml.replace('UTF-8', 'windows-1252'), 'latin1') })), 'Café · Grading scale');
+  await assert.rejects(D.docx(zipOf({ 'word/document.xml': xml.replace('UTF-8', 'x-no-such-encoding') })), /unsupported XML encoding/);
+});
+
+test('review: a zip whose CRC, local header or sizes disagree is refused as damaged', async () => {
+  const good = () => zipOf({ 'a.xml': '<x>hello</x>' });
+  const bad = async (mutate, re = /damaged/) => { const z = good(); mutate(z); await assert.rejects((async () => D.unzip(z).text('a.xml'))(), re); };
+  await bad((z) => u32(z, central(z) + 16, 12345)); // central CRC
+  await bad((z) => u32(z, 0, 0x01020304)); // local signature
+  await bad((z) => u16(z, 8, 0)); // local method says stored
+  await bad((z) => u32(z, central(z) + 24, 5)); // uncompressed size too small for the stream
+  await bad((z) => u32(z, central(z) + 24, 50)); // uncompressed size larger than the stream
+  await bad((z) => u32(z, central(z) + 20, 1 << 30)); // compressed size past the end of the file
+  const z64 = good();
+  u32(z64, central(z64) + 24, 0xffffffff);
+  assert.throws(() => D.unzip(z64), /zip64/);
+  const disk = good();
+  u16(disk, eocd(disk) + 4, 1);
+  assert.throws(() => D.unzip(disk), /multi-disk/);
+});
