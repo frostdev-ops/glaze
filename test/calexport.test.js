@@ -154,10 +154,28 @@ const page = () => {
     return { ok: true, headers: { get: () => null }, text: async () => JSON.stringify(late) };
   };
   const get = (area) => (keys, cb) => { const all = JSON.parse(JSON.stringify(store[area])); cb(keys === null ? all : Object.fromEntries([keys].flat().filter((k) => k in all).map((k) => [k, all[k]]))); };
+  // Just enough of a page for the dialog: elements that record their listeners, and links that record a click.
+  const activation = { isActive: true };
+  const downloads = [];
+  class E {
+    constructor(tag) { this.tagName = tag.toUpperCase(); this.kids = []; this.on = {}; this.dataset = {}; }
+    append(...k) { this.kids.push(...k); }
+    addEventListener(type, f) { (this.on[type] ||= []).push(f); }
+    setAttribute() {}
+    showModal() { this.open = true; }
+    close() { this.open = false; for (const f of this.on.close || []) f(); }
+    remove() {}
+    focus() {}
+    querySelector() { return null; }
+    click() { if (this.download) downloads.push(this.download); }
+  }
+  const document = { activeElement: null, createElement: (tag) => new E(tag), body: { append(x) { document.dialog = x; } } };
   const c = vm.createContext({
-    TextEncoder, URL, Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
+    document, navigator: { userActivation: activation }, setTimeout: () => 0, Blob: class {},
+    FormData: class { constructor(f) { this.v = f.values; } has(k) { return k in this.v; } get(k) { return this.v[k] ?? null; } },
+    TextEncoder, URL: Object.assign(class extends URL {}, { createObjectURL: () => 'blob:x', revokeObjectURL() {} }), Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
     location: { origin: ORIGIN, host: 'canvas.test' },
-    chrome: { storage: { sync: { get: get('sync') }, local: { get: get('local') } } },
+    chrome: { storage: { sync: { get: get('sync'), set() {} }, local: { get: get('local') } } },
     fetch: async (url) => { asked.push(decodeURIComponent(url)); if (hold) await new Promise((res) => held.push(res)); return answer(url); },
     GZ_CTX: {
       t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need: async () => {}, settings: () => ({ enabled: true, enhance: { gradescope: true } }),
@@ -168,7 +186,14 @@ const page = () => {
   for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'features/calexport.js']) vm.runInContext(read(f), c);
   const saved = [];
   const go = (alive = () => true) => c.GZ_CAL_UI.run({ icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsRange: '2w' }, alive, (text) => { saved.push(text); return 'f.ics'; });
-  return { store, asked, held, saved, go, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
+  // The dialog's Download, as the page would send it: trusted either way (a real press, or a script's requestSubmit()).
+  const submit = async () => {
+    await c.GZ_CAL_UI.open();
+    const form = document.dialog.kids[0];
+    Object.assign(form, { elements: {}, values: { icsDue: 'on', icsTasks: 'on', icsPlan: 'on', icsRange: '2w' } });
+    for (const f of form.on.submit) await f({ isTrusted: true, target: form, preventDefault() {} });
+  };
+  return { store, asked, held, saved, go, activation, downloads, submit, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
 };
 const settle = () => new Promise((res) => setImmediate(res));
 
@@ -211,4 +236,15 @@ test('review: the dialog closed while Canvas answers: no file', async () => {
   p.release();
   assert.equal(await job, null);
   assert.deepEqual(p.saved, []);
+});
+
+test('review: a script\'s requestSubmit() (trusted, but no activation) starts no export; the student\'s press does', async () => {
+  const script = page();
+  script.activation.isActive = false;
+  await script.submit();
+  assert.deepEqual([script.asked, script.downloads], [[], []]);
+  const person = page();
+  await person.submit();
+  assert.equal(person.asked.length > 0, true);
+  assert.deepEqual(person.downloads, ['glaze-calendar-2026-10-15.ics']);
 });

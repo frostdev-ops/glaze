@@ -94,8 +94,10 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    // Only the student's own click or key, never a script's.
-    if (!e.isTrusted || busy) return;
+    // Only the student's own click or key, never a script's: a trusted event while the page has their transient activation
+    // (a script's form.requestSubmit() is trusted too, but has none). As Better To Do's writes: a browser without the
+    // userActivation API is held to the trusted event alone.
+    if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true) || busy) return;
     const f = new FormData(e.target);
     const o = { icsDue: f.has('icsDue'), icsTasks: f.has('icsTasks'), icsPlan: f.has('icsPlan'), icsRange: String(f.get('icsRange')) };
     // Gradescope's box is there only with Gradescope in To Do on; otherwise its choice stays as it was.
