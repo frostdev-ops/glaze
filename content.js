@@ -106,7 +106,7 @@
   const SWEEP_TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
   const sweepEls = (els) => {
     // Read the site's current state, without our previous pass's overrides.
-    for (const e of els) for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a);
+    for (const e of els) { liftable.delete(e); for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a); }
     const pending = [];
     const canvasInk = !ultra && new Map();
     for (const e of els) {
@@ -170,8 +170,11 @@
         const onFill = fill || (bg && bg.a >= 0.5 && C.saturated(bg)) || C.same(fg, accentInk);
         if (fg && fg.a >= 0.5 && !C.saturated(fg) && C.brightness(fg) < 0.35 && !onFill && (hasText(e) || (!ultra && FIELD.test(e.tagName)))) tags.push('data-gz-dark');
         if (!ultra && canvasInk.has(e)) tags.push('data-gz-dark');
-        // An instructor's dark colour (navy) unreadable on the surface: canvas.css lifts it.
-        if (!ultra && fg?.a >= 0.5 && C.saturated(fg) && !onFill && hasText(e) && C.contrast(C.hex(fg), palette['--gz-surface']) < 3 && e.closest('.user_content')) tags.push('data-gz-lift');
+        // Instructor's dark colour (navy), not a link: canvas.css lifts it.
+        if (!ultra && fg?.a >= 0.5 && C.saturated(fg) && !onFill && hasText(e) && e.closest('.user_content') && !e.closest('a')) {
+          liftable.set(e, C.hex(fg));
+          if (C.contrast(C.hex(fg), palette['--gz-surface']) < 3) tags.push('data-gz-lift');
+        }
         if (!ultra && tags.includes('data-gz-dark') && !canvasInk.has(e)) canvasInk.set(e, '');
       }
       const r = e.getBoundingClientRect();
@@ -184,6 +187,9 @@
     }
     for (const [e, tags] of pending) for (const a of tags) e.setAttribute(a, (!ultra && a === 'data-gz-dark' && canvasInk.get(e)) || '');
   };
+  // Instructor colours met by the sweep: a new dark palette re-checks only these.
+  const liftable = new Map();
+  const relift = () => { for (const [e, c] of liftable) if (!e.isConnected) liftable.delete(e); else e.toggleAttribute('data-gz-lift', C.contrast(c, palette['--gz-surface']) < 3); };
   const sweepAll = () => {
     const all = document.body.querySelectorAll('*');
     if (all.length <= MAX_FULL) sweepEls(all);
@@ -748,6 +754,7 @@
     cardsIO.disconnect();
     onScreen.clear();
     clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
+    liftable.clear();
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
   };
 
@@ -3219,6 +3226,7 @@
       }
       paintCourses();
     }
+    const surface = palette['--gz-surface'];
     palette = colors;
     const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
     accentInk = C.parse(colors['--gz-accent-ink']);
@@ -3284,26 +3292,18 @@
       hoverSeen = new WeakSet();
       focusSeen = new WeakSet();
       if (observer) { clearTags(['data-gz-light', 'data-gz-dark', 'data-gz-hover']); sweepAll(); }
-    }
+    } else if (dark && surface !== colors['--gz-surface']) relift();
     if (!s.look.tooltips) hideTip();
     if (said) syncDocTools();
     syncScene();
     themeEditors();
-    armFlip(s.auto);
+    armFlip();
   };
-  // Scheduled dark: one timeout to the next boundary. Timers can stall in sleep, so it rechecks the clock every
-  // 10 minutes at most and when the tab is shown.
-  let flip = 0, flipDark;
-  const armFlip = (a) => {
-    clearTimeout(flip);
-    flip = 0;
-    if (!links.length || !a.on || a.mode !== 'schedule') return;
-    const now = new Date(), next = GZ_SCHEDULE_NEXT(a.from, a.to, now);
-    flipDark = GZ_SCHEDULE_DARK(a.from, a.to, now);
-    if (next) flip = setTimeout(flipCheck, Math.min(next - now, 6e5));
+  // Scheduled dark's clock loads while a schedule is worn.
+  const onSchedule = () => (links.length && worn.auto.on && worn.auto.mode === 'schedule' ? worn.auto : null);
+  const armFlip = () => {
+    if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
   };
-  const flipCheck = () => (GZ_SCHEDULE_DARK(worn.auto.from, worn.auto.to, new Date()) === flipDark ? armFlip(worn.auto) : reapply());
-  document.addEventListener('visibilitychange', () => { if (flip && !document.hidden) flipCheck(); });
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
     for (const k of attrs) html.removeAttribute(k);
@@ -3396,7 +3396,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     unmenu();
     for (const l of links) l.remove();
     links = [];
-    armFlip(worn.auto);
+    armFlip();
     themeEditors();
     syncPageFade();
     stopScene();
@@ -3425,9 +3425,8 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   // flashed the default dark palette first.
   const KEPT = 'gz-settings';
   if (!ultra) try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
-  // Keep quizzes light: a quiz being taken or a tool's page (New Quizzes) goes without Glaze; a tool off those
-  // addresses is only seen once the body is in.
-  const on = (s) => s.enabled && (ultra || !s.enhance.quizLight || !(/\/quizzes\/\d+\/(take|history)|\/external_tools\//.test(location.pathname) || document.getElementById('tool_content')));
+  // Keep quizzes light: no Glaze on a quiz being taken or a tool's page (New Quizzes; seen once the body is in).
+  const on = (s) => s.enabled && (ultra || !s.enhance.quizLight || !(/\/quizzes\/\d+\/(take|history)(\/|$)|\/external_tools\//.test(location.pathname) || document.getElementById('tool_content')));
   // Theme on before storage answers: most people leave it on, and this way the first paint is
   // already themed. If it turns out to be off, it comes straight back off.
   const ready = load().then((s) => {

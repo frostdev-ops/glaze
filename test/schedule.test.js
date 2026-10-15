@@ -89,4 +89,137 @@ test('Keep quizzes light: quiz taking and external tool pages on Canvas only, an
   assert.equal(on(quiet, { pathname: '/courses/1/quizzes/2' }), true); // the quiz's start page
   assert.equal(on(quiet, { pathname: '/courses/1/quizzes/2/take', ultra: true }), true);
   assert.equal(on({ ...plain, enabled: false }), false);
+  assert.equal(on(quiet, { pathname: '/courses/1/quizzes/2/takeover' }), true); // whole segments only
+});
+
+// ---- Codex review fixes ---------------------------------------------------------------------------------------
+test('times: only "HH:MM" strings; arrays, objects and numbers fall back without throwing', () => {
+  for (const bad of [['21:00'], JSON.parse('{"toString":null}'), 2100, true, '21:00 ', '9:00']) {
+    assert.equal(D.GZ_SANITIZE({ auto: { from: bad, to: bad } }).auto.from, '20:00');
+  }
+  assert.equal(D.GZ_SANITIZE({ auto: { from: '00:00', to: '23:59' } }).auto.to, '23:59');
+});
+
+// The next flip is where dark-now changes: no change before it (minute steps), a change at it.
+const agree = (from, to, now) => {
+  const next = D.GZ_SCHEDULE_NEXT(from, to, now);
+  const here = D.GZ_SCHEDULE_DARK(from, to, now);
+  for (let t = +now; t < +next; t += 6e4) assert.equal(D.GZ_SCHEDULE_DARK(from, to, new Date(t)), here, `${from}-${to} from ${now.toISOString()}: changed at ${new Date(t).toISOString()}, before ${next.toISOString()}`);
+  assert.notEqual(D.GZ_SCHEDULE_DARK(from, to, next), here, `${from}-${to}: no change at ${next.toISOString()}`);
+};
+
+test('DST: dark-now and the next flip agree through the skipped and the repeated hour', () => {
+  // Fall: the second 01:21 (EST) with 00:00 → 01:30: the window ended at the first 01:30; next is the next midnight.
+  const second = new Date('2026-11-01T06:21:00Z');
+  assert.equal(second.getHours(), 1);
+  assert.equal(D.GZ_SCHEDULE_DARK('00:00', '01:30', second), false);
+  assert.equal(iso(D.GZ_SCHEDULE_NEXT('00:00', '01:30', second)), '2026-11-02 00:00');
+  // Spring: 02:30 doesn't exist and starts at 03:30, so 03:00 is still light and 01:55's next flip is 03:30.
+  assert.equal(D.GZ_SCHEDULE_DARK('02:30', '08:00', at('2026-03-08T03:00')), false);
+  assert.equal(iso(D.GZ_SCHEDULE_NEXT('02:30', '08:00', at('2026-03-08T01:55'))), '2026-03-08 03:30');
+  assert.equal(D.GZ_SCHEDULE_DARK('03:00', '08:00', at('2026-03-08T03:00')), true);
+  // A window the change turns inside out (02:30 → 03:00) is empty that day, not a whole day.
+  assert.equal(D.GZ_SCHEDULE_DARK('02:30', '03:00', at('2026-03-08T12:00')), false);
+  for (const [from, to] of [['00:00', '01:30'], ['01:30', '00:00'], ['01:15', '01:45'], ['02:30', '08:00'], ['20:00', '02:30'], ['02:30', '03:00'], ['03:00', '02:00'], ['20:00', '08:00']]) {
+    for (const t of ['2026-03-07T22:10:00Z', '2026-03-08T06:55:00Z', '2026-03-08T07:20:00Z', '2026-03-08T08:00:00Z', '2026-10-31T23:00:00Z', '2026-11-01T05:10:00Z', '2026-11-01T05:40:00Z', '2026-11-01T06:21:00Z', '2026-11-01T06:50:00Z']) agree(from, to, new Date(t));
+  }
+});
+
+test('the clock (features/schedule.js): one timeout to the next flip, re-armed, repaints only on a change', () => {
+  let now = +new Date('2026-10-15T19:59:00-04:00');
+  const pending = new Map();
+  let id = 0, painted = 0, visible;
+  const RealDate = Date;
+  const ctx = vm.createContext({
+    globalThis: {}, GZ_SCHEDULE_DARK: D.GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT: D.GZ_SCHEDULE_NEXT, Math,
+    Date: class extends RealDate { constructor(...a) { super(...(a.length ? a : [now])); } },
+    setTimeout: (f, ms) => { pending.set(++id, [f, ms]); return id; }, clearTimeout: (i) => pending.delete(i),
+    document: { hidden: false, addEventListener: (n, f) => { visible = f; } },
+  });
+  const S = vm.runInContext(fs.readFileSync(require.resolve('../features/schedule.js'), 'utf8'), ctx);
+  let worn = { on: true, mode: 'schedule', from: '20:00', to: '08:00' };
+  const hook = { auto: () => worn, reapply: () => { painted++; S.arm(hook); } };
+  for (let i = 0; i < 5; i++) S.arm(hook);
+  assert.equal(pending.size, 1);
+  assert.equal([...pending.values()][0][1], 6e4);
+  now += 6e4; // 20:00: it fires and repaints once
+  const [[k, [fire]]] = pending;
+  pending.delete(k);
+  fire();
+  assert.equal(painted, 1);
+  assert.equal(pending.size, 1);
+  assert.equal([...pending.values()][0][1], 6e5); // 12 hours away: rechecked within 10 minutes
+  visible(); // shown again, no change: re-armed, no repaint
+  assert.deepEqual([painted, pending.size], [1, 1]);
+  worn = null; // device mode, or off
+  S.arm(hook);
+  assert.equal(pending.size, 0);
+});
+
+// The sweep's instructor-colour check, run on stand-in elements (no browser cascade claimed).
+const sweepWith = (palette) => {
+  const C = require('../lib/color.js');
+  const ctx = vm.createContext({
+    C, ultra: false, darkTheme: true, palette, accentInk: C.parse(palette['--gz-accent-ink']), innerHeight: 900,
+    SKIP: /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i, FIELD: /^(input|textarea|select)$/i,
+    getComputedStyle: (e) => e.cs, hasText: (e) => e.childNodes.some((n) => n.nodeType === 3 && n.textContent.trim()),
+    document: { documentElement: {} }, instBlue: () => false, tagBrand() {}, sweepColors: (e, c) => c,
+  });
+  const from = source.indexOf('  const SWEEP_TAGS'), to = source.indexOf('  const sweepAll', from);
+  vm.runInContext(`${source.slice(from, to)}; globalThis.api = { sweepEls, relift }`, ctx);
+  return ctx;
+};
+const content = { style: {}, parentElement: null, classList: { contains: (n) => n === 'user_content' } };
+const textEl = (color, link = false) => {
+  const attrs = new Map();
+  const e = {
+    tagName: link ? 'A' : 'SPAN', isConnected: true, id: '', childNodes: [{ nodeType: 3, textContent: 'answer' }], parentElement: content,
+    style: { color }, classList: { contains: () => false }, getAttribute: () => null, getAnimations: () => [],
+    cs: { color, backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none', position: 'static', transitionDuration: '0s' },
+    getAttributeNames: () => [...attrs.keys()], setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k),
+    toggleAttribute: (k, on) => (on ? attrs.set(k, '') : attrs.delete(k)),
+    closest: (sel) => (sel === '.user_content' ? content : sel === 'a' && link ? e : null), getBoundingClientRect: () => ({ height: 20, bottom: 30 }),
+  };
+  return { e, attrs };
+};
+
+test('instructor text: re-checked when one dark palette changes to another; links keep their colour', () => {
+  const midnight = D.GZ_PRESET('Midnight'), frost = D.GZ_PRESET('Frost');
+  const ctx = sweepWith(midnight);
+  const teal = textEl('#006e78'); // 3.0:1 on Midnight, 2.9:1 on Frost
+  const navy = textEl('#000080');
+  const link = textEl('#000080', true);
+  ctx.api.sweepEls([teal.e, navy.e, link.e]);
+  assert.deepEqual([teal, navy, link].map((x) => x.attrs.has('data-gz-lift')), [false, true, false]);
+  ctx.palette = frost;
+  ctx.api.relift();
+  assert.equal(teal.attrs.has('data-gz-lift'), true);
+  ctx.palette = midnight;
+  ctx.api.relift();
+  assert.equal(teal.attrs.has('data-gz-lift'), false);
+  // applySettings calls it on a dark-to-dark surface change, without a full sweep, and not when the surface stays.
+  const gate = source.slice(source.indexOf('    if (dark !== darkTheme) {'), source.indexOf('    if (!s.look.tooltips)'));
+  let sweeps = 0, relifts = 0;
+  const run = (surface, next) => vm.runInNewContext(gate, { dark: true, darkTheme: true, observer: {}, surface, colors: { '--gz-surface': next }, clearTags() {}, sweepAll: () => sweeps++, relift: () => relifts++, WeakSet });
+  run(midnight['--gz-surface'], frost['--gz-surface']);
+  run(frost['--gz-surface'], frost['--gz-surface']);
+  assert.deepEqual([sweeps, relifts], [0, 1]);
+});
+
+test('editor: clearing a time keeps the last valid one and saves nothing', () => {
+  const opts = fs.readFileSync(require.resolve('../options.js'), 'utf8');
+  const s = D.GZ_SANITIZE({ auto: { on: true, mode: 'schedule', from: '21:00', to: '07:00' } });
+  let changed, saves = 0;
+  const control = { type: 'time', value: '', dataset: { key: 'auto.from' }, addEventListener: (n, f) => { changed = f; } };
+  const start = opts.indexOf("  for (const el of $$('[data-key]')) {", opts.indexOf('// ---- generic controls'));
+  const end = opts.indexOf("  for (const r of $$('.seg", start);
+  vm.runInNewContext(opts.slice(start, end), {
+    s, $$: () => [control], get: (p) => p.split('.').reduce((o, k) => o[k], s), set: (p, v) => { s.auto.from = v; }, group: () => 'auto',
+    renderCourses() {}, refresh() {}, save: () => saves++,
+  });
+  changed();
+  assert.deepEqual([s.auto.from, control.value, saves], ['21:00', '21:00', 0]);
+  control.value = '22:15';
+  changed();
+  assert.deepEqual([s.auto.from, saves], ['22:15', 1]);
 });
