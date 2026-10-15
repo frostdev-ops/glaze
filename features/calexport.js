@@ -12,7 +12,6 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   let box = null, opener = null, say = null, busy = false;
 
   const readTodo = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } });
-  const local = (keys) => new Promise((res) => { try { chrome.storage.local.get(keys, (r) => res(r || {})); } catch { res({}); } });
   const libs = () => ctx.need('lib/todo.js', () => globalThis.GZ_TODO)
     .then(() => Promise.all([ctx.need('lib/ics.js', () => globalThis.GZ_ICS), ctx.need('lib/calexport.js', () => globalThis.GZ_CALEXPORT)]));
   // Canvas's planner over every page its Link header names, on this site only, as Better To Do reads it.
@@ -55,7 +54,8 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   // and again right before it's saved, with nothing awaited between that check and the save.
   const run = async (o, alive, save) => {
     const L = GZ_TODO, X = GZ_CALEXPORT;
-    if (ctx.settings().enhance.gradescope) await ctx.need('lib/gradescope.js', () => globalThis.GZ_GRADESCOPE).catch(() => {});
+    // Every chosen source is read strictly: one that can't be loaded or read stops the export, and nothing is saved.
+    if (ctx.settings().enhance.gradescope && o.icsGs !== false) await ctx.need('lib/gradescope.js', () => globalThis.GZ_GRADESCOPE);
     const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses()]);
     if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
     const uid = String(p.id), tz = L.zone(p.time_zone), now = Date.now();
@@ -75,15 +75,29 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     let items = o.icsDue || o.icsPlan ? await ask(r.from, r.to + 56 * DAY) : [];
     if (o.icsPlan) {
       const read = new Set(items.map((i) => `${i.type}:${i.id}`));
-      const want = X.planned((await local([key]))[key], r).filter((k) => !/^(task|gradescope):/.test(k) && !read.has(k));
+      const mine = await strict('local', [key]);
+      if (!mine) return null;
+      const want = X.planned(mine[key], r).filter((k) => !/^(task|gradescope):/.test(k) && !read.has(k));
       if (want.length) items = [...items, ...await ask(r.from - 180 * DAY, r.from)];
+    }
+    // The class schedule (lib/classes.js), when chosen: each meeting in the range, in floating local time. A read or a
+    // load that fails stops the export (nothing is saved), rather than a file that quietly leaves the classes out.
+    let classes = [];
+    if (o.icsClasses) {
+      const ck = `classes:${location.origin}/${uid}`;
+      const got = await strict('local', [ck]);
+      if (!got) throw new Error('classes');
+      if (got[ck]?.courses?.length) {
+        await ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES).catch(() => { throw new Error('classes'); });
+        classes = GZ_CLASSES.icsEvents(got[ck], { site: location.host, from: L.dayKey(r.first), to: L.dayKey(r.last - 1), tz });
+      }
     }
     if (!alive()) return null;
     const a = await state(key, uid);
     if (!alive() || !a?.on || a.sig !== before.sig) return null;
     const events = X.events({
       items, gs: a.gs, data: a.data, o, ...r, site: location.origin, host: location.host, cids: live.length ? new Set(Object.keys(names)) : null, names,
-      words: { plan: (title) => t('Do: {title}', { title }), focus: (title) => t('Focus: {title}', { title }), untitled: t('Planned work') },
+      words: { plan: (title) => t('Do: {title}', { title }), focus: (title) => t('Focus: {title}', { title }), untitled: t('Planned work') }, classes,
     });
     const text = GZ_ICS.write({ name: 'Glaze', events }, { now });
     const b = await state(key, uid);
@@ -105,7 +119,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     // userActivation API is held to the trusted event alone.
     if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true) || busy) return;
     const f = new FormData(e.target);
-    const o = { icsDue: f.has('icsDue'), icsTasks: f.has('icsTasks'), icsPlan: f.has('icsPlan'), icsRange: String(f.get('icsRange')) };
+    const o = { icsDue: f.has('icsDue'), icsTasks: f.has('icsTasks'), icsPlan: f.has('icsPlan'), icsClasses: f.has('icsClasses'), icsRange: String(f.get('icsRange')) };
     // Gradescope's box is there only with Gradescope in To Do on; otherwise its choice stays as it was.
     if (e.target.elements.icsGs) o.icsGs = f.has('icsGs');
     // Remembered for next time (and shown in the options page).
@@ -118,8 +132,8 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
       const r = await run(o, () => box === mine && !!mine?.open, save);
       line.textContent = !r ? '' : !r.n ? t('Nothing to export in that range.')
         : [t('Saved {file}', { file: r.name }), r.guessed && t('Canvas gives no end date for this term, so this covers the next 16 weeks.')].filter(Boolean).join(' ');
-    } catch {
-      line.textContent = t("Couldn't make the calendar. Try again in a moment.");
+    } catch (err) {
+      line.textContent = err?.message === 'classes' ? t("Couldn't read your class schedule. Nothing was saved.") : t("Couldn't make the calendar. Try again in a moment.");
     } finally { busy = false; }
   };
 
@@ -137,7 +151,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     const form = make('form', {},
       make('h2', { id: 'gz-ics-title', textContent: t('Export calendar (.ics)') }),
       make('p', { className: 'gz-ics-desc', textContent: t('Made on this device. The file holds your course and assignment names: import it into Google Calendar, Outlook or Apple Calendar yourself. Importing a newer file updates the same events where your calendar supports it.') }),
-      make('fieldset', {}, check('icsDue', t('Canvas due dates')), check('icsTasks', t('Your tasks with a due date')), check('icsPlan', t('Do-on days and focus sessions')),
+      make('fieldset', {}, check('icsDue', t('Canvas due dates')), check('icsTasks', t('Your tasks with a due date')), check('icsPlan', t('Do-on days and focus sessions')), check('icsClasses', t('Your class schedule')),
         ctx.settings().enhance.gradescope && check('icsGs', t('Gradescope work'))),
       make('label', { className: 'gz-ics-range' }, make('span', { textContent: t('Range') }), range),
       say,

@@ -240,6 +240,36 @@ test('a page may change only its own Canvas site’s what-if records', async () 
   assert.deepEqual(Object.keys(store.data), [`whatIf:${ORIGIN}:3`]);
 });
 
+// Syllabus import (features/syllabus.js) keeps what a syllabus said through the same worker ('glaze:syllabus').
+test('a page keeps or deletes only its own Canvas site’s syllabus records, and only what lib/syllabus.js allows', async () => {
+  const store = shared();
+  const send = serviceWorker(store);
+  const from = (url) => ({ id: WORKER_ID, tab: { id: 3 }, frameId: 0, url });
+  const key = `syllabus:${ORIGIN}/3/25`;
+  const rec = { prof: { name: 'Dr. Okafor', email: 'a@b.edu' }, weights: [{ name: 'Labs', weight: 40 }], html: '<b>', scale: [['A', 93]] };
+  const kept = await send({ type: 'glaze:syllabus', key, rec, at: 10 }, from(`${ORIGIN}/courses/25`));
+  assert.equal(kept.ok, true);
+  assert.deepEqual(store.data[key], kept.rec);
+  assert.equal(store.data[key].html, undefined, 'tidied');
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key: 'syllabus:https://other.instructure.com/3/25', rec, at: 11 }, from(`${ORIGIN}/`)), { ok: false, error: 'sender' });
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec, at: 12 }, from('https://example.com/')), { ok: false, error: 'sender' });
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec: { prof: {} }, at: 13 }, from(`${ORIGIN}/`)), { ok: false, error: 'bad' });
+  assert.equal((await send({ type: 'glaze:syllabus', key, rec: null, at: 14 }, from(`${ORIGIN}/`))).ok, true);
+  assert.deepEqual(store.data, { [key]: { deleted: 14 } }, 'only the time of the delete is left');
+});
+
+test('the what-if calculator shows the syllabus\'s weights as a note, and still counts Canvas\'s', async () => {
+  const sylKey = `syllabus:${ORIGIN}/3/${BIO.course.id}`;
+  const plain = gradesPage();
+  await ready(plain);
+  const p = gradesPage({ store: shared({ [sylKey]: { weights: [{ name: 'Labs', weight: 50 }, { name: 'Exams', weight: 50 }] } }) });
+  await ready(p);
+  const note = find(p.box(), (e) => e.tagName === 'P' && e.textContent.startsWith('Your syllabus lists'));
+  assert.equal(note?.textContent, 'Your syllabus lists Labs 50%, Exams 50%. Glaze counts the weights Canvas has.');
+  assert.deepEqual(totals(p), totals(plain), 'the figures are Canvas\'s');
+  assert.equal(find(plain.box(), (e) => e.tagName === 'P' && e.textContent.startsWith('Your syllabus')), undefined);
+});
+
 test('a course that failed to load can be asked for again', async () => {
   const p = gradesPage();
   p.UI.render();
@@ -313,19 +343,20 @@ test('GPA: a course answer without a grading scheme says the what-if needs a sca
 });
 
 // The GPA with past terms, trends and a goal (features/gpaterms.js, lib/gpa.js), kept through the service worker.
-const histPage = (store, held = {}) => {
+const CALC = [{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 92 }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } }];
+const histPage = (store, held = {}, list = CALC, groups = [], sync = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(el(doc, 'div', { id: 'DashboardCard_Container' }));
   const state = { settings: { enabled: true, enhance: { gpa: true, gpaPlus: true } } };
   store.send ||= serviceWorker(store);
   const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` };
-  const list = [{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 92 }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } }];
   let ctx;
   const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
-  const chrome = { runtime: { sendMessage: (m) => store.send(m, sender) }, storage: { local: store.tab(held), sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
+  const chrome = { runtime: { sendMessage: (m) => store.send(m, sender) }, storage: { local: store.tab(held), sync: shared(sync).tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
   ctx = vm.createContext({
     document: doc, location: { pathname: '/', search: '', hash: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome,
+    TextEncoder, fetch: () => Promise.resolve({ ok: true, text: async () => JSON.stringify(groups), headers: { get: () => '' } }),
     GZ_CTX: {
       t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', capi: () => Promise.resolve(null), canvasCourses: () => Promise.resolve(list), canvasCourseId: () => undefined,
       need, settings: () => state.settings, on: () => true,
@@ -363,7 +394,7 @@ test('GPA: past terms count in the overall GPA, show as a trend table, set a goa
   p.f('goal:v').fire('change');
   await settle(10);
   assert.deepEqual(store.data[TKEY].g, { k: 'cum', v: 3.5 }, 'kept by the service worker');
-  assert.match(p.hist().textContent, /Out of reach this term: straight A's would bring your cumulative GPA to 3\.48\./);
+  assert.match(p.hist().textContent, /Out of reach this term: the best grades your courses can still give would bring your cumulative GPA to 3\.48\./);
   p.f('goal:v').value = '3.4';
   p.f('goal:v').fire('change');
   await settle(10);
@@ -386,6 +417,83 @@ test('GPA: past terms count in the overall GPA, show as a trend table, set a goa
   assert.equal(store.data[TKEY].t.length, 4);
   const other = await store.send({ type: 'glaze:gpaterms', key: 'gpaTerms:https://other.instructure.com:3', op: 'clear', at: Date.now() }, { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` });
   assert.deepEqual(other, { ok: false, error: 'sender' }, "a page can't change another site's terms");
+});
+
+// A goal for this term, with the GPA view open.
+const goalPage = async (list, groups, goal = { k: 'term', v: 3.5 }, sync = {}) => {
+  const p = histPage(shared({ [`gpaTerms:${ORIGIN}:3`]: { t: [], g: goal } }), {}, list, groups, sync);
+  p.UI.render();
+  await settle(10);
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  return p;
+};
+const term = { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' };
+
+test('GPA goal: a pass/fail course is no GPA course, and a course with no grade yet doesn\'t make the goal "met now"', async () => {
+  const p = await goalPage([
+    { id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3' }], term },
+    { id: '28', name: 'Art Studio', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 95, computed_current_grade: 'P' }], term },
+  ]);
+  const text = p.hist().textContent;
+  assert.doesNotMatch(text, /Your grades now get you there/);
+  assert.match(text, /Some courses have no grade yet, so whether your grades now get you there isn't known\. One way there:/);
+  assert.match(text, /Calculus I/);
+  assert.doesNotMatch(text.slice(text.indexOf('One way there')), /Art Studio/, 'the P course is offered no letter');
+});
+
+test('GPA goal: What it takes aims at the percent that rounds to the letter, as the route does', async () => {
+  // 799.96 of 900 earned, 100 left: full marks make 89.996%, which Canvas shows as 90%, an A-.
+  const groups = [{ id: '1', name: 'All', group_weight: 0, assignments: [
+    { id: 'a', name: 'Done', points_possible: 900, submission: { score: 799.96 } }, { id: 'b', name: 'Final', points_possible: 100, submission: {} }] }];
+  const p = await goalPage([{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 88.88 }], term }], groups, { k: 'term', v: 3.7 });
+  assert.match(p.hist().textContent, /Calculus IB\+A-90%\+What it takes/);
+  byText(p.hist(), 'What it takes').fire('click');
+  await settle(20);
+  const text = p.hist().textContent;
+  assert.doesNotMatch(text, /Out of reach|no way there/);
+  assert.match(text, /A-90%\+You'd need about 100% on the item left\./);
+});
+
+test('GPA goal: What it takes on a bound off the hundredths (A- from 90.004) aims where Canvas rounds into it', async () => {
+  // 800.01 of 900 earned, 100 left: full marks make 90.001%, shown as 90.00%, which is under 90.004: a B+.
+  const groups = [{ id: '1', name: 'All', group_weight: 0, assignments: [
+    { id: 'a', name: 'Done', points_possible: 900, submission: { score: 800.01 } }, { id: 'b', name: 'Final', points_possible: 100, submission: {} }] }];
+  const sync = { gpaCourses: { [`canvas:${ORIGIN}/27`]: { s: 'A 94, A- 90.004, B+ 87, B 84, B- 80, C 70, F 0' } } };
+  const p = await goalPage([{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 88.89 }], term }], groups, { k: 'term', v: 3.7 }, sync);
+  assert.match(p.hist().textContent, /Calculus IB\+A-90%\+What it takes/);
+  byText(p.hist(), 'What it takes').fire('click');
+  await settle(20);
+  const text = p.hist().textContent;
+  assert.doesNotMatch(text, /You'd need about/);
+  assert.match(text, /Out of reach: the best grades your courses can still give make 3\.30 this term\./, 'the course is held at B+');
+});
+
+test('GPA goal: a course not graded yet on a Pass/Fail scale adds no GPA credits', async () => {
+  const sync = { gpaCourses: { [`canvas:${ORIGIN}/28`]: { s: 'P 60, F 0' } } };
+  const p = await goalPage([
+    { id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 95 }], term },
+    { id: '28', name: 'Art Studio', enrollments: [{ type: 'student', user_id: '3' }], term },
+  ], [], { k: 'term', v: 4 }, sync);
+  const text = p.hist().textContent;
+  assert.doesNotMatch(text, /Out of reach/);
+  assert.match(text, /This term needs a GPA of 4\.00: about A in every course\./);
+  assert.match(text.slice(text.indexOf('Aim for')), /Art Studio–P60%\+Pass Art Studio \(reach P\)\./, 'not routed to a letter: a condition to pass');
+});
+
+test('GPA goal: a course with an F now on a Pass/Fail scale is a condition to pass, not left out of "met now"', async () => {
+  const sync = { gpaCourses: { [`canvas:${ORIGIN}/28`]: { s: 'P 60, F 0' } } };
+  const p = await goalPage([
+    { id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 95 }], term },
+    { id: '28', name: 'Art Studio', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 40 }], term },
+  ], [], { k: 'term', v: 4 }, sync);
+  const text = p.hist().textContent;
+  assert.match(text, /Now, from Canvas2\.0062\.00/, 'the trend counts the F now: 2.00 over 6 credits');
+  assert.match(text, /This term needs a GPA of 4\.00/, 'passing leaves it out of the best case');
+  assert.doesNotMatch(text, /Your grades now get you there/);
+  assert.match(text, /One way there, from your grades now:/);
+  assert.match(text, /Art StudioFP60%\+Pass Art Studio \(reach P\)\./);
 });
 
 test('GPA: a read of past terms held up while another tab removed them all doesn\'t bring them back', async () => {

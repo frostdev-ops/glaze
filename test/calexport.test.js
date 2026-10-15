@@ -133,7 +133,8 @@ test('review: overdue work planned for later keeps its plan; its past deadline s
 });
 
 // features/calexport.js run() in a page of its own: Canvas's answers can be held, and storage changed meanwhile.
-const page = () => {
+// failKey: a read that names this key fails, as a failed read does; need(file): what loading a file on demand does.
+const page = ({ failKey = null, need = async () => {} } = {}) => {
   const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
   const UID = '3', ORIGIN = 'https://canvas.test', ACCT = 'a'.repeat(24);
   const store = {
@@ -157,6 +158,7 @@ const page = () => {
   const fail = {}, runtime = {};
   const get = (area) => (keys, cb) => {
     if (fail[area] === 'throw') throw new Error('Extension context invalidated.');
+    if (failKey && [keys].flat().includes(failKey)) { runtime.lastError = { message: 'failed' }; cb(undefined); delete runtime.lastError; return; }
     if (fail[area] === 'error') { runtime.lastError = { message: 'failed' }; cb(undefined); delete runtime.lastError; return; }
     const all = JSON.parse(JSON.stringify(store[area])); cb(keys === null ? all : Object.fromEntries([keys].flat().filter((k) => k in all).map((k) => [k, all[k]])));
   };
@@ -184,22 +186,24 @@ const page = () => {
     chrome: { runtime, storage: { sync: { get: get('sync'), set() {} }, local: { get: get('local') } } },
     fetch: async (url) => { asked.push(decodeURIComponent(url)); if (hold) await new Promise((res) => held.push(res)); return answer(url); },
     GZ_CTX: {
-      t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need: async () => {}, settings: () => ({ enabled: true, enhance: { gradescope: true } }),
+      t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need, settings: () => ({ enabled: true, enhance: { gradescope: true } }),
       profile: async () => ({ id: UID, time_zone: TZ }), canvasCourses: async () => [{ id: '7', name: 'Biology' }],
     },
   });
   vm.runInContext('globalThis.globalThis = this; Date.UTC = Object.getPrototypeOf(Date).UTC; Date.parse = Object.getPrototypeOf(Date).parse;', c);
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'features/calexport.js']) vm.runInContext(read(f), c);
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'lib/classes.js', 'features/calexport.js']) vm.runInContext(read(f), c);
   const saved = [];
-  const go = (alive = () => true) => c.GZ_CAL_UI.run({ icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsRange: '2w' }, alive, (text) => { saved.push(text); return 'f.ics'; });
+  const go = (alive = () => true, more = {}) => c.GZ_CAL_UI.run({ icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsRange: '2w', ...more }, alive, (text) => { saved.push(text); return 'f.ics'; });
   // The dialog's Download, as the page would send it: trusted either way (a real press, or a script's requestSubmit()).
-  const submit = async () => {
+  const submit = async (more = {}) => {
     await c.GZ_CAL_UI.open();
     const form = document.dialog.kids[0];
-    Object.assign(form, { elements: {}, values: { icsDue: 'on', icsTasks: 'on', icsPlan: 'on', icsRange: '2w' } });
+    Object.assign(form, { elements: {}, values: { icsDue: 'on', icsTasks: 'on', icsPlan: 'on', icsRange: '2w', ...more } });
     for (const f of form.on.submit) await f({ isTrusted: true, target: form, preventDefault() {} });
   };
-  return { store, fail, asked, held, saved, go, activation, downloads, submit, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
+  // The dialog's status line, once the export has answered.
+  const said = () => document.dialog.kids[0].kids.find((k) => k?.className === 'gz-ics-say')?.textContent || '';
+  return { store, fail, asked, held, saved, go, activation, downloads, submit, said, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
 };
 const settle = () => new Promise((res) => setImmediate(res));
 
@@ -290,4 +294,53 @@ test('review: a read that works but finds no settings (a fresh install) uses the
   assert.equal(r.name, 'f.ics');
   assert.match(p.saved[0], /SUMMARY:Do: Lab 1/);
   assert.ok(!/gradescope/.test(p.saved[0]), 'Gradescope in To Do is off by default');
+});
+
+test('the class schedule (W14) goes in as one event per meeting in the range, with its own choice', async () => {
+  const p = page();
+  p.store.local['classes:https://canvas.test/3'] = { courses: [{ id: '7', code: 'BIO 1100', name: 'Biology', periods: [{ days: [2, 4], start: 810, end: 885, loc: 'Life Sciences 120', from: '', to: '', skip: ['2026-10-22'] }] }] };
+  await p.go(undefined, { icsClasses: true });
+  const meetings = p.saved[0].match(/UID:canvas\.test\/class\/7\/[^\r]+/g) || [];
+  assert.deepEqual(meetings.map((u) => u.split('/')[3]), ['2026-10-15', '2026-10-20', '2026-10-27'], 'the next two weeks, the day off left out');
+  // In UTC, from the profile's zone (New York) for a schedule saved without one: 13:30 EDT is 17:30Z.
+  assert.match(p.saved[0], /DTSTART:20261015T173000Z\r\nDTEND:20261015T184500Z/);
+  assert.match(p.saved[0], /LOCATION:Life Sciences 120/);
+  await p.go(undefined, { icsClasses: false });
+  assert.ok(!/class\/7/.test(p.saved[1]));
+  // A schedule saved in Phoenix, exported from a profile in New York: its 09:00 class is 16:00Z (Codex W14 review).
+  p.store.local['classes:https://canvas.test/3'] = { tz: 'America/Phoenix', courses: [{ id: '7', code: '', name: 'Lab', periods: [{ days: [4], start: 540, end: 590, loc: '', from: '', to: '', skip: [] }] }] };
+  await p.go(undefined, { icsClasses: true });
+  assert.match(p.saved[2], /DTSTART:20261015T160000Z\r\nDTEND:20261015T165000Z/);
+});
+
+// W14 review (P2): with the class schedule chosen, a schedule that can't be read, or lib/classes.js that can't be loaded,
+// stops the export with a message and saves no file, rather than a file that quietly leaves the classes out.
+test('the class schedule chosen but unreadable or not loadable: no file, and the page says why', async () => {
+  const sched = { courses: [{ id: '7', code: 'BIO 1100', name: 'Biology', periods: [{ days: [2, 4], start: 810, end: 885, loc: '', from: '', to: '', skip: [] }] }] };
+  const key = 'classes:https://canvas.test/3';
+  const unreadable = page({ failKey: key });
+  unreadable.store.local[key] = sched;
+  await unreadable.submit({ icsClasses: 'on' });
+  assert.deepEqual([unreadable.saved, unreadable.downloads], [[], []]);
+  assert.match(unreadable.said(), /Couldn't read your class schedule\. Nothing was saved\./);
+  const unloadable = page({ need: async (f, ready) => { if (f === 'lib/classes.js') throw new Error('not loaded'); return ready(); } });
+  unloadable.store.local[key] = sched;
+  await unloadable.submit({ icsClasses: 'on' });
+  assert.deepEqual(unloadable.downloads, []);
+  assert.match(unloadable.said(), /Couldn't read your class schedule/);
+  // Not chosen: the same failures don't matter, and the file is made.
+  const skipped = page({ failKey: key });
+  skipped.store.local[key] = sched;
+  await skipped.submit();
+  assert.equal(skipped.downloads.length, 1);
+});
+
+test('another chosen source that can\'t be loaded or read (Gradescope, the plans) saves no file either', async () => {
+  const gs = page({ need: async (f, ready) => { if (f === 'lib/gradescope.js') throw new Error('not loaded'); return ready(); } });
+  await gs.submit({ icsGs: 'on' });
+  assert.deepEqual(gs.downloads, []);
+  assert.match(gs.said(), /Couldn't make the calendar/);
+  const plans = page({ failKey: 'todo:https://canvas.test/3' });
+  await plans.submit();
+  assert.deepEqual(plans.downloads, []);
 });

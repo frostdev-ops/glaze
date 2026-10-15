@@ -444,6 +444,8 @@
         <label class="check"><input type="checkbox" data-key="enhance.calc"><span>What-if calculator</span>
           <span class="desc">On a course's gradebook: try scores for work not graded yet, or set a target and see what you'd need. Uses the course's own weights, and says so when it can't.</span>
           <span class="desc">On Canvas: above a course's grades, by Canvas's own rules (weights, dropped scores, excused work, grading periods). Change real scores, leave work out, add pretend assignments. Kept on this device until the real grade arrives; Canvas never sees them.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.syllabus"><span>Syllabus import</span>
+          <span class="desc">On Canvas: read a course's syllabus (its Syllabus page, a Word, PowerPoint or web page file, or pasted text) on this device. You check every field before it's kept; then the professor, class times and dates show on the course home, the grading scale can go to your GPA and the dates to Better To Do.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.gpa"><span>Grade point average</span>
           <span class="desc">On Canvas's Dashboard: your GPA for each term and across your current courses, from your current grades. Set each course's credits, level and grading scale under it.</span></label>
         <div class="group">
@@ -539,6 +541,7 @@
           <label class="check"><input type="checkbox" data-key="todo.icsDue"><span>Canvas due dates</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsTasks"><span>Your tasks with a due date</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsPlan"><span>Do-on days and focus sessions</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.icsClasses"><span>Your class schedule</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsGs"><span>Gradescope work</span>
             <span class="desc">With Gradescope in To Do on, for a Canvas account that said yes to showing it.</span></label>
           <div class="row">
@@ -595,6 +598,11 @@
             <span class="desc">Your "do on" days and focus sessions from Better To Do.</span></label>
           <div class="row">
             <label>Before a focus session <select data-key="remind.plan"><option value="0">At the start</option><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="enhance.remindClass"><span>Class reminders</span>
+            <span class="desc">Before each class in your class schedule (Ctrl+K, Class schedule, on a Canvas page).</span></label>
+          <div class="row">
+            <label>Before a class <select data-key="remind.cls"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
           </div>
           <label class="check"><input type="checkbox" data-key="enhance.streak"><span>Streak</span>
             <span class="desc">Days in a row with nothing missed, and your best, in the To Do header. Work handed in late or not at all ends a run; excused work never counts. Two restores a month put back a run, free.</span></label>

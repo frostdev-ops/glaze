@@ -109,6 +109,15 @@ _Last updated: 2026-10-15_
   streak on, the day your run started, your best, what a restore forgave and how many restores you used this month.
   It's kept apart from Canvas's own read and done state, which Glaze never changes. Nothing sends it anywhere, and
   Export settings leaves it out; your reminder choices (which kinds, how long before) are settings and sync with them.
+- **Your class schedule** (Canvas), in `chrome.storage.local`, on this device only, per Canvas site and signed-in user
+  id: for each course you saved, its Canvas course id (or a name of your own), code and name, and each meeting's days,
+  start and end time, place, first and last day and days off; the time zone those times are in (your Canvas
+  profile's); and when each course was last saved, when you last pressed Delete all and which courses you deleted when,
+  so a save from another tab made before a deletion can't bring a course back. Only what you choose to save on the
+  review screen is kept; the file, page or text you import is read on your device and not kept. Delete removes a
+  course, Delete all the lot. Nothing sends it anywhere other than into a calendar file you export yourself (Export
+  calendar (.ics), "Your class schedule"), and Export settings leaves it out; whether class reminders are on, and how
+  long before, are settings and sync with them.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
@@ -141,6 +150,15 @@ _Last updated: 2026-10-15_
   settings. Remove deletes a sticker, Delete your picture deletes a picture; Reset everything deletes all of it.
   Your own pictures are shown on a page through temporary blob addresses, not written into it, though the LMS page's
   own code can still read a picture shown on it.
+- **What you keep from a syllabus** (Canvas, the Syllabus import Extra, off by default), in `chrome.storage.local`, on
+  this device only, per Canvas site, user and course, and only after you check it and choose Save: the professor's
+  name, e-mail, office and office hours, class times, the dates you kept, the grading scale and the weights. The
+  syllabus itself (the Syllabus page's text, a file you pick, text you paste) is read on this device, shown to you
+  while you review it, and not kept. If you choose so when saving, the scale also goes to your GPA choices above
+  (synced like them) and the dates you tick become your own Better To Do tasks. Delete on the course home removes the
+  record, keeping only when it was deleted (so a late save from another tab can't bring it back); the GPA scale and
+  tasks stay until you change them there. Only the first 200,000 characters of a syllabus are read, and the review says
+  so when there were more.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -256,6 +274,18 @@ animated backgrounds) are bundled. It makes requests in these cases:
   that same copy. It asks again when you come back to the page after that, not within a minute of a failed ask, and
   never on a timer. Reminders are drawn inside the Canvas page only: Glaze has no notifications permission and sends
   nothing to any other place. It never writes to Canvas.
+- **Syllabus import** (Canvas, off by default). On a course's home and Syllabus page, Glaze asks your own Canvas site
+  for your profile (your user id) and course list (the course's term start, for dates written without a year), the
+  same read-only requests Better To Do makes. It reads the Syllabus page from the page already open, with no request
+  of its own, and reads files you pick on this device. Nothing about the syllabus is sent anywhere: there is no server
+  to parse it and no consent box to tick, because nothing leaves your computer. It never writes to Canvas.
+- **Class schedule** (Canvas). Opening it asks your own Canvas site for your profile and course list (as Better To
+  Do does), to match classes to your courses. A file you choose or text you paste is read on your device and never
+  uploaded. A calendar link is read only when it is an address on the Canvas site you're on (your own calendar feed,
+  say), with your existing session; a link anywhere else is refused before any request, and Glaze asks you to download
+  the file instead. Showing your classes in the agenda uses what you saved and asks nothing more. With only class
+  reminders on, the reminders ask your Canvas site for your profile (for your time zone) and course list, as above, and
+  never for your planner items.
 - **Gradescope in To Do** (off by default). Gradescope has no API for students, so Glaze reads your Gradescope course
   pages, signed in as you, and nothing else of Gradescope's. While the switch is on and Glaze itself is on, and only then, Glaze runs on
   `https://www.gradescope.com` pages. When there's something to read or ask, it first reads your account page
@@ -356,7 +386,7 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 
 ## Permissions
 
-- `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, reminder and streak state, marks on documents,
+- `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
   typed-text backups, Looks history and favorites, Dashboard notes and widgets, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.

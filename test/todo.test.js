@@ -282,7 +282,7 @@ test('its settings join GZ_SPEC from here, so the first content script carries o
   assert.equal(D.GZ_SPEC.enhance.todo[0], false); // off until the student turns it on
   assert.equal(D.GZ_SPEC.todo, T.SPEC);
   assert.deepEqual(D.GZ_SANITIZE({}).todo, { span: 'week', n: 7, unit: 'days', start: 'rolling', past: 'week', rel: false, urgent: true, teacher: true, progress: true, done: 'auto', group: true, sync: false, cardN: 4, cardStatus: true, cardCross: false, gsDaily: false,
-    icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsRange: '4w' });
+    icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsClasses: true, icsRange: '4w' });
   assert.equal(D.GZ_SPEC.enhance.cardTasks[0], false); // tasks on cards: off too
   assert.deepEqual(D.GZ_SANITIZE({ todo: { span: 'custom', n: 90, unit: 'weeks', past: 'forever', sync: 'yes' } }).todo, { ...D.GZ_SANITIZE({}).todo, span: 'custom', unit: 'weeks' });
 });

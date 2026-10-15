@@ -16,6 +16,22 @@ All notable changes to Glaze are documented here. The format follows
   table of the same figures. Only a small summary of this term is kept on this device, until you clear it. No
   comparisons with anyone, nothing timed or tracked, nothing sent anywhere.
 
+- **Class schedule (Canvas):** Ctrl+K, Class schedule (or the agenda widget's button) imports your timetable, read on
+  your device and never uploaded.
+  - From an `.ics` file or a calendar link on your own Canvas site (weekly rules, cancelled and moved meetings become
+    days off; one-off events such as exams are left out), a registrar's page saved as HTML, a Word file (.docx), or
+    pasted text: Banner, PeopleSoft and Workday copies, plain lists ("BIO 110 TR 1:30-2:45pm Life Sciences 120"),
+    24-hour times, "14h30", "Uhr", and day names and abbreviations in English, German, Spanish, French, Dutch and
+    Portuguese. Term dates and holidays ("Thanksgiving break: Nov 25–27") are picked up; office hours aren't classes.
+  - A review screen before anything is kept: each class matched to your Canvas course by code or name (labelled with
+    the site and code), or kept as not a Canvas course; days, times, place, first and last day and days off all
+    editable; what Glaze guessed is marked "Check this". Nothing is saved until you choose Save.
+  - View, edit and delete each course, add a class by hand, or delete all. Kept on this device per Canvas site and
+    account; a save from another tab made before a deletion doesn't bring a course back.
+  - Export calendar (.ics) can include your classes ("Your class schedule"), one event per meeting in the range.
+  - The agenda widget shows the day's classes with your work. Class reminders (off by default; Reminders hub or the
+    editor) remind 5, 10, 15 or 30 minutes before each class, inside Canvas like the others.
+  - Photos and PDFs aren't read yet.
 - **Export calendar (.ics)** (Canvas): Better To Do's Export button, or Export calendar (.ics) in Ctrl+K, saves an
   .ics file of your Canvas deadlines, your own tasks with a due date, "do on" days and focus sessions, and Gradescope
   work (for a Canvas account that said yes to it), each part optional, for the next 2, 4, 8 or 16 weeks or the current
@@ -32,6 +48,11 @@ All notable changes to Glaze are documented here. The format follows
   trends and goal. Free, unlimited and kept on this device; nothing is uploaded. PDF and photo transcripts aren't
   read yet.
 
+- **Syllabus import** (Canvas, off by default): read a course's syllabus on your device, from its Syllabus page, a
+  Word, PowerPoint, web page or text file, or pasted text, in six languages. Every field (professor, office hours,
+  class times, exam and due dates, grading scale, weights) is shown with the line it came from for you to correct
+  before anything is kept. Saved, it shows on the course home, can set the course's scale in your GPA, adds the dates
+  you pick to Better To Do and lists the weights beside the what-if calculator. Nothing is uploaded. PDF not yet.
 - **Canvas sidebar:** style Canvas's native global navigation with a solid color, two-color gradient or picture
   (an https link or local file), filters and an overlay. Choose text and icon colors, normal/small/icon-only labels,
   three sizes, logo visibility and a collapsed rail. Native links keep their labels and keyboard access. The
