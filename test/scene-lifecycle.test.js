@@ -20,16 +20,22 @@ const engine = () => {
 };
 const opts = { name: 'mist', ground: '#000', colors: ['#123', '#456', '#789'], dim: 0, amount: 0.5, speed: 1 };
 
-test('a scene stops frames and disposes resources when its caller is invalidated', () => {
+test('a scene cut off from its caller stops its frames and keeps its last frame on screen', () => {
   const e = engine(); let live = true;
   const scene = e.start({}, () => live); scene.update(opts);
   assert.equal(e.counts.draws, 1); assert.equal(e.frames.size, 1);
   const [id, tick] = [...e.frames][0]; e.frames.delete(id); live = false; tick(100);
   assert.equal(e.frames.size, 0, 'reload does not schedule another animation frame');
   assert.equal(e.listeners.size, 0);
-  assert.deepEqual(e.counts, { draws: 1, disposed: 1, lost: 1, geometry: 1, material: 1 });
+  assert.deepEqual(e.counts, { draws: 1, disposed: 0, lost: 0, geometry: 0, material: 0 }, 'the drawing stays: the page is not left bare');
   scene.stop(); scene.draw(); scene.update(opts);
-  assert.equal(e.counts.disposed, 1, 'stop is idempotent and a disposed scene cannot revive');
+  assert.equal(e.counts.draws, 1, 'a frozen scene never draws again');
+});
+
+test('a scene switched off frees everything, once', () => {
+  const e = engine(); const scene = e.start({}, () => true); scene.update(opts);
+  scene.stop(); scene.stop(); scene.draw(); scene.update(opts);
+  assert.deepEqual([e.counts.disposed, e.counts.lost, e.frames.size, e.listeners.size], [1, 1, 0, 0]);
   assert.equal(e.counts.draws, 1);
 });
 

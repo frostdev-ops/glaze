@@ -39,7 +39,8 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offca
   filter: blur(var(--gz-bg-blur, 0px));
 }
 /* Cards over a picture: a little see-through, never so much that text sits on the image. */
-html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer) {
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap .content-list-item .content-list-item .itemContainer {
   background: color-mix(in srgb, var(--gz-surface) 88%, transparent) !important;
 }
 
