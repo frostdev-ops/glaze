@@ -26,8 +26,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // The feature hub: Canvas's extras by where they show, with the names the editor gives them.
   const HUB = [
     ['Dashboard', ['notes', 'widgets', 'todo', 'cardTasks', 'overall', 'gradeHover', 'gpa', 'newgrades', 'newcontent', 'coursemenu']],
-    ['Course pages', ['progress', 'place', 'download', 'calc', 'syllabus', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp'], ['progress', 'place', 'download', 'calc', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
-    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'streak'], ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak']],
+    ['Course pages', ['progress', 'place', 'download', 'calc', 'syllabus', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
+    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak']],
     ['Everywhere', ['palette', 'search', 'keys', 'drafts', 'quizLight']],
   ];
   const EXTRA = {
