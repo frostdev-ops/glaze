@@ -4,7 +4,7 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const X = globalThis.GZ_CTX;
   const rail = X.site === 'ultra' && typeof GZ_NAV !== 'undefined' ? GZ_ULTRA_RAIL(X) : null;
   let reading = '', loaded = null, toggle = null;
-  const overlay = X.site === 'ultra' ? GZ_ULTRA_OVERLAY(X, () => X.repaintNav(loaded?.src)) : null;
+  const overlay = rail ? GZ_ULTRA_OVERLAY(X, () => X.repaintNav(loaded?.src)) : null;
   const titled = new Map();
   const labels = new Set(), fitted = new Map();
   let fitFrame = 0, fitObserver;
