@@ -179,7 +179,7 @@ test('a total\'s chip: Moodle\'s own text, and its share where it says a percent
 
 // ---- features/moodle.js, in a stand-in page ---------------------------------------------------------------------------
 const D = require('../defaults.js');
-const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '', courses = [], stored = {}, root = ORIGIN, list = {}, dark = true } = {}) => {
+const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '', courses = [], stored = {}, root = ORIGIN, list = {}, dark = true, live = { on: true } } = {}) => {
   const asked = [];
   // storage.local, as GZ_CTX.local hands it over.
   const local = { get: (k, cb) => cb(Object.fromEntries([k].flat().map((x) => [x, stored[x]]))), set: (o) => Object.assign(stored, o) };
@@ -194,7 +194,7 @@ const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = []
     URL, Promise, JSON, Date, document, location: { origin: ORIGIN }, matchMedia: () => ({ matches: dark }),
     GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../lib/color.js'),
     GZ_MOODLE: M, GZ_PAGE: { score },
-    GZ_CTX: { t: (k) => k, settings: () => settings, local: (fn) => fn(local), canvasCourseKey: (id) => (id ? `moodle:${root}/${id}` : null), courseList: () => list, on: () => true },
+    GZ_CTX: { t: (k) => k, settings: () => settings, local: (fn) => fn(local), canvasCourseKey: (id) => (id ? `moodle:${root}/${id}` : null), courseList: () => list, on: () => live.on },
     fetch: async (url, opts = {}) => { asked.push({ url, ...opts }); return { ok: true, status: 200, text: async () => overview, json: async () => [{ error: false, data: { events: [], courses } }] }; },
   });
   context.globalThis = context;
@@ -491,6 +491,59 @@ test('a failed or empty course read changes nothing kept, and is asked again on 
   // Nothing of this root kept: asked again, however fresh the time.
   assert.equal(kinds(await pageLoad({ stored, courses: [] })).filter((k) => k.startsWith('enrolled')).length, 1);
 });
+
+// content.js's recordCourses alone, over a module content.js is still waiting for (moodleIn).
+const recorder = (moodleIn) => {
+  const ctx = vm.createContext({ ultra: false, moodle: true, window: {}, moodleIn });
+  ctx.window.top = ctx.window;
+  vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} this.recordCourses = recordCourses;`, ctx);
+  return ctx;
+};
+const noUnhandled = async (run) => {
+  let unhandled = 0;
+  const count = () => { unhandled++; };
+  process.on('unhandledRejection', count);
+  try { await run(); await settle(); await settle(); } finally { process.off('unhandledRejection', count); }
+  assert.equal(unhandled, 0, 'no unhandled rejection');
+};
+
+test('switched off while the Moodle module loads: no course read starts, and one does when Glaze is back on', () => noUnhandled(async () => {
+  const settings = { enabled: true, enhance: {} };
+  const live = { on: true };
+  const stored = {};
+  const p = page({ stored, settings, live, courses: [{ id: 16, fullname: 'BIO 1100', shortname: 'BIO 1100' }] });
+  let release;
+  const ctx = recorder(() => new Promise((res) => { release = res; }));
+  ctx.recordCourses(); // the sweep starts, Glaze on
+  settings.enabled = false; live.on = false; // switched off before the module is in
+  release(p.api);
+  await settle(); await settle();
+  assert.deepEqual(p.asked, [], 'nothing asked while off');
+  // Back on: startSweep runs recordCourses again, and this time it reads.
+  settings.enabled = true; live.on = true;
+  ctx.moodleIn = () => Promise.resolve(p.api);
+  ctx.recordCourses();
+  await settle(); await settle(); await settle();
+  assert.deepEqual(kinds(p), ['enrolled_courses_by_timeline_classification']);
+  assert.ok(stored.seenCourses[`moodle:${ORIGIN}/16`]);
+  // Switched off after storage was asked, before Moodle is: nothing asked either.
+  const q = page({ stored: {}, settings, live });
+  const r = q.api.record();
+  live.on = false;
+  await assert.rejects(r, /off/);
+  assert.deepEqual(q.asked, []);
+}));
+
+test('a signed-out page or a failed course read is caught, and asked again when the sweep starts again', () => noUnhandled(async () => {
+  const p = page({ logout: null });
+  let calls = 0;
+  const ctx = recorder(() => Promise.resolve({ record: () => { calls++; return p.api.record(); } }));
+  await ctx.recordCourses();
+  await settle();
+  await ctx.recordCourses(); // let go after the failure: the next start asks again
+  assert.equal(calls, 2);
+  assert.deepEqual(p.asked, [], 'signed out: Moodle never asked');
+}));
 
 test('each course card wears its own course\'s Look and tint, painted only on change and taken off with them', () => {
   const k = (id) => `moodle:${ORIGIN}/${id}`;

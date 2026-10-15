@@ -49,22 +49,27 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
   // Every course the student is in, for the editor's list, the course menu, the tint and the cards (below), kept beside
   // other sites' courses (storage.local seenCourses, content.js's course keys). content.js asks once a page load (top
   // frame); Moodle is asked when this root (the courses' keys' own: one host can hold two Moodles, in folders) has no
-  // course kept, or its list is ten minutes old (`seenCoursesAt <key prefix>`). A failed read is asked again next page.
+  // course kept, or its list is ten minutes old (`seenCoursesAt <key prefix>`). Nothing is asked while Glaze is off, checked
+  // again once storage answers: the promise rejects, and content.js asks again when Glaze comes back on, as after a
+  // failed read (which the next page asks again too).
   let recording = null;
+  const live = () => GZ_CTX.settings().enabled && GZ_CTX.on();
   const record = () => {
+    if (!live()) return Promise.reject(new Error('off'));
     paint();
     const pre = GZ_CTX.canvasCourseKey('x')?.slice(0, -1); // moodle:<root>/
     if (!/^moodle:https?:\/\//.test(pre)) return Promise.resolve();
     const at = `seenCoursesAt ${pre}`;
     const get = (keys) => new Promise((res) => GZ_CTX.local((l) => l.get(keys, (r) => res(r || {}))));
     return (recording ||= get(['seenCourses', at]).then((r) => {
+      if (!live()) throw new Error('off');
       if (Date.now() - (r[at] || 0) < 600000 && Object.keys(r.seenCourses || {}).some((k) => k.startsWith(pre) && /^\d+$/.test(k.slice(pre.length)))) return;
       return service('core_course_get_enrolled_courses_by_timeline_classification', { classification: 'all', limit: 0, offset: 0, sort: 'fullname' })
         .then((d) => {
           const seen = M.seen(d, GZ_CTX.canvasCourseKey);
           return get('seenCourses').then((now) => GZ_CTX.local((l) => l.set({ seenCourses: { ...now.seenCourses, ...seen }, [at]: Date.now() })));
         });
-    }));
+    }).catch((e) => { recording = null; throw e; }));
   };
 
   // Each card (Dashboard and My courses) in its course's own Look and tint, as the course's pages wear them (content.js

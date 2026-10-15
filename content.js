@@ -267,7 +267,7 @@
     if (!ultra) {
       if (canvasRecorded || window.top !== window) return;
       canvasRecorded = true;
-      if (moodle) return moodleIn().then((m) => m.record(), () => {});
+      if (moodle) return moodleIn().then((m) => m.record()).catch(() => { canvasRecorded = false; });
       Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
         const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
           name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
