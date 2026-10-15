@@ -8,6 +8,13 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 - Settings Back/Forward survives preview site changes. Precise navigation dimensions and Blackboard nicknames have usable editor controls; course edits repaint the preview, and open Share sessions pages follow relay preference saves without connecting.
+- Course tabs stay visible on Ultra's full routed documents and positively cached Assignment overviews, preserving
+  their allowed URL context and content scroller. Unknown assessments and tests return to Course Content; tabs never
+  fetch a gradebook to classify an overview or open an attempt. Saved page and scroll wait for native content to arrive;
+  a refreshed native gradebook immediately replaces an older Assignment classification. Floating widgets keep clear
+  of the routed native header as well as the strip.
+- Course tabs use automatic short names by default, removing common term/section wrappers and spacing subject codes.
+  Nicknames still win, saved full-name/code choices stay intact, and the full name/code remain in tooltips and accessible names.
 - Ultra route changes show immediately instead of waiting behind Glaze's separate loading gate. Internal widget
   updates no longer trigger native-page sweeps, and an unchanged gradebook keeps its successful empty late-status answer.
 - Tabs left open across an extension reload stop feature work immediately; Google sync and Download all close orphaned

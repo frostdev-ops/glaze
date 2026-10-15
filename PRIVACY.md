@@ -244,8 +244,10 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   so when there were more.
 - **Course tabs** (Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
-  pinned, when it was last used, and where you were in the course: the address of a course tool, document or folder
-  (never a test, attempt, assessment, discussion or message) and how far down. Closing a tab removes it.
+  pinned, when it was last used, and where you were in the course: the address of a course tool, document, folder or
+  positively cached Assignment overview and how far down. Tests, unknown assessments, attempts, discussions and
+  messages are never reopened. Classification only checks an existing cached gradebook column; tabs do not fetch one.
+  Closing a tab removes it.
   **Copies of course pages for instant switching** are kept in memory only and never written to disk: in the page while
   it is open, and in the browser's session storage (`chrome.storage.session`, which the browser holds in memory and
   which Blackboard pages can't read; Glaze's background worker keeps it), per site and account. A copy is what was
@@ -283,7 +285,8 @@ you import) are bundled. It makes requests in these cases:
   reads above. Replaying the copy makes no requests: the page's existing stylesheets remain in place and unreadable
   stylesheets are never linked again. Blackboard routes the selected course normally; if it fails to switch in place
   within 2.5 seconds, Glaze loads that selected course's own-site address. Glaze never prefetches a course or opens one
-  in the background.
+  in the background. Assignment overviews require a positive classification from the gradebook already held by the
+  native grade features; tabs make no request to classify them and recheck before recording or replaying a copy.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette

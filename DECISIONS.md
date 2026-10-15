@@ -752,6 +752,20 @@ synthetic Ultra, `test/fixtures/ultra-course.html`, and `scripts/ultra-tabs-chec
 | The look is attributes on the strip and the course's own `--gz-course` (each tab carries its `course-color-N` and `data-course-id`, so content-ultra.js `paintCourses` colours it as it does every course element) | Colours computed in JS | One source of course colour, picks and harmonizing included. |
 | First script: `content-ultra.js` +942 B, `defaults.js` +39 B, `content.js` −41 B (Ultra +940 B against integration 95cf019, under the 1.5 KB share; Canvas and Moodle −2 B). The strip, copies and switching are `features/coursetabs.js` and `lib/coursetabs.js`, on demand | | |
 
+## Full routed course tabs (B8b)
+
+- Full routed documents keep their allowlisted view, state and parent context. An exact Assignment overview needs
+  a positive cached subtype on every use; raw cached gradebook results refresh even when the displayed grade key is
+  unchanged. Tests and unknown assessments return to Course Content. No attempt or timed-test safety is inferred.
+- The native populated main and its native content identity establish routed provenance. A URL, header or appended
+  Glaze root cannot establish it. Saved path, scroll and capture share this check; unprovable reused native content
+  retains the existing bounded full-load fallback.
+- Automatic short names are the new default; explicit stored name/code choices survive. Parsing is bounded to 200
+  characters, with longer doubtful names kept intact. Nicknames win, and original metadata stays accessible.
+- An invalidated extension stops its own switch and scroll callbacks; guarded storage/worker wrappers make no call.
+- Routed headers share the strip's keep-clear contract while attached, so global floats avoid their combined area;
+  moving or disabling the strip removes only the marker it introduced.
+
 ## Ultra route performance
 
 | Decision | Alternative | Reason |

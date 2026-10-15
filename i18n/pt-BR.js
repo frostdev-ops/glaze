@@ -1559,6 +1559,7 @@
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Os XP de sequência exigem ativar Sequência; os XP ganhos permanecem ao desativar.",
   "Close or unpin a tab to open another course tab.": "Feche ou desafixe uma aba para abrir outra aba de curso.",
   "Course tabs": "Abas de cursos",
+  "This overview is not a cached Assignment. The tab returns to Course Content.": "Esta visão geral não corresponde a uma tarefa em cache. A aba volta ao conteúdo do curso.",
   "On Blackboard Ultra, each course you open gets a tab, as pages do in your browser. A tab takes you back to where you were in its course; one left in a test or an assignment opens at the course's tool instead, never in the test.": "No Blackboard Ultra, cada curso que você abre ganha uma aba, como as páginas no seu navegador. Uma aba leva você de volta aonde estava no curso; uma deixada em um teste ou atividade abre na ferramenta do curso, nunca no teste.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Fixe uma aba para mantê-la, arraste as abas para ordená-las, feche uma pelo × ou com o botão do meio do mouse. No teclado: as setas passam de uma aba para outra, Delete fecha uma, P a fixa e Shift com uma seta a move.",
   "Above the course's bar": "Acima da barra do curso",
