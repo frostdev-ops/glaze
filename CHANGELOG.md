@@ -16,6 +16,12 @@ All notable changes to Glaze are documented here. The format follows
 - **Looks history and Previous Look:** the last 20 themes you wore, from the popup, the editor or Ctrl+K,
   with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
   kept on this device.
+- **Moodle:** Glaze restyles Moodle (the Boost theme of Moodle 5, and 4.x where its markup is the same) on any
+  school's domain, with the same palettes, Looks, fonts, backgrounds and motion: the Dashboard and My courses,
+  course and activity pages, grades, the calendar, messages and the login page, in light and dark palettes.
+  Course cards show your course total from Moodle's grades overview; what's due this week comes from your
+  Timeline, in the popup and the command palette, which also lists Moodle's pages, your courses and the
+  course's tabs. Read-only: Glaze asks your own Moodle what its own pages ask.
 
 ### Changed
 
@@ -24,6 +30,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
+- **Dark palettes:** a page with a form holding a field named "id" no longer stops Glaze's pass that darkens
+  what the stylesheet can't reach.
 - **Canvas, dark palettes:** text that was too faint is now readable:
   - the list view's item labels, due times, points and status pills;
   - its course titles, which now show in each course's color;

@@ -28,7 +28,7 @@ _Last updated: 2026-10-15_
   to 20 courses, the hypothetical scores you typed for work not graded yet. A score is removed once the
   item has a real grade or is gone, and "Clear scores" removes a course's.
 - **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
-  time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner),
+  time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner, or Moodle's Timeline),
   and the address of the site it came from, so the popup can list them. It is replaced each time it's
   fetched.
 - **What you type in Blackboard's editors** (the "Back up what you type" Extra, on by default), in
@@ -111,6 +111,16 @@ animated backgrounds) are bundled. It makes requests in these cases:
   files. The extension's background worker fetches them from your school's file host without cookies.
   Links and file bytes stay in memory while Glaze makes the zip; they are not saved in extension storage.
   The resulting zip is saved to your device.
+- **On Moodle.** At most every ten minutes, Glaze asks your own Moodle site for the activities due in the
+  next seven days, with the same request Moodle's own Timeline block makes (`core_calendar_get_action_events_by_timesort`
+  through Moodle's `/lib/ajax/service.php`, with your existing session and the page's own session key), and keeps
+  them as the due list above. When you open the command palette, it asks for your courses in progress, the same
+  request as Moodle's Course overview block (`core_course_get_enrolled_courses_by_timeline_classification`). On
+  the Dashboard and My courses, with Grades on course cards on, it loads your grades overview page
+  (`/grade/report/overview/index.php`), as you would see it, once per page, to read each course's total. These are
+  read-only: Moodle sends its service calls as POST requests, and these two only read. They go only to the Moodle
+  site you are on. Only the due list is stored; the other answers stay in memory. Moodle may log that the grades
+  overview was viewed, as it does when you open it yourself.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an
@@ -148,9 +158,9 @@ device; nothing is sent anywhere, and the editor applies nothing until you choos
 If a Look's code names a background image on another site, the editor's preview loads it from that
 site, as for any pasted theme code, and says which site it is.
 
-## Recognizing Canvas
+## Recognizing Canvas and Moodle
 
-To recognize Canvas on any school's domain, Glaze checks the head of each https page for Canvas's own stylesheet link and stops at the page body; nothing is read beyond that, and nothing leaves the browser. When it finds Canvas, it remembers that site so it can style it from the start next time.
+To recognize Canvas and Moodle on any school's domain, Glaze checks the head of each https page for Canvas's own stylesheet link or the keywords line Moodle writes into every page ("moodle, …"), and stops at the page body. For Moodle it also checks the page id and layout Moodle puts on the body tag itself, so a page that merely mentions Moodle is left alone. Nothing is read beyond that, and nothing leaves the browser. When it finds either, it remembers that site so it can style it from the start next time.
 
 ## Permissions
 
@@ -163,9 +173,9 @@ To recognize Canvas on any school's domain, Glaze checks the head of each https 
   pattern cannot name a fixed host. Glaze reads and restyles the page in your browser only.
 - Host access to `https://*.instructure.com/*` — to apply the theme on Canvas, which Instructure hosts
   for most schools under that domain.
-- Host access to `https://*/*` and `scripting` — Canvas also runs on schools' own domains. The Canvas check
-  described above runs on https pages for that reason; when it finds Canvas, Glaze styles that site, and
-  only that site, the same way. The hostname is kept in the extension's local storage on your device.
+- Host access to `https://*/*` and `scripting` — Canvas also runs on schools' own domains, and Moodle always does.
+  The check described above runs on https pages for that reason; when it finds Canvas or Moodle, Glaze styles that
+  site, and only that site, the same way. The hostname is kept in the extension's local storage on your device.
   The same host access lets the gallery script above run on `https://frostdev.io/glaze/looks`; it adds no
   permission.
 

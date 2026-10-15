@@ -28,12 +28,17 @@
 //                      name=/path names the output; /path@selector clicks that first (a modal, the editor);
 //                      ?glaze_view=planner (or cards) shows the dashboard in that view without saving it;
 //                      ?glaze_lang=de serves a page as <html lang="de">, the language Glaze writes its own words in
+//   --lms moodle       the local Moodle (http://localhost:8081, ~/Projects/moodle-dev) instead of Canvas: its login, course
+//                      ids and default pages (dashboard, my courses, calendar, messages, grades, BIO 1100's course, grades and
+//                      activities, the login page); fixtures are named moodle-<page>.html. ?glaze_anon=1 loads a page signed
+//                      out (the login page) without ending the session.
 //   CHROME=/path/to/chrome runs that browser instead of Chrome for Testing.
 //
 //   node scripts/canvas-shots.js
 //   node scripts/canvas-shots.js --look Paper --look Midnight /courses/{bio}/modules /grades
 //   node scripts/canvas-shots.js --settings '{enabled:false}' --full /courses/{eng}
 //   node scripts/canvas-shots.js --settings '{enabled:false}' --html test/fixtures planner=/?glaze_view=planner
+//   node scripts/canvas-shots.js --lms moodle --audit --full
 const { chromium } = require('playwright');
 const { parseArgs } = require('util');
 const crypto = require('crypto');
@@ -45,8 +50,9 @@ const { redact, fixture } = require('./redact.js');
 const { auditFrame } = require('./audit.js');
 
 const root = path.join(__dirname, '..');
-const BASE = 'http://localhost:3000';
-const CREDS = path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
+let BASE = 'http://localhost:3000';
+let CREDS = path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
+let LMS = 'canvas';
 const CHROME = path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
 const COURSES = { bio: 'BIO 1100', eng: 'ENG 1100', math: 'MATH 1350', hist: 'HIST 2010' };
 // Pages loaded at once.
@@ -82,9 +88,12 @@ const parse = () => {
       look: { type: 'string', multiple: true }, settings: { type: 'string' }, out: { type: 'string' },
       width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' }, full: { type: 'boolean' }, 'course-menu': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
       user: { type: 'string', default: 'student' }, html: { type: 'string' }, audit: { type: 'boolean' }, perf: { type: 'string' },
+      lms: { type: 'string', default: 'canvas' },
     } });
   } catch (e) { die(`${e.message}\nSee --help.`); }
   const { values: opt, positionals } = parsed;
+  if (!['canvas', 'moodle'].includes(opt.lms)) die('--lms is canvas or moodle.');
+  if ((LMS = opt.lms) === 'moodle') { BASE = 'http://localhost:8081'; CREDS = path.join(os.homedir(), 'Projects/moodle-dev/credentials.env'); }
   if (opt.help) { console.log(fs.readFileSync(__filename, 'utf8').split(/\n(?!\/\/)/)[0].replace(/^\/\/ ?/gm, '')); process.exit(0); }
   const size = { width: +opt.width, height: +opt.height };
   if (!(size.width > 0 && size.height > 0)) die('--width and --height must be positive numbers.');
@@ -125,12 +134,45 @@ const login = async (page, user) => {
     .map((l) => l.split(/=(.*)/s).slice(0, 2).map((s) => s.trim().replace(/^(["'])(.*)\1$/, '$2'))));
   // No error text from here on: Playwright's call log can quote what was typed.
   try {
-    await page.goto(`${BASE}/login/canvas`);
     const who = user.toUpperCase();
+    if (LMS === 'moodle') {
+      await page.goto(`${BASE}/login/index.php`);
+      await page.fill('#username', cred[`${who}_USERNAME`]);
+      await page.fill('#password', cred[`${who}_PASSWORD`]);
+      // The first page in a new profile loads Moodle's ES modules one by one through PHP (about 20 s): the
+      // dashboard is waited for once, so every page after it starts warm.
+      await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60000 }), page.click('#loginbtn')]);
+      await page.goto(`${BASE}/my/`);
+      await page.waitForFunction(moodleSettled, null, { timeout: 90000 }).catch(() => {});
+      return;
+    }
+    await page.goto(`${BASE}/login/canvas`);
     await page.fill('input[name="pseudonym_session[unique_id]"]', cred[`${who}_EMAIL`]);
     await page.fill('input[name="pseudonym_session[password]"]', cred[`${who}_PASSWORD`] || cred.PASSWORD);
     await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20000 }), page.press('input[name="pseudonym_session[password]"]', 'Enter')]);
-  } catch { die(`Canvas login failed (is ${BASE} up, and the ${user} login right in ${CREDS}?)`); }
+  } catch { die(`${LMS} login failed (is ${BASE} up, and the ${user} login right in ${CREDS}?)`); }
+};
+
+// Moodle's pages are done when the scripts its own Behat runs wait for are (M.util.pending_js, in the page's world).
+const moodleSettled = () => document.readyState === 'complete' && window.M?.util?.pending_js?.length === 0;
+// Moodle: course ids from the service its dashboard calls (the page's sesskey, the session cookie), and BIO 1100's
+// first activity of each kind from its course page.
+const moodleLookup = async (context) => {
+  const my = await (await context.request.get(`${BASE}/my/`)).text();
+  const sesskey = my.match(/"sesskey":"(\w+)"/)?.[1] || die('Moodle did not show the dashboard; the login did not take.');
+  const res = await context.request.post(`${BASE}/lib/ajax/service.php?sesskey=${sesskey}&info=courses`, { data: [{ index: 0, methodname: 'core_course_get_enrolled_courses_by_timeline_classification', args: { classification: 'all', limit: 0, offset: 0, sort: 'fullname' } }] });
+  const courses = (await res.json())[0]?.data?.courses || [];
+  return { ids: Object.fromEntries(Object.entries(COURSES).map(([k, code]) => [k, courses.find((c) => c.shortname === code)?.id])), context };
+};
+const moodlePages = async ({ ids, context }) => {
+  if (!ids.bio) die(`Moodle has no course ${COURSES.bio}; the default pages need it (~/Projects/moodle-dev/reseed).`);
+  const home = await (await context.request.get(`${BASE}/course/view.php?id=${ids.bio}`)).text();
+  const mod = (name) => home.match(new RegExp(`/mod/${name}/view\\.php\\?id=(\\d+)`))?.[1] ?? die(`BIO 1100 has no ${name}.`);
+  return [['dashboard', '/my/'], ['my-courses', '/my/courses.php'], ['calendar', '/calendar/view.php?view=month'], ['upcoming', '/calendar/view.php?view=upcoming'],
+    ['messages', '/message/index.php'], ['drawer', '/my/', '[id^="message-drawer-toggle-"]'], ['grades', '/grade/report/overview/index.php'],
+    ['bio-home', '/course/view.php?id={bio}'], ['bio-grades', '/grade/report/user/index.php?id={bio}'], ['bio-assign', `/mod/assign/view.php?id=${mod('assign')}`],
+    ['bio-quiz', `/mod/quiz/view.php?id=${mod('quiz')}`], ['bio-forum', `/mod/forum/view.php?id=${mod('forum')}`], ['bio-page', `/mod/page/view.php?id=${mod('page')}`],
+    ['login', '/login/index.php?glaze_anon=1']];
 };
 
 // Course ids by placeholder, and the pages that go with the default set (ids change when Canvas is reseeded).
@@ -189,7 +231,7 @@ const snapshot = ([keep, coarse]) => {
   // Inline rules (InstUI's generated ones, the editor's skin) are most of a page's bytes and none of its markup.
   for (const s of doc.querySelectorAll('script, style')) s.textContent = '';
   for (const m of doc.querySelectorAll('meta[name^="csrf"]')) m.remove();
-  for (const i of doc.querySelectorAll('input[type="hidden"]')) if (/token|session|verifier|csrf/i.test(i.name)) i.setAttribute('value', '');
+  for (const i of doc.querySelectorAll('input[type="hidden"]')) if (/token|session|verifier|csrf|sesskey/i.test(i.name)) i.setAttribute('value', '');
   // Rows only: the head's run of stylesheets is what tells a Canvas page apart (brandable_css), so it stays whole.
   const body = doc.querySelector('body');
   for (const p of body ? [body, ...body.querySelectorAll('*')] : []) {
@@ -208,7 +250,7 @@ const FIXTURE_MAX = 150 * 1024;
 const saveHtml = async (page, file, url) => {
   let h;
   for (const level of [[12], [6], [3], [2], [3, 1], [2, 1], [1, 1]]) if ((h = redact(await page.evaluate(snapshot, level))).length <= FIXTURE_MAX) break;
-  fs.writeFileSync(file, fixture(url, h));
+  fs.writeFileSync(file, fixture(url, h, LMS));
   return h.length;
 };
 
@@ -225,16 +267,20 @@ const shoot = async ({ page, errors }, { label, settings, out, courseMenu, html,
   errors.length = 0;
   let note = '';
   try {
-    const res = await page.goto(BASE + url);
-    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => { note += ' (network never idle)'; });
+    const res = await page.goto(BASE + url, { timeout: 60000 });
+    // Moodle polls (messages, the session) and is never idle: its own test runner's signal instead, no script pending.
+    if (LMS === 'moodle') await page.waitForFunction(moodleSettled, null, { timeout: 30000 }).catch(() => { note += ' (Moodle never settled)'; });
+    else await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => { note += ' (network never idle)'; });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForFunction(revealed, null, { timeout: 3000 }).catch(() => { note += ' (reveal unfinished)'; });
     // Long enough for three.js to load and draw when a scene is on.
     await page.waitForTimeout(settings.enabled && settings.bg.kind === 'scene' ? 1500 : 400);
     const here = new URL(page.url());
-    if (res.status() >= 400 || here.pathname.startsWith('/login')) throw new Error(`HTTP ${res.status()}, ended at ${here.pathname}`);
+    if (res.status() >= 400 || (here.pathname.startsWith('/login') && !here.searchParams.has('glaze_anon'))) throw new Error(`HTTP ${res.status()}, ended at ${here.pathname}`);
     if (here.pathname + here.search !== url) note += ` (now ${here.pathname})`;
     await page.evaluate(() => window.scrollTo(0, 0));
+    // Moodle greets each kind of page with a user tour that dims it; ending it is what a student does once.
+    if (LMS === 'moodle') await page.locator('[data-role="end"]').first().click({ timeout: 1500 }).then(() => page.waitForTimeout(400), () => {});
     if (click) {
       await page.locator(click).first().click({ timeout: 5000 });
       // Off whatever was clicked, so no hover or tooltip is left in this or the tab's next shot.
@@ -261,7 +307,7 @@ const shoot = async ({ page, errors }, { label, settings, out, courseMenu, html,
       found.sort((x, y) => y.area - x.area);
       note += `\n${found.slice(0, 8).map((i) => `      ${String(i.area).padStart(7)}  ${i.kind.padEnd(10)} ${i.fg ? `${i.fg} on ${i.bg} ${i.contrast}:1` : i.bg}  ${i.frame ? `[${i.frame}] ` : ''}${i.el}`).join('\n')}`;
     });
-    if (html) note += ` html=${Math.round(await saveHtml(page, path.join(html, `canvas-${name}.html`), url) / 1024)}KB`;
+    if (html) note += ` html=${Math.round(await saveHtml(page, path.join(html, `${LMS}-${name}.html`), url) / 1024)}KB`;
     const errs = [...new Set(errors)];
     return { ok: true, audit: found && { look: label, page: name, url, issues: found }, line: `  ${url}  "${p.title}"  glaze-css=${p.css}  data-gz=${p.attrs}  errors=${errs.length ? `${errs.length}: ${errs.slice(0, 2).map((e) => e.slice(0, 100)).join(' | ')}` : 0}${note}` };
   } catch (e) { return { ok: false, line: `  ${url}  FAILED: ${e.message.split('\n')[0]}` }; }
@@ -325,7 +371,7 @@ const perfLoad = async (context, scratch, url, next) => {
   const page = await context.newPage();
   try {
     const cdp = await context.newCDPSession(page);
-    await page.goto(next ? `${BASE}/grades` : 'data:text/html,<body style="background:%23000">');
+    await page.goto(next ? `${BASE}${LMS === 'moodle' ? '/my/' : '/grades'}` : 'data:text/html,<body style="background:%23000">');
     if (next) await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     await cdp.send('Performance.enable');
@@ -385,11 +431,16 @@ const eachTab = async (tabs, items, fn) => {
     // ?glaze_view=: the dashboard draws the view named in its ENV, so the page is served with that one in
     // place of the saved preference. ?glaze_lang=: the page is served as <html lang> that language, which is what
     // Glaze reads (Canvas's own words stay as they are). Nothing is written to Canvas.
-    await context.route((u) => u.searchParams.has('glaze_view') || u.searchParams.has('glaze_lang'), async (route) => {
+    await context.route((u) => u.searchParams.has('glaze_view') || u.searchParams.has('glaze_lang') || u.searchParams.has('glaze_anon'), async (route) => {
       const u = new URL(route.request().url());
-      const view = u.searchParams.get('glaze_view'), lang = u.searchParams.get('glaze_lang');
-      u.searchParams.delete('glaze_view');
-      u.searchParams.delete('glaze_lang');
+      const view = u.searchParams.get('glaze_view'), lang = u.searchParams.get('glaze_lang'), anon = u.searchParams.has('glaze_anon');
+      for (const k of ['glaze_view', 'glaze_lang', 'glaze_anon']) u.searchParams.delete(k);
+      // Signed out: asked from here, outside the browser and its cookies, and the session it answers with is not kept.
+      if (anon) {
+        const res = await fetch(u.href);
+        const headers = Object.fromEntries([...res.headers].filter(([k]) => k !== 'set-cookie' && k !== 'content-encoding'));
+        return route.fulfill({ status: res.status, headers, body: await res.text() });
+      }
       const res = await route.fetch({ url: u.href });
       let body = await res.text();
       if (view) body = body.replace(/"dashboard_view":"\w+"/, `"dashboard_view":"${view}"`);
@@ -399,8 +450,8 @@ const eachTab = async (tabs, items, fn) => {
     await login(first, user);
     const tabs = [watch(first)];
     while (tabs.length < TABS) tabs.push(watch(await context.newPage()));
-    const found = await lookup(context);
-    const pages = (positionals.length ? positionals.map((p) => { const [, name, url, click] = p.match(PAGE); return [name || slug(url) || 'dashboard', url, click]; }) : await defaultPages(found))
+    const found = await (LMS === 'moodle' ? moodleLookup : lookup)(context);
+    const pages = (positionals.length ? positionals.map((p) => { const [, name, url, click] = p.match(PAGE); return [name || slug(url) || 'dashboard', url, click]; }) : await (LMS === 'moodle' ? moodlePages : defaultPages)(found))
       .map(([name, p, click]) => [name, fill(p, found.ids), click]);
     const base = `chrome-extension://${extensionId(ext)}`;
 

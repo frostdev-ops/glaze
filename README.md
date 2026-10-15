@@ -7,10 +7,10 @@
 
 # Glaze
 
-Glaze is a Chrome and Safari extension that restyles Blackboard Ultra and Canvas. It replaces the palette with one you
+Glaze is a Chrome and Safari extension that restyles Blackboard Ultra, Canvas and Moodle. It replaces the palette with one you
 control, reshapes the pages around it, and adds small helpers you can see at a glance. It works on any
 institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/` on its own
-domain, and on Canvas, which Glaze recognizes on any school's domain.
+domain, and on Canvas and Moodle, which Glaze recognizes on any school's domain.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
@@ -27,13 +27,14 @@ domain, and on Canvas, which Glaze recognizes on any school's domain.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
 - **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade and new-content badges, a what-if grade calculator that keeps your scores, a Ctrl+K command palette for courses, items, pages, settings and what's due this week (also in the popup), remembering your place in a course's content, a backup of what you type in Blackboard's editors, Download all, which saves a folder's files as one zip, and focus mode for course documents (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts, dark documents and hiding page parts you don't use (off by default).
 - **On Canvas** — the same extras, each where Canvas keeps the same thing: progress, previews, new-item badges, your place and Download all on Modules; score bars and percentages on Grades and Assignments; due-date status and urgency on Assignments, Modules and To Do; tint, a Look per course and card grades on the Dashboard; draft backup for new Inbox messages to individual users in uniquely named courses. Where Canvas has its own (what-if scores, editor recovery, course nicknames and colors, folder zips, unread counts), Glaze leaves it to Canvas, themed. Course progress counts module completion requirements, so a course without any shows no bar.
+- **On Moodle** — the theme on Moodle's Boost theme (Moodle 5; 4.x where its markup is the same): Dashboard, My courses, course and activity pages, grades, calendar, messages and the login page. Your course total on each course card, from Moodle's grades overview (points, a percentage or a letter, as your Moodle shows it); what's due this week from your Timeline, in the popup and the Ctrl+K palette, which also lists Moodle's pages, your courses and the course's tabs.
 - **Looks** — ten ready-made combinations (Graveyard and Pumpkin Patch are for Halloween) of palette, fonts, shape and background, one click each in the popup or the editor, or one for a single course.
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
 - **Looks gallery** — free Looks shared openly at [frostdev.io/glaze/looks](https://frostdev.io/glaze/looks). Use this Look in Glaze opens it in the editor's preview; save favorites, and go back with Previous Look from a history of the themes you wore. Both stay on your device.
 - **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
-- **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain.
+- **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain. Moodle is recognized by the keywords line its core writes in every page's head, together with the page id and layout it puts on the page's body.
 
 ## Install
 
@@ -45,7 +46,7 @@ domain, and on Canvas, which Glaze recognizes on any school's domain.
 2. Open `chrome://extensions`.
 3. Enable **Developer mode** (top right).
 4. Click **Load unpacked** and select the repository folder.
-5. Open your Blackboard Ultra or Canvas site and click the Glaze icon.
+5. Open your Blackboard Ultra, Canvas or Moodle site and click the Glaze icon.
 
 ## Safari
 
@@ -58,7 +59,7 @@ the frosted-glass blur needs Safari 18.
    (your own `~/Applications` if you aren't an administrator) and reopens from there. Dragging it into
    **Applications** works too. (A `.zip` of the same app is there too.)
 2. Glaze opens Safari's Extensions settings and shows an illustrated guide: tick Glaze, then allow it
-   on your Blackboard or Canvas site. The guide ticks off the first step as soon as Safari turns Glaze on.
+   on your Blackboard, Canvas or Moodle site. The guide ticks off the first step as soon as Safari turns Glaze on.
 
 The downloaded Mac app checks `https://frostdev.io/projects/glaze/appcast.xml` about once a day
 while Glaze is in use and downloads updates from GitHub. Sparkle system profiling is disabled.
@@ -132,7 +133,7 @@ listing as the Mac app; buying or installing on one platform covers the other.
 2. Turn Glaze on in **Settings › Apps › Safari › Extensions › Glaze** by switching on
    **Allow Extension**. On iOS 26.2 and newer, the guide's **Open Settings** button takes you to
    Safari's extension settings, and the guide ticks the step off as soon as Glaze is on.
-3. Open your Blackboard Ultra or Canvas site in Safari and tap the extensions button in the address bar (a puzzle
+3. Open your Blackboard Ultra, Canvas or Moodle site in Safari and tap the extensions button in the address bar (a puzzle
    piece; on iPhone it can be in the page menu at the left of the address). Tap **Glaze**, then **Always Allow…** and **Always Allow on This Website**, and reload the page.
 
 The popup and the editor are under the same button. The editor also opens from Settings › Apps › Safari ›
@@ -196,7 +197,7 @@ device. On Canvas it also keeps course names, codes and colors, unread-grade cou
 with site and account identifiers for badge records. Supported new Inbox drafts keep the body, subject and destination
 identifiers locally for up to 14 days. Your Looks history (the last 20 themes) and favorites stay on your device too;
 the Looks gallery is a website you visit yourself, and Glaze sends it nothing. Canvas's own what-if scores and editor recovery remain with Canvas.
-It has no analytics. The extension's read-only requests go to your own Blackboard or Canvas site
+It has no analytics. The extension's read-only requests go to your own Blackboard, Canvas or Moodle site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards;
 your course list and a course's items for the command palette and new-content badges), to Google Fonts or jsDelivr for a web

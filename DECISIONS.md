@@ -256,3 +256,14 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | A theme for history is colors, preset, auto, look and background; tooltips and hints stay the student's | Every setting | The same line theme codes and Looks draw. Auto light/dark comes back with the theme it belonged to. |
 | Gallery palettes are codes with colors only (`{c}`), which the 2.1+ decoder already accepts | A palette flag in the code | Applying one keeps the student's fonts and background; no format change. |
 
+
+## Moodle (W20, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Recognized by core's keywords meta in the head ("moodle, …") and the page id and layout core puts on `<body>`, both required; the host is then registered like a Canvas host, in its own list (`moodle`) | A hostname containing "moodle" or a `/course/view.php` address (another extension) | Moodle runs on any domain and any path; the meta alone also appears on blogs about Moodle. Its own list keeps Moodle hosts out of the Canvas list that Download all trusts. |
+| The theme is `moodle.css`, Boost's own variables remapped (Bootstrap 5's greys and body, Moodle's design-system tokens), plus classes for Bootstrap's rgb() utilities, literals and Bootstrap 4 | One rule per component | Boost's dark mode works the same way, so one remap covers almost every page in both palette directions. Moodle 4.x (Bootstrap 4) has few variables: its rules are kept to stable classes; not measured. |
+| Everything beyond the head gate loads on demand (`lib/moodle.js` parsing, `features/moodle.js` asking) | Moodle code in the first content script | The first script on Canvas and Ultra pages doesn't carry Moodle. |
+| Due list from `core_calendar_get_action_events_by_timesort` and courses from `core_course_get_enrolled_courses_by_timeline_classification`, through `/lib/ajax/service.php` with the page's session key from the log-out link | A web services token; `M.cfg` from the page's world | What Moodle's own Timeline and Course overview call, with no setup; both read only. The isolated world can't read `M.cfg`, and the log-out link carries the key on every signed-in page, and the site's root when Moodle is in a folder. |
+| Card grades from the server-rendered grades overview, read row by row, shown as Moodle formats them; a band only for a percentage | `gradereport_user_get_grade_items` (another extension) | That service isn't AJAX-enabled (`servicenotavailable`, measured), so another extension's Moodle card grades come back empty. Points carry no maximum there, so they get a neutral chip. |
+| No course menu, per-course tint or Look, and no keyboard shortcuts on Moodle yet | Generalizing the Canvas course keys | Each needs Moodle course keys threaded through content.js (seen courses, tint, Looks, the editor's list), more than this package's share of the first script. |
