@@ -52,7 +52,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const cleared = (key) => key && marks[key] !== was[key];
       for (const s of W.values()) {
         if (!s.rec || !cleared(s.key)) continue;
-        Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [] });
+        Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [], cut: (s.cut || 0) + 1 });
         s.what = C.whatOf(s.rec);
         s.v++;
       }
@@ -193,15 +193,22 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // alone), as of before they were read (st.oldAt) and against the record's last Clear all (lib/gradecalc.js moveLegacy):
   // seen, as read; keep, those still waiting for a grade. Shown here only once the worker says which came in; a failure
   // leaves both stores as they were, for the next page to try again.
-  const migrate = (st, old, keep) => send({ op: 'legacy', key: st.key, cid: st.cid, at: st.oldAt, seen: Object.fromEntries(Object.entries(old).map(([id, [v]]) => [id, v])), keep })
-    .then((x) => {
-      const add = (x?.ok ? x.moved || [] : []).filter((id) => old[id] && !(id in st.rec.s));
-      if (!add.length) return;
-      for (const id of add) st.rec.s[id] = old[id];
-      st.what = C.whatOf(st.rec);
-      st.v++;
-      whatIf();
-    });
+  // A reply that comes after a clear shows nothing (the clear took them too); one that comes after the gradebook was read
+  // again is checked against it as rebuild does, so a grade that came in meanwhile takes its old score away, with a word.
+  const migrate = (st, old, waiting) => {
+    const cut = st.cut;
+    return send({ op: 'legacy', key: st.key, cid: st.cid, at: st.oldAt, seen: Object.fromEntries(Object.entries(old).map(([id, [v]]) => [id, v])), keep: waiting })
+      .then((x) => {
+        const add = (x?.ok ? x.moved || [] : []).filter((id) => old[id] && !(id in st.rec.s));
+        if (st.cut !== cut || !add.length) return;
+        const r = C.reconcile({ s: Object.fromEntries(add.map((id) => [id, old[id]])) }, st.course);
+        Object.assign(st.rec.s, r.kept.s);
+        st.gone = [...st.gone, ...r.gone];
+        if (r.gone.length) { st.open = true; keep(st); } else st.what = C.whatOf(st.rec);
+        st.v++;
+        whatIf();
+      });
+  };
 
   const whatIf = () => {
     const old = document.getElementById('gz-calc');
@@ -375,7 +382,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     box.append(make('label', { className: 'gz-calc-target' }, before, target, rqd ? after.replace(/^\s*%/, '') : after), need);
 
     const clear = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Clear this course') });
-    clear.addEventListener('click', () => { st.rec = { s: {}, h: [], p: [], c: st.rec.c }; st.focus = 'summary'; redraw(); });
+    clear.addEventListener('click', () => { Object.assign(st, { rec: { s: {}, h: [], p: [], c: st.rec.c }, cut: (st.cut || 0) + 1 }); st.focus = 'summary'; redraw(); });
     const clearAll = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Clear all courses') });
     clearAll.addEventListener('click', () => send({ op: 'clear', key: st.key }).then((r) => {
       st.focus = 'summary';
@@ -384,7 +391,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       if (r?.ok) {
         for (const s of W.values()) {
           if (s.key !== st.key || !s.rec) continue;
-          Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [] });
+          Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [], cut: (s.cut || 0) + 1 });
           s.what = C.whatOf(s.rec);
           s.v++;
         }

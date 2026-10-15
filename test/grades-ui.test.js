@@ -890,6 +890,47 @@ test('Ultra what-if migration: a Clear all made while the old store was being re
   assert.deepEqual(store.data.whatIf, { _777_1: { _1_1: 5 } }, 'cleared, so gone from the old store too; other courses stay');
 });
 
+// Codex B4 fix verification: the worker's answer to the move held back until the test lets it (a slow reply).
+const lateMove = (store) => {
+  const late = [];
+  const real = (store.send = serviceWorker(store));
+  store.send = (m, s) => (m.op === 'legacy' ? real(m, s).then((r) => new Promise((ok) => late.push(() => ok(r)))) : real(m, s));
+  return () => { while (late.length) late.shift()(); };
+};
+test("Ultra what-if migration: a move answered after the gradebook brought that item's grade shows the grade, not the old score", async () => {
+  const store = shared({ whatIf: LEGACY() });
+  const release = lateMove(store);
+  const p = ultraPage({ store });
+  p.UI.render();
+  await settle(14);
+  await open(p);
+  p.books._101_1 = regraded({ _603_1: 50 }, 80);
+  p.UI.render();
+  await settle(10);
+  assert.deepEqual(totals(p).slice(0, 2), ['80%', '80%']);
+  release();
+  await settle(14);
+  assert.deepEqual(totals(p).slice(0, 2), ['80%', '80%'], 'the old 100 stays out');
+  assert.match(p.box().textContent, /Your grade for Lab Report 3 is in, so your what-if score for it is gone\./);
+  assert.equal(store.data[UKEY]?._101_1?.s?._603_1, undefined, 'and it leaves the store');
+});
+
+test('Ultra what-if migration: a move answered after a Clear all shows nothing, and a later edit keeps it cleared', async () => {
+  const store = shared({ whatIf: LEGACY() });
+  const release = lateMove(store);
+  const p = ultraPage({ store });
+  p.UI.render();
+  await settle(14);
+  await open(p);
+  const clear = await store.send({ type: 'glaze:whatif', op: 'clear', key: UKEY, at: U_NOW - 1 }, { id: WORKER_ID, tab: { id: 2 }, frameId: 0, url: `${UO}/ultra/grades` });
+  assert.deepEqual(clear, { ok: true });
+  release();
+  await settle(14);
+  assert.equal(totals(p)[1], '88%', 'not brought back on the page');
+  await typeScore(p, '_602_1', 80);
+  assert.deepEqual(Object.keys(store.data[UKEY]._101_1.s), ['_602_1'], 'nor by the next edit');
+});
+
 test('Ultra what-if: a course with no overall grade is an estimate from the share of points, and says so', async () => {
   const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
   p.UI.render();
@@ -1027,6 +1068,32 @@ test('Ultra syllabus import: a review left open while the page moved to another 
   await settle(20);
   assert.equal(Object.keys(p.store.data).filter((k) => k.startsWith('syllabus:')).length, 0, 'saved under neither course');
   assert.match(p.dlg().textContent, /Not saved: this page now shows another course\./);
+});
+
+test('Ultra syllabus import: a save that finishes after another course opened the dialog leaves that dialog open (Codex B4 fix verification)', async () => {
+  const p = sylPage();
+  const real = p.store.send;
+  const late = [];
+  p.store.send = (m, s) => (m.type === 'glaze:syllabus' ? real(m, s).then((r) => new Promise((ok) => late.push(() => ok(r)))) : real(m, s));
+  p.S.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  await pasteAndRead(p, 'Instructor: Dr. Course One');
+  byText(p.dlg(), 'Save').fire('click');
+  await settle(20);
+  p.loc.pathname = '/ultra/courses/_102_1/outline';
+  p.S.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  const b = p.dlg();
+  assert.equal(b?.open, true);
+  while (late.length) late.shift()();
+  await settle(20);
+  assert.match(p.store.data[`syllabus:${UO}/_900_1/_101_1`]?.prof?.name || '', /Course One/, 'the first is saved under its course');
+  assert.equal(p.dlg(), b, 'the new dialog stays');
+  assert.equal(b.open, true);
 });
 
 test('an Ultra page may change only its own site’s grade records, by its own ids', async () => {

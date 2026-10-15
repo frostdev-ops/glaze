@@ -168,8 +168,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     opener = document.activeElement;
     opened = who;
     dlg?.close();
-    dlg = attr(make('dialog', { id: 'gz-syl-dlg' }), { 'aria-labelledby': 'gz-syl-title' });
-    dlg.addEventListener('close', () => { reading?.abort(); dlg?.remove(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
+    const box = (dlg = attr(make('dialog', { id: 'gz-syl-dlg' }), { 'aria-labelledby': 'gz-syl-title' }));
+    // Its own close only: one closed as the next opens (close fires later) leaves the new one, its read and focus alone.
+    box.addEventListener('close', () => { box.remove(); if (dlg !== box) return; reading?.abort(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
     dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
     document.body.append(dlg);
     if (saved) review(fromSaved(saved), '');
@@ -318,6 +319,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   const review = (r, read) => {
     const w = opened; // the course this dialog is for, whatever the page shows by the time it is saved
+    const box = dlg; // and the dialog: a save that finishes after another opened leaves that one open
     const saved = !!r.saved;
     const p = r.prof;
     const say = status();
@@ -376,6 +378,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const tasks = ds.filter((d) => d.task);
       if (tasks.length && !await addTasks(tasks, w)) notes.push(t('The dates could not be added to To Do.'));
       if (notes.length) { say.textContent = `${t('Saved.')} ${notes.join(' ')}`; return; }
+      if (dlg !== box) return;
       dlg.close();
       draw(true);
       document.getElementById('gz-syl-h')?.focus();
