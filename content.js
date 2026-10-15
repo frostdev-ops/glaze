@@ -3257,9 +3257,11 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       });
     }
     applySettings();
-    onBody(() => {
+    onBody(async () => {
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
+      if (!ultra) await ready;
+      if (!settings.enabled || !links.length) return;
       syncFooter();
       startSweep();
       syncScene();
@@ -3305,13 +3307,13 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   if (!ultra) try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
   // Theme on before storage answers: most people leave it on, and this way the first paint is
   // already themed. If it turns out to be off, it comes straight back off.
-  enable();
-  load().then((s) => {
+  const ready = load().then((s) => {
     settings = s;
     tidyDrafts();
     if (!s.enabled) disable();
     else if (links.length) applySettings();
   });
+  enable();
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
   // save landing late can't undo an edit that is further along.
   if (isPreview) {
