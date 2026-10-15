@@ -227,18 +227,10 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await page.waitForSelector(tile('quotes'));
     await page.waitForTimeout(500);
     ok(JSON.stringify(await rect(tile('quotes'))) === JSON.stringify(kept), 'after a reload, where it was');
-    // The toolbar is in the page's header. Folding the panel takes only its column's widgets (the moved ones stay);
-    // Hide widgets takes them all, and Show widgets brings them back.
+    // The toolbar is in the page's header; Hide widgets takes every widget away, and Show widgets brings them back.
     ok(await page.evaluate(() => !!document.querySelector('div.base-courses-header-container div.base-header-tools > #gz-toolbar')), 'the toolbar is in the page header');
     const vis = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#gz-room section.gz-w')].map((e) => [e.dataset.tile, e.getClientRects().length > 0])));
-    // In the column: overlapping the panel's width (where its widgets keep Ultra's To Do clear).
-    const inCol = await page.evaluate(() => { const c = document.querySelector('#gz-panel .gz-dash-grid').getBoundingClientRect(); return Object.fromEntries([...document.querySelectorAll('#gz-room section.gz-w')].map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.tile, r.right > c.left && r.left < c.right]; })); });
-    await page.click('#gz-panel .gz-panel-toggle');
-    await page.waitForTimeout(200);
-    let v = await vis();
-    ok(Object.keys(inCol).every((k) => v[k] === !inCol[k]) && Object.values(inCol).some(Boolean) && Object.values(inCol).some((x) => !x), `folded: the column's widgets go, the others stay (in the column ${JSON.stringify(inCol)}; shown ${JSON.stringify(v)})`);
-    await shot('courses-folded-light-1280');
-    await page.click('#gz-panel .gz-panel-toggle');
+    ok(await page.evaluate(() => !document.querySelector('#gz-panel h2, #gz-panel .gz-panel-toggle')), 'no Notes and widgets heading to fold');
     await page.click('#gz-toolbar .gz-dash-hide');
     await page.waitForTimeout(200);
     v = await vis();

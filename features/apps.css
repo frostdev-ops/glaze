@@ -241,23 +241,13 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 
 /* ---- Ultra: Glaze's panel on the Courses page (features/widgets.js), first in the right column above Ultra's To Do
    (owner decision A). Ultra's column is 320px wide; on a narrow window Ultra moves it under the courses at full width,
-   so the grid lays out by the panel's own width. The heading's button folds it away. */
+   so the grid lays out by the panel's own width. No heading: Hide widgets, in the toolbar, takes them away. */
 #gz-panel { margin: 0 0 calc(1rem * var(--gz-space, 1)); padding: 1rem 1rem 0.25rem; font-family: var(--gz-font); color: var(--gz-ink); }
-#gz-panel .gz-panel-head { margin: 0 0 0.5rem; font-size: 1rem; }
-#gz-panel .gz-panel-toggle {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; padding: 0.35rem 0.25rem; border: 0; border-radius: var(--gz-radius-sm);
-  font: 600 1rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); background: none; cursor: pointer; text-align: start;
-}
-#gz-panel .gz-panel-toggle::after { content: ""; width: 0.5rem; height: 0.5rem; margin-inline-end: 0.35rem; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(-135deg); }
-#gz-panel .gz-panel-toggle[aria-expanded="false"]::after { transform: rotate(45deg); }
-html:not([data-gz-motion="off"]) #gz-panel .gz-panel-toggle::after { transition: transform 0.2s; }
-#gz-panel .gz-panel-toggle:hover { color: var(--gz-accent); }
 #gz-panel :is(button, a, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #gz-panel [hidden] { display: none !important; }
 :is(#gz-room, #gz-float, #gz-panel, #gz-toolbar)[hidden], :is(#gz-room, #gz-dash) .gz-w[hidden] { display: none !important; }
-/* No widget in the column: no heading and no gap there (the sides stay, so the column's measure doesn't move). */
-#gz-panel[data-empty] { margin-bottom: 0; padding-block: 0; }
-#gz-panel[data-empty] .gz-panel-head { display: none; }
+/* Better To Do in its tile on the Courses page: Ultra's own To Do steps aside (features/widgets.js sets the mark). */
+html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
 /* The Courses page's toolbar, in Ultra's header tools beside the page's title. */
 #gz-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.4rem; font-family: var(--gz-font); font-size: 0.875rem; line-height: 1.4; color: var(--gz-ink); }
 #gz-toolbar :is(button, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
