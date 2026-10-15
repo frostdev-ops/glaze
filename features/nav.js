@@ -161,7 +161,9 @@ function GZ_ULTRA_OVERLAY(X, repaint) {
     const next = on && X.nav().collapsed && document.querySelector('nav[class*="makeStylesnavigation"], nav#base_tools, nav:has(> #base_tools)')?.closest('.MuiDrawer-paper');
     if (next !== paper) {
       cleanup(); if (!next) return; paper = next;
-      button = document.createElement('button'); button.type = 'button'; button.className = 'gz-nav-expand'; button.textContent = '›';
+      button = document.createElement('button'); button.type = 'button'; button.className = 'gz-nav-expand';
+      // A drawn chevron: the '›' glyph sat low and off-centre in the round button, by each font's own metrics.
+      button.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       button.setAttribute('aria-label', X.t('Expand global navigation')); button.setAttribute('aria-expanded', 'false'); button.addEventListener('click', toggle);
       (paper.querySelector('header') || paper).append(button);
       for (const [name, fn] of [['pointerenter', pointerEnter], ['pointerleave', pointerLeave], ['focusin', focusIn], ['focusout', focusOut], ['keydown', keydown]]) paper.addEventListener(name, fn);
