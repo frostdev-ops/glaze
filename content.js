@@ -38,7 +38,7 @@
   const C = GZ_COLOR;
   const html = document.documentElement;
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -56,7 +56,7 @@
   const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css']];
   // What only one site does: its part puts its own over these ("the site's own part", below). They're Moodle's: nothing.
   const no = () => {};
-  const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, still: no, stop: no, renderProgress: no,
+  const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,
     renderNew: no, renderCalc: no, openNew: no, paintCourses: no, tintOf: no, courseColor: no, paintNav: no, syncNav: no, nickOf: () => '', syncNames: no,
     unname: no, holding: () => false, syncTodo: no, syncCardTasks: no, syncWidgets: no, syncRemind: no, syncSyl: no, syncInsights: no, ctx: {} };
 
@@ -298,11 +298,14 @@
   const need = (file, ready) => {
     if (!loading.has(file)) {
       const p = ready() ? Promise.resolve() : isPreview ? Promise.reject(new Error('not in the preview'))
-        : chrome.runtime.sendMessage({ type: 'glaze:load', files: [file], doc: docId }).then((r) => {
+        : Promise.resolve().then(() => {
+          if (!chrome.runtime?.id) throw new Error('reloaded');
+          return chrome.runtime.sendMessage({ type: 'glaze:load', files: [file], doc: docId });
+        }).then((r) => {
           if (!r?.ok) throw new Error(r?.error || 'not loaded');
           if (!ready()) throw new Error('ran, but not ready');
         });
-      p.catch(() => setTimeout(() => { if (loading.get(file) === p) loading.delete(file); }, 60000));
+      p.catch(() => { if (chrome.runtime?.id) setTimeout(() => { if (loading.get(file) === p) loading.delete(file); }, 60000); });
       loading.set(file, p);
     }
     return loading.get(file);
@@ -339,7 +342,7 @@
   // (content-ultra.js). Absolute URLs: Ultra's <base href> points at its CDN.
   // Canvas's REST API is the same thing under /api/v1 (capi): its string-id JSON keeps long ids exact, and an
   // older Canvas starts a response with `while(1);`.
-  const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept } })
+  const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', redirect: 'error', headers: { accept } })
     .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
   // The Canvas course this page is in (/courses/:id/...), or undefined.
@@ -407,15 +410,14 @@
     X.syncSyl();
     X.syncInsights();
   };
-  // ---- page loads ------------------------------------------------------------------------------
-  // Ultra holds a page's container hidden while it is built (X.gate, X.still: content-ultra.js), from here, so
-  // it's held before it's first painted.
-
   // Throttle, not debounce: Ultra never stops mutating (ripples, popper repositioning), and a
   // debounce that restarts on every record would put the sweep off indefinitely.
   const schedule = (records) => {
     // Cut off by a reload of Glaze: stop watching, and every GZ_CTX.on() feature stops too.
     if (!chrome.runtime?.id) { observer?.disconnect(); observer = null; return; }
+    // Native-parent removals still need remount/teardown; only changes inside our UI are irrelevant.
+    if (ultra) records = records.filter((r) => !r.target.closest?.('[id^="gz-"]'));
+    if (!records.length) return;
     X.lift();
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {
@@ -427,13 +429,11 @@
         continue;
       }
       if (r.type === 'attributes') { dirty.add(r.target); continue; }
-      // Here, not in the throttled pass: a page must be held before it's first painted.
       for (const n of r.addedNodes) {
         if (n.nodeType !== 1) continue;
         dirty.add(n);
-        if (ultra) X.gate(n); // holding a page while it loads is Ultra's
+        if (ultra) X.gate(n); // native additions may need first-paint nav discovery
       }
-      if (ultra) X.still(r.target);
     }
     // Too many separate subtrees to be worth tracking: one full pass is cheaper.
     if (dirty.size > 500) { dirty.clear(); full = true; }
@@ -873,11 +873,12 @@
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
   // Whether a key is one for the shortcuts: switched on, no modifier, not typing, and on Canvas and Moodle not repeated, not
   // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too, and Moodle's pages).
-  const keyOn = (e) => !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)
+  const keyOn = (e) => !!chrome.runtime?.id && !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)
     && (ultra || !(e.defaultPrevented || e.repeat || !(moodle || GZ_PAGE.canvasKeys(location.pathname)) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')));
   let keysWaiting = null; // the keys pressed while keys.js loads, as they were: handed over in order when it's in
   if (window.top === window) {
     document.addEventListener('keydown', (e) => {
+      if (!chrome.runtime?.id) return;
       if (globalThis.GZ_KEYS) return GZ_KEYS.key(e);
       const was = { key: e.key, target: e.target, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, repeat: e.repeat, at: Date.now(), preventDefault() {}, stopImmediatePropagation() {} };
       if (keysWaiting) {
@@ -901,7 +902,7 @@
   let cmdWanted = null; // while palette.js loads: open it when it's in? Each press meanwhile turns that over.
   if (window.top === window) {
     document.addEventListener('keydown', (e) => {
-      if (e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
+      if (!chrome.runtime?.id || e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
       // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
       if (globalThis.GZ_CMD?.isOpen()) { e.preventDefault(); e.stopPropagation(); GZ_CMD.close(); return; }
       if (cmdWanted !== null) { e.preventDefault(); e.stopPropagation(); cmdWanted = !cmdWanted; return; }
@@ -910,7 +911,7 @@
       e.preventDefault();
       e.stopPropagation();
       cmdWanted = true;
-      need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (cmdWanted && observer && settings.enhance.palette) GZ_CMD.open(); }, () => {}).finally(() => { cmdWanted = null; });
+      need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (cmdWanted && chrome.runtime?.id && observer && settings.enhance.palette) GZ_CMD.open(); }, () => {}).finally(() => { cmdWanted = null; });
     }, true);
   }
 
@@ -971,16 +972,16 @@
     };
   };
   const syncScene = () => {
-    if (!settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
+    if (!chrome.runtime?.id || !settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
     if (scene) return scene.update(sceneOpts());
     sceneLoad ||= import(chrome.runtime.getURL('lib/scene.js'));
     sceneLoad.then((mod) => {
-      if (scene || !links.length || worn.bg.kind !== 'scene') return;
+      if (!chrome.runtime?.id || scene || !links.length || worn.bg.kind !== 'scene') return;
       sceneCanvas = document.createElement('canvas');
       sceneCanvas.id = 'gz-scene';
       sceneCanvas.setAttribute('aria-hidden', 'true');
       placeScene();
-      scene = mod.start(sceneCanvas);
+      scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id);
       scene.update(sceneOpts());
     }).catch(() => { sceneFailed = true; stopScene(); });
   };
@@ -1370,7 +1371,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
 
   // The helpers a file loaded by need() may use (features/*.js): this frame's, read through one name. The part's are
   // asked of it when called, so a part that comes late still answers.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer,
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf,
     nickOf: (cid) => X.nickOf(cid), courseList: () => courseList, courseColors, varText, cardUI,

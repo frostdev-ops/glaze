@@ -17,19 +17,25 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     let pending = null, closed = false;
     const close = () => {
       if (closed) return;
-      closed = true; clearInterval(ping); signal.removeEventListener('abort', close); port.disconnect();
+      closed = true; clearInterval(ping); signal.removeEventListener('abort', close);
+      try { port.disconnect(); } catch { /* already disconnected or reloaded */ }
       pending?.reject(signal.reason || new DOMException('Aborted', 'AbortError')); pending = null;
     };
+    const post = (m) => {
+      if (closed) return;
+      if (!chrome.runtime?.id) return close();
+      try { port.postMessage(m); } catch { close(); }
+    };
     // Active messages, rather than an idle open port, keep an MV3 worker alive during slow streams.
-    const ping = setInterval(() => { if (!closed) port.postMessage({ type: 'ping' }); }, 15000);
+    const ping = setInterval(() => { if (!closed) post({ type: 'ping' }); }, 15000);
     signal.addEventListener('abort', close, { once: true });
-    port.onDisconnect.addListener(() => { void chrome.runtime.lastError; if (!closed) { pending?.resolve(null); pending = null; close(); } });
+    port.onDisconnect.addListener(() => { if (chrome.runtime?.id) void chrome.runtime.lastError; if (!closed) { pending?.resolve(null); pending = null; close(); } });
     port.onMessage.addListener((m) => {
       if (!pending) return;
       if (m.type === 'chunk') {
         const raw = atob(m.data), data = Uint8Array.from(raw, (c) => c.charCodeAt(0));
         pending.chunks.push(data); pending.size += data.length;
-        port.postMessage({ type: 'ack' });
+        post({ type: 'ack' });
       } else if (m.type === 'done') {
         const data = new Uint8Array(pending.size); let at = 0;
         for (const c of pending.chunks) { data.set(c, at); at += c.length; }
@@ -41,7 +47,7 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     });
     return { close, read: (url) => new Promise((resolve, reject) => {
       if (closed || signal.aborted) return reject(signal.reason || new DOMException('Aborted', 'AbortError'));
-      pending = { resolve, reject, chunks: [], size: 0 }; port.postMessage({ type: 'file', url });
+      pending = { resolve, reject, chunks: [], size: 0 }; post({ type: 'file', url });
     }) };
   };
   const jobs = new Map(); // folder id -> { ctl, label, pct, done }

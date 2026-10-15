@@ -126,7 +126,7 @@ test('CSS sidebar filters stay equal to the shared on-demand image filters', () 
 
 test('late words start the sidebar once; ordinary mutation passes do not repeat it', () => {
   const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
-  const chunk = source.slice(source.indexOf('  const flush = () => {'), source.indexOf('  // ---- page loads'));
+  const chunk = source.slice(source.indexOf('  const flush = () => {'), source.indexOf('  // Throttle, not debounce:'));
   let ready = false, calls = 0;
   const ctx = { timer: 1, dirty: new Set(), full: false, wordsLate: true, document: { body: {} }, tip: null, tinted: null, looked: null, words: () => ready, outermost: () => [], tintKey: () => null, lookHere: () => null, X: { syncNav: () => calls++ } };
   for (const name of ['sweepAll','sweepRoots','tagExtras','themeEditors','applySettings','placeScene','keepPlace','watchDrafts','syncDownloads','syncDocTools','syncCourseMenu']) ctx[name] = () => {};
