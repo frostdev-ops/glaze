@@ -1723,7 +1723,6 @@
   "Reset item appearance": "Réinitialiser l’apparence des éléments",
   "Item style": "Style des éléments",
   "Tile": "Tuile",
-  "Pill": "Pilule",
   "Show item backgrounds": "Afficher le fond des éléments",
   "Active item indicator": "Indicateur de l’élément actif",
   "Bar": "Barre",

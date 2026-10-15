@@ -12,13 +12,16 @@
   #site-wrap { min-height: 100vh; display: grid; grid-template-columns: var(--gz-nav-width, 200px) minmax(0, 1fr); }
   #site-wrap > section { grid-column: 2; }
   .MuiDrawer-root { grid-column: 1; grid-row: 1 / 3; min-width: 0; }
-  .MuiDrawer-paper { width: var(--gz-nav-width, 200px); min-height: 100vh; display: flex; flex-direction: column; }
+  .MuiDrawer-paper { box-sizing: border-box; width: var(--gz-nav-width, 200px); min-height: 100vh; display: flex; flex-direction: column; }
   .makeStylesfooter-preview { margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; font-size: 11px; }
   .MuiListItemButton-root { display: flex; align-items: center; gap: 12px; }
   .makeStylesnavigation-preview ul { list-style: none; padding: 0; }
   .makeStylesnavigation-preview svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; }
   html[data-gz-nav-collapsed] #site-wrap { grid-template-columns: 80px minmax(0, 1fr); }
+  html[data-gz-nav-collapsed] .MuiDrawer-root { position: relative; }
   html[data-gz-nav-collapsed] .MuiDrawer-paper { width: 80px; }
+  /* The narrow editor frame previews the desktop overlay without changing its layout column. */
+  html[data-gz-nav-collapsed][data-gz-nav-expanded] .MuiDrawer-paper { position: absolute; inset: 0 auto auto 0; z-index: 1300; width: var(--gz-nav-width, 200px); min-height: 100%; box-shadow: var(--gz-shadow); }
   #base_tools { display: flex; gap: 8px; padding: 8px; }
   #base_tools a { display: flex; align-items: center; gap: 6px; padding: 8px; text-decoration: none; }
   #base_tools svg { width: 20px; height: 20px; }

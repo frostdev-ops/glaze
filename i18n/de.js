@@ -1723,7 +1723,6 @@
   "Reset item appearance": "Aussehen der Einträge zurücksetzen",
   "Item style": "Eintragsstil",
   "Tile": "Kachel",
-  "Pill": "Kapsel",
   "Show item backgrounds": "Hintergründe der Einträge anzeigen",
   "Active item indicator": "Markierung des aktiven Eintrags",
   "Bar": "Balken",

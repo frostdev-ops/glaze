@@ -617,7 +617,7 @@ kept on the device only. Where it sits was agreed with B5 (Dashboard panel) in t
 
 The fresh Codex review rechecks Next due's widget, page, visibility and extension context before its planner request
 and after awaits. Obsolete reads release the refresh throttle; failed reads keep the error visible and become retryable
-on the normal widget tick. Widget clocks stop when the extension context is invalidated. The delayed-account pet
+on the normal widget tick, with a separate one-minute failure backoff retained across remounts for the same account/range. Widget clocks stop when the extension context is invalidated. The delayed-account pet
 snapshot witness already passes: JavaScript resolves the assignment's object before awaiting its value.
 
 | Choice | Alternative | Why |

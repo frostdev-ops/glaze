@@ -28,7 +28,7 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
     if (X.site === 'ultra' && on && n.labelOverflow === 'shrink' && (!n.collapsed || overlay?.open()) && (n.labels !== 'icons' || overlay?.open())) {
       fitObserver ||= new ResizeObserver(() => { if (!fitFrame) fitFrame = requestAnimationFrame(fitLabels); });
       for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a[href], .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(footer, [class*="makeStylesfooter"]) a[href]')) {
-        const label = a.querySelector('.MuiListItemText-root, span:not(:has(svg))') || a;
+        const label = a.querySelector('.MuiTypography-root') || a.querySelector('.MuiListItemText-root, span:not(:has(svg))') || a;
         if (label && !fitted.has(a)) { fitted.set(a, label); fitObserver.observe(a); }
       }
       fitLabels();
@@ -182,7 +182,7 @@ function GZ_ULTRA_RAIL(X) {
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const captured = new Map(), custom = new Map();
   let config = N.clean(), active = false, host, top, bottom, signature = '', clock = 0, logo = null, logoId = '', rev = 0, reads = 0, local = {}, W, P, icons, iconRead;
-  let nextItems = [], nextAt = 0, nextBusy = false, nextError = false;
+  let nextItems = [], nextAt = 0, nextBusy = false, nextError = false, nextRetry = { key: '', at: 0 };
   let timerPending = false, advanced = '', timerFailed = '';
   const icon = (name) => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -245,20 +245,21 @@ function GZ_ULTRA_RAIL(X) {
   };
   const refreshNext = async () => {
     const token = rev, read = reads, url = location.href;
+    const start = new Date(); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 7);
+    const key = `${local.todoCache?.key || location.origin} ${+start}`;
     const current = () => chrome.runtime?.id && active && X.on() && X.settings().enabled && token === rev && read === reads && url === location.href && document.visibilityState !== 'hidden' && config.widgets.some((w) => w.id === 'next' && w.on);
-    if (isPreview || nextBusy || Date.now() - nextAt < 120000 || !current()) return;
+    if (isPreview || nextBusy || Date.now() - nextAt < 120000 || nextRetry.key === key && Date.now() < nextRetry.at || !current()) return;
     nextBusy = true; nextAt = Date.now();
     try {
       await Promise.all([X.need('lib/ultra.js', () => globalThis.GZ_ULTRA), X.need('lib/todo.js', () => globalThis.GZ_TODO)]);
       if (!current()) return;
-      const start = new Date(); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 7);
       const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache);
       if (!current()) return;
       const [raw, options] = await Promise.all([get('local', plan.key), get('sync', 'todo')]);
       if (!current()) return;
       const data = GZ_TODO.clean(raw[plan.key]), mode = GZ_SANITIZE(options).todo.done;
       nextItems = plan.items.filter((i) => i && !i.ov?.dismissed && !GZ_TODO.isDone(i, mode, data.items[`${i.type}:${i.id}`]?.done)); nextError = false;
-    } catch { if (current()) { nextItems = []; nextAt = 0; nextError = true; } }
+    } catch { nextRetry = { key, at: Date.now() + 60000 }; if (current()) { nextItems = []; nextAt = 0; nextError = true; } }
     finally {
       const fresh = current();
       if (fresh) drawWidgets(); else nextAt = 0;

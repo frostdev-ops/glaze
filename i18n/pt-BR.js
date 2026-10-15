@@ -1723,7 +1723,6 @@
   "Reset item appearance": "Redefinir aparência dos itens",
   "Item style": "Estilo dos itens",
   "Tile": "Bloco",
-  "Pill": "Cápsula",
   "Show item backgrounds": "Mostrar fundos dos itens",
   "Active item indicator": "Indicador do item ativo",
   "Bar": "Barra",

@@ -1723,7 +1723,6 @@
   "Reset item appearance": "Restablecer apariencia de los elementos",
   "Item style": "Estilo de los elementos",
   "Tile": "Mosaico",
-  "Pill": "Cápsula",
   "Show item backgrounds": "Mostrar fondos de los elementos",
   "Active item indicator": "Indicador del elemento activo",
   "Bar": "Barra",

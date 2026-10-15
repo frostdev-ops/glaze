@@ -1026,9 +1026,9 @@ html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="
 html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(.MuiListItemText-root, .MuiTypography-root, a > span:not(:has(svg))) {
   display: block; max-width: 100% !important; font: inherit !important; white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important; hyphens: none !important; overflow: hidden; text-overflow: ellipsis;
 }
-html[data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a { height: auto !important; max-height: max(var(--gz-nav-height), calc(var(--gz-nav-text) * 2.6 + 12px)); }
+html[data-gz-nav-brand][data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a { height: auto !important; max-height: max(var(--gz-nav-height), calc(var(--gz-nav-text) * 2.6 + 12px)); }
 html[data-gz-nav-overflow="wrap"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(.MuiTypography-root, a > span:not(:has(svg, .MuiTypography-root))) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal !important; }
-html[data-gz-nav-overflow="shrink"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a { font-size: var(--gz-nav-fit, 10px) !important; }
+html[data-gz-nav-brand][data-gz-nav-overflow="shrink"] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a { font-size: var(--gz-nav-fit, 10px) !important; }
 html[data-gz-nav-style="pill"] { --gz-nav-item-radius: 999px; }
 html[data-gz-nav-style="flat"] { --gz-nav-item-radius: 0; }
 html[data-gz-nav-background] { --gz-nav-item-bg: var(--gz-surface); }

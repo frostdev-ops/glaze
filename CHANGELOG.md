@@ -6,9 +6,6 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
-- **Ultra navigation:** Next due stops pending work when its widget or page changes, retries failed reads on its next
-  clock tick, and invalidated extension clocks stop scheduling callbacks.
-
 ### Fixed
 - Ultra route changes show immediately instead of waiting behind Glaze's separate loading gate. Internal widget
   updates no longer trigger native-page sweeps, and an unchanged gradebook keeps its successful empty late-status answer.
@@ -31,7 +28,8 @@ All notable changes to Glaze are documented here. The format follows
   the real Ultra nav rules, with compact rows, ellipsis/wrap/shrink labels, tile/pill/flat items, active indicators,
   logo alignment and footer controls, section resets, drag/keyboard reordering and a collapsed-rail hover/focus/touch overlay
   that keeps page content in place. Navigation settings and custom links
-  are included in Export all.
+  are included in Export all. Next due stops pending reads when its widget or page changes and backs off failed reads
+  for a minute; callbacks from an invalidated extension stop scheduling.
 
 - **Optional encrypted share sessions.** Create/join by pasted invite, copy view/edit invites, see encrypted editing-device last-seen information, pause/resume, leave locally, creator deletion and opt-in one-year expiry. Selected notes/folders and encrypted files, the current Look, and selected custom tasks/plans stay copied locally and catch up when reopened. Looks apply only by explicit choice; joined data never replaces existing app items. Recovery can re-upload retained files after a relay restore. Notes import/Export all now use an extension-only backup surface; all settings/notes backups always include session keys and creator delete tokens with a private-backup warning. On-demand only, with no LMS first-script increase or new dependencies. Relay deployment and native Safari/Firefox live checks remain separate.
 

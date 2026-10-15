@@ -1723,7 +1723,6 @@
   "Reset item appearance": "Uiterlijk van items herstellen",
   "Item style": "Itemstijl",
   "Tile": "Tegel",
-  "Pill": "Pil",
   "Show item backgrounds": "Itemachtergronden tonen",
   "Active item indicator": "Aanduiding actief item",
   "Bar": "Balk",
