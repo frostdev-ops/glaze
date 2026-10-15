@@ -26,7 +26,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   };
   const watch = (p, then) => {
     if (!p || typeof p.then !== 'function' || watched.has(p)) return;
-    watched.add(p); p.then((v) => { if (live()) then(v); }, () => {});
+    watched.add(p); p.then((v) => { if (live()) then(v); else watched.delete(p); }, () => watched.delete(p));
   };
   const sync = (changed = notify) => {
     notify = changed;
@@ -83,6 +83,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     const details = make('div', { className: 'element-details' }, term, link, code, grade, progress, badges);
     const menu = make('button', { type: 'button', className: 'gz-cm-btn', textContent: '⋯' });
     menu.id = `gz-w-cm-${id}`; menu.dataset.cid = id;
+    menu.setAttribute('aria-haspopup', 'dialog'); menu.setAttribute('aria-expanded', 'false');
     const card = make('article', { className: 'gz-course-card' }, banner, details, menu);
     card.dataset.courseId = id;
     body.append(card);
@@ -96,6 +97,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       if (menu.title !== label) { menu.title = label; menu.setAttribute('aria-label', label); }
       const menuOff = !ctx.settings().enhance.coursemenu || !ctx.courseList()[id];
       if (menu.hidden !== menuOff) menu.hidden = menuOff;
+      if (!menuOff && menu.parentNode !== card) card.append(menu);
       const native = nativeCards.get(id);
       const source = native?.querySelector('progress, [role="progressbar"]');
       const max = source?.max || +source?.getAttribute('aria-valuemax'), value = source?.value ?? +source?.getAttribute('aria-valuenow');

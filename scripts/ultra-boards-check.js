@@ -210,7 +210,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     ok(guides >= 1, `a guide shows on the line it meets (${guides})`);
     await shot('courses-drag-guide-light-1280');
     await page.mouse.up();
-    await until(layout, (l) => l?.boards?.courses?.find((x) => x.id === 'timer')?.x !== null, 'timer drag not saved');
+    await until(layout, (l) => Number.isFinite(l?.boards?.courses?.find((x) => x.id === 'timer')?.x), 'timer drag not saved');
     await stable();
     const tm = await rect(tile('timer'));
     ok(Math.abs(tm.top - n.top) < 1 && Math.abs(tm.left - (n.right + 16)) < 1, 'it snaps beside the other tile, tops lined up');
@@ -448,7 +448,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     for (const board of ['courses', 'dash', 'pages']) for (const x of base.boards[board]) x.on = false;
     const courseTile = 'section.gz-w[data-tile^="course:"]';
     for (const preset of ['Paper', 'Frost']) for (const width of [1280, 375]) {
-      await store(settingsFor(preset, { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: false } }), { ...notes, widgetLayout: base });
+      await store(settingsFor(preset, { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: false, cardTasks: true, overall: true, coursemenu: true, newgrades: true, newcontent: true } }), { ...notes, widgetLayout: base, ucards: {} });
       await page.setViewportSize({ width, height: width < 768 ? 2400 : 1400 });
       await page.goto(`${O}/ultra/course`);
       await page.waitForSelector('#gz-toolbar .gz-dash-edit');
@@ -464,6 +464,13 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       ok(await page.locator(courseTile).count() >= native, `B10 ${preset} ${width}: each loaded course is a tile`);
       ok(await page.evaluate(() => document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display === 'none'), 'B10: native list steps aside');
       ok(await page.locator('article.course-element-card').count() === native, 'B10: React keeps all its nodes');
+      await opts.evaluate(() => chrome.storage.sync.set({ ucards: { ['ultra:https://bb.school.test/_101_1']: { k: 'gradient', c: '#aa2244', d: '#2255aa', a: 45 } }, ulinks: { ['ultra:https://bb.school.test/_101_1']: [{ n: 'Course calendar', u: 'https://bb.school.test/ultra/calendar', i: 'calendar' }] } }));
+      await page.waitForSelector(`${courseTile} article[data-gz-card="gradient"]`);
+      ok(await page.locator(`${courseTile} .gz-bm a`).count() > 0, 'B10: existing bookmark and style painter applies');
+      const menuButton = page.locator(`${courseTile} .gz-cm-btn`).first();
+      await menuButton.click(); await page.waitForSelector('#gz-cm');
+      ok(await page.locator('#gz-cm').count() === 1, 'B10: existing course menu opens');
+      await page.keyboard.press('Escape');
       const geometry = await page.locator(courseTile).evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, term: e.querySelector('.gz-course-term').textContent }; }));
       ok(geometry.every((a) => a.l >= 0 && a.r <= width && geometry.every((b) => a === b || a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t)), `B10 ${preset} ${width}: cards fit without overlap`);
       ok(requests.length === count, `B10 ${preset} ${width}: adding cards starts no requests (${requests.length - count})`);
@@ -479,7 +486,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       if (width === 1280) {
         const before = await first.boundingBox();
         await first.locator('.gz-w-grip').focus(); await page.keyboard.press('ArrowDown');
-        await until(layout, (l) => l.boards.courses.find((x) => x.id === key)?.y !== null, 'course move not saved');
+        await until(layout, (l) => Number.isFinite(l.boards.courses.find((x) => x.id === key)?.y), 'course move not saved');
         await stable();
         const after = await first.boundingBox();
         ok(Math.abs(after.y - before.y - 16) < 1, 'B10: keyboard movement uses the shared grip');

@@ -759,8 +759,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const C = globalThis.GZ_COURSE_CARDS;
     if (!C) return;
     const available = C.list().filter((c) => !lay.boards[board].some((x) => x.id === c.key && x.on));
-    const count = lay.boards[board].filter((x) => W.course(x.id)).length;
-    const room = Math.max(0, W.COURSE_MAX - count);
+    const count = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin).length;
+    const room = Math.max(0, Math.min(W.COURSE_MAX - count, W.COURSE_TOTAL - lay.boards[board].filter((x) => W.course(x.id)).length));
     if (board === 'courses') {
       add.append(button(t('+ Course cards'), () => {
         nativeShown = false;
@@ -807,7 +807,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const edit = button(t(board ? 'Edit layout' : 'Edit widgets'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
     const reset = board && button(t('Reset layout'), () => {
-      change({ ops: lay.boards[board].map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false } })), widths: { [board]: 0 } });
+      change({ ops: lay.boards[board].filter((x) => !W.course(x.id) || W.course(x.id).origin === location.origin).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false } })), widths: { [board]: 0 } });
       say(t('Layout reset.'));
     }, { className: 'gz-w-small gz-dash-reset', hidden: true });
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
@@ -1181,7 +1181,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       setTimeout(() => { starting = null; }, 60000);
     });
     else if (W && lay) {
-      if (ultra) globalThis.GZ_COURSE_CARDS?.sync(draw);
+      if (ultra && board) globalThis.GZ_COURSE_CARDS?.sync(draw);
       // A pass: draw only when something changed (a switch let a tile in or out, Canvas redrew the Dashboard), so the
       // page's observer isn't fed changes of Glaze's own.
       const h = home();

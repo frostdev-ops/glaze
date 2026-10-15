@@ -422,6 +422,8 @@ test('course tiles are site-scoped, bounded and confined to Ultra boards', () =>
   assert.equal(l.boards.courses[0].term.length, 120);
   assert.equal(l.boards.courses[0].extra, undefined);
   assert.equal(l.boards.dash[0].id, key(1, 'other.test'));
+  const another = W.apply(l, { ops: [{ s: 'courses', id: key(1, 'other.test'), set: { on: true } }] });
+  assert.ok(another.boards.courses.some((x) => x.id === key(1, 'other.test')), 'a full board at one school never blocks another school');
   const one = W.apply(W.layout({}), { ops: [{ s: 'courses', id: key(1), set: { on: true, term: 'Fall' } }, { s: 'dash', id: key(1), set: { on: true } }, { s: 'pages', id: key(2), set: { on: true } }] });
   const two = W.apply(one, { ops: [{ s: 'courses', id: key(1), remove: true }] });
   assert.ok(!two.boards.courses.some((x) => W.course(x.id)));
