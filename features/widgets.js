@@ -133,8 +133,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Who's signed in (their id names their notes; their Canvas time zone counts the agenda's days), asked only when a
   // tile needs it: a page with nothing of theirs to show asks Canvas nothing. A failed ask is asked again next time.
   let asking = null;
-  // Ultra: /users/me through lib/ultra.js's reader (it has no time zone; the browser's counts).
-  const profile = () => (ultra ? ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin }).me()).then((id) => ({ id })) : ctx.profile());
+  // Ultra shares the planning features' profile (the browser's time zone counts).
+  const profile = () => (ultra ? ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.profile()) : ctx.profile());
   const who = () => (asking ||= profile().then((p) => {
     if (!/^(\d+|_\d+_\d+)$/.test(String(p?.id))) throw new Error('no profile');
     let tz;
@@ -219,7 +219,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         key: `class:${x.id}.${x.p}`, kind: 'class', title: x.name, course: [x.code && !x.name.includes(x.code) && x.code, x.loc].filter(Boolean).join(' · '),
         url: /^\d+$/.test(x.id) ? `/courses/${x.id}` : /^_\d+_\d+$/.test(x.id) ? `/ultra/courses/${x.id}/outline` : '', at: x.at, end: x.until, done: false,
       })) : []);
-      const memo = new Map(); // day -> { at, items } for days the shared copy doesn't cover
+      const memo = ultra ? null : new Map(); // Canvas days the shared copy doesn't cover; Ultra shares page.planned's memo.
       const title = make('h4', { className: 'gz-w-day' });
       const list = make('ul', { className: 'gz-w-agenda' });
       const today = () => L.dayOf(Date.now(), me.tz);
@@ -237,12 +237,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       // Better To Do's copy when it's this account's, covers the day and is under ten minutes old; else this day alone.
       const items = async (d) => {
         const lo = L.midnight(d, me.tz), hi = L.midnight(d + 1, me.tz);
+        if (ultra) return (await GZ_ULTRA.page.planned(lo, hi, cache)).items;
         if (cache?.key === L.storeKey(location.origin, me.uid) && Date.now() - cache.at < 6e5 && Date.parse(cache.start) <= lo && Date.parse(cache.end) >= hi) return cache.items || [];
         const m = memo.get(d);
         if (m && Date.now() - m.at < 12e4) return m.items;
-        // Ultra: its To Do and calendar for that day, with each item's submission (lib/ultra.js), as Better To Do reads them.
-        const got = ultra ? (await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.planner(GZ_ULTRA.read({ origin: location.origin }), { from: lo, to: hi, now: Date.now() }))).items
-          : await ctx.capi(`/planner/items?start_date=${new Date(lo).toISOString()}&end_date=${new Date(hi).toISOString()}&per_page=100`).then((raw) => (Array.isArray(raw) ? raw : []).map(L.slim));
+        const got = await ctx.capi(`/planner/items?start_date=${new Date(lo).toISOString()}&end_date=${new Date(hi).toISOString()}&per_page=100`).then((raw) => (Array.isArray(raw) ? raw : []).map(L.slim));
         memo.set(d, { at: Date.now(), items: got });
         return got;
       };
