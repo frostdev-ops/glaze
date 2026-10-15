@@ -91,9 +91,12 @@
         "motion.css",
         "extras.css",
         "canvas.css",
+        "moodle.css",
         "fonts/*.woff2",
         "assets/art/pets/*/sprites.webp",
-        "assets/art/stickers/critters/*.webp"
+        "assets/art/stickers/critters/study-buddy.webp",
+        "assets/art/stickers/critters/study-buddy-happy.webp",
+        "assets/art/stickers/critters/study-buddy-sleepy.webp"
       ],
       "matches": [
         "https://*/*"

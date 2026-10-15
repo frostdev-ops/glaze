@@ -357,7 +357,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     add.dataset.focus = 'add';
     add.setAttribute('aria-expanded', String(!!form));
     head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }),
-      ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []), add);
+      ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
+      ...(globalThis.GZ_REMIND_UI?.head() || []), add); // the streak and reminders (features/reminders.js), when on
     const parts = [form && taskForm()];
     if (!cache) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Loading…') }));
     else if (!out.groups.length && !out.grading.length) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Nothing to do. Enjoy it.') }));

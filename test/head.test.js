@@ -140,3 +140,17 @@ test('the Ultra boot fixture navigates on its own origin despite the CDN base', 
   });
   assert.equal(moved.href, 'https://bb.invalid/ultra/course');
 });
+
+test('Moodle is Moodle by the keywords meta its core writes in every head; its frames wait for Moodle\'s body', async () => {
+  const moodle = { matches: (s) => s === 'meta[name="keywords"][content^="moodle,"]' };
+  const p = page({ pathname: '/my/', marker: moodle });
+  await p.done;
+  assert.equal(p.window.started, 'moodle');
+  const framed = page({ pathname: '/h5p/embed.php', marker: moodle, frame: true }, 'body');
+  await Promise.resolve();
+  assert.equal(framed.window.started, undefined);
+  framed.document.body = {};
+  framed.listeners.get('DOMContentLoaded')();
+  await framed.done;
+  assert.equal(framed.window.started, undefined, 'no Moodle page in the frame');
+});

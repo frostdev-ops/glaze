@@ -1531,6 +1531,63 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #application .gz-ct [data-done] :is(.gz-ct-t, .gz-ct-when) { text-decoration: line-through; font-weight: 400; color: var(--gz-ink-muted); }
 #application p.gz-ct { padding-block: 0.5rem; color: var(--gz-ink-muted); }
 #application .gz-ct .gz-todo-chip { font-size: 0.92em; }
+
+/* Reminders and streak (features/reminders.js): the streak and the bell in the To Do header, one toast in the page's
+   corner (it never takes focus; it doesn't slide in under reduced motion), and the hub, a dialog. */
+#gz-todo .gz-rm-head { display: inline-flex; align-items: center; gap: 0.15rem; }
+#gz-todo .gz-rm-head button {
+  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border: 1px solid transparent; border-radius: 999px;
+  background: none; cursor: pointer; font-size: 0.75rem; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums;
+}
+#gz-todo .gz-rm-head button:hover { color: var(--gz-accent); border-color: var(--gz-line); }
+.gz-rm-bell svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gz-rm-live { position: fixed; inset-inline-end: 16px; inset-block-end: 16px; z-index: 9999; width: min(340px, calc(100vw - 32px)); }
+.gz-rm-toast {
+  box-sizing: border-box; padding: 0.6rem 0.75rem 0.7rem; font: 0.875rem/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-inline-start: 3px solid var(--gz-accent); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+@media (prefers-reduced-motion: no-preference) { html:not([data-gz-motion="off"]) .gz-rm-toast { animation: gz-rm-in 0.22s ease-out; } }
+@keyframes gz-rm-in { from { opacity: 0; transform: translateY(8px); } }
+.gz-rm-toast p { margin: 0; }
+.gz-rm-toast .gz-rm-what { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--gz-accent); }
+.gz-rm-toast .gz-rm-title { display: block; margin-top: 0.1rem; font-weight: 600; color: var(--gz-ink); }
+.gz-rm-toast a.gz-rm-title:hover { color: var(--gz-accent); }
+.gz-rm-toast .gz-rm-course { font-size: 0.75rem; color: var(--gz-ink-muted); }
+.gz-rm-toast .gz-rm-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+:is(.gz-rm-toast, #gz-rm) button {
+  margin: 0; padding: 0.25rem 0.65rem; font: inherit; font-size: 0.8125rem; color: var(--gz-ink); background: var(--gz-surface-2);
+  border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; box-shadow: none;
+}
+:is(.gz-rm-toast, #gz-rm) button:hover { border-color: var(--gz-accent); }
+:is(.gz-rm-toast, #gz-rm) :is([data-act="hide"], [data-act="close"]) { flex: none; width: 1.75rem; height: 1.75rem; padding: 0; font-size: 16px; line-height: 1; }
+:is(.gz-rm-toast, #gz-rm, #gz-todo .gz-rm-head) :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-rm {
+  box-sizing: border-box; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-rm::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-rm .gz-rm-in { display: grid; gap: 0.9rem; padding: 1rem 1.1rem 1.1rem; }
+#gz-rm .gz-rm-top { display: flex; align-items: center; gap: 0.75rem; }
+#gz-rm h2 { flex: 1; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-rm h3 { margin: 0 0 0.35rem; font: 600 11px/1.3 var(--gz-font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-muted); }
+#gz-rm section > p { margin: 0 0 0.35rem; }
+#gz-rm .gz-rm-desc { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-rm .gz-rm-list { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; }
+#gz-rm .gz-rm-list li { display: flex; align-items: center; gap: 0.6rem; padding: 0.3rem 0.4rem; border-radius: var(--gz-radius-sm); }
+#gz-rm .gz-rm-list li:hover { background: var(--gz-row-hover); }
+#gz-rm .gz-rm-at { flex: none; width: 7.5rem; font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); }
+#gz-rm .gz-rm-main { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
+#gz-rm .gz-rm-kind { font-size: 11px; font-weight: 600; color: var(--gz-accent); }
+#gz-rm .gz-rm-set { display: grid; gap: 0.35rem; }
+#gz-rm .gz-rm-check { display: grid; grid-template-columns: auto 1fr; column-gap: 0.5rem; align-items: start; cursor: pointer; }
+#gz-rm .gz-rm-check small { grid-column: 2; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-rm input[type="checkbox"] { margin: 0.15rem 0 0; accent-color: var(--gz-accent); }
+#gz-rm fieldset { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; min-width: 0; margin: 0 0 0 1.5rem; padding: 0; border: 0; }
+#gz-rm legend { float: left; width: 100%; margin: 0; padding: 0; border: 0; font-size: 12px; line-height: 1.45; color: var(--gz-ink-muted); }
+#gz-rm .gz-rm-pick { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: 1.5rem; color: var(--gz-ink-muted); }
+#gz-rm select { width: auto; max-width: 100%; margin: 0; padding: 0.2rem 0.4rem; height: auto; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); }
+#gz-rm .gz-rm-set > button { justify-self: start; margin-top: 0.3rem; }
 /* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
 #gz-cm .gz-cm-more {
   margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);
@@ -1612,9 +1669,9 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 }
 /* Outside #application: Glaze's font and line height, as its other floating parts. */
 #gz-float .gz-w, #gz-hub, .gz-tour { font-family: var(--gz-font); line-height: 1.4; }
-#gz-float .gz-w { position: fixed; z-index: 999; width: 17rem; max-height: calc(100vh - 24px); overflow: auto; background: var(--gz-surface); box-shadow: var(--gz-shadow); }
-#gz-float .gz-w[data-size="m"] { width: 21rem; }
-#gz-float .gz-w[data-size="l"] { width: 27rem; }
+#gz-float .gz-w { position: fixed; z-index: 999; width: min(17rem, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; background: var(--gz-surface); box-shadow: var(--gz-shadow); }
+#gz-float .gz-w[data-size="m"] { width: min(21rem, calc(100vw - 24px)); }
+#gz-float .gz-w[data-size="l"] { width: min(27rem, calc(100vw - 24px)); }
 #gz-float .gz-w-head { cursor: grab; touch-action: none; }
 #gz-float .gz-w[data-dragging] { cursor: grabbing; opacity: 0.92; }
 .gz-w :is(button, input, select, textarea) { font: inherit; }
@@ -1703,7 +1760,7 @@ html[data-gz-motion="off"] .gz-w-breath:is([data-phase="in"], [data-phase="hold"
 html:not([data-gz-motion="off"]) .gz-w-pet img { transition: transform 0.2s; }
 html:not([data-gz-motion="off"]) .gz-w-pet:hover img { transform: rotate(-4deg) scale(1.04); }
 .gz-w-body:has(.gz-w-pet) { position: relative; display: grid; justify-items: center; gap: 0.3rem; }
-.gz-w-cheer { position: absolute; top: 40%; left: var(--gz-x, 40%); pointer-events: none; font-weight: 700; font-size: 1rem; white-space: nowrap; color: var(--gz-accent); }
+.gz-w-cheer { position: absolute; top: 40%; inset-inline: 0; pointer-events: none; text-align: center; font-weight: 700; font-size: 1rem; color: var(--gz-accent); }
 html:not([data-gz-motion="off"]) .gz-w-cheer { animation: gz-w-rise 1.6s ease-out forwards; }
 html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 @keyframes gz-w-rise { from { opacity: 0; transform: translateY(0); } 15% { opacity: 1; } to { opacity: 0; transform: translateY(-3.5rem); } }

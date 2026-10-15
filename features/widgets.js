@@ -77,7 +77,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // stop() when the tile goes.
   const WIDGETS = {
     notes(body) {
-      let key = '', note = { text: '', at: 0 }, wait = 0, dirty = false;
+      let key = '', note = { text: '', at: 0 }, wait = 0, dirty = false, busy = false, tries = 0, typed = 0;
       const view = make('div', { className: 'gz-w-note-view', tabIndex: 0 });
       view.setAttribute('role', 'button');
       view.setAttribute('aria-label', t('Edit notes'));
@@ -89,27 +89,36 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           : [make('span', { className: 'gz-w-faint', textContent: t('Notes for yourself. Links work.') })]));
       };
       const edit = () => { view.hidden = true; text.hidden = false; text.value = note.text; text.focus(); text.setSelectionRange(text.value.length, text.value.length); };
+      // What was typed stays unsaved (dirty) until the worker says it's kept; a failed save is tried again on blur, on
+      // leaving the page and when the tile goes, three times per change at most. One save at a time.
+      const fail = () => { status.textContent = t("Couldn't save your notes. They're still here; try again in a moment."); };
       const save = () => {
         clearTimeout(wait);
-        if (!dirty) return;
-        if (!key) { status.textContent = t("Couldn't save your notes. They're still here; try again in a moment."); return; }
-        dirty = false;
-        note = { text: text.value, at: Date.now() };
-        send({ type: 'glaze:notes', key, text: note.text, at: note.at }).then((r) => {
-          status.textContent = r?.ok ? '' : t("Couldn't save your notes. They're still here; try again in a moment.");
-          if (r?.ok && !r.kept && r.note && text.hidden) { note = r.note; render(); }
+        if (!dirty || busy || tries >= 3) return;
+        if (!key) { fail(); return; }
+        // Stamped when it was typed, so a later edit saved sooner (on blur, in another tab) still wins.
+        const sent = { text: text.value, at: typed };
+        busy = true;
+        tries++;
+        send({ type: 'glaze:notes', key, text: sent.text, at: sent.at }).then((r) => {
+          busy = false;
+          if (!r?.ok) return fail();
+          status.textContent = '';
+          if (text.value === sent.text || !r.kept) { dirty = false; tries = 0; }
+          note = r.kept ? sent : r.note || note;
+          if (!r.kept && text.hidden) render();
         });
       };
       view.addEventListener('click', (e) => { if (!e.target.closest('a')) edit(); });
       view.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a')) { e.preventDefault(); edit(); } });
-      text.addEventListener('input', () => { dirty = true; clearTimeout(wait); wait = setTimeout(save, 600); });
-      text.addEventListener('blur', () => { save(); render(); text.hidden = true; view.hidden = false; });
+      text.addEventListener('input', () => { dirty = true; tries = 0; typed = Date.now(); clearTimeout(wait); wait = setTimeout(save, 600); });
+      text.addEventListener('blur', () => { save(); note = { ...note, text: text.value }; render(); text.hidden = true; view.hidden = false; });
       const leave = () => save();
       addEventListener('pagehide', leave);
-      const onStore = (ch, a) => { if (a === 'local' && key && ch[key] && text.hidden) { note = W.cleanNote(ch[key].newValue); render(); } };
+      const onStore = (ch, a) => { if (a === 'local' && key && ch[key] && text.hidden && !dirty) { note = W.cleanNote(ch[key].newValue); render(); } };
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       const load = () => who().then(() => { key = W.notesKey(location.origin, me.uid); return get('local', key); })
-        .then((r) => { if (text.hidden) { note = W.cleanNote(r[key]); render(); } }, () => {});
+        .then((r) => { if (text.hidden && !dirty) { note = W.cleanNote(r[key]); render(); } }, () => {});
       load();
       render();
       body.append(view, text, status);
@@ -117,7 +126,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     },
 
     agenda(body) {
-      let L = null, day = null, data = null, cache = null;
+      let L = null, day = null, data = null, cache = null, alive = true;
       const memo = new Map(); // day -> { at, items } for days the shared copy doesn't cover
       const title = make('h4', { className: 'gz-w-day' });
       const list = make('ul', { className: 'gz-w-agenda' });
@@ -174,20 +183,22 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       };
       body.append(make('div', { className: 'gz-w-row' }, back, title, next, home), list);
       Promise.all([ctx.need('lib/todo.js', () => globalThis.GZ_TODO), who()]).then(async () => {
+        if (!alive) return;
         L = globalThis.GZ_TODO;
         const k = L.storeKey(location.origin, me.uid);
         const r = await get('local', [k, 'todoCache']);
         data = L.clean(r[k]);
+        if (!alive) return;
         cache = r.todoCache;
         day = today();
         try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
         paint();
       }, () => list.replaceChildren(make('li', { className: 'gz-w-faint', textContent: t("Couldn't load this day. Try again in a moment.") })));
-      return { wake: () => { if (L && day !== null) paint(); }, stop: () => { try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
+      return { wake: () => { if (L && day !== null) paint(); }, stop: () => { alive = false; try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
     },
 
     timer(body) {
-      let s = W.IDLE, tick = 0, audio = null;
+      let s = W.IDLE, tick = 0, audio = null, alive = true;
       // Text nodes changed in place, and labels only when they change: the page's own observer sees no new nodes each second.
       const phase = document.createTextNode(''), time = document.createTextNode('');
       const clock = make('p', { className: 'gz-w-clock' }, time);
@@ -223,6 +234,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const run = () => {
         clearTimeout(tick);
         tick = 0;
+        if (!alive) return;
         const now = Date.now();
         const was = s;
         s = W.advance(s, now, o);
@@ -242,7 +254,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       get('local', 'widgetTimer').then((r) => { s = W.cleanTimer(r.widgetTimer); run(); });
       body.append(make('p', { className: 'gz-w-faint' }, phase), clock, make('div', { className: 'gz-w-row' }, go, reset), say);
       run();
-      return { wake: run, update: run, stop: () => { clearTimeout(tick); audio?.close?.(); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
+      return { wake: run, update: run, stop: () => { alive = false; clearTimeout(tick); audio?.close?.(); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
     },
 
     quotes(body) {
@@ -340,26 +352,53 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       return { wake: () => { if (!shown() && t0) stop(); }, stop: () => clearTimeout(wait) };
     },
 
+    // The study buddy: asleep while nothing's going on, awake while the timer runs or after a pat, happy for a while after
+    // a finished focus block (any tab) or an item ticked off in Better To Do. Only when the last win was is kept.
     buddy(body) {
+      let st = { happyAt: 0, patAt: 0, running: false }, wait = 0, todoKey = '', alive = true;
       const img = make('img', { alt: '', draggable: false, decoding: 'async' });
-      const pic = () => { img.src = chrome.runtime.getURL(`assets/art/stickers/critters/${lay.buddy}.webp`); };
+      const paint = () => {
+        clearTimeout(wait);
+        if (!alive) return;
+        const m = W.mood(st, Date.now());
+        const src = chrome.runtime.getURL(`assets/art/stickers/critters/study-buddy${m.mood ? `-${m.mood}` : ''}.webp`);
+        if (img.src !== src) img.src = src;
+        body.dataset.mood = m.mood || 'awake';
+        if (m.until) wait = setTimeout(paint, m.until - Date.now() + 50);
+      };
+      const win = () => { st.happyAt = Date.now(); put({ widgetBuddy: { happyAt: st.happyAt } }); paint(); };
       const pet = button('', () => {
+        st.patAt = Date.now();
+        paint();
         const w = make('span', { className: 'gz-w-cheer', textContent: t(CHEERS[Math.floor(Math.random() * CHEERS.length)]) });
-        w.style.setProperty('--gz-x', `${10 + Math.random() * 60}%`);
         w.setAttribute('aria-hidden', 'true');
         pet.after(w);
         setTimeout(() => w.remove(), 1600);
       }, { className: 'gz-w-pet' });
       pet.setAttribute('aria-label', t('Pet your study buddy'));
       pet.append(img);
-      const swap = button(t('Another critter'), () => {
-        lay = { ...lay, buddy: W.CRITTERS[(W.CRITTERS.indexOf(lay.buddy) + 1) % W.CRITTERS.length] };
-        put({ widgetLayout: lay });
-        pic();
-      }, { className: 'gz-w-small gz-w-edit-only' });
-      pic();
-      body.append(pet, swap);
-      return {};
+      const onStore = (ch, a) => {
+        if (a !== 'local') return;
+        const tm = ch.widgetTimer;
+        if (tm) {
+          const was = W.cleanTimer(tm.oldValue), now = W.cleanTimer(tm.newValue);
+          st.running = !!now.end;
+          if (was.phase === 'work' && was.end && now.phase === 'rest') win(); else paint();
+        }
+        if (todoKey && ch[todoKey] && W.ticks(ch[todoKey].newValue) > W.ticks(ch[todoKey].oldValue)) win();
+        if (ch.widgetBuddy && !tm) { st.happyAt = Math.max(st.happyAt, +ch.widgetBuddy.newValue?.happyAt || 0); paint(); }
+      };
+      try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
+      get('local', ['widgetTimer', 'widgetBuddy']).then((r) => {
+        st.running = !!W.cleanTimer(r.widgetTimer).end;
+        st.happyAt = Math.max(st.happyAt, Number.isFinite(r.widgetBuddy?.happyAt) ? r.widgetBuddy.happyAt : 0);
+        paint();
+      });
+      // Better To Do's data is per account: its key needs who's signed in. Without it, only the timer counts.
+      who().then(() => { todoKey = `todo:${location.origin}/${me.uid}`; }, () => {});
+      paint();
+      body.append(pet);
+      return { wake: paint, stop: () => { alive = false; clearTimeout(wait); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
     },
   };
 

@@ -65,9 +65,8 @@ const GZ_SPEC = {
     urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
-    download: [true, 'bool'], todo: [false, 'bool'], cardTasks: [false, 'bool'],
-    // Canvas's Dashboard: notes, and widgets (lib/widgets.js has their settings, the widgets item).
-    notes: [false, 'bool'], widgets: [false, 'bool'],
+    download: [true, 'bool'], todo: [false, 'bool'], cardTasks: [false, 'bool'], search: [true, 'bool'],
+    notes: [false, 'bool'], widgets: [false, 'bool'], // and lib/widgets.js
     // place: a course's content reopens where you left it (open folders, scroll).
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
@@ -78,6 +77,8 @@ const GZ_SPEC = {
     quizLight: [false, 'bool'],
     // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
     gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'],
+    // Reminders and the streak, each opt-in (lib/remind.js has the rest).
+    remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], streak: [false, 'bool'],
   },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };

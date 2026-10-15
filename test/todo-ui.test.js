@@ -117,7 +117,7 @@ const summaries = (calls) => calls.filter((u) => u.includes('submission_summary'
 test('a module that arrives after the list was turned off stays off', async () => {
   const decls = read('content.js').match(/ {2}const todoHere = .*\n {2}const syncTodo = .*\n/)[0];
   let arrive;
-  const ctx = { ultra: false, links: [1], settings: { enhance: { todo: true } }, location: { pathname: '/' }, need: () => new Promise((r) => { arrive = r; }) };
+  const ctx = { ultra: false, moodle: false, links: [1], settings: { enhance: { todo: true } }, location: { pathname: '/' }, need: () => new Promise((r) => { arrive = r; }) };
   vm.createContext(ctx);
   vm.runInContext(`${decls}\nglobalThis.syncTodo = syncTodo;`, ctx);
   const late = ctx.syncTodo();

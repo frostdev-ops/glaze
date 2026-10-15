@@ -10,9 +10,11 @@ mkdir -p dist
 rm -f "$OUT"
 # Everything packaged is world-readable: a Safari app installed by the App Store is owned by root, and a
 # file only its owner can read (the icons were 0600 here) would be unreadable to Safari.
-chmod -R a+rX manifest.json content.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css features \
-  popup.html popup.js options.html options.js preview.html ui.js ui.css fonts icons assets/art/pets assets/art/stickers/critters
-zip -q -r -X "$OUT" manifest.json content.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css features \
-  popup.html popup.js options.html options.js preview.html ui.js ui.css fonts icons assets/art/pets assets/art/stickers/critters -x '*.DS_Store'
+chmod -R a+rX manifest.json content.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css moodle.css features \
+  popup.html popup.js options.html options.js preview.html ui.js ui.css fonts icons assets/art/pets \
+  assets/art/stickers/critters/study-buddy.webp assets/art/stickers/critters/study-buddy-happy.webp assets/art/stickers/critters/study-buddy-sleepy.webp
+zip -q -r -X "$OUT" manifest.json content.js defaults.js lib i18n _locales theme.css motion.css extras.css canvas.css moodle.css features \
+  popup.html popup.js options.html options.js preview.html ui.js ui.css fonts icons assets/art/pets \
+  assets/art/stickers/critters/study-buddy.webp assets/art/stickers/critters/study-buddy-happy.webp assets/art/stickers/critters/study-buddy-sleepy.webp -x '*.DS_Store'
 
 echo "packaged Glaze v$version -> $OUT ($(du -h "$OUT" | cut -f1))"

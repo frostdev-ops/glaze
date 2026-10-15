@@ -90,11 +90,10 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   const fresh = W.layout(undefined);
   assert.deepEqual(fresh.tiles.map((t) => t.id), W.TILES);
   assert.deepEqual(fresh.tiles.filter((t) => t.on).map((t) => t.id), ['notes', 'agenda', 'timer', 'quotes']);
-  const kept = W.layout({ tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: 2 }, { id: 'music' }, { id: 'evil' }, { id: 'timer', size: 'xl' }, null], music: 'javascript:x', buddy: '../../etc' });
+  const kept = W.layout({ tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: 2 }, { id: 'music' }, { id: 'evil' }, { id: 'timer', size: 'xl' }, null], music: 'javascript:x' });
   assert.deepEqual(kept.tiles.slice(0, 2), [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: null }, { id: 'timer', on: true, size: 's', float: false, x: null, y: null }]);
   assert.equal(kept.tiles.length, W.TILES.length);
   assert.equal(kept.music, '');
-  assert.equal(kept.buddy, W.CRITTERS[0]);
   assert.equal(W.layout({ music: ' https://youtu.be/jfKfPfyJRdk ' }).music, 'https://youtu.be/jfKfPfyJRdk');
   const ids = (l) => l.tiles.map((t) => t.id).join(' ');
   assert.equal(ids(W.move(fresh, 'timer', -1)), 'notes timer agenda quotes music breathe buddy');
@@ -133,9 +132,16 @@ test('notes: kept per site and user, a newer note wins, links are links and noth
   await W.saveNote({ key, text: 'x'.repeat(W.NOTES_MAX + 50), at: 11 }, local);
   assert.equal(box[key].text.length, W.NOTES_MAX);
   await W.saveNote({ key, text: '', at: 12 }, local);
-  assert.ok(!(key in box), 'an empty note is removed');
+  assert.deepEqual(box[key], { text: '', at: 12 }, 'an emptied note keeps only when it was emptied');
   assert.equal((await W.saveNote({ key: 'notes:https://x/1/2', text: 'a', at: 1 }, local)).ok, false);
   assert.equal((await W.saveNote({ key, text: 7, at: 1 }, local)).ok, false);
+
+  // Text at 100, cleared at 300, then a text typed at 200 that arrives late: the clearing stands.
+  const k2 = W.notesKey('https://school.instructure.com', '43');
+  await W.saveNote({ key: k2, text: 'draft', at: 100 }, local);
+  await W.saveNote({ key: k2, text: '', at: 300 }, local);
+  assert.deepEqual(await W.saveNote({ key: k2, text: 'late', at: 200 }, local), { ok: true, kept: false, note: { text: '', at: 300 } });
+  assert.deepEqual(box[k2], { text: '', at: 300 });
 
   assert.deepEqual(W.links('See https://example.com/a?b=1. And (https://en.wikipedia.org/wiki/Foo_(bar)), ok'), [
     { text: 'See ' }, { text: 'https://example.com/a?b=1', href: 'https://example.com/a?b=1' }, { text: '. And (' },
@@ -178,4 +184,15 @@ test('feedback: a prefilled GitHub issue with version, browser and system only',
   assert.deepEqual(W.browser('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'), { name: 'Safari 18.0', os: 'iOS' });
   assert.deepEqual(W.browser('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0'), { name: 'Edge 150', os: 'Windows' });
   assert.deepEqual(W.browser(''), { name: 'Unknown', os: 'Unknown' });
+});
+
+test('study buddy: happy after a win, awake while the timer runs or after a pat, asleep otherwise', () => {
+  const now = 1_000_000_000;
+  assert.deepEqual(W.mood({}, now), { mood: 'sleepy', until: 0 });
+  assert.deepEqual(W.mood({ running: true }, now), { mood: '', until: 0 });
+  assert.deepEqual(W.mood({ patAt: now - 1000 }, now), { mood: '', until: now - 1000 + 6e4 });
+  assert.deepEqual(W.mood({ happyAt: now - 6e4, running: true }, now), { mood: 'happy', until: now - 6e4 + 10 * 6e4 });
+  assert.equal(W.mood({ happyAt: now - 11 * 6e4 }, now).mood, 'sleepy');
+  assert.equal(W.ticks({ items: { 'assignment:1': { done: true }, 'quiz:2': { done: false }, 'quiz:3': {} }, tasks: [{ done: 5 }, { done: 0 }] }), 2);
+  assert.equal(W.ticks(undefined), 0);
 });
