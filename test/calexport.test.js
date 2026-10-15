@@ -153,7 +153,13 @@ const page = () => {
     const late = url.includes('start_date=2026-04') ? [{ plannable_type: 'assignment', plannable_id: '1', course_id: '7', context_name: 'Biology', plannable: { title: 'Lab 1' }, plannable_date: '2026-10-14T03:59:00Z', html_url: '/courses/7/assignments/1' }] : [];
     return { ok: true, headers: { get: () => null }, text: async () => JSON.stringify(late) };
   };
-  const get = (area) => (keys, cb) => { const all = JSON.parse(JSON.stringify(store[area])); cb(keys === null ? all : Object.fromEntries([keys].flat().filter((k) => k in all).map((k) => [k, all[k]]))); };
+  // fail[area]: 'error' answers with runtime.lastError and no result, as a failed read does; 'throw' throws.
+  const fail = {}, runtime = {};
+  const get = (area) => (keys, cb) => {
+    if (fail[area] === 'throw') throw new Error('Extension context invalidated.');
+    if (fail[area] === 'error') { runtime.lastError = { message: 'failed' }; cb(undefined); delete runtime.lastError; return; }
+    const all = JSON.parse(JSON.stringify(store[area])); cb(keys === null ? all : Object.fromEntries([keys].flat().filter((k) => k in all).map((k) => [k, all[k]])));
+  };
   // Just enough of a page for the dialog: elements that record their listeners, and links that record a click.
   const activation = { isActive: true };
   const downloads = [];
@@ -175,7 +181,7 @@ const page = () => {
     FormData: class { constructor(f) { this.v = f.values; } has(k) { return k in this.v; } get(k) { return this.v[k] ?? null; } },
     TextEncoder, URL: Object.assign(class extends URL {}, { createObjectURL: () => 'blob:x', revokeObjectURL() {} }), Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
     location: { origin: ORIGIN, host: 'canvas.test' },
-    chrome: { storage: { sync: { get: get('sync'), set() {} }, local: { get: get('local') } } },
+    chrome: { runtime, storage: { sync: { get: get('sync'), set() {} }, local: { get: get('local') } } },
     fetch: async (url) => { asked.push(decodeURIComponent(url)); if (hold) await new Promise((res) => held.push(res)); return answer(url); },
     GZ_CTX: {
       t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need: async () => {}, settings: () => ({ enabled: true, enhance: { gradescope: true } }),
@@ -193,7 +199,7 @@ const page = () => {
     Object.assign(form, { elements: {}, values: { icsDue: 'on', icsTasks: 'on', icsPlan: 'on', icsRange: '2w' } });
     for (const f of form.on.submit) await f({ isTrusted: true, target: form, preventDefault() {} });
   };
-  return { store, asked, held, saved, go, activation, downloads, submit, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
+  return { store, fail, asked, held, saved, go, activation, downloads, submit, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
 };
 const settle = () => new Promise((res) => setImmediate(res));
 
@@ -254,4 +260,34 @@ test('review: a plan on a Gradescope item that isn\'t allowed (or on a kind that
   assert.deepEqual(run({ gs: [], data }), [], 'consent refused: no Gradescope items allowed');
   const gs = [item({ type: 'gradescope', id: '55', title: 'HW 3', url: 'https://www.gradescope.com/courses/1/assignments/55', course: '' })];
   assert.deepEqual(run({ gs, data }).map((e) => e.summary).sort(), ['Do: HW 3', 'Focus: HW 3', 'HW 3'], 'allowed: its plans go in, with its deadline');
+});
+
+for (const [what, change] of [
+  ['Glaze turned off, then its settings can\'t be read back', (p) => { p.store.sync.enabled = false; p.fail.sync = 'error'; }],
+  ['the settings can\'t be read back', (p) => { p.fail.sync = 'error'; }],
+  ['the settings read throws', (p) => { p.fail.sync = 'throw'; }],
+  ['the Gradescope answer can\'t be read back', (p) => { p.fail.local = 'error'; }],
+]) {
+  test(`review: ${what} while Canvas answers: no file`, async () => {
+    const p = page();
+    // No Gradescope, so what a failed read falls back to (the defaults, nothing kept) looks the same as before.
+    p.store.sync.enhance.gradescope = false;
+    delete p.store.local.gradescope;
+    p.hold();
+    const job = p.go();
+    await settle();
+    change(p);
+    p.release();
+    assert.equal(await job, null);
+    assert.deepEqual(p.saved, []);
+  });
+}
+
+test('review: a read that works but finds no settings (a fresh install) uses the defaults, and saves', async () => {
+  const p = page();
+  p.store.sync = {};
+  const r = await p.go();
+  assert.equal(r.name, 'f.ics');
+  assert.match(p.saved[0], /SUMMARY:Do: Lab 1/);
+  assert.ok(!/gradescope/.test(p.saved[0]), 'Gradescope in To Do is off by default');
 });
