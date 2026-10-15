@@ -184,7 +184,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     strip.append(list, hint, note);
     strip.addEventListener('click', onClick);
     strip.addEventListener('auxclick', onClick);
-    strip.addEventListener('mousedown', (e) => { if (e.button === 1 && tabOf(e)) e.preventDefault(); }); // no autoscroll
+    // No autoscroll (middle button), and no scroll from the focus a press gives a tab: the browser would bring the strip
+    // into view, moving the page just as its picture is taken. The tab takes the focus without scrolling instead.
+    strip.addEventListener('mousedown', (e) => {
+      const el = tabOf(e);
+      if (!el || e.button > 1) return;
+      e.preventDefault();
+      if (!e.button) el.focus({ preventScroll: true });
+    });
     strip.addEventListener('keydown', onKey);
     strip.addEventListener('pointerdown', onDown);
     strip.addEventListener('pointermove', onMove);
