@@ -344,7 +344,7 @@ test('GPA: a course answer without a grading scheme says the what-if needs a sca
 
 // The GPA with past terms, trends and a goal (features/gpaterms.js, lib/gpa.js), kept through the service worker.
 const CALC = [{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 92 }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } }];
-const histPage = (store, held = {}, list = CALC, groups = []) => {
+const histPage = (store, held = {}, list = CALC, groups = [], sync = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(el(doc, 'div', { id: 'DashboardCard_Container' }));
@@ -353,10 +353,10 @@ const histPage = (store, held = {}, list = CALC, groups = []) => {
   const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` };
   let ctx;
   const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
-  const chrome = { runtime: { sendMessage: (m) => store.send(m, sender) }, storage: { local: store.tab(held), sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
+  const chrome = { runtime: { sendMessage: (m) => store.send(m, sender) }, storage: { local: store.tab(held), sync: shared(sync).tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
   ctx = vm.createContext({
     document: doc, location: { pathname: '/', search: '', hash: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome,
-    fetch: () => Promise.resolve({ ok: true, text: async () => JSON.stringify(groups), headers: { get: () => '' } }),
+    TextEncoder, fetch: () => Promise.resolve({ ok: true, text: async () => JSON.stringify(groups), headers: { get: () => '' } }),
     GZ_CTX: {
       t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', capi: () => Promise.resolve(null), canvasCourses: () => Promise.resolve(list), canvasCourseId: () => undefined,
       need, settings: () => state.settings, on: () => true,
@@ -420,8 +420,8 @@ test('GPA: past terms count in the overall GPA, show as a trend table, set a goa
 });
 
 // A goal for this term, with the GPA view open.
-const goalPage = async (list, groups, goal = { k: 'term', v: 3.5 }) => {
-  const p = histPage(shared({ [`gpaTerms:${ORIGIN}:3`]: { t: [], g: goal } }), {}, list, groups);
+const goalPage = async (list, groups, goal = { k: 'term', v: 3.5 }, sync = {}) => {
+  const p = histPage(shared({ [`gpaTerms:${ORIGIN}:3`]: { t: [], g: goal } }), {}, list, groups, sync);
   p.UI.render();
   await settle(10);
   p.hist().open = true;
@@ -454,6 +454,32 @@ test('GPA goal: What it takes aims at the percent that rounds to the letter, as 
   const text = p.hist().textContent;
   assert.doesNotMatch(text, /Out of reach|no way there/);
   assert.match(text, /A-90%\+You'd need about 100% on the item left\./);
+});
+
+test('GPA goal: What it takes on a bound off the hundredths (A- from 90.004) aims where Canvas rounds into it', async () => {
+  // 800.01 of 900 earned, 100 left: full marks make 90.001%, shown as 90.00%, which is under 90.004: a B+.
+  const groups = [{ id: '1', name: 'All', group_weight: 0, assignments: [
+    { id: 'a', name: 'Done', points_possible: 900, submission: { score: 800.01 } }, { id: 'b', name: 'Final', points_possible: 100, submission: {} }] }];
+  const sync = { gpaCourses: { [`canvas:${ORIGIN}/27`]: { s: 'A 94, A- 90.004, B+ 87, B 84, B- 80, C 70, F 0' } } };
+  const p = await goalPage([{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 88.89 }], term }], groups, { k: 'term', v: 3.7 }, sync);
+  assert.match(p.hist().textContent, /Calculus IB\+A-90%\+What it takes/);
+  byText(p.hist(), 'What it takes').fire('click');
+  await settle(20);
+  const text = p.hist().textContent;
+  assert.doesNotMatch(text, /You'd need about/);
+  assert.match(text, /Out of reach: the best grades your courses can still give make 3\.30 this term\./, 'the course is held at B+');
+});
+
+test('GPA goal: a course not graded yet on a Pass/Fail scale adds no GPA credits', async () => {
+  const sync = { gpaCourses: { [`canvas:${ORIGIN}/28`]: { s: 'P 60, F 0' } } };
+  const p = await goalPage([
+    { id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 95 }], term },
+    { id: '28', name: 'Art Studio', enrollments: [{ type: 'student', user_id: '3' }], term },
+  ], [], { k: 'term', v: 4 }, sync);
+  const text = p.hist().textContent;
+  assert.doesNotMatch(text, /Out of reach/);
+  assert.match(text, /This term needs a GPA of 4\.00: about A in every course\./);
+  assert.doesNotMatch(text.slice(text.indexOf('Aim for')), /Art Studio/);
 });
 
 test('GPA: a read of past terms held up while another tab removed them all doesn\'t bring them back', async () => {

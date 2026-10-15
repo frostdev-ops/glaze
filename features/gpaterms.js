@@ -124,9 +124,10 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     const out = [make('div', { className: 'gz-gpa-switches' }, make('label', {}, t('Goal GPA'), ' ', value), make('label', {}, t('Goal for'), ' ', kind))];
     if (!g) return out;
     // This term: every course with credits that counts, graded yet or not; a course whose letter has no grade points
-    // (Pass, Excellent) is no GPA course. The most each can make is the best letter it can still give (lib/gpa.js
-    // topOf: its scale, and what its work left reaches once asked), with its bonus.
-    const cur = rows.filter((r) => r.credits > 0 && (r.pts != null || !r.letter));
+    // (Pass, Excellent), or whose best on its scale has none (lib/gpa.js noGpa), is no GPA course. The most each can
+    // make is the best letter it can still give (lib/gpa.js topOf: its scale, and what its work left reaches once
+    // asked), with its bonus.
+    const eligible = rows.filter((r) => r.credits > 0 && (r.pts != null || !r.letter));
     const bonus = (r) => (w ? r.p.l || 0 : 0);
     // A course's lowest percent for a letter needs its scale: the student's own, else the course's own scheme where
     // Canvas gives the letter (asked for once), else Canvas's default.
@@ -139,7 +140,10 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       return api.schemes.get(id) || null;
     };
     // A course whose work left can't reach a letter (asked with What it takes) is held below it.
-    const courses = cur.map((c) => ({ credits: c.credits, letter: c.pts == null ? null : c.letter, score: c.rqd ? null : c.score, scale: c.rqd ? null : scaleOf(c), bonus: bonus(c), max: V.caps.get(String(c.c.id)) }));
+    const pairs = eligible.map((c) => [c, { credits: c.credits, letter: c.pts == null ? null : c.letter, score: c.rqd ? null : c.score, scale: c.rqd ? null : scaleOf(c), bonus: bonus(c), max: V.caps.get(String(c.c.id)) }])
+      .filter(([, x]) => !G().noGpa(x));
+    const cur = pairs.map(([c]) => c);
+    const courses = pairs.map(([, x]) => x);
     const L = G().LADDER[!!plus];
     const credits = sum(cur, (r) => r.credits);
     const done = past.t.flatMap((x) => G().rowsOf(x, w)).filter((x) => x.points != null && x.credits > 0);

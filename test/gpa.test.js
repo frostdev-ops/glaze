@@ -130,9 +130,18 @@ test('a route offers only letters a course can still give: by its scale, and by 
   // An E now is an F; a course with no grade now has no known baseline.
   assert.deepEqual(G.route([{ credits: 3, letter: 'E' }], 1, true), [{ letter: 'D', min: null, up: 2 }]);
   assert.deepEqual(G.route([{ credits: 3, letter: null }], 3.5, true), [{ letter: 'A-', min: null, up: null }]);
-  // The lowest raw percent that reaches a bound.
+  // The lowest raw percent that reaches a bound, bounds off the hundredths too (a scale may say 90.004).
   const C = require('../lib/gradecalc.js');
-  assert.ok(C.reaches(C.reachFrom(90), 90) && !C.reaches(C.reachFrom(90) - 0.0001, 90));
+  for (const [min, from] of [[90, 89.995], [90.004, 90.005], [90.01, 90.005], [87.5, 87.495], [60, 59.995], [93.333, 93.335]]) {
+    assert.ok(Math.abs(C.reachFrom(min) - from) < 1e-9, `reachFrom(${min})`);
+    assert.ok(C.reaches(C.reachFrom(min), min) && !C.reaches(C.reachFrom(min) - 0.0001, min), `${min} is reached from ${from}, not below`);
+  }
+  // A Pass/Fail scale earns no grade points at its best: no GPA course. Below P, its best is F, which counts.
+  const PF = [['P', 60], ['F', 0]];
+  assert.equal(G.noGpa({ scale: PF }), true);
+  assert.equal(G.noGpa({ scale: PF, max: 50 }), false);
+  assert.equal(G.noGpa({ scale: S }), false);
+  assert.equal(G.noGpa({ scale: null }), false);
 });
 
 test('a removed term stays removed, and an import does not replace a newer term of the same name', () => {
