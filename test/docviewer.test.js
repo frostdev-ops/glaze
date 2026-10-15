@@ -17,7 +17,9 @@ test('canvadocs gets its own small script in every frame, and not the first cont
   assert.deepEqual(entry.js, ['lib/ink.js', 'features/docviewer.js']);
   assert.equal(entry.all_frames, true, 'the viewer is always framed');
   assert.equal(entry.run_at, 'document_start');
-  assert.deepEqual(m.content_scripts[0].exclude_matches, DOCS);
+  const glaze = m.content_scripts.filter((x) => x.js.includes('content.js'));
+  assert.deepEqual(glaze.find((c) => c.js.includes('content-canvas.js')).exclude_matches, DOCS);
+  assert.ok(glaze.find((c) => c.js.includes('content-ultra.js')).exclude_matches.includes('https://*.instructure.com/*'), 'nor does Ultra\'s: no instructure.com host');
 });
 
 // A ratchet, as the first script's: lib/ink.js and features/docviewer.js as W9 left them (with the review's fixes), plus about 2%.
@@ -27,7 +29,7 @@ test('the DocViewer script stays within its budget', () => {
   assert.ok(total <= Math.round(DOCVIEWER_BASELINE * 1.02), `${total} bytes in ${entry.js.join(', ')}: over ${DOCVIEWER_BASELINE} + 2%`);
 });
 
-// features/docs.js answers; content.js only hands it the message (and loads it for that).
+// features/docs.js answers; content-canvas.js only hands it the message (and loads it for that).
 const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', profile = () => Promise.resolve({ id: '170000000000077' }) } = {}) => {
   const sent = [];
   const frame = { closed: false, postMessage: (msg, origin) => sent.push({ msg, origin }) };
@@ -50,8 +52,8 @@ const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', 
   return { sent, ask, frame, iframe, docs: ctx.GZ_DOCS, later, settings, ctx };
 };
 
-test('content.js loads features/docs.js for a canvadocs frame\'s question only, and hands it the message', async () => {
-  const src = fs.readFileSync(path.join(root, 'content.js'), 'utf8');
+test('Canvas\'s part (content-canvas.js) loads features/docs.js for a canvadocs frame\'s question only, and hands it the message', async () => {
+  const src = fs.readFileSync(path.join(root, 'content-canvas.js'), 'utf8');
   const line = src.split('\n').find((l) => l.includes("e.data?.gz === 'docs?'"));
   const asked = [];
   let listener;

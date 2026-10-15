@@ -22,6 +22,8 @@ rm -rf "$resources"
 mkdir -p "$resources"
 unzip -q "dist/glaze-v$version.zip" -d "$resources"
 sh scripts/safari-manifest.sh "$resources/manifest.json"
+# The app bundles only what the Xcode project lists: stop before building if the package has something it doesn't.
+node scripts/safari-resources.js "$resources"
 
 auth="-allowProvisioningUpdates -authenticationKeyPath $ASC_KEY_PATH -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
 mkdir -p release

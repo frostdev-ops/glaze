@@ -1,4 +1,4 @@
-// The Canvas grades extras as they behave on a page (features/grades.js, and content.js's card grades), run in a VM
+// The Canvas grades extras as they behave on a page (features/grades.js, and content-canvas.js' card grades), run in a VM
 // on a small stand-in for the DOM and chrome.storage, with Canvas's answers from the local Canvas fixture.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -344,7 +344,8 @@ test('GPA: a course answer without a grading scheme says the what-if needs a sca
 
 // The GPA with past terms, trends and a goal (features/gpaterms.js, lib/gpa.js), kept through the service worker.
 const CALC = [{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 92 }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } }];
-const histPage = (store, held = {}, list = CALC, groups = [], sync = {}) => {
+// extra: more of the page's globals (a stand-in features/import.js, say).
+const histPage = (store, held = {}, list = CALC, groups = [], sync = {}, extra = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(el(doc, 'div', { id: 'DashboardCard_Container' }));
@@ -355,12 +356,13 @@ const histPage = (store, held = {}, list = CALC, groups = [], sync = {}) => {
   const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
   const chrome = { runtime: { sendMessage: (m) => store.send(m, sender) }, storage: { local: store.tab(held), sync: shared(sync).tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
   ctx = vm.createContext({
-    document: doc, location: { pathname: '/', search: '', hash: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome,
+    document: doc, location: { pathname: '/', search: '', hash: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, AbortController, GZ_I18N: I, chrome,
     TextEncoder, fetch: () => Promise.resolve({ ok: true, text: async () => JSON.stringify(groups), headers: { get: () => '' } }),
     GZ_CTX: {
       t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', capi: () => Promise.resolve(null), canvasCourses: () => Promise.resolve(list), canvasCourseId: () => undefined,
       need, settings: () => state.settings, on: () => true,
     },
+    ...extra,
   });
   vm.runInContext(read('lib/gradecalc.js'), ctx);
   vm.runInContext(read('features/grades.js'), ctx);
@@ -548,12 +550,14 @@ test('GPA: of two transcript files picked one after the other, the later one is 
   p.hist().fire('toggle');
   await settle(10);
   const later = [];
-  const file = (name, text) => ({ name, type: 'text/plain', size: text.length, text: () => new Promise((r) => later.push(() => r(text))) });
+  const file = (name, text) => ({ name, type: 'text/plain', size: text.length, slice: () => new Blob([text]), text: () => new Promise((r) => later.push(() => r(text))) });
   const input = p.f('imp:file');
   input.files = [file('fall.txt', 'Fall 2024\nBIO 101 Biology 4 A')];
   input.fire('change');
   p.f('imp:file').files = [file('spring.txt', 'Spring 2025\nENG 101 Writing 3 B')];
   p.f('imp:file').fire('change');
+  await settle(10); // both files are being read (features/import.js looks at their first bytes before their text)
+  assert.equal(later.length, 2);
   later[1]();
   await settle(10);
   later[0]();
@@ -562,8 +566,35 @@ test('GPA: of two transcript files picked one after the other, the later one is 
   assert.doesNotMatch(p.hist().textContent, /Fall 2024/);
 });
 
-// ---- content.js: the Dashboard cards' grade, as a link of its own ----
-const source = read('content.js');
+test('GPA: a PDF or photo being read is called off by the next read and by closing Past terms, and nothing it finds is shown after', async () => {
+  // features/import.js held: each read waits until the test answers it.
+  const reads = [];
+  const GZ_IMPORT = { read: (file, opts) => new Promise((resolve) => reads.push({ file, opts, resolve })), note: () => '', doubt: () => false };
+  const p = histPage(shared(), {}, CALC, [], {}, { GZ_IMPORT });
+  p.UI.render();
+  await settle(10);
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  const pick = async (name) => { p.f('imp:file').files = [{ name, type: 'application/pdf', size: 9 }]; p.f('imp:file').fire('change'); await settle(10); };
+  await pick('fall.pdf');
+  await pick('spring.pdf');
+  assert.equal(reads.length, 2);
+  assert.equal(reads[0].opts.signal.aborted, true, 'the first read stops when the second starts, before either said how far it got');
+  assert.equal(reads[1].opts.signal.aborted, false);
+  p.hist().open = false;
+  p.hist().fire('toggle');
+  assert.equal(reads[1].opts.signal.aborted, true, 'closing Past terms, trends and goal stops the read at once');
+  reads[1].resolve({ text: 'Spring 2025\nENG 101 Writing 3 B', ocr: null });
+  await settle(10);
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  assert.doesNotMatch(p.hist().textContent, /Check what Glaze found/, 'what a read stopped by closing found is never shown');
+});
+
+// ---- content-canvas.js: the Dashboard cards' grade, as a link of its own ----
+const source = read('content-canvas.js');
 const block = (from, to) => { const a = source.indexOf(from), b = source.indexOf(to, a); assert.ok(a > 0 && b > a, `${from} … ${to}`); return source.slice(a, b); };
 const dashboard = () => {
   const doc = page();
@@ -574,7 +605,7 @@ const dashboard = () => {
   card.append(el(doc, 'div', { className: 'ic-DashboardCard__header' }, link));
   doc.body.append(card);
   const list = [{ id: '27', enrollments: [{ type: 'student', computed_current_score: 83.5 }] }];
-  const ctx = vm.createContext({ document: doc, observer: {}, GZ_PAGE: require('../lib/page.js'), locale: () => 'en', t: (k, v) => I.t(k, v, 'en'), canvasCourses: () => Promise.resolve(list) });
+  const ctx = vm.createContext({ document: doc, I: { observer: {} }, GZ_PAGE: require('../lib/page.js'), locale: () => 'en', t: (k, v) => I.t(k, v, 'en'), canvasCourses: () => Promise.resolve(list) });
   vm.runInContext(`${block('  const tagCanvasCards = () => {', '  // Canvas: its course colors come inline')}; globalThis.tag = tagCanvasCards;`, ctx);
   return { doc, card, list, tag: ctx.tag };
 };

@@ -56,7 +56,7 @@ const page = () => {
   const sent = [], held = [], replies = [];
   let hold = false, holdReplies = false;
   const c = {
-    console, URL, Intl, document, location: { origin: ORIGIN, host: 'canvas.test' },
+    console, URL, Intl, AbortController, document, location: { origin: ORIGIN, host: 'canvas.test' },
     fetch: async (u) => { if (hold) await new Promise((res) => held.push(res)); return { ok: String(u).startsWith(ORIGIN), text: async () => ICS }; },
     GZ_I18N: { locale: () => 'en' }, GZ_TODO: T, GZ_CLASSES: C, GZ_ICS: I,
     GZ_CTX: {

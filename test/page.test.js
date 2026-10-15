@@ -277,9 +277,9 @@ test('Canvas course cards: with grading periods, the current period\'s score', (
 
 test('files in content items, as the content API sends them', () => {
   const o = 'https://learn.example.edu';
-  // A File item.
+  // A File item's contentDetail is never asked for (lib/ultra.js), and never read here.
   const file = { contentHandler: 'resource/x-bb-file', contentDetail: { 'resource/x-bb-file': { file: { permanentUrl: '/bbcswebdav/pid-1-dt-content-rid-2_1/xid-2_1', fileName: 'cheat sheet.jpg', fileSize: 81601 } } } };
-  assert.deepEqual(P.files(file, o), [{ url: `${o}/bbcswebdav/pid-1-dt-content-rid-2_1/xid-2_1`, name: 'cheat sheet.jpg', size: 81601 }]);
+  assert.deepEqual(P.files(file, o), []);
   // A document block: file links carry data-bbfile (HTML-escaped JSON); videos and tool links don't count.
   const bf = (j) => JSON.stringify(j).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   const rawText = `<div data-layout-row="r"><p><a data-bbid="x" data-bbfile="${bf({ linkName: 'Syllabus & Schedule.pdf', mimeType: 'application/pdf', render: 'inline' })}" href="${o}/bbcswebdav/pid-3-dt-content-rid-4_1/xid-4_1">Syllabus</a></p>`

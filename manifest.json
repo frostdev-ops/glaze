@@ -9,6 +9,15 @@
     "scripting",
     "unlimitedStorage"
   ],
+  "optional_permissions": [
+    "identity"
+  ],
+  "oauth2": {
+    "client_id": "1071735898350-o14e1vjmrvkmrfl8bb8e8qbcpue5i5qq.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.app.created"
+    ]
+  },
   "host_permissions": [
     "https://*/*"
   ],
@@ -38,6 +47,9 @@
   "background": {
     "service_worker": "lib/background.js"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
@@ -46,7 +58,26 @@
     {
       "matches": [
         "https://*/ultra",
-        "https://*/ultra/*",
+        "https://*/ultra/*"
+      ],
+      "js": [
+        "lib/color.js",
+        "lib/i18n.js",
+        "lib/page.js",
+        "lib/grades.js",
+        "lib/fonts.js",
+        "defaults.js",
+        "content-ultra.js",
+        "content.js"
+      ],
+      "exclude_matches": [
+        "https://*.instructure.com/*"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
         "https://*.instructure.com/*"
       ],
       "js": [
@@ -56,6 +87,7 @@
         "lib/grades.js",
         "lib/fonts.js",
         "defaults.js",
+        "content-canvas.js",
         "content.js"
       ],
       "exclude_matches": [
@@ -122,6 +154,7 @@
       "resources": [
         "lib/scene.js",
         "lib/three.min.js",
+        "reader.html",
         "fonts/*.woff2"
       ],
       "matches": [

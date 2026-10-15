@@ -8,6 +8,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **PDFs and photos in the imports** (class schedule, syllabus, transcript), read on your device: a PDF's own text
+  (tables kept as rows, two-column pages in order), and the text of a scanned PDF, a photo or a screenshot (PNG, JPEG,
+  WebP, HEIC where your browser opens it; or paste one into the import's text box) recognized by the Tesseract OCR engine,
+  bundled with its English, German, Spanish, French, Dutch and Portuguese models. Nothing is uploaded or downloaded for
+  it. A progress line and Stop reading while it works; closing the dialog stops it too. When the text came from a
+  picture, the review says so and marks "Check this" on what came from a line the engine wasn't sure of. Password-
+  protected and broken PDFs get a plain message. The extension grows by about 10 MB (the OCR models), and its pages may
+  now compile WebAssembly ('wasm-unsafe-eval' in its content security policy); no new permission.
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
   notes on a course's home (there as soon as Notes is turned on), or a class reminder. It opens and acts only on your own
@@ -72,6 +80,29 @@ All notable changes to Glaze are documented here. The format follows
   term. Import it into Google Calendar, Outlook or Apple Calendar; stable event identifiers mean a newer file updates
   the same events where the calendar supports it. Made on the device, downloaded by the browser (no new permission);
   the choices are remembered and also in the options page. No subscribe link: that would need a server.
+- **Google Calendar sync** (Chrome, off until you connect; Glaze's settings, Google Calendar sync): a calendar named
+  Glaze in your Google account, kept up to date with the same events and choices as Export calendar (.ics). Built in,
+  but behind a build-time switch (`lib/gcal.js` `ON`) that stays off until Google verifies the app: released builds
+  show nothing of it, and their manifest has no `identity` permission or `oauth2` client.
+  - Chrome's own Google sign-in (`chrome.identity.getAuthToken`, an optional `identity` permission asked for on your
+    click, with no install warning) and one scope, `calendar.app.created`: Glaze can manage only calendars it makes,
+    and never sees your others. No Glaze server; requests go only to `www.googleapis.com` and, to revoke access,
+    `oauth2.googleapis.com`, without cookies and without following redirects.
+  - Incremental: events keep stable IDs (a hash of the Canvas account and the event's identifier), only what changed
+    is written, past events stay as history, and changes made in Google come back through Google's sync cursor.
+    Requests are spaced out, at most 150 writes a run, with exponential backoff on 429, rate-limit 403s and 5xx, and a
+    fresh token after a 401.
+  - Deadlines, tasks, Gradescope work and classes mirror Canvas: an edit in Google is written over, a deletion
+    stays. A "do on" day or focus session moved or deleted in Google moves or clears the plan in Better To Do, unless
+    you changed it here since. No reminders on the events; they show you as free.
+  - It runs from Canvas pages: on open if the last sync was 15 minutes ago or more, every 15 minutes while one stays
+    open, and 10 seconds after your plans, schedule or choices change. No `alarms` permission.
+  - **Link another device**: a code (the calendar's ID) to paste on another computer, so both keep one calendar
+    without Glaze listing your calendars.
+  - **Disconnect**: optionally deletes the Glaze calendar (asked first), revokes Glaze's access, has Chrome forget
+    its tokens, removes the permission and deletes what Glaze kept for it.
+  - Edge, Brave and Safari show a note pointing to the export. `scripts/dev-gcal.sh` builds an unpacked copy with the
+    store's public key, for testing with the real OAuth client; the store package never carries it.
 - **Past terms, GPA trends and a GPA goal** (Canvas, with the GPA on): add earlier terms by hand or import them from a
   transcript's text, a web page or a Word file, read on this device and always shown for review first (the transcript's
   own term GPA is checked against Glaze's). Plus/minus or whole-letter scales per term, credits, honors and AP;
@@ -239,6 +270,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Changed
 
+- **Blackboard (for what comes next):** Glaze can now read Ultra's courses and terms, what's due (To Do in two-week
+  slices and the calendar), where each piece of work stands (on time, late, missing, excused, or unknown, never
+  guessed) and the gradebook, in the same shapes its Canvas planning and grade features use. Courses with no overall
+  formula Glaze can read get a share-of-points estimate, labelled as one. Nothing new is shown yet, and nothing is
+  read until a feature asks; when one does, only GETs to your own Blackboard site, one at a time.
 - **Better To Do is on by default** on Canvas (owner decision). One switch in the editor turns it off and brings back
   Canvas's own To Do; What's new says so once.
 - **Rose palette:** its accent is a little darker (#c026d3 → #b31fc4), so links and active labels pass 4.5:1 on Rose's
@@ -257,6 +293,9 @@ All notable changes to Glaze are documented here. The format follows
 - **And about 30 KB less again:** draft backup, Blackboard's what-if calculator, the document buttons (focus mode,
   reading time, dark file previews) and remembering your place in a course now load only on the pages where they
   appear. They work as before.
+- **Each LMS loads only its own code:** Blackboard, Canvas and Moodle pages no longer start with each other's
+  extras. A page now starts with about 21 KB less code on Blackboard, 27 KB less on Canvas and 57 KB less on Moodle.
+  Everything looks and works as before.
 
 ### Fixed
 
@@ -274,6 +313,11 @@ All notable changes to Glaze are documented here. The format follows
 - **Canvas:** quiz preview notices use the palette.
 - **Canvas, dark palettes:** an instructor's text in a dark colour (navy, dark green, deep red) is lifted to a
   light shade of the same colour.
+- **Blackboard, folder previews and Download all:** Glaze no longer receives or keeps the launch credentials (`key`
+  and `secret`) Blackboard includes for some course tool links in its content answers. Both ask only for the fields
+  they use, and folder previews keep only each item's title, state and due date. They were never stored, logged or
+  sent, but folder previews held them in memory for the page's life. Download all now reads a File item's file
+  through Blackboard's public content API, and whether an item is a document from the course's public content list.
 
 ## [2.2.0] — 2026-10-15
 
