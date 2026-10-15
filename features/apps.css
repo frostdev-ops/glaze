@@ -279,9 +279,9 @@ html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
 #gz-float[data-stack] { position: fixed; z-index: 999; top: var(--gz-float-top, 12px); right: var(--gz-float-right, 12px); bottom: var(--gz-float-bottom, 12px); width: min(288px, var(--gz-float-width, calc(100vw - 24px))); display: flex; flex-direction: column; gap: 12px; overflow: auto; overscroll-behavior: contain; }
 #gz-float[data-stack] .gz-w { position: static; flex: none; width: auto; max-height: none; }
 #gz-float[data-stack] .gz-w-grip { display: none; }
-/* Better To Do's tile on the Dashboard: its list has its own heading. */
-.gz-w[data-tile="todo"] .gz-w-head h3 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.gz-w[data-tile="todo"] .gz-w-head { min-height: 1.4rem; }
+/* Better To Do's tile (both boards): headed as every tile is, so folded it still says what it is; the list's own
+   heading stays for screen readers only, its counts and buttons under the tile's. */
+.gz-w[data-tile="todo"] #gz-todo .gz-todo-head h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .gz-w[data-tile="todo"] #gz-todo { margin: 0; }
 /* The line a dragged tile met. */
 .gz-guide { position: absolute; z-index: 1000; pointer-events: none; background: var(--gz-accent); }
