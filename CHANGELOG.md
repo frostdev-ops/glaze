@@ -6,6 +6,15 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **Course tabs keep their pages alive, like browser tabs.** A course tab picked from the strip now runs as a live
+  Blackboard page in a frame over the window, kept running while you're on another tab: text you typed, an upload or
+  submission under way, open folders, an open document or assignment and the scroll are all still there when you
+  pick it again, and switching is instant. Up to four tabs stay live (the least recently shown stops first; it opens
+  again where you left it). While a tab's page first loads, a blurred picture of how it last looked, with a spinner,
+  covers it. Any page of the course is remembered, exactly. Glaze's host access becomes `<all_urls>` (Chrome requires
+  it to take those pictures; its install warning is unchanged), and the covered page's animated scene pauses.
+
 ### Fixed
 - Settings Back/Forward survives preview site changes. Precise navigation dimensions and Blackboard nicknames have usable editor controls; course edits repaint the preview, and open Share sessions pages follow relay preference saves without connecting.
 - Course tabs stay visible on Ultra's full routed documents and positively cached Assignment overviews, preserving

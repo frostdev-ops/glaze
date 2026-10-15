@@ -14,8 +14,7 @@
   // The options preview is Ultra. On a site, decide once from its head while the parser is still there;
   // addresses and body classes can belong to another app or a same-host tool.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
-  // A course tab's live page (course tabs keep each in a frame named gz-ctab:<course>): Glaze works there as
-  // on a page of its own (solo), but for what only the page around it has (the footer, the due list, the drafts' tidy).
+  // A course tab's live frame (gz-ctab:<course>) works as a page of its own (solo), without the footer.
   const tabFrame = window.top !== window && /^gz-ctab:_\d+_\d+$/.test(window.name) ? window.name.slice(8) : '';
   const solo = window.top === window || !!tabFrame;
   const ULTRA = 'base[href*="/ultra/"]';
@@ -973,7 +972,6 @@
       colors: GZ_BG_COLORS(worn.bg.colors, palette),
       dim,
       amount,
-      // Still while a course tab's frame covers this page: nothing of it shows.
       speed: html.hasAttribute('data-gz-ctab-framed') ? 0 : pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
     };
   };
