@@ -1226,8 +1226,29 @@
   // types it in through the browser's own editing, so Quill and Ultra take it as your edit.
   const EDITOR = '.ql-editor[contenteditable="true"]';
   const BBID = /_\d+_\d+/;
+  // shortcut: new messages to individual users in uniquely named courses; add stable thread/group ids before expanding.
+  const CANVAS_DRAFT = '#compose-message-modal textarea[data-testid="message-body"]';
+  let inboxAccount = null;
+  let inboxLoading = false;
+  let inboxRetry = 0;
+  let inboxWrites = new WeakMap();
+  const inboxSending = new Set();
+  const barKeys = new WeakMap();
+  const draftText = (ed) => ultra ? ed.textContent : ed.value;
+  const inboxIdentity = (ed) => {
+    const modal = ed.closest('#compose-message-modal');
+    const subject = modal?.querySelector('input[data-testid="subject-input"]')?.value;
+    const name = modal?.querySelector('input[data-testid="course-select-modal"]')?.value;
+    const courses = inboxAccount?.courses.filter((c) => c.name === name) || [];
+    const tags = [...(modal?.querySelectorAll('[data-testid="address-book-tag"]') || [])];
+    const to = tags.map((tag) => GZ_DRAFTS.canvasRecipient(tag.id));
+    if (courses.length !== 1 || !tags.length || to.some((id) => !id)) return null;
+    const m = { origin: location.origin, user: inboxAccount.user, course: String(courses[0].id), to, subject };
+    return GZ_DRAFTS.canvasKey(m) ? m : null;
+  };
   // The nearest Blackboard id above the editor (a reply's post, say), and the editor's own id.
   const draftKey = (ed) => {
+    if (!ultra) return GZ_DRAFTS.canvasKey(inboxIdentity(ed));
     let near = '';
     for (let p = ed.parentElement, i = 0; p && !near && i < 15; p = p.parentElement, i++) {
       for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
@@ -1241,19 +1262,30 @@
   const bars = new Map(); // bar -> editor
   const saveDraft = (ed) => {
     saveTimers.delete(ed);
-    if (!ed.isConnected || !settings.enhance.drafts) return;
-    const key = draftKey(ed);
-    const text = ed.textContent;
+    if (!ed.isConnected || !settings.enhance.drafts || (!ultra && !observer)) return;
+    const key = ultra ? draftKey(ed) : inboxWrites.get(ed);
+    if (!key || key !== draftKey(ed)) return;
+    const text = draftText(ed);
     // Too short, or cleared: drop the copy, but only one written here. A copy still on offer stays
     // until something worth keeping replaces it.
-    if (!GZ_DRAFTS.worth(text)) { if (typed.delete(key)) local((s) => s.remove(key)); return; }
-    typed.set(key, { ed, text, gone: 0 });
-    local((s) => s.set({ [key]: { html: ed.innerHTML, text, at: Date.now() } }));
+    if (!GZ_DRAFTS.worth(text)) { if (typed.delete(key) || !ultra) local((s) => s.remove(key)); return; }
+    const d = { html: ultra ? ed.innerHTML : text, text, at: Date.now(), ...(!ultra && { canvas: inboxIdentity(ed) }) };
+    typed.set(key, { ed, ...d, gone: 0 });
+    local((s) => s.set({ [key]: d }));
   };
   // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
   const onWrite = (e) => {
-    const ed = ultra && settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(EDITOR);
-    if (!ed) return;
+    if (!ultra && e.type !== 'input') return;
+    const ed = settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(ultra ? EDITOR : CANVAS_DRAFT);
+    if (!ed) {
+      // Controlled inputs can change value without a DOM mutation, so destination edits also run the pass.
+      if (!ultra && settings.enhance.drafts && observer && e.target.closest?.('#compose-message-modal')) watchInboxDrafts();
+      return;
+    }
+    if (!ultra) {
+      inboxWrites.set(ed, draftKey(ed));
+      for (const [bar, editor] of bars) if (editor === ed) { bar.remove(); bars.delete(bar); }
+    }
     clearTimeout(saveTimers.get(ed));
     saveTimers.set(ed, setTimeout(() => saveDraft(ed), 1000));
   };
@@ -1283,28 +1315,60 @@
       return b;
     };
     bar.append(msg, button(t('Restore'), () => {
+      if (!ultra) {
+        if (draftKey(ed) !== key || draftText(ed).trim() || !settings.enhance.drafts || !observer) return;
+        // React's controlled textarea reads the native setter + input, rather than a visible-only DOM edit.
+        local((s) => s.get(key, (r) => {
+          if (r?.[key]?.at !== d.at || r[key].text !== d.text) { inboxWrites.delete(ed); return; }
+          if (!ed.isConnected || draftKey(ed) !== key || draftText(ed).trim() || !settings.enhance.drafts || !observer) return;
+          Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ed, d.text);
+          ed.dispatchEvent(new Event('input', { bubbles: true }));
+          ed.focus();
+        }));
+        return;
+      }
       ed.focus();
       const r = document.createRange();
       r.selectNodeContents(ed);
       getSelection().removeAllRanges();
       getSelection().addRange(r);
       document.execCommand('insertHTML', false, d.html);
-    }), button(t('Dismiss'), () => local((s) => s.remove(key))));
-    (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed).before(bar);
+    }), button(t('Dismiss'), () => ultra ? local((s) => s.remove(key)) : forgetInboxDraft(key, d)));
+    (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed.closest('[data-cid="TextArea"]') || ed).before(bar);
     bars.set(bar, ed);
+    barKeys.set(bar, key);
   };
-  const dropBars = () => { for (const bar of bars.keys()) bar.remove(); bars.clear(); };
+  const dropBars = () => { for (const bar of bars.keys()) bar.remove(); bars.clear(); if (!ultra) inboxWrites = new WeakMap(); };
+  const forgetInboxDraft = (key, d) => local((s) => s.get(key, (r) => { if (r?.[key]?.at === d.at && r[key].text === d.text) s.remove(key); }));
+  const inboxPosted = async (d) => {
+    // Only after Send/close or a recovery offer, never sweep-poll the inbox. Detail GET must not mark mail read.
+    try {
+      const list = await capi('/conversations?scope=sent&per_page=20');
+      const c = list.find((c) => c.subject === d.canvas.subject && c.context_code === `course_${d.canvas.course}` && Date.parse(c.last_authored_message_at) >= d.at - 1000);
+      return !!c && GZ_DRAFTS.sent(d, await capi(`/conversations/${c.id}?auto_mark_as_read=false`));
+    } catch { return false; } // Offline or no exact match: keep the copy.
+  };
   const offerDraft = (ed) => {
     const key = draftKey(ed);
-    local((s) => s.get(key, (r) => {
+    if (!key) return;
+    local((s) => s.get(key, async (r) => {
       const d = r?.[key];
-      if (!d?.html || !settings.enhance.drafts || !observer || !ed.isConnected || ed.textContent.trim()) return;
-      if (GZ_DRAFTS.posted(d.text, pageText())) s.remove(key);
-      else restoreBar(ed, key, d);
+      if (!ultra && (GZ_DRAFTS.canvasKey(d?.canvas) !== key || typeof d?.text !== 'string' || GZ_DRAFTS.stale({ [key]: d }, Date.now()).length)) return;
+      if (!d?.html || !settings.enhance.drafts || !observer || !ed.isConnected || draftKey(ed) !== key || draftText(ed).trim()) return;
+      const posted = ultra ? GZ_DRAFTS.posted(d.text, pageText()) : await inboxPosted(d);
+      if (posted) { if (ultra) s.remove(key); else forgetInboxDraft(key, d); }
+      else if (settings.enhance.drafts && observer && ed.isConnected && draftKey(ed) === key && !draftText(ed).trim()) {
+        if (ultra) restoreBar(ed, key, d);
+        else local((s) => s.get(key, (r) => {
+          if (r?.[key]?.at === d.at && r[key].text === d.text && settings.enhance.drafts && observer && ed.isConnected
+            && draftKey(ed) === key && !draftText(ed).trim() && ![...bars.values()].includes(ed)) restoreBar(ed, key, d);
+        }));
+      }
     }));
   };
   const watchDrafts = () => {
-    if (!ultra) return;
+    // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
+    if (!ultra) { watchInboxDrafts(); return; }
     if (!settings.enhance.drafts) return;
     const now = Date.now();
     let page = null;
@@ -1327,6 +1391,36 @@
       if (!ed.textContent.trim()) setTimeout(() => offerDraft(ed), 800);
     }
   };
+  const watchInboxDrafts = () => {
+    if (!settings.enhance.drafts || !/^\/conversations\/?$/.test(location.pathname)) return;
+    const ed = document.querySelector(CANVAS_DRAFT);
+    if (ed && !inboxAccount && !inboxLoading && Date.now() >= inboxRetry) {
+      inboxLoading = true;
+      Promise.all([capi('/users/self/profile'), canvasCourses()]).then(([user, courses]) => {
+        inboxAccount = { user: String(user.id), courses };
+      }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
+    }
+    for (const [key, d] of typed) if (!d.ed.isConnected) {
+      typed.delete(key);
+      if (inboxSending.delete(key)) setTimeout(() => { if (observer && settings.enhance.drafts) inboxPosted(d).then((sent) => { if (sent) forgetInboxDraft(key, d); }); }, 1000);
+    }
+    for (const [bar, editor] of bars) {
+      if (!bar.isConnected || !editor.isConnected || draftKey(editor) !== barKeys.get(bar)) { bar.remove(); bars.delete(bar); }
+      else bar.hidden = !!draftText(editor).trim();
+    }
+    // Identity changes are common in compose: offer only after the exact course, recipients and subject return.
+    const key = ed && draftKey(ed);
+    if (key && !ed.value.trim() && ![...bars.values()].includes(ed) && inboxWrites.get(ed) !== key) {
+      inboxWrites.set(ed, key);
+      setTimeout(() => { if (draftKey(ed) === key) offerDraft(ed); }, 800);
+    }
+  };
+  document.addEventListener('click', (e) => {
+    if (ultra || !settings.enhance.drafts || !observer || !e.target.closest?.('#send-message-button')) return;
+    const ed = document.querySelector(CANVAS_DRAFT);
+    const key = ed && draftKey(ed);
+    if (key) { inboxWrites.set(ed, key); saveDraft(ed); inboxSending.add(key); }
+  }, true);
   // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
   const tidyDrafts = () => {
     if (window.top !== window) return;
@@ -2614,7 +2708,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   enable();
   load().then((s) => {
     settings = s;
-    if (ultra) tidyDrafts();
+    tidyDrafts();
     if (!s.enabled) disable();
     else if (links.length) applySettings();
   });
