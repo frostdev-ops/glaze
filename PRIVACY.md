@@ -44,10 +44,10 @@ _Last updated: 2026-10-15_
 - **Past terms and a GPA goal** (Canvas, the GPA Extra), in `chrome.storage.local`, on this device only, per Canvas
   site and signed-in user id: up to 40 terms you typed in or imported, each with its name, plus/minus or whole-letter
   scale and up to 40 courses (the name, credits, grade as written, honors/AP level, left out or not), and your goal
-  (cumulative or this term's GPA). A transcript you paste or pick (text, a web page or a Word file) is read in the page
-  on this device; only the terms you review and add are kept, never the transcript itself. Glaze sends none of it
-  anywhere: no upload, no AI service. "Remove this term" and "Remove all past terms" delete it, and the time of the
-  last Remove all is kept so a change from another open tab can't bring terms back.
+  (cumulative or this term's GPA). A transcript you paste or pick (text, a web page, a Word file, a PDF, a photo or a
+  screenshot) is read on this device; only the terms you review and add are kept, never the transcript itself. Glaze
+  sends none of it anywhere: no upload, no AI service. "Remove this term" and "Remove all past terms" delete it, and
+  the time of the last Remove all is kept so a change from another open tab can't bring terms back.
 - **Insights** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site and signed-in
   user id: one small summary of this term, so the view opens at once next time: each current course's id and name, its
   published work's name, due date, points, when you handed it in and whether Canvas marks it on time, late, missing or
@@ -201,8 +201,9 @@ services, which receive ordinary connection information such as your IP address.
 
 ## Network requests
 
-The browser extension ships as static files and loads no remote scripts. Its built-in fonts and three.js (used by the
-animated backgrounds) are bundled. It makes requests in these cases:
+The browser extension ships as static files and loads no remote scripts. Its built-in fonts, three.js (used by the
+animated backgrounds), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
+you import) are bundled. It makes requests in these cases:
 
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
   site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
@@ -334,6 +335,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
   same read-only requests Better To Do makes. It reads the Syllabus page from the page already open, with no request
   of its own, and reads files you pick on this device. Nothing about the syllabus is sent anywhere: there is no server
   to parse it and no consent box to tick, because nothing leaves your computer. It never writes to Canvas.
+- **PDFs and photos you import** (class schedule, syllabus, transcript): none. A PDF or picture you pick or paste is read
+  on your device by Glaze's reader, a page of the extension that the import opens in a hidden frame for that one file:
+  pdf.js reads a PDF's text, and the OCR engine reads a picture or a scanned page, both from the extension's own files.
+  The reader's own policy lets it load nothing but Glaze's files, so it can't send anything anywhere; it keeps nothing,
+  and the frame is removed (its work stopped, its memory freed) when the read ends or you close the dialog. Only the
+  fields you review and save are kept, as above; the file never is. Like everything Glaze shows on a page, the text read
+  appears in the review on the LMS page, where that page's own code could read it.
 - **Class schedule** (Canvas). Opening it asks your own Canvas site for your profile and course list (as Better To
   Do does), to match classes to your courses. A file you choose or text you paste is read on your device and never
   uploaded. A calendar link is read only when it is an address on the Canvas site you're on (your own calendar feed,
@@ -462,6 +470,11 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 - `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
   typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, and Safari update-check timestamp described above.
   Notes' text, pictures and attachments are in the extension's own IndexedDB.
+- No permission for reading PDFs and photos. The extension's own pages may compile WebAssembly (`'wasm-unsafe-eval'` in
+  its content security policy), which the OCR engine needs; it still runs only code that ships in the package, and
+  never in the LMS page. The reader page is web-accessible so an import can open it in a frame; it reads a file only
+  with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
+  make it read anything.
 - `identity` (Chrome only, optional) — asked for only when you press Connect in Google Calendar sync, and removed on
   Disconnect. It lets Chrome sign Glaze in to Google Calendar with the Google account in your browser; Chrome shows no
   warning for it. Glaze never asks for `identity.email` and never sees your password.

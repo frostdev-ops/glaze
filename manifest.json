@@ -47,6 +47,9 @@
   "background": {
     "service_worker": "lib/background.js"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
@@ -152,6 +155,7 @@
       "resources": [
         "lib/scene.js",
         "lib/three.min.js",
+        "reader.html",
         "fonts/*.woff2"
       ],
       "matches": [
