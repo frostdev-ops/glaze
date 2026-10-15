@@ -25,14 +25,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const CHEERS = ['such focus', 'very study', 'wow', 'much learning', 'so brave', 'many tasks, much done'];
   // The feature hub: Canvas's extras by where they show, with the names the editor gives them.
   const HUB = [
-    ['Dashboard', ['notes', 'widgets', 'todo', 'cardTasks', 'overall', 'gradeHover', 'gpa', 'newgrades', 'newcontent', 'coursemenu']],
+    ['Dashboard', ['notes', 'widgets', 'todo', 'cardTasks', 'overall', 'gradeHover', 'gpa', 'insights', 'newgrades', 'newcontent', 'coursemenu']],
     ['Course pages', ['progress', 'place', 'download', 'calc', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
     ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'streak']],
     ['Everywhere', ['palette', 'search', 'keys', 'drafts', 'quizLight']],
   ];
   const EXTRA = {
     notes: 'Dashboard notes', widgets: 'Widgets', todo: 'Better To Do', cardTasks: 'Tasks on course cards', overall: 'Grades on course cards',
-    gradeHover: 'Card grades only on hover', gpa: 'Grade point average', newgrades: 'New-grade badges', newcontent: 'New-content badges', coursemenu: 'Course menu',
+    gradeHover: 'Card grades only on hover', gpa: 'Grade point average', insights: 'Insights', newgrades: 'New-grade badges', newcontent: 'New-content badges', coursemenu: 'Course menu',
     progress: 'Course progress', place: 'Remember your place', download: 'Download all', calc: 'What-if calculator', inline: 'Due-date status and percentages',
     scores: 'Score bars', urgency: 'Due-date urgency', previews: 'Folder previews', toggles: 'Document buttons', darkDocs: 'Dark documents',
     reading: 'Reading width', clamp: 'Shorter descriptions', palette: 'Command palette', search: 'Search in your courses',

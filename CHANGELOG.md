@@ -8,6 +8,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Insights** (Canvas, off by default): an Insights button on the Dashboard, or Insights in Ctrl+K, shows your term
+  in numbers, worked out on this device: how much you handed in on time per course and overall (late, missing and
+  excused apart, and the best run of weeks with everything on time); each course's grade after each piece of graded
+  work by Canvas's own rules, as sparklines; the work due each week with the three busiest weeks ahead; how often your
+  Better To Do "do on" days and focus sessions were kept; and a summary card you can save as a PNG. Every chart has a
+  table of the same figures. Only a small summary of this term is kept on this device, until you clear it. No
+  comparisons with anyone, nothing timed or tracked, nothing sent anywhere.
+
 - **Export calendar (.ics)** (Canvas): Better To Do's Export button, or Export calendar (.ics) in Ctrl+K, saves an
   .ics file of your Canvas deadlines, your own tasks with a due date, "do on" days and focus sessions, and Gradescope
   work (for a Canvas account that said yes to it), each part optional, for the next 2, 4, 8 or 16 weeks or the current
