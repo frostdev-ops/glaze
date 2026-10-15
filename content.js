@@ -2952,8 +2952,11 @@
     }
     if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false, true);
     if (menu) paintMenu();
-    if (ultra) syncNames();
+    if (ultra) syncNames(); else syncCards();
   };
+  // Canvas's dashboard cards: features/cards.js.
+  const cardUI = (f) => need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => f(GZ_CARD_UI), () => {});
+  const syncCards = () => { if (!isPreview && location.pathname === '/') cardUI((m) => m.paint()); };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
     closeMenu(false, true);
@@ -3098,7 +3101,8 @@
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')),
       cap(t('Look'), 'gz-cm-look'), lookGrid);
     else box.append(note, make('p', { className: 'gz-cm-note', textContent: t('Change the colour and nickname in Canvas’s own card menu.') }),
-      make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid);
+      make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
+      make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));
     document.body.append(box);
     menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
     btn.setAttribute('aria-expanded', 'true');

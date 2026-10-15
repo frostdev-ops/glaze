@@ -13,6 +13,9 @@
 //                      object works too: '{enabled:false}', '{bg:{kind:"scene",scene:"horizon"}}'
 //   --out <dir>        where the PNGs go (default: a new temp dir, printed). Named <look>-<page>.png
 //   --course-menu     open Glaze’s Dashboard Course menu and enable tint in the throwaway capture profile
+//   --sync <json>      more sync items saved beside the settings, such as the course cards' (lib/cards.js):
+//                     '{card:{pet:"cat"},cards:{"canvas:{origin}/{bio}":{k:"solid",c:"#e11d48"}}}'; {origin} is the
+//                     local Canvas, {bio} and the others its course ids
 //   --width, --height  viewport, 1440x900 by default;  --full  captures the whole page
 //   --user <who>       student (default), teacher or admin
 //   --html <dir>       also save each page's DOM as <dir>/canvas-<page>.html, a test fixture: script bodies
@@ -83,7 +86,7 @@ const parse = () => {
   try {
     parsed = parseArgs({ allowPositionals: true, options: {
       look: { type: 'string', multiple: true }, settings: { type: 'string' }, out: { type: 'string' },
-      width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' }, full: { type: 'boolean' }, 'course-menu': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+      width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' }, full: { type: 'boolean' }, 'course-menu': { type: 'boolean' }, sync: { type: 'string' }, help: { type: 'boolean', short: 'h' },
       user: { type: 'string', default: 'student' }, html: { type: 'string' }, audit: { type: 'boolean' }, perf: { type: 'string' },
       eval: { type: 'string' }, wait: { type: 'string', default: '0' },
     } });
@@ -104,8 +107,11 @@ const parse = () => {
   const html = opt.html && path.resolve(opt.html);
   const perf = opt.perf === undefined ? 0 : +opt.perf;
   if (!(perf >= 0 && Number.isInteger(perf))) die('--perf takes a number of runs.');
+  let sync = {};
+  try { if (opt.sync) sync = new Function(`return (${opt.sync})`)(); } catch (e) { die(`--sync: ${e.message}`); }
+  if (!plain(sync)) die('--sync must be an object.');
   if (!(+opt.wait >= 0)) die('--wait takes seconds.');
-  return { evalJs: opt.eval, wait: +opt.wait * 1000, size, positionals, full: !!opt.full, courseMenu: !!opt['course-menu'], out, looks, user: opt.user, html, audit: !!opt.audit, perf };
+  return { evalJs: opt.eval, wait: +opt.wait * 1000, size, positionals, full: !!opt.full, courseMenu: !!opt['course-menu'], out, looks, user: opt.user, html, audit: !!opt.audit, perf, sync };
 };
 
 // The extension as it is in the working copy, with localhost added to where it runs and what it exposes.
@@ -114,6 +120,8 @@ const devCopy = (dest) => {
   for (const f of fs.readdirSync(root)) {
     if (f !== 'manifest.json' && !f.startsWith('.') && !NOT_EXTENSION.has(f) && !DOCS.test(f)) fs.cpSync(path.join(root, f), path.join(dest, f), { recursive: true });
   }
+  // The one part of assets/ the extension ships (package.sh): the card pets.
+  fs.cpSync(path.join(root, 'assets/art/pets'), path.join(dest, 'assets/art/pets'), { recursive: true });
   const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   for (const e of [...(m.content_scripts || []), ...(m.web_accessible_resources || [])]) e.matches.push('http://localhost/*');
   // And to inject there: Glaze's on-demand files (lib/background.js 'glaze:load') need host access.
@@ -367,7 +375,7 @@ const eachTab = async (tabs, items, fn) => {
 };
 
 (async () => {
-  const { evalJs, wait, size, positionals, full, courseMenu, out, looks, user, html, audit, perf } = parse();
+  const { evalJs, wait, size, positionals, full, courseMenu, out, looks, user, html, audit, perf, sync } = parse();
   fs.mkdirSync(out, { recursive: true });
   if (html) fs.mkdirSync(html, { recursive: true });
   console.log(`Screenshots go to ${out}`);
@@ -415,7 +423,8 @@ const eachTab = async (tabs, items, fn) => {
     for (const { label, settings } of looks) {
       // Saved settings are the real extension storage; the content script reads them as the page starts.
       await first.goto(`${base}/options.html`).catch((e) => die(`Glaze did not load from ${ext}: ${e.message}`));
-      await first.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, settings);
+      const more = JSON.parse(fill(JSON.stringify(sync).replace(/\{origin\}/g, BASE), found.ids));
+      await first.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, { ...settings, ...more });
       console.log(`\n${label}: ${settings.enabled ? `preset ${settings.preset ?? 'custom'}, bg ${settings.bg.kind}` : 'Glaze off'}`);
       if (perf) {
         for (const [name, url] of pages) for (const next of [false, true]) for (let i = 0; i < perf; i++) {

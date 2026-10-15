@@ -144,6 +144,8 @@ const cssNames = () => {
 // Keyed on, but on no fixture: each needs an interaction, a state or content the seed doesn't have. A fixture that
 // shows one makes the last test below ask for it to be taken off this list.
 const UNSEEN = [
+  // Canvas's mark after a link to another site: on a Dashboard card only once a course bookmark (W4) links elsewhere.
+  '.external_link_icon',
   // TinyMCE's menus, dialogs, swatches and tooltips exist only while one is open.
   '.tox-button', '.tox-button--icon', '.tox-button--naked', '.tox-button--secondary', '.tox-checkbox__icons', '.tox-checkbox__input',
   '.tox-checkbox__label', '.tox-collection__group', '.tox-collection__item', '.tox-collection__item--active',
