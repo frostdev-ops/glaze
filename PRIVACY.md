@@ -86,6 +86,12 @@ _Last updated: 2026-10-15_
   scaled down to at most 960 pixels and kept as WebP (JPEG in Safari), at most about 400 KB each and 4 MB in all.
   They are never synced, exported or put in a theme code. Choosing another picture, or removing the card's style,
   deletes the old one; Reset everything deletes them all.
+- **Stickers, your pointer picture and Look rotation**, in `chrome.storage.local`, on this device only: where you put
+  stickers on a page (the site's address and the page's path, with each sticker's position, size and angle), the
+  pictures you add as your own stickers (scaled down to at most 256 pixels, at most about 200 KB each and 4 MB in all),
+  your own pointer picture (scaled to 32 pixels), and which Looks rotation takes turns with and when it last changed.
+  None of it is synced, exported or put in a theme code; the pointer and rotation choices themselves sync with your
+  settings. Remove deletes a sticker, Delete your picture deletes a picture; Reset everything deletes all of it.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 

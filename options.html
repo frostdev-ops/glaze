@@ -158,6 +158,22 @@
           <p class="desc">A palette, fonts, shape and background that go together, in one click.</p>
           <div class="looks" id="looks"></div>
         </div>
+        <div class="group">
+          <h3>Look rotation</h3>
+          <p class="desc" id="rotate-note">Wears the next of the Looks you tick on a timer, kept on this computer. None ticked: every built-in Look. Your history keeps each one.</p>
+          <div class="row">
+            <select data-key="extras.rotate" aria-label="Look rotation" aria-describedby="rotate-note">
+              <option value="off">Off</option>
+              <option value="6h">Every 6 hours</option>
+              <option value="12h">Every 12 hours</option>
+              <option value="24h">Every 24 hours</option>
+              <option value="week">Every week</option>
+              <option value="daily">Every day at a set time</option>
+            </select>
+            <label id="rotate-at">At <input type="time" data-key="extras.at" required></label>
+          </div>
+          <ul class="saved" id="rotate-looks" aria-label="Looks to rotate through"></ul>
+        </div>
         <div class="swatches" id="presets"></div>
         <div class="tokens" id="colors"></div>
         <ul class="contrast" id="contrast" aria-label="Contrast checks"></ul>
@@ -223,6 +239,23 @@
         <label class="check"><input type="checkbox" data-key="look.hints"><span>Hover hints</span>
           <span class="desc">Hover a date to see how far off it is ("Due in 2 days"), a grade to see its percentage, or cut-off text to read all of it.</span></label>
         <label class="check"><input type="checkbox" data-key="footer"><span>Show the Glaze footer bar</span></label>
+        <div class="group">
+          <h3>Pointer</h3>
+          <div class="row">
+            <select data-key="extras.cursor" aria-label="Pointer" aria-describedby="cursor-note">
+              <option value="off">Standard</option>
+              <option value="aqua">Aqua</option>
+              <option value="lilac">Lilac</option>
+              <option value="pearl">Pearl</option>
+              <option value="own">Your own picture</option>
+            </select>
+            <span class="row" id="cursor-own"><button type="button" id="cursor-pick">Choose a picture…</button><img id="cursor-img" alt="" width="32" height="32" hidden><input type="file" id="cursor-file" accept="image/png,image/jpeg" hidden></span>
+          </div>
+          <p class="desc" id="cursor-note">On your course pages. A picture of your own (PNG or JPEG) is scaled to 32 pixels and kept on this computer; its top-left corner is the tip. Text fields keep the usual text cursor.</p>
+          <h3>Stickers</h3>
+          <label class="check"><input type="checkbox" data-key="extras.stickers"><span>Show stickers</span>
+            <span class="desc">Put stickers on any course page from the command palette (Ctrl+K): Place stickers on this page. They are kept on this computer, and never shown on a quiz you are taking.</span></label>
+        </div>
       </section>
 
       <section id="background">
@@ -573,6 +606,7 @@
   <script src="lib/cards.js"></script>
   <script src="lib/share.js"></script>
   <script src="lib/history.js"></script>
+  <script src="lib/lookx.js"></script>
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
   <script src="lib/todo.js"></script>
