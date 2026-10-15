@@ -18,7 +18,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', gradescope: 'Gradescope in To Do', search: 'Search in your courses',
     remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak',
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
-    notes: 'Dashboard notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
+    notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -71,12 +71,21 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...(ctx.settings().enhance.gpa ? [{ label: t('GPA: past terms, trends and goal'), hint: 'Glaze', group: 'Glaze', run: () => (location.pathname === '/' && globalThis.GZ_GRADES_UI ? GZ_GRADES_UI.open() : go('/#gz-gpa')()) }] : []),
       // Insights (features/insights.js): this term in numbers, on any Canvas page.
       ...(ctx.settings().enhance.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: () => need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.open(), () => {}) }] : []),
+      // The notes app (features/notes.js): the library, a new note, and this course's notes.
+      ...(ctx.settings().enhance.notes ? [
+        { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },
+        { label: t('New note'), hint: cid ? t('This course') : 'Glaze', group: 'Glaze', run: (e) => notes({ create: true, course: cid, event: e }) },
+        ...(cid ? [{ label: t('Course notes'), hint: t('This course'), group: 'Glaze', run: (e) => notes({ course: cid, event: e }) }] : []),
+      ] : []),
       ...glazeCmds(),
       // Every Canvas extra with its switch (features/widgets.js), whether or not the widgets are on.
       { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },
       ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
     ];
   };
+  // Notes opens only for the student's own click or Enter on its row: that event goes with the request, through loading
+  // features/notes.js, and open() checks it.
+  const notes = (o) => o.event?.isTrusted && need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open(o), () => {});
   // Everything the palette can do, built when it opens.
   const commands = async () => {
     // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds).
@@ -149,7 +158,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       hint.textContent = c.hint && c.hint !== c.group ? `${t(c.group)} · ${c.hint}` : t(c.group);
       li.append(label, hint);
       li.addEventListener('pointermove', () => { if (cmd.active !== i) { cmd.active = i; mark(); } });
-      li.addEventListener('click', () => runCmd(i));
+      li.addEventListener('click', (e) => runCmd(i, e));
       return li;
     }));
     if (cmd.seeking || !cmd.shown.length) cmd.list.insertBefore(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: t(cmd.seeking ? 'Searching your courses…' : cmd.loading ? 'Loading…' : 'Nothing matches.') }), cmd.list.children[at] || null);
@@ -160,11 +169,12 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     const on = cmd.list.querySelector('[aria-selected="true"]');
     if (on) { cmd.input.setAttribute('aria-activedescendant', on.id); on.scrollIntoView({ block: 'nearest' }); } else cmd.input.removeAttribute('aria-activedescendant');
   };
-  const runCmd = (i) => {
+  // e: the click or key that chose it, for the commands that need the student's own action (Notes).
+  const runCmd = (i, e) => {
     const c = cmd?.shown[i];
     if (!c) return;
     closeCmd();
-    c.run();
+    c.run(e);
   };
   // Search in your courses is Canvas's: not on Ultra, nor on Moodle, which has no /api/v1.
   const searchHere = () => !ultra && !moodle && ctx.settings().enhance.search;
@@ -200,7 +210,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       const n = cmd.shown.length;
       const step = { ArrowDown: 1, ArrowUp: -1, Tab: e.shiftKey ? -1 : 1 }[e.key];
       if (step && n) { e.preventDefault(); cmd.active = (cmd.active + step + n) % n; mark(); } else if (e.key === 'Tab') e.preventDefault();
-      else if (e.key === 'Home' || e.key === 'End') { if (n) { e.preventDefault(); cmd.active = e.key === 'Home' ? 0 : n - 1; mark(); } } else if (e.key === 'Enter') { e.preventDefault(); runCmd(cmd.active); } else if (e.key === 'Escape') { e.preventDefault(); closeCmd(); }
+      else if (e.key === 'Home' || e.key === 'End') { if (n) { e.preventDefault(); cmd.active = e.key === 'Home' ? 0 : n - 1; mark(); } } else if (e.key === 'Enter') { e.preventDefault(); runCmd(cmd.active, e); } else if (e.key === 'Escape') { e.preventDefault(); closeCmd(); }
       // Ultra's own shortcuts never see keys meant for the palette.
       e.stopPropagation();
     });

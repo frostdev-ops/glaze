@@ -31,7 +31,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     ['Everywhere', ['palette', 'search', 'keys', 'drafts', 'quizLight']],
   ];
   const EXTRA = {
-    notes: 'Dashboard notes', widgets: 'Widgets', todo: 'Better To Do', cardTasks: 'Tasks on course cards', overall: 'Grades on course cards',
+    notes: 'Notes', widgets: 'Widgets', todo: 'Better To Do', cardTasks: 'Tasks on course cards', overall: 'Grades on course cards',
     gradeHover: 'Card grades only on hover', gpa: 'Grade point average', insights: 'Insights', newgrades: 'New-grade badges', newcontent: 'New-content badges', coursemenu: 'Course menu',
     progress: 'Course progress', place: 'Remember your place', download: 'Download all', calc: 'What-if calculator', syllabus: 'Syllabus import', inline: 'Due-date status and percentages',
     scores: 'Score bars', urgency: 'Due-date urgency', previews: 'Folder previews', toggles: 'Document buttons', darkDocs: 'Dark documents',
@@ -130,7 +130,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         .then((r) => { newer(W.cleanNote(r[key])); if (text.hidden && !draft) render(); }, () => {});
       load();
       render();
-      body.append(view, text, status);
+      // The notes app (features/notes.js, the same switch): these notes stay as they are, and this opens the rest.
+      const app = make('button', { type: 'button', className: 'gz-w-btn gz-w-note-app', textContent: t('Open Notes') });
+      app.addEventListener('click', (e) => { if (e.isTrusted) ctx.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ event: e }), () => {}); });
+      body.append(view, text, status, app);
       return { wake: () => { if (!key) load(); }, stop: () => { save(); removeEventListener('pagehide', leave); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
     },
 
