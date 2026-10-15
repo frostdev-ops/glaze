@@ -65,7 +65,8 @@ test('a concurrent sign-out clear wins over an earlier snapshot write', async ()
   const drop = w.send({ op: 'drop', signout: true });
   await Promise.all([put, drop]);
   assert.equal(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 0);
-  assert.equal(await w.send({ op: 'put', cid, snap: snapshot() }), null, 'sign-out revokes this account until hello');
+  assert.equal(await w.send({ op: 'put', cid, snap: snapshot() }), null, 'sign-out revokes this document');
+  assert.equal((await w.send({ op: 'hello' }))?.stale, true, 'cached identity cannot undo sign-out');
 });
 
 test('snapshot limits count ancestor metadata', async () => {
@@ -127,7 +128,8 @@ test('an account change clears and revokes already-open documents, including cac
   assert.equal((await w.send({ op: 'hello' }))?.stale, true, 'old document cannot reassert cached /users/me');
   assert.equal(await w.send({ op: 'put', cid, epoch: hello.epoch, snap: snapshot() }), null);
   assert.equal((await w.send({ op: 'hello', born: w.born - 1000 }, { tab: { id: 3 }, documentId: 'unseen-old-document' }))?.stale, true);
-  assert.ok((await w.send({ op: 'hello', born: w.born + 2000 }, { tab: { id: 1 }, documentId: 'reloaded-document' }))?.ok);
+  assert.equal((await w.send({ op: 'hello', born: w.born + 1500 }, { tab: { id: 3 }, documentId: 'old-document-born-after-switching-document' }))?.stale, true, 'even an unseen document born after the switching document predates the observed boundary');
+  assert.ok((await w.send({ op: 'hello', born: Date.now() + 1 }, { tab: { id: 1 }, documentId: 'reloaded-document' }))?.ok);
 });
 
 test('cache broadcasts only reach known matching Ultra documents', async () => {
@@ -158,4 +160,14 @@ test('document ordering metadata is strictly validated and never replaces sender
   assert.equal(await w.send({ op: 'hello' }, { id: 'other-extension' }), null);
   assert.equal(await w.send({ op: 'hello' }, { tab: null }), null);
   assert.equal(await w.send({ op: 'hello' }, { documentId: {} }), null);
+  assert.equal(await w.send({ op: 'hello', uid: '_' + '1'.repeat(1000) + '_1' }), null);
+});
+
+
+test('a tolerated birth-time skew never creates a future account boundary', async () => {
+  const w = worker(); await w.send({ op: 'hello' });
+  const future = Date.now() + 500;
+  await w.send({ op: 'hello', uid: '_43_1', born: future }, { tab: { id: 2 }, documentId: 'skewed-document' });
+  assert.ok(w.data[`snapwho:${site}`]?.floor <= Date.now());
+  assert.ok((await w.send({ op: 'hello', born: Date.now() + 1 }, { tab: { id: 3 }, documentId: 'fresh-document' }))?.ok);
 });

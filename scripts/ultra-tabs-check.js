@@ -414,7 +414,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     // Quiet state and repeated route redraws: own DOM writes must settle, with one strip and no listener growth.
     phase = 'redraw-probes';
     await isolated(() => {
-      globalThis.__b8 = { syncs: 0, helds: 0, adds: 0, removes: 0, storeAdds: 0, storeRemoves: 0, timeouts: new Set() };
+      globalThis.__b8 = { syncs: 0, helds: 0, adds: 0, removes: 0, storeAdds: 0, storeRemoves: 0, runtimeAdds: 0, runtimeRemoves: 0, timeouts: new Set() };
       const sync = GZ_CTABS.sync, held = GZ_CTABS.held;
       GZ_CTABS.sync = (...a) => { __b8.syncs++; return sync(...a); };
       GZ_CTABS.held = (...a) => { __b8.helds++; return held(...a); };
@@ -425,6 +425,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       for (const name of ['addListener', 'removeListener']) {
         const native = chrome.storage.onChanged[name];
         chrome.storage.onChanged[name] = (...args) => { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addListener' ? 'storeAdds' : 'storeRemoves']++; return native(...args); };
+      }
+      for (const name of ['addListener', 'removeListener']) {
+        const native = chrome.runtime.onMessage[name];
+        chrome.runtime.onMessage[name] = (...args) => { if (String(new Error().stack).includes('features/coursetabs.js')) __b8[name === 'addListener' ? 'runtimeAdds' : 'runtimeRemoves']++; return native(...args); };
       }
       const schedule = setTimeout, cancel = clearTimeout;
       globalThis.setTimeout = (f, ms, ...a) => {
@@ -445,10 +449,11 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForTimeout(2000);
     const quietBefore = await isolated(() => ({ syncs: __b8.syncs, helds: __b8.helds }));
     await page.waitForTimeout(1200);
-    const quietAfter = await isolated(() => ({ syncs: __b8.syncs, helds: __b8.helds, netListeners: __b8.adds - __b8.removes, netStoreListeners: __b8.storeAdds - __b8.storeRemoves, timers: __b8.timeouts.size }));
+    const quietAfter = await isolated(() => ({ syncs: __b8.syncs, helds: __b8.helds, netListeners: __b8.adds - __b8.removes, netStoreListeners: __b8.storeAdds - __b8.storeRemoves, netRuntimeListeners: __b8.runtimeAdds - __b8.runtimeRemoves, timers: __b8.timeouts.size }));
     ok(quietAfter.syncs - quietBefore.syncs <= 2, `quiet after redraws: ${quietAfter.syncs - quietBefore.syncs} sync calls in 1.2s`);
     ok(quietAfter.netListeners === 0, `toggle cycles retain no extra listeners (${quietAfter.netListeners})`);
     ok(quietAfter.netStoreListeners === 0, `toggle cycles retain no extra storage listeners (${quietAfter.netStoreListeners})`);
+    ok(quietAfter.netRuntimeListeners === 0, `routes/toggles retain no extra runtime listeners (${quietAfter.netRuntimeListeners})`);
     ok(await page.locator('#gz-ctabs').count() === 1, 'redraws, Back and Forward keep exactly one strip');
     fs.writeFileSync(path.join(out, 'redraw-metrics.json'), JSON.stringify({ quietBefore, quietAfter }, null, 2));
 
