@@ -166,7 +166,7 @@ test('static preview arrival starts nav despite an earlier cached rejected injec
   const a = source.indexOf('  const syncNav = () =>'), b = source.indexOf('\n  chrome.storage.onChanged', a);
   let starts = 0, asks = 0;
   const failed = Promise.reject(new Error('not in the preview')); failed.catch(() => {});
-  const ctx = vm.createContext({ isPreview: true, I: { links: [1], worn: { nav: {} } }, navItems: { links: [1], order: [], hidden: [], widgets: [] }, syncDashboard() {}, need: (file) => { if (file === 'features/nav.js') asks++; return failed; }, location: { pathname: '/preview.html' }, window: {} });
+  const ctx = vm.createContext({ isPreview: true, I: { links: [1], worn: { nav: {} } }, navItems: { links: [1], order: [], hidden: [], widgets: [] }, syncDashboard() {}, glazeItem() {}, need: (file) => { if (file === 'features/nav.js') asks++; return failed; }, location: { pathname: '/preview.html' }, window: {} });
   const sync = vm.runInContext(source.slice(a, b) + '\nsyncNav;', ctx);
   sync(); await new Promise(setImmediate);
   ctx.GZ_NAV_UI = { sync: () => starts++ };
@@ -194,4 +194,49 @@ test('the nav logo goes home in this tab: the Dashboard when it is on, else Cour
   assert.deepEqual(run(false, {}, false), { clicked: [], assigned: ['/ultra/course'], prevented: true });
   assert.deepEqual(run(true, { metaKey: true }), { clicked: [], assigned: [], prevented: false }, 'a modified click is the browser\'s');
   assert.deepEqual(run(true, { target: { closest: () => null } }), { clicked: [], assigned: [], prevented: false }, 'only the logo');
+});
+
+test('Glaze settings: last in the nav, a copy of its last item, hidden and moved like Ultra\'s own; gone when Glaze is off', () => {
+  const N = require('../lib/nav.js');
+  assert.equal(N.native('#glaze'), 'glaze');
+  assert.equal(N.NATIVE.at(-1), 'glaze', 'last by default');
+  const src = fs.readFileSync(require('node:path').join(__dirname, '..', 'content-ultra.js'), 'utf8');
+  const block = src.slice(src.indexOf("  // Glaze settings, last in Ultra's nav"), src.indexOf('  const queueNav = '));
+  // A small DOM: a nav with two items in li, the last Ultra's Sign out (#).
+  const mk = (tag) => { const e = { tagName: tag.toUpperCase(), children: [], attrs: {}, classList: null, parentElement: null, listeners: {} };
+    e.classList = { set: new Set(), add: (c) => e.classList.set.add(c), remove: (...cs) => cs.forEach((c) => e.classList.set.delete(c)), contains: (c) => e.classList.set.has(c) };
+    e.setAttribute = (k, v) => { e.attrs[k] = String(v); }; e.getAttribute = (k) => e.attrs[k] ?? null; e.removeAttribute = (k) => { delete e.attrs[k]; };
+    e.append = (...k) => k.forEach((x) => { if (typeof x === 'object') { x.parentElement = e; e.children.push(x); } else e.text = x; });
+    e.after = (x) => { const p = e.parentElement; x.parentElement = p; p.children.splice(p.children.indexOf(e) + 1, 0, x); };
+    e.remove = () => { const p = e.parentElement; if (p) p.children.splice(p.children.indexOf(e), 1); e.parentElement = null; };
+    e.addEventListener = (t, f) => { e.listeners[t] = f; };
+    e.replaceWith = (x) => { const p = e.parentElement; x.parentElement = p; p.children[p.children.indexOf(e)] = x; };
+    e.querySelector = (sel) => { const all = []; const walk = (n) => n.children.forEach((k) => { all.push(k); walk(k); }); walk(e); return all.find((k) => (sel === 'a[href="#glaze"]' ? k.attrs.href === '#glaze' : sel === 'svg' ? k.tagName === 'SVG' : k.tagName === 'SPAN' && k.className !== 'gz-nav-glaze-icon')) || null; };
+    e.querySelectorAll = () => { const all = []; const walk = (n) => n.children.forEach((k) => { all.push(k); walk(k); }); walk(e); return all.filter((k) => k.tagName === 'A'); };
+    e.cloneNode = (deep) => { const c = mk(tag); c.attrs = { ...e.attrs }; e.classList.set.forEach((x) => c.classList.add(x)); if (deep) e.children.forEach((k) => c.append(k.cloneNode(true))); return c; };
+    Object.defineProperty(e, 'href', { set: (v) => { e.attrs.href = v; }, get: () => e.attrs.href });
+    return e; };
+  const root = mk('nav'); root.isConnected = true;
+  const item = (href, label) => { const li = mk('li'), a = mk('a'), svg = mk('svg'), span = mk('span'); a.attrs.href = href; a.classList.add('MuiListItemButton-root'); span.text = label; a.append(svg, span); li.append(a); root.append(li); return a; };
+  item('/ultra/course', 'Courses'); item('#', 'Sign out');
+  const sent = [];
+  const ctx = { navRoots: new Set([root]), GZ_NAV: N, t: (k) => k, chrome: { runtime: { sendMessage: (m) => sent.push(m) } },
+    document: { createElement: (t) => mk(t), createTreeWalker: (n) => ({ nextNode: () => (n.text !== undefined ? { set data(v) { n.text = v; }, get data() { return n.text; } } : null) }) }, NodeFilter: { SHOW_TEXT: 4 } };
+  const glazeItem = require('node:vm').runInNewContext(block + '\nglazeItem;', ctx);
+  glazeItem(true);
+  const lis = root.children, g = lis.at(-1).children[0];
+  assert.equal(lis.length, 3, 'one more item');
+  assert.ok(lis.at(-1).classList.contains('gz-nav-glaze'), 'last, in its own li');
+  assert.equal(g.attrs.href, '#glaze');
+  assert.equal(g.attrs['aria-label'], 'Glaze settings');
+  assert.ok(g.classList.contains('MuiListItemButton-root'), 'Ultra\'s classes: every nav setting styles it');
+  assert.equal(g.children[0].className, 'gz-nav-glaze-icon', 'the drop for its icon');
+  assert.equal(g.children[1].text, 'Glaze settings');
+  let stopped = 0;
+  g.listeners.click({ preventDefault() {}, stopPropagation() { stopped++; } });
+  assert.deepEqual(sent, ['options'], 'opens the editor');
+  glazeItem(true);
+  assert.equal(root.children.length, 3, 'once, however often the pass runs');
+  glazeItem(false);
+  assert.equal(root.children.length, 2, 'Glaze off: gone');
 });

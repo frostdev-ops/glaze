@@ -604,6 +604,27 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       }
     }
   };
+  // Glaze settings, last in Ultra's nav: a copy of its last item (so every nav setting styles it), Glaze's drop for its
+  // icon (theme.css); it opens the editor. Hidden and moved like Ultra's own (lib/nav.js NATIVE 'glaze').
+  const glazeItem = (on) => {
+    for (const root of navRoots) {
+      const g = root.isConnected && root.querySelector('a[href="#glaze"]');
+      if (!on) { (g?.parentElement.classList.contains('gz-nav-glaze') ? g.parentElement : g || null)?.remove(); continue; }
+      const last = root.isConnected && !g && [...root.querySelectorAll('a[href]')].filter((a) => GZ_NAV.native(a.getAttribute('href'))).pop();
+      if (!last) continue;
+      const a = last.cloneNode(true), name = t('Glaze settings');
+      for (const k of ['id', 'aria-current', 'target', 'data-gz-nav-id', 'data-gz-nav-original']) a.removeAttribute(k);
+      a.classList.remove('active', 'Mui-selected', 'gz-nav-dashboard');
+      Object.assign(a, { href: '#glaze', title: name }); a.setAttribute('aria-label', name);
+      a.querySelector('svg')?.replaceWith(Object.assign(document.createElement('span'), { className: 'gz-nav-glaze-icon' }));
+      const label = a.querySelector('.MuiTypography-root, .MuiListItemText-root, span:not(:has(svg)):not(.gz-nav-glaze-icon)') || a;
+      const text = document.createTreeWalker(label, NodeFilter.SHOW_TEXT).nextNode();
+      if (text) text.data = name; else label.append(name);
+      a.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); try { chrome.runtime.sendMessage('options'); } catch { /* reloaded */ } });
+      const li = last.parentElement.tagName === 'LI' && Object.assign(last.parentElement.cloneNode(false), { id: '' });
+      if (li) { li.classList.add('gz-nav-glaze'); li.append(a); last.parentElement.after(li); } else last.after(a);
+    }
+  };
   const queueNav = () => { if (!navQueued) { navQueued = true; queueMicrotask(() => { navQueued = false; syncDashboard(); }); } };
   const navObserver = new MutationObserver((changes) => {
     if (!chrome.runtime?.id) { navObserver.disconnect(); return; }
@@ -665,6 +686,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     globalThis.GZ_FOLDER_UI?.sync(!!top()?.hideFolders, meId);
     if (!isPreview && window.top !== window) return;
     syncDashboard();
+    glazeItem(I.links.length && I.settings?.enabled);
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
     else if (I.links.length && navItems) {
       const n = I.worn.nav;

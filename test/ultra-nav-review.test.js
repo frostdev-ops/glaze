@@ -201,7 +201,7 @@ test('a refused completed timer advance is attempted only once for that stored s
 test('a default Ultra grade page does not load the nav UI, but saved custom links do', () => {
   const src = source('content-ultra.js'), a = src.indexOf('  const syncNav ='), b = src.indexOf('\n  chrome.storage.onChanged', a);
   let files = [];
-  const c = vm.createContext({ isPreview: false, window: {}, I: { links: [1], worn: { nav: {} } }, navItems: { links: [], order: [], hidden: [], widgets: [] }, navRead: false, syncDashboard() {}, location: { pathname: '/ultra/grades' }, need: (f) => { files.push(f); return Promise.resolve(); } });
+  const c = vm.createContext({ isPreview: false, window: {}, I: { links: [1], worn: { nav: {} } }, navItems: { links: [], order: [], hidden: [], widgets: [] }, navRead: false, syncDashboard() {}, glazeItem() {}, location: { pathname: '/ultra/grades' }, need: (f) => { files.push(f); return Promise.resolve(); } });
   c.window.top = c.window;
   const sync = vm.runInContext(src.slice(a, b > a ? b : src.indexOf('\n  // A host registered', a)) + '\nsyncNav;', c);
   sync(); assert.deepEqual(files, []);
