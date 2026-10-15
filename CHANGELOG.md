@@ -7,6 +7,9 @@ All notable changes to Glaze are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Course tabs stay visible on Ultra's full routed documents and positively cached Assignment overviews, preserving
+  their allowed URL context and content scroller. Unknown assessments and tests return to Course Content; tabs never
+  fetch a gradebook to classify an overview or open an attempt.
 - Ultra route changes show immediately instead of waiting behind Glaze's separate loading gate. Internal widget
   updates no longer trigger native-page sweeps, and an unchanged gradebook keeps its successful empty late-status answer.
 - Tabs left open across an extension reload stop feature work immediately; Google sync and Download all close orphaned

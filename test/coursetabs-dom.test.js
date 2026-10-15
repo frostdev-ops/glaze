@@ -70,6 +70,7 @@ function replay(href) {
   const document = { querySelectorAll: () => [anchor] }, routed = [];
   vm.runInNewContext(remember + end + '\nremember(document, {clientX:5,clientY:5});end();', {
     L, document, go: {}, URL, location: { origin: 'https://bb.school.test' }, shown: () => true,
+    safePath: (p, q) => L.safe(p, q), observeView() {},
     clearTimeout() {}, place() {}, draw() {}, route: (url) => routed.push(url),
   });
   return routed;

@@ -514,6 +514,11 @@ html[data-gz-ctabs~="above"] div.bb-course-navigation:not(:has(#gz-ctabs)) { pad
 html[data-gz-ctabs~="below"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h) !important; }
 html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) :has(> .js-course-navigation) { margin-top: var(--gz-ctabs-h) !important; }
 html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
+/* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. */
+html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }
+html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
+html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: var(--gz-surface, Canvas); }
+#gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
 #gz-ctabs {
   position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 8px; box-sizing: border-box; flex: none; width: 100%;
   height: var(--gz-ctabs-h, 40px); padding: 6px 12px 0; margin: 0; font: 500 13px/1.2 var(--gz-font, inherit); color: var(--gz-ink-muted);
