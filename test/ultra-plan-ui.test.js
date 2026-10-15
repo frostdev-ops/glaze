@@ -339,3 +339,23 @@ test('review (B2 3): when Ultra sent only part of the calendar, a card and the l
   const t = l.c.GZ_TODO_UI.probe.get().box.text;
   assert.ok(t.includes(MISSING) && !t.includes('Nothing to do'));
 });
+
+
+test('NEW-1: Ultra W11 stores its calculation day without changing a stable run', async () => {
+  const today = T.dayOf(NOW, 'America/New_York'), rk = R.storeKey(O, '_900_1');
+  const r = page({ path: '/ultra/stream', enhance: { streak: true }, stored: {
+    [rk]: { streak: { start: today - 20, best: 100, asOf: today - 1 } },
+    todoCache: { key: KEY, at: NOW, start: new Date(NOW - 9 * 864e5).toISOString(), end: new Date(NOW + 9 * 864e5).toISOString(), items: [], grading: [], sums: {} },
+  } });
+  r.c.chrome.runtime.sendMessage = (m, cb) => {
+    r.sent.push(m);
+    const area = { get: async () => r.store, set: async (v) => { Object.assign(r.store, v); return true; } };
+    R.change(m, { local: area }, NOW).then(cb);
+  };
+  vm.runInContext(read('features/reminders.js'), r.c);
+  r.c.GZ_REMIND_UI.sync(true); await settle();
+  assert.equal(r.store[rk].streak.asOf, today);
+  assert.equal(r.sent.filter((m) => m.op === 'streak').length, 1);
+  assert.deepEqual(r.calls, [], 'no new direct request');
+  r.c.GZ_REMIND_UI.sync(false);
+});

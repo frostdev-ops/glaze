@@ -202,7 +202,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const s = R.streak(b, st.streak, T.dayOf(now, who.tz));
     run = s;
     const was = st.streak;
-    if (writing || (was && s.start === was.start && s.best === was.best)) return;
+    if (writing || (was && s.start === was.start && s.best === was.best && s.asOf === was.asOf)) return;
     writing = true;
     const { current, extended, ...keep } = s;
     send({ op: 'streak', from: was?.start ?? null, streak: keep }).then((r) => { writing = false; if (r?.data) { st = R.clean(r.data); arm(); } });

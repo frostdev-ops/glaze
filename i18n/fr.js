@@ -1564,6 +1564,6 @@
   "A local study buddy that earns XP from handed-in work, streak days and kept do-on plans already saved on this device. Decorate its habitat and unlock new looks. Off by default; no notifications, focus-session XP or missed-day penalties.": "Un compagnon d’étude local gagne des XP grâce aux devoirs rendus, aux jours de série et aux jours prévus respectés déjà enregistrés sur cet appareil. Décore son habitat et débloque de nouvelles apparences. Désactivé par défaut ; aucune notification, aucun XP pour les séances de concentration ni pénalité pour les jours manqués.",
 
   "Pet history couldn’t be updated. Existing progress was kept.": "L’historique du compagnon n’a pas pu être mis à jour. La progression a été conservée.",
-  "Streak XP uses saved streak days through yesterday, while Streak is on. Restores add days once; switching it off keeps earned XP.": "Les XP de série comptent les jours enregistrés jusqu’à hier, quand Série est activée. Les restaurations ajoutent chaque jour une seule fois ; la désactivation conserve les XP gagnés.",
+  "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Les XP de série comptent seulement les jours déjà vérifiés par Série, jusqu’à hier. Les restaurations ajoutent chaque jour une seule fois ; la désactivation conserve les XP gagnés.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Les XP de série nécessitent d’activer Série ; les XP gagnés restent après la désactivation.",
 };

@@ -1564,6 +1564,6 @@
   "A local study buddy that earns XP from handed-in work, streak days and kept do-on plans already saved on this device. Decorate its habitat and unlock new looks. Off by default; no notifications, focus-session XP or missed-day penalties.": "Ein lokaler Lernbegleiter erhält EP für abgegebene Aufgaben, Serientage und eingehaltene Tagespläne, die bereits auf diesem Gerät gespeichert sind. Dekoriere sein Zuhause und schalte neue Looks frei. Standardmäßig aus; keine Benachrichtigungen, EP für Fokus-Sitzungen oder Strafen für ausgelassene Tage.",
 
   "Pet history couldn’t be updated. Existing progress was kept.": "Der Haustierverlauf konnte nicht aktualisiert werden. Dein Fortschritt bleibt erhalten.",
-  "Streak XP uses saved streak days through yesterday, while Streak is on. Restores add days once; switching it off keeps earned XP.": "Serien-EP zählen gespeicherte Serientage bis gestern, solange die Serie eingeschaltet ist. Wiederherstellungen zählen jeden Tag einmal; Ausschalten behält verdiente EP.",
+  "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Serien-EP zählen nur von der Serie bereits geprüfte Tage bis gestern. Wiederherstellungen zählen jeden Tag einmal; Ausschalten behält verdiente EP.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Serien-EP erfordern eine eingeschaltete Serie; verdiente EP bleiben beim Ausschalten erhalten.",
 };

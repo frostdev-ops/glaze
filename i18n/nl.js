@@ -1564,6 +1564,6 @@
   "A local study buddy that earns XP from handed-in work, streak days and kept do-on plans already saved on this device. Decorate its habitat and unlock new looks. Off by default; no notifications, focus-session XP or missed-day penalties.": "Een lokaal studiemaatje verdient XP met ingeleverd werk, reeksdagen en nagekomen dagplannen die al op dit apparaat zijn opgeslagen. Versier het verblijf en speel nieuwe looks vrij. Standaard uit; geen meldingen, XP voor focussessies of straf voor gemiste dagen.",
 
   "Pet history couldn’t be updated. Existing progress was kept.": "De huisdiergeschiedenis kon niet worden bijgewerkt. Je voortgang is bewaard.",
-  "Streak XP uses saved streak days through yesterday, while Streak is on. Restores add days once; switching it off keeps earned XP.": "Reeks-XP tellen opgeslagen reeksdagen tot en met gisteren zolang Reeks aanstaat. Herstel telt elke dag eenmaal; uitschakelen behoudt verdiende XP.",
+  "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Reeks-XP tellen alleen dagen die Reeks al heeft gecontroleerd, tot en met gisteren. Herstel telt elke dag eenmaal; uitschakelen behoudt verdiende XP.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Reeks-XP vereisen dat Reeks aanstaat; verdiende XP blijven behouden als het uitstaat.",
 };

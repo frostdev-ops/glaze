@@ -206,3 +206,14 @@ test('W24: a failed declared-widget load is quiet until its bounded retry', asyn
   assert.equal(p.loads.length, 2);
   p.ui.sync(false);
 });
+
+
+test('Ultra hub offers Streak beside Pet habitat', async () => {
+  const p = page(); p.c.navigator = { userAgent: 'Synthetic fixture' };
+  await p.ui.hub();
+  const hub = p.doc.getElementById('gz-hub');
+  const group = hub.querySelectorAll('fieldset').find((g) => g.querySelector('legend')?.textContent === 'Reminders and streak');
+  assert.ok(group.querySelector('input[data-key="streak"]'));
+  assert.ok(group.querySelector('input[data-key="pet"]'));
+  hub.close();
+});

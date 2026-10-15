@@ -508,7 +508,7 @@ test('NEW-1: W11 persists calculated day even when start and best do not change'
   a.ui.sync(true); await settle();
   assert.equal(a.ops('streak').length, 1, 'same day does not rewrite');
   w.skew += 864e5;
-  a.ui.sync(true); await settle();
+  a.live().at(-1).f(); await settle();
   assert.equal(a.ops('streak').length, 2);
   assert.equal(w.box[KEY].streak.asOf, today + 1);
   a.ui.sync(false);

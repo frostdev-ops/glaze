@@ -1564,6 +1564,6 @@
   "A local study buddy that earns XP from handed-in work, streak days and kept do-on plans already saved on this device. Decorate its habitat and unlock new looks. Off by default; no notifications, focus-session XP or missed-day penalties.": "Un compañero de estudio local gana XP por trabajos entregados, días de racha y planes de día cumplidos ya guardados en este dispositivo. Decora su hábitat y desbloquea nuevos aspectos. Desactivado por defecto; sin notificaciones, XP por sesiones de concentración ni penalizaciones por días perdidos.",
 
   "Pet history couldn’t be updated. Existing progress was kept.": "No se pudo actualizar el historial de la mascota. Se conservó tu progreso.",
-  "Streak XP uses saved streak days through yesterday, while Streak is on. Restores add days once; switching it off keeps earned XP.": "Los XP de racha cuentan los días guardados hasta ayer mientras Racha está activada. Las restauraciones añaden cada día una vez; desactivarla conserva los XP ganados.",
+  "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Los XP de racha cuentan solo los días ya comprobados por Racha, hasta ayer. Las restauraciones añaden cada día una vez; desactivarla conserva los XP ganados.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Los XP de racha requieren activar Racha; los XP ganados se conservan al desactivarla.",
 };

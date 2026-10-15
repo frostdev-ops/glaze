@@ -60,7 +60,7 @@ test('unticking removes plan XP and reticking recomputes without accumulating', 
 
 const cache = { at: now, start: new Date(now - 33 * T.DAY).toISOString(), end: new Date(now + 8 * T.DAY).toISOString() };
 test('streak XP is a union of W11 verified days, never its historical best', () => {
-  const streak = { start: today - 2, best: 100, keys: [], ok: [] };
+  const streak = { start: today - 2, asOf: today, best: 100, keys: [], ok: [] };
   const first = run({ streak, cache, planner: [] });
   assert.deepEqual(first.days, [today - 2, today - 1]);
   assert.equal(xp(first), 10);
@@ -68,13 +68,13 @@ test('streak XP is a union of W11 verified days, never its historical best', () 
   assert.equal(xp(run({ streak: { ...streak, start: today + 7 }, now: now + 7 * T.DAY }, first)), 10);
 });
 for (const [name, c] of [['missing', undefined], ['stale', { ...cache, at: now - 6e5 }], ['future', { ...cache, at: now + 1 }], ['partial', { ...cache, start: new Date(now - T.DAY).toISOString() }]]) {
-  test(`saved W11 streak does not depend on ${name} cache`, () => assert.equal(xp(run({ streak: { start: today - 10, best: 100 }, cache: c, planner: [] })), 50));
+  test(`saved W11 streak does not depend on ${name} cache`, () => assert.equal(xp(run({ streak: { start: today - 10, asOf: today, best: 100 }, cache: c, planner: [] })), 50));
 }
 test('only the saved W11 start and restores determine credited closed days', () => {
   const planner = [{ type: 'assignment', id: '3', title: 'Missed', at: now - T.DAY, sub: { submitted: false }, cid: '1' }];
-  const streak = { start: today - 2, best: 100, keys: [], ok: [] };
+  const streak = { start: today - 2, asOf: today, best: 100, keys: [], ok: [] };
   assert.deepEqual(run({ streak, cache, planner }).days, [today - 2, today - 1]);
-  assert.deepEqual(run({ streak: { ...streak, start: today - 4, ok: ['assignment:3'] }, cache, planner }).days, [today - 4, today - 3, today - 2, today - 1]);
+  assert.deepEqual(run({ streak: { ...streak, start: today - 4, asOf: today, ok: ['assignment:3'] }, cache, planner }).days, [today - 4, today - 3, today - 2, today - 1]);
 });
 
 test('levels and equipment validate stored values and keep rewards local', () => {

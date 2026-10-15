@@ -9,23 +9,23 @@ const view = (state) => P.view(state);
 
 test('P1: default eight-day planner coverage does not block saved W11 streak XP', () => {
   const cache = { at: now, ...T.fetchRange(D.GZ_SANITIZE({}).todo, now, tz) };
-  const state = run({ cache, streak: { start: today - 20, best: 900 }, planner: [] });
+  const state = run({ cache, streak: { start: today - 20, asOf: today, best: 900 }, planner: [] });
   assert.equal(view(state).streakXp, 100);
   assert.deepEqual(state.days, Array.from({ length: 20 }, (_, i) => today - 20 + i));
 });
 test('P2: saved W11 start is the single source, unaffected by hidden-course rows or cache availability', () => {
-  const streak = { start: today - 10, best: 500 };
+  const streak = { start: today - 10, asOf: today, best: 500 };
   const state = run({ streak, planner: [{ ...row, at: now - 5 * T.DAY, cid: 'hidden', sub: { submitted: false } }] });
   assert.equal(view(state).streakXp, 50);
   assert.deepEqual(run({ streak }, state), state);
-  assert.equal(view(run({ streak: { start: today - 12, best: 500, ok: ['assignment:1'] } }, state)).streakXp, 60);
-  assert.equal(view(run({ streak: { start: today - 2, best: 500 } }, state)).streakXp, 50);
+  assert.equal(view(run({ streak: { start: today - 12, asOf: today, best: 500, ok: ['assignment:1'] } }, state)).streakXp, 60);
+  assert.equal(view(run({ streak: { start: today - 2, asOf: today, best: 500 } }, state)).streakXp, 50);
 });
 test('saved streak absent or disabled grants no new days; disabling preserves settled rewards', () => {
-  const saved = run({ streak: { start: today - 2, best: 50 } });
+  const saved = run({ streak: { start: today - 2, asOf: today, best: 50 } });
   assert.equal(view(run({ streak: { start: today - 10 }, streakOn: false }, saved)).streakXp, 10);
   assert.equal(view(run({ streakOn: false })).streakXp, 0);
-  assert.equal(view(run({ streak: { start: today, best: 500 } })).streakXp, 0, 'today is not yet a closed day');
+  assert.equal(view(run({ streak: { start: today, asOf: today, best: 500 } })).streakXp, 0, 'today is not yet a closed day');
 });
 for (const [name, options, planner, data] of [
   ['synced planner untick', { sync: true, done: 'auto' }, [{ ...row, ov: { done: false } }], todo],
@@ -119,3 +119,15 @@ for (const [done, tick, work, plans] of [['manual', true, 20, 8], ['auto', false
     assert.equal(view(after).work, work); assert.equal(view(after).plans, plans);
   });
 }
+
+
+test('NEW-2: Ultra uses local ticks even when Canvas tick sync is on', async () => {
+  const key = 'pet:https://school.test/_3_1';
+  const stored = { 'todo:https://school.test/_3_1': { items: { 'assignment:1': { done: false, on: '2026-10-14' } } },
+    'insights:https://school.test/_3_1': insights, todoCache: { key: 'todo:https://school.test/_3_1', at: now, items: [row] } };
+  const result = await P.change({ key, op: 'read', tz }, {
+    local: { get: async () => stored, set: async () => true },
+    sync: { get: async () => ({ todo: { sync: true } }) },
+  });
+  assert.equal(result.data.work, 0); assert.equal(result.data.plans, 0);
+});

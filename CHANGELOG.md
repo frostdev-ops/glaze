@@ -6,6 +6,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+- Pet streak XP waits for W11’s stored calculation day, and synced work/plan credit survives rows leaving the planner window. Ultra’s hub offers Streak beside Pet habitat.
+
 ### Added
 
 - **Pet reward corrections:** W11's saved streak supplies closed-day rewards without a planner-window requirement; synced/manual unticks revoke work and plan XP. Clearing Insights and deleting finished history preserve settled XP. Bounded records fail closed without resetting progress. The widget now uses B5's real shared Canvas/Ultra panel, account helper and app stylesheet; failed module loads back off quietly.
