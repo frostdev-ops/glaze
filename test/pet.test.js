@@ -114,3 +114,9 @@ test('an older retained cache cannot resurrect XP after a newer submission corre
   assert.equal(xp(next), 0);
   assert.equal(xp(run({ insights, todo: { items: { 'assignment:1': { on: '2026-10-14' } } } }, next)), 0);
 });
+
+test('unknown Ultra submission timing earns only neutral hand-in XP, never the on-time bonus', () => {
+  assert.equal(xp(run({ planner: [{ type: 'assignment', id: '_2_1', at: now - T.DAY, state: 'unknown', sub: { submitted: true } }] })), 15);
+  assert.equal(xp(run({ insights: insight([item({ s: '', a: now, d: now - T.DAY })]) })), 15);
+  assert.equal(xp(run({ planner: [{ type: 'assignment', id: '_2_1', sub: { submitted: 'true' } }] })), 0);
+});

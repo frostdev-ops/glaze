@@ -8,7 +8,10 @@
 .gz-game-cell img{grid-area:1/1;object-fit:contain;max-width:none;pointer-events:none}
 .gz-game-decor{width:54px;height:54px}
 .gz-game-buddy{position:absolute;width:118px;height:118px;z-index:2}
-.gz-game progress{accent-color:var(--gz-accent,#16837b);width:100%;height:12px}
+.gz-game progress{appearance:none;accent-color:var(--gz-accent,#16837b);width:100%;height:10px;border:0;border-radius:999px;overflow:hidden;background:var(--gz-line,#bbc6cc)}
+.gz-game progress::-webkit-progress-bar{background:var(--gz-line,#bbc6cc)}
+.gz-game progress::-webkit-progress-value{background:var(--gz-accent,#16837b);border-radius:999px}
+.gz-game progress::-moz-progress-bar{background:var(--gz-accent,#16837b);border-radius:999px}
 .gz-game label{display:grid;grid-template-columns:1fr minmax(110px,1fr);align-items:center;gap:8px;margin:8px 0;font-size:.9em}
 .gz-game select,.gz-game-dialog button{font:inherit;color:inherit;background:var(--gz-surface,#fff);border:1px solid var(--gz-line,#bbc6cc);border-radius:8px;padding:7px;min-width:0}
 .gz-game select:disabled{opacity:.65}

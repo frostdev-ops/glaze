@@ -48,7 +48,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         select.addEventListener('change', () => update({ op: 'decor', item: id, cell: select.value === '' ? null : Number(select.value) }));
         decor.append(make('label', {}, make('span', { textContent: `${t(NAMES[id])} · ${t('Level {level}', { level: item.level })}` }), select));
       }
-      const rules = make('details', {}, make('summary', { textContent: t('How XP works') }), make('p', { textContent: t('Handed in: 20 XP on time, 10 XP late, 15 XP without a due date. A kept do-on plan: 8 XP. Each verified streak day: 5 XP. Focus sessions give no XP.') }), make('p', { textContent: t('Only work already saved on this device counts. Missing days never take progress away. Unticking work removes its XP. New looks and decorations unlock as you level up.') }));
+      const rules = make('details', {}, make('summary', { textContent: t('How XP works') }), make('p', { textContent: t('Handed in: 20 XP on time, 10 XP late, 15 XP when timing is unknown. A kept do-on plan: 8 XP. Each verified streak day: 5 XP. Focus sessions give no XP.') }), make('p', { textContent: t('Only work already saved on this device counts. Missing days never take progress away. Unticking work removes its XP. New looks and decorations unlock as you level up.') }));
       decor.querySelector('summary').dataset.control = 'decor';
       rules.querySelector('summary').dataset.control = 'rules';
       decor.open = !!wasOpen[0]; rules.open = !!wasOpen[1];

@@ -38,11 +38,13 @@ test('every web-accessible resource is in the package, and only the art the exte
     if (!r.includes('*')) assert.ok(fs.existsSync(path.join(root, r)), `${r} doesn't exist`);
   }
   // The art the extension uses, and nothing else from assets/art (never its contact sheet or README): the pets, the
-  // sticker folders holding exactly lib/lookx.js's stickers (the study buddy's three among them), the pointer sets.
+  // sticker folders holding Look stickers and the pet game's buddy looks, plus the pointer sets.
   assert.deepEqual(roots.filter((p) => p.startsWith('assets/')).sort(), ['assets/art/cursors', 'assets/art/pets', 'assets/art/stickers']);
   const L = require('../lib/lookx.js');
   const files = (dir) => fs.readdirSync(path.join(root, dir), { recursive: true }).filter((f) => !fs.statSync(path.join(root, dir, f)).isDirectory() && !f.endsWith('.DS_Store')).map((f) => `${dir}/${f}`).sort();
-  assert.deepEqual(files('assets/art/stickers'), [...L.BUNDLED.keys()].map(L.file).sort());
+  const P = require('../lib/pet.js');
+  const art = [...L.BUNDLED.keys(), ...Object.values(P.WEAR).map((x) => `critters/${x.art}`)];
+  assert.deepEqual(files('assets/art/stickers'), [...new Set(art)].map(L.file).sort());
   assert.ok(['', '-happy', '-sleepy'].every((s) => L.BUNDLED.has(`critters/study-buddy${s}`)));
   assert.deepEqual(files('assets/art/cursors'), Object.keys(L.CURSORS).flatMap((c) => [`assets/art/cursors/${c}/default.png`, `assets/art/cursors/${c}/pointer.png`]).sort());
 });
