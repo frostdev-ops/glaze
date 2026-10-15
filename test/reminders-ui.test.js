@@ -249,20 +249,20 @@ test('no planner request where To Do or the card tasks will make it, drawn yet o
   assert.match(own.fetched[0], /\/api\/v1\/planner\/items\?/);
 });
 
-// The Dashboard in its planner (list) view still holds Canvas's course-card skeletons, hidden: content.js's gate
+// The Dashboard in its planner (list) view still holds Canvas's course-card skeletons, hidden: content-canvas.js's gate
 // (syncCardTasks: cardsHere and a .ic-DashboardCard on the page) starts the card tasks there, and they ask the planner.
 // So reminders leave it to them, and the planner is asked once, not twice.
 test("the Dashboard's planner view: card tasks run and ask, reminders don't: one planner request", async () => {
   const html = read('test/fixtures/canvas-dashboard-planner.html');
   assert.match(html, /id="DashboardCard_Container" style="display: none;?"/, 'the fixture is the planner view');
   const has = (sel) => (sel === '.ic-DashboardCard' && /class="ic-DashboardCard"/.test(html) ? {} : null);
-  // content.js's own gate, run over that page.
-  const src = read('content.js');
+  // Canvas's part's own gate (content-canvas.js), run over that page.
+  const src = read('content-canvas.js');
   const line = (name) => src.match(new RegExp(`^  const ${name} = \\(\\) => [^\\n]*;$`, 'm'))[0];
   const started = [];
   const CT = { sync: (on) => started.push(on) };
   vm.runInNewContext(`${line('cardsHere')} ${line('syncCardTasks')} syncCardTasks()`, {
-    ultra: false, moodle: false, links: [{}], settings: { enhance: { cardTasks: true } }, location: { pathname: '/' },
+    I: { links: [{}], settings: { enhance: { cardTasks: true } } }, location: { pathname: '/' },
     document: { querySelector: has }, need: async () => {}, globalThis: { GZ_CARD_TASKS: CT }, GZ_CARD_TASKS: CT,
   });
   await settle();

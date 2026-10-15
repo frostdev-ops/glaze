@@ -85,9 +85,13 @@ test('the detector stays under 2 KB', () => {
 });
 
 // ---- the background: a Moodle host is injected now and registered for good, in its own list --------------------------
+// Each LMS's first content script: Canvas's is the manifest's for *.instructure.com, with its part; Moodle's is the same
+// without it (B0b).
+const CANVAS_FIRST = require('../manifest.json').content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js;
+const MOODLE_FIRST = CANVAS_FIRST.filter((f) => f !== 'content-canvas.js');
 test('a Moodle host is injected now and registered from then on, apart from Canvas hosts', async () => {
   const store = { canvas: ['https://canvas.school.edu/*'] };
-  const injected = [], registered = [];
+  const injected = [], registered = [], lists = {};
   let message;
   const none = { addListener() {} };
   const context = vm.createContext({
@@ -99,21 +103,28 @@ test('a Moodle host is injected now and registered from then on, apart from Canv
       scripting: {
         executeScript: async (o) => { injected.push(o); return [{ result: {} }]; },
         getRegisteredContentScripts: async () => registered.map((id) => ({ id })),
-        registerContentScripts: async (list) => { for (const s of list) { assert.ok(!registered.includes(s.id), `registered twice: ${s.id}`); registered.push(s.id); } },
+        registerContentScripts: async (list) => { for (const s of list) { assert.ok(!registered.includes(s.id), `registered twice: ${s.id}`); registered.push(s.id); lists[s.id] = s.js; } },
       },
     },
   });
   vm.runInContext(read('lib/background.js'), context);
   const send = async (m, url) => { for (const f of message) f(m, { tab: { id: 4 }, frameId: 0, url }, () => {}); await settle(); await settle(); };
   await send('moodle', 'https://moodle.school.edu/my/');
-  assert.deepEqual(injected.map((o) => o.files), [require('../manifest.json').content_scripts[0].js], 'the whole first content script, into that page');
+  assert.deepEqual(injected.map((o) => o.files), [MOODLE_FIRST], 'Moodle\'s whole first content script, into that page: no Canvas part');
   assert.deepEqual(plain(store.moodle), ['https://moodle.school.edu/*']);
   assert.deepEqual(plain(store.canvas), ['https://canvas.school.edu/*'], 'the Canvas list (which Download all trusts) is untouched');
   assert.deepEqual(registered.sort(), ['https://canvas.school.edu/*', 'https://moodle.school.edu/*']);
+  assert.deepEqual(plain(lists), { 'https://canvas.school.edu/*': CANVAS_FIRST, 'https://moodle.school.edu/*': MOODLE_FIRST }, 'each host its own LMS\'s list');
+  assert.ok(CANVAS_FIRST.includes('content-canvas.js') && !MOODLE_FIRST.includes('content-canvas.js') && MOODLE_FIRST.at(-1) === 'content.js');
   await send('moodle', 'https://moodle.school.edu/course/view.php?id=2');
   assert.deepEqual(plain(store.moodle), ['https://moodle.school.edu/*'], 'a host once');
   await send('blackboard', 'https://x.edu/');
   assert.equal(injected.length, 2, 'only the two LMSs it knows');
+  // A Canvas host found on a page gets Canvas's list, part and all; one on both lists too (Canvas's holds Moodle's).
+  store.moodle.push('https://both.school.edu/*');
+  await send('canvas', 'https://both.school.edu/courses/1');
+  assert.deepEqual(injected.at(-1).files, CANVAS_FIRST);
+  assert.deepEqual(plain(lists['https://both.school.edu/*']), CANVAS_FIRST);
 });
 
 // ---- lib/moodle.js ------------------------------------------------------------------------------------------------
@@ -249,8 +260,7 @@ test('course cards get their total from the grades overview, asked once a page l
 
 test('Moodle\'s files load on demand, end on a value, and keep the first copy when loaded twice', () => {
   const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
-  const first = require('../manifest.json').content_scripts[0].js;
-  for (const f of ['lib/moodle.js', 'features/moodle.js']) assert.ok(list.includes(f) && !first.includes(f), f);
+  for (const f of ['lib/moodle.js', 'features/moodle.js']) assert.ok(list.includes(f) && !MOODLE_FIRST.includes(f), f);
   const context = vm.createContext({ URL, document: {}, location: { origin: ORIGIN } });
   context.globalThis = context;
   for (const [f, name] of [['lib/moodle.js', 'GZ_MOODLE'], ['features/moodle.js', 'GZ_MOODLE_PAGE']]) {

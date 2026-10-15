@@ -169,6 +169,11 @@ script writes from your saved settings, so the CSS never needs JavaScript to dec
 DOM sweep tags the long tail — hardcoded light backgrounds, dark text, viewport-fixed bars — with
 `data-gz-*` attributes the stylesheets then restyle.
 
+Each LMS loads only what it needs at first paint: the shared `content.js` (with the small libraries it uses)
+plus that site's own part, `content-ultra.js` on Blackboard Ultra and `content-canvas.js` on Canvas. Moodle
+has no part; it is themed by `content.js` and `moodle.css`. Everything else, from the command palette to the
+grade calculators, loads on demand from `features/` the first time a page needs it.
+
 ## Building
 
 ```sh
