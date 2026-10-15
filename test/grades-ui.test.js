@@ -931,6 +931,24 @@ test('Ultra what-if migration: a move answered after a Clear all shows nothing, 
   assert.deepEqual(Object.keys(store.data[UKEY]._101_1.s), ['_602_1'], 'nor by the next edit');
 });
 
+test('Ultra what-if migration: a whole-record write while the move is on its way waits for it, so the moved score stays (a refresh, an edit)', async () => {
+  for (const change of ['refresh', 'edit']) {
+    const store = shared({ whatIf: LEGACY(), [UKEY]: ACCOUNT() });
+    const release = lateMove(store);
+    const p = ultraPage({ store });
+    p.UI.render();
+    await settle(14);
+    await open(p);
+    if (change === 'refresh') { p.books._101_1 = regraded({ _601_1: 95 }, 81); p.UI.render(); await settle(10); } // Lab Report 1's what-if goes
+    else await typeScore(p, '_604_1', 70);
+    release();
+    await settle(20);
+    assert.equal(store.data[UKEY]._101_1.s._603_1?.[0], 100, `${change}: the moved score is kept`);
+    if (change === 'edit') assert.equal(store.data[UKEY]._101_1.s._604_1?.[0], 70, 'and so is the edit');
+    assert.equal(store.data.whatIf?._101_1, undefined, `${change}: and it has left the old store`);
+  }
+});
+
 test('Ultra what-if: a course with no overall grade is an estimate from the share of points, and says so', async () => {
   const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
   p.UI.render();
