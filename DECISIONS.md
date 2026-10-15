@@ -322,3 +322,16 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Due list from `core_calendar_get_action_events_by_timesort` and courses from `core_course_get_enrolled_courses_by_timeline_classification`, through `/lib/ajax/service.php` with the page's session key from the log-out link | A web services token; `M.cfg` from the page's world | What Moodle's own Timeline and Course overview call, with no setup; both read only. The isolated world can't read `M.cfg`, and the log-out link carries the key on every signed-in page, and the site's root when Moodle is in a folder. |
 | Card grades from the server-rendered grades overview, read row by row, shown as Moodle formats them; a band only for a percentage | `gradereport_user_get_grade_items` (another extension) | That service isn't AJAX-enabled (`servicenotavailable`, measured), so another extension's Moodle card grades come back empty. Points carry no maximum there, so they get a neutral chip. |
 | No course menu, per-course tint or Look, and no keyboard shortcuts on Moodle yet | Generalizing the Canvas course keys | Each needs Moodle course keys threaded through content.js (seen courses, tint, Looks, the editor's list), more than this package's share of the first script. |
+
+
+## Canvas global navigation (W8)
+
+| Choice | Alternative | Why |
+| --- | --- | --- |
+| Style Canvas's existing rail, with first-paint variables and attributes | Replace its navigation | Canvas keeps its links, trays, labels, permissions and keyboard behavior. Ultra is unchanged. |
+| Reuse the card painter, contrast reader, picture encoder and background queue | A second picture store or write queue | Sidebar and course pictures share the 960 px / 400 KB each / 4 MB total limits; either editor preserves pictures still referenced by the other. |
+| Keep the live local sidebar picture as a temporary blob URL | A data URL in page styles or sessionStorage | The chosen fill paints first, then the on-demand module loads the picture. Blob URLs are revoked on replacement/disable. Page code can read a displayed picture, as PRIVACY states. |
+| Theme codes and exports carry only sidebar image URLs | Export local pictures or their identifiers | A file stays on its device. Only appearance fields travel, when a custom background is chosen; layout, logo and collapse preferences stay the student's. Built-in Looks leave the sidebar alone. The gallery's pinned decoder needs an update with the next release before it accepts the new `n` group. |
+| Compact labels stay in the native accessible name; titles use the existing tooltip | Draw another tooltip inside the narrow rail | The hint stays readable outside the scrollable rail and works with focus as well as hover. Turning Glaze's tooltips off retains native titles and accessible names. |
+
+Canvas's experimental `#instui-sidenav` layout is not covered by W8; revisit the selectors when that navigation feature ships. Long, scrollable rails may reveal the solid fill below a scrolled image layer; no institution navigation plugins were runtime tested.

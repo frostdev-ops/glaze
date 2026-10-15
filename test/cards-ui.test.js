@@ -251,6 +251,15 @@ test('the background worker takes card writes from this extension only, one at a
   assert.deepEqual(await send({ type: 'glaze:cards', set: [] }), nope, "or change a theme's set");
   assert.equal(await send({ type: 'glaze:toString', key: A }), 'ignored', 'only the kinds of write it names');
   assert.equal(store.sync.cards[A], undefined);
+  const navMessage = { type: 'glaze:nav', nav: { k: 'solid', c: '#112233' } };
+  for (const sender of [{ id: 'other', tab: {}, url: 'https://school.instructure.com/' }, { id: 'glaze', tab: {}, url: 'https://evil.example/' }, { id: 'glaze', url: 'chrome-extension://x/preview.html' }]) assert.deepEqual(await send(navMessage, sender), nope);
+  assert.deepEqual(await send({ ...navMessage, image: 'data:image/png;base64,AAAA' }), nope, 'only the editor uploads');
+  assert.deepEqual(await send({ type: 'glaze:cards', key: A, nav: navMessage.nav }), nope, 'a card request cannot change the global rail');
+  assert.ok((await send(navMessage)).ok, 'a Canvas command can style the rail');
+  assert.equal(store.sync.nav.c, '#112233');
+  const popup = { id: 'glaze', url: 'chrome-extension://x/popup.html' };
+  assert.deepEqual(await send(navMessage, popup), nope, 'the popup has no sidebar writer');
+  assert.deepEqual(await send({ ...navMessage, image: 'data:image/png;base64,AAAA' }, popup), nope, 'the popup cannot upload');
   assert.deepEqual(await send({ type: 'glaze:cards', key: B, style: null }, editor), { ok: true, id: null }, 'the editor page');
   const image = `data:image/webp;base64,${'N'.repeat(300000)}`;
   const [a, b] = await Promise.all([send({ type: 'glaze:cards', key: A, style: {}, image }), send({ type: 'glaze:cards', key: B, style: {}, image })]);
@@ -295,4 +304,28 @@ test('two tabs saving different courses at the same moment keep both', async () 
   await Promise.all([one.find((e) => e.className === 'gz-ce-done').fire('click'), two.find((e) => e.className === 'gz-ce-done').fire('click')]);
   await tick(30);
   assert.deepEqual(env.store.sync.cards, { [A]: { k: 'solid', c: '#aa0000' }, [B]: { k: 'solid', c: '#00aa00' } });
+});
+
+test('card and nav pictures share one cap and queue, retain each other, and roll back failed uploads', async () => {
+  const env = computer(), image = 'data:image/webp;base64,AAAA';
+  const card = await env.worker({ key: A, style: {}, image });
+  const nav = await env.worker({ nav: { k: 'image' }, image });
+  assert.ok(card.ok && nav.ok);
+  assert.equal(pics(env.store.local).length, 2);
+  await env.worker({ key: B, style: { k: 'solid', c: '#112233' } });
+  assert.ok(env.store.local[`cardImg:${nav.id}`], 'editing cards retains the rail picture');
+  await env.worker({ nav: { ink: '#cccccc' } });
+  assert.ok(env.store.local[`cardImg:${card.id}`], 'editing the rail retains course pictures');
+  assert.equal(env.store.sync.nav.i, nav.id);
+  env.failSync = true;
+  assert.equal((await env.worker({ nav: { k: 'image' }, image })).ok, false);
+  assert.equal(pics(env.store.local).length, 2, 'failed upload rolled back');
+  env.failSync = false;
+  await env.worker({ reset: true });
+  assert.deepEqual(pics(env.store.local), [`cardImg:${nav.id}`], 'card-only reset retains the rail picture');
+  env.failLocalRemove = true;
+  assert.deepEqual((({ ok, cleanup }) => ({ ok, cleanup }))(await env.worker({ nav: { k: 'solid' } })), { ok: true, cleanup: false }, 'a successful style save is not reported as failed cleanup');
+  env.failLocalRemove = false;
+  await env.worker({ nav: { k: 'default' } });
+  assert.deepEqual(pics(env.store.local), []);
 });

@@ -82,10 +82,14 @@ _Last updated: 2026-10-15_
 - **Canvas course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
   card style (`cards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
   (`links`: their names, addresses and icons), by your Canvas site's address and course number.
-- **Pictures you choose for course cards from your computer**, in `chrome.storage.local`, on this device only:
+- **Canvas sidebar settings**, in `chrome.storage.sync`: background colors, an optional `https://` picture link
+  or a local picture identifier, filter/overlay, text color, logo visibility, labels, size and collapsed state.
+- **Pictures you choose for course cards or the Canvas sidebar from your computer**, in `chrome.storage.local`, on this device only:
   scaled down to at most 960 pixels and kept as WebP (JPEG in Safari), at most about 400 KB each and 4 MB in all.
-  They are never synced, exported or put in a theme code. Choosing another picture, or removing the card's style,
-  deletes the old one; Reset everything deletes them all.
+  They are never synced, exported or put in a theme code. Choosing another picture, removing the card's style,
+  or switching the sidebar away from its local picture deletes the old one; Reset everything deletes them all.
+  Sidebar pictures use a temporary blob URL while shown, rather than embedding their bytes in the page's
+  inline styles or sessionStorage. Canvas page code can still read a picture displayed on its page.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -234,6 +238,9 @@ animated backgrounds) are bundled. It makes requests in these cases:
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
+- **Sidebar pictures.** A sidebar picture linked by `https://` is loaded by your browser from that host when
+  shown. The editor also reads it for its contrast warning when the host permits that; the preview of a theme
+  code names its sidebar image host before you apply it. Files selected from your device cause no upload.
 - **Course card pictures and bookmarks.** A card picture you give as an `https://` link is loaded by your browser
   like the background image. With condensed cards, the card editor reads that picture once more to measure how
   well text reads on it; a site that doesn't allow that gets an ordinary request and is just not measured. A

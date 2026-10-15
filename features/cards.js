@@ -508,16 +508,10 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     // Only the latest pick in this editor may be kept: an earlier one that finishes later is dropped.
     const rev = (mine.pick = (mine.pick || 0) + 1);
     const here = () => ed === mine && mine.pick === rev;
-    let bmp;
-    try { bmp = await createImageBitmap(f); } catch { if (here()) say(t("That file isn't a picture Glaze can read.")); return; }
-    if (!here()) { bmp.close?.(); return; }
-    const { w, h } = K.fit(bmp.width, bmp.height);
-    const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
-    c.getContext('2d').drawImage(bmp, 0, 0, w, h);
-    bmp.close?.();
-    let url = c.toDataURL('image/webp', 0.82);
-    if (!url.startsWith('data:image/webp')) url = c.toDataURL('image/jpeg', 0.85);
-    if (url.length > K.IMG_MAX) { say(t(SAID.cap)); return; }
+    let url;
+    try { url = await K.picture(f); }
+    catch (e) { if (here()) say(t(e.message === 'cap' ? SAID.cap : "That file isn't a picture Glaze can read.")); return; }
+    if (!here()) return;
     await turn(mine, async () => {
       if (!here()) return;
       const s = { ...base, k: 'image' };
@@ -535,24 +529,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   };
 
   // A picture's average color, through its filter, for the contrast line; null when its site doesn't allow reading it.
-  const average = (url, f) => new Promise((res) => {
-    const im = new Image();
-    if (!url.startsWith('data:')) im.crossOrigin = 'anonymous';
-    im.onload = () => {
-      try {
-        const c = Object.assign(document.createElement('canvas'), { width: 8, height: 8 });
-        const x = c.getContext('2d', { willReadFrequently: true });
-        x.filter = K.FILTERS[f] || 'none';
-        x.drawImage(im, 0, 0, 8, 8);
-        const p = x.getImageData(0, 0, 8, 8).data;
-        const sum = [0, 0, 0];
-        for (let i = 0; i < p.length; i += 4) for (let j = 0; j < 3; j++) sum[j] += p[i + j];
-        res(C.hex({ r: sum[0] / 64, g: sum[1] / 64, b: sum[2] / 64 }));
-      } catch { res(null); }
-    };
-    im.onerror = () => res(null);
-    im.src = url;
-  });
+  const average = (url, f) => K.average(url, f);
 
   return { paint, open };
 })();

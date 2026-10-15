@@ -698,6 +698,7 @@
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
     placeScene();
     if (!said) return;
+    if (all) syncNav();
     renderProgress();
     renderNew();
     keepPlace();
@@ -787,6 +788,7 @@
     tagExtras([document.body]);
     watchDrafts();
     syncCourseMenu();
+    syncNav();
     if (!ultra) renderProgress();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
@@ -970,7 +972,7 @@
     if (hinted && titled && !titled.contains(hinted[0])) hinted = null;
     if (hinted && hinted[0] === tipFor) return;
     // Canvas: a title that only repeats the text beside it, uncut.
-    if (!ultra && titled && !hinted && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
+    if (!ultra && titled && !hinted && !titled.closest('#header') && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
     hideTip();
     const text = titled?.getAttribute('title')?.trim();
     if (titled && !text && !hinted) return;
@@ -2495,6 +2497,21 @@
   };
   if (!ultra) addEventListener('pagereveal', (e) => { if (e.viewTransition) setAttr('data-gz-vt-in', true); });
 
+  const paintNav = (n, picture) => {
+    if (site !== 'canvas' || window.top !== window) return;
+    setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
+    for (const k of ['labels', 'collapsed', 'f']) setAttr(`data-gz-nav-${k}`, n[k]);
+    setAttr('data-gz-nav-no-logo', !n.logo);
+    const src = n.i ? picture : n.u;
+    setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
+    for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) setVar(`--gz-nav-${k}`, v);
+  };
+  const syncNav = () => {
+    if (site !== 'canvas' || isPreview || window.top !== window) return;
+    if (worn.nav.i || worn.nav.collapsed || worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
+    else globalThis.GZ_NAV_UI?.sync();
+  };
+
   const applySettings = () => {
     looked = lookHere();
     const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey()) : settings);
@@ -2552,6 +2569,7 @@
     for (const f of [s.look.font, s.look.head, s.look.mono]) GZ_FONTS.load(f);
     setAttr('data-gz-density', s.look.density);
     setAttr('data-gz-depth', String(s.look.depth));
+    paintNav(s.nav);
     // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
     const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
@@ -2580,7 +2598,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncWidgets(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncWidgets(); syncNav(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -2710,12 +2728,13 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     stopScene();
     stopSweep();
     clearSettings();
+    globalThis.GZ_NAV_UI?.sync();
     syncDocTools();
     syncFooter();
   };
 
   // The helpers a file loaded by need() may use (features/*.js): this frame's, read through one name.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, profile, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, on: () => !!observer,
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, profile, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => paintNav(worn.nav, src), on: () => !!observer,
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, myCourses, courseId, courseItems, toggleOf, canvasPeek, moduleItems,
     nickOf, courseList: () => courseList, courseColor, courseColors, varText, cardUI,
