@@ -214,7 +214,7 @@ test('R3-2: new late hand-in after visible redo can replace settled zero outside
 });
 test('R3-2: refreshed, same, older or unproven hand-in timestamps preserve a native untick zero', () => {
   const zero = run({ insights, todoO: syncAuto, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 1 } });
-  for (const [at, a] of [[now + 1000, now - 2 * T.DAY], [now + 1000, now + 1], [now + 1000, 0], [now, now + 500], [now + 1, now + 500]]) {
+  for (const [at, a] of [[now + 1000, now - 2 * T.DAY], [now + 1000, now - 3 * T.DAY], [now + 1000, 0], [now, now + 500], [now + 1, now + 500]]) {
     const record = { at, courses: [{ id: '1', items: [{ ...insights.courses[0].items[0], a, s: 'late' }] }] };
     assert.equal(view(run({ insights: record, todoO: syncAuto, now: now + 2000 }, zero)).work, 0);
   }
@@ -222,4 +222,59 @@ test('R3-2: refreshed, same, older or unproven hand-in timestamps preserve a nat
   const after = run({ insights: newer, todoO: syncAuto, now: now + 2000 }, zero);
   assert.equal(view(after).work, 10, 'a genuinely new submitted hand-in can replace native zero');
   assert.deepEqual(run({ insights: { ...newer, at: now + 3000 }, todoO: syncAuto, now: now + 4000 }, after), after, 'cache refresh alone leaves settled history unchanged');
+});
+
+
+const serverA = Date.parse('2026-10-15T10:00:00Z');
+const clockInsight = (at, a = serverA, status = 'on') => ({ at, courses: [{ id: '1', items: [{ k: 'assignment:1', n: 'Clock', d: serverA + T.DAY, a, s: status }] }] });
+const clockRow = { ...row, at: serverA + T.DAY };
+test('R4-1: slow device clock does not turn the same provider hand-in into a new reward after untick', () => {
+  const observed = serverA - 8 * 60000;
+  const zero = run({ now: observed, insights: clockInsight(observed - 1), planner: [{ ...clockRow, ov: { done: false } }], cache: { at: observed }, todoO: syncAuto });
+  const later = { now: observed + T.DAY, insights: clockInsight(observed + T.DAY), todoO: syncAuto };
+  assert.equal(view(zero).work, 0);
+  assert.equal(view(run(later, zero)).work, 0);
+});
+for (const [label, zero] of [['positive', false], ['native zero', true], ['redo zero', 'redo']]) {
+  test(`R4-1: fast device accepts a provider-newer hand-in after ${label}`, () => {
+    const observed = serverA + 12 * 60000;
+    const initial = run({ now: observed, insights: clockInsight(observed - 1), planner: [{ ...clockRow, ov: { done: zero === true ? false : true } }], cache: { at: observed }, todoO: syncAuto });
+    const settled = zero === 'redo' ? run({ now: observed + 1, insights: clockInsight(observed - 1), planner: [{ ...clockRow, sub: { submitted: true, redo: true } }], cache: { at: observed + 1 }, todoO: syncAuto }, initial) : initial;
+    const fresh = { now: observed + 60000, insights: clockInsight(observed + 60000, serverA + 5 * 60000, 'late'), todoO: syncAuto };
+    const after = run(fresh, settled);
+    assert.equal(view(settled).work, zero ? 0 : 20);
+    assert.equal(view(after).work, 10, 'new provider timestamp precedes fast device observation but is a new hand-in');
+    assert.deepEqual(run(fresh, after), after);
+  });
+}
+test('R4-1: provider baseline is retained across zero, clean and JSON view round trips without device-time clamping', () => {
+  const observed = serverA - 8 * 60000;
+  const first = run({ now: observed, insights: clockInsight(observed - 1), planner: [clockRow], cache: { at: observed }, todoO: syncAuto });
+  assert.equal(first.sub['assignment:1'], serverA);
+  const redo = run({ now: observed + 1, insights: clockInsight(observed - 1), planner: [{ ...clockRow, sub: { submitted: true, redo: true } }], cache: { at: observed + 1 }, todoO: syncAuto }, first);
+  assert.equal(redo.sub['assignment:1'], serverA);
+  assert.equal(P.clean(JSON.parse(JSON.stringify(redo)), observed).sub['assignment:1'], serverA);
+  assert.equal(P.view(redo).sub['assignment:1'], serverA);
+});
+test('R4-1: missing legacy provider baseline stays conservative and is not fabricated from a refresh', () => {
+  const legacy = { earned: { 'work:assignment:1': 0 }, seen: { 'assignment:1': serverA - 8 * 60000 } };
+  const after = run({ now: serverA + T.DAY, insights: clockInsight(serverA + T.DAY), todoO: syncAuto }, legacy);
+  assert.equal(view(after).work, 0);
+  assert.deepEqual(after.sub, {});
+});
+test('R4-1: malformed or oversized provider metadata fails closed without replacing stored history', async () => {
+  const key = 'pet:https://school.test/3';
+  for (const sub of [[], 'bad', null, { 'assignment:1': 'bad' }, { 'assignment:1': -1 }, { bad: serverA }, Object.fromEntries(Array.from({ length: P.MAX + 1 }, (_, i) => [`assignment:${i}`, serverA]))]) {
+    const raw = { earned: { 'work:assignment:1': 20 }, sub }, before = JSON.stringify(raw); let writes = 0;
+    assert.equal(P.clean(raw), null);
+    const r = await P.change({ key, op: 'read', tz }, { local: { get: async () => ({ [key]: raw }), set: async () => { writes++; return true; } } });
+    assert.equal(r.error, 'history'); assert.equal(writes, 0); assert.equal(JSON.stringify(raw), before);
+  }
+});
+test('R4-1: provider metadata capacity exhaustion preserves the original store and settled XP', async () => {
+  const key = 'pet:https://school.test/3';
+  const raw = { earned: { 'work:assignment:2': 20 }, sub: Object.fromEntries(Array.from({ length: P.MAX }, (_, i) => [`assignment:${i + 10}`, serverA])) };
+  const before = JSON.stringify(raw); let writes = 0;
+  const r = await P.change({ key, op: 'read', tz }, { local: { get: async () => ({ [key]: raw, 'insights:https://school.test/3': insights }), set: async () => { writes++; return true; } } });
+  assert.equal(r.error, 'history'); assert.equal(writes, 0); assert.equal(JSON.stringify(raw), before); assert.equal(r.data.work, 20);
 });
