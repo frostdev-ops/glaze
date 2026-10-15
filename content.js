@@ -812,6 +812,13 @@
         const sc = GZ_PAGE.score(got, max);
         if (sc) return [el, { title: t('{got} of {n} points', { got: parseFloat(got), n: parseFloat(max) }), sub: GZ_I18N.pct(Math.round(sc.ratio * 100), locale()) }];
       }
+      // InstUI cuts some titles (the To Do sidebar's) in script, so the rest isn't on the page: its link's label has it.
+      // Pointed at, or the link focused from the keyboard.
+      const cut = !ultra && (el.matches('[data-cid="TruncateText"]') ? el : el.matches('a[aria-label]') && el.querySelector('[data-cid="TruncateText"]'));
+      if (cut) {
+        const full = GZ_PAGE.uncut(cut.textContent, cut.closest('a[aria-label]')?.getAttribute('aria-label'));
+        if (full) return [cut, { title: full.slice(0, 300) }];
+      }
       if (!ultra && el.matches('.score_holder > .tooltip, .score-display')) {
         const sc = GZ_PAGE.canvasScore(el.textContent);
         if (sc?.max) return [el, { title: t('{got} of {n} points', { got: sc.got, n: sc.max }), sub: GZ_I18N.pct(Math.round(sc.ratio * 100), locale()) }];
