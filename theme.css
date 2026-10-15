@@ -733,6 +733,15 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 #site-wrap .layer-content::after { display: none !important; }
 #site-wrap .layer-details :is(.full-panel-details-title, .separation-border, .guidance-wrapper, [class*="makeStyleselementDetails-"], .element-details) { border-bottom: 0 !important; }
 #site-wrap .layer-details .discussion-participants li::before { display: none !important; }
+/* Item pages' wells and lists (an assignment's due date, attempts and details; a profile's lists; a group set with
+   nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the wells in the page's own colour,
+   square, so they read as empty outlines. */
+#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .base-profile section ul, .group-empty-state) {
+  border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important;
+  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
+}
+#site-wrap .assessment-details-section > ul.section-content { padding: 0.75rem 1rem !important; }
+#site-wrap .base-profile section ul { overflow: hidden; } /* its rows paint their own fill: kept inside the corners */
 /* Item type at a glance: the type icon carries its name as aria-label. */
 #site-wrap .content-list-item svg[aria-label] { color: var(--gz-type, var(--gz-accent)) !important; }
 #site-wrap .content-list-item svg:is([aria-label="Assignment"], [aria-label*="Assessment"]) { --gz-type: var(--gz-warn); }
