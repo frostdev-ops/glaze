@@ -100,12 +100,14 @@ test('worker timer/nav message allow rules reject unknown actions, untrusted sen
   const vm = require('node:vm');
   const source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
   let enabled = true;
-  const ctx = vm.createContext({ fromEditor: (s) => s.editor === true, fromCanvas: async (s) => s.canvas === true, fromUltra: async (s) => s.ultra === true, chrome: { storage: { sync: { get: async () => ({ enabled }) } } } });
+  // ultraPage: the top frame, or a course tab's frame on the same Ultra site as its tab (lib/background.js).
+  const ctx = vm.createContext({ fromEditor: (s) => s.editor === true, fromCanvas: async (s) => s.canvas === true, fromUltra: async (s) => s.ultra === true, ultraPage: (s) => s.frameId === 0 || s.sameSite === true, chrome: { storage: { sync: { get: async () => ({ enabled }) } } } });
   const h = (name) => vm.runInContext(`({${source.match(new RegExp(`\\n  ${name}: \\{([\\s\\S]*?)\\n  \\},`))[1]}})`, ctx);
   const timer = h('widgetTimer'), nav = h('nav');
   assert.equal(await timer.allow({ op: 'toggle' }, { ultra: true, frameId: 0 }), true);
   assert.equal(await timer.allow({ op: 'reset' }, { canvas: true, frameId: 0 }), true);
-  for (const sender of [{}, { ultra: true, frameId: 1 }]) assert.equal(await timer.allow({ op: 'toggle' }, sender), false);
+  for (const sender of [{}, { ultra: true, frameId: 1 }, { canvas: true, frameId: 1, sameSite: true }]) assert.equal(await timer.allow({ op: 'toggle' }, sender), false);
+  assert.equal(await timer.allow({ op: 'toggle' }, { ultra: true, frameId: 1, sameSite: true }), true, 'a course tab\'s frame is its page');
   assert.equal(await timer.allow({ op: 'snapshot', timer: {} }, { editor: true }), false);
   enabled = false; assert.equal(await timer.allow({ op: 'toggle' }, { ultra: true, frameId: 0 }), false);
   assert.equal(await nav.allow({ nav: {}, items: {} }, { editor: true }), true);

@@ -199,7 +199,7 @@ const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true 
       },
     },
     GZ_MATCH_PRESET: () => null,
-    GZ_CTX: { t: (k) => k, need: () => Promise.resolve(), settings: () => settings, on: () => true },
+    GZ_CTX: { t: (k) => k, need: () => Promise.resolve(), settings: () => settings, on: () => true, solo: true },
   });
   context.window = context;
   context.top = context;
