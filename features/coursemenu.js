@@ -7,6 +7,8 @@
 var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   const ctx = globalThis.GZ_CTX;
   const ultra = ctx.site === 'ultra';
+  // Moodle: tint and look only (the color is Moodle's own, and the card styles are Canvas's).
+  const moodle = ctx.site === 'moodle';
   const { t, make, nickOf, cardUI, courseColor, courseColors, varText } = ctx;
   const C = GZ_COLOR;
   // Ultra's course-color-1…10 in order, by hue, for the swatches' names.
@@ -201,6 +203,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       make('div', { className: 'gz-cm-colorhead' }, cap(t('Colors'), 'gz-cm-colors'), reset), grid,
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')),
       cap(t('Look'), 'gz-cm-look'), lookGrid);
+    else if (moodle) box.append(note, make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid);
     else box.append(note, make('p', { className: 'gz-cm-note', textContent: t('Change the colour and nickname in Canvas’s own card menu.') }),
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
       make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));

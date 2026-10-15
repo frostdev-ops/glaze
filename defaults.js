@@ -191,8 +191,8 @@ const GZ_SCENE_LOOK = (intensity) => {
 const HEX = /^#[0-9a-f]{6}$/i;
 // Ultra gives each course one of ten colour slots (.course-color-1…10), the same on every page.
 const COURSE_SLOT = /^([1-9]|10)$/;
-// Canvas keys include the origin: two schools can both have a course 25.
-const COURSE_ID = /^(?:_\d+_\d+|canvas:https?:\/\/[a-z\d.-]+(?::\d+)?\/\d+)$/i;
+// Canvas and Moodle keys include the site (Moodle's can be in a folder): two schools can both have a course 25.
+const COURSE_ID = /^(?:_\d+_\d+|canvas:https?:\/\/[a-z\d.-]+(?::\d+)?\/\d+|moodle:https?:\/\/[a-z\d.-]+(?::\d+)?(?:\/[\w.~-]+)*\/\d+)$/i;
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 const cleanName = (n) => (typeof n === 'string' ? n.trim().slice(0, 40) : '');
 // A course's nickname: one line, 60 characters at most (counted as people count them, not as UTF-16 units).

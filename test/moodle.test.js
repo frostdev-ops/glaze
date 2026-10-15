@@ -178,22 +178,28 @@ test('a total\'s chip: Moodle\'s own text, and its share where it says a percent
 });
 
 // ---- features/moodle.js, in a stand-in page ---------------------------------------------------------------------------
-const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '' } = {}) => {
+const D = require('../defaults.js');
+const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '', courses = [], stored = {}, root = ORIGIN, list = {}, dark = true, live = { on: true } } = {}) => {
   const asked = [];
+  // storage.local, as GZ_CTX.local hands it over.
+  const local = { get: (k, cb) => cb(Object.fromEntries([k].flat().map((x) => [x, stored[x]]))), set: (o) => Object.assign(stored, o) };
   const el = (attrs = {}) => ({ attrs, getAttribute: (k) => attrs[k] ?? null, setAttribute: (k, v) => { attrs[k] = String(v); }, removeAttribute: (k) => { delete attrs[k]; } });
-  const cardEls = cards.map(([id, name = true]) => { const name_ = name && el(); return { dataset: { courseId: id }, querySelector: () => name_, name: name_ }; });
+  const style = () => { const vars = {}; return { vars, setProperty: (k, v) => { vars[k] = v; }, removeProperty: (k) => { delete vars[k]; } }; };
+  const cardEls = cards.map(([id, name = true]) => { const name_ = name && el(); return { dataset: { courseId: id }, style: style(), querySelector: () => name_, name: name_ }; });
   const document = {
     querySelector: (sel) => (sel.includes('logout.php') && logout ? { href: logout } : null),
     querySelectorAll: (sel) => (sel.includes('course-content') ? cardEls : []),
   };
   const context = vm.createContext({
-    URL, Promise, JSON, document, location: { origin: ORIGIN },
-    GZ_MOODLE: M, GZ_PAGE: { score }, GZ_CTX: { t: (k) => k, settings: () => settings },
-    fetch: async (url, opts = {}) => { asked.push({ url, ...opts }); return { ok: true, status: 200, text: async () => overview, json: async () => [{ error: false, data: { events: [], courses: [] } }] }; },
+    URL, Promise, JSON, Date, document, location: { origin: ORIGIN }, matchMedia: () => ({ matches: dark }),
+    GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../lib/color.js'),
+    GZ_MOODLE: M, GZ_PAGE: { score },
+    GZ_CTX: { t: (k) => k, settings: () => settings, local: (fn) => fn(local), canvasCourseKey: (id) => (id ? `moodle:${root}/${id}` : null), courseList: () => list, on: () => live.on },
+    fetch: async (url, opts = {}) => { asked.push({ url, ...opts }); return { ok: true, status: 200, text: async () => overview, json: async () => [{ error: false, data: { events: [], courses } }] }; },
   });
   context.globalThis = context;
   const api = vm.runInContext(read('features/moodle.js'), context);
-  return { api, asked, cards: cardEls, context };
+  return { api, asked, cards: cardEls, context, stored };
 };
 
 test('the session comes from the log-out link: Moodle\'s root (a folder too) and its key; none when signed out or elsewhere', () => {
@@ -208,11 +214,16 @@ test('it asks only the page\'s own Moodle, read-only calls with the page\'s key,
   const p = page({ logout: `${ORIGIN}/moodle/login/logout.php?sesskey=k1` });
   await p.api.due(1792050235000);
   await p.api.commands(() => () => {});
+  await p.api.record();
+  // The due list, the palette's courses in progress, then every course (the editor's, the course menu's, the tint's).
   assert.deepEqual(p.asked.map((a) => [a.url, a.method, a.credentials]), [
     [`${ORIGIN}/moodle/lib/ajax/service.php?sesskey=k1&info=core_calendar_get_action_events_by_timesort`, 'POST', 'same-origin'],
     [`${ORIGIN}/moodle/lib/ajax/service.php?sesskey=k1&info=core_course_get_enrolled_courses_by_timeline_classification`, 'POST', 'same-origin'],
+    [`${ORIGIN}/moodle/lib/ajax/service.php?sesskey=k1&info=core_course_get_enrolled_courses_by_timeline_classification`, 'POST', 'same-origin'],
   ]);
   assert.deepEqual(JSON.parse(p.asked[0].body)[0].args, { timesortfrom: 1792050235, timesortto: 1792050235 + 7 * 86400, limitnum: 50, limittononsuspendedevents: true });
+  assert.equal(JSON.parse(p.asked[1].body)[0].args.classification, 'inprogress');
+  assert.equal(JSON.parse(p.asked[2].body)[0].args.classification, 'all');
   const out = page({ logout: null });
   await assert.rejects(out.api.due(Date.now()));
   out.api.cards();
@@ -354,4 +365,248 @@ test('the capture harness never repeats Moodle\'s session key when its lookup fa
   assert.deepEqual(plain(ok.ids), { bio: 16 });
   await assert.rejects(moodlePages({ ids: {}, context: {} }), /Moodle has no course BIO 1100/, 'an error the run closes the browser on, not an exit');
   await assert.rejects(moodlePages({ ids: { bio: 16 }, context: { request: { get: async () => ({ text: async () => '<a href="/mod/assign/view.php?id=4">' }) } } }), /BIO 1100 has no quiz/);
+});
+
+// ---- course keys, tint, Looks, the course menu and the shortcuts (W20b) -----------------------------------------------
+// content.js's course key, as it runs on a page: Moodle's from <body> and its theme's sheet, Canvas's from the address.
+const keyLine = read('content.js').match(/^ {2}const canvasCourseKey = [^\n]*;$/m)[0];
+const courseKey = ({ site = 'moodle', body, sheet = `${ORIGIN}/theme/styles.php/boost/1792050189_1/all`, origin = ORIGIN, canvasId } = {}) => vm.runInNewContext(`${keyLine} canvasCourseKey`, {
+  site, moodle: site === 'moodle', location: { origin }, canvasCourseId: () => canvasId,
+  document: { body: body === undefined ? null : { className: body }, querySelector: (sel) => (sel.includes('/theme/styles') && sheet ? { href: sheet } : null) },
+});
+const G = require('../defaults.js');
+
+test('a Moodle course is keyed by its site\'s root and its id, from Moodle\'s own markup, on its pages and nowhere else', () => {
+  for (const { f, html } of fixtures) {
+    const body = html.match(/<body[^>]*class="([^"]*)"/)[1];
+    const sheet = html.match(/<link[^>]*href="([^"]*\/theme\/styles\.php[^"]*)"/)[1];
+    const want = /^moodle-(course|assign|quiz|user-report)\.html$/.test(f) ? `moodle:${ORIGIN}/16` : null;
+    assert.equal(courseKey({ body, sheet })(), want, f);
+  }
+  assert.equal(courseKey()(), null, 'before <body> is in');
+  assert.equal(courseKey({ body: 'course-1 context-15 path-course-view' })(), null, 'the site itself (course 1) is no course');
+  assert.equal(courseKey({ body: 'pagelayout-incourse course-10' })(), `moodle:${ORIGIN}/10`);
+  assert.equal(courseKey()('17'), `moodle:${ORIGIN}/17`, 'a course card names its own');
+  // Moodle in a folder: two of them on one host (a school's archive) are two sites.
+  const here = courseKey({ body: 'course-5', sheet: 'https://school.edu/moodle/theme/styles.php/boost/1/all', origin: 'https://school.edu' })();
+  const archive = courseKey({ body: 'course-5', sheet: 'https://school.edu/archive/2024/theme/styles_debug.php?theme=boost&type=scss', origin: 'https://school.edu' })();
+  assert.deepEqual([here, archive], ['moodle:https://school.edu/moodle/5', 'moodle:https://school.edu/archive/2024/5']);
+  // Canvas's keys are as they were (nothing to migrate), and never one of Moodle's on the same host.
+  assert.equal(courseKey({ site: 'canvas', canvasId: '25', origin: 'https://school.edu' })(), 'canvas:https://school.edu/25');
+  assert.notEqual(courseKey({ site: 'canvas', canvasId: '5', origin: 'https://school.edu' })(), courseKey({ body: 'course-5', sheet: 'https://school.edu/theme/styles.php/x', origin: 'https://school.edu' })());
+});
+
+test('Moodle courses\' tint and Look survive sanitizing; a malformed Moodle key does not', () => {
+  const keys = [`moodle:${ORIGIN}/16`, 'moodle:https://school.edu/moodle/5', 'moodle:https://school.edu/archive/2024/5', 'canvas:https://school.edu/5'];
+  const looks = Object.fromEntries(keys.map((k) => [k, 'Lagoon']));
+  const s = G.GZ_SANITIZE({ courses: { tint: true, tinted: keys, looks } });
+  assert.deepEqual(s.courses.tinted, keys);
+  assert.deepEqual(s.courses.looks, looks);
+  assert.notEqual(G.GZ_COURSE_LOOK(s, keys[1]), s, 'worn on its pages');
+  assert.equal(G.GZ_COURSE_LOOK(s, 'moodle:https://school.edu/moodle/6'), s, 'and only there');
+  const bad = ['moodle:16', 'moodle:javascript:alert(1)/5', 'moodle:https://h/x', 'moodle:https://h/a b/5', 'moodle:https://h//5'];
+  assert.deepEqual(G.GZ_SANITIZE({ courses: { tinted: bad, looks: Object.fromEntries(bad.map((k) => [k, 'Lagoon'])) } }).courses, G.GZ_SANITIZE({}).courses);
+});
+
+test('Moodle courses are kept with Moodle\'s own color for each, the one its card draws', () => {
+  const key = (id) => `moodle:${ORIGIN}/${id}`;
+  // The fixture's pictures are scrubbed: Moodle's default colors, by id.
+  const seen = M.seen(M.answer(json('moodle-courses.json')), key);
+  assert.deepEqual(Object.keys(seen), [16, 17, 19, 18].map(key));
+  assert.deepEqual(seen[key(16)], { name: 'BIO 1100: Introduction to Biology', code: 'BIO 1100', moodle: true, color: '#b2bec3' });
+  assert.equal(seen[key(19)].color, '#6c5ce7');
+  // The start of the pattern Moodle 5.3 draws for HIST 2010 (course 19): its first rect is the course's color.
+  const svg = '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="532" height="532"><rect x="0" y="0" width="100%" height="100%" fill="rgb(108, 92, 231)" /><rect x="4.9" y="4.9" width="69" height="69" fill="none" stroke="#222" /></svg>';
+  const one = (c) => M.seen({ courses: [{ id: 3, fullname: 'X', ...c }] }, key)[key(3)];
+  assert.equal(one({ courseimage: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` }).color, '#6c5ce7');
+  assert.equal(one({ courseimage: `data:image/svg+xml;base64,${Buffer.from(svg.replace('108, 92, 231', '255,0,10')).toString('base64')}` }).color, '#ff000a');
+  assert.equal(one({ courseimage: `${ORIGIN}/pluginfile.php/40/course/overviewfiles/photo.jpg` }).color, '#dfe6e9', 'a picture of its own: the default for its id');
+  assert.equal(one({ courseimage: 'data:image/svg+xml;base64,%%%' }).color, '#dfe6e9');
+  assert.equal(one({ fullname: 'A &amp; B <b>2</b>' }).name, 'A & B 2');
+  assert.deepEqual(M.seen({ courses: [{ id: 'x', fullname: 'X' }, { id: 4, fullname: '' }, null] }, key), {});
+  assert.deepEqual(M.seen({ courses: [{ id: 4, fullname: 'X' }] }, () => null), {}, 'no key (no theme sheet found): not kept');
+  for (const bad of [null, {}, { courses: 'no' }]) assert.deepEqual(M.seen(bad, key), {});
+});
+
+// content.js's own recordCourses and dueWeek, as a page load runs them (startSweep), over the real features/moodle.js:
+// the course list doesn't wait on the due list's cache, and is fresh per Moodle root, not per host.
+const contentBlock = (start, end) => {
+  const src = read('content.js');
+  const at = src.indexOf(start);
+  return src.slice(at, src.indexOf(end, at) + end.length);
+};
+const pageLoad = async ({ stored, root = ORIGIN, courses = [{ id: 16, fullname: 'BIO 1100', shortname: 'BIO 1100' }], now = Date.now() } = {}) => {
+  const p = page({ stored, root, courses });
+  const chrome = { storage: { local: { get: (k, cb) => cb(Object.fromEntries([k].flat().map((x) => [x, stored[x]]))), set: (o) => Object.assign(stored, o) } } };
+  const ctx = vm.createContext({
+    ultra: false, moodle: true, window: {}, chrome, Date: { now: () => now }, Promise, Object,
+    location: { origin: new URL(root).origin }, moodleIn: () => Promise.resolve(p.api),
+  });
+  ctx.window.top = ctx.window;
+  vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} let dueSoon = null; ${contentBlock('  const dueWeek = () =>', '  }));\n')}
+    this.load = () => { recordCourses(); return dueWeek(); };`, ctx);
+  await ctx.load();
+  await settle(); await settle();
+  return p;
+};
+const kinds = (p) => p.asked.map((a) => JSON.parse(a.body)[0].methodname.replace(/^core_(course|calendar)_get_/, ''));
+
+test('a page load reads the courses of a Moodle root that has none kept, even while the due list is fresh', async () => {
+  const now = Date.now();
+  const warm = { dueWeek: [], dueWeekAt: now - 60000, dueWeekFrom: ORIGIN };
+  const canvas = { 'canvas:https://c.example/1': { name: 'Canvas course', canvas: true } };
+  const stored = { ...warm, seenCourses: { ...canvas } };
+  const p = await pageLoad({ stored, now });
+  assert.deepEqual(kinds(p), ['enrolled_courses_by_timeline_classification'], 'the due list from its cache, the courses asked');
+  assert.deepEqual(plain(stored.seenCourses), { ...canvas, [`moodle:${ORIGIN}/16`]: { name: 'BIO 1100', code: 'BIO 1100', moodle: true, color: '#b2bec3' } });
+  assert.ok(stored[`seenCoursesAt moodle:${ORIGIN}/`] > 0);
+  // The next page, within ten minutes: nothing asked.
+  assert.deepEqual(kinds(await pageLoad({ stored, now: now + 60000 })), []);
+  // Ten minutes on, the list again (the due list's cache, fresh or not, has no say).
+  stored[`seenCoursesAt moodle:${ORIGIN}/`] -= 601000;
+  stored.dueWeekAt = now;
+  assert.deepEqual(kinds(await pageLoad({ stored, now })), ['enrolled_courses_by_timeline_classification']);
+});
+
+test('two Moodles on one host keep their course lists apart: one\'s fresh list never stands in for the other\'s', async () => {
+  const now = Date.now();
+  const stored = { dueWeek: [], dueWeekAt: now, dueWeekFrom: 'https://school.edu', 'seenCoursesAt moodle:https://school.edu/': now,
+    seenCourses: { 'moodle:https://school.edu/16': { name: 'A', moodle: true } } };
+  const b = await pageLoad({ stored, root: 'https://school.edu/archive', now });
+  assert.deepEqual(kinds(b), ['enrolled_courses_by_timeline_classification']);
+  assert.deepEqual(Object.keys(stored.seenCourses), ['moodle:https://school.edu/16', 'moodle:https://school.edu/archive/16']);
+  // And the other way round: the root at the host's top doesn't count the folder's courses as its own.
+  delete stored['seenCoursesAt moodle:https://school.edu/'];
+  stored.seenCourses = { 'moodle:https://school.edu/archive/16': { name: 'B', moodle: true } };
+  stored['seenCoursesAt moodle:https://school.edu/'] = now;
+  assert.deepEqual(kinds(await pageLoad({ stored, root: 'https://school.edu', now })), ['enrolled_courses_by_timeline_classification']);
+});
+
+test('a failed or empty course read changes nothing kept, and is asked again on the next page', async () => {
+  const canvas = { 'canvas:https://c.example/1': { name: 'Canvas course', canvas: true } };
+  const stored = { seenCourses: { ...canvas } };
+  const p = await pageLoad({ stored, courses: [] });
+  assert.equal(kinds(p).filter((k) => k.startsWith('enrolled')).length, 1);
+  assert.deepEqual(plain(stored.seenCourses), canvas);
+  // Nothing of this root kept: asked again, however fresh the time.
+  assert.equal(kinds(await pageLoad({ stored, courses: [] })).filter((k) => k.startsWith('enrolled')).length, 1);
+});
+
+// content.js's recordCourses alone, over a module content.js is still waiting for (moodleIn).
+const recorder = (moodleIn) => {
+  const ctx = vm.createContext({ ultra: false, moodle: true, window: {}, moodleIn });
+  ctx.window.top = ctx.window;
+  vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} this.recordCourses = recordCourses;`, ctx);
+  return ctx;
+};
+const noUnhandled = async (run) => {
+  let unhandled = 0;
+  const count = () => { unhandled++; };
+  process.on('unhandledRejection', count);
+  try { await run(); await settle(); await settle(); } finally { process.off('unhandledRejection', count); }
+  assert.equal(unhandled, 0, 'no unhandled rejection');
+};
+
+test('switched off while the Moodle module loads: no course read starts, and one does when Glaze is back on', () => noUnhandled(async () => {
+  const settings = { enabled: true, enhance: {} };
+  const live = { on: true };
+  const stored = {};
+  const p = page({ stored, settings, live, courses: [{ id: 16, fullname: 'BIO 1100', shortname: 'BIO 1100' }] });
+  let release;
+  const ctx = recorder(() => new Promise((res) => { release = res; }));
+  ctx.recordCourses(); // the sweep starts, Glaze on
+  settings.enabled = false; live.on = false; // switched off before the module is in
+  release(p.api);
+  await settle(); await settle();
+  assert.deepEqual(p.asked, [], 'nothing asked while off');
+  // Back on: startSweep runs recordCourses again, and this time it reads.
+  settings.enabled = true; live.on = true;
+  ctx.moodleIn = () => Promise.resolve(p.api);
+  ctx.recordCourses();
+  await settle(); await settle(); await settle();
+  assert.deepEqual(kinds(p), ['enrolled_courses_by_timeline_classification']);
+  assert.ok(stored.seenCourses[`moodle:${ORIGIN}/16`]);
+  // Switched off after storage was asked, before Moodle is: nothing asked either.
+  const q = page({ stored: {}, settings, live });
+  const r = q.api.record();
+  live.on = false;
+  await assert.rejects(r, /off/);
+  assert.deepEqual(q.asked, []);
+}));
+
+test('a signed-out page or a failed course read is caught, and asked again when the sweep starts again', () => noUnhandled(async () => {
+  const p = page({ logout: null });
+  let calls = 0;
+  const ctx = recorder(() => Promise.resolve({ record: () => { calls++; return p.api.record(); } }));
+  await ctx.recordCourses();
+  await settle();
+  await ctx.recordCourses(); // let go after the failure: the next start asks again
+  assert.equal(calls, 2);
+  assert.deepEqual(p.asked, [], 'signed out: Moodle never asked');
+}));
+
+test('each course card wears its own course\'s Look and tint, painted only on change and taken off with them', () => {
+  const k = (id) => `moodle:${ORIGIN}/${id}`;
+  const settings = D.GZ_SANITIZE({ enabled: true, courses: { tint: true, tinted: [k(16)], looks: { [k(17)]: 'Library' } } });
+  const list = { [k(16)]: { name: 'BIO', moodle: true, color: '#b2bec3' }, [k(17)]: { name: 'ENG', moodle: true, color: '#fdcb6e' }, [k(18)]: { name: 'MATH', moodle: true, color: '#fd79a8' } };
+  const p = page({ cards: [['16'], ['17'], ['18']], settings, list });
+  p.api.paint();
+  const [bio, eng, math] = p.cards;
+  const base = D.GZ_ACTIVE_COLORS(settings, true);
+  assert.deepEqual(plain(bio.style.vars), D.GZ_TINT(base, '#b2bec3', settings.courses.strength / 100), 'tinted as its pages are');
+  assert.equal(bio.dataset.gzCourseLook, 'dark');
+  assert.deepEqual(plain(eng.style.vars), D.GZ_ACTIVE_COLORS(D.GZ_COURSE_LOOK(settings, k(17)), true), 'its Look');
+  assert.equal(eng.dataset.gzCourseLook, 'light', 'Library is a light Look');
+  assert.deepEqual([plain(math.style.vars), math.dataset.gzCourseLook], [{}, undefined], 'neither: the page\'s own');
+  // Only on change: a card already painted isn't written again.
+  bio.style.setProperty = () => assert.fail('painted again');
+  p.api.paint();
+  // Unticked and its Look gone: back to the page's palette.
+  settings.courses.tinted = [];
+  delete settings.courses.looks[k(17)];
+  delete bio.style.setProperty;
+  bio.style.setProperty = (x, v) => { bio.style.vars[x] = v; };
+  p.api.paint();
+  assert.deepEqual([plain(bio.style.vars), bio.dataset.gzCourseLook, plain(eng.style.vars), eng.dataset.gzCourseLook], [{}, undefined, {}, undefined]);
+});
+
+// features/keys.js on Moodle, as content.js hands it keys.
+const moodleKeys = ({ id = 'page-course-view-topics', sheet = `${ORIGIN}/theme/styles.php/boost/1/all`, origin = ORIGIN } = {}) => {
+  const went = [];
+  const document = { body: { id }, querySelector: (sel) => (sel.includes('/theme/styles') ? { href: sheet } : null), addEventListener() {} };
+  const ctx = vm.createContext({
+    document, location: { origin, pathname: '/course/view.php', assign: (u) => went.push(u) }, navigator: { platform: 'MacIntel' }, Date,
+    GZ_CTX: { site: 'moodle', settings: () => ({ enhance: { keys: true } }), typing: () => false, keyOn: () => true, wordsIn: new Set(), t: (k) => k },
+  });
+  vm.runInContext(read('features/keys.js'), ctx);
+  const press = (...keys) => { for (const key of keys) ctx.GZ_KEYS.key({ key, target: document.body, preventDefault() {}, stopImmediatePropagation() {} }); };
+  return { press, went };
+};
+
+test('Moodle\'s shortcuts are Canvas\'s keys, going to Moodle\'s own pages at its root', () => {
+  const k = moodleKeys();
+  k.press('g', 'd', 'g', 'c', 'g', 'a', 'g', 'g', 'g', 'm');
+  assert.deepEqual(k.went, ['/my/', '/my/courses.php', '/calendar/view.php?view=month', '/grade/report/overview/index.php', '/message/index.php'].map((p) => ORIGIN + p));
+  const folder = moodleKeys({ sheet: 'https://school.edu/moodle/theme/styles.php/boost/1/all', origin: 'https://school.edu' });
+  folder.press('g', 'c');
+  assert.deepEqual(folder.went, ['https://school.edu/moodle/my/courses.php']);
+});
+
+test('Moodle\'s shortcuts work on its main pages, a course\'s and its activities\', and not where a student is busy', () => {
+  const on = (id) => { const k = moodleKeys({ id }); k.press('g', 'd'); return k.went.length === 1; };
+  const ids = fixtures.map(({ html }) => html.match(/<body id="([^"]+)"/)[1]);
+  for (const id of ids) assert.equal(on(id), id !== 'page-login-index', id);
+  for (const id of ['page-course-view-weeks', 'page-course-section', 'page-mod-forum-discuss', 'page-mod-page-view', 'page-mod-resource-view']) assert.ok(on(id), id);
+  for (const id of ['page-mod-quiz-attempt', 'page-mod-quiz-review', 'page-mod-forum-post', 'page-course-edit', 'page-course-modedit', 'page-mod-assign-grader', 'page-user-edit', 'page-admin-index', 'page-mod-quiz-view-x']) assert.ok(!on(id), id);
+});
+
+test('content.js hands Moodle\'s keys to keys.js, with Canvas\'s guards: not repeated, not taken, not in a menu or dialog', () => {
+  const line = read('content.js').match(/^ {2}const keyOn = [^\n]*\n[^\n]*;$/m)[0];
+  const keyOn = (site, e, pathname = '/course/view.php') => vm.runInNewContext(`${line} keyOn`, {
+    settings: { enhance: { keys: true } }, observer: {}, typing: () => false, ultra: site === 'ultra', moodle: site === 'moodle', location: { pathname }, GZ_PAGE: require('../lib/page.js'),
+  })({ key: 'g', target: { closest: () => null }, ...e });
+  assert.ok(keyOn('moodle', {}));
+  for (const e of [{ repeat: true }, { defaultPrevented: true }, { ctrlKey: true }, { target: { closest: () => ({}) } }]) assert.ok(!keyOn('moodle', e), JSON.stringify(e));
+  assert.ok(!keyOn('canvas', {}), 'Canvas has no such page');
+  assert.ok(keyOn('canvas', {}, '/courses/25'));
 });

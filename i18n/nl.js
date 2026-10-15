@@ -402,6 +402,7 @@
   "its overall grade names a category Glaze can't find": 'het noemt een categorie die Glaze niet kan vinden',
   "Tint and look for {name}": "Tint en uiterlijk voor {name}",
   "Change the colour and nickname in Canvas’s own card menu.": "Wijzig de kleur en bijnaam in het kaartmenu van Canvas.",
+  "The colour is Moodle’s own for this course.": "De kleur is die van Moodle voor deze cursus.",
   "Open Blackboard or Canvas once and your courses show up here. Change Canvas colours in its own card menu.": "Open Blackboard of Canvas om je cursussen hier te zien. Wijzig Canvas-kleuren in het eigen kaartmenu.",
   'Locked': 'Vergrendeld',
   'Not complete': 'Niet voltooid',

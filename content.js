@@ -261,11 +261,13 @@
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
   let canvasRecorded = false;
-  const canvasCourseKey = (id = canvasCourseId()) => id ? `canvas:${location.origin}/${id}` : null;
+  // Moodle's: <body>'s course (1 is the site) under its theme sheet's root.
+  const canvasCourseKey = (id = moodle ? document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1] : canvasCourseId()) => id ? `${site}:${moodle ? document.querySelector('link[href*="/theme/styles"]')?.href.split('/theme/')[0] : location.origin}/${id}` : null;
   const recordCourses = () => {
     if (!ultra) {
-      if (moodle || canvasRecorded || window.top !== window) return;
+      if (canvasRecorded || window.top !== window) return;
       canvasRecorded = true;
+      if (moodle) return moodleIn().then((m) => m.record()).catch(() => { canvasRecorded = false; });
       Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
         const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
           name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
@@ -291,7 +293,7 @@
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
           try { chrome.storage.local.get('seenCourses', (r) => {
-            const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([, c]) => c?.canvas));
+            const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k]) => k.includes(':')));
             chrome.storage.local.set({ seenCourses: { ...canvas, ...seen }, seenCoursesAt: Date.now(), courseSlots });
           }); } catch { /* reloaded */ }
         });
@@ -1532,10 +1534,10 @@
   // "g" then a letter goes somewhere, "/" searches, "?" lists them: features/keys.js, loaded on the first key that
   // starts one while the switch is on, then handed every key. Top frame only.
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
-  // Whether a key is one for the shortcuts: switched on, no modifier, not typing, and on Canvas not repeated, not
-  // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too).
+  // Whether a key is one for the shortcuts: switched on, no modifier, not typing, and on Canvas and Moodle not repeated, not
+  // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too, and Moodle's pages).
   const keyOn = (e) => !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)
-    && (ultra || !(moodle || e.defaultPrevented || e.repeat || !GZ_PAGE.canvasKeys(location.pathname) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')));
+    && (ultra || !(e.defaultPrevented || e.repeat || !(moodle || GZ_PAGE.canvasKeys(location.pathname)) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')));
   let keysWaiting = null; // the keys pressed while keys.js loads, as they were: handed over in order when it's in
   if (window.top === window) {
     document.addEventListener('keydown', (e) => {
@@ -1896,8 +1898,8 @@
   const menuOn = () => !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
   const syncCourseMenu = () => {
     const on = menuOn();
-    for (const card of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard')) {
-      const cid = ultra ? (card.dataset.courseId || card.id.slice(19)) : canvasCourseKey(card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1]);
+    for (const card of document.querySelectorAll(ultra ? CARD : moodle ? '[data-region="course-content"]' : '.ic-DashboardCard')) {
+      const cid = ultra ? (card.dataset.courseId || card.id.slice(19)) : canvasCourseKey(moodle ? card.dataset.courseId : card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1]);
       let b = card.querySelector(':scope > .gz-cm-btn');
       if (b && (!on || b.dataset.cid !== cid || !courseList[cid])) { b.remove(); b = null; }
       if (!on || !courseList[cid]) continue;
@@ -1923,7 +1925,7 @@
   };
   // Canvas's dashboard cards: features/cards.js.
   const cardUI = (f) => need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => f(GZ_CARD_UI), () => {});
-  const syncCards = () => { if (!isPreview && !moodle && location.pathname === '/') cardUI((m) => m.paint()); };
+  const syncCards = () => { if (moodle) globalThis.GZ_MOODLE_PAGE?.paint(); else if (!isPreview && location.pathname === '/') cardUI((m) => m.paint()); };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
     globalThis.GZ_COURSE_MENU?.close(false, true);
@@ -2291,6 +2293,8 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     });
   });
   const reapply = () => { if (settings.enabled && links.length) applySettings(); };
+  // Moodle's course is on <body>: its tint and look before that is drawn.
+  if (moodle && !document.body) new MutationObserver((_, o) => document.body && (o.disconnect(), reapply())).observe(html, { childList: true });
   darkMQ.addEventListener('change', reapply);
   calmMQ.addEventListener('change', reapply);
 })();

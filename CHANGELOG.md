@@ -8,6 +8,16 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Moodle: tint, Looks, the course menu and keyboard shortcuts.** A Moodle course can tint its pages and wear its own
+  Look, on its course page, its activities and its card on the Dashboard and My courses, set from the course menu on
+  that card or in
+  the editor, where Moodle courses are listed in the colour Moodle gives them. The keyboard shortcuts work on Moodle
+  as on Canvas: `g` then `d`, `c`, `a`, `g` or `m` for the Dashboard, My courses, the calendar, grades and messages,
+  `g` then `?` for the list, on Moodle's main pages and a course's sections and activities, never while typing, in
+  a quiz being taken or in an editing form. Each course is kept by its site (Moodle's folder too) and id, apart from
+  Canvas's, so nothing moves. The course list is read from your own Moodle, read-only, at most every ten minutes for
+  each Moodle site.
+
 - **Insights** (Canvas, off by default): an Insights button on the Dashboard, or Insights in Ctrl+K, shows your term
   in numbers, worked out on this device: how much you handed in on time per course and overall (late, missing and
   excused apart, and the best run of weeks with everything on time); each course's grade after each piece of graded
