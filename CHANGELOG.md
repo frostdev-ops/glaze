@@ -8,6 +8,22 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Export calendar (.ics)** (Canvas): Better To Do's Export button, or Export calendar (.ics) in Ctrl+K, saves an
+  .ics file of your Canvas deadlines, your own tasks with a due date, "do on" days and focus sessions, and Gradescope
+  work (for a Canvas account that said yes to it), each part optional, for the next 2, 4, 8 or 16 weeks or the current
+  term. Import it into Google Calendar, Outlook or Apple Calendar; stable event identifiers mean a newer file updates
+  the same events where the calendar supports it. Made on the device, downloaded by the browser (no new permission);
+  the choices are remembered and also in the options page. No subscribe link: that would need a server.
+- **Past terms, GPA trends and a GPA goal** (Canvas, with the GPA on): add earlier terms by hand or import them from a
+  transcript's text, a web page or a Word file, read on this device and always shown for review first (the transcript's
+  own term GPA is checked against Glaze's). Plus/minus or whole-letter scales per term, credits, honors and AP;
+  pass/fail, withdrawn, transfer and incomplete courses are listed but left out. The Dashboard's GPA gains an overall
+  figure with past terms, a chart of term and cumulative GPA (with a table of the same figures for screen readers),
+  and a cumulative or term goal: what this term needs, whether it's in reach, and one route there from your grades
+  now, with the lowest percent for each letter and, per course, what the work left needs. Ctrl+K: GPA: past terms,
+  trends and goal. Free, unlimited and kept on this device; nothing is uploaded. PDF and photo transcripts aren't
+  read yet.
+
 - **Syllabus import** (Canvas, off by default): read a course's syllabus on your device, from its Syllabus page, a
   Word, PowerPoint, web page or text file, or pasted text, in six languages. Every field (professor, office hours,
   class times, exam and due dates, grading scale, weights) is shown with the line it came from for you to correct

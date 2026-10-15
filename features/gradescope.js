@@ -82,12 +82,20 @@
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     [role="status"]:empty { display: none; } [role="status"] { margin: 8px 0 0; color: var(--ink); }`;
+  // The bar while it's on the page: it goes as soon as Glaze or its Gradescope switch is turned off.
+  let shown = null;
+  try {
+    chrome.storage.onChanged.addListener((ch, area) => {
+      if (area === 'sync' && (ch.enabled || ch.enhance) && shown) on().then((yes) => { if (!yes) { shown?.remove(); shown = null; } });
+    });
+  } catch { /* reloaded */ }
   const bar = (d, open, list) => {
     const host = make('div');
+    shown = host;
     host.id = 'gz-gradescope';
     const root = host.attachShadow({ mode: 'closed' });
     const say = make('p', { role: 'status' });
-    const close = () => host.remove();
+    const close = () => { host.remove(); if (shown === host) shown = null; };
     const pick = (c) => {
       const want = G.suggest(c, list);
       const sel = make('select', { name: c.gid },
@@ -143,9 +151,14 @@
     const kept = G.clean(raw);
     if (kept.acct && !unplaced(kept).length && !due(kept)) return; // nothing to do: not even the account page is asked for
     const d = await on() ? await whoami() : null;
-    if (!d) return;
+    // Both switches again after every wait: turned off meanwhile, nothing is drawn or read.
+    if (!d || !await on()) return;
     const open = unplaced(d);
-    if (open.length) { await words().catch(() => {}); bar(d, open, G.canvas(seenCourses)); }
+    if (open.length) {
+      await words().catch(() => {});
+      if (!await on()) return;
+      bar(d, open, G.canvas(seenCourses));
+    }
     await sync(d);
   })();
 })();

@@ -295,6 +295,15 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Search in the command palette asks each course's REST lists with `search_term` (pages, assignments, discussions, announcements, modules, files: six GETs a course), six at a time, the course you're in and this term's first, and stops at 24 results | One GraphQL query over `allCourses` (another extension's `SearchByTerm`: top 3 pages and assignments per course) | Canvas's GraphQL `Course` has pages, assignments and discussions connections with a search filter but no files (local Canvas source, `app/graphql/types/course_type.rb`); the query is a POST that needs the CSRF token; and one query for every course, past ones included, can't be ordered, cut short or cancelled per course. GETs are cached per course, kind and term for five minutes in memory. |
 | Content results go after the palette's matches that contain the query as typed, each arrival below the last; its looser matches (letters in order) are held back until the search is done, then added at the end. The keyboard's choice stays on the same item | Appending them after everything; inserting them above the loose matches; ranking them in with the rest | Arrivals would otherwise land under a dozen weak matches, and inserting or re-ranking moves rows under a still pointer, so a click hits something else (Codex W6 review). |
 
+## Past terms, GPA trends and goal (W16, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Past terms live in `storage.local` per site and user (`gpaTerms:<origin>:<user>`), changed one term at a time through the broker ('glaze:gpaterms'), each term with its last change time, and a Remove-all watermark that every change carries as the last one its page saw | `storage.sync`; whole-record writes from the page | Transcripts are device data and too big for sync. Changes to different terms from two tabs both land, and an older change to a term arriving late is dropped. A change made before Remove all, or on a view read before it (a read held up while it came), is refused, and the page puts back what is stored (Codex W16 review). |
+| Transcripts are read as text (pasted, HTML or DOCX through `lib/doctext.js`) by heuristics in `lib/gpa.js`, and always reviewed before anything is kept | another extension's server-side AI parse; PDF and photos now | Everything stays on the device. PDF (pdf.js), photos (OCR) and AI extraction wait on owner decisions #1, #10 and #11; they would feed the same review screen. |
+| Withdrawn grades, WF included, are left out and listed; the student can change a WF to F | Counting WF as F | Schools differ; leaving it visible and editable is honest either way. |
+| The route starts from each course's letter now and takes the cheapest steps up (percentage points to the next letter on the course's scale, over grade points gained, credits counted). What it takes asks the course's work left (the calculator's own `need`) and a letter it can't reach caps that course | Equal letters everywhere; asking every course's work up front | One request per course only when asked; the plan stays possible once Canvas data says a letter is out of reach. |
+
 ## Dashboard notes, widgets and What Glaze can do (W7, Oct 2026)
 
 | Decision | Considered | Why |
@@ -347,6 +356,18 @@ What 2.0 chose, what it turned down, and why. Newest last.
 
 Canvas's experimental `#instui-sidenav` layout is not covered by W8; revisit the selectors when that navigation feature ships. Long, scrollable rails may reveal the solid fill below a scrolled image layer; no institution navigation plugins were runtime tested.
 
+## Calendar export (W13a, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| A local `.ics` file, downloaded through a blob link (`<a download>`) | The `downloads` permission; a subscribe URL | No new permission. A calendar can only subscribe to an address it can fetch on its own schedule, which needs a server holding the student's data: Glaze has none, by rule. Direct Google/Microsoft sync (S3) waits for owner-created client IDs and verification. |
+| Deadlines and focus sessions in UTC (`…Z`); all-day items and "do on" days as dates; no `VTIMEZONE` | `TZID` = the Canvas time zone plus a generated `VTIMEZONE` | None of these events repeats, so an instant is exact whatever zone the calendar shows it in, and every calendar app reads UTC. The Canvas time zone still decides the days: where the range starts and ends, and which day an all-day item is on. A `VTIMEZONE` matters only for repeating local times; W14's class periods use floating local times (lib/ics.js), which stay at 9:00 across DST. |
+| Event UIDs from `lib/ics.js uid()`: the Canvas host, the kind and the item's id (a focus session adds its start) | Random UIDs; including the Canvas user id | The same item is the same event in every export, so re-importing updates it where the calendar supports that (untested per app). The host already tells sites apart; the user id would only put more personal data in the file. A moved focus session is a new event: sessions have no id of their own. |
+| "This term": the latest end date among courses under way (a course's own dates when it keeps to them, else its term's), at most a year; with no dates (Canvas's default term), 16 weeks, and the dialog says so | Asking for enrollment terms separately | One request the page already makes (`include[]=term`). |
+| The export runs on a Canvas page; the options page holds the same choices without a button | Exporting from the options page | Canvas deadlines for the range come from Canvas's planner with the student's session, which only a Canvas page has; an options-page file from the two-minute planner copy would silently miss most of the range. |
+| Past deadlines stay out; a plan in the range always goes in: its item's title is looked for up to half a year back, else "Planned work" | Dropping plans whose item wasn't read | A plan for overdue work is exactly what the student needs on the calendar. The second planner read happens only when such a plan exists. |
+| The export stops, saving nothing, if Glaze, the Gradescope switch or this account's Gradescope answer changes, or the dialog closes, while Canvas answers; checked again with nothing awaited before the save | Composing from what was read when the export began | A withdrawn answer must not leave Gradescope work in a file made after it. |
+| Calendar events in the planner are left out | Including them | Better To Do doesn't list them either, and Canvas's own calendar feed already has them. |
 ## Syllabus import (W15, Oct 2026)
 
 | Decision | Considered | Why |
