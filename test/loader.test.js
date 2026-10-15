@@ -102,7 +102,7 @@ test('success means the file ran to its end: an injection that fails, throws or 
 // What a feature file reads from content.js when it loads (features/*.js).
 const CTX = { placeAsked: () => 0, t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}), site: 'canvas', wordsIn: new Set() };
 // What a feature file touches as it loads: the listeners it adds (features/keys.js, coursemenu.js, previews.js).
-const page = () => ({ document: { addEventListener() {}, documentElement: {} }, addEventListener() {}, GZ_COLOR: {}, IntersectionObserver: class {} });
+const page = () => ({ document: { addEventListener() {}, documentElement: {} }, location: { pathname: '/host' }, addEventListener() {}, GZ_COLOR: {}, IntersectionObserver: class {} });
 // Moved out of the first content script in W0c: the palette, the keys, the course menu, the previews and Download all.
 // W0d: the draft backup, the document buttons and your place in a course (Ultra's what-if is features/grades.js since B4).
 const W0C = [['features/palette.js', 'GZ_CMD'], ['features/keys.js', 'GZ_KEYS'], ['features/coursemenu.js', 'GZ_COURSE_MENU'], ['features/previews.js', 'GZ_PEEK'], ['features/download.js', 'GZ_DOWNLOAD'],
@@ -166,7 +166,7 @@ test('each site\'s part returns only what content.js calls, and content.js calls
   assert.ok(forwarded, 'GZ_CTX forwards the part\'s helpers');
   const keys = JSON.parse(forwarded[1].replace(/'/g, '"'));
   for (const [file, name] of [['content-ultra.js', 'GZ_SITE_ULTRA'], ['content-canvas.js', 'GZ_SITE_CANVAS']]) {
-    const context = vm.createContext({ document: { addEventListener() {} }, addEventListener() {}, IntersectionObserver: class { observe() {} }, window: {}, location: { origin: 'https://school.test' } });
+    const context = vm.createContext({ document: { addEventListener() {} }, addEventListener() {}, IntersectionObserver: class { observe() {} }, MutationObserver: class { observe() {} }, chrome: { storage: { onChanged: { addListener() {} } } }, window: {}, location: { origin: 'https://school.test' } });
     context.globalThis = context;
     const make = vm.runInContext(read(file), context);
     assert.equal(make, vm.runInContext(name, context));

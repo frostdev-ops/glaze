@@ -62,9 +62,12 @@ domain, and on Canvas and Moodle, which Glaze recognizes on any school's domain.
 Blackboard Ultra's base navigation supports both its newer MUI drawer and legacy rail. In the editor, choose a Glaze,
 school or device-only custom logo, set precise rail/icon/label sizes and spacing, and add up to eight http/https links
 with built-in icons. Native items can be reordered or hidden and restored with Reset navigation; the Institution page
-entry reads Dashboard with its original destination. Optional clock/date, cached next-due item, shared focus timer and
+entry reads Dashboard with its original destination while Glaze's Dashboard is enabled. Optional clock/date, next-due item, shared focus timer and
 pet-level widgets can be ordered at the top or bottom. Export all includes the navigation settings and links; local
 pictures remain on their device, and Look codes carry only the existing appearance fields.
+Next due shares the agenda/Better To Do planner and account/cache rules, refreshing only while enabled and visible.
+Logos, sizes and Dashboard naming apply on the initial path; optional order/hiding, links and widgets settle after
+their on-demand module arrives. Narrow modal drawers keep Ultra's native width.
 
 ## Install
 

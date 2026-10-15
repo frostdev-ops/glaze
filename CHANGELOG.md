@@ -11,8 +11,8 @@ All notable changes to Glaze are documented here. The format follows
 
 - **Blackboard navigation:** the newer MUI drawer and legacy rail now share Glaze's styling, with a bundled Glaze logo
   at first paint, school/device-only custom logos, precise sizes and spacing, custom http/https links with built-in
-  icons, reversible native-item order/hiding and Reset. Institution page reads Dashboard at the same link. Optional
-  clock/date, cached next-due item, shared focus timer and pet level can sit at the top or bottom. The editor previews
+  icons, reversible native-item order/hiding and Reset. Institution page reads Dashboard at the same link while
+  Glaze's Dashboard is enabled. Optional clock/date, planner-backed next-due item, shared focus timer and pet level can sit at the top or bottom. The editor previews
   the real Ultra nav rules; navigation settings and custom links are included in Export all.
 
 - **Planning on Blackboard Ultra.** Better To Do (on by default), tasks on course cards, reminders and the streak, Export

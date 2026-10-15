@@ -411,8 +411,8 @@ GZ_UI.load().then((s) => {
     $('#nav-items').replaceChildren(...order.map((id, at) => {
       const link = navItems.links.find((l) => l.id === id), name = link ? link.n : t(nativeNames[id]);
       const li = node('li', { }, node('span', { textContent: name })); li.dataset.id = id;
-      const up = navButton('Move up', () => writeNavItems({ ...navItems, order: move(order, at, -1) })); up.disabled = at === 0;
-      const down = navButton('Move down', () => writeNavItems({ ...navItems, order: move(order, at, 1) })); down.disabled = at === order.length - 1;
+      const up = navButton('Move up', () => { if (at > 0) writeNavItems({ ...navItems, order: move(order, at, -1) }); }); up.setAttribute('aria-disabled', String(at === 0));
+      const down = navButton('Move down', () => { if (at < order.length - 1) writeNavItems({ ...navItems, order: move(order, at, 1) }); }); down.setAttribute('aria-disabled', String(at === order.length - 1));
       up.setAttribute('aria-label', `${t('Move up')} · ${name}`); down.setAttribute('aria-label', `${t('Move down')} · ${name}`);
       li.append(up, down);
       if (link) {
@@ -430,8 +430,8 @@ GZ_UI.load().then((s) => {
       const position = node('select'); position.setAttribute('aria-label', t(widgetNames[w.id]));
       position.append(new Option(t('Top'), 'top'), new Option(t('Bottom'), 'bottom')); position.value = w.at;
       position.addEventListener('change', () => writeNavItems({ ...navItems, widgets: navItems.widgets.map((x) => x.id === w.id ? { ...x, at: position.value } : x) }));
-      const up = navButton('Move up', () => writeNavItems({ ...navItems, widgets: move(navItems.widgets, at, -1) })); up.disabled = at === 0;
-      const down = navButton('Move down', () => writeNavItems({ ...navItems, widgets: move(navItems.widgets, at, 1) })); down.disabled = at === navItems.widgets.length - 1;
+      const up = navButton('Move up', () => { if (at > 0) writeNavItems({ ...navItems, widgets: move(navItems.widgets, at, -1) }); }); up.setAttribute('aria-disabled', String(at === 0));
+      const down = navButton('Move down', () => { if (at < navItems.widgets.length - 1) writeNavItems({ ...navItems, widgets: move(navItems.widgets, at, 1) }); }); down.setAttribute('aria-disabled', String(at === navItems.widgets.length - 1));
       const row = node('li', {}, node('label', {}, input, t(widgetNames[w.id])), position, up, down); row.dataset.id = `widget-${w.id}`; return row;
     }));
     if (focusId) { const row = document.querySelector(`.nav-editor-list [data-id="${focusId}"]`); const controls = row?.querySelectorAll('button, input, select'); (controls?.[focusAt]?.disabled ? row.querySelector('button:not([disabled]), input, select') : controls?.[focusAt])?.focus(); }

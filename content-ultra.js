@@ -572,7 +572,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 
   const renamed = new Map();
   const syncDashboard = () => {
-    const on = I.links.length && I.settings.enabled && GZ_NAV.dashboard(I.settings);
+    const on = I.links.length && I.settings.enabled && I.settings.enhance.dashboard;
     for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a[href]')) {
       if (GZ_NAV.native(a.getAttribute('href')) !== 'institution-page') continue;
       const label = a.querySelector('.MuiTypography-root, .MuiListItemText-root, span:not(:has(svg))');
@@ -644,7 +644,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 });
 
 // Known Ultra entry: arm before asynchronous head detection lets the parser reach <body>.
-if (!document.body && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
+if (/html/.test(document.contentType) && !document.body && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
   GZ_SITE_ULTRA.sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => {
     const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
     l.setAttribute('blocking', 'render'); setTimeout(() => l.removeAttribute('blocking'), 1000);

@@ -1034,7 +1034,7 @@ html[data-gz-dark-theme][data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(:is(#ba
 html[data-gz-nav-brand="custom"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img)::after { background-image: var(--gz-nav-logo, url("assets/logo.svg")); }
 html[data-gz-nav-collapsed][data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("icons/icon.svg"); }
 html[data-gz-nav-no-logo] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img) { display: none; }
-.gz-nav-dashboard > svg { display: none !important; }
+.gz-nav-dashboard :is(svg, .MuiListItemIcon-root) { display: none !important; }
 .gz-nav-dashboard::after { content: ""; order: -1; width: var(--gz-nav-icon); height: var(--gz-nav-icon); flex: none; background: currentColor; mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>') center / contain no-repeat; }
 .gz-nav-widgets { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
 .gz-nav-widgets:empty { display: none; }

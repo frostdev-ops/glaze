@@ -90,7 +90,7 @@ function GZ_ULTRA_RAIL(X) {
     svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '1.8');
     const path = document.createElementNS(svg.namespaceURI, 'path');
-    path.setAttribute('d', name === 'dashboard' ? 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' : icons?.[name] || icons?.link || 'M5 12h14');
+    path.setAttribute('d', icons?.[name] || icons?.link || 'M5 12h14');
     svg.append(path); return svg;
   };
   const restore = () => {
@@ -162,11 +162,17 @@ function GZ_ULTRA_RAIL(X) {
   const timerAction = async (op, node) => {
     if (!W || timerPending || !node.options) return;
     timerPending = true;
-    const token = rev;
-    const r = isPreview ? { ok: true, timer: op === 'reset' ? W.IDLE : op === 'toggle' ? W.cleanTimer(local.widgetTimer).end ? W.pause(W.cleanTimer(local.widgetTimer), Date.now()) : W.start(W.cleanTimer(local.widgetTimer), Date.now(), node.options) : W.advance(W.cleanTimer(local.widgetTimer), Date.now(), node.options) }
-      : await send({ type: 'glaze:widgetTimer', op });
+    const token = rev, read = reads;
+    let r;
+    if (isPreview) {
+      const now = Date.now(), before = W.cleanTimer(local.widgetTimer);
+      let timer = W.advance(before, now, node.options);
+      if (op === 'reset') timer = W.IDLE;
+      if (op === 'toggle') timer = timer.end ? W.pause(timer, now) : W.start(timer, now, node.options);
+      r = { ok: true, timer };
+    } else r = await send({ type: 'glaze:widgetTimer', op });
     timerPending = false;
-    if (!active || token !== rev) return;
+    if (!active || token !== rev || read !== reads) return;
     node.status.textContent = r?.ok ? '' : X.t('Not saved. Try again in a moment.');
     timerFailed = r?.ok ? '' : JSON.stringify(W.cleanTimer(local.widgetTimer));
     if (r?.ok) { local.widgetTimer = r.timer; if (op !== 'advance') advanced = ''; }

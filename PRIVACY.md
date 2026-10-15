@@ -9,12 +9,17 @@ _Last updated: 2026-10-15_
   switches/order/position sync in the separate capped `navItems` item. A link is contacted only when you click it;
   icons and the default Glaze logo are bundled. Custom logos are resized on this device and stored as `navLogo:<id>`
   in local storage (960 px longest side, 400,000 characters each, within the existing 4,000,000-character combined
-  picture cap). Replacement/reset deletes unused custom-logo pictures after the new setting is saved; failed saves
-  retain the old picture. A displayed local picture is readable by the school page, like other displayed images.
+  committed-picture cap). Replacement can temporarily retain the previous logo until the new setting commits;
+  failed saves retain the old picture. Replacement/reset/import then remove unused custom logos. A displayed local
+  picture is readable by the school page, like other displayed images.
   Export all carries navigation settings/links but removes local picture ids and restores the bundled logo on import;
   Look/share codes exclude personal navigation links, layout and logos. Rail widgets are off by default. The timer
-  shares the existing device `widgetTimer`; next due uses the same-origin due cache and the pet reads existing progress
-  for a fresh cached same-origin account, without fetching a profile, awarding XP or recording extra activity.
+  shares the existing device `widgetTimer`; its editor preview is an isolated demonstration. When Next due is enabled
+  and visible, it uses the agenda/Better To Do planner reader and account-matched cache: a covered To Do copy under
+  ten minutes old, otherwise a two-minute range memo. That existing reader may read your profile, memberships, work,
+  calendar and submission state from this school's `/learn/api/` paths. Finished/dismissed work is excluded. The pet
+  reads existing progress for a fresh cached same-origin account without fetching a profile or awarding XP.
+  These widgets record no extra activity.
 
 - **Pet habitat** (off by default), in `chrome.storage.local`, per site and confirmed signed-in account (`pet:<origin>/<uid>`): settled XP contributions for rewarded work/plan ids, existing source-cache timestamps, the provider hand-in timestamp saved when work credit settles, credited streak day numbers, the selected buddy look and decoration positions. The broker reads existing Better To Do, planner-cache, Insights and W11 streak records, plus the existing To Do/Streak switches; it adds no assignment requests or activity tracking. The ordinary shared identity helper may read the signed-in profile once for the page. Saved W11 `[streak.start, min(today, streak.asOf))` is the only source of streak days while Streak is on, including free restores; no days are guessed from its all-time best. With Streak off, no saved streak, or no valid saved calculation day (`asOf`), no new streak XP is awarded and existing XP stays. Missing/cleared caches and deleting finished task or plan history preserve settled rewards. With Canvas tick sync on, historical hand-ins and kept plans can receive first rewards without a planner row. A missing row preserves settled work/plan values; work credit can update if a fresh existing source proves a hand-in newer than the saved provider hand-in timestamp. A refreshed source timestamp alone cannot override a native untick. Ultra always follows local ticks. Visible unticks (local or synced), manual done mode and newer submission corrections revoke the associated work/plan XP; a still-present plan moved to a future day or with a known missed completion also loses plan credit. Each contribution/version/provider-baseline/day collection is capped at 4,096 entries. An unreadable, oversized or full record is left untouched and the view explains that its update was refused; existing earned history is never silently truncated or reset. No focus timer rewards, analytics, remote game service, notifications or missed-day penalties. Progress is not synced; removing the extension or clearing its local storage deletes it. Moodle has no supported stored account-scoped completion source yet, so no game is shown there.
 

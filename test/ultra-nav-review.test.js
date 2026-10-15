@@ -15,7 +15,7 @@ const moduleOf = (file) => {
 test('the known Ultra entry provisionally blocks before a head marker or body exists, bounded to one second', () => {
   const sheets = [], timers = [];
   const head = { appendChild: (l) => { sheets.push(l); } };
-  const document = { body: null, head, createElement: () => ({ attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; } }) };
+  const document = { contentType: 'text/html', body: null, head, createElement: () => ({ attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; } }) };
   const c = vm.createContext({ document, location: { pathname: '/ultra/course' }, chrome: { runtime: { getURL: (f) => `extension://${f}` } }, setTimeout: (fn, ms) => { timers.push({ fn, ms }); } });
   vm.runInContext(source('content-ultra.js'), c);
   assert.equal(sheets.length, 4);
@@ -25,6 +25,8 @@ test('the known Ultra entry provisionally blocks before a head marker or body ex
   for (const t of timers) t.fn(); assert.ok(sheets.every((l) => !('blocking' in l.attrs)));
   document.body = {}; c.GZ_SITE_ULTRA.sheets = undefined; vm.runInContext(source('content-ultra.js'), c);
   assert.equal(sheets.length, 4, 'late injection never arms a render blocker');
+  document.body = null; document.contentType = 'application/xml'; vm.runInContext(source('content-ultra.js'), c);
+  assert.equal(sheets.length, 4, 'XML/error responses get no provisional styles');
 });
 
 test('bundled-logo CSS retains the original img accessible name', () => {
