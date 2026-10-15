@@ -11,7 +11,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const TOOLS = [['/ultra/course', 'Courses'], ['/ultra/calendar', 'Calendar'], ['/ultra/grades', 'Grades'], ['/ultra/messages', 'Messages'],
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
-    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu' };
+    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu', search: 'Search in your courses' };
   // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
@@ -71,18 +71,21 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...(ctx.settings().enhance.gpa ? [{ label: t('GPA: past terms, trends and goal'), hint: 'Glaze', group: 'Glaze', run: () => (location.pathname === '/' && globalThis.GZ_GRADES_UI ? GZ_GRADES_UI.open() : go('/#gz-gpa')()) }] : []),
       // Insights (features/insights.js): this term in numbers, on any Canvas page.
       ...(ctx.settings().enhance.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: () => need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.open(), () => {}) }] : []),
-      // The notes app (features/notes.js): the library, a new note, and this course's notes.
-      ...(ctx.settings().enhance.notes ? [
-        { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },
-        { label: t('New note'), hint: cid ? t('This course') : 'Glaze', group: 'Glaze', run: (e) => notes({ create: true, course: cid, event: e }) },
-        ...(cid ? [{ label: t('Course notes'), hint: t('This course'), group: 'Glaze', run: (e) => notes({ course: cid, event: e }) }] : []),
-      ] : []),
-      ...glazeCmds(),
-      // Every Canvas extra with its switch (features/widgets.js), whether or not the widgets are on.
-      { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },
+      ...apps(cid),
       ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
     ];
   };
+  // Canvas and Ultra alike: the notes app (features/notes.js: the library, a new note, and this course's notes), Glaze's
+  // own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
+  const apps = (cid) => [
+    ...(ctx.settings().enhance.notes ? [
+      { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },
+      { label: t('New note'), hint: cid ? t('This course') : 'Glaze', group: 'Glaze', run: (e) => notes({ create: true, course: cid, event: e }) },
+      ...(cid ? [{ label: t('Course notes'), hint: t('This course'), group: 'Glaze', run: (e) => notes({ course: cid, event: e }) }] : []),
+    ] : []),
+    ...glazeCmds(),
+    { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },
+  ];
   // Notes opens only for the student's own click or Enter on its row: that event goes with the request, through loading
   // features/notes.js, and open() checks it.
   const notes = (o) => o.event?.isTrusted && need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open(o), () => {});
@@ -110,7 +113,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
         })),
       ...dueCmds(due),
       ...items,
-      ...glazeCmds(),
+      ...apps(cid),
     ];
   };
   let cmd = null; // { box, input, list, all, shown, active, back }
@@ -176,8 +179,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     closeCmd();
     c.run(e);
   };
-  // Search in your courses is Canvas's: not on Ultra, nor on Moodle, which has no /api/v1.
-  const searchHere = () => !ultra && !moodle && ctx.settings().enhance.search;
+  // Canvas and Ultra share content search; Moodle has no adapter.
+  const searchHere = () => !moodle && ctx.settings().enhance.search;
   const openCmd = () => {
     const box = document.createElement('div');
     box.id = 'gz-cmd';

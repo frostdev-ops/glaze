@@ -421,3 +421,27 @@ test('the index is cleaned whatever storage holds', () => {
   assert.equal(N.imageType(new TextEncoder().encode('GIF89a......')), 'image/gif');
   assert.equal(N.imageType(new TextEncoder().encode('<html>')), null);
 });
+
+test('Ultra: notes kept per Ultra site and _N_N account, courses by Ultra id, and content links from the public contents API', () => {
+  const o = 'https://school.blackboard.test';
+  assert.ok(N.KEY.test(N.storeKey(o, '_5_1')));
+  for (const k of ['notesIdx:https://school.blackboard.test/_5', 'notesIdx:https://school.blackboard.test/_5_1_2', 'notesIdx:https://school.blackboard.test/5_1']) assert.ok(!N.KEY.test(k), k);
+  const idx = N.clean({ notes: { '00000000-0000-4000-8000-000000000001': { title: 'a', course: '_7_1' }, '00000000-0000-4000-8000-000000000002': { title: 'b', course: '_7' } } });
+  assert.deepEqual(Object.values(idx.notes).map((n) => n.course), ['_7_1', ''], 'an Ultra course id is kept; anything else is no course');
+  // The public contents API's items (content-ultra.js courseItems): title, parent and links only.
+  const items = [
+    { id: '_1_1', title: 'Week 1', links: [{ rel: 'alternate', href: '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_1_1' }] },
+    { id: '_2_1', parentId: '_1_1', title: 'Lab', links: [{ rel: 'self', href: '/learn/api/public/v1/courses/_7_1/contents/_2_1' }, { rel: 'alternate', href: `${o}/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_2_1` }] },
+    { id: '_3_1', title: 'Other site', links: [{ rel: 'alternate', href: 'https://evil.example/ultra/redirect' }] },
+    { id: '_4_1', title: 'Not Ultra', links: [{ rel: 'alternate', href: '/webapps/blackboard/x' }] },
+    { id: '_5_1', title: 'Script', links: [{ rel: 'alternate', href: 'javascript:alert(1)' }] },
+    { id: '_6_1', title: '', links: [{ rel: 'alternate', href: '/ultra/redirect?x=1' }] },
+    { id: '_7_1', title: 'No links' }, null, 'x',
+  ];
+  assert.deepEqual(N.ultraLinks(items, o), [
+    { title: 'Week 1', href: `${o}/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_1_1`, kind: 'item', group: '' },
+    { title: 'Lab', href: `${o}/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_2_1`, kind: 'item', group: 'Week 1' },
+  ]);
+  assert.deepEqual(N.ultraLinks(null, o), []);
+  assert.match(N.sanitize('<a href="https://school.blackboard.test/ultra/x" data-gz-kind="item">Lab</a>'), /data-gz-kind="item"/, 'an Ultra link keeps its kind in a note');
+});

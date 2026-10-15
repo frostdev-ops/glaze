@@ -200,3 +200,18 @@ test('study buddy: happy after a win, awake while the timer runs or after a pat,
   assert.equal(W.ticks({ items: { 'assignment:1': { done: true }, 'quiz:2': { done: false }, 'quiz:3': {} }, tasks: [{ done: 5 }, { done: 0 }] }), 2);
   assert.equal(W.ticks(undefined), 0);
 });
+
+test('layout: a tile another file declares (MORE) comes after the built-in ones, off and at its size, and keeps its place', () => {
+  const more = { pet: { size: 'm' }, notes: { size: 'l' }, 'Bad id': {}, x: {} };
+  const lay = W.layout(undefined, more);
+  assert.deepEqual(lay.tiles.map((t) => t.id), [...W.TILES, 'pet'], 'a built-in id or a bad one is not added');
+  assert.deepEqual(lay.tiles.at(-1), { id: 'pet', on: false, size: 'm', float: false, x: null, y: null });
+  const kept = W.layout({ tiles: [{ id: 'pet', on: true, size: 's', float: true, x: 0.5, y: 0 }, { id: 'notes' }] }, more);
+  assert.deepEqual(kept.tiles.slice(0, 2).map((t) => [t.id, t.on, t.size, t.float]), [['pet', true, 's', true], ['notes', true, 'm', false]]);
+  assert.ok(!W.layout(kept).tiles.some((t) => t.id === 'pet'), 'without its declaration, not a tile');
+});
+
+test('notes: an Ultra account (_N_N) has its own key on its own site', () => {
+  assert.ok(W.NOTES_KEY.test(W.notesKey('https://school.blackboard.test', '_5_1')));
+  for (const k of ['notes:https://school.blackboard.test/_5', 'notes:https://school.blackboard.test/_5_1/x', 'notes:https://school.blackboard.test/5_1']) assert.ok(!W.NOTES_KEY.test(k), k);
+});
