@@ -1419,7 +1419,7 @@
     setTimeout(canvasBack, 200);
   };
   const canvasPlace = () => {
-    const cid = window.top === window && observer && canvasCourseId();
+    const cid = window.top === window && observer && canvasCourseKey();
     if (!cid) return;
     // An item opened from Modules, or with its Next and Previous buttons, carries its module item id.
     const item = new URLSearchParams(location.search).get('module_item_id');
