@@ -94,9 +94,9 @@
         "moodle.css",
         "fonts/*.woff2",
         "assets/art/pets/*/sprites.webp",
-        "assets/art/stickers/critters/study-buddy.webp",
-        "assets/art/stickers/critters/study-buddy-happy.webp",
-        "assets/art/stickers/critters/study-buddy-sleepy.webp"
+        "assets/art/stickers/*/*.webp",
+        "assets/art/cursors/*/*.png",
+        "features/lookx.css"
       ],
       "matches": [
         "https://*/*"

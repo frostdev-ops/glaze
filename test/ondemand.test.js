@@ -127,11 +127,11 @@ test('a closed keyboard help stays closed when the words arrive', () => {
   assert.equal(k.document.body.children.length, 0);
 });
 
-// The draft backup on Ultra, while lib/drafts.js is on its way.
-test('a first and only input while lib/drafts.js loads is still backed up once it arrives', async () => {
+// The draft backup on Ultra, while lib/drafts.js and features/drafts.js are on their way.
+test('a first and only input while the draft backup loads is still backed up once it arrives', async () => {
   const saved = [];
   const t = clock();
-  const loading = later();
+  const loads = [];
   class Element {}
   const editor = Object.assign(new Element(), {
     id: 'ed1', isConnected: true, textContent: 'A pasted paragraph that is long enough to keep.', innerHTML: '<p>A pasted paragraph that is long enough to keep.</p>',
@@ -142,15 +142,24 @@ test('a first and only input while lib/drafts.js loads is still backed up once i
     ultra: true, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/ultra/courses/_1_1/outline' },
     document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => null, querySelectorAll: () => [] },
     chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
-    need: () => loading, setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, window: {}, globalThis: null,
+    need: (file) => { const p = later(); loads.push({ file, p }); return p; },
+    setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, window: {}, globalThis: null,
   });
   ctx.globalThis = ctx;
-  vm.runInContext(block('  // ---- draft backup (Extras)', '  // ---- download all (Extras)'), ctx);
+  vm.runInContext(`${block('  // ---- draft backup (Extras)', '  // ---- download all (Extras)')}; globalThis.api = { watchDrafts, local };`, ctx);
+  ctx.api.watchDrafts();
+  assert.deepEqual(loads, [], 'no editor on the page: nothing loads');
   for (const f of listeners.paste || []) f({ type: 'paste', target: editor });
   t.run();
   assert.deepEqual(saved, [], 'nothing kept before the module is in');
+  assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js']);
   ctx.GZ_DRAFTS = require('../lib/drafts.js');
-  loading.resolve();
+  loads[0].p.resolve();
+  await settle();
+  assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js', 'features/drafts.js'], 'then the backup itself');
+  ctx.GZ_CTX = { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local, draftEditor: '.ql-editor[contenteditable="true"]' };
+  vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
+  loads[1].p.resolve();
   await settle();
   t.run();
   assert.equal(saved.length, 1, 'the paste is kept once the module arrives, without another input');
@@ -251,5 +260,55 @@ test('Download all\'s buttons aren\'t drawn by a file that arrives after Glaze, 
     h.loads[0].p.resolve();
     await settle();
     assert.equal(n, syncs, why);
+  }
+});
+
+// ---- W0d: the draft backup, Ultra's what-if calculator, the document buttons and your place load where they're used ----
+test('Ultra\'s what-if calculator loads on a course\'s Grades with its grades in, and nowhere else', async () => {
+  const grades = { pathname: '/ultra/courses/_1_1/grades' };
+  for (const [why, change, files] of [['grades in', () => {}, ['lib/gradecalc.js', 'features/whatif.js']],
+    ['switched off', (c) => { c.settings.enhance.calc = false; }, []], ['the outline', (c) => { c.location.pathname = '/ultra/courses/_1_1/outline'; }, []],
+    ['grades not in yet', (c) => { c.bookFor = () => ({}); }, []], ['Glaze off', (c) => { c.observer = null; }, []]]) {
+    const h = hooks('  // ---- what-if calculator (Extras)', '  // ---- draft backup (Extras)', { ultra: true, courseId: () => '_1_1', bookFor: () => ({ results: [] }), location: { ...grades }, api: 'renderCalc' });
+    h.ctx.settings.enhance.calc = true;
+    change(h.ctx);
+    h.ctx.api.renderCalc();
+    let rendered = 0;
+    if (h.loads.length) {
+      h.ctx.GZ_GRADECALC = {};
+      h.loads[0].p.resolve();
+      await settle();
+      h.ctx.GZ_WHATIF = { render: () => rendered++ };
+      h.loads[1].p.resolve();
+      await settle();
+    }
+    assert.deepEqual(h.loads.map((l) => l.file), files, why);
+    assert.equal(rendered, files.length ? 1 : 0, why);
+  }
+});
+
+test('the document buttons load on a course document or a file preview, with the switch on', () => {
+  for (const [why, ultra, toggles, has, loads] of [['a document', false, true, ['doc'], 1], ['switched off', false, false, ['doc'], 0],
+    ['a Canvas file preview', false, true, ['preview'], 1], ['nothing there', false, true, [], 0],
+    ['an Ultra preview, switched off (its images are turned back)', true, false, ['preview'], 1]]) {
+    const h = hooks('  // ---- document buttons (Extras)', '  // ---- keyboard shortcuts (Extras)', { ultra, addEventListener() {}, api: 'syncDocTools' });
+    h.ctx.settings.enhance.toggles = toggles;
+    h.ctx.document.querySelector = (sel) => (has.some((k) => (k === 'doc' ? /document-content-root|show-content/ : /iframe/).test(sel)) ? {} : null);
+    h.ctx.api.syncDocTools();
+    assert.equal(h.loads.length, loads, why);
+  }
+});
+
+test('your place loads on a course\'s Modules or an item opened from it (Canvas), or a course outline (Ultra)', () => {
+  for (const [why, ultra, pathname, search, rows, loads] of [['Modules', false, '/courses/5/modules', '', true, 1], ['course home without modules', false, '/courses/5', '', false, 0],
+    ['an item from Modules', false, '/courses/5/assignments/9', '?module_item_id=3', false, 1], ['another course page', false, '/courses/5/assignments/9', '', true, 0],
+    ['an outline', true, '/ultra/courses/_1_1/outline', '', true, 1], ['an outline still empty', true, '/ultra/courses/_1_1/outline', '', false, 0]]) {
+    const h = hooks('  // ---- your place in a course (Extras)', '  // ---- what-if calculator (Extras)', {
+      ultra, URLSearchParams, courseId: () => '_1_1', canvasCourseKey: () => 'canvas:x/5', location: { pathname, search }, api: 'keepPlace' });
+    h.ctx.settings.enhance.place = true;
+    h.ctx.document.querySelector = () => (rows ? {} : null);
+    h.ctx.document.getElementById = () => (rows ? {} : null);
+    h.ctx.api.keepPlace();
+    assert.equal(h.loads.length, loads, why);
   }
 });

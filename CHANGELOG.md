@@ -19,6 +19,14 @@ All notable changes to Glaze are documented here. The format follows
   nothing changes until you choose Use this theme. A code made of a palette alone changes only your colors.
 - **Favorites:** save a gallery Look or any theme code from its preview, and preview it again later.
   Kept on this device.
+- **Stickers:** 51 stickers in four packs (study, cozy autumn, space and sky, critters), or your own pictures, on any
+  course page. Ctrl+K, Place stickers on this page: drag to move, drag the corner to resize, turn a little, remove;
+  every step works from the keyboard too, and a list shows all the stickers on the page. They never take a click
+  from the page, and never show on a quiz you are taking. Free, unlimited, kept on this device.
+- **Pointers:** three pointer sets (Aqua, Lilac, Pearl), each with its own hand for links and buttons, or a PNG or
+  JPEG of your own scaled to 32 pixels. Text fields keep the usual text cursor. Course pages only.
+- **Look rotation** (off by default): wears the next of the Looks and favorites you choose every 6, 12 or 24 hours,
+  every week, or every day at a set time. One timer to the next change, run on this device; Ctrl+K has Next Look now.
 - **Looks history and Previous Look:** the last 20 themes you wore, from the popup, the editor or Ctrl+K,
   with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
   kept on this device.
@@ -148,6 +156,9 @@ All notable changes to Glaze are documented here. The format follows
 - **Pages load less code until you use a feature:** the command palette, keyboard shortcuts, the course menu's
   popover, folder previews and Download all's buttons now load the first time you use them (or, for Download all, on
   a course page with folders), so every other page starts with about 46 KB less. They work as before.
+- **And about 30 KB less again:** draft backup, Blackboard's what-if calculator, the document buttons (focus mode,
+  reading time, dark file previews) and remembering your place in a course now load only on the pages where they
+  appear. They work as before.
 
 ### Fixed
 

@@ -47,6 +47,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
       ...Object.entries(ultra ? EXTRAS : moodle ? { overall: CANVAS_EXTRAS.overall } : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
+      ...(globalThis.GZ_LOOKX?.cmds() || []),
       { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
       { label: t('Glaze settings'), hint: t('Opens the editor'), group: 'Glaze', run: () => { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } },
     ];
@@ -69,6 +70,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   };
   // Everything the palette can do, built when it opens.
   const commands = async () => {
+    // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds).
+    await need('features/lookx.js', () => globalThis.GZ_LOOKX).catch(() => {});
     if (moodle) { const [m, due] = await Promise.all([moodleIn(), dueWeek()]); return [...await m.commands(go), ...dueCmds(due), ...glazeCmds()]; }
     if (!ultra) return canvasCommands();
     const cid = courseId();

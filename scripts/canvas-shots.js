@@ -16,7 +16,8 @@
 //   --sync <json>      more sync items saved beside the settings, such as the course cards' (lib/cards.js):
 //                     '{card:{pet:"cat"},cards:{"canvas:{origin}/{bio}":{k:"solid",c:"#e11d48"}}}'; {origin} is the
 //                     local Canvas, {bio} and the others its course ids
-//   --local <json>     storage.local items set the same way (merged, not cleared), such as Gradescope's (lib/gradescope.js);
+//   --local <json>     storage.local items saved before the pages load, such as stickers (lib/lookx.js):
+//                     '{"stk:{origin}/courses/{bio}":[{id:"a",s:"study/coffee",x:80,y:200,w:120,r:-6}]}'
 //                      {me} is the signed-in user's id there and in --sync
 //   --width, --height  viewport, 1440x900 by default;  --full  captures the whole page
 //   --user <who>       student (default), teacher or admin
@@ -135,8 +136,8 @@ const devCopy = (dest) => {
   for (const f of fs.readdirSync(root)) {
     if (f !== 'manifest.json' && !f.startsWith('.') && !NOT_EXTENSION.has(f) && !DOCS.test(f)) fs.cpSync(path.join(root, f), path.join(dest, f), { recursive: true });
   }
-  // The parts of assets/ the extension ships (package.sh): the card pets and the study buddy.
-  for (const d of ['assets/art/pets', ...['', '-happy', '-sleepy'].map((m) => `assets/art/stickers/critters/study-buddy${m}.webp`)]) fs.cpSync(path.join(root, d), path.join(dest, d), { recursive: true });
+  // The parts of assets/ the extension ships (package.sh): the card pets, the stickers and the pointer sets.
+  for (const d of ['assets/art/pets', 'assets/art/stickers', 'assets/art/cursors']) fs.cpSync(path.join(root, d), path.join(dest, d), { recursive: true });
   const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   for (const e of [...(m.content_scripts || []), ...(m.web_accessible_resources || [])]) e.matches.push('http://localhost/*');
   // And to inject there: Glaze's on-demand files (lib/background.js 'glaze:load') need host access.
@@ -488,7 +489,7 @@ const eachTab = async (tabs, items, fn) => {
       await first.goto(`${base}/options.html`).catch((e) => die(`Glaze did not load from ${ext}: ${e.message}`));
       const more = JSON.parse(fill(JSON.stringify(sync).replace(/\{origin\}/g, BASE), found.ids));
       await first.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, { ...settings, ...more });
-      if (Object.keys(local).length) await first.evaluate((l) => chrome.storage.local.set(l), JSON.parse(fill(JSON.stringify(local).replace(/\{origin\}/g, BASE), found.ids)));
+      await first.evaluate((l) => chrome.storage.local.set(l), JSON.parse(fill(JSON.stringify(local).replace(/\{origin\}/g, BASE), found.ids)));
       console.log(`\n${label}: ${settings.enabled ? `preset ${settings.preset ?? 'custom'}, bg ${settings.bg.kind}` : 'Glaze off'}`);
       if (perf) {
         for (const [name, url] of pages) for (const next of [false, true]) for (let i = 0; i < perf; i++) {
