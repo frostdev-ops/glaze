@@ -1,3 +1,263 @@
+/* Glaze's own apps, the same on Canvas and Blackboard Ultra (content.js SHEETS links this on both; not Moodle): the
+   notes app, the Dashboard notes and widgets with the feature hub and the tour, and Ultra's panel for them on its
+   Courses page; and the planning features (Better To Do, tasks on cards, reminders, the calendar file), at the end.
+   Colors are the palette's --gz-* tokens, which content.js writes on every site. */
+/* ---- Dashboard notes, widgets and the feature hub (features/widgets.js). The grid sits under the Dashboard's heading;
+   a floating tile is fixed over the page. Tiles take the GPA panel's look. Motion only while Glaze's motion is on. */
+#gz-dash { margin: 0 0 calc(1.25rem * var(--gz-space)); font-size: 0.875rem; color: var(--gz-ink); }
+#gz-dash .gz-dash-bar { display: flex; justify-content: flex-end; gap: 0.4rem; margin-bottom: 0.4rem; }
+#gz-dash .gz-dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: calc(0.9rem * var(--gz-space)); }
+#gz-dash .gz-dash-grid > .gz-w[data-size="m"] { grid-column: span 2; }
+#gz-dash .gz-dash-grid > .gz-w[data-size="l"] { grid-column: 1 / -1; }
+@media (max-width: 760px) { #gz-dash .gz-dash-grid > .gz-w[data-size] { grid-column: 1 / -1; } }
+#gz-dash .gz-dash-add:not(:empty) { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-top: 0.6rem; }
+#gz-dash[data-editing] .gz-w:not([data-float]) { outline: 1px dashed var(--gz-line-strong); outline-offset: 3px; cursor: grab; }
+#gz-dash .gz-w[data-over] { outline: 2px solid var(--gz-accent); }
+.gz-w {
+  position: relative; display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; padding: 0.7rem 0.9rem 0.85rem; font-size: 0.875rem; color: var(--gz-ink);
+  background: var(--gz-panel, var(--gz-surface)); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); box-sizing: border-box;
+}
+/* Outside #application: Glaze's font and line height, as its other floating parts. */
+#gz-float .gz-w, #gz-hub, .gz-tour { font-family: var(--gz-font); line-height: 1.4; }
+#gz-float .gz-w { position: fixed; z-index: 999; width: min(17rem, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; background: var(--gz-surface); box-shadow: var(--gz-shadow); }
+#gz-float .gz-w[data-size="m"] { width: min(21rem, calc(100vw - 24px)); }
+#gz-float .gz-w[data-size="l"] { width: min(27rem, calc(100vw - 24px)); }
+#gz-float .gz-w-head { cursor: grab; touch-action: none; }
+#gz-float .gz-w[data-dragging] { cursor: grabbing; opacity: 0.92; }
+.gz-w :is(button, input, select, textarea) { font: inherit; }
+.gz-w [hidden], #gz-hub [hidden], .gz-tour [hidden] { display: none !important; }
+.gz-w :is(button, input, select, textarea, a, [tabindex]):focus-visible, :is(#gz-hub, .gz-tour) :is(button, input, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.gz-w-head { display: flex; align-items: center; gap: 0.35rem; min-width: 0; padding-inline-end: 4.5rem; }
+:is(#gz-dash, #gz-float) .gz-w-head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gz-w-grip {
+  display: none; flex: none; width: 1.1rem; height: 1.4rem; padding: 0; border: 0; border-radius: 4px; cursor: grab; color: var(--gz-ink-faint);
+  background: radial-gradient(circle, currentColor 1.2px, transparent 1.5px) 0 0 / 6px 6px;
+}
+:is(#gz-float, #gz-dash[data-editing]) .gz-w-grip { display: block; }
+.gz-w-tools { position: absolute; top: 0.45rem; inset-inline-end: 0.5rem; display: flex; align-items: center; gap: 0.15rem; }
+.gz-w-tools:empty { display: none; }
+/* While editing, a grid tile's controls get their own row above its heading. */
+#gz-dash[data-editing] .gz-w:not([data-float]) .gz-w-tools { position: static; order: -1; flex-wrap: wrap; justify-content: flex-end; }
+#gz-dash[data-editing] .gz-w:not([data-float]) .gz-w-head { padding-inline-end: 0; }
+.gz-w-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.gz-w-faint { margin: 0; color: var(--gz-ink-muted); font-size: 0.8rem; }
+.gz-w-status { margin: 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
+.gz-w-status:empty { display: none; }
+:is(.gz-w, #gz-dash, #gz-hub, .gz-tour) .gz-w-btn {
+  display: inline-flex; align-items: center; padding: 0.25rem 0.85rem; border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer;
+  color: var(--gz-ink); background: transparent; font-weight: 600; line-height: 1.5; text-decoration: none;
+}
+:is(.gz-w, #gz-dash, #gz-hub, .gz-tour) .gz-w-btn:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
+:is(.gz-w, #gz-dash, #gz-hub, .gz-tour) .gz-w-main { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+:is(.gz-w, #gz-dash, #gz-hub, .gz-tour) .gz-w-main:hover { color: var(--gz-accent-ink); filter: brightness(1.08); }
+:is(.gz-w, #gz-dash, #gz-hub, .gz-tour) :is(.gz-w-small, .gz-w-icon) {
+  padding: 0.05rem 0.55rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer; color: var(--gz-ink-muted); line-height: 1.5;
+}
+:is(.gz-w, #gz-dash, #gz-hub, .gz-tour) .gz-w-icon { min-width: 1.7rem; padding: 0.05rem 0.3rem; font-size: 1rem; line-height: 1.3; }
+:is(.gz-w, #gz-dash, #gz-hub, .gz-tour) :is(.gz-w-small, .gz-w-icon):hover, #gz-dash .gz-w-small[aria-pressed="true"] { color: var(--gz-accent); border-color: var(--gz-line-strong); }
+:is(.gz-w, #gz-dash, .gz-tour) button:disabled { opacity: 0.45; cursor: default; }
+:is(#gz-dash, #gz-float) select.gz-w-size { width: auto; height: auto; min-height: 0; margin: 0; font-size: 0.8rem; padding: 0.1rem 0.3rem; border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface); }
+.gz-w:not([data-float]) .gz-w-edit-only { display: none; }
+#gz-dash[data-editing] .gz-w .gz-w-edit-only, #gz-float .gz-w-edit-only { display: inline-flex; }
+/* Notes: the text with its links, until clicked; then the box to type in. Height by the tile's size. */
+.gz-w-note-view, .gz-w-note {
+  width: 100%; min-height: 5.5rem; max-height: 12rem; margin: 0; padding: 0.5rem 0.6rem; box-sizing: border-box; overflow: auto;
+  border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface);
+  white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5;
+}
+.gz-w[data-size="m"] :is(.gz-w-note-view, .gz-w-note) { min-height: 10rem; max-height: 20rem; }
+.gz-w[data-size="l"] :is(.gz-w-note-view, .gz-w-note) { min-height: 16rem; max-height: 32rem; }
+.gz-w-note { resize: vertical; }
+.gz-w-note-view { cursor: text; }
+.gz-w-note-view a { color: var(--gz-accent); text-decoration: underline; }
+/* Agenda */
+:is(#gz-dash, #gz-float) .gz-w-day { flex: 1 1 auto; margin: 0; text-align: center; font-size: 0.9rem; font-weight: 600; color: var(--gz-ink); }
+.gz-w-agenda { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.gz-w-agenda li { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 0 0.5rem; align-items: baseline; }
+.gz-w-agenda li > .gz-w-faint:not(:only-child) { grid-column: 2; }
+.gz-w-agenda li.gz-w-faint { display: block; }
+.gz-w-when { font-size: 0.75rem; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
+.gz-w-what { font-weight: 600; color: var(--gz-ink); overflow-wrap: anywhere; text-decoration: none; }
+a.gz-w-what:hover { color: var(--gz-accent); text-decoration: underline; }
+.gz-w-agenda li[data-done] .gz-w-what { color: var(--gz-ink-muted); text-decoration: line-through; }
+/* Timer */
+.gz-w-clock { margin: 0; font-size: 2.4rem; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--gz-ink); }
+.gz-w-body[data-running="yes"] .gz-w-clock { color: var(--gz-accent); }
+/* Quote */
+.gz-w-quote { margin: 0; padding: 0 0 0 0.8rem; border-inline-start: 3px solid var(--gz-accent-soft); font-size: 1.05rem; line-height: 1.45; color: var(--gz-ink); }
+/* Music */
+.gz-w-music { display: flex; align-items: center; gap: 0.4rem; }
+.gz-w-music input { flex: 1 1 auto; min-width: 0; padding: 0.25rem 0.5rem; border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface); }
+.gz-w-music input[aria-invalid="true"] { border-color: var(--gz-err); }
+.gz-w-stage { display: grid; gap: 0.4rem; justify-items: start; }
+.gz-w-stage iframe { width: 100%; height: 152px; border: 0; border-radius: var(--gz-radius-sm); }
+.gz-w[data-size="l"] .gz-w-stage iframe { height: 352px; }
+/* Breathe: a ring that grows on the way in and shrinks on the way out, over each phase's own length. Without motion,
+   the words and the count carry it. */
+.gz-w-breath {
+  width: 5rem; height: 5rem; margin: 0.3rem auto; border-radius: 50%; transform: scale(0.55);
+  background: radial-gradient(circle, var(--gz-accent-soft), color-mix(in srgb, var(--gz-accent) 35%, transparent));
+}
+html:not([data-gz-motion="off"]) .gz-w-breath { transition: transform var(--gz-breath, 4s) ease-in-out; }
+.gz-w-breath:is([data-phase="in"], [data-phase="hold"]) { transform: scale(1); }
+html[data-gz-motion="off"] .gz-w-breath { transform: none; opacity: 0.6; }
+html[data-gz-motion="off"] .gz-w-breath:is([data-phase="in"], [data-phase="hold"], [data-phase="out"]) { opacity: 1; }
+.gz-w-breath-word { margin: 0; min-height: 1.4em; text-align: center; font-size: 1.05rem; font-weight: 600; }
+.gz-w-body:has(.gz-w-breath) { display: grid; justify-items: center; gap: 0.3rem; }
+/* Study buddy: click for a word of encouragement, which floats up and away. */
+.gz-w-pet { display: block; margin: 0 auto; padding: 0; border: 0; background: none; cursor: pointer; }
+.gz-w-pet img { display: block; width: 6rem; height: 6rem; }
+html:not([data-gz-motion="off"]) .gz-w-pet img { transition: transform 0.2s; }
+html:not([data-gz-motion="off"]) .gz-w-pet:hover img { transform: rotate(-4deg) scale(1.04); }
+.gz-w-body:has(.gz-w-pet) { position: relative; display: grid; justify-items: center; gap: 0.3rem; }
+.gz-w-cheer { position: absolute; top: 40%; inset-inline: 0; pointer-events: none; text-align: center; font-weight: 700; font-size: 1rem; color: var(--gz-accent); }
+html:not([data-gz-motion="off"]) .gz-w-cheer { animation: gz-w-rise 1.6s ease-out forwards; }
+html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
+@keyframes gz-w-rise { from { opacity: 0; transform: translateY(0); } 15% { opacity: 1; } to { opacity: 0; transform: translateY(-3.5rem); } }
+/* The hub and the tour */
+#gz-hub {
+  width: min(34rem, calc(100vw - 2rem)); max-height: calc(100vh - 3rem); padding: 1rem 1.2rem; overflow: auto; font-size: 0.9rem; color: var(--gz-ink);
+  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-hub::backdrop { background: color-mix(in srgb, #000 40%, transparent); }
+#gz-hub header { justify-content: space-between; flex-wrap: nowrap; }
+#gz-hub h2 { margin: 0; font-size: 1.15rem; color: var(--gz-ink); }
+#gz-hub > .gz-w-faint { margin-top: 0.3rem; }
+#gz-hub fieldset { margin: 0.8rem 0 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.15rem 1rem; }
+#gz-hub legend { margin-bottom: 0.3rem; padding: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); }
+#gz-hub .gz-w-check { display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0; cursor: pointer; color: var(--gz-ink); }
+#gz-hub input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; accent-color: var(--gz-accent); }
+#gz-hub footer { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--gz-line); }
+.gz-tour-ring { position: absolute; z-index: 10000; pointer-events: none; border: 2px solid var(--gz-accent); border-radius: var(--gz-radius); box-shadow: 0 0 0 9999px color-mix(in srgb, #000 35%, transparent); }
+.gz-tour {
+  z-index: 10001; width: min(22rem, calc(100vw - 24px)); padding: 0.9rem 1rem; display: grid; gap: 0.5rem; font-size: 0.9rem; color: var(--gz-ink); box-sizing: border-box;
+  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+.gz-tour p { margin: 0; }
+.gz-tour:focus { outline: none; }
+.gz-tour .gz-w-row { justify-content: flex-end; }
+.gz-tour .gz-w-small { margin-inline-end: auto; }
+
+/* Notes (features/notes.js): the library and the editor in one dialog over the page; a note's own content is styled
+   here, never by inline styles (the sanitizer drops them). */
+#gz-nt-course { margin-top: 0.5rem; }
+#gz-nt {
+  box-sizing: border-box; width: min(1180px, calc(100vw - 24px)); height: min(880px, calc(100vh - 24px)); padding: 0; overflow: hidden;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-nt[open] { display: flex; flex-direction: column; }
+#gz-nt::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-nt :is(p, h2, h3, ul) { margin: 0; }
+#gz-nt h2 { font: 600 18px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-nt h2:focus { outline: none; }
+#gz-nt h3 { font: 600 11px/1.3 var(--gz-font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.9rem 1.1rem 0.6rem; border-bottom: 1px solid var(--gz-line); }
+#gz-nt .gz-nt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+#gz-nt button { margin: 0; padding: 0.3rem 0.75rem; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; box-shadow: none; }
+#gz-nt button:hover:not(:disabled) { border-color: var(--gz-accent); }
+#gz-nt button:disabled { opacity: 0.45; cursor: default; }
+#gz-nt button[type="submit"], #gz-nt .gz-nt-empty button { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
+#gz-nt :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-nt :is(input, select) { box-sizing: border-box; margin: 0; padding: 0.3rem 0.5rem; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); }
+#gz-nt .gz-nt-field { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-say { padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-muted); border-bottom: 1px solid var(--gz-line); }
+#gz-nt .gz-nt-say:empty { display: none; }
+#gz-nt .gz-nt-ask { padding: 0.75rem 1.1rem; background: var(--gz-surface-2); border-bottom: 1px solid var(--gz-line); }
+#gz-nt .gz-nt-form { display: grid; gap: 0.5rem; }
+#gz-nt .gz-nt-form input { min-width: min(28rem, 100%); }
+#gz-nt .gz-nt-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(15rem, 21rem) minmax(0, 1fr); }
+#gz-nt .gz-nt-lib { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; padding: 0.8rem; overflow: auto; border-inline-end: 1px solid var(--gz-line); }
+#gz-nt .gz-nt-lib input[type="search"] { width: 100%; }
+#gz-nt .gz-nt-filters { display: grid; gap: 0.35rem; }
+#gz-nt .gz-nt-filters .gz-nt-field { justify-content: space-between; }
+#gz-nt .gz-nt-filters select { max-width: 12rem; }
+#gz-nt :is(.gz-nt-count, .gz-nt-usage, .gz-nt-when, .gz-nt-none) { font-size: 12px; color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-list, #gz-nt .gz-nt-folders ul, #gz-nt .gz-nt-picks { display: grid; gap: 0.2rem; padding: 0; list-style: none; }
+#gz-nt .gz-nt-item, #gz-nt .gz-nt-picks button { display: grid; gap: 0.1rem; width: 100%; padding: 0.45rem 0.6rem; text-align: start; background: transparent; border: 1px solid transparent; border-radius: var(--gz-radius-sm); }
+#gz-nt .gz-nt-item:hover, #gz-nt .gz-nt-picks button:hover { background: var(--gz-surface-2); }
+#gz-nt .gz-nt-item[aria-current="true"] { background: var(--gz-surface-2); border-color: var(--gz-accent); }
+#gz-nt .gz-nt-item strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gz-ink); }
+#gz-nt :is(.gz-nt-item, .gz-nt-picks button) small { color: var(--gz-ink-muted); font-size: 11px; }
+#gz-nt .gz-nt-item span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-folders { display: grid; gap: 0.35rem; padding-top: 0.5rem; border-top: 1px solid var(--gz-line); }
+#gz-nt .gz-nt-folders li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.3rem; }
+#gz-nt .gz-nt-tools { display: inline-flex; flex-wrap: wrap; gap: 0.2rem; }
+#gz-nt .gz-nt-tools button { padding: 0.1rem 0.5rem; font-size: 12px; }
+#gz-nt .gz-nt-ed { display: flex; flex-direction: column; gap: 0.55rem; min-width: 0; min-height: 0; padding: 0.9rem 1.1rem; overflow: auto; }
+#gz-nt .gz-nt-empty { display: grid; justify-items: start; align-content: center; gap: 0.75rem; height: 100%; color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-title { width: 100%; padding: 0.2rem 0; font: 600 22px/1.3 var(--gz-font-head, var(--gz-font)); background: transparent; border: 0; border-bottom: 1px solid transparent; border-radius: 0; }
+#gz-nt .gz-nt-title:focus { border-bottom-color: var(--gz-accent); outline: none; }
+#gz-nt .gz-nt-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+#gz-nt .gz-nt-tools-bar { position: sticky; top: -0.9rem; z-index: 1; display: flex; flex-wrap: wrap; gap: 0.2rem; padding: 0.3rem 0; background: var(--gz-surface); border-bottom: 1px solid var(--gz-line); }
+#gz-nt .gz-nt-tools-bar button { min-width: 2rem; padding: 0.2rem 0.55rem; border-radius: var(--gz-radius-sm); }
+#gz-nt :is(.gz-nt-linkbar, .gz-nt-pick) { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; background: var(--gz-surface-2); border-radius: var(--gz-radius-sm); }
+#gz-nt .gz-nt-linkbar[hidden] { display: none; }
+#gz-nt .gz-nt-linkbar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-pick { display: grid; }
+#gz-nt .gz-nt-picks { max-height: 16rem; overflow: auto; }
+#gz-nt .gz-nt-body { flex: 1; min-height: 12rem; padding: 0.2rem 0 2rem; font-size: 15px; line-height: 1.6; color: var(--gz-ink); outline: none; overflow-wrap: anywhere; }
+#gz-nt .gz-nt-body > :first-child { margin-top: 0; }
+#gz-nt .gz-nt-body :is(p, div, ul, ol, pre, blockquote, table, h1, h2, h3) { margin: 0 0 0.6em; }
+#gz-nt .gz-nt-body h1 { font: 700 1.6em/1.25 var(--gz-font-head, var(--gz-font)); }
+#gz-nt .gz-nt-body h2 { font: 600 1.3em/1.3 var(--gz-font-head, var(--gz-font)); }
+#gz-nt .gz-nt-body h3 { font: 600 1.1em/1.35 var(--gz-font-head, var(--gz-font)); letter-spacing: 0; text-transform: none; color: var(--gz-ink); }
+#gz-nt .gz-nt-body :is(ul, ol) { padding-inline-start: 1.6em; }
+#gz-nt .gz-nt-body ul[data-check] { padding-inline-start: 0.2em; list-style: none; }
+#gz-nt .gz-nt-body ul[data-check] > li { position: relative; padding-inline-start: 1.7em; }
+#gz-nt .gz-nt-body ul[data-check] > li::before { content: "☐"; content: "☐" / var(--gz-nt-todo); position: absolute; inset-inline-start: 0; cursor: pointer; color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-body ul[data-check] > li[data-done]::before { content: "☑"; content: "☑" / var(--gz-nt-done); color: var(--gz-accent); }
+#gz-nt .gz-nt-body ul[data-check] > li[data-done] { color: var(--gz-ink-muted); text-decoration: line-through; }
+#gz-nt .gz-nt-body blockquote { padding-inline-start: 0.9em; color: var(--gz-ink-muted); border-inline-start: 3px solid var(--gz-line-strong); }
+#gz-nt .gz-nt-body :is(code, pre) { font-family: var(--gz-font-mono, ui-monospace, monospace); font-size: 0.9em; background: var(--gz-surface-2); border-radius: var(--gz-radius-sm); }
+#gz-nt .gz-nt-body code { padding: 0.1em 0.3em; }
+#gz-nt .gz-nt-body pre { padding: 0.7em 0.9em; overflow: auto; white-space: pre-wrap; }
+#gz-nt .gz-nt-body pre code { padding: 0; background: none; }
+#gz-nt .gz-nt-body a { color: var(--gz-accent); text-decoration: underline; }
+#gz-nt .gz-nt-body a[data-gz-file] { padding: 0.05em 0.5em; text-decoration: none; background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 999px; }
+#gz-nt .gz-nt-body a[data-gz-file]::before { content: "↓ "; }
+#gz-nt .gz-nt-body img { max-width: 100%; height: auto; border-radius: var(--gz-radius-sm); }
+#gz-nt .gz-nt-body img:not([src]) { display: inline-block; min-width: 6rem; min-height: 3rem; background: var(--gz-surface-2); }
+#gz-nt .gz-nt-body table { border-collapse: collapse; }
+#gz-nt .gz-nt-body :is(th, td) { padding: 0.25em 0.5em; border: 1px solid var(--gz-line-strong); }
+#gz-nt .gz-nt-body hr { border: 0; border-top: 1px solid var(--gz-line-strong); }
+#gz-nt .gz-nt-body[contenteditable="false"] { color: var(--gz-ink-muted); }
+#gz-nt .gz-nt-actions { padding-top: 0.6rem; border-top: 1px solid var(--gz-line); }
+.gz-w .gz-w-note-app { justify-self: start; margin-top: 0.4rem; }
+@media (max-width: 720px) {
+  #gz-nt .gz-nt-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 40%) minmax(0, 1fr); }
+  #gz-nt .gz-nt-lib { border-inline-end: 0; border-bottom: 1px solid var(--gz-line); }
+}
+
+/* ---- Ultra: Glaze's panel on the Courses page (features/widgets.js), first in the right column above Ultra's To Do
+   (owner decision A). Ultra's column is 320px wide; on a narrow window Ultra moves it under the courses at full width,
+   so the grid lays out by the panel's own width. The heading's button folds it away. */
+#gz-panel { margin: 0 0 calc(1rem * var(--gz-space, 1)); padding: 1rem 1rem 0.25rem; font-family: var(--gz-font); color: var(--gz-ink); }
+#gz-panel .gz-panel-head { margin: 0 0 0.5rem; font-size: 1rem; }
+#gz-panel .gz-panel-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; padding: 0.35rem 0.25rem; border: 0; border-radius: var(--gz-radius-sm);
+  font: 600 1rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); background: none; cursor: pointer; text-align: start;
+}
+#gz-panel .gz-panel-toggle::after { content: ""; width: 0.5rem; height: 0.5rem; margin-inline-end: 0.35rem; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(-135deg); }
+#gz-panel .gz-panel-toggle[aria-expanded="false"]::after { transform: rotate(45deg); }
+html:not([data-gz-motion="off"]) #gz-panel .gz-panel-toggle::after { transition: transform 0.2s; }
+#gz-panel .gz-panel-toggle:hover { color: var(--gz-accent); }
+#gz-panel :is(button, a, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-panel [hidden] { display: none !important; }
+#gz-panel-body { container-type: inline-size; }
+#gz-panel #gz-dash .gz-dash-bar { flex-wrap: wrap; }
+@container (max-width: 31rem) { #gz-panel #gz-dash .gz-dash-grid > .gz-w[data-size] { grid-column: 1 / -1; } }
+
+/* Ultra: Course notes on a course outline, a block of its own at the end of the right column. */
+#gz-nt-block { margin-top: 1rem; }
+#gz-nt-block .gz-nt-course {
+  display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.9rem; border: 1px solid var(--gz-line-strong); border-radius: 999px;
+  font: 600 0.875rem/1.5 var(--gz-font); color: var(--gz-ink); background: transparent; cursor: pointer;
+}
+#gz-nt-block .gz-nt-course:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
+#gz-nt-block .gz-nt-course:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-nt-block .gz-nt-course i { display: none; }
+
 /* ---- Planning (B2): Better To Do, the Gradescope line, tasks on course cards, reminders and the calendar file's dialog,
    on Canvas and Ultra. Colors and sizes are the palette's --gz-* tokens; a token only canvas.css derives has its
    fallback here. */

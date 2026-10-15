@@ -18,9 +18,6 @@ _Last updated: 2026-10-15_
   recolour or tint. On Canvas this includes the site's address, course id, name, code and native color; on Moodle,
   the site's address (with its folder, if Moodle is in one), course id, full and short name, and the colour Moodle
   gives the course.
-- **Your Blackboard sites**, in `chrome.storage.local`, on this device only: the address of each site Glaze has found
-  Blackboard Ultra on (at most 20), so that only those sites' pages can save Better To Do, reminders and the other data
-  above for their own accounts.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 - **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
@@ -48,10 +45,10 @@ _Last updated: 2026-10-15_
 - **Past terms and a GPA goal** (Canvas, the GPA Extra), in `chrome.storage.local`, on this device only, per Canvas
   site and signed-in user id: up to 40 terms you typed in or imported, each with its name, plus/minus or whole-letter
   scale and up to 40 courses (the name, credits, grade as written, honors/AP level, left out or not), and your goal
-  (cumulative or this term's GPA). A transcript you paste or pick (text, a web page or a Word file) is read in the page
-  on this device; only the terms you review and add are kept, never the transcript itself. Glaze sends none of it
-  anywhere: no upload, no AI service. "Remove this term" and "Remove all past terms" delete it, and the time of the
-  last Remove all is kept so a change from another open tab can't bring terms back.
+  (cumulative or this term's GPA). A transcript you paste or pick (text, a web page, a Word file, a PDF, a photo or a
+  screenshot) is read on this device; only the terms you review and add are kept, never the transcript itself. Glaze
+  sends none of it anywhere: no upload, no AI service. "Remove this term" and "Remove all past terms" delete it, and
+  the time of the last Remove all is kept so a change from another open tab can't bring terms back.
 - **Insights** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site and signed-in
   user id: one small summary of this term, so the view opens at once next time: each current course's id and name, its
   published work's name, due date, points, when you handed it in and whether Canvas marks it on time, late, missing or
@@ -112,14 +109,15 @@ _Last updated: 2026-10-15_
   shows only on the Canvas or Blackboard site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
-- **Dashboard notes and widgets** (Canvas, off by default), in `chrome.storage.local`, on this device only: your notes
-  (at most 20,000 characters) per Canvas site and signed-in user id, with when you last typed them, so a note typed later
+- **Dashboard notes and widgets** (Canvas and Blackboard Ultra, off by default), in `chrome.storage.local`, on this device only: your notes
+  (at most 20,000 characters) per site and signed-in user id, with when you last typed them, so a note typed later
   in another tab wins; an emptied note keeps only the time it was emptied, so an older copy can't bring it back. The widgets' layout (which are on, their order and size, where a
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
   it ends, so it keeps running from page to page. The widgets' settings (timer
   lengths, chime, quote choices, breathing lengths) are in `chrome.storage.sync` with your other settings (`widgets`).
-- **Notes** (Canvas, the notes app; the Notes switch, off by default), on this device only, per Canvas site and signed-in user id. The
-  library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name Canvas showed),
+  On Ultra, whether you folded Glaze's panel on the Courses page away (`panelShut`) is kept there too.
+- **Notes** (Canvas and Blackboard Ultra, the notes app; the Notes switch, off by default), on this device only, per site and signed-in user id. The
+  library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name the site showed),
   when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'
   names, courses and order. Each note's text and the pictures and attachments you add are in the extension's own
   IndexedDB, which only Glaze's background worker opens. Neither is in the school page's own storage (its
@@ -205,8 +203,9 @@ services, which receive ordinary connection information such as your IP address.
 
 ## Network requests
 
-The browser extension ships as static files and loads no remote scripts. Its built-in fonts and three.js (used by the
-animated backgrounds) are bundled. It makes requests in these cases:
+The browser extension ships as static files and loads no remote scripts. Its built-in fonts, three.js (used by the
+animated backgrounds), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
+you import) are bundled. It makes requests in these cases:
 
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
   site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
@@ -244,6 +243,21 @@ animated backgrounds) are bundled. It makes requests in these cases:
   shares the answer), and on the Courses and Grades pages for each course you've opened before whose
   card is on screen: at most once every five minutes per course, with your existing session. The list
   is kept in memory; only the items' ids are stored, as above. Nothing is sent anywhere else.
+- **Search in your courses on Blackboard Ultra** (on by default): after two typed characters and a 150 ms pause,
+  Glaze reads your own site's public recursive content, announcement and discussion topic lists with GETs through
+  its Ultra reader, reusing the page's existing memberships. It searches this course and open courses in this term,
+  up to 100 courses. Only titles, availability, handler type and public body text are requested; no private content
+  details, LTI fields, discussion threads, attempts or messages. Content with future, expired, missing, malformed or
+  unsupported release conditions is omitted, including under restricted ancestors. HTML becomes text locally and
+  never loads its images or scripts. Your query stays on the device. Projected source text and the course/term list
+  are reused for five minutes in a bounded memory cache; expired rows are evicted on later cache reads/writes.
+  Switching search or Glaze off clears the caches; leaving the page clears them too. Nothing is stored on disk.
+  At most three lists run together, 30 search GETs per query and two pages of up to 200 items per list. The palette
+  shares its existing membership lookup. Temporary failures are not cached as empty: network/server errors pause
+  retries for three seconds and HTTP 429 for 30 seconds. Missing tools (403/404) can be cached as empty.
+  New input, closing the palette, or switching search or Glaze off cancels pending search reads. Content links use
+  the native redirect; announcement/discussion results open the course tool list only after you choose one.
+  Search itself marks nothing read.
 - **On Canvas.** At most every ten minutes, Glaze asks your own Canvas site for your planner items for the
   next seven days, the same list Canvas's own planner and To Do list show, and keeps what's still to do as
   the due list above. On the Dashboard (Grades on course cards) and when you open the command palette, it
@@ -353,6 +367,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
   same read-only requests Better To Do makes. It reads the Syllabus page from the page already open, with no request
   of its own, and reads files you pick on this device. Nothing about the syllabus is sent anywhere: there is no server
   to parse it and no consent box to tick, because nothing leaves your computer. It never writes to Canvas.
+- **PDFs and photos you import** (class schedule, syllabus, transcript): none. A PDF or picture you pick or paste is read
+  on your device by Glaze's reader, a page of the extension that the import opens in a hidden frame for that one file:
+  pdf.js reads a PDF's text, and the OCR engine reads a picture or a scanned page, both from the extension's own files.
+  The reader's own policy lets it load nothing but Glaze's files, so it can't send anything anywhere; it keeps nothing,
+  and the frame is removed (its work stopped, its memory freed) when the read ends or you close the dialog. Only the
+  fields you review and save are kept, as above; the file never is. Like everything Glaze shows on a page, the text read
+  appears in the review on the LMS page, where that page's own code could read it.
 - **Class schedule** (Canvas). Opening it asks your own Canvas site for your profile and course list (as Better To
   Do does), to match classes to your courses. A file you choose or text you paste is read on your device and never
   uploaded. A calendar link is read only when it is an address on the Canvas site you're on (your own calendar feed,
@@ -385,12 +406,21 @@ animated backgrounds) are bundled. It makes requests in these cases:
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
   day's planner items, a read-only GET, at most every two minutes per day you look at. Nothing is written to Canvas.
+  On Blackboard Ultra they sit in a panel on the Courses page and ask your own Ultra site for who is signed in
+  (`/users/me`, shared with the other extras) and, for a day the agenda shows, that day's To Do and calendar items with
+  your submissions for the courses that have something due (read-only GETs through Glaze's Ultra reader, never
+  following a redirect), at most every two minutes per day. Nothing is written to Blackboard.
 - **Notes** (Canvas, off by default). Glaze uses your profile and course list (as the other extras do). When you choose
   **Canvas link** in a note, it lists one course's files, pages or modules with their items from your own Canvas site:
   read-only GETs with your existing session, the next page asked for only on your own site, never following a redirect,
   and stopped when you close the picker or the view. Only the link and title you pick go in the note. Opening a note
   loads nothing from anywhere: a picture from another site, pasted into a note, becomes a link to it instead. Links in
   notes open in a new tab without telling the site where you came from. Nothing about your notes is sent anywhere.
+  On Blackboard Ultra, it asks your own Ultra site who is signed in and for your course list, and **Blackboard link**
+  lists a course's content items from Blackboard's public contents API (each kept to its title, folder and link):
+  read-only GETs that never follow a redirect and stop when you close the picker. Only the link and title you pick go
+  in the note. Glaze also keeps the address of each Ultra site it has started on (storage.local `ultra`), so only those
+  sites' pages may save notes, Better To Do's tasks and plans, reminders and class schedules.
 - **Music widget** (Canvas, off by default). Glaze contacts no music service until you press **Load player**, on each
   page. Then your browser loads that service's player inside the widget, from **Spotify** (`open.spotify.com`),
   **YouTube** or **YouTube Music** (both from `www.youtube-nocookie.com`, YouTube's privacy-enhanced mode) or **Apple
@@ -474,6 +504,11 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 - `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
   typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, and Safari update-check timestamp described above.
   Notes' text, pictures and attachments are in the extension's own IndexedDB.
+- No permission for reading PDFs and photos. The extension's own pages may compile WebAssembly (`'wasm-unsafe-eval'` in
+  its content security policy), which the OCR engine needs; it still runs only code that ships in the package, and
+  never in the LMS page. The reader page is web-accessible so an import can open it in a frame; it reads a file only
+  with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
+  make it read anything.
 - `identity` (Chrome only, optional) — asked for only when you press Connect in Google Calendar sync, and removed on
   Disconnect. It lets Chrome sign Glaze in to Google Calendar with the Google account in your browser; Chrome shows no
   warning for it. Glaze never asks for `identity.email` and never sees your password.

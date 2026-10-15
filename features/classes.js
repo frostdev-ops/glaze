@@ -1,8 +1,9 @@
 // Class schedule (W14), on Canvas and Blackboard Ultra, loaded on demand: the command palette ("Class schedule"), the
 // agenda tile and the reminders hub open it (open()). A schedule is read on this device from an .ics file or a calendar
-// link on this site (Ultra's own "Share calendar" link pasted by the student, say), a registrar's page saved as HTML, a
-// Word file or pasted text (lib/classes.js reads it; lib/ics.js and lib/doctext.js turn files into text). Every class it
-// finds is shown for review, each field editable and each guess marked, matched to one of the student's courses on this
+// link on this site (Ultra's own "Share calendar" link pasted by the student, say), a PDF, a picture or screenshot (also
+// pasted), a registrar's page saved as HTML, a Word file or pasted text (lib/classes.js reads it; lib/ics.js and
+// features/import.js turn files into text). Every class it finds is shown for review, each field editable and each guess
+// marked (a row read from a picture the OCR engine wasn't sure of, too), matched to one of the student's courses on this
 // site by code first, then name; nothing is kept until Save. Kept in storage.local (classes:<site>/<user>) through the
 // worker's queue ('glaze:classes'). Nothing is sent anywhere: a calendar link is read only when it is on this site.
 // Classic script, through GZ_CTX; a second injection keeps the first.
@@ -18,6 +19,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   // Each drawing of the dialog (a view, or the dialog opened again) is a new generation: an answer that comes back after
   // it moved on (a file or link still being read, a write the worker hadn't answered) changes nothing on screen.
   let gen = 0;
+  let reading = null; // the AbortController of a PDF or picture being read: a new view or closing the dialog calls it off
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false && k !== '')); return e; };
   // A click a person made (not a page script's): every button here saves, deletes or moves on.
@@ -86,16 +88,17 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   };
 
   // ---- reading a schedule --------------------------------------------------------------------------------------
-  const read = async (file, text, link) => {
+  const read = async (file, text, link, signal) => {
     const ics = (s) => C.fromIcs(s, { tz });
     if (file) {
-      if (file.size > MAX) throw new Error(t('That file is too big for a schedule.'));
-      const name = file.name.toLowerCase();
-      if (/\.(ics|ical|ifb)$/.test(name) || file.type === 'text/calendar') { await ctx.need('lib/ics.js', () => globalThis.GZ_ICS); return ics(await file.text()); }
-      if (/\.docx$/.test(name)) { await ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT); return C.fromText(await GZ_DOCTEXT.docx(new Uint8Array(await file.arrayBuffer())), { lang: lang() }); }
-      if (/\.html?$/.test(name) || file.type === 'text/html') { await ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT); return C.fromText(GZ_DOCTEXT.html(await file.text()), { lang: lang() }); }
-      if (/\.txt$/.test(name) || file.type === 'text/plain') return C.fromText(await file.text(), { lang: lang() });
-      throw new Error(t('Glaze reads .ics, .html, .docx and .txt files.'));
+      if (/\.(ics|ical|ifb)$/i.test(file.name) || file.type === 'text/calendar') {
+        if (file.size > MAX) throw new Error(t('That file is too big for a schedule.'));
+        await ctx.need('lib/ics.js', () => globalThis.GZ_ICS);
+        return ics(await file.text());
+      }
+      await ctx.need('features/import.js', () => globalThis.GZ_IMPORT);
+      const r = await GZ_IMPORT.read(file, { signal, progress: (s) => say(s) });
+      return { ...C.fromText(r.text, { lang: lang() }), ocr: r.ocr };
     }
     if (link) {
       // Only this site's own addresses (its calendar feed): Glaze asks nothing of anywhere else.
@@ -113,28 +116,50 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   };
   const importer = () => {
     view = 'import';
-    const file = make('input', { type: 'file', accept: '.ics,.ical,.html,.htm,.docx,.txt,text/calendar,text/html,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const file = make('input', { type: 'file', accept: '.ics,.ical,.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.html,.htm,.docx,.txt,text/calendar,application/pdf,image/*,text/html,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
     const text = make('textarea', { rows: 7, placeholder: t(`Copy your schedule from your school's registration page and paste it here, or type it: one class per line, like "BIO 110 TR 1:30-2:45pm Life Sciences 120".`) });
     const link = make('input', { type: 'url', placeholder: `${location.origin}${ultra ? '/' : '/feeds/calendars/'}….ics` });
-    const go = button(t('Read schedule'), async () => {
-      if (!file.files[0] && !text.value.trim() && !link.value.trim()) return say(t('Choose a file, paste your schedule or give a calendar link.'), true);
+    const stop = button(t('Stop reading'), () => reading?.abort(), { hidden: true });
+    // pasted: a screenshot pasted into the text box, read instead of what's typed there.
+    const run = async (pasted) => {
+      const f = pasted || file.files[0];
+      if (!f && !text.value.trim() && !link.value.trim()) return say(t('Choose a file, paste your schedule or give a calendar link.'), true);
+      // Read schedule is disabled while it reads, so the keyboard's place moves to Stop reading, and back after.
+      const kept = document.activeElement === go;
       go.disabled = true;
       say(t('Reading…'));
       const g = gen;
+      reading?.abort(); // one still under way (Read schedule is disabled meanwhile, so only a race) is called off
+      const ctl = reading = new AbortController();
+      stop.hidden = false;
+      if (kept) stop.focus();
       try {
-        const r = await read(file.files[0], text.value, link.value.trim());
+        const r = await read(f, text.value, link.value.trim(), ctl.signal);
         if (g !== gen) return;
         if (!r.entries.length) { go.disabled = false; return say(t("Glaze didn't find any classes there. Check that days and times are in it, or add your classes yourself."), true); }
-        const found = r.entries.map((e) => ({ ...e, id: C.match(e, courses) }));
-        review(found, { ignored: r.ignored });
-      } catch (e) { if (g === gen) { go.disabled = false; say(e?.message || t("Couldn't read that."), true); } }
-    }, { className: 'gz-cl-main-btn' });
+        // A class read from a line the OCR engine wasn't sure of: its days, times and place are guesses too.
+        const doubt = (e) => !!r.ocr && GZ_IMPORT.doubt(r.ocr, e.label);
+        const found = r.entries.map((e) => ({ ...e, id: C.match(e, courses), periods: doubt(e) ? e.periods.map((p) => ({ ...p, unsure: [...new Set([...p.unsure, 'days', 'time', 'loc'])] })) : e.periods }));
+        review(found, { ignored: r.ignored, ocr: r.ocr });
+      } catch (e) { if (g === gen) { go.disabled = false; say(e?.cancelled ? t('Stopped.') : e?.message || t("Couldn't read that."), !e?.cancelled); } }
+      finally {
+        if (reading === ctl) reading = null;
+        const back = document.activeElement === stop;
+        stop.hidden = true;
+        if ((kept || back) && go.isConnected) go.focus();
+      }
+    };
+    const go = button(t('Read schedule'), () => run(), { className: 'gz-cl-main-btn' });
+    text.addEventListener('paste', (e) => {
+      const img = e.isTrusted && [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
+      if (img && !go.disabled) { e.preventDefault(); run(img); }
+    });
     draw(t('Import a schedule'),
       make('p', { className: 'gz-cl-faint', textContent: t('Glaze reads it on this device and shows you what it found before anything is saved.') }),
-      field(t('A file: .ics calendar, saved web page (.html), Word (.docx) or text'), file),
-      field(t('Or paste it'), text),
+      field(t('A file: .ics calendar, PDF, picture or screenshot, saved web page (.html), Word (.docx) or text'), file),
+      field(t('Or paste it, or paste a screenshot'), text),
       field(t('Or a calendar link on {site}', { site: location.host }), link),
-      make('div', { className: 'gz-cl-row' }, go, button(t('Back'), () => list('.gz-cl-import'))));
+      make('div', { className: 'gz-cl-row' }, go, stop, button(t('Back'), () => list('.gz-cl-import'))));
     file.focus();
   };
 
@@ -160,6 +185,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     }, { className: 'gz-cl-main-btn' });
     draw(opts.edit ? t('Edit class') : opts.manual ? t('Add a class') : t('Check what Glaze found'),
       !opts.edit && !opts.manual && make('p', { className: 'gz-cl-faint', textContent: t('Nothing is saved until you choose Save. Fields marked "Check this" were a guess.') }),
+      opts.ocr && make('p', { className: 'gz-cl-ocr', textContent: GZ_IMPORT.note(opts.ocr) }),
       opts.ignored > 0 && make('p', { className: 'gz-cl-faint', textContent: t('Left out as one-off events or office hours: {n}', { n: opts.ignored }) }),
       ...rows.map((r) => r.el),
       make('div', { className: 'gz-cl-row' }, save, button(t('Cancel'), () => list('.gz-cl-import'))));
@@ -262,9 +288,10 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   // ---- the dialog ------------------------------------------------------------------------------------------------
   const draw = (title, ...parts) => {
     gen++;
+    reading?.abort();
     const close = button('×', () => box.close(), { className: 'gz-cl-close', 'aria-label': t('Close') });
     box.firstChild.replaceChildren(make('div', { className: 'gz-cl-top' }, make('h2', { id: 'gz-cl-title', textContent: title }), close),
-      ...parts, make('p', { className: 'gz-cl-say', role: 'status' }));
+      ...parts.filter((p) => p != null && p !== false && p !== ''), make('p', { className: 'gz-cl-say', role: 'status' }));
   };
   const onStore = (ch, area) => {
     if (area !== 'local' || !ch[key] || !box) return;
@@ -286,6 +313,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     box = make('dialog', { id: 'gz-cl' }, make('div', { className: 'gz-cl-in' }), make('style', { textContent: CSS }));
     box.setAttribute('aria-labelledby', 'gz-cl-title');
     box.addEventListener('close', () => {
+      reading?.abort();
       box?.remove();
       box = null;
       view = null;
@@ -350,6 +378,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
 #gz-cl .gz-cl-chips li { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.1rem 0.15rem 0.1rem 0.5rem; font-size: 12px;
   border: 1px solid var(--gz-line, #d0d7de); border-radius: 999px; }
 #gz-cl .gz-cl-chips button { padding: 0 0.4rem; border: 0; background: none; }
+#gz-cl .gz-cl-ocr { padding: 0.4rem 0.6rem; border-inline-start: 3px solid var(--gz-warn, #b26b00); background: var(--gz-surface-2, #f6f8fa); }
 #gz-cl .gz-cl-say:empty { display: none; }
 #gz-cl .gz-cl-say[role="alert"] { color: var(--gz-err, #b42318); font-weight: 600; }
 #gz-cl [hidden] { display: none !important; }`;
