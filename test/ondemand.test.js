@@ -129,8 +129,12 @@ test('a closed keyboard help stays closed when the words arrive', () => {
 
 // The draft backup on Ultra, while lib/drafts.js and features/drafts.js are on their way: the editor still there when
 // they arrive, or gone by then (the reply closed, the page changed), when what was read as it was written is kept.
-for (const gone of [false, true]) {
-  test(`a first and only input while the draft backup loads is still backed up once it arrives${gone ? ', even with its editor gone by then' : ''}`, async () => {
+// Or Ultra put the same editor and wrapper to another post (post_12_3/ed1 → post_99_1/ed2), off the page or still on it:
+// the paste stays under the post it was written for.
+const AFTER = { '': '', gone: ', even with its editor gone by then', 'reused, gone': ', even with its editor and wrapper reused for another post and gone',
+  reused: ', even with its editor and wrapper reused for another post' };
+for (const gone of Object.keys(AFTER)) {
+  test(`a first and only input while the draft backup loads is still backed up once it arrives${AFTER[gone]}`, async () => {
     const saved = [];
     const t = clock();
     const loads = [];
@@ -164,7 +168,12 @@ for (const gone of [false, true]) {
     t.run();
     assert.deepEqual(saved, [], 'nothing kept before the module is in');
     assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js']);
-    if (gone) { editor.isConnected = false; ctx.document.querySelector = () => null; ctx.location.pathname = '/ultra/stream'; }
+    if (gone.startsWith('reused')) {
+      Object.assign(editor, { id: 'ed2', textContent: '', innerHTML: '' });
+      editor.parentElement.attributes[0].value = 'post_99_1';
+      if (gone === 'reused') ctx.api.watchDrafts(); // a pass while the files load
+    }
+    if (gone === 'gone' || gone === 'reused, gone') { editor.isConnected = false; ctx.document.querySelector = () => null; ctx.location.pathname = '/ultra/stream'; }
     ctx.GZ_DRAFTS = require('../lib/drafts.js');
     loads[0].p.resolve();
     await settle();

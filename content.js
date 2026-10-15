@@ -1420,30 +1420,42 @@
   const local = (fn) => { try { fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
   // What a copy needs, read as it is written: the editor can be gone (compose closed, the page changed) before it's kept.
   const draftAt = (ed) => {
-    const m = ed.closest('#compose-message-modal'), up = [];
-    for (let p = ed.parentElement; p && up.length < 15; p = p.parentElement) up.push(p);
-    return { ed, up, path: location.pathname, at: Date.now(), text: ultra ? ed.textContent : ed.value, html: ultra ? ed.innerHTML : ed.value,
+    // Values, not elements: Ultra may reuse the editor and its wrapper for another post before the copy is made.
+    // Ultra: the nearest Blackboard id above the editor (a reply's post, say).
+    const m = ed.closest('#compose-message-modal'), BBID = /_\d+_\d+/;
+    let near = '';
+    for (let p = ultra && ed.parentElement, i = 0; p && !near && i < 15; p = p.parentElement, i++) {
+      for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
+    }
+    return { ed, id: ed.id, near, path: location.pathname, at: Date.now(), text: ultra ? ed.textContent : ed.value, html: ultra ? ed.innerHTML : ed.value,
       subject: m?.querySelector('input[data-testid="subject-input"]')?.value, name: m?.querySelector('input[data-testid="course-select-modal"]')?.value,
       to: [...(m?.querySelectorAll('[data-testid="address-book-tag"]') || [])].map((e) => e.id) };
   };
   const draftsWaiting = new Map(); // editor -> what was read from it last
+  // Read again; an editor Ultra has put to another post (other ids or page) keeps what it held for the last one too.
+  const draftsOld = [];
+  const draftWait = (ed) => {
+    const was = draftsWaiting.get(ed), now = draftAt(ed);
+    if (was && (was.id !== now.id || was.near !== now.near || was.path !== now.path)) draftsOld.push(was);
+    draftsWaiting.set(ed, now);
+  };
   const draftsIn = () => need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => need('features/drafts.js', () => globalThis.GZ_DRAFT_UI)).then(() => {
-    const eds = [...draftsWaiting];
+    const eds = [...draftsOld.splice(0), ...draftsWaiting.values()];
     draftsWaiting.clear();
-    for (const [ed, at] of eds) if (ed.isConnected) GZ_DRAFT_UI.write({ type: 'input', target: ed }); else GZ_DRAFT_UI.keep(at);
+    for (const at of eds) GZ_DRAFT_UI.take(at);
     if (observer) watchDrafts();
-  }, () => draftsWaiting.clear());
+  }, () => { draftsWaiting.clear(); draftsOld.length = 0; });
   for (const ev of ['keydown', 'input', 'paste']) document.addEventListener(ev, (e) => {
     if (globalThis.GZ_DRAFT_UI) return GZ_DRAFT_UI.write(e);
     if ((!ultra && e.type !== 'input') || !settings.enhance.drafts || !observer || !(e.target instanceof Element)) return;
     const ed = e.target.closest(DRAFT_ED);
-    if (ed) { draftsWaiting.set(ed, draftAt(ed)); draftsIn(); } else if (!ultra && e.target.closest('#compose-message-modal')) watchDrafts();
+    if (ed) { draftWait(ed); draftsIn(); } else if (!ultra && e.target.closest('#compose-message-modal')) watchDrafts();
   }, true);
   // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
   const watchDrafts = () => {
     if (globalThis.GZ_DRAFT_UI) return GZ_DRAFT_UI.watch();
     // Read again each pass while it loads: a paste lands in Quill after its event.
-    for (const [ed] of draftsWaiting) if (ed.isConnected) draftsWaiting.set(ed, draftAt(ed));
+    for (const [ed] of draftsWaiting) if (ed.isConnected) draftWait(ed);
     if (settings.enhance.drafts && (ultra || /^\/conversations\/?$/.test(location.pathname)) && document.querySelector(DRAFT_ED)) draftsIn();
   };
   // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
