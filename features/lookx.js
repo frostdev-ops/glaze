@@ -226,7 +226,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (pack === 'own') {
       // The pictures stored (lib/lookx.js imgIds): read in sticker mode only.
       const all = await get(null);
-      if (panel !== was || !panel || pack !== 'own') return;
+      if (!live || panel !== was || !panel || pack !== 'own') return;
       const ids = GZ_LX.imgIds(all);
       for (const id of ids) if (!own[id]) own[id] = blobOf(all[`stkImg:${id}`]) || undefined;
       const file = make('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', hidden: true });
