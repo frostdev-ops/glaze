@@ -223,7 +223,7 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   const asked = [];
   const ctx = {
     I: { links: [1], settings: { enhance: { todo: true, cardTasks: true, remind: false, remindExam: false, remindPlan: false, remindClass: false, streak: true } } },
-    location: { pathname: '/ultra/course' }, window: {}, CARD: 'article[id^="course-list-course-"]', cards: true,
+    location: { pathname: '/ultra/course' }, window: {}, CARD: 'article[id^="course-list-course-"]', cards: true, tabFrame: '',
     document: { querySelector: () => (ctx.cards ? {} : null) },
     need: async (file) => { asked.push(file); },
     GZ_TODO_UI: { sync: (on) => asked.push(`todo ${on}`) }, GZ_CARD_TASKS: { sync: (on) => asked.push(`cards ${on}`) }, GZ_REMIND_UI: { sync: (on) => asked.push(`remind ${on}`) },
@@ -242,6 +242,9 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   ctx.window.top = {}; // a frame inside the page
   ctx.solo = false;
   assert.deepEqual(await run('/ultra/course'), ['todo false', 'cards false', 'remind false']);
+  // A course tab's frame is a page of its own (its To Do panel), but reminders stay the page's around it.
+  ctx.solo = true; ctx.tabFrame = '_101_1';
+  assert.deepEqual(await run('/ultra/courses/_101_1/outline'), ['features/todo.js', 'cards false', 'remind false', 'todo true']);
 });
 
 // ---- Codex's B2 review: each failed before its fix ----

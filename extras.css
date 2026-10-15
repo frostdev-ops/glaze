@@ -39,7 +39,8 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offca
   filter: blur(var(--gz-bg-blur, 0px));
 }
 /* Cards over a picture: a little see-through, never so much that text sits on the image. */
-html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer) {
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap .content-list-item .content-list-item .itemContainer {
   background: color-mix(in srgb, var(--gz-surface) 88%, transparent) !important;
 }
 
@@ -584,3 +585,5 @@ html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:ha
 #gz-ctabs-frames > .gz-ctabs-pic { position: absolute; inset: 0; z-index: 1; overflow: hidden; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
 html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
 html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
+/* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
+html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }

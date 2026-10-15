@@ -42,7 +42,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const top = () => I.links.length && solo && I.settings.enhance;
   const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
-  const syncRemind = () => load(() => ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
+  // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
+  const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
 
   // Submitted late: the latest attempt against the due date, for work waiting to be graded. An
   // attempt's date never changes, so each is asked once. Nothing is called late in a course that
@@ -361,7 +362,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     syncWidgets();
   };
   const dash = () => top()?.dashboard && /^\/ultra\/institution-page\/?$/.test(location.pathname);
-  const widgetsHere = () => { const e = top(); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats)); };
+  const widgetsHere = () => { const e = !tabFrame && top(); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats)); };
   const syncWidgets = () => {
     const on = widgetsHere();
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
@@ -386,9 +387,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
   // stall it for half a second). A click on the main menu or a course's tabs instead holds the old
   // page in a view transition until the next one exists, then crossfades into it: when the address has
-  // changed and the new page has been still for 120 ms, or after 500 ms at most. Top frame only,
-  // and only while entrances are on. Route containers themselves stay visible as Ultra builds them.
-  if (window.top === window && document.startViewTransition) {
+  // changed and the new page has been still for 120 ms, or after 500 ms at most. A page of its own (a course tab's
+  // frame too), and only while entrances are on. Route containers themselves stay visible as Ultra builds them.
+  if (solo && document.startViewTransition) {
     const PAGE_LINKS = '#base_tools a, .bb-ui-navigation-list-horizontal a';
     const settled = (from) => new Promise((done) => {
       const t0 = performance.now();
