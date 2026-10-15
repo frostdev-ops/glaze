@@ -266,7 +266,9 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.match(ui, /const human = \(e\) => e\.isTrusted/);
   assert.match(ui, /if \(!human\(e\) \|\| busy\) return;[\s\S]*?const p = permission\(\)/);
   assert.match(ui, /if \(!e\.isTrusted\) return;/);
-  assert.deepEqual(require('../manifest.json').optional_host_permissions, ['https://share.frostdev.io/*']);
+  // The required https://*/* already covers the relay; Chrome flags (and drops) an optional entry for it as redundant.
+  assert.equal(require('../manifest.json').optional_host_permissions, undefined);
+  assert.ok(require('../manifest.json').host_permissions.includes('https://*/*'));
 });
 
 test('session worker accepts only exact extension pages; an LMS or another extension cannot ask for keys', async () => {
