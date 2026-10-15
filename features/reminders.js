@@ -74,9 +74,13 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     if (!(cache?.key === todoKey && cache.at > best.at)) cache = best;
     arm();
   };
-  // The To Do list and the card tasks ask for themselves on the pages they run on, if they're on: by their settings, not
-  // by whether they've drawn yet (content.js todoHere, cardsHere), so a page that's still starting isn't asked twice.
-  const theyAsk = () => { const e = en(), p = location.pathname; return (e.todo && /^\/(courses\/\d+\/?)?$/.test(p)) || (e.cardTasks && p === '/'); };
+  // The To Do list and the card tasks ask for themselves where they run, if they're on: by content.js's own gates
+  // (todoHere; cardsHere with Canvas's course cards on the page, as syncCardTasks), not by whether they've drawn yet.
+  // The Dashboard without cards (its list view) has no card tasks, so there this asks for itself.
+  const theyAsk = () => {
+    const e = en(), p = location.pathname;
+    return (e.todo && /^\/(courses\/\d+\/?)?$/.test(p)) || (e.cardTasks && p === '/' && !!document.querySelector('.ic-DashboardCard'));
+  };
   const refresh = () => {
     const now = Date.now();
     if (!on || !T || asking || now - failed < 6e4 || (cache && now - cache.at < OLD) || theyAsk()) return;

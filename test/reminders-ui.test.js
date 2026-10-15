@@ -47,13 +47,13 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
   let turn = Promise.resolve();
   w.release = () => { for (const f of w.waiting.splice(0)) f(); };
   const Clock = class extends Date { static now() { return w.now(); } };
-  w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {} } = {}) => {
+  w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {}, cards = false } = {}) => {
     const timers = [];
     const docOn = {};
     const body = new E('body');
     const document = {
       visibilityState: hidden ? 'hidden' : 'visible', body, activeElement: body,
-      createElement: (t) => new E(t), createElementNS: (ns, t) => new E(t), querySelector: () => null,
+      createElement: (t) => new E(t), createElementNS: (ns, t) => new E(t), querySelector: (sel) => (cards && sel === '.ic-DashboardCard' ? new E() : null),
       addEventListener: (t, f) => { docOn[t] = f; },
     };
     const sent = [];
@@ -202,10 +202,20 @@ test('no planner request where To Do or the card tasks will make it, drawn yet o
   list.ui.sync(true);
   await settle();
   assert.deepEqual(list.fetched, []);
-  const cards = world(2 * 36e5, { cacheAge: stale }).tab({ pathname: '/', enhance: { cardTasks: true } });
+  const cards = world(2 * 36e5, { cacheAge: stale }).tab({ pathname: '/', enhance: { cardTasks: true }, cards: true });
   cards.ui.sync(true);
   await settle();
   assert.deepEqual(cards.fetched, []);
+  // The Dashboard's list view has no course cards, so no card tasks: with To Do off, it asks for itself.
+  const listView = world(2 * 36e5, { cacheAge: stale }).tab({ pathname: '/', enhance: { cardTasks: true } });
+  listView.ui.sync(true);
+  await settle();
+  assert.equal(listView.fetched.length, 1);
+  // Within ten minutes of the last answer, it doesn't.
+  const fresh = world(2 * 36e5, { cacheAge: 5 * 6e4 }).tab({ pathname: '/', enhance: { cardTasks: true } });
+  fresh.ui.sync(true);
+  await settle();
+  assert.deepEqual(fresh.fetched, []);
   // On a page neither runs on, it asks for itself.
   const own = world(2 * 36e5, { cacheAge: stale }).tab({ pathname: '/courses/25/assignments', enhance: { todo: true } });
   own.ui.sync(true);
