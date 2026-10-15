@@ -6,9 +6,9 @@ Glaze
 
 ## Short summary (132 char max)
 
-> Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras on Ultra. Works at any school.
+> Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras. Works at any school.
 
-(126 characters.)
+(116 characters.)
 
 ## Category
 

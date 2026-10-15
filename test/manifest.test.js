@@ -41,7 +41,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   fs.writeFileSync(file, JSON.stringify(input));
   const expected = structuredClone(input);
   delete expected.options_ui.open_in_tab;
-  expected.description = 'Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras on Ultra.';
+  expected.description = 'Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras.';
   for (const entry of expected.web_accessible_resources) delete entry.use_dynamic_url;
   try {
     const rewrite = () => execFileSync('sh', [path.join(__dirname, '../scripts/safari-manifest.sh'), file]);
