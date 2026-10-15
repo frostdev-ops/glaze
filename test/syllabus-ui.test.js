@@ -108,30 +108,33 @@ test('the GPA table and syllabus import share that one writer: a credits change 
 
 // ---- features/syllabus.js on a stand-in page ----
 class El {
-  constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, dataset: {}, style: {}, open: false, parentNode: null }); }
+  constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, dataset: {}, style: {}, open: false, parentNode: null, on: {}, files: [], text: '' }); }
   append(...k) { for (const c of k) if (c && typeof c === 'object') { c.parentNode = this; this.children.push(c); } }
   prepend(...k) { this.append(...k); }
   before() {}
   replaceChildren(...k) { this.children = []; this.append(...k); }
   remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this); this.parentNode = null; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
-  addEventListener() {}
+  addEventListener(type, f) { (this.on[type] ||= []).push(f); }
+  fire(type) { for (const f of this.on[type] || []) f({ type, isTrusted: true, preventDefault() {} }); }
+  get all() { return [this, ...this.children.flatMap((c) => c.all)]; }
   focus() {}
   showModal() { this.open = true; }
   close() { this.open = false; }
   contains() { return false; }
   querySelector() { return null; }
   querySelectorAll() { return []; }
-  get textContent() { return ''; }
-  set textContent(v) {}
+  get textContent() { return this.text; }
+  set textContent(v) { this.text = String(v); }
 }
-const page = () => {
+// extra: more of the page's globals (a stand-in features/import.js, say).
+const page = (extra = {}) => {
   const body = new El('body');
   const state = { settings: { enabled: true, enhance: { syllabus: true } }, on: true, cid: '25' };
   const held = [];
   const open = { now: false };
   const ctx = vm.createContext({
-    Intl, Date, JSON, Promise, Math, Number, String, Object, Array, Error,
+    Intl, Date, JSON, Promise, Math, Number, String, Object, Array, Error, File, AbortController,
     document: { body, activeElement: null, createElement: (t) => new El(t), getElementById: () => null, querySelector: () => null },
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome: undefined,
@@ -146,10 +149,11 @@ const page = () => {
         return new Promise((res) => (open.now ? load(res) : held.push(() => load(res))));
       },
     },
+    ...extra,
   });
   vm.runInContext(read('features/syllabus.js'), ctx);
   // Lets what's held through, and everything asked for after it.
-  return { UI: ctx.GZ_SYL_UI, body, state, release: () => { open.now = true; while (held.length) held.shift()(); } };
+  return { UI: ctx.GZ_SYL_UI, body, state, ctx, release: () => { open.now = true; while (held.length) held.shift()(); } };
 };
 
 test('the dialog doesn\'t open when the feature was turned off while its code was on its way', async () => {
@@ -171,4 +175,37 @@ test('the dialog doesn\'t open when the feature was turned off while its code wa
   await opening;
   assert.equal(p.body.children[0]?.tagName, 'DIALOG');
   assert.equal(p.body.children[0].open, true);
+});
+
+test('a second Read it calls the first read off, Stop reading calls off the newest, and only a read still wanted is reviewed', async () => {
+  // features/import.js held: each read waits until the test answers it.
+  const reads = [];
+  const p = page({ GZ_IMPORT: { read: (file, opts) => new Promise((resolve) => reads.push({ opts, resolve })), note: () => '', doubt: () => false } });
+  const opening = p.UI.open();
+  await settle();
+  p.release();
+  await opening;
+  await settle();
+  let reviewed = 0;
+  const extract = p.ctx.GZ_SYLLABUS.extract;
+  p.ctx.GZ_SYLLABUS.extract = (...a) => { reviewed++; return extract(...a); };
+  const dlg = p.body.children[0];
+  const button = (text) => dlg.all.find((e) => e.tagName === 'BUTTON' && e.text === text);
+  dlg.all.find((e) => e.id === 'gz-syl-file').files = [{ name: 'syllabus.pdf' }];
+  button('Read it').fire('click');
+  await settle();
+  button('Read it').fire('click');
+  await settle();
+  assert.equal(reads.length, 2);
+  assert.equal(reads[0].opts.signal.aborted, true, 'the first read stops when the second starts');
+  button('Stop reading').fire('click');
+  assert.equal(reads[1].opts.signal.aborted, true, 'Stop reading stops the newest');
+  for (const r of reads) r.resolve({ text: 'Instructor: Dr. Amara Okafor', ocr: null });
+  await settle();
+  assert.equal(reviewed, 0, 'neither read that was called off reaches the review');
+  button('Read it').fire('click');
+  await settle();
+  reads[2].resolve({ text: 'Instructor: Dr. Amara Okafor', ocr: null });
+  await settle();
+  assert.equal(reviewed, 1, 'a read left alone does');
 });

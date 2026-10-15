@@ -52,6 +52,8 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   fs.writeFileSync(file, JSON.stringify(input));
   const expected = structuredClone(input);
   delete expected.options_ui.open_in_tab;
+  delete expected.oauth2; // Safari has no identity API: Google Calendar sync is Chrome's
+  delete expected.optional_permissions;
   expected.description = 'Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras.';
   for (const entry of expected.web_accessible_resources) delete entry.use_dynamic_url;
   try {
@@ -69,6 +71,13 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; the reader is the one page a site may frame, and loads only Glaze\'s files', () => {
+  assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" });
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html']);
+  const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
+  assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
 });
 
 test('every content script file exists', () => {

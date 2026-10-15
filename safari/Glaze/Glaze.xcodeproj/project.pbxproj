@@ -70,6 +70,10 @@
 		B0B1000000000000000000C2 /* content-canvas.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F2 /* content-canvas.js */; };
 		B0B1000000000000000000A3 /* moodle.css in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F3 /* moodle.css */; };
 		B0B1000000000000000000C3 /* moodle.css in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F3 /* moodle.css */; };
+		D230000000000000000000A1 /* reader.html in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F1 /* reader.html */; };
+		D230000000000000000000C1 /* reader.html in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F1 /* reader.html */; };
+		D230000000000000000000A2 /* reader.js in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F2 /* reader.js */; };
+		D230000000000000000000C2 /* reader.js in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F2 /* reader.js */; };
 		B0B1000000000000000000A4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000C4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
@@ -156,6 +160,8 @@
 		B0B1000000000000000000F1 /* content-ultra.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-ultra.js"; path = "Resources/content-ultra.js"; sourceTree = "<group>"; };
 		B0B1000000000000000000F2 /* content-canvas.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-canvas.js"; path = "Resources/content-canvas.js"; sourceTree = "<group>"; };
 		B0B1000000000000000000F3 /* moodle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = moodle.css; path = Resources/moodle.css; sourceTree = "<group>"; };
+		D230000000000000000000F1 /* reader.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = reader.html; path = Resources/reader.html; sourceTree = "<group>"; };
+		D230000000000000000000F2 /* reader.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = reader.js; path = Resources/reader.js; sourceTree = "<group>"; };
 		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
 		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -264,6 +270,8 @@
 				B0B1000000000000000000F1 /* content-ultra.js */,
 				B0B1000000000000000000F2 /* content-canvas.js */,
 				B0B1000000000000000000F3 /* moodle.css */,
+				D230000000000000000000F1 /* reader.html */,
+				D230000000000000000000F2 /* reader.js */,
 				B0B1000000000000000000F4 /* features */,
 				B0B1000000000000000000F5 /* assets */,
 			);
@@ -444,6 +452,8 @@
 				B0B1000000000000000000A1 /* content-ultra.js in Resources */,
 				B0B1000000000000000000A2 /* content-canvas.js in Resources */,
 				B0B1000000000000000000A3 /* moodle.css in Resources */,
+				D230000000000000000000A1 /* reader.html in Resources */,
+				D230000000000000000000A2 /* reader.js in Resources */,
 				B0B1000000000000000000A4 /* features in Resources */,
 				B0B1000000000000000000A5 /* assets in Resources */,
 			);
@@ -484,6 +494,8 @@
 				B0B1000000000000000000C1 /* content-ultra.js in Resources */,
 				B0B1000000000000000000C2 /* content-canvas.js in Resources */,
 				B0B1000000000000000000C3 /* moodle.css in Resources */,
+				D230000000000000000000C1 /* reader.html in Resources */,
+				D230000000000000000000C2 /* reader.js in Resources */,
 				B0B1000000000000000000C4 /* features in Resources */,
 				B0B1000000000000000000C5 /* assets in Resources */,
 			);

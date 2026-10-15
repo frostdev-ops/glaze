@@ -630,6 +630,97 @@ GZ_UI.load().then((s) => {
   $('#gs-ask').addEventListener('click', () => gsOp({ op: 'hide', hide: false }));
   $('#gs-forget').addEventListener('click', () => gsOp({ op: 'bind', key: null }));
 
+  // ---- Google Calendar sync (lib/gcal.js, through the worker: 'glaze:gcal'), Chrome only ----
+  // Behind the build-time switch (lib/gcal.js ON): off, the section stays hidden and nothing here runs.
+  if (GZ_GCAL.ON) {
+    $('#gcal').hidden = false;
+    // Offered where chrome.identity.getAuthToken signs in with the browser's own Google account: Google Chrome (and plain
+    // Chromium). Edge doesn't support it, Brave has no Google sign-in, Safari and Firefox have no getAuthToken (S3 §1, §4):
+    // those get a note pointing to the .ics export.
+    const gcalHere = location.protocol === 'chrome-extension:' && !('brave' in navigator) && !!navigator.userAgentData?.brands?.length
+      && navigator.userAgentData.brands.every((b) => /^(Google Chrome|Chromium|HeadlessChrome)$|Not.?A.?Brand/i.test(b.brand));
+    const gcalOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:gcal', ...op }, (r) => res(chrome.runtime.lastError ? { ok: false, error: 'network' } : r || { ok: false })));
+    const gcalRender = (g) => {
+      $('#gcal-other').hidden = gcalHere;
+      $('#gcal-off').hidden = !gcalHere || !!g?.cal;
+      $('#gcal-on').hidden = !gcalHere || !g?.cal;
+      if (!g?.cal) return;
+      // The account is what Google reports as the calendar's owner when it was made or linked: a label, not a check.
+      $('#gcal-who').textContent = g.owner ? t('Connected to {account}.', { account: g.owner }) : t('Connected.');
+      const last = Math.max(0, ...Object.values(g.last || {}).filter(Number.isFinite));
+      $('#gcal-when').textContent = last ? t('Last synced {when}.', { when: when(last) }) : t('Glaze syncs the next time you open Canvas.');
+      $('#gcal-error').textContent = g.error === 'auth' ? t('Google needs you to sign in again before Glaze can sync.')
+        : g.error === 'missing' || g.error === 'denied' ? t("Glaze can't reach its calendar in your Google account. Disconnect, then connect again to make a new one.")
+          : g.error ? t("Google Calendar didn't answer last time. Glaze tries again later.") : '';
+      $('#gcal-reconnect').hidden = g.error !== 'auth';
+      $('#gcal-id').value = g.cal;
+    };
+    const gcalLoad = () => new Promise((res) => chrome.storage.local.get('gcal', (r) => res(gcalRender(r?.gcal))));
+    gcalLoad();
+    // The sign-in, inside the student's own click: Chrome's identity permission (optional; Chrome shows no warning for
+    // it), then Google's consent in Chrome's own window. → '' once Chrome holds a token with the calendar scope, else why not.
+    const gcalSignIn = async () => {
+      try {
+        if (!await chrome.permissions.request({ permissions: ['identity'] })) return t("Glaze can't connect without Chrome's sign-in permission.");
+        const r = await chrome.identity.getAuthToken({ interactive: true });
+        const scope = chrome.runtime.getManifest().oauth2.scopes[0];
+        if (Array.isArray(r?.grantedScopes) && !r.grantedScopes.includes(scope)) {
+          // Chrome would hand the same token back: forgotten, so the next Connect asks Google again.
+          await chrome.identity.removeCachedAuthToken({ token: r.token }).catch(() => {});
+          return t("Glaze needs the calendar access on Google's screen. Connect again and leave it ticked.");
+        }
+        return '';
+      } catch { return t("Google didn't connect. Export calendar (.ics) works without signing in."); }
+    };
+    // Only a person's click or key, while the page has their activation; one at a time.
+    let gcalBusy = false;
+    const gcalClick = (id, f) => $(id).addEventListener('click', async (e) => {
+      if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true) || gcalBusy) return;
+      gcalBusy = true;
+      try { await f(); } finally { gcalBusy = false; }
+    });
+    const gcalJoin = async (op) => {
+      const no = await gcalSignIn();
+      if (no) return hint(no, true);
+      const r = await gcalOp(op);
+      // Focus moves to what replaced the button that was pressed.
+      if (r.ok) return gcalLoad().then(() => { $('#gcal-share').focus(); hint(t('Connected.')); });
+      hint(r.error === 'code' ? t("That isn't a link code. Copy it from Link another device on your other computer.")
+        : r.error === 'missing' || r.error === 'denied' ? t("That calendar isn't in this Google account, or Glaze didn't make it.")
+          : t("Couldn't reach Google Calendar. Try again in a moment."), true);
+    };
+    gcalClick('#gcal-connect', () => gcalJoin({ op: 'connect', tz: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+    gcalClick('#gcal-link', () => ($('#gcal-code').value.trim() ? gcalJoin({ op: 'connect', code: $('#gcal-code').value }) : $('#gcal-code').focus()));
+    gcalClick('#gcal-reconnect', async () => {
+      const no = await gcalSignIn();
+      if (no) return hint(no, true);
+      await gcalOp({ op: 'retry' });
+      hint(t('Connected.'));
+    });
+    $('#gcal-share').addEventListener('click', () => {
+      const open = $('#gcal-pair').hidden;
+      $('#gcal-pair').hidden = !open;
+      $('#gcal-share').setAttribute('aria-expanded', String(open));
+      if (open) $('#gcal-id').select();
+    });
+    $('#gcal-copy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText($('#gcal-id').value); hint(t('Copied.')); } catch { $('#gcal-id').select(); hint(t('Copy the code from the box.')); }
+    });
+    // Escape keeps the last returnValue, so each question starts from none.
+    $('#gcal-disconnect').addEventListener('click', () => { $('#gcal-drop').checked = false; $('#gcal-bye').returnValue = ''; $('#gcal-bye').showModal(); });
+    $('#gcal-bye').addEventListener('close', async () => {
+      if ($('#gcal-bye').returnValue !== 'ok') return $('#gcal-disconnect').focus();
+      const r = await gcalOp({ op: 'disconnect', drop: $('#gcal-drop').checked });
+      if (!r.ok) return hint(t("Couldn't delete the Glaze calendar, so nothing changed. Try again, or disconnect without deleting it."), true);
+      // Nothing stays behind: the permission goes too, until the next Connect asks again.
+      await chrome.permissions.remove({ permissions: ['identity'] }).catch(() => {});
+      gcalRender(null);
+      $('#gcal-connect').focus();
+      hint(r.had && !r.revoked ? t("Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.") : t('Disconnected.'), r.had && !r.revoked);
+    });
+    chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal) gcalRender(changes.gcal.newValue); });
+  }
+
   // Another surface (the popup, another options tab) changed something: take it, unless it is
   // only our own save coming back.
   chrome.storage.onChanged.addListener((changes, area) => {

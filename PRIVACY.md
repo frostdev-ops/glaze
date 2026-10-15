@@ -44,10 +44,10 @@ _Last updated: 2026-10-15_
 - **Past terms and a GPA goal** (Canvas, the GPA Extra), in `chrome.storage.local`, on this device only, per Canvas
   site and signed-in user id: up to 40 terms you typed in or imported, each with its name, plus/minus or whole-letter
   scale and up to 40 courses (the name, credits, grade as written, honors/AP level, left out or not), and your goal
-  (cumulative or this term's GPA). A transcript you paste or pick (text, a web page or a Word file) is read in the page
-  on this device; only the terms you review and add are kept, never the transcript itself. Glaze sends none of it
-  anywhere: no upload, no AI service. "Remove this term" and "Remove all past terms" delete it, and the time of the
-  last Remove all is kept so a change from another open tab can't bring terms back.
+  (cumulative or this term's GPA). A transcript you paste or pick (text, a web page, a Word file, a PDF, a photo or a
+  screenshot) is read on this device; only the terms you review and add are kept, never the transcript itself. Glaze
+  sends none of it anywhere: no upload, no AI service. "Remove this term" and "Remove all past terms" delete it, and
+  the time of the last Remove all is kept so a change from another open tab can't bring terms back.
 - **Insights** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site and signed-in
   user id: one small summary of this term, so the view opens at once next time: each current course's id and name, its
   published work's name, due date, points, when you handed it in and whether Canvas marks it on time, late, missing or
@@ -85,6 +85,15 @@ _Last updated: 2026-10-15_
   your "do on" days and focus sessions and your Gradescope work, with **course and assignment names**, links to them on
   your Canvas site and your tasks' notes, and the Canvas site's address in each event's identifier. Once saved, it is
   an ordinary file on your device; what happens to it after you import it is up to you and your calendar provider.
+- **Google Calendar sync** (Chrome, off until you connect), in `chrome.storage.local`, on this device only: the ID of
+  the calendar named Glaze that Glaze made in your Google account (or that you linked with a code from another device),
+  the Google account Google names as that calendar's owner (its email address, shown as "Connected to …"), when you
+  connected, when each Canvas site and account last synced and how the last sync ended. For each event Glaze wrote: an
+  event ID (a SHA-256 hash of the Canvas site, your Canvas user id and the event's identifier), which Canvas account
+  and, for a "do on" day or focus session, which Better To Do item it belongs to, that plan's date or time, when the
+  event ends, a hash of what was written and Google's version tag for it; Google's sync cursor; and the IDs of deadline
+  events you deleted in Google Calendar, so Glaze doesn't put them back. No sign-in token: Chrome keeps that itself.
+  **Disconnect** deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
   which Canvas course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "not a Canvas course"), and for
@@ -193,8 +202,9 @@ services, which receive ordinary connection information such as your IP address.
 
 Ultra appearance uses the visible course-card banners and existing color slots; it makes no LMS API requests. Linked images load from their chosen HTTPS hosts, exactly as on Canvas. The Ultra document viewer has no added iframe injection or host access.
 
-The browser extension ships as static files and loads no remote scripts. Its built-in fonts and three.js (used by the
-animated backgrounds) are bundled. It makes requests in these cases:
+The browser extension ships as static files and loads no remote scripts. Its built-in fonts, three.js (used by the
+animated backgrounds), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
+you import) are bundled. It makes requests in these cases:
 
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
   site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
@@ -284,6 +294,29 @@ animated backgrounds) are bundled. It makes requests in these cases:
   isn't kept. If Glaze, the Gradescope switch or your Gradescope answer changes, or the dialog closes, while Canvas
   answers, no file is saved. With Gradescope in
   To Do on, the Gradescope work comes from what's already kept on this device; nothing is asked of Gradescope.
+- **Google Calendar sync** (Chrome, off until you connect; not in released builds until Google verifies Glaze, and
+  those builds can't make any of these requests). The only destinations are Google's Calendar API at
+  `https://www.googleapis.com` and Google's token revocation at `https://oauth2.googleapis.com`; requests carry the
+  access token Chrome gives Glaze, never cookies, and never follow a redirect. There is no Glaze server.
+  - **Connect** (your click in Glaze's settings): Chrome asks for the `identity` permission and shows Google's own
+    sign-in and consent for one scope, `https://www.googleapis.com/auth/calendar.app.created` ("make secondary Google
+    calendars, and see, create, change and delete events on them"). With it Glaze can't see or change your other
+    calendars, nor list them. Chrome talks to Google for the sign-in itself. Glaze then creates one calendar named
+    Glaze, with your time zone. **Link another device** opens that same calendar by its ID instead of making one.
+  - **Sync**: a Canvas page works out what Export calendar (.ics) would save, with the same choices, and Glaze sends
+    Google what changed: for each event its title (an assignment, task, plan or class name), the course name, your
+    task's notes, its date or time, the class's room, and the link back to the item on your Canvas site. No
+    reminders, and the events show you as free. Glaze also reads back changes made in Google Calendar to the events
+    in the Glaze calendar: an edited deadline is written over; a deleted one stays deleted; a "do on" day or focus
+    session you move or delete there moves or clears that plan in Better To Do. It runs when a Canvas page opens if
+    the last sync was 15 minutes ago or more, every 15 minutes while a Canvas page stays open, and 10 seconds after
+    your Better To Do data, class schedule or export choices change. Nothing runs with no Canvas page open.
+  - **Disconnect**: if you choose, Glaze deletes the Glaze calendar first; then it asks Google to revoke Glaze's
+    access (the token goes in the request body), has Chrome forget its tokens, removes the `identity` permission and
+    deletes what it stored. You can also remove Glaze's access at https://myaccount.google.com/connections.
+  - Uninstalling Glaze deletes what it stored on the device but doesn't revoke Google's access by itself:
+    disconnect first, or remove it at https://myaccount.google.com/connections.
+  - Edge, Brave, Safari and Firefox don't offer it; Export calendar (.ics) works everywhere.
 - **Tasks on course cards** (Canvas, off by default). On the Dashboard's card view, Glaze asks your own Canvas site
   for your profile (user id and time zone; one request a page, shared with Better To Do) and uses Better To Do's copy
   of your planner items. Only when that copy is missing or more than two minutes old and the To Do list isn't on the
@@ -303,6 +336,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
   same read-only requests Better To Do makes. It reads the Syllabus page from the page already open, with no request
   of its own, and reads files you pick on this device. Nothing about the syllabus is sent anywhere: there is no server
   to parse it and no consent box to tick, because nothing leaves your computer. It never writes to Canvas.
+- **PDFs and photos you import** (class schedule, syllabus, transcript): none. A PDF or picture you pick or paste is read
+  on your device by Glaze's reader, a page of the extension that the import opens in a hidden frame for that one file:
+  pdf.js reads a PDF's text, and the OCR engine reads a picture or a scanned page, both from the extension's own files.
+  The reader's own policy lets it load nothing but Glaze's files, so it can't send anything anywhere; it keeps nothing,
+  and the frame is removed (its work stopped, its memory freed) when the read ends or you close the dialog. Only the
+  fields you review and save are kept, as above; the file never is. Like everything Glaze shows on a page, the text read
+  appears in the review on the LMS page, where that page's own code could read it.
 - **Class schedule** (Canvas). Opening it asks your own Canvas site for your profile and course list (as Better To
   Do does), to match classes to your courses. A file you choose or text you paste is read on your device and never
   uploaded. A calendar link is read only when it is an address on the Canvas site you're on (your own calendar feed,
@@ -422,8 +462,16 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 ## Permissions
 
 - `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
-  typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, and Safari update-check timestamp described above.
+  typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, and Safari update-check timestamp described above.
   Notes' text, pictures and attachments are in the extension's own IndexedDB.
+- No permission for reading PDFs and photos. The extension's own pages may compile WebAssembly (`'wasm-unsafe-eval'` in
+  its content security policy), which the OCR engine needs; it still runs only code that ships in the package, and
+  never in the LMS page. The reader page is web-accessible so an import can open it in a frame; it reads a file only
+  with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
+  make it read anything.
+- `identity` (Chrome only, optional) — asked for only when you press Connect in Google Calendar sync, and removed on
+  Disconnect. It lets Chrome sign Glaze in to Google Calendar with the Google account in your browser; Chrome shows no
+  warning for it. Glaze never asks for `identity.email` and never sees your password.
 - `unlimitedStorage` — so the browser never clears your notes, pictures and attachments to free space. Nothing more is
   stored or sent because of it; Chrome shows no warning for it.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
@@ -439,7 +487,16 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
   site, and only that site, the same way. The hostname is kept in the extension's local storage on your device.
   The same host access lets the gallery script above run on `https://frostdev.io/glaze/looks`, and, only while
   "Gradescope in To Do" is on, Glaze's Gradescope script run on `https://www.gradescope.com` and its background worker
-  read Gradescope course pages; neither adds a permission.
+  read Gradescope course pages; neither adds a permission. It also covers Google Calendar sync's requests to
+  `www.googleapis.com` and `oauth2.googleapis.com`.
+
+## Google user data
+
+Glaze's use and transfer of information received from Google APIs adheres to the
+[Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including
+the Limited Use requirements. Glaze uses Google Calendar access only to keep the Glaze calendar in step with your
+Canvas work, as described above. It doesn't sell, share or use this data for advertising or to train AI models, no
+person reads it, and none of it goes to frostdev or anyone else.
 
 ## Hosting
 
