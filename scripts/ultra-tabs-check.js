@@ -35,7 +35,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
   });
   let user = '_42_1';
-  let phase = 'first-load';
+  let phase = 'first-load', switchCount = 0;
   const requestDetails = [];
   const requests = []; // everything the page asked for besides Glaze's own extension files
   try {
@@ -92,13 +92,16 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       && document.querySelector(`#gz-ctabs [role="tab"][data-course-id="${c}"][aria-selected="true"]`)
       && [...document.querySelectorAll('div.bb-course-navigation a[href]')].some((a) => a.getAttribute('href').startsWith(`/ultra/courses/${c}/`)), cid, { timeout: 10000 });
     const open = async (cid) => {
-      await page.click('[data-analytics-id="course.header.home"]').catch(() => {});
-      await page.waitForSelector(`a[href="/ultra/courses/${cid}/outline"]`);
-      await page.click(`a[href="/ultra/courses/${cid}/outline"]`);
-      await settled(cid);
+      const previous = phase; phase = `native-open:${cid}`;
+      try {
+        await page.click('[data-analytics-id="course.header.home"]').catch(() => {});
+        await page.waitForSelector(`a[href="/ultra/courses/${cid}/outline"]`);
+        await page.click(`a[href="/ultra/courses/${cid}/outline"]`);
+        await settled(cid);
+      } finally { phase = previous; }
     };
     const switchTab = async (cid) => {
-      const previous = phase; phase = `tab-switch:${cid}`;
+      const previous = phase; phase = `tab-switch:${++switchCount}:${cid}`;
       try { await page.click(`#gz-ctabs [data-course-id="${cid}"]`); await settled(cid); } finally { phase = previous; }
     };
     const scroller = () => page.evaluate(() => document.querySelector('.course-content-container > .panel-wrap')?.scrollTop);
@@ -381,8 +384,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));
     ok(!kept.length && ((await session())[`snapwho:${SITE}`]?.uid || (await session())[`snapwho:${SITE}`]) === '_43_1', `another account on the site: the last one's copies go (${kept.length} left)`);
     ok(await order() === '_103_1', `and it starts its own list (${await order()})`);
-    // The student's two page loads (the first and the reload), each with Ultra's stylesheet: the copies' own link to it
-    // came from the browser's cache, and no course page was ever fetched or opened.
+    // Native documents/stylesheet loads are separate from resource-free snapshot replay. Other enabled Glaze features
+    // can read their own course endpoints; every request, destination, method and current page is recorded.
     const asked = requestDetails.filter((r) => r.type === 'document' && r.origin === SITE);
     ok(asked.length === 2, `the only page loads so far are the student's own (${asked.length})`);
     ok(requestDetails.every((r) => r.method === 'GET'), 'all measured fixture traffic is GET');
