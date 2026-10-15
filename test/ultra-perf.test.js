@@ -29,3 +29,17 @@ test('an unchanged gradebook remembers a successful empty late-status answer', a
   bookFor('_101_1', true); await settle();
   assert.equal(requests, 4, 'the normal one-minute grade refresh remains');
 });
+
+test('Ultra native-added-subtree hooks run synchronously before the batched pass', () => {
+  const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../content.js'), 'utf8');
+  const start = core.indexOf('  const schedule = '), end = core.indexOf('  const startSweep = ', start);
+  const added = [], dirty = new Set(); let pass;
+  const schedule = vm.runInNewContext(`${core.slice(start, end)} schedule`, {
+    chrome: { runtime: { id: 'glaze' } }, observer: {}, ultra: true, dirty, full: false, timer: 0,
+    X: { lift() {}, gate: (node) => added.push(node) }, flush: () => {}, setTimeout: (fn) => { pass = fn; return 1; },
+  });
+  const a = { nodeType: 1 }, b = { nodeType: 1 }, own = { closest: () => ({}) };
+  schedule([{ type: 'childList', target: {}, addedNodes: [a] }, { type: 'childList', target: own, addedNodes: [{ nodeType: 1 }] }, { type: 'childList', target: {}, addedNodes: [b] }]);
+  assert.deepEqual(added, [a, b], 'discovery happens in the observer callback, before its timer runs');
+  assert.equal(typeof pass, 'function');
+});

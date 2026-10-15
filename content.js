@@ -56,7 +56,7 @@
   const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css']];
   // What only one site does: its part puts its own over these ("the site's own part", below). They're Moodle's: nothing.
   const no = () => {};
-  const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, stop: no, renderProgress: no,
+  const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,
     renderNew: no, renderCalc: no, openNew: no, paintCourses: no, tintOf: no, courseColor: no, paintNav: no, syncNav: no, nickOf: () => '', syncNames: no,
     unname: no, holding: () => false, syncTodo: no, syncCardTasks: no, syncWidgets: no, syncRemind: no, syncSyl: no, syncInsights: no, ctx: {} };
 
@@ -432,6 +432,7 @@
       for (const n of r.addedNodes) {
         if (n.nodeType !== 1) continue;
         dirty.add(n);
+        if (ultra) X.gate(n); // native additions may need first-paint nav discovery
       }
     }
     // Too many separate subtrees to be worth tracking: one full pass is cheaper.

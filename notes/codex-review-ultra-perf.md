@@ -34,5 +34,6 @@ verification is still pending, and no claim of live cold-load slowdown is made.
 Reload/request fixes now pass 55 focused checks after seven failures on saved pre-fix source and the separate stale
 `GZ_CTX.on()` failure. This includes late card storage, stale sticker construction/action, safe injection and real key
 listeners, JSON auth redirects, Google orphan timer and Port keepalive teardown. Integration 07/a694 guards/budget are
-merged. B7c's pending `gate: discoverNav` must survive the final merge as synchronous native-added-subtree discovery;
-it must not restore the removed hold/mask/timer. Actual Chrome reload and final full-suite remain pending.
+merged. Generic core `X.gate` and synchronous native-added-subtree dispatch are restored for B7c's pending
+`gate: discoverNav`; Ultra's removed hold/mask/timer are not restored. Pending nav/planner/widget optimizations are not
+claimed here. Actual Chrome reload and final full-suite remain pending.

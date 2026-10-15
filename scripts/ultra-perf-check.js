@@ -135,6 +135,7 @@ const listeners = async (cdp) => {
       const opts = await context.newPage(); await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
       await opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); }, D.GZ_DEFAULTS);
       for (let rep = 0; rep < reps; rep++) {
+        if (rep) await opts.evaluate(async (defaults) => { await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(defaults); }, D.GZ_DEFAULTS);
         const page = await context.newPage(); const errors = [];
         page.on('pageerror', (e) => errors.push(e.message));
         await page.addInitScript(() => {
@@ -189,7 +190,7 @@ const listeners = async (cdp) => {
           await opts.evaluate(async ({ bg, motion }) => chrome.storage.sync.set({ bg, motion }), D.GZ_DEFAULTS);
         }
         let reload = null;
-        if (process.env.PERF_RELOAD && instrumented && rep === 0) {
+        if (process.env.PERF_RELOAD && instrumented && rep === reps - 1) {
           await opts.evaluate(() => chrome.runtime.reload()).catch(() => {});
           await page.waitForTimeout(300);
           const beforeMutation = await snapshot(page, instrumented);
@@ -210,6 +211,10 @@ const listeners = async (cdp) => {
     fs.mkdirSync(path.dirname(output), { recursive: true });
     fs.writeFileSync(output, JSON.stringify({ source, revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim(), results }, null, 2));
     console.log(output);
+    for (const result of results) {
+      assert.deepEqual(result.errors, [], 'the fixture run has no uncaught page/extension exception');
+      assert.deepEqual(result.blocked, [], 'the fixture run attempts no unfixed network response');
+    }
     if (process.env.PERF_REQUIRE_NO_HOLD) for (const result of results) for (const stage of ['courses', 'outline', 'grades']) {
       assert.equal(result[stage].held, 0, `${stage}: SPA content must remain visible`);
       assert.equal(result[stage].stillHeld, false, `${stage}: no lingering SPA hold`);
