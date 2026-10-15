@@ -10,7 +10,7 @@ All notable changes to Glaze are documented here. The format follows
 - Ultra route changes show immediately instead of waiting behind Glaze's separate loading gate. Internal widget
   updates no longer trigger native-page sweeps, and an unchanged gradebook keeps its successful empty late-status answer.
 - Tabs left open across an extension reload stop feature work immediately; Google sync and Download all close orphaned
-  timers/ports safely. Shared JSON API reads reject login redirects.
+  timers/ports safely, and animated scenes stop and release their rendering resources. Shared JSON API reads reject login redirects.
 - Widget callbacks left in a tab after reloading Glaze stop before using invalidated Chrome APIs, including the study
   buddy repaint and What Glaze can do hub.
 - Blackboard widgets retain the newest layout and timer state when storage replies arrive late. Explicit global floats

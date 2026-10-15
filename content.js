@@ -972,16 +972,16 @@
     };
   };
   const syncScene = () => {
-    if (!settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
+    if (!chrome.runtime?.id || !settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
     if (scene) return scene.update(sceneOpts());
     sceneLoad ||= import(chrome.runtime.getURL('lib/scene.js'));
     sceneLoad.then((mod) => {
-      if (scene || !links.length || worn.bg.kind !== 'scene') return;
+      if (!chrome.runtime?.id || scene || !links.length || worn.bg.kind !== 'scene') return;
       sceneCanvas = document.createElement('canvas');
       sceneCanvas.id = 'gz-scene';
       sceneCanvas.setAttribute('aria-hidden', 'true');
       placeScene();
-      scene = mod.start(sceneCanvas);
+      scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id);
       scene.update(sceneOpts());
     }).catch(() => { sceneFailed = true; stopScene(); });
   };

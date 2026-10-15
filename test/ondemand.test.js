@@ -30,7 +30,7 @@ const loader = ({ lang = 'de' } = {}) => {
     isPreview: false, observer: {}, timer: 0, wordsArrived: 0, flush() {},
     locale: () => lang,
     GZ_I18N: require('../lib/i18n.js'),
-    chrome: { runtime: { sendMessage: (m) => { const r = later(); replies.push({ m, r }); return r; } } },
+    chrome: { runtime: { id: 'glaze', sendMessage: (m) => { const r = later(); replies.push({ m, r }); return r; } } },
     setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, Promise, crypto: require('node:crypto').webcrypto,
   });
   vm.runInContext(`globalThis.GZ_LANGS = undefined; ${block('  // ---- code on demand', '  // ---- the gradebook')}; globalThis.api = { words, wordsIn, need, loading };`, ctx);
@@ -42,6 +42,7 @@ test('things drawn before the page\'s words arrived are redrawn when they do', a
   const redraw = [];
   api.wordsIn.add(() => redraw.push('keys'));
   assert.equal(api.words(), false);
+  await settle();
   assert.deepEqual(JSON.parse(JSON.stringify(replies.map((x) => [x.m.type, x.m.files]))), [['glaze:load', ['i18n/de.js']]]);
   assert.equal(replies[0].m.doc, ctx.__gzDoc, 'names this document');
   vm.runInContext("globalThis.GZ_LANGS = { de: require_de }", Object.assign(ctx, { require_de: { Restore: 'Wiederherstellen' } }));
@@ -56,6 +57,7 @@ test('a catalogue that fails to load leaves the page in English for good: no sec
   const redraw = [];
   api.wordsIn.add(() => redraw.push('keys'));
   api.words();
+  await settle();
   replies[0].r.resolve({ ok: false, error: 'Frame was removed' });
   await settle();
   assert.equal(api.words(), true, 'the extras draw, in English');
@@ -201,6 +203,7 @@ const hooks = (from, to, extra = {}) => {
   class Element {}
   const ctx = vm.createContext({
     Element, Date, Promise, GZ_PAGE: require('../lib/page.js'), isPreview: false, ultra: false, moodle: false, observer: {},
+    chrome: { runtime: { id: 'glaze' } },
     settings: { enhance: { keys: true, palette: true, coursemenu: true, download: true, previews: true } },
     document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => ({}) },
     location: { pathname: '/', origin: 'https://school.test', assign(u) { ctx.went.push(u); } }, went: [],

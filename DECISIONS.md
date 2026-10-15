@@ -687,6 +687,7 @@ becomes the Dashboard; landing there is opt-in. Evidence: `parity/spikes/B7.md`.
 | Record a successful empty late-status set before comparing gradebook content | Treat an unchanged gradebook as if lateness was never read | The next due-chip pass otherwise repeats the gradebook request. Failed reads retain their retry behavior; the one-minute freshness limit stays. |
 | Keep identity sharing unchanged | Add a second account cache interface | The measured sequence read `/users/me` only once, so the evidence does not justify an invasive cache refactor. |
 | Feature `on()` checks the live extension ID immediately; orphaned calendar timers and download ports stop | Wait until another core body mutation or retry extension calls forever | Old listeners/timers can run before the core observer notices a reload. Port close must settle pending bytes even when disconnect already throws. |
+| An optional caller-liveness callback stops and disposes an invalidated scene before another frame | Keep the old tab's rendering loop until the next page mutation | Core and editor preview pass extension liveness; the standalone store promo keeps its one-argument still-frame behavior. Stop is idempotent and removes the resize listener too. |
 | The shared `api()` JSON reader uses `redirect: 'error'` | Follow an authentication redirect | Every caller consumes JSON GET results. Media bytes and signed download URLs use separate flows and retain their behavior. |
 
 ### B7b fresh Codex delta fixes

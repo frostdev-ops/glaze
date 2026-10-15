@@ -181,7 +181,8 @@ const listeners = async (cdp) => {
           await cdp.detach();
         }
         let scene = null;
-        if (process.env.PERF_SCENE && rep === 0) {
+        const sceneReload = process.env.PERF_SCENE && process.env.PERF_RELOAD && instrumented && rep === reps - 1;
+        if (process.env.PERF_SCENE && (rep === 0 || sceneReload)) {
           await page.emulateMedia({ reducedMotion: 'no-preference' });
           await opts.evaluate(async ({ bg, motion }) => chrome.storage.sync.set({ bg: { ...bg, kind: 'scene', scene: 'pumpkins' }, motion: { ...motion, followSystem: false } }), D.GZ_DEFAULTS);
           await page.waitForTimeout(500);
@@ -197,19 +198,23 @@ const listeners = async (cdp) => {
           assert.equal(scene.canvas, 1, 'the bundled scene actually started');
           if (instrumented) assert.ok(scene.draws > 0, 'the bundled scene drew frames during the sample');
           await cdp.detach();
-          await opts.evaluate(async ({ bg, motion }) => chrome.storage.sync.set({ bg, motion }), D.GZ_DEFAULTS);
+          if (!sceneReload) await opts.evaluate(async ({ bg, motion }) => chrome.storage.sync.set({ bg, motion }), D.GZ_DEFAULTS);
         }
         let reload = null;
         if (process.env.PERF_RELOAD && instrumented && rep === reps - 1) {
           await opts.evaluate(() => chrome.runtime.reload()).catch(() => {});
           await page.waitForTimeout(300);
           const beforeMutation = await snapshot(page, instrumented);
+          await page.waitForTimeout(300);
+          const quiet = await snapshot(page, instrumented);
+          if (sceneReload) assert.equal(quiet.glDraws, beforeMutation.glDraws, 'the old scene stops drawing before the next core mutation');
           await page.evaluate(() => document.getElementById('main-content-inner').append(document.createElement('p')));
           await page.waitForTimeout(300);
-          reload = { beforeMutation, afterMutation: await snapshot(page, instrumented) };
+          reload = { beforeMutation, quiet, afterMutation: await snapshot(page, instrumented) };
           assert.equal(beforeMutation.runtime, false, 'the extension was actually reloaded');
           assert.equal(beforeMutation.contextOn, false, 'context checks stop before the next core mutation');
           assert.equal(reload.afterMutation.contextOn, false);
+          if (sceneReload) assert.equal(reload.afterMutation.glDraws, quiet.glDraws, 'native mutations do not restart the disposed scene');
         }
         const paints = await page.evaluate(() => performance.getEntriesByType('paint').map((e) => ({ name: e.name, ms: e.startTime })));
         results.push({ instrumented, rep, initialElapsed, initial, courses, outline, lateProbe, grades, own, lifecycle, scene, reload, requests, blocked, paints, errors });
