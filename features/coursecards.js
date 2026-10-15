@@ -61,7 +61,6 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       uid = String(id);
       ctx.need('lib/todo.js', () => globalThis.GZ_TODO).then(() => { if (live()) { L = GZ_TODO; gs ||= L.gradescope(render); read(); } }, () => {});
     });
-    for (const b of peek.books.values()) watch(b.pending, render);
     if (before !== JSON.stringify([...cards])) notify();
     render();
   };

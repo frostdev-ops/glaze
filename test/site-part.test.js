@@ -202,3 +202,23 @@ test('Ultra course cards peek at existing promises and books without starting a 
   assert.equal(warm.me, me); assert.equal(warm.courses, courses); assert.equal(warm.books.get('_101_1'), book);
   assert.equal(p.c.GZ_CTX.canvasPeek().books, warm.books); assert.equal(requests, count);
 });
+
+test('an existing Ultra grade request refreshes mounted course cards when it finishes without native DOM', async () => {
+  const p = page({ site: 'ultra', preload: true, raw: { enabled: false }, pathname: '/ultra/institution-page' });
+  await p.done;
+  let updates = 0, requests = 0, finish;
+  p.c.GZ_COURSE_CARDS = { sync: () => { updates++; assert.equal(p.c.GZ_CTX.canvasPeek().books.get('_101_1').overall.label, '87%'); } };
+  p.c.fetch = async (u) => {
+    requests++;
+    const profile = u.endsWith('/users/me');
+    if (!profile) await new Promise((r) => { finish = r; });
+    return { ok: true, url: u, text: async () => JSON.stringify(profile ? { id: '_900_1' } : { results: [{ columnId: '_5_1', effectiveScore: 87, pointsPossible: 100, displayGrade: { text: '87%' }, column: { externalGrade: true } }] }), headers: { get: () => null } };
+  };
+  const book = p.c.GZ_CTX.bookFor('_101_1');
+  await settle();
+  assert.equal(book.pending, true); assert.equal(updates, 0);
+  finish(); await settle();
+  assert.equal(book.pending, false);
+  assert.equal(updates, 1, 'the existing grade reader wakes cached board cards');
+  assert.equal(requests, 2, 'only the existing profile and grade requests');
+});
