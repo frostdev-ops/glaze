@@ -344,7 +344,8 @@ test('GPA: a course answer without a grading scheme says the what-if needs a sca
 
 // The GPA with past terms, trends and a goal (features/gpaterms.js, lib/gpa.js), kept through the service worker.
 const CALC = [{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 92 }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } }];
-const histPage = (store, held = {}, list = CALC, groups = [], sync = {}) => {
+// extra: more of the page's globals (a stand-in features/import.js, say).
+const histPage = (store, held = {}, list = CALC, groups = [], sync = {}, extra = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(el(doc, 'div', { id: 'DashboardCard_Container' }));
@@ -361,6 +362,7 @@ const histPage = (store, held = {}, list = CALC, groups = [], sync = {}) => {
       t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', capi: () => Promise.resolve(null), canvasCourses: () => Promise.resolve(list), canvasCourseId: () => undefined,
       need, settings: () => state.settings, on: () => true,
     },
+    ...extra,
   });
   vm.runInContext(read('lib/gradecalc.js'), ctx);
   vm.runInContext(read('features/grades.js'), ctx);
@@ -562,6 +564,33 @@ test('GPA: of two transcript files picked one after the other, the later one is 
   await settle(10);
   assert.match(p.hist().textContent, /Spring 2025/);
   assert.doesNotMatch(p.hist().textContent, /Fall 2024/);
+});
+
+test('GPA: a PDF or photo being read is called off by the next read and by closing Past terms, and nothing it finds is shown after', async () => {
+  // features/import.js held: each read waits until the test answers it.
+  const reads = [];
+  const GZ_IMPORT = { read: (file, opts) => new Promise((resolve) => reads.push({ file, opts, resolve })), note: () => '', doubt: () => false };
+  const p = histPage(shared(), {}, CALC, [], {}, { GZ_IMPORT });
+  p.UI.render();
+  await settle(10);
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  const pick = async (name) => { p.f('imp:file').files = [{ name, type: 'application/pdf', size: 9 }]; p.f('imp:file').fire('change'); await settle(10); };
+  await pick('fall.pdf');
+  await pick('spring.pdf');
+  assert.equal(reads.length, 2);
+  assert.equal(reads[0].opts.signal.aborted, true, 'the first read stops when the second starts, before either said how far it got');
+  assert.equal(reads[1].opts.signal.aborted, false);
+  p.hist().open = false;
+  p.hist().fire('toggle');
+  assert.equal(reads[1].opts.signal.aborted, true, 'closing Past terms, trends and goal stops the read at once');
+  reads[1].resolve({ text: 'Spring 2025\nENG 101 Writing 3 B', ocr: null });
+  await settle(10);
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  assert.doesNotMatch(p.hist().textContent, /Check what Glaze found/, 'what a read stopped by closing found is never shown');
 });
 
 // ---- content-canvas.js: the Dashboard cards' grade, as a link of its own ----

@@ -26,9 +26,19 @@ var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
     }[code] || t("Glaze couldn't read that file.");
   };
 
-  // The reader in a hidden frame for one file. → { text, pages, ocr: { pages, conf, unsure } | null }
-  const frame = (file, kind, signal, progress) => new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(Object.assign(new Error('cancelled'), { cancelled: true }));
+  // The reader in a hidden frame for one file, with a one-use pass from the worker (lib/background.js 'glaze:reader')
+  // that only Glaze can get, so the reader works for this import and nothing else.
+  // → { text, pages, ocr: { pages, conf, unsure, blank } | null }
+  const cancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
+  const frame = async (file, kind, signal, progress) => {
+    if (signal?.aborted) throw cancelled();
+    const pass = crypto.randomUUID();
+    const ok = await Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:reader', op: 'job', pass })).then((r) => r?.ok === true, () => false);
+    if (!ok) throw oops(why());
+    if (signal?.aborted) throw cancelled();
+    return reading(file, kind, signal, progress, pass);
+  };
+  const reading = (file, kind, signal, progress, pass) => new Promise((resolve, reject) => {
     const src = chrome.runtime.getURL('reader.html');
     const f = Object.assign(document.createElement('iframe'), { tabIndex: -1, title: 'Glaze' });
     f.setAttribute('aria-hidden', 'true');
@@ -36,7 +46,7 @@ var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
     const ch = new MessageChannel();
     let quiet = 0;
     const end = (done, v) => { clearTimeout(quiet); signal?.removeEventListener('abort', stop); ch.port1.close(); f.remove(); done(v); };
-    const stop = () => end(reject, Object.assign(new Error('cancelled'), { cancelled: true }));
+    const stop = () => end(reject, cancelled());
     const wait = () => { clearTimeout(quiet); quiet = setTimeout(() => end(reject, oops(why('quiet'))), 60000); };
     ch.port1.onmessage = ({ data: m }) => {
       if (m?.type === 'progress') { wait(); progress(m); } else if (m?.type === 'done') end(resolve, m); else if (m?.type === 'error') end(reject, oops(why(m.code)));
@@ -46,7 +56,7 @@ var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
     // Only to Glaze's own origin (spelled out: URL.origin of an extension scheme is "null" in some engines), so a
     // frame the page navigated elsewhere gets nothing.
     const origin = src.slice(0, src.indexOf('/', src.indexOf('://') + 3));
-    f.addEventListener('load', () => f.contentWindow.postMessage({ type: 'glaze:read', file, kind, langs: lang ? [lang] : [] }, origin, [ch.port2]), { once: true });
+    f.addEventListener('load', () => f.contentWindow.postMessage({ type: 'glaze:read', pass, file, kind, langs: lang ? [lang] : [] }, origin, [ch.port2]), { once: true });
     f.src = src;
     wait();
     document.documentElement.append(f);
@@ -78,9 +88,11 @@ var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
         : t('Reading the text in the picture: {pct}%', { pct });
   };
   // What to tell the student about text read from a picture, or '' when none was.
-  const note = (ocr) => (!ocr ? '' : ocr.conf < 80 || ocr.unsure.length
+  // A scanned page with no text read (blank, or a picture over the pixel limit, left undecoded) is said too.
+  const note = (ocr) => (!ocr ? '' : [ocr.conf < 80 || ocr.unsure.length
     ? t("Glaze read this from a picture and wasn't sure of some of it. Check every field against your file before you save.")
-    : t('Glaze read this from a picture. Check it against your file before you save.'));
+    : t('Glaze read this from a picture. Check it against your file before you save.'),
+  ocr.blank > 0 && t('Scanned pages with no text Glaze could read: {n}. A page may be blank, or its picture too large to read.', { n: ocr.blank })].filter(Boolean).join(' '));
   // Whether a line came from text the OCR engine wasn't sure of (ocr.unsure), for "Check this" on what it gave.
   const doubt = (ocr, line) => !!line && !!ocr?.unsure.some((u) => u.includes(line) || line.includes(u));
   return { read, note, doubt };

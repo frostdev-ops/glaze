@@ -39,7 +39,11 @@ const frames = (page) => page.evaluate(() => document.querySelectorAll('iframe[s
   fs.mkdirSync(ext);
   for (const f of fs.readdirSync(root)) if (f !== 'manifest.json' && !f.startsWith('.') && !NOT_EXTENSION.has(f) && !/\.(md|sh)$/.test(f)) fs.cpSync(path.join(root, f), path.join(ext, f), { recursive: true });
   const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-  for (const e of [...m.content_scripts, ...m.web_accessible_resources]) e.matches.push('http://localhost/*');
+  // Glaze's first script is one entry per site (content-ultra.js, content-canvas.js): localhost gets Canvas's, as
+  // scripts/canvas-shots.js does.
+  const glaze = m.content_scripts.filter((e) => e.js.at(-1) === 'content.js');
+  for (const e of [...m.content_scripts.filter((x) => !glaze.includes(x)), ...m.web_accessible_resources]) e.matches.push('http://localhost/*');
+  m.content_scripts.push({ ...glaze.find((e) => e.matches.includes('https://*.instructure.com/*')), matches: ['http://localhost/*'], exclude_matches: undefined });
   m.host_permissions.push('http://localhost/*');
   fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
@@ -230,21 +234,40 @@ const frames = (page) => page.evaluate(() => document.querySelectorAll('iframe[s
       await page.keyboard.press('Escape');
     }
 
+    // ---- a site framing the reader itself, with no pass: nothing is read ----
+    await open('/');
+    const framed = await page.evaluate((src) => new Promise((resolve) => {
+      const f = Object.assign(document.createElement('iframe'), { src });
+      f.onload = () => {
+        const ch = new MessageChannel();
+        const quiet = setTimeout(() => resolve('no answer'), 3000);
+        ch.port1.onmessage = ({ data }) => { clearTimeout(quiet); resolve(data.type); };
+        f.contentWindow.postMessage({ type: 'glaze:read', pass: crypto.randomUUID(), file: new File(['%PDF-1.7'], 'x.pdf'), kind: 'pdf' }, '*', [ch.port2]);
+      };
+      document.body.append(f);
+    }), `chrome-extension://${id}/reader.html`);
+    ok(framed === 'no answer', `a site that frames the reader itself, with a pass it made up, gets ${framed}`);
+
     // ---- the reader's own accuracy on the pictures, decoded by the browser ----
-    const reader = await ctx.newPage();
-    await reader.goto(`chrome-extension://${id}/reader.html`);
+    // One reader per file, each with a pass put in the worker's list for its tab (as an import's content script asks).
+    const sw = ctx.serviceWorkers().find((w) => w.url().startsWith(`chrome-extension://${id}/`)) || await ctx.waitForEvent('serviceworker');
     for (const f of Object.keys(SCORE).filter((x) => fs.existsSync(path.join(FX, x)))) {
+      const reader = await ctx.newPage();
+      await reader.goto(`chrome-extension://${id}/reader.html`);
+      const tab = await reader.evaluate(() => chrome.tabs.getCurrent().then((t) => t.id));
+      const pass = crypto.randomUUID();
+      await sw.evaluate(([p, t]) => readerPasses.set(p, { tab: t, at: Date.now() }), [pass, tab]);
       const at = Date.now();
-      const r = await reader.evaluate(([b64, name]) => new Promise((resolve) => {
+      const r = await reader.evaluate(([b64, name, p]) => new Promise((resolve) => {
         const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
         const ch = new MessageChannel();
         ch.port1.onmessage = ({ data }) => { if (data.type !== 'progress') resolve(data); };
-        window.postMessage({ type: 'glaze:read', file: new File([bytes], name), kind: GZ_DOCTEXT.kind(name, '', bytes.subarray(0, 16)), langs: [] }, '*', [ch.port2]);
-      }), [fs.readFileSync(path.join(FX, f)).toString('base64'), f]);
+        window.postMessage({ type: 'glaze:read', pass: p, file: new File([bytes], name), kind: GZ_DOCTEXT.kind(name, '', bytes.subarray(0, 16)), langs: [] }, '*', [ch.port2]);
+      }), [fs.readFileSync(path.join(FX, f)).toString('base64'), f, pass]);
       const s = SCORE[f](r.text || '');
       console.log(`     browser: ${f}: ${s.ok}/${s.of} = ${Math.round((s.ok / s.of) * 100)}%, extra ${s.extra}${r.ocr ? `, OCR confidence ${r.ocr.conf}, unsure lines ${r.ocr.unsure.length}` : ''}, ${Date.now() - at} ms`);
+      await reader.close();
     }
-    await reader.close();
 
     ok(!away.length, `the reader and its workers asked for nothing but the extension's own files${away.length ? `: ${[...new Set(away)].join(', ')}` : ''}${canvasAway.size ? ` (Canvas's own pages asked ${[...canvasAway].join(', ')}, refused)` : ''}`);
     ok(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);

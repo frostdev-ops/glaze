@@ -126,6 +126,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       go.disabled = true;
       say(t('Reading…'));
       const g = gen;
+      reading?.abort(); // one still under way (Read schedule is disabled meanwhile, so only a race) is called off
       const ctl = reading = new AbortController();
       stop.hidden = false;
       if (kept) stop.focus();

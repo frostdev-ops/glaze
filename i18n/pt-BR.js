@@ -1453,4 +1453,5 @@
   "Glaze read this from a picture. Check it against your file before you save.": "O Glaze leu isto de uma imagem. Confira com o seu arquivo antes de salvar.",
   "A PDF, a picture or screenshot, Word, PowerPoint, a web page or text.": "Um PDF, uma imagem ou captura de tela, Word, PowerPoint, uma página web ou texto.",
   "Or paste the text, or a screenshot": "Ou cole o texto, ou uma captura de tela",
+  "Scanned pages with no text Glaze could read: {n}. A page may be blank, or its picture too large to read.": "Páginas digitalizadas sem texto que o Glaze conseguiu ler: {n}. Uma página pode estar em branco, ou a imagem ser grande demais para ler.",
 };

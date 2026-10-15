@@ -45,9 +45,13 @@ test('imageSize: from the header, before decoding', () => {
   // A JPEG whose frame header comes after a big EXIF block (a phone's thumbnail).
   const jpeg = b(70010, [0, [0xff, 0xd8, 0xff, 0xe1, 0xff, 0xff]], [65539, [0xff, 0xc0, 0, 17, 8, 0x0b, 0xd0, 0x0f, 0xc0]]);
   assert.deepEqual(D.imageSize(jpeg), { w: 4032, h: 3024 });
-  // HEIC: a grid's whole picture (its largest 'ispe'), not a 512-pixel tile's.
-  const heic = b(120, [4, ascii('ftypheic')], [40, ascii('ispe')], [48, [0, 0, 2, 0, 0, 0, 2, 0]], [80, ascii('ispe')], [88, [0, 0, 0x0f, 0xc0, 0, 0, 0x0b, 0xd0]]);
+  // HEIC: a grid's whole picture (the largest 'ispe' in its 'meta' box), not a 512-pixel tile's, nor four bytes of the
+  // picture data after it that happen to spell 'ispe'.
+  const heic = b(160, [0, [0, 0, 0, 16]], [4, ascii('ftypheic')], [16, [0, 0, 0, 104]], [20, ascii('meta')],
+    [40, ascii('ispe')], [48, [0, 0, 2, 0, 0, 0, 2, 0]], [80, ascii('ispe')], [88, [0, 0, 0x0f, 0xc0, 0, 0, 0x0b, 0xd0]],
+    [120, [0, 0, 0, 40]], [124, ascii('mdat')], [128, ascii('ispe')], [136, [0, 0, 0x7f, 0xff, 0, 0, 0x7f, 0xff]]);
   assert.deepEqual(D.imageSize(heic), { w: 4032, h: 3024 });
+  assert.equal(D.imageSize(b(40, [0, [0, 0, 0, 16]], [4, ascii('ftypheic')], [16, [0, 0, 0, 24]], [20, ascii('mdat')])), null, 'no meta box: no size');
   assert.equal(D.imageSize(ascii('%PDF-1.7')), null);
   assert.equal(D.imageSize(b(30, [0, [0xff, 0xd8, 0x00]])), null, 'a broken JPEG says nothing');
 });
@@ -95,6 +99,21 @@ test('ocrText: lines, cells by their gaps, slips mended, and how sure it was', (
   assert.deepEqual(D.ocrText({}), { text: '', conf: 0, unsure: [] });
 });
 
+test('ocrText: a line it mends is reported unsure as mended, so the review still marks what came from it', () => {
+  const word = (text, x0, confidence = 95) => ({ text, confidence, bbox: { x0, y0: 10, x1: x0 + 6 * text.length, y1: 24 } });
+  const line = (...words) => ({ bbox: { x0: 0, y0: 6, x1: 500, y1: 40 }, words });
+  let x = 0;
+  const words = ['Office', 'hours:', 'Monday', '11:00', 'AM', '12:15', 'PM'].map((w) => { const r = word(w, x, w === '11:00' ? 40 : 95); x += 6 * w.length + 6; return r; });
+  const r = D.ocrText({ blocks: [{ paragraphs: [{ lines: [line(...words)] }] }] });
+  assert.equal(r.text, 'Office hours: Monday 11:00 AM - 12:15 PM', 'the lost dash between two times is put back');
+  assert.deepEqual(r.unsure, [r.text]);
+  // The syllabus reads its office hours from that line (lib/syllabus.js, which scripts/import-truth.js loads with the
+  // class-time reader it needs); the field from it is marked.
+  require('../scripts/import-truth.js');
+  const src = require('../lib/syllabus.js').extract(r.text).hours[0].src;
+  assert.ok(importer().I.doubt(r, src), `"${src}" is one of the unsure lines`);
+});
+
 // ---- features/import.js: the reader's frame -------------------------------------------------------------------------
 const importer = () => {
   const frames = [];
@@ -107,21 +126,22 @@ const importer = () => {
       return f;
     },
   };
-  const timers = [];
+  const timers = [], asked = [];
   const ctx = vm.createContext({
-    document, MessageChannel, URL, Uint8Array, Blob, Promise,
+    document, MessageChannel, URL, Uint8Array, Blob, Promise, crypto,
     setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: () => {},
-    chrome: { runtime: { getURL: (p) => `chrome-extension://glazeid/${p}` } },
+    // The worker gives a pass for each job (lib/background.js 'glaze:reader').
+    chrome: { runtime: { getURL: (p) => `chrome-extension://glazeid/${p}`, sendMessage: async (m) => { asked.push(m); return { ok: true }; } } },
     GZ_I18N: { locale: () => 'de' }, GZ_DOCTEXT: D,
     GZ_CTX: { t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'de-DE', need: async () => {} },
   });
   vm.runInContext(fs.readFileSync(path.join(root, 'features/import.js'), 'utf8'), ctx);
-  return { I: ctx.GZ_IMPORT, frames, timers };
+  return { I: ctx.GZ_IMPORT, frames, timers, asked };
 };
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 
 test('import: a PDF goes to the reader page in a frame of its own, over a channel only it holds, to its origin only', async () => {
-  const { I, frames } = importer();
+  const { I, frames, asked } = importer();
   const file = new File([fixture('timetable.pdf')], 'timetable.pdf');
   const said = [];
   const p = I.read(file, { progress: (s) => said.push(s) });
@@ -135,6 +155,8 @@ test('import: a PDF goes to the reader page in a frame of its own, over a channe
   const [{ m, origin, ports }] = f.posted;
   assert.equal(origin, 'chrome-extension://glazeid', 'never "*": a frame the page navigated elsewhere gets nothing');
   assert.deepEqual([m.type, m.kind, m.file, [...m.langs]], ['glaze:read', 'pdf', file, ['deu']], 'with the page language’s OCR model');
+  assert.deepEqual(asked.map(({ type, op, pass }) => [type, op, pass]), [['glaze:reader', 'job', m.pass]], 'and the one-use pass it asked the worker for first');
+  assert.match(m.pass, /^[\w-]{36}$/);
   assert.equal(ports.length, 1);
   ports[0].postMessage({ type: 'progress', stage: 'text', page: 1, pages: 2 });
   ports[0].postMessage({ type: 'progress', stage: 'text', page: 1, pages: 2 });
@@ -180,6 +202,115 @@ test('import: text, web pages and Word stay in the page; other files are refused
   assert.match(I.note({ conf: 92, unsure: ['x'] }), /wasn't sure of some of it/);
   assert.equal(I.doubt({ unsure: ['BIO 1100\tBiology\tMWF 9:00'] }, 'BIO 1100'), true);
   assert.equal(I.doubt({ unsure: ['ENG 1100'] }, 'BIO 1100'), false);
+});
+
+// ---- reader.js itself, in a vm: whom it reads for, and what it refuses before decoding -------------------------------
+// A stand-in pdf.js beside a stand-in reader.html records what the reader asks of it (and refuses every PDF);
+// createImageBitmap records each decode (and fails); the worker redeems a pass once, as lib/background.js does.
+const stand = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'glaze-reader-test-'));
+fs.mkdirSync(path.join(stand, 'lib/pdfjs'), { recursive: true });
+fs.writeFileSync(path.join(stand, 'lib/pdfjs/pdf.min.mjs'), `export const GlobalWorkerOptions = {};
+export const getDocument = (opts) => { (globalThis.__glazeReaderPdf ||= []).push(opts); return { promise: Promise.reject(Object.assign(new Error('stand-in'), { name: 'InvalidPDFException' })), destroy: async () => {} }; };\n`);
+test.after(() => fs.rmSync(stand, { recursive: true, force: true }));
+const reader = () => {
+  let onmessage = null;
+  const passes = new Set(), decoded = [];
+  const ctx = vm.createContext({
+    GZ_DOCTEXT: D, URL, Blob, File, Uint8Array, Promise, Object, Error, Math, JSON, Array, Set, console,
+    location: { href: pathToFileURL(path.join(stand, 'reader.html')).href },
+    addEventListener: (type, f) => { if (type === 'message') onmessage = f; },
+    chrome: { runtime: { sendMessage: async (m) => ({ ok: m?.type === 'glaze:reader' && m.op === 'claim' && passes.delete(m.pass) }) } },
+    createImageBitmap: async (b) => { decoded.push(b); throw new Error('stand-in decoder'); },
+    Worker: class { postMessage() {} terminate() {} },
+  });
+  new vm.Script(fs.readFileSync(path.join(root, 'reader.js'), 'utf8'), { importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER }).runInContext(ctx);
+  // A job as any page could post it, with a channel of its own; → the reader's answer, or null when it says nothing.
+  const post = (data) => new Promise((resolve) => {
+    const ch = new MessageChannel();
+    const quiet = setTimeout(() => { ch.port1.close(); resolve(null); }, 250);
+    ch.port1.onmessage = ({ data: m }) => { if (m.type !== 'progress') { clearTimeout(quiet); ch.port1.close(); resolve(m); } };
+    onmessage({ data, ports: [ch.port2], origin: 'https://elsewhere.example', source: {} });
+  });
+  return { post, decoded, pass: () => { const p = crypto.randomUUID(); passes.add(p); return p; } };
+};
+const job = (name, bytes, kind, pass) => ({ type: 'glaze:read', file: new File([bytes], name), kind, ...(pass && { pass }) });
+
+test('reader: no work without the one-use pass Glaze\'s import got from the worker, and one file per reader', async () => {
+  const r = reader();
+  const png = fixture('timetable.png');
+  assert.equal(await r.post(job('a.png', png, 'image')), null, 'no pass: a site that framed the reader gets nothing done');
+  assert.equal(await r.post(job('a.png', png, 'image', 'made-up')), null, 'nor with one it made up');
+  assert.equal(r.decoded.length, 0);
+  const pass = r.pass();
+  const [first, second] = await Promise.all([r.post(job('a.png', png, 'image', pass)), r.post(job('b.png', png, 'image', r.pass()))]);
+  assert.equal(first?.code, 'format', 'the import\'s own file is read (the stand-in decoder fails it)');
+  assert.equal(second, null, 'a second file, even with a pass, is refused: the import opens a reader per file');
+  assert.equal(r.decoded.length, 1);
+  assert.equal(await reader().post(job('a.png', png, 'image', pass)), null, 'a pass works once');
+});
+
+test('reader: a picture\'s size is read from its whole header before it is decoded, and a picture whose size can\'t be read isn\'t decoded', async () => {
+  // A JPEG whose frame header says 10,000 × 10,000, after 17 APP segments (more than 1 MiB) of a camera's metadata.
+  const big = new Uint8Array(2 + 17 * 65537 + 11 + 2);
+  big.set([0xff, 0xd8]);
+  for (let i = 0; i < 17; i++) big.set([0xff, 0xe1, 0xff, 0xff], 2 + i * 65537);
+  big.set([0xff, 0xc0, 0, 11, 8, 0x27, 0x10, 0x27, 0x10, 1, 0], 2 + 17 * 65537);
+  big.set([0xff, 0xd9], big.length - 2);
+  assert.ok(big.length > 1 << 20);
+  assert.deepEqual(D.imageSize(big), { w: 10000, h: 10000 });
+  let r = reader();
+  assert.equal((await r.post(job('big.jpg', big, 'image', r.pass())))?.code, 'pixels');
+  assert.equal(r.decoded.length, 0, 'refused before decoding');
+  r = reader();
+  assert.equal((await r.post(job('odd.png', ascii('not really a picture at all'), 'image', r.pass())))?.code, 'format');
+  assert.equal(r.decoded.length, 0, 'a size it can\'t read is refused, not decoded to find out');
+});
+
+test('reader: pdf.js is held to the same pixel limit for the pictures inside a PDF', async () => {
+  const r = reader();
+  assert.equal((await r.post(job('t.pdf', fixture('timetable.pdf'), 'pdf', r.pass())))?.code, 'broken', 'the stand-in refuses every PDF');
+  const opts = globalThis.__glazeReaderPdf.at(-1);
+  assert.equal(opts.maxImageSize, D.READ.pixels);
+  assert.equal(opts.enableXfa, false);
+});
+
+// ---- lib/background.js: the reader's passes ---------------------------------------------------------------------------
+const workerPasses = () => {
+  const listeners = [];
+  const none = { addListener() {} };
+  const ID = 'glazeid';
+  const ctx = vm.createContext({
+    URL, console, setTimeout, clearTimeout, TextEncoder, crypto, Date,
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, 'lib', f), 'utf8'), ctx); },
+    chrome: {
+      runtime: { id: ID, getURL: (p = '') => `chrome-extension://${ID}/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
+      storage: { local: { get: async () => ({}), set: async () => {} }, sync: { get: async () => ({}), set: async () => {} }, onChanged: none },
+      scripting: { executeScript: () => Promise.resolve([]) },
+    },
+  });
+  vm.runInContext(fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8'), ctx);
+  const send = (m, sender) => new Promise((resolve) => {
+    let answered = false;
+    for (const f of listeners) if (f(m, { id: ID, ...sender }, (r) => { answered = true; resolve(r && { ...r }); }) === true || answered) return;
+    resolve(undefined);
+  });
+  return { send };
+};
+
+test('the worker hands a pass only to a content script in a tab, and redeems it once, for the reader in that tab', async () => {
+  const w = workerPasses();
+  const tab = { id: 7 }, page = { tab, frameId: 0, url: 'https://school.instructure.com/courses/25' };
+  const readerIn = (id) => ({ tab: { id }, frameId: 3, url: 'chrome-extension://glazeid/reader.html' });
+  const pass = crypto.randomUUID();
+  assert.deepEqual(await w.send({ type: 'glaze:reader', op: 'job', pass }, { url: 'chrome-extension://glazeid/options.html' }), { ok: false }, 'not from an extension page');
+  assert.deepEqual(await w.send({ type: 'glaze:reader', op: 'job', pass: 'short' }, page), { ok: false }, 'not a guessable pass');
+  assert.deepEqual(await w.send({ type: 'glaze:reader', op: 'job', pass }, page), { ok: true });
+  assert.deepEqual(await w.send({ type: 'glaze:reader', op: 'claim', pass }, page), { ok: false }, 'only the reader redeems it');
+  assert.deepEqual(await w.send({ type: 'glaze:reader', op: 'claim', pass }, readerIn(8)), { ok: false }, 'and only in the tab that asked');
+  const again = crypto.randomUUID();
+  await w.send({ type: 'glaze:reader', op: 'job', pass: again }, page);
+  assert.deepEqual(await w.send({ type: 'glaze:reader', op: 'claim', pass: again }, readerIn(7)), { ok: true });
+  assert.deepEqual(await w.send({ type: 'glaze:reader', op: 'claim', pass: again }, readerIn(7)), { ok: false }, 'once');
 });
 
 // ---- the engines, as the reader runs them ----------------------------------------------------------------------------

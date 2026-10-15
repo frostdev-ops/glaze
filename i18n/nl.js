@@ -1453,4 +1453,5 @@
   "Glaze read this from a picture. Check it against your file before you save.": "Glaze heeft dit uit een afbeelding gelezen. Controleer het met je bestand voordat je opslaat.",
   "A PDF, a picture or screenshot, Word, PowerPoint, a web page or text.": "Een pdf, een afbeelding of schermafbeelding, Word, PowerPoint, een webpagina of tekst.",
   "Or paste the text, or a screenshot": "Of plak de tekst, of een schermafbeelding",
+  "Scanned pages with no text Glaze could read: {n}. A page may be blank, or its picture too large to read.": "Gescande pagina's zonder tekst die Glaze kon lezen: {n}. Een pagina kan leeg zijn, of de afbeelding te groot om te lezen.",
 };

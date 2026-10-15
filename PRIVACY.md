@@ -432,8 +432,9 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
   Notes' text, pictures and attachments are in the extension's own IndexedDB.
 - No permission for reading PDFs and photos. The extension's own pages may compile WebAssembly (`'wasm-unsafe-eval'` in
   its content security policy), which the OCR engine needs; it still runs only code that ships in the package, and
-  never in the LMS page. The reader page is web-accessible so an import can open it in a frame; a site that framed it
-  itself could only have it read a file that site already has, and would get nothing of yours.
+  never in the LMS page. The reader page is web-accessible so an import can open it in a frame; it reads a file only
+  with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
+  make it read anything.
 - `unlimitedStorage` — so the browser never clears your notes, pictures and attachments to free space. Nothing more is
   stored or sent because of it; Chrome shows no warning for it.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store

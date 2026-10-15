@@ -175,6 +175,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     // pasted: a screenshot pasted into the text box, read instead of what's typed there.
     const go = async (pasted) => {
       const f = pasted instanceof File ? pasted : file.files[0];
+      // Only the newest read is wanted: one still under way is called off, and says nothing more.
+      reading?.abort();
       say.textContent = t('Reading…');
       const ctl = reading = new AbortController();
       stop.hidden = false;
@@ -187,8 +189,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
         if (ctl.signal.aborted) return;
         if (!text.trim()) { say.textContent = t('Choose a file or paste the text first.'); return; }
         review(extract(text, ocr), text);
-      } catch (e) { say.textContent = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); }
-      finally { if (reading === ctl) reading = null; stop.hidden = true; }
+      } catch (e) { if (reading === ctl) say.textContent = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); }
+      finally { if (reading === ctl) { reading = null; stop.hidden = true; } }
     };
     paste.addEventListener('paste', (e) => {
       const img = e.isTrusted && [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));

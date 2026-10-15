@@ -27,6 +27,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   // what came from a picture, for the review's note.
   const V = { review: null, text: '', note: '', open: new Set(), importOpen: false, kind: 'cum', needs: new Map(), caps: new Map(), focus: null, gen: 0, reading: null, ocr: null };
   let body, api;
+  const hooked = new WeakSet();
   const redraw = () => { if (body?.isConnected) draw(body, api); };
   const saved = (ok) => { if (!ok) { V.note = t('Not saved. Try again in a moment.'); redraw(); } };
   const stat = (term, w) => C().gpa(G().rowsOf(term, w));
@@ -213,19 +214,21 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     V.focus = found.length ? 'rev:h' : 'imp:text';
     redraw();
   };
-  // A PDF or picture is read while "Past terms, trends and goal" is open: closing it (or the view gone from the page)
-  // or another read calls it off.
+  // A PDF or picture is read while "Past terms, trends and goal" is open: closing it (draw's hook), the view gone from
+  // the page, Stop reading or another read calls it off, and what it found is shown only if the view is still open.
+  const shown = () => !!body?.isConnected && body.closest('details')?.open !== false;
   const readFile = async (file) => {
     const gen = ++V.gen;
     V.reading?.ctl.abort();
-    V.reading = null;
     const ctl = new AbortController();
-    const show = (text, ocr) => { if (gen === V.gen) review(text, ocr); };
+    // Kept from the start, so it can be called off before it has said anything.
+    V.reading = { ctl, say: '' };
+    const show = (text, ocr) => { if (gen === V.gen && shown()) review(text, ocr); };
     // Only a PDF or picture says how far it has got: its first word draws the progress line and Stop reading.
     const prog = (s) => {
-      if (!body?.isConnected || body.closest('details')?.open === false || gen !== V.gen) return ctl.abort();
-      const first = !V.reading;
-      V.reading = { ctl, say: s };
+      if (!shown() || gen !== V.gen || V.reading?.ctl !== ctl) return ctl.abort();
+      const first = !V.reading.say;
+      V.reading.say = s;
       const el = body.querySelector('[data-f="imp:prog"]');
       if (first || !el) redraw(); else el.textContent = s;
     };
@@ -257,9 +260,9 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     const file = f(label(make('input', { type: 'file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.txt,.htm,.html,.docx,application/pdf,image/*,text/plain,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), t('A transcript file: a PDF, a picture or screenshot, text, a web page or Word')), 'imp:file');
     file.addEventListener('change', () => { if (file.files?.[0]) readFile(file.files[0]); });
     const go = btn(t('Read it'), 'imp:go', () => { V.gen++; V.reading?.ctl.abort(); review(V.text); });
-    const busy = V.reading && make('div', { className: 'gz-gpa-actions' }, f(make('span', { className: 'gz-gpa-note', role: 'status', textContent: V.reading.say }), 'imp:prog'),
+    const busy = V.reading?.say && make('div', { className: 'gz-gpa-actions' }, f(make('span', { className: 'gz-gpa-note', role: 'status', textContent: V.reading.say }), 'imp:prog'),
       btn(t('Stop reading'), 'imp:stop', () => V.reading?.ctl.abort()));
-    const box = make('details', { className: 'gz-gpa-more', open: !!V.text || !!V.importOpen || !!V.reading }, make('summary', { textContent: t('Import from a transcript') }),
+    const box = make('details', { className: 'gz-gpa-more', open: !!V.text || !!V.importOpen || !!V.reading?.say }, make('summary', { textContent: t('Import from a transcript') }),
       note(t('Read on this device; nothing is uploaded. PDFs, pictures and screenshots (paste one into the box), text, web pages and Word files work.')),
       area, make('div', { className: 'gz-gpa-actions' }, go, file), busy || '');
     box.addEventListener('toggle', () => { V.importOpen = box.open; });
@@ -294,6 +297,9 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   // ---- the view ----------------------------------------------------------------------------------------------------
   const draw = (el, a) => {
     [body, api] = [el, a];
+    // Closing the panel this view is in stops a read at once, not at its next word.
+    const host = el.closest('details');
+    if (host && !hooked.has(host)) { hooked.add(host); host.addEventListener('toggle', () => { if (!host.open) V.reading?.ctl.abort(); }); }
     const focus = V.focus || (el.contains(document.activeElement) && document.activeElement.dataset.f);
     V.focus = null;
     const e = X.settings().enhance;
