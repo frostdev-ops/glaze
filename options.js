@@ -1048,7 +1048,7 @@ GZ_UI.load().then((s) => {
       const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
       const folders = GZ_FOLDERS.backup(all);
       const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
-      const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r.navItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
