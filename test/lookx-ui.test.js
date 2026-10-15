@@ -340,3 +340,20 @@ test('page: a pointer picture read that answers after the page is hidden makes n
   await settle();
   assert.equal(p.blobs.size, 0);
 });
+
+test('page: "Your pictures" read answering after the page is hidden makes no blob: address', async () => {
+  const data = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
+  const p = page({ 'stkImg:pic1': data });
+  await p.lx.edit();
+  await settle();
+  p.holdWhen((keys) => keys === null);
+  const sel = (function find(e) { return e.tagName === 'SELECT' ? e : e.children.map(find).find(Boolean); })(p.body.find('gz-stk-panel'));
+  sel.value = 'own';
+  for (const f of sel.on.change) f();
+  for (let i = 0; i < 20 && !p.held.length; i++) await tick();
+  assert.equal(p.held.length, 1, 'your pictures are being read');
+  p.fire('pagehide');
+  p.held.shift().release();
+  await settle();
+  assert.equal(p.blobs.size, 0);
+});
