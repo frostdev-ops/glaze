@@ -11,6 +11,7 @@
 //   --settings <json>  Glaze settings merged over the look (or over the defaults, with no --look); a JS
 //                      object works too: '{enabled:false}', '{bg:{kind:"scene",scene:"horizon"}}'
 //   --out <dir>        where the PNGs go (default: a new temp dir, printed). Named <look>-<page>.png
+//   --course-menu     open Glaze’s Dashboard Course menu and enable tint in the throwaway capture profile
 //   --width, --height  viewport, 1440x900 by default;  --full  captures the whole page
 //   path ...           pages to shoot instead of the default set (dashboard, calendar, inbox, grades and
 //                      BIO 1100's course pages); {bio} {eng} {math} {hist} stand for course ids
@@ -61,7 +62,7 @@ const parse = () => {
   try {
     parsed = parseArgs({ allowPositionals: true, options: {
       look: { type: 'string', multiple: true }, settings: { type: 'string' }, out: { type: 'string' },
-      width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' }, full: { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
+      width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' }, full: { type: 'boolean' }, 'course-menu': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     } });
   } catch (e) { die(`${e.message}\nSee --help.`); }
   const { values: opt, positionals } = parsed;
@@ -76,7 +77,7 @@ const parse = () => {
   const names = opt.look?.length ? opt.look : opt.settings ? [null] : ['Frost', 'Paper'];
   const looks = names.map((name) => ({ label: slug(name || 'custom'), settings: settingsFor(name, user) }));
   const out = opt.out ? path.resolve(opt.out) : fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-canvas-shots-'));
-  return { size, positionals, full: !!opt.full, out, looks };
+  return { size, positionals, full: !!opt.full, courseMenu: !!opt['course-menu'], out, looks };
 };
 
 // The extension as it is in the working copy, with localhost added to where it runs and what it exposes.
@@ -162,7 +163,7 @@ const watch = (page) => {
 };
 
 // Load a page, let it settle, save the screenshot; gives its diagnostics line.
-const shoot = async ({ page, errors }, { label, settings, out, ...view }, [name, url]) => {
+const shoot = async ({ page, errors }, { label, settings, out, courseMenu, ...view }, [name, url]) => {
   errors.length = 0;
   let note = '';
   try {
@@ -175,6 +176,16 @@ const shoot = async ({ page, errors }, { label, settings, out, ...view }, [name,
     const here = new URL(page.url());
     if (res.status() >= 400 || here.pathname.startsWith('/login')) throw new Error(`HTTP ${res.status()}, ended at ${here.pathname}`);
     if (here.pathname + here.search !== url) note += ` (now ${here.pathname})`;
+    await page.evaluate(() => window.scrollTo(0, 0));
+    if (courseMenu && here.pathname === '/') {
+      await page.locator('.gz-cm-btn').nth(1).click();
+      await page.locator('.gz-cm-tint input').check();
+      await page.waitForTimeout(300);
+      // Store capture only: replace a QA label in the fake seed without writing to Canvas.
+      for (const label of await page.getByText('zz T22 unread and what-if proof', { exact: true }).all()) {
+        await label.evaluate((e) => { e.textContent = 'Lab report 1: Cells and membranes'; });
+      }
+    }
     const p = await page.evaluate(probe);
     await capture(page, path.join(out, `${label}-${name}.png`), view);
     const errs = [...new Set(errors)];
@@ -192,7 +203,7 @@ const eachTab = async (tabs, items, fn) => {
 };
 
 (async () => {
-  const { size, positionals, full, out, looks } = parse();
+  const { size, positionals, full, courseMenu, out, looks } = parse();
   fs.mkdirSync(out, { recursive: true });
   console.log(`Screenshots go to ${out}`);
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-canvas-')));
@@ -225,7 +236,7 @@ const eachTab = async (tabs, items, fn) => {
       await first.goto(`${base}/options.html`).catch((e) => die(`Glaze did not load from ${ext}: ${e.message}`));
       await first.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, settings);
       console.log(`\n${label}: ${settings.enabled ? `preset ${settings.preset ?? 'custom'}, bg ${settings.bg.kind}` : 'Glaze off'}`);
-      const results = await eachTab(tabs, pages, (tab, p) => shoot(tab, { label, settings, out, size, full }, p));
+      const results = await eachTab(tabs, pages, (tab, p) => shoot(tab, { label, settings, out, size, full, courseMenu }, p));
       for (const r of results) console.log(r.line);
       failed += results.filter((r) => !r.ok).length;
     }
