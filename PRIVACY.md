@@ -142,8 +142,8 @@ _Last updated: 2026-10-15_
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
   Clear history in the editor deletes the history; Remove deletes a favorite.
 - **Canvas and Blackboard Ultra course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
-  card style (`cards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
-  (`links`: their names, addresses and icons), by the LMS site address and course id; Canvas and Ultra use separate keys.
+  card style (Canvas `cards`, Ultra `ucards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
+  (Canvas `links`, Ultra `ulinks`: their names, addresses and icons), by LMS site address and course id. Separate Ultra items protect them from older Glaze clients.
 - **Your marks on documents** (Canvas, "Pen and highlighter on documents", off by default), in `chrome.storage.local`,
   on this device only, per Canvas site, signed-in user id and file id (which the viewer's address on your Canvas page
   names): each pen or highlighter stroke's points, color and width, page by page. Canvas's document viewer runs on
@@ -160,7 +160,7 @@ _Last updated: 2026-10-15_
   They are never synced, exported or put in a theme code. Choosing another picture, removing the card's style,
   or switching the sidebar away from its local picture deletes the old one; Reset everything deletes them all.
   Sidebar pictures use a temporary blob URL while shown, rather than embedding their bytes in the page's
-  inline styles or sessionStorage. Canvas page code can still read a picture displayed on its page.
+  inline styles or sessionStorage. Canvas and Ultra page code can still read a picture displayed on their page. Ultra card pictures use separate `ultraCardImg:` local keys, so older clients cannot delete them as unused Canvas pictures.
 - **Stickers, your pointer picture and Look rotation**, in `chrome.storage.local`, on this device only: where you put
   stickers on a page (the site's address and the page's path, with each sticker's position, size and angle), the
   pictures you add as your own stickers (scaled down to at most 256 pixels, at most about 200 KB each and 4 MB in all),
@@ -190,6 +190,8 @@ Blackboard coursework, grades, or credentials. The network requests below reach 
 services, which receive ordinary connection information such as your IP address.
 
 ## Network requests
+
+Ultra appearance uses the visible course-card banners and existing color slots; it makes no LMS API requests. Linked images load from their chosen HTTPS hosts, exactly as on Canvas. The Ultra document viewer has no added iframe injection or host access.
 
 The browser extension ships as static files and loads no remote scripts. Its built-in fonts and three.js (used by the
 animated backgrounds) are bundled. It makes requests in these cases:
@@ -448,5 +450,3 @@ project's GitHub repository at
 ## Contact
 
 admin@frostdev.io
-
-Ultra appearance uses the visible course-card banners and existing color slots; it makes no LMS API requests. Linked images load from their chosen HTTPS hosts, exactly as on Canvas. The Ultra document viewer has no added iframe injection or host access.

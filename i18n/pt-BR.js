@@ -1446,4 +1446,7 @@
   "Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.": "Personalize a navegação global do Canvas e Blackboard Ultra. Os links e a navegação continuam funcionando normalmente.",
   "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Personalize os cartões do Canvas e Blackboard Ultra pelo menu do curso. As linhas de lista do Ultra mantêm o layout; estilos de banner e cantos arredondados continuam aplicados.",
 
+  "Use course color for overlay": "Usar a cor do curso na sobreposição",
+  "Back to the course color": "Voltar à cor do curso",
+
 };

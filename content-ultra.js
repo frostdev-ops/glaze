@@ -529,6 +529,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   // Run with the flush: Ultra draws cards and headers again as it likes, and this puts the nicknames back.
   const syncNames = () => {
+    syncNav();
     if (!document.querySelector('[data-gz-real]') && !Object.keys(I.settings.courses.names).length) return;
     for (const [sel, idOf, where, exact] of NAME_AT) {
       for (const el of document.querySelectorAll(sel)) {

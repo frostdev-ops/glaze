@@ -9,6 +9,7 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const sync = () => {
     const n = X.nav();
     const on = X.on() && X.settings().enabled;
+    for (const [a, text] of titled) if (a.isConnected === false) { if (a.getAttribute('title') === text) a.removeAttribute('title'); titled.delete(a); }
     const b = X.site === 'ultra' ? null : document.getElementById('primaryNavToggle');
     for (const el of labels) if (!on || (!n.collapsed && n.labels !== 'icons') || !el.isConnected) { el.classList.remove('gz-nav-label'); labels.delete(el); }
     if (X.site === 'ultra' && on && (n.collapsed || n.labels === 'icons')) {

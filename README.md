@@ -17,9 +17,9 @@ domain, and on Canvas and Moodle, which Glaze recognizes on any school's domain.
   <a href="https://github.com/frostdev-ops/glaze/releases/download/v2.2.0/glaze-2.2.0-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
 </p>
 
-Blackboard Ultra's Courses page shares the card editor and appearance settings with Canvas: colors, gradients, pictures, crop, filters and overlay; grid sizing, condensed cards, hover effects, particles and pets. Open a course card's Glaze menu, then **Card style and bookmarks**. In Ultra list view, banner styles and corners apply; row dimensions and labels stay native. The global navigation shares Canvas's background, label and size controls, with contrast checks in the editor. Ultra's document viewer stays native pending a verified viewer origin and safe integration.
-
 ## Features
+
+- **Blackboard Ultra appearance** — the Courses page shares Canvas’s card editor and appearance settings: colors, gradients, pictures, crop, filters and overlay; grid sizing, condensed cards, hover effects, particles and pets. Open a course card's Glaze menu, then **Card style and bookmarks**. In Ultra list view, banner styles and corners apply; row dimensions and labels stay native. The global navigation shares Canvas's background, label and size controls, with contrast checks in the editor. Ultra's document viewer stays native pending a verified viewer origin and safe integration.
 
 - **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system or a schedule (dark from 20:00 to 08:00, say). Keep quizzes light (off by default) leaves quizzes you're taking and external tools such as New Quizzes unthemed on Canvas.
 - **Look** — fonts for text, headings and code (two bundled; about forty more from Google Fonts and Nerd Fonts, or any Google Font by name, each previewed in its own face), text size, line height, corner radius, density, depth and glass.

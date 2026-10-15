@@ -140,3 +140,28 @@ test('late words start the sidebar once; ordinary mutation passes do not repeat 
   c.full = true;
   c.flushNow(); assert.equal(calls, 2);
 });
+
+test('Ultra replacement drawer labels are hidden and titled, and owned changes clean up', () => {
+  let nav = { ...G.GZ_DEFAULTS.nav, labels: 'icons' }, on = true, anchors = [];
+  const anchor = (text) => {
+    const classes = new Set(), attrs = new Map();
+    const label = { textContent: text, isConnected: true, querySelector: () => null, closest: () => null, classList: { add: (k) => classes.add(k), remove: (k) => classes.delete(k) } };
+    const a = { textContent: text, isConnected: true, hasAttribute: (k) => attrs.has(k), getAttribute: (k) => attrs.get(k) ?? null, removeAttribute: (k) => attrs.delete(k), querySelectorAll: () => [label], get title() { return attrs.get('title') || ''; }, set title(v) { attrs.set('title', v); } };
+    return { a, label, classes };
+  };
+  const ctx = vm.createContext({
+    GZ_CTX: { site: 'ultra', nav: () => nav, on: () => on, settings: () => ({ enabled: on }) },
+    document: { getElementById: () => null, querySelectorAll: () => anchors.map((x) => x.a), addEventListener() {} },
+    chrome: { storage: { onChanged: { addListener() {} } } },
+  });
+  const ui = vm.runInContext(fs.readFileSync(require.resolve('../features/nav.js'), 'utf8'), ctx);
+  const first = anchor('Courses'); anchors = [first]; ui.sync();
+  assert.ok(first.classes.has('gz-nav-label')); assert.equal(first.a.title, 'Courses');
+  const second = anchor('Calendar'); first.a.isConnected = first.label.isConnected = false; anchors = [second]; ui.sync();
+  assert.ok(second.classes.has('gz-nav-label')); assert.equal(second.a.title, 'Calendar');
+  assert.equal(first.classes.has('gz-nav-label'), false); assert.equal(first.a.title, '');
+  nav = { ...nav, labels: 'normal' }; ui.sync();
+  assert.equal(second.classes.size, 0); assert.equal(second.a.title, '');
+  nav.labels = 'icons'; ui.sync(); on = false; ui.sync();
+  assert.equal(second.classes.size, 0); assert.equal(second.a.title, '');
+});

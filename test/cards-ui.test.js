@@ -61,7 +61,7 @@ const computer = () => {
 };
 
 // One tab on that computer, with the editor loaded.
-const tab = (env) => {
+const tab = (env, site = 'canvas') => {
   const bitmaps = [];
   const chrome = {
     runtime: { lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => { env.worker(m).then(cb, () => cb({ ok: false, error: 'write' })); } },
@@ -82,6 +82,7 @@ const tab = (env) => {
     querySelectorAll: () => [], getElementById: () => null, addEventListener() {},
   };
   const context = vm.createContext({
+    location: { origin: 'https://bb.school.edu', pathname: '/ultra/course' },
     chrome, document, window: { top: {} }, setTimeout, clearTimeout, crypto: globalThis.crypto, structuredClone, URL, TextEncoder, Promise,
     MutationObserver: class { observe() {} },
     Option: class extends El { constructor(text, value) { super('option'); Object.assign(this, { text, value }); } },
@@ -89,7 +90,8 @@ const tab = (env) => {
     GZ_I18N: { num: (n) => String(n) },
   });
   context.globalThis = context;
-  context.GZ_CTX = { need: () => Promise.resolve(), t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), capi: () => Promise.resolve({}), locale: () => 'en' };
+  context.GZ_CTX = { site, need: () => Promise.resolve(), t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), capi: () => Promise.resolve({}), locale: () => 'en' };
+  if (site === 'ultra') { context.window = context; context.top = context; }
   for (const f of ['lib/color.js', 'lib/cards.js', 'features/cards.js']) vm.runInContext(read(f), context, { filename: f });
   const ui = vm.runInContext('GZ_CARD_UI', context);
   const dialog = () => body.children.find((e) => e.tagName === 'DIALOG');
@@ -99,7 +101,7 @@ const tab = (env) => {
     input.files = [file];
     return input.fire('change');
   };
-  return { ui, dialog, find, picture, bitmaps };
+  return { ui, dialog, find, picture, bitmaps, document };
 };
 const load = () => { const env = computer(); return { env, store: env.store, ...tab(env) }; };
 
@@ -334,4 +336,29 @@ test('card and nav pictures share one cap and queue, retain each other, and roll
   env.failLocalRemove = false;
   await env.worker({ nav: { k: 'default' } });
   assert.deepEqual(pics(env.store.local), []);
+});
+
+
+test('Ultra paints its isolated styles on new cards and opens the same editor from a raw course id', async () => {
+  const env = computer();
+  const key = 'ultra:https://bb.school.edu/_25_1';
+  env.store.sync.ucards = { [key]: { k: 'gradient', c: '#123456', d: '#654321' } };
+  env.store.sync.card = { width: 262, height: 146, gap: -1 };
+  const { ui, document, dialog, find } = tab(env, 'ultra');
+  let cards = [];
+  document.documentElement.setAttribute('data-gz-motion', 'off');
+  document.querySelectorAll = () => cards;
+  await ui.paint();
+  const card = new El('article'); card.dataset.courseId = '_25_1'; card.className = 'course-element-card course-color-2';
+  const props = new Map(); card._style = { getPropertyValue: (k) => props.get(k) || '', setProperty: (k, v) => props.set(k, v), removeProperty: (k) => props.delete(k) };
+  const title = new El('h4'); title.textContent = 'Synthetic course';
+  card.querySelector = (s) => s === '.course-title' ? title : s === '.course-banner' ? { offsetHeight: 160 } : null;
+  cards = [card]; await ui.paint();
+  assert.equal(card.getAttribute('data-gz-card'), 'gradient');
+  assert.match(props.get('--gz-card-grad'), /#123456/);
+  for (const k of ['width', 'gap', 'height']) assert.equal(document.documentElement.hasAttribute('data-gz-card-' + k), false, 'untouched geometry is native');
+  await ui.open('_25_1'); assert.ok(dialog().open);
+  assert.equal(find((e) => e.type === 'radio' && e.value === 'gradient').checked, true);
+  document.documentElement.removeAttribute('data-gz-motion'); await ui.paint();
+  assert.equal(card.hasAttribute('data-gz-card'), false);
 });

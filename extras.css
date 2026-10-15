@@ -528,3 +528,5 @@ html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a
 #gz-ce .gz-ce-foot { display: flex; justify-content: space-between; gap: 0.6rem; padding-top: 0.25rem; border-top: 1px solid var(--gz-line); }
 #gz-ce .gz-ce-done { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
 @media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
+
+#gz-ce svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
