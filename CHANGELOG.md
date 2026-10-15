@@ -6,6 +6,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- Widget callbacks left in a tab after reloading Glaze stop before using invalidated Chrome APIs, including the study
+  buddy repaint and What Glaze can do hub.
+- Blackboard widgets retain the newest layout and timer state when storage replies arrive late. Explicit global floats
+  also work from the default Dashboard, respect right-side navigation, resized course tab strips and footer bounds, and
+  remain available on the native Institution tab. Landing checks current settings and claims each tab once in the worker;
+  unavailable widget files leave the native Institution page reachable.
+
 ### Added
 - Blackboard Ultra: hide folders and learning modules locally, with a Show hidden folders count and per-account/course choices included in Export all. Controls follow reused outline rows, save only on your own activation, and malformed imported records preserve saved choices.
 
@@ -45,8 +53,9 @@ All notable changes to Glaze are documented here. The format follows
   - The Institution page becomes Glaze's **Dashboard** (on by default; Glaze Dashboard in the editor, What Glaze can do
     and Ctrl+K): two tabs in its header (a real tablist: arrow keys, Home, End; above the board where the header has no
     place for them), *Dashboard* (the default, and the page's heading says so; its own layout, starting with Canvas's
-    default widgets and Better To Do as a widget) and *Institution page* (Ultra's own page and heading, themed, nothing
-    over it). The last tab is kept. Ultra's page waits hidden until the Dashboard is drawn, so it doesn't flash first.
+    default widgets and Better To Do as a widget) and *Institution page* (Ultra's own page and heading, themed; the
+    Dashboard board hides, while any widgets explicitly floated over every page remain). The last tab is kept. Ultra's
+    page waits hidden until the Dashboard is drawn, so it doesn't flash first.
     The Dashboard's widgets need no other switch (the notes and the pet keep theirs); with every widget off it says how
     to add them. Ctrl+K has a Dashboard entry.
   - **Edit layout** (then Reset layout and Done; Esc ends it too) moves a widget anywhere, by its heading or with the

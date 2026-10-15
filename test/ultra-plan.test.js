@@ -128,9 +128,10 @@ test('Gradescope courses can be placed with Ultra courses, and show for that Ult
 });
 
 // The background worker (lib/background.js), with its storage in memory: who may write.
-const worker = () => {
+const worker = ({ sessionFail = null } = {}) => {
   const m = require('../manifest.json');
-  const store = { sync: { version: 2, enabled: true, enhance: { gradescope: true } }, local: {} };
+  const store = { sync: { version: 2, enabled: true, enhance: { gradescope: true } }, local: {}, session: {} };
+  const removed = [];
   const area = (s) => ({
     get: async (k) => structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))),
     set: async (v) => { Object.assign(s, structuredClone(v)); },
@@ -145,7 +146,8 @@ const worker = () => {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
-      storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
+      tabs: { onRemoved: { addListener: (f) => removed.push(f) } },
+      storage: { session: Object.fromEntries(Object.entries(area(store.session)).map(([k, f]) => [k, (...a) => { if (sessionFail === k) throw Error('storage unavailable'); return f(...a); }])), local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
       scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
     },
   });
@@ -155,7 +157,7 @@ const worker = () => {
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { store, send };
+  return { store, send, removed };
 };
 
 test("the worker takes an Ultra page's planning writes for its own site's accounts only, on a host Glaze found Ultra on", async () => {
@@ -199,4 +201,48 @@ test("the worker takes an Ultra page's planning writes for its own site's accoun
   assert.deepEqual(await w.send({ type: 'glaze:gradescope', op: 'bind', key: 'https://other.example.edu/_900_1', acct: ACCT, show: true }, page), nope);
   assert.equal((await w.send({ type: 'glaze:gradescope', op: 'rows', acct: ACCT, gid: '11', to: `ultra:${o}/_101_1`, rows: [] }, page)).ok, true);
   assert.deepEqual(await w.send({ type: 'glaze:gradescope', op: 'rows', acct: ACCT, gid: '11', to: `ultra:${o}/_101_1`, rows: [] }, { ...page, url: 'https://other.example.edu/ultra/course' }), nope);
+});
+
+
+test('widget layout broker accepts top-frame LMS/editor changes only and refuses master-off writes', async () => {
+  const w = worker();
+  w.store.local.ultra = [o];
+  const page = { id: 'glaze', tab: { id: 7 }, frameId: 0, url: `${o}/ultra/course` };
+  const msg = { type: 'glaze:widgetLayout', more: { pet: { size: 'm' } }, ops: [{ s: 'courses', id: 'notes', set: { fold: true } }] };
+  assert.equal((await w.send(msg, page)).ok, true);
+  const saved = structuredClone(w.store.local.widgetLayout);
+  for (const sender of [{ ...page, frameId: 1 }, { ...page, id: 'other' }, { ...page, tab: undefined }, { ...page, url: 'https://unknown.test/ultra/course' }, { ...page, url: `${o}/ultrax/course` }, { ...page, url: 'http://bb.example.edu/ultra/course' }]) {
+    assert.equal((await w.send(msg, sender)).ok, false, JSON.stringify(sender));
+  }
+  w.store.sync.enabled = false;
+  assert.equal((await w.send(msg, page)).ok, false);
+  assert.deepEqual(w.store.local.widgetLayout, saved);
+});
+
+test('landing worker validates top frame, recorded Ultra site, current master/dashboard/opt-in and claims each tab atomically', async () => {
+  const w = worker();
+  w.store.local.ultra = [o];
+  w.store.sync.widgets = { land: true };
+  const page = { id: 'glaze', tab: { id: 7 }, frameId: 0, url: `${o}/ultra/stream` };
+  const msg = { type: 'glaze:landed' };
+  for (const sender of [{ ...page, frameId: 1 }, { ...page, id: 'other' }, { ...page, tab: undefined }, { ...page, url: 'https://unknown.test/ultra/stream' }, { ...page, url: `${o}/ultrax/stream` }, { ...page, url: 'http://bb.example.edu/ultra/stream' }]) {
+    assert.deepEqual(await w.send(msg, sender), { first: false }, JSON.stringify(sender));
+  }
+  for (const [key, set] of [['master', () => { w.store.sync.enabled = false; }], ['dashboard', () => { w.store.sync.enhance.dashboard = false; }], ['opt-in', () => { w.store.sync.widgets.land = false; }]]) {
+    set();
+    assert.deepEqual(await w.send(msg, page), { first: false }, key);
+    w.store.sync.enabled = true; w.store.sync.enhance.dashboard = true; w.store.sync.widgets.land = true;
+  }
+  assert.deepEqual(w.store.session, {}, 'refusals do not consume the once bit');
+  const both = await Promise.all([w.send(msg, page), w.send(msg, page)]);
+  assert.deepEqual(both.map((x) => x.first).sort(), [false, true], 'only one simultaneous claim wins');
+  assert.deepEqual(await w.send(msg, { ...page, tab: { id: 8 } }), { first: true }, 'another tab');
+  w.removed[0](7);
+  await new Promise(setImmediate);
+  assert.equal(w.store.session['landed:7'], undefined, 'tab closure cleans its marker');
+  for (const k of ['get', 'set']) {
+    const broken = worker({ sessionFail: k });
+    broken.store.local.ultra = [o]; broken.store.sync.widgets = { land: true };
+    assert.deepEqual(await broken.send(msg, page), { first: false }, `session ${k} throws`);
+  }
 });
