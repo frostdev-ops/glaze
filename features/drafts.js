@@ -20,26 +20,27 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const inboxSending = new Set();
   const barKeys = new WeakMap();
   const draftText = (ed) => ultra ? ed.textContent : ed.value;
-  const inboxIdentity = (ed) => {
-    const modal = ed.closest('#compose-message-modal');
-    const subject = modal?.querySelector('input[data-testid="subject-input"]')?.value;
-    const name = modal?.querySelector('input[data-testid="course-select-modal"]')?.value;
-    const courses = inboxAccount?.courses.filter((c) => c.name === name) || [];
-    const tags = [...(modal?.querySelectorAll('[data-testid="address-book-tag"]') || [])];
-    const to = tags.map((tag) => GZ_DRAFTS.canvasRecipient(tag.id));
-    if (courses.length !== 1 || !tags.length || to.some((id) => !id)) return null;
-    const m = { origin: location.origin, user: inboxAccount.user, course: String(courses[0].id), to, subject };
+  // Where a copy goes, from what content.js read off the editor (ctx.draftAt): now, or as it was written if it's gone.
+  // Canvas: the exact course, recipients and subject, with the account.
+  const identityOf = (s) => {
+    const courses = inboxAccount?.courses.filter((c) => c.name === s.name) || [];
+    const to = s.to.map((id) => GZ_DRAFTS.canvasRecipient(id));
+    if (courses.length !== 1 || !to.length || to.some((id) => !id)) return null;
+    const m = { origin: location.origin, user: inboxAccount.user, course: String(courses[0].id), to, subject: s.subject };
     return GZ_DRAFTS.canvasKey(m) ? m : null;
   };
-  // The nearest Blackboard id above the editor (a reply's post, say), and the editor's own id.
-  const draftKey = (ed) => {
-    if (!ultra) return GZ_DRAFTS.canvasKey(inboxIdentity(ed));
+  const inboxIdentity = (ed) => identityOf(ctx.draftAt(ed));
+  // Ultra: the nearest Blackboard id above the editor (a reply's post, say), and the editor's own id.
+  const keyOf = (s) => {
+    if (!ultra) return GZ_DRAFTS.canvasKey(identityOf(s));
     let near = '';
-    for (let p = ed.parentElement, i = 0; p && !near && i < 15; p = p.parentElement, i++) {
+    for (const p of s.up) {
       for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
+      if (near) break;
     }
-    return `draft:${location.pathname}#${near}/${ed.id}`;
+    return `draft:${s.path}#${near}/${s.ed.id}`;
   };
+  const draftKey = (ed) => keyOf(ctx.draftAt(ed));
   const typed = new Map(); // key -> { ed, text, gone }: written here, watched until it posts
   const saveTimers = new Map(); // editor -> timer
   const offered = new WeakSet();
@@ -80,8 +81,9 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     local((s) => s.set({ [key]: d }));
   };
   // Canvas: who you are and your courses, asked once the compose dialog is there or written in; again a minute after a
-  // failure. An editor written in meanwhile is taken up once it is in, as if just written in.
-  const accountWaiting = new Set();
+  // failure. An editor written in meanwhile is taken up once it is in, as if just written in; one gone by then is kept
+  // from what was read as it was written.
+  const accountWaiting = new Map(); // editor -> ctx.draftAt
   const loadAccount = () => {
     if (inboxAccount || inboxLoading || Date.now() < inboxRetry) return;
     inboxLoading = true;
@@ -89,8 +91,25 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       inboxAccount = { user: String(user.id), courses };
       const eds = [...accountWaiting];
       accountWaiting.clear();
-      for (const ed of eds) if (ed.isConnected) write({ type: 'input', target: ed });
+      for (const [ed, at] of eds) if (ed.isConnected) write({ type: 'input', target: ed }); else keep(at);
     }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
+  };
+  // An editor gone (compose closed, the page changed) before its copy could be made: the copy is made from what was read
+  // as it was written, under the same rules.
+  const keep = (s) => {
+    if (!ctx.settings().enhance.drafts || !ctx.on()) return;
+    if (ultra) {
+      if (!GZ_DRAFTS.worth(s.text)) return;
+      const key = keyOf(s), d = { html: s.html, text: s.text, at: s.at };
+      typed.set(key, { ed: s.ed, ...d, gone: 0 });
+      local((st) => st.set({ [key]: d }));
+      return;
+    }
+    if (!inboxAccount) { accountWaiting.set(s.ed, s); loadAccount(); return; }
+    const canvas = identityOf(s), key = GZ_DRAFTS.canvasKey(canvas);
+    if (!key) return;
+    inboxPending.set(s.ed, { key, d: { html: s.text, text: s.text, at: s.at, canvas } });
+    saveDraft(s.ed);
   };
   // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
   const write = (e) => {
@@ -103,7 +122,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     }
     if (!ultra) {
       // A copy's key needs the account (who you are, your courses): what is written before it is in waits for it.
-      if (!inboxAccount) { accountWaiting.add(ed); loadAccount(); return; }
+      if (!inboxAccount) { accountWaiting.set(ed, ctx.draftAt(ed)); loadAccount(); return; }
       inboxWrites.set(ed, draftKey(ed));
       captureInboxDraft(ed);
       for (const [bar, editor] of bars) if (editor === ed) { bar.remove(); bars.delete(bar); }
@@ -248,7 +267,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     const key = ed && draftKey(ed);
     if (key) { inboxWrites.set(ed, key); captureInboxDraft(ed); saveDraft(ed); inboxSending.add(key); }
   }, true);
-  return { write, watch, drop };
+  return { write, watch, drop, keep };
 })();
 
 GZ_DRAFT_UI;
