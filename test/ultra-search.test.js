@@ -18,7 +18,7 @@ test('public search lists project only safe fields; bodies become text, unavaila
   const rows = U.SEARCH_KINDS.flatMap((k) => U.searchItems(k, fixture[k.list], course, D.html, now));
   assert.deepEqual(rows.map((r) => r.title), ['Laboratory', 'Reading: Cell membrane', 'Lab report', 'Lab moved', 'Cell questions']);
   assert.match(rows[1].text, /Résumé & safety notes: mitochondria/);
-  assert.doesNotMatch(JSON.stringify(rows), /forbiddenword|outside.invalid|isRead|contentDetail|topic/);
+  assert.doesNotMatch(JSON.stringify(rows), /forbiddenword|files.example.com|isRead|contentDetail|topic/);
   assert.equal(rows[1].url, '/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_701_1');
   assert.equal(rows[3].url, '/ultra/courses/_101_1/announcements');
   assert.equal(rows[4].url, '/ultra/courses/_101_1/engagement');
@@ -63,6 +63,9 @@ test('public readers page only the same list, preserve projection, refuse redire
   }
   await assert.rejects(r.search(course, U.SEARCH_KINDS[0], D.html), /budget/);
   assert.equal(asked.length, 3);
+  let repeated = 0;
+  await U.read({ origin, f: async () => { repeated++; return json({ results: [], paging: { nextPage: '/learn/api/public/v1/courses/_101_1/contents?fields=contentDetail' } }); } }).search(course, U.SEARCH_KINDS[0], D.html);
+  assert.equal(repeated, 1, 'a repeated page cannot spend the budget or crowd out unique results');
   for (const nextPage of [origin + '/learn/api/v1/courses/_101_1/discussions/_901_1', 'https://other.invalid/learn/api/public/v1/courses/_101_1/contents', '/learn/api/public/v1/courses/_101_1/contents/_701_1']) {
     let count = 0;
     const reader = U.read({ origin, f: async () => { count++; return json({ results: [], paging: { nextPage } }); } });
