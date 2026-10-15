@@ -64,7 +64,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const ultra = ctx.site === 'ultra';
   const sync = (on = want) => {
     want = on;
-    const here = on && window.top === window && (ultra ? /^\/ultra\/courses\/_\d+_\d+\/outline/ : /^\/courses\/\d+\/?$/).test(location.pathname);
+    const here = on && ctx.solo && (ultra ? /^\/ultra\/courses\/_\d+_\d+\/outline/ : /^\/courses\/\d+\/?$/).test(location.pathname);
     const side = here && document.querySelector(ultra ? 'aside.outline-actions' : '#course_show_secondary');
     let b = document.getElementById('gz-nt-course');
     if (!side) (ultra ? document.getElementById('gz-nt-block') : b)?.remove();

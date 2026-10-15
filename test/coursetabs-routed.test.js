@@ -44,8 +44,8 @@ test('the strip goes before/after the full routed header without moving native c
 
 test('a routed content scroller need not contain the strip to save its position', () => {
   const sc = { scrollTop: 610, contains: () => false }, tab = { cid: '_71_1' }; let saves = 0;
-  vm.runInNewContext(part('  const onScroll = ', '  // ---- snapshots') + '\nonScroll({target:sc});', {
-    go: null, ctx: { courseId: () => '_71_1' }, document: {}, sc, Element: Object, strip: {}, tabs: [tab],
+  vm.runInNewContext(part('  const onScroll = ', '  // ---- pictures') + '\nonScroll({target:sc});', {
+    showing: '', framed: '', ctx: { courseId: () => '_71_1' }, document: {}, sc, Element: Object, strip: {}, tabs: [tab],
     location: { pathname: documentPath, search: '?view=content&state=view' }, L,
     pageScroller: () => sc, safePath: () => documentPath, observeView() {}, atView: () => true, notePlace() {}, save: () => saves++,
   });
@@ -63,45 +63,10 @@ test('routed scrollers use the nearest content overflow ancestor, then the docum
   outer.overflowY = 'visible'; assert.equal(scrollerOf(main, true), doc.scrollingElement);
 });
 
-test('a full routed switch waits for native content replacement, then settles without a course bar', () => {
-  const old = {}, main = {}, next = {}, g = { cid: '_71_1', url: documentPath, at: 0, before: [old, main] }; let ended = 0, current = [old, main];
-  const check = vm.runInNewContext(part('  const check = ', '  const end = ') + '\ncheck;', {
-    go: g, performance: { now: () => 500 }, courseBar: () => null, shown: () => false,
-    ctx: { on: () => true, courseId: () => '_71_1', holding: () => false }, view: () => current,
-    sameView: (a, b) => a?.every((v, i) => v === b?.[i]), loading: () => false,
-    readyView: () => true,
-    document: {}, location: { pathname: documentPath }, end: () => ended++,
-  });
-  check(); assert.equal(ended, 0, 'a URL update with the old native shell cannot release the copy');
-  current = [old, next]; check(); assert.equal(ended, 1, 'new settled native content can release it');
-});
-
-test('header-only and reused-header transitions cannot certify or capture the old main under the destination', () => {
-  const helper = part('  const sameView = ', '  let liveView = ');
-  const oldMain = { childElementCount: 1, textContent: 'Old reading' }, newMain = { childElementCount: 1, textContent: 'New reading' };
-  let current = [{}, oldMain, {}, 'Old header'], pathname = `${C}/document/_81_1`, ended = 0;
-  const go = { cid: '_71_1', at: 0, before: current };
-  const api = vm.runInNewContext(helper + part('  let liveView = ', '  // A panel over the bar') + part('  const check = ', '  const end = ') + '\n({observeView, check, live:()=>liveView});', {
-    view: () => current, location: { get pathname() { return pathname; }, search: '' }, shown: (e) => !!e, loading: () => false,
-    go, courseBar: () => null, ctx: { on: () => true, courseId: () => '_71_1', holding: () => false }, performance: { now: () => 500 }, document: {}, end: () => ended++,
-  });
-  api.observeView(); const previous = api.live();
-  pathname = `${C}/document/_86_1`;
-  current = [current[0], oldMain, current[2], 'New header'];
-  api.check(); assert.equal(ended, 0, 'a changed header cannot release outgoing native content');
-  api.observeView(); assert.equal(api.live(), previous, 'a new root/header around old content cannot relabel capture provenance');
-  current = [{}, null, null]; api.check(); assert.equal(ended, 0, 'a header appearing before main is not ready');
-  api.observeView(); assert.equal(api.live(), previous);
-  current = [{}, { childElementCount: 0, textContent: '', childNodes: [] }, null]; api.check(); assert.equal(ended, 0);
-  api.observeView(); assert.equal(api.live(), previous);
-  current = [{}, newMain, {}]; api.observeView(); assert.equal(api.live().path, pathname);
-  api.check(); assert.equal(ended, 1);
-});
-
 test('disabled tabs never scan native routes or place a strip from the mutation hook', () => {
   let scans = 0, writes = 0;
   const held = vm.runInNewContext(part('  const held = ', '  // The first paint') + '\nheld;', {
-    on: false, strip: {}, go: null, bars: [], seenBar: null,
+    on: false, strip: {}, bars: [], seenBar: null,
     courseBar: () => { scans++; return null; }, routed: () => { scans++; return null; }, place: () => writes++,
   });
   held(); assert.equal(scans, 0); assert.equal(writes, 0);

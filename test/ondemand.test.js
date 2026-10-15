@@ -26,7 +26,7 @@ const clock = () => {
 const loader = ({ lang = 'de' } = {}) => {
   const replies = [];
   const t = clock();
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ solo: false, tabFrame: '',
     isPreview: false, observer: {}, timer: 0, wordsArrived: 0, flush() {},
     locale: () => lang,
     GZ_I18N: require('../lib/i18n.js'),
@@ -90,7 +90,7 @@ const dom = () => {
 const keys = (words = { de: false }, site = 'canvas') => {
   const document = dom();
   const wordsIn = new Set();
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ solo: false, tabFrame: '',
     document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../lib/page.js'),
     GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing: () => false, keyOn: () => true, wordsIn,
       t: (k) => (words.de && k === 'Keyboard shortcuts' ? 'Tastenkürzel' : k) },
@@ -150,7 +150,7 @@ for (const gone of Object.keys(AFTER)) {
       attributes: [], matches: () => true, closest(sel) { return sel.includes('ql-editor') ? this : null; },
     });
     const listeners = {};
-    const ctx = vm.createContext({
+    const ctx = vm.createContext({ solo: false, tabFrame: '',
       ultra: true, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/ultra/courses/_1_1/outline' },
       document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => null, querySelectorAll: () => [],
         body: {}, createTreeWalker: () => ({ nextNode: () => null }) }, // the page's text, where a sent post would show: none here
@@ -201,7 +201,7 @@ const hooks = (from, to, extra = {}) => {
   const listeners = {};
   const loads = [];
   class Element {}
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ solo: true, tabFrame: '',
     Element, Date, Promise, GZ_PAGE: require('../lib/page.js'), isPreview: false, ultra: false, moodle: false, observer: {},
     chrome: { runtime: { id: 'glaze' } },
     settings: { enhance: { keys: true, palette: true, coursemenu: true, download: true, previews: true } },
@@ -358,7 +358,7 @@ const ultraPlace = async (touch) => {
   class Element {}
   const toggle = { getAttribute: () => 'false', click: () => clicks++ };
   const row = { dataset: { contentId: '_9_1' } };
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ solo: true, tabFrame: '',
     Element, Date, Promise, URLSearchParams, GZ_PAGE: require('../lib/page.js'), ultra: true, observer: {}, settings: { enhance: { place: true } },
     document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => row, querySelectorAll: () => [row], scrollingElement: { scrollTop: 0 }, body: {} },
     location: { pathname: '/ultra/courses/_1_1/outline', search: '' }, courseId: () => '_1_1', canvasCourseKey: () => null,
@@ -375,7 +375,7 @@ const ultraPlace = async (touch) => {
   assert.deepEqual(loads.map((l) => l.file), ['features/place.js']);
   if (touch) for (const f of listeners.wheel) f({ isTrusted: true });
   ctx.GZ_CTX = { site: 'ultra', settings: () => ctx.settings, on: () => true, local: (fn) => fn(ctx.chrome.storage.local), courseId: ctx.courseId, canvasCourseKey: ctx.canvasCourseKey,
-    toggleOf: () => toggle, ROWS: '.content-list-item[data-content-id]', holding: () => false, tapped: ctx.api.tapped, acted: ctx.api.acted, placeAsked: ctx.api.placeAsked };
+    toggleOf: () => toggle, ROWS: '.content-list-item[data-content-id]', holding: () => false, tapped: ctx.api.tapped, acted: ctx.api.acted, placeAsked: ctx.api.placeAsked, solo: true };
   vm.runInContext(fs.readFileSync(require.resolve('../features/place.js'), 'utf8'), ctx);
   loads[0].p.resolve();
   await settle();
@@ -406,7 +406,7 @@ for (const gone of ['never', 'before the files arrive', 'while the account is as
     const close = () => { editor.isConnected = false; ctx.document.querySelector = () => null; };
     const listeners = {};
     let account;
-    const ctx = vm.createContext({
+    const ctx = vm.createContext({ solo: false, tabFrame: '',
       ultra: false, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/conversations', origin: 'https://school.test' },
       document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: (s) => (s === SEL ? editor : null), querySelectorAll: () => [] },
       chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },

@@ -54,7 +54,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
     setTimeout(canvasBack, 200);
   };
   const canvasPlace = () => {
-    const cid = window.top === window && ctx.on() && canvasCourseKey();
+    const cid = ctx.solo && ctx.on() && canvasCourseKey();
     if (!cid) return;
     // An item opened from Modules, or with its Next and Previous buttons, carries its module item id.
     const item = new URLSearchParams(location.search).get('module_item_id');
@@ -72,12 +72,16 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
       canvasBack();
     }));
   };
+  // While a place is being put back (data-gz-placing): a course tab's frame waits for it before it shows (features/coursetabs.js).
+  const placing = (on) => document.documentElement?.toggleAttribute('data-gz-placing', on);
   const backTo = () => {
     const p = place;
     const b = p?.back;
-    if (!b) return;
+    const done = () => { if (p) p.back = null; placing(false); };
+    if (!b) return done();
+    placing(true);
     const rows = outlineRows(p.cid);
-    if (!rows.length) { p.back = null; return; }
+    if (!rows.length) return done();
     if (b.ready && !ctx.holding()) {
       let busy = false;
       for (const row of rows) {
@@ -93,14 +97,14 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
         const sc = scrollerOf(rows[0]);
         // Anything you do ends this above, so what moved the outline meanwhile is Ultra (it scrolls a
         // module it unfolds into view): the place kept wins.
-        if (!p.top) { p.back = null; return; }
+        if (!p.top) return done();
         // An unfolded module's contents slide open over ~0.4 s and rows can still arrive, so the outline
         // grows under the scroll (clamping it, then anchoring shifts it): set again until it holds there
         // twice running, for three seconds at most. Nothing is saved meanwhile.
         b.scrolled ||= Date.now();
         const there = Math.abs(sc.scrollTop - p.top) < 2;
         b.steady = there ? (b.steady || 0) + 1 : 0;
-        if (b.steady >= 2 || Date.now() - b.scrolled > 3000) { p.back = null; return; }
+        if (b.steady >= 2 || Date.now() - b.scrolled > 3000) return done();
         if (!there) sc.scrollTop = p.top;
       }
     }
@@ -109,7 +113,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
   const sync = () => {
     if (!ctx.settings().enhance.place) { place = null; return; }
     if (!ultra) return canvasPlace();
-    const cid = window.top === window && ctx.on() && courseId();
+    const cid = ctx.solo && ctx.on() && courseId();
     const rows = cid ? outlineRows(cid) : [];
     if (!rows.length) { if (place) place.away = true; return; }
     if (!place || place.away || place.cid !== cid) {
@@ -166,7 +170,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
     }, 500);
   }, { capture: true, passive: true });
   // Anything you do first ends putting your place back.
-  const stop = () => { if (place) place.back = null; };
+  const stop = () => { if (place) place.back = null; placing(false); };
   return { sync, stop };
 })();
 

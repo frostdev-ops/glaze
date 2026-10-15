@@ -7,10 +7,12 @@ const root = process.env.GZ_B8_REPO || path.join(__dirname, '..');
 const L = require(path.join(root, 'lib/coursetabs.js'));
 const site = 'https://bb.school.test';
 const uid = '_42_1', cid = '_1_1';
-const snapshot = (html = '<div>Viewed course</div>', chain = []) => ({ cid, path: `/ultra/courses/${cid}/outline`, layers: [{ html, at: [0, 0, 0, 0], chain }] });
+// A picture the page asks for: the worker takes it (captureVisibleTab, faked here: `shots.size` characters).
+const shot = (c = cid, extra = {}) => ({ op: 'shot', cid: c, path: `/ultra/courses/${c}/outline`, strip: null, size: [1400, 900], ...extra });
 const flush = () => new Promise(setImmediate);
 function worker() {
   const data = {}, notices = [], pages = new Map([[1, site + '/ultra/course'], [2, site + '/ultra/course'], [3, site + '/ultra/course']]);
+  const active = new Set([1, 2, 3]), shots = { size: 1000, during() {} };
   const born = Date.now() - 10000, epochs = new Map();
   let message, changed;
   const source = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
@@ -26,7 +28,8 @@ function worker() {
     fromUltra: async (s) => s.id === 'extension' && s.tab && s.url.startsWith(site + '/ultra/') ? site : null,
     switchOn: async () => on,
     chrome: { tabs: {
-      async get(id) { return { url: pages.get(id) }; },
+      async get(id) { return { url: pages.get(id), active: active.has(id), windowId: 1 }; },
+      async captureVisibleTab() { shots.during(); return `data:image/jpeg;base64,${'A'.repeat(shots.size)}`; },
       async sendMessage(tab, value, target) { notices.push({ tab, value, target }); },
     }, storage: { session: area, onChanged: { addListener(f) { changed = f; } } }, runtime: { onMessage: { addListener(f) { message = f; } } } },
   });
@@ -38,7 +41,7 @@ function worker() {
     if (reply?.ok && reply.epoch) epochs.set(s.documentId, reply.epoch);
     return reply;
   };
-  return { data, send, notices, pages, born,
+  return { data, send, notices, pages, born, active, shots,
     change(onNow) { on = onNow; changed({ enabled: { newValue: onNow } }, 'sync'); },
     async drain() { await send({ op: 'invalid' }); },
   };
@@ -46,87 +49,94 @@ function worker() {
 
 test('snapshots require a hello from the current account', async () => {
   const w = worker();
-  assert.equal(await w.send({ op: 'put', cid, snap: snapshot() }), null);
+  assert.equal(await w.send(shot()), null);
 });
 
 test('a stale account cannot switch ownership by writing', async () => {
   const w = worker();
   assert.ok(await w.send({ op: 'hello' }));
-  assert.ok(await w.send({ op: 'put', cid, snap: snapshot() }));
+  assert.ok(await w.send(shot()));
   await w.send({ op: 'hello', uid: '_43_1', born: w.born + 1000 }, { tab: { id: 2 }, documentId: 'document-2' });
-  assert.equal(await w.send({ op: 'put', cid, snap: snapshot() }), null);
+  assert.equal(await w.send(shot()), null);
   assert.equal(await w.send({ op: 'get', cid, uid: '_43_1' }), null);
 });
 
 test('a concurrent sign-out clear wins over an earlier snapshot write', async () => {
   const w = worker();
   await w.send({ op: 'hello' });
-  const put = w.send({ op: 'put', cid, snap: snapshot() });
+  const put = w.send(shot());
   const drop = w.send({ op: 'drop', signout: true });
   await Promise.all([put, drop]);
   assert.equal(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 0);
-  assert.equal(await w.send({ op: 'put', cid, snap: snapshot() }), null, 'sign-out revokes this document');
+  assert.equal(await w.send(shot()), null, 'sign-out revokes this document');
   assert.equal((await w.send({ op: 'hello' }))?.stale, true, 'cached identity cannot undo sign-out');
 });
 
-test('snapshot limits count ancestor metadata', async () => {
+test('a picture past the one-course limit is not kept', async () => {
   const w = worker();
   await w.send({ op: 'hello' });
-  const big = snapshot('x'.repeat(990000), Array.from({ length: 30 }, () => ['div', 'i'.repeat(3999), 'c'.repeat(3999), 's'.repeat(3999), 'm'.repeat(3999)]));
-  assert.equal(await w.send({ op: 'put', cid, snap: big }), null);
+  w.shots.size = L.SNAP_ONE;
+  assert.equal(await w.send(shot()), null);
 });
 
-test('snapshot geometry rejects unbounded coordinates', async () => {
+test('picture geometry rejects unbounded sizes', async () => {
   const w = worker();
   await w.send({ op: 'hello' });
-  const bad = snapshot(); bad.layers[0].at[0] = 1e99;
-  assert.equal(await w.send({ op: 'put', cid, snap: bad }), null);
+  assert.equal(await w.send(shot(cid, { size: [1e99, 900] })), null);
+  assert.equal(await w.send(shot(cid, { size: [1400] })), null);
 });
 
-test('the snapshot broker rejects another origin, subframes and unsafe routes', async () => {
+test('only the tab on screen is pictured: one switched away from, before or during the picture, gives none', async () => {
+  const w = worker();
+  await w.send({ op: 'hello' });
+  w.active.delete(1);
+  assert.equal(await w.send(shot()), null, 'not the active tab');
+  w.active.add(1);
+  w.shots.during = () => w.active.delete(1);
+  assert.equal(await w.send(shot()), null, 'switched away while the picture was taken');
+  w.shots.during = () => {}; w.active.add(1);
+  w.pages.set(1, 'https://other.test/ultra/course');
+  assert.equal(await w.send(shot()), null, 'the tab went to another site');
+});
+
+test('the picture broker rejects another origin, subframes and other courses\' addresses', async () => {
   const w = worker();
   assert.equal(await w.send({ op: 'hello' }, { url: 'https://other.test/ultra/course' }), null);
   assert.equal(await w.send({ op: 'hello' }, { frameId: 1 }), null);
   await w.send({ op: 'hello' });
-  const bad = snapshot(); bad.path = '/ultra/courses/_9_1/outline';
-  assert.equal(await w.send({ op: 'put', cid, snap: bad }), null);
+  assert.equal(await w.send(shot(cid, { path: '/ultra/courses/_9_1/outline' })), null);
+  assert.equal(await w.send(shot(cid, { path: '/ultra/courses/_1_1/x y' })), null);
 });
 
-
-test('concurrent snapshot writes stay inside the shared total cap', async () => {
+test('concurrent pictures stay inside the shared total cap', async () => {
   const w = worker();
   await w.send({ op: 'hello' });
-  await Promise.all(Array.from({ length: 8 }, (_, i) => {
-    const s = snapshot('x'.repeat(990000)); s.cid = `_${i + 1}_1`; s.path = `/ultra/courses/${s.cid}/outline`;
-    return w.send({ op: 'put', cid: s.cid, snap: s });
-  }));
+  w.shots.size = 1_500_000;
+  await Promise.all(Array.from({ length: 8 }, (_, i) => w.send(shot(`_${i + 1}_1`))));
   const copies = Object.entries(w.data).filter(([k]) => k.startsWith('snap:')).map(([, v]) => v);
   assert.ok(copies.length > 0);
   assert.ok(copies.reduce((sum, s) => sum + s.n, 0) <= L.SNAP_ALL);
 });
 
-
-test('closing a course forgets its worker copy without dropping another course', async () => {
+test('closing a course forgets its worker picture without dropping another course\'s', async () => {
   const w = worker(); await w.send({ op: 'hello' });
-  await w.send({ op: 'put', cid, snap: snapshot() });
-  const other = snapshot(); other.cid = '_2_1'; other.path = '/ultra/courses/_2_1/outline';
-  await w.send({ op: 'put', cid: other.cid, snap: other });
+  await w.send(shot());
+  await w.send(shot('_2_1'));
   assert.ok(await w.send({ op: 'forget', cid }));
   assert.equal(await w.send({ op: 'get', cid }), null);
-  assert.ok((await w.send({ op: 'get', cid: other.cid }))?.snap);
+  assert.ok((await w.send({ op: 'get', cid: '_2_1' }))?.snap);
 });
-
 
 test('an account change clears and revokes already-open documents, including cached hello', async () => {
   const w = worker();
   const hello = await w.send({ op: 'hello' });
-  await w.send({ op: 'put', cid, snap: snapshot() });
+  await w.send(shot());
   const next = { tab: { id: 2 }, documentId: 'document-2' };
   assert.ok((await w.send({ op: 'hello', uid: '_43_1', born: w.born + 1000 }, next))?.ok);
   assert.equal(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 0);
   assert.ok(w.notices.some((n) => n.tab === 1 && n.target.documentId === 'document-1' && n.value.uid === '_43_1'));
   assert.equal((await w.send({ op: 'hello' }))?.stale, true, 'old document cannot reassert cached /users/me');
-  assert.equal(await w.send({ op: 'put', cid, epoch: hello.epoch, snap: snapshot() }), null);
+  assert.equal(await w.send(shot(cid, { epoch: hello.epoch })), null);
   assert.equal((await w.send({ op: 'hello', born: w.born - 1000 }, { tab: { id: 3 }, documentId: 'unseen-old-document' }))?.stale, true);
   assert.equal((await w.send({ op: 'hello', born: w.born + 1500 }, { tab: { id: 3 }, documentId: 'old-document-born-after-switching-document' }))?.stale, true, 'even an unseen document born after the switching document predates the observed boundary');
   assert.ok((await w.send({ op: 'hello', born: Date.now() + 1 }, { tab: { id: 1 }, documentId: 'reloaded-document' }))?.ok);
@@ -141,17 +151,17 @@ test('cache broadcasts only reach known matching Ultra documents', async () => {
   assert.deepEqual(w.notices.map((n) => n.tab), [2]);
 });
 
-test('a rapid off/on clears its observed generation and rejects an in-flight old put', async () => {
+test('a rapid off/on clears its observed generation and rejects an old document\'s picture', async () => {
   const w = worker();
   const hello = await w.send({ op: 'hello' });
-  await w.send({ op: 'put', cid, snap: snapshot() });
+  await w.send(shot());
   w.change(false); w.change(true);
   await w.drain();
   assert.equal(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 0);
   assert.ok(w.notices.some((n) => n.value.epoch > hello.epoch && n.value.uid === uid));
-  assert.equal(await w.send({ op: 'put', cid, snap: snapshot() }), null, 'old generation cannot refill after off/on');
+  assert.equal(await w.send(shot()), null, 'old generation cannot refill after off/on');
   assert.ok((await w.send({ op: 'hello' }))?.ok);
-  assert.ok((await w.send({ op: 'put', cid, snap: snapshot() }))?.ok, 'fresh hello resumes normal snapshots');
+  assert.ok((await w.send(shot()))?.snap, 'fresh hello resumes normal pictures');
 });
 
 test('document ordering metadata is strictly validated and never replaces sender checks', async () => {
