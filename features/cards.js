@@ -194,11 +194,12 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     saveTimer = setTimeout(commit, soon ? 500 : 0);
   };
   // Over what is stored now (another tab may have saved since), refused if the item would not fit in sync storage.
-  const commit = async () => {
+  // False, with the reason in the dialog, when it isn't saved.
+  const commit = async (e = ed) => {
     clearTimeout(saveTimer);
-    if (!ed) return true;
-    const { key, style } = ed;
-    const links = ed.links.map(K.link).filter(Boolean);
+    if (!e) return true;
+    const { key, style } = e;
+    const links = e.links.map(K.link).filter(Boolean);
     const r = await get('sync', ['cards', 'links']);
     const cards = { ...K.styles(r.cards) };
     const all = { ...K.links(r.links) };
@@ -212,33 +213,40 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (patch.cards) await tidy(cards);
     return true;
   };
-  // A picture kept on this device goes with the last style that used it.
+  // A picture kept on this device goes with the last style that used it (a replaced one, once the new one is saved).
+  // Found by storage's own keys, so none is missed; the open editor's picture, not saved yet, stays.
   const tidy = async (cards) => {
-    const { cardImgs: kept = {} } = await get('local', 'cardImgs');
-    const gone = K.orphans(cards, kept).filter((id) => id !== ed?.style?.i);
-    if (!gone.length) return;
-    for (const id of gone) delete kept[id];
-    try { chrome.storage.local.remove(gone.map((id) => `cardImg:${id}`)); chrome.storage.local.set({ cardImgs: kept }); } catch { /* reloaded */ }
+    const gone = K.orphans(cards, K.kept(await get('local', null))).filter((id) => id !== ed?.style?.i);
+    if (gone.length) await new Promise((res) => { try { chrome.storage.local.remove(gone.map((id) => `cardImg:${id}`), res); } catch { res(); } });
   };
 
   const KINDS = [['', 'Canvas color'], ['solid', 'Color'], ['gradient', 'Gradient'], ['image', 'Picture']];
   const FILTER_NAMES = { none: 'None', vivid: 'Vivid', mono: 'Mono', noir: 'Noir', warm: 'Warm', cool: 'Cool', faded: 'Faded', dreamy: 'Dreamy' };
   const ICON_NAMES = { link: 'Link', book: 'Book', video: 'Video', chat: 'Chat', doc: 'Document', calendar: 'Calendar', folder: 'Folder', code: 'Code', star: 'Star', globe: 'Globe' };
 
+  // True once the editor is gone. A save that fails keeps it open, with the draft and the reason; closing again then
+  // leaves without saving.
   const close = async () => {
-    if (!ed) return;
-    const { dlg, key } = ed;
-    await commit();
+    if (!ed) return true;
+    const e = ed;
+    const { dlg, key } = e;
+    if (!await commit(e) && !e.leave) {
+      e.leave = true;
+      e.note.textContent += ` ${t('Your changes are still here. Close again to leave without them.')}`;
+      return false;
+    }
+    if (ed !== e) return true;
     ed = null;
     editing = null;
     if (dlg.open) dlg.close();
     dlg.remove();
     paint();
     document.getElementById(`gz-cm-${key}`)?.focus({ preventScroll: true });
+    return true;
   };
 
   const open = async (key) => {
-    await close();
+    if (!await close()) return;
     let d;
     try { d = await read(); } catch { return; }
     const card = cardOf(key);
@@ -301,7 +309,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
       const shown = ed && d.card.condensed && s;
       contrast.hidden = !shown;
       if (!shown) return;
-      let o = { course: courseColor() };
+      let o = { course: courseColor(), overlay: d.card.overlay };
       if (s.k === 'image') {
         const at = src(data || d, s);
         const sig = `${at}|${s.f || ''}`;
@@ -340,6 +348,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
       measure();
     };
     const change = (next, soon = true) => {
+      ed.leave = false;
       ed.style = next && K.style(next);
       say('');
       paint();
@@ -371,9 +380,10 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     pick.addEventListener('click', () => file.click());
     file.addEventListener('change', async () => {
       const f = file.files[0];
+      const mine = ed;
       file.value = '';
-      if (f) await addPicture(f, img());
-      fill();
+      if (f) await addPicture(f, img(), mine);
+      if (ed === mine) fill();
     });
     filter.addEventListener('change', () => ed.style?.k === 'image' && change({ ...img(), f: filter.value }));
     for (const [i, k] of [[fx, 'x'], [fy, 'y'], [zoom, 'z'], [ova, 'o']]) i.addEventListener('input', () => ed.style?.k === 'image' && change({ ...img(), [k]: +i.value }));
@@ -392,7 +402,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
       make('label', { className: 'gz-ce-check' }, iconsOn, t('Show bookmark icons on cards')),
       make('p', { className: 'gz-ce-desc', textContent: t('An https:// address, or a path on this Canvas site like /courses/12/files. Icons are Glaze’s own: nothing is asked of the linked site.') }));
     // Rows are drafts until they have an address: only the good ones are shown and kept.
-    const saveLinks = () => { paint(); save(); };
+    const saveLinks = () => { ed.leave = false; paint(); save(); };
     const renderLinks = (focus) => {
       list.replaceChildren(...ed.links.map((l, n) => {
         const label = l.n || l.u;
@@ -495,25 +505,34 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   };
 
   // A picture from this computer: scaled down (lib/cards.js fit), kept as WebP (JPEG where the browser can't write
-  // WebP), within the per-picture and total caps, in storage.local. The old one goes once nothing uses it.
-  const addPicture = async (f, base) => {
+  // WebP), within the per-picture and total caps (every picture on this device counts, the one it replaces too), in
+  // storage.local. It belongs to the editor it was chosen in (`mine`): if that has closed or moved to another course
+  // by the time the picture is ready, it is dropped. The replaced picture goes once the new style is saved (tidy).
+  const addPicture = async (f, base, mine) => {
+    const here = () => ed === mine;
     let bmp;
-    try { bmp = await createImageBitmap(f); } catch { say(t("That file isn't a picture Glaze can read.")); return; }
+    try { bmp = await createImageBitmap(f); } catch { if (here()) say(t("That file isn't a picture Glaze can read.")); return; }
+    if (!here()) { bmp.close?.(); return; }
     const { w, h } = K.fit(bmp.width, bmp.height);
     const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
     c.getContext('2d').drawImage(bmp, 0, 0, w, h);
     bmp.close?.();
     let url = c.toDataURL('image/webp', 0.82);
     if (!url.startsWith('data:image/webp')) url = c.toDataURL('image/jpeg', 0.85);
-    const { cardImgs: kept = {} } = await get('local', 'cardImgs');
-    if (base.i) delete kept[base.i];
-    if (!K.room(url.length, kept)) { say(t("That picture is too big to keep. Try a smaller one, or remove another card's picture.")); return; }
+    const others = K.kept(await get('local', null));
+    if (!here()) return;
+    if (!K.room(url.length, others)) { say(t("That picture is too big to keep. Try a smaller one, or remove another card's picture.")); return; }
     const id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
-    if (!await set('local', { [`cardImg:${id}`]: url, cardImgs: { ...kept, [id]: url.length } })) { say(t('Not saved. Try again in a moment.')); return; }
-    (data || {}).imgs && (data.imgs[`cardImg:${id}`] = url);
+    if (!await set('local', { [`cardImg:${id}`]: url })) { if (here()) say(t('Not saved. Try again in a moment.')); return; }
+    // Moved on while it was written: nothing uses it.
+    if (!here()) { try { chrome.storage.local.remove(`cardImg:${id}`); } catch { /* reloaded */ } return; }
+    if (data) data.imgs[`cardImg:${id}`] = url;
     const s = { ...base, k: 'image', i: id };
     delete s.u;
-    if (ed) { ed.style = K.style(s); paint(); await commit(); }
+    mine.leave = false;
+    mine.style = K.style(s);
+    paint();
+    await commit(mine);
   };
 
   // A picture's average color, through its filter, for the contrast line; null when its site doesn't allow reading it.

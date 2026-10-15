@@ -31,7 +31,9 @@ All notable changes to Glaze are documented here. The format follows
   (the measured ratio) and warns below 4.5:1. It never changes your colors.
 - **Font search:** typing in the font list filters it; a name that isn't in the list is tried on Google Fonts.
 - **Theme codes and Looks carry course cards:** how cards look, and up to eight card styles that take turns on the
-  cards without their own. Only linked pictures travel; a picture from your computer never leaves it.
+  cards without their own. Only linked pictures travel; a picture from your computer never leaves it. A code with
+  card settings needs this Glaze or newer; the Looks gallery's checker learns them with the next release. A code that
+  would be too long (many card pictures with long links) is refused when you copy it, with the reason.
 - **Scheduled dark mode:** auto light and dark can follow a schedule instead of the system, dark from one time
   until another (20:00 to 08:00 by default, past midnight too). It switches on time while a page is open, and a
   page opened after the switch starts in the right palette. Set it in the editor, the popup or Ctrl+K.

@@ -536,7 +536,8 @@ GZ_UI.load().then((s) => {
   // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
   $('#share-copy').addEventListener('click', async () => {
     const { cards } = await new Promise((res) => chrome.storage.sync.get('cards', (r) => res(r || {})));
-    const code = await GZ_SHARE.encode(s, cards);
+    let code;
+    try { code = await GZ_SHARE.encode(s, cards); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
     try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
   // from: the gallery Look the code came with ({ name, author }), or null for a pasted code.
@@ -736,7 +737,7 @@ GZ_UI.load().then((s) => {
     save(Object.keys(s));
     // Card styles and bookmarks too, and the pictures kept for them on this computer.
     chrome.storage.sync.remove(['cards', 'links']);
-    chrome.storage.local.get('cardImgs', (r) => chrome.storage.local.remove(['cardImgs', ...Object.keys(r?.cardImgs || {}).map((id) => `cardImg:${id}`)]));
+    chrome.storage.local.get(null, (r) => chrome.storage.local.remove(Object.keys(r || {}).filter((k) => k.startsWith('cardImg:'))));
     fill();
     hint(t('Everything is back to the defaults. Your presets are kept.'));
 

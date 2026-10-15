@@ -698,8 +698,9 @@ html[data-gz-dark-theme] [class*="css-"][class*="-pill__text"] { color: oklch(fr
    (lib/cards.js paint): --gz-card-c, --gz-card-grad, or the picture's --gz-card-img, -pos, -zoom, -filter, and its
    overlay's --gz-card-ov and -ov-a. A card without one is Canvas's own, toned as above. */
 #application :is(.ic-DashboardCard__header_hero, .ic-DashboardCard__header_image) { height: var(--gz-card-h, 146px); }
-/* No overlay: Canvas's own pictures show without their color wash. */
-html[data-gz-card-plain] #application .ic-DashboardCard__header_image > .ic-DashboardCard__header_hero { opacity: 0 !important; }
+/* No overlay: Canvas's own pictures show without their color wash. A card with its own style keeps its fill (its
+   picture's overlay is hidden below instead). */
+html[data-gz-card-plain] #application .ic-DashboardCard:not([data-gz-card]) .ic-DashboardCard__header_image > .ic-DashboardCard__header_hero { opacity: 0 !important; }
 /* A color or gradient covers the picture area; the card's name takes that color. */
 #application :is(.ic-DashboardCard, .planner-grouping):is([data-gz-card="solid"], [data-gz-card="gradient"]) { --gz-course: var(--gz-card-c); }
 #application .ic-DashboardCard[data-gz-card] .ic-DashboardCard__header_hero { opacity: 1 !important; position: relative; overflow: hidden; isolation: isolate; }
@@ -715,7 +716,7 @@ html[data-gz-card-plain] .ic-DashboardCard[data-gz-card="image"] .ic-DashboardCa
 #application .planner-grouping[data-gz-card="image"] [class*="Grouping-styles__hero"] { background-image: none !important; }
 #application .planner-grouping[data-gz-card] [class*="Grouping-styles__overlay"] { background: var(--gz-card-grad, var(--gz-card-c)) !important; opacity: 1 !important; }
 #application .planner-grouping[data-gz-card="image"] [class*="Grouping-styles__overlay"] { background: var(--gz-card-ov) !important; opacity: var(--gz-card-ov-a) !important; }
-html[data-gz-card-plain] #application .planner-grouping [class*="Grouping-styles__overlay"][class*="withImage"],
+html[data-gz-card-plain] #application .planner-grouping:not([data-gz-card]) [class*="Grouping-styles__overlay"][class*="withImage"],
 html[data-gz-card-plain] #application .planner-grouping[data-gz-card="image"] [class*="Grouping-styles__overlay"] { opacity: 0 !important; }
 
 /* Condensed: the name sits on the picture in white, so the card is that much shorter (the editor measures how well it reads). */
@@ -739,7 +740,7 @@ html[data-gz-card-hover="none"] #application .ic-DashboardCard:hover { transform
     animation: gz-card-shine 0.9s var(--gz-ease) forwards;
   }
   /* Particles over the picture while the pointer is on the card: soft dots on a repeating tile, drifting. */
-  html:not([data-gz-card-particles="none"], [data-gz-motion="off"]) #application .ic-DashboardCard:hover .ic-DashboardCard__header::after {
+  html:not([data-gz-card-particles="none"], [data-gz-motion="off"], [data-gz-no-hover]) #application .ic-DashboardCard:hover .ic-DashboardCard__header::after {
     content: ""; position: absolute; inset: 0 0 auto; height: var(--gz-card-h, 146px); z-index: 1; pointer-events: none;
     background-size: 90px 90px; animation: gz-card-fall 2.4s linear infinite; animation-play-state: var(--gz-ambient, running);
   }
@@ -772,8 +773,9 @@ html[data-gz-card-hover="none"] #application .ic-DashboardCard:hover { transform
   background: var(--gz-pet-sheet) 0 0 / 256px 128px no-repeat; filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
   animation: gz-pet-idle 2.46s step-end infinite; animation-play-state: var(--gz-ambient, running);
 }
-.ic-DashboardCard:hover > .gz-pet { animation: gz-pet-act 0.98s step-end 1; }
-html[data-gz-motion="off"] .gz-pet { animation: none; }
+/* The stretch or hop only with hover motion on; Off (and reduced motion, which content.js makes Off) stills it. */
+@media (hover: hover) { html:not([data-gz-motion="off"], [data-gz-no-hover]) .ic-DashboardCard:hover > .gz-pet { animation: gz-pet-act 0.98s step-end 1; } }
+html[data-gz-motion="off"] .ic-DashboardCard > .gz-pet { animation: none !important; }
 html[data-gz-card-pet="none"] .gz-pet { display: none; }
 /* Condensed cards have the name low on the picture: the pet peeks in at the top instead, a little smaller. */
 html[data-gz-card-condensed] .gz-pet { top: 2px; right: calc(50% - 32px); scale: 0.75; transform-origin: top center; }

@@ -544,4 +544,6 @@
   "Folder": "Dossier",
   "Star": "Étoile",
   "Globe": "Globe",
+  "Your changes are still here. Close again to leave without them.": "Vos modifications sont toujours là. Fermez à nouveau pour partir sans elles.",
+  "This theme is too long for a code: its card pictures have long links. Shorten them, or remove some card styles.": "Ce thème est trop long pour un code : ses images de carte ont de longs liens. Raccourcissez-les ou retirez des styles de carte.",
 };

@@ -78,6 +78,46 @@ test('contrast is measured, never corrected', () => {
   assert.equal(K.contrast({ k: 'image', u: 'https://x' }), null, "a picture the browser won't let be read");
 });
 
+// canvas.css rules, as [selector, body], comments removed; @media blocks flattened.
+const cssRules = () => {
+  const css = require('fs').readFileSync(require('path').join(__dirname, '../canvas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const out = [];
+  const walk = (text) => {
+    for (let i = 0; i < text.length;) {
+      const open = text.indexOf('{', i);
+      if (open < 0) break;
+      const sel = text.slice(i, open).trim();
+      let depth = 1, j = open + 1;
+      for (; depth && j < text.length; j++) if (text[j] === '{') depth++; else if (text[j] === '}') depth--;
+      const body = text.slice(open + 1, j - 1);
+      if (sel.startsWith('@media') || sel.startsWith('@supports')) walk(body); else out.push([sel, body]);
+      i = j;
+    }
+  };
+  walk(css);
+  return out;
+};
+
+test('motion off stills the pet and the particles; hover motion off stops what a hover starts', () => {
+  const rules = cssRules();
+  for (const [sel, body] of rules) {
+    const moving = /animation:\s*gz-(pet-act|card-fall)/.test(body);
+    if (!moving) continue;
+    for (const s of sel.split(/,(?![^(]*\))/)) {
+      assert.match(s, /:not\([^)]*\[data-gz-motion="off"\]/, `${s} animates with motion off`);
+      assert.match(s, /\[data-gz-no-hover\]/, `${s} animates with hover motion off`);
+    }
+  }
+  assert.ok(rules.some(([sel, body]) => /data-gz-motion="off"\][^{]*\.gz-pet/.test(sel) && /animation:\s*none\s*!important/.test(body)), 'an Off rule that no hover rule outranks');
+});
+
+test("turning off Canvas's overlay never hides a card's own style", () => {
+  for (const [sel, body] of cssRules()) {
+    if (!/data-gz-card-plain/.test(sel) || !/opacity:\s*0\s*!important/.test(body)) continue;
+    for (const s of sel.split(/,(?![^(]*\))/)) assert.match(s, /:not\(\[data-gz-card\]\)|\[data-gz-card="image"\][^,]*overlay/, `${s.trim()} also hides custom styles`);
+  }
+});
+
 test('card settings: defaults, ranges and choices, and what they paint on the page', () => {
   const d = K.settings();
   assert.deepEqual(d, { width: 262, gap: -1, radius: -1, height: 146, condensed: false, overlay: true, hover: 'lift', particles: 'none', pet: 'none', icons: true, create: false });
@@ -90,6 +130,18 @@ test('card settings: defaults, ranges and choices, and what they paint on the pa
   assert.ok(!K.LOOK.includes('icons') && !K.LOOK.includes('create') && K.LOOK.includes('pet'));
 });
 
+test('contrast is measured on what CSS paints: the overlay composited in sRGB, and none when the overlay is off', () => {
+  // A white picture under 50% black is #808080 on screen: 3.95:1 with white text, not OKLab's lighter mix.
+  const r = K.contrast({ k: 'image', u: 'https://x', c: '#000000', o: 50 }, { avg: '#ffffff' });
+  assert.ok(Math.abs(r - 3.95) < 0.02, String(r));
+  assert.equal(K.over('#ffffff', '#000000', 0.5), '#808080');
+  // Overlay off (card.overlay): the picture alone.
+  assert.equal(K.contrast({ k: 'image', u: 'https://x', c: '#000000', o: 90 }, { avg: '#ffffff', overlay: false }), 1);
+  // A plain linear-gradient's midpoint is the sRGB one too.
+  assert.equal(K.contrast({ k: 'gradient', c: '#000000', d: '#ffffff' }), 1);
+  assert.ok(Math.abs(K.contrast({ k: 'gradient', c: '#000000', d: '#000000' }) - 21) < 0.01);
+});
+
 test('local pictures: scaled down, capped each and in all, and dropped with their style', () => {
   assert.deepEqual(K.fit(4000, 2000), { w: 960, h: 480 });
   assert.deepEqual(K.fit(300, 200), { w: 300, h: 200 }, 'never scaled up');
@@ -97,6 +149,8 @@ test('local pictures: scaled down, capped each and in all, and dropped with thei
   assert.ok(!K.room(K.IMG_MAX + 1));
   assert.ok(!K.room(K.IMG_MAX, { a: K.IMG_TOTAL - K.IMG_MAX + 1 }));
   assert.deepEqual(K.orphans({ [A]: { k: 'image', i: 'aaaaaaaaaaaa' } }, { aaaaaaaaaaaa: 10, bbbbbbbbbbbb: 20 }), ['bbbbbbbbbbbb']);
+  // What storage holds is what counts: every cardImg: key, by its own size.
+  assert.deepEqual(K.kept({ 'cardImg:aaaaaaaaaaaa': 'data:xx', cardImgs: { zzz: 1 }, other: 'x' }), { aaaaaaaaaaaa: 7 });
   assert.match('data:image/webp;base64,AAAA', K.DATA);
   assert.doesNotMatch('data:image/svg+xml;base64,AAAA', K.DATA);
   assert.doesNotMatch('data:image/webp;base64,AA") x', K.DATA);
@@ -127,4 +181,38 @@ test('theme codes carry how cards look and linked card styles, never a picture f
     ['out of range', { c, k: { width: 9999 } }],
     ['not a list', { c, d: { k: 'solid', c: '#111111' } }],
   ]) await assert.rejects(S.decode(await make(obj)), Error, why);
+});
+
+test('every valid saved state gives a code that decodes back to it, or a clear "too long" at copy time', async () => {
+  const G = require('../defaults.js');
+  const S = require('../lib/share.js');
+  // Deterministic states: settings at their edges, and card styles with every optional field, including the longest
+  // links the cards item can hold (signed links: no repeats for deflate to fold).
+  let seed = 7;
+  const rnd = (n) => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed % n; };
+  const hex = () => `#${rnd(0xffffff).toString(16).padStart(6, '0')}`;
+  const styleOf = (n, long) => [
+    () => ({ k: 'solid', c: hex() }),
+    () => ({ k: 'gradient', c: hex(), d: hex(), ...(rnd(2) && { a: rnd(361) }) }),
+    () => ({ k: 'image', u: `https://pics.example/${long ? Array.from({ length: long }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[rnd(36)]).join('') : n}.jpg`, ...(rnd(2) && { c: hex() }), ...(rnd(2) && { o: rnd(101) }), f: Object.keys(K.FILTERS)[1 + rnd(7)], x: rnd(101), y: rnd(101), z: 100 + rnd(201) }),
+  ][n % 3]();
+  let copied = 0, refused = 0;
+  for (let n = 0; n < 60; n++) {
+    const long = n % 10 === 9 ? 850 : n % 10 === 8 ? 300 : 0;
+    const cards = K.styles(Object.fromEntries(Array.from({ length: 1 + rnd(8) }, (_, i) => [`canvas:https://s.instructure.com/${i}`, styleOf(n + i, long)])));
+    const card = K.settings(Object.fromEntries(Object.entries(K.SPEC).map(([k, [d, rule]]) => [k, rnd(2) ? d : rule === 'bool' ? !d : typeof rule[0] === 'number' ? rule[rnd(2)] : rule[rnd(rule.length)]])));
+    const s = { ...G.GZ_SANITIZE({}), card };
+    let code;
+    try { code = await S.encode(s, cards); } catch (e) { assert.match(e.message, /too long for a code/); refused++; continue; }
+    const got = await S.decode(code);
+    copied++;
+    assert.deepEqual(got.cards, Object.values(cards).filter((v) => !v.i).slice(0, K.SET_MAX));
+    for (const [k, v] of Object.entries(got.card)) assert.equal(v, card[k]);
+  }
+  assert.ok(copied > 40, `${copied} copied, ${refused} refused`);
+  // The worst the cards item allows: eight pictures with long signed links. Refused when copied, never a code that
+  // its own decoder calls damaged.
+  const worst = K.styles(Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`canvas:https://s.instructure.com/${i}`, { k: 'image', u: `https://pics.example/${Array.from({ length: 850 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[rnd(36)]).join('')}` }])));
+  assert.equal(Object.keys(worst).length, 8);
+  await assert.rejects(S.encode(G.GZ_SANITIZE({}), worst), /too long for a code/);
 });
