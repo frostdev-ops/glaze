@@ -22,7 +22,7 @@ const fixture = () => {
   const html = new E('html'), head = new E('head'), body = new E('body'), outline = new E(); html.append(head, body); body.append(outline);
   const row = (id, title, module = false) => {
     const r = new E(); r.className = 'content-list-item'; r.dataset.contentId = id;
-    const h = new E('h3'), toggle = new E('button'); toggle.textContent = title; toggle.id = `${module ? 'learning-module' : 'folder'}-title-${id}`; h.append(toggle); r.append(h); return r;
+    const h = new E('h3'), toggle = new E('button'); toggle.textContent = title; toggle.id = `${module ? 'learning-module' : 'folder'}-title-${id}`; h.append(toggle); const content = new E(); content.append(h); r.append(content); return r;
   };
   const parent = row('_101_1', 'Parent'), child = row('_102_1', 'Nested'), module = row('_104_1', 'Module', true), plain = new E(); plain.dataset.contentId = '_103_1'; plain.className = 'content-list-item';
   parent.append(child, plain); outline.append(parent, module);
@@ -35,16 +35,17 @@ const fixture = () => {
   const ctx = { on: () => on, settings: () => ({ enhance: { hideFolders: enabled } }), courseId: () => cid,
     toggleOf: (r) => r.querySelector(`#folder-title-${r.dataset.contentId}`) || r.querySelector(`#learning-module-title-${r.dataset.contentId}`), t: (k, args) => k.replace(/\{(\w+)\}/g, (_, p) => args[p]) };
   const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { constructor(f) { mutations = f; } observe() {} } });
-  vm.runInContext(fs.readFileSync(require.resolve('../features/folders.js'), 'utf8'), c);
+  vm.runInContext(fs.readFileSync(process.env.GZ_B9_FEATURE || require.resolve('../features/folders.js'), 'utf8'), c);
   const ui = c.GZ_FOLDER_UI;
   const click = async (el, type = 'click') => { const e = { preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }; el.listeners[type](e); await settle(); return e; };
   return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => mutations(),
     identity: Promise.resolve('_900_1'), setOn: (v) => { on = v; }, setEnabled: (v) => { enabled = v; }, fail: (v) => { failed = v; }, hold: (v) => { held = v; }, change: (v) => { cid = v; location.pathname = `/ultra/courses/${v}/outline`; }, path: (v) => { location.pathname = v; }, changed: () => changed.forEach((f) => f({ [F.key(location.origin, '_900_1', cid)]: {} }, 'local')) };
 };
-const eye = (row) => row.querySelector(':scope > .gz-folder-eye');
+const eye = (row) => row.querySelector(`#gz-folder-eye-${row.dataset.contentId}`);
 test('nested folder and learning module controls hide, show, unhide and reapply after redraw', async () => {
   const e = fixture(); e.ui.sync(true, e.identity); await settle();
   assert.ok(eye(e.parent)); assert.ok(eye(e.child)); assert.ok(eye(e.module)); assert.equal(eye(e.plain), null);
+  e.redraw(); e.redraw(); assert.equal(e.document.querySelectorAll('.gz-folder-eye').length, 3, 'wrapped Ultra headings do not accumulate duplicate buttons');
   assert.equal(eye(e.parent).getAttribute('aria-label'), 'Hide folder: Parent');
   assert.equal((await e.click(eye(e.child), 'keydown')).stopped, true);
   assert.equal((await e.click(eye(e.child))).stopped, true);
@@ -92,4 +93,14 @@ test('a storage result arriving after course navigation cannot hide the new outl
   release({ [F.key('https://bb.example.edu', '_900_1', '_800_1')]: { ids: ['_101_1'], show: false } }); await settle();
   assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
   assert.ok(eye(e.parent)); assert.equal(e.sent.length, 0);
+});
+test('a cross-tab storage change invalidates an older in-flight read', async () => {
+  const e = fixture(); let release; e.hold(new Promise((r) => { release = r; }));
+  e.ui.sync(true, e.identity); await settle();
+  const key = F.key('https://bb.example.edu', '_900_1', '_800_1');
+  e.store[key] = { ids: ['_102_1'], show: true };
+  e.hold(null); e.changed(); await settle();
+  release({ [key]: { ids: ['_101_1'], show: false } }); await settle();
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
+  assert.equal(e.child.getAttribute('data-gz-folder-hidden'), 'show');
 });
