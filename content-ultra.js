@@ -560,23 +560,58 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const p of document.querySelectorAll('[data-gz-real]')) if (!nickOf(p.dataset.gzCid)) unname(p);
   };
 
+  const renamed = new Map();
+  const syncDashboard = () => {
+    const on = I.links.length && I.settings.enabled && GZ_NAV.dashboard(I.settings);
+    for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a[href]')) {
+      if (GZ_NAV.native(a.getAttribute('href')) !== 'institution-page') continue;
+      const label = a.querySelector('.MuiTypography-root, .MuiListItemText-root, span:not(:has(svg))');
+      const text = label && document.createTreeWalker(label, NodeFilter.SHOW_TEXT).nextNode();
+      if (!text) continue;
+      let r = renamed.get(a);
+      if (r?.node !== text) { r = { node: text, text: text.data, aria: a.getAttribute('aria-label') }; renamed.set(a, r); }
+      const name = on ? t('Dashboard') : r.text;
+      if (text.data !== name) text.data = name;
+      a.classList.toggle('gz-nav-dashboard', !!on);
+      if (on) { if (a.getAttribute('aria-label') !== name) a.setAttribute('aria-label', name); }
+      else if (r.aria === null) a.removeAttribute('aria-label'); else a.setAttribute('aria-label', r.aria);
+    }
+    for (const a of renamed.keys()) if (!a.isConnected) renamed.delete(a);
+  };
+  const navObserver = new MutationObserver(syncDashboard);
+  navObserver.observe(html, { childList: true, subtree: true, characterData: true });
+  addEventListener('pagehide', () => navObserver.disconnect(), { once: true });
   const paintNav = (n, picture) => {
     if (!isPreview && window.top !== window) return;
     I.setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
     I.setAttr('data-gz-nav-brand', n.brand);
+    I.setAttr('data-gz-nav-detailed', n.detailed);
     for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;
     I.setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
     for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) I.setVar(`--gz-nav-${k}`, v);
+    syncDashboard();
   };
+  let navRead = false, navItems = null;
   const syncNav = () => {
     if (!isPreview && window.top !== window) return;
+    syncDashboard();
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
-    else if (I.links.length) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
+    else if (I.links.length && navItems) {
+      const n = I.worn.nav;
+      if (n.i || n.li || n.collapsed || n.labels === 'icons' || navItems.links.length || navItems.order.length || navItems.hidden.length || navItems.widgets.some((w) => w.on)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
+    } else if (I.links.length && !navRead) {
+      navRead = true;
+      try { chrome.storage.sync.get('navItems', (r) => {
+        navRead = false;
+        navItems ||= GZ_NAV.clean(r?.navItems); syncNav();
+      }); } catch { navRead = false; }
+    }
     if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
   };
+  chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && c.navItems) { navItems = GZ_NAV.clean(c.navItems.newValue); syncNav(); } });
   // A host registered for another LMS may answer settings before Ultra's schema arrives.
   if (!('brand' in I.settings.nav)) {
     const nav = I.settings.nav;
@@ -597,4 +632,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
 });
 
+// Known Ultra entry: arm before asynchronous head detection lets the parser reach <body>.
+if (!document.body && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
+  GZ_SITE_ULTRA.sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => {
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
+    l.setAttribute('blocking', 'render'); setTimeout(() => l.removeAttribute('blocking'), 1000);
+    (document.head || document.documentElement).appendChild(l); return l;
+  });
+}
 GZ_SITE_ULTRA;

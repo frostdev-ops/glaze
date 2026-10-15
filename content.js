@@ -31,6 +31,7 @@
     document.addEventListener('DOMContentLoaded', look);
     look();
   });
+  if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
   const ultra = site === 'ultra';
   const moodle = site === 'moodle';
@@ -1289,7 +1290,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     if (notUltra) return;
     if (!links.length) {
       links = SHEETS.map((f) => {
-        const l = document.createElement('link');
+        const l = (ultra && globalThis.GZ_SITE_ULTRA?.sheets?.shift()) || document.createElement('link');
         l.rel = 'stylesheet';
         l.href = chrome.runtime.getURL(f);
         // Hold the first paint until the sheets are in. A script-inserted sheet does not block rendering

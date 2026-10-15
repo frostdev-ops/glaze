@@ -76,13 +76,15 @@ GZ_NAV_UI;
 
 // The modern drawer and legacy rail keep their native links. Comments remember each item's original DOM position.
 function GZ_ULTRA_RAIL(X) {
-  const N = GZ_NAV, roots = 'nav[class*="makeStylesnavigation"], nav#base_tools, nav:has(> #base_tools)';
+  const N = GZ_NAV, roots = 'nav[class*="makeStylesnavigation"], nav#base_tools, nav:has(> #base_tools)', isPreview = /-extension:$/.test(location.protocol);
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const setText = (e, text) => { if (e.textContent !== text) e.textContent = text; };
   const get = (area, keys) => new Promise((res) => { try { chrome.storage[area].get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const captured = new Map(), custom = new Map();
-  let config = N.clean(), active = false, host, top, bottom, signature = '', clock = 0, logo = null, logoId = '', rev = 0, reads = 0, local = {}, W, P, icons;
+  let config = N.clean(), active = false, host, top, bottom, signature = '', clock = 0, logo = null, logoId = '', rev = 0, reads = 0, local = {}, W, P, icons, iconRead;
+  let nextItems = [], nextAt = 0, nextBusy = false, nextError = false;
+  let timerPending = false, advanced = '', timerFailed = '';
   const icon = (name) => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
@@ -98,9 +100,6 @@ function GZ_ULTRA_RAIL(X) {
     for (const [a, r] of captured) {
       if (r.mark.isConnected && r.unit.isConnected) r.mark.after(r.unit); r.mark.remove();
       r.unit.hidden = r.hidden; delete r.unit.dataset.gzNavId;
-      if (r.label && r.label.textContent === X.t('Dashboard')) r.label.textContent = r.text;
-      if (r.aria === null) a.removeAttribute('aria-label'); else a.setAttribute('aria-label', r.aria);
-      r.icon?.classList.remove('gz-nav-native-icon'); r.own?.remove();
     }
     captured.clear();
     for (const r of custom.values()) r.unit.remove(); custom.clear();
@@ -133,9 +132,10 @@ function GZ_ULTRA_RAIL(X) {
   };
   const readLocal = () => {
     const token = rev, read = ++reads;
-    get('local', ['widgetTimer', 'todoCache', 'dueWeek', 'dueWeekFrom']).then(async (r) => {
+    get('local', isPreview ? ['todoCache'] : ['widgetTimer', 'todoCache']).then(async (r) => {
       if (!active || token !== rev || read !== reads) return;
-      local = r;
+      if (r.todoCache?.key !== local.todoCache?.key) { nextItems = []; nextAt = 0; }
+      local = { ...r, ...(isPreview && { widgetTimer: local.widgetTimer }) };
       const key = r.todoCache?.key;
       if (typeof key === 'string' && key.startsWith(`todo:${location.origin}/`) && Date.now() - r.todoCache.at < 120000) {
         const petKey = key.replace(/^todo:/, 'pet:');
@@ -143,6 +143,34 @@ function GZ_ULTRA_RAIL(X) {
       }
       if (active && token === rev && read === reads) drawWidgets();
     });
+  };
+  const refreshNext = async () => {
+    if (isPreview || nextBusy || Date.now() - nextAt < 120000 || !config.widgets.some((w) => w.id === 'next' && w.on)) return;
+    const token = rev, read = reads, url = location.href;
+    nextBusy = true; nextAt = Date.now();
+    try {
+      await Promise.all([X.need('lib/ultra.js', () => globalThis.GZ_ULTRA), X.need('lib/todo.js', () => globalThis.GZ_TODO)]);
+      const start = new Date(); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 7);
+      const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache);
+      const [raw, options] = await Promise.all([get('local', plan.key), get('sync', 'todo')]);
+      if (!active || !X.on() || !X.settings().enabled || token !== rev || read !== reads || url !== location.href || !config.widgets.some((w) => w.id === 'next' && w.on)) return;
+      const data = GZ_TODO.clean(raw[plan.key]), mode = GZ_SANITIZE(options).todo.done;
+      nextItems = plan.items.filter((i) => i && !i.ov?.dismissed && !GZ_TODO.isDone(i, mode, data.items[`${i.type}:${i.id}`]?.done)); nextError = false;
+    } catch { if (active && token === rev) { nextItems = []; nextError = true; } }
+    finally { nextBusy = false; if (active && token === rev) drawWidgets(); }
+  };
+  const timerAction = async (op, node) => {
+    if (!W || timerPending || !node.options) return;
+    timerPending = true;
+    const token = rev;
+    const r = isPreview ? { ok: true, timer: op === 'reset' ? W.IDLE : op === 'toggle' ? W.cleanTimer(local.widgetTimer).end ? W.pause(W.cleanTimer(local.widgetTimer), Date.now()) : W.start(W.cleanTimer(local.widgetTimer), Date.now(), node.options) : W.advance(W.cleanTimer(local.widgetTimer), Date.now(), node.options) }
+      : await send({ type: 'glaze:widgetTimer', op });
+    timerPending = false;
+    if (!active || token !== rev) return;
+    node.status.textContent = r?.ok ? '' : X.t('Not saved. Try again in a moment.');
+    timerFailed = r?.ok ? '' : JSON.stringify(W.cleanTimer(local.widgetTimer));
+    if (r?.ok) { local.widgetTimer = r.timer; if (op !== 'advance') advanced = ''; }
+    drawWidgets();
   };
   const widgetNodes = new Map();
   const drawWidgets = () => {
@@ -157,16 +185,16 @@ function GZ_ULTRA_RAIL(X) {
         setText(node.time, time); setText(node.detail, day); node.box.title = `${time} · ${day}`;
       }
       if (w.id === 'next') {
-        const list = local.dueWeekFrom === location.origin && Array.isArray(local.dueWeek) ? local.dueWeek : [];
-        const item = list.filter((i) => i && typeof i.title === 'string' && Number.isFinite(i.due) && i.due > now && /^_\d+_\d+$/.test(i.cid) && /^_\d+_\d+$/.test(i.content)).sort((a, b) => a.due - b.due)[0];
-        const label = item ? `${item.title.slice(0, 200)} · ${GZ_PAGE.describe(new Date(item.due), true, new Date(now), X.locale()).rel}` : X.t('No upcoming work');
+        refreshNext();
+        const item = nextItems.filter((i) => typeof i.title === 'string' && Number.isFinite(i.at) && i.at > now && /^_\d+_\d+$/.test(i.cid)).sort((a, b) => a.at - b.at)[0];
+        const label = item ? `${item.title.slice(0, 200)} · ${GZ_PAGE.describe(new Date(item.at), true, new Date(now), X.locale()).rel}` : X.t(nextError ? "Glaze couldn't load this. Try again in a moment." : 'No upcoming work');
         setText(node.detail, label); node.box.title = label; node.box.setAttribute('aria-label', label);
-        if (item) { node.box.href = `${location.origin}/ultra/redirect?redirectType=nautilus&courseId=${encodeURIComponent(item.cid)}&contentId=${encodeURIComponent(item.content)}`; node.box.removeAttribute('aria-disabled'); }
+        if (item) { node.box.href = /^_\d+_\d+$/.test(item.content) ? `${location.origin}/ultra/redirect?redirectType=nautilus&courseId=${encodeURIComponent(item.cid)}&contentId=${encodeURIComponent(item.content)}` : `${location.origin}/ultra/courses/${item.cid}/outline`; node.box.removeAttribute('aria-disabled'); }
         else { node.box.removeAttribute('href'); node.box.setAttribute('aria-disabled', 'true'); }
       }
       if (w.id === 'timer' && W && node.options) {
-        const before = W.cleanTimer(local.widgetTimer), state = W.advance(before, now, node.options);
-        if (state !== before) send({ type: 'glaze:widgetTimer', op: 'advance' });
+        const before = W.cleanTimer(local.widgetTimer), state = timerFailed === JSON.stringify(before) ? before : W.advance(before, now, node.options);
+        if (state !== before && advanced !== JSON.stringify(before)) { advanced = JSON.stringify(before); timerAction('advance', node); }
         const left = W.clock(W.left(state, now, node.options));
         setText(node.time, left); setText(node.go, X.t(state.end ? 'Pause' : 'Start'));
         node.go.setAttribute('aria-label', `${X.t(state.end ? 'Pause' : 'Start')} · ${X.t('Focus timer')}`);
@@ -198,9 +226,9 @@ function GZ_ULTRA_RAIL(X) {
       if (w.id === 'timer') {
         const go = make('button', { type: 'button', textContent: X.t('Start') }), reset = make('button', { type: 'button', textContent: X.t('Reset') });
         reset.setAttribute('aria-label', `${X.t('Reset')} · ${X.t('Focus timer')}`);
-        const action = async (op) => { const r = await send({ type: 'glaze:widgetTimer', op }); if (active && r?.ok) { local.widgetTimer = r.timer; drawWidgets(); } };
-        go.addEventListener('click', () => action('toggle')); reset.addEventListener('click', () => action('reset'));
-        box.append(time, go, reset); node.go = go;
+        node.status = make('span', { role: 'status', className: 'gz-nav-status' });
+        go.addEventListener('click', () => timerAction('toggle', node)); reset.addEventListener('click', () => timerAction('reset', node));
+        box.append(time, go, reset, node.status); node.go = go;
         X.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(async () => {
           const settings = await get('sync', 'widgets');
           if (!active || token !== rev) return;
@@ -227,21 +255,18 @@ function GZ_ULTRA_RAIL(X) {
       if (captured.has(a)) { const r = captured.get(a); if (!r.mark.isConnected) r.unit.before(r.mark); continue; }
       const unit = a.parentElement.tagName === 'LI' ? a.parentElement : a;
       const prior = [...captured].find(([, r]) => r.unit === unit);
-      if (prior) { captured.delete(prior[0]); prior[1].icon?.classList.remove('gz-nav-native-icon'); prior[1].own?.remove(); }
+      if (prior) captured.delete(prior[0]);
       const mark = prior?.[1].mark || document.createComment('glaze-nav'); if (!mark.isConnected) unit.before(mark);
-      const label = a.querySelector('.MuiListItemText-root, .MuiTypography-root, span:not(:has(svg))');
-      const r = { id, unit, mark, hidden: prior?.[1].hidden ?? unit.hidden, label, text: label?.textContent, aria: a.getAttribute('aria-label') };
+      const r = { id, unit, mark, hidden: prior?.[1].hidden ?? unit.hidden };
       captured.set(a, r); unit.dataset.gzNavId = id;
-      if (id === 'institution-page') { r.icon = a.querySelector('svg'); r.icon?.classList.add('gz-nav-native-icon'); r.own = icon('dashboard'); a.prepend(r.own); }
     }
     for (const [a, r] of captured) {
       r.unit.hidden = r.hidden || config.hidden.includes(r.id);
-      if (r.id === 'institution-page') { if (r.label) setText(r.label, X.t('Dashboard')); a.setAttribute('aria-label', X.t('Dashboard')); }
     }
     for (const [id, r] of custom) if (!config.links.some((l) => l.id === id)) { r.unit.remove(); custom.delete(id); }
     for (const l of config.links) {
       let a = custom.get(l.id)?.a;
-      if (!a) { a = make('a', { className: 'MuiButtonBase-root MuiListItemButton-root base-navigation-button-content gz-nav-link' }, icon(l.i), make('span', { className: 'MuiListItemText-root' })); const unit = list.tagName === 'UL' ? make('li', {}, a) : a; unit.dataset.gzNavId = l.id; custom.set(l.id, { a, unit }); }
+      if (!a) { a = make('a', { className: `MuiButtonBase-root MuiListItemButton-root gz-nav-link${root.matches('[class*="makeStylesnavigation"]') ? '' : ' base-navigation-button-content'}` }, icon(l.i), make('span', { className: 'MuiListItemText-root' })); const parent = [...captured.values()][0]?.mark.parentNode || list; const unit = parent.tagName === 'UL' ? make('li', {}, a) : a; unit.dataset.gzNavId = l.id; custom.set(l.id, { a, unit, parent }); }
       a.href = l.u; a.target = l.tab ? '_blank' : '_self'; a.rel = l.tab ? 'noopener noreferrer' : ''; a.title = l.n; a.setAttribute('aria-label', l.n);
       setText(a.lastElementChild, l.n);
       if (a.dataset.icon !== l.i) { a.firstElementChild.replaceWith(icon(l.i)); a.dataset.icon = l.i; }
@@ -250,23 +275,30 @@ function GZ_ULTRA_RAIL(X) {
     const units = new Map(originals.map((r) => [r.id, r.unit]));
     for (const [id, r] of custom) units.set(id, r.unit);
     const order = N.sequence([...units.keys()], config);
-    if (JSON.stringify([...list.children].map((e) => e.dataset.gzNavId).filter(Boolean)) !== JSON.stringify(order)) { const focused = document.activeElement; for (const id of order) list.append(units.get(id)); if (list.contains(focused)) focused.focus({ preventScroll: true }); }
+    const parents = new Map([...captured.values()].map((r) => [r.unit, r.mark.parentNode]));
+    for (const r of custom.values()) parents.set(r.unit, r.parent);
+    const focused = document.activeElement;
+    for (const parent of new Set(parents.values())) {
+      const wanted = order.map((id) => units.get(id)).filter((unit) => parents.get(unit) === parent);
+      if (wanted.some((unit, at) => [...parent.children].filter((e) => e.dataset.gzNavId)[at] !== unit)) parent.append(...wanted);
+    }
+    if (list.contains(focused) && document.activeElement !== focused) focused.focus({ preventScroll: true });
+    if ((config.links.length || config.widgets.some((w) => w.on && w.id === 'next')) && !iconRead) iconRead = X.need('lib/cards.js', () => globalThis.GZ_CARDS).then(() => { icons = GZ_CARDS.ICONS; if (active) { for (const { a } of custom.values()) a.dataset.icon = ''; sync(true); } }).catch(() => { iconRead = null; });
     mountWidgets(); loadLogo();
   };
-  if (location.pathname.endsWith('/preview.html')) document.addEventListener('click', (e) => { if (e.target.closest?.('a')) e.preventDefault(); });
+  if (isPreview) document.addEventListener('click', (e) => { if (e.target.closest?.('a')) e.preventDefault(); });
   const load = () => get('sync', 'navItems').then((r) => { config = N.clean(r.navItems); if (active) sync(true); });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' && changes.navItems) { config = N.clean(changes.navItems.newValue); if (active) sync(true); }
     if (area === 'local') {
       if (logoId && changes[`navLogo:${logoId}`]) { logoId = ''; if (active) loadLogo(); }
-      if (active && Object.keys(changes).some((k) => ['widgetTimer', 'todoCache', 'dueWeek', 'dueWeekFrom'].includes(k) || k.startsWith('pet:'))) readLocal();
+      if (active && Object.keys(changes).some((k) => (!isPreview && k === 'widgetTimer') || k === 'todoCache' || k.startsWith('todo:') || k.startsWith('pet:'))) { if (changes.todoCache) nextAt = 0; readLocal(); }
     }
     if (area === 'sync' && changes.widgets && active) { signature = ''; mountWidgets(); }
   });
   addEventListener('pagehide', () => { active = false; rev++; restore(); });
   document.addEventListener('visibilitychange', () => { if (active) drawWidgets(); });
-  addEventListener('message', (e) => { if (e.origin === location.origin && e.source === parent && e.data?.gzNavPreview) { config = N.clean(e.data.gzNavPreview); if (active) sync(true); } });
-  X.need('lib/cards.js', () => globalThis.GZ_CARDS).then(() => { icons = GZ_CARDS.ICONS; signature = ''; if (active) { for (const { a } of custom.values()) a.dataset.icon = ''; sync(true); } }).catch(() => {});
+  addEventListener('message', (e) => { if (isPreview && e.origin === location.origin && e.source === parent && e.data?.gzNavPreview) { config = N.clean(e.data.gzNavPreview); if (active) sync(true); } });
   load();
   return { sync };
 }

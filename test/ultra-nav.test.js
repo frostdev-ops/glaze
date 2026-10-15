@@ -156,10 +156,10 @@ test('the wrong-LMS-host fallback injects the nav schema before Ultra once with 
 
 test('static preview arrival starts nav despite an earlier cached rejected injection', async () => {
   const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../content-ultra.js'), 'utf8');
-  const a = source.indexOf('  const syncNav = () =>'), b = source.indexOf('\n  // A host registered', a);
+  const a = source.indexOf('  const syncNav = () =>'), b = source.indexOf('\n  chrome.storage.onChanged', a);
   let starts = 0, asks = 0;
   const failed = Promise.reject(new Error('not in the preview')); failed.catch(() => {});
-  const ctx = vm.createContext({ isPreview: true, I: { links: [1] }, need: (file) => { if (file === 'features/nav.js') asks++; return failed; }, location: { pathname: '/preview.html' }, window: {} });
+  const ctx = vm.createContext({ isPreview: true, I: { links: [1], worn: { nav: {} } }, navItems: { links: [1], order: [], hidden: [], widgets: [] }, syncDashboard() {}, need: (file) => { if (file === 'features/nav.js') asks++; return failed; }, location: { pathname: '/preview.html' }, window: {} });
   const sync = vm.runInContext(source.slice(a, b) + '\nsyncNav;', ctx);
   sync(); await new Promise(setImmediate);
   ctx.GZ_NAV_UI = { sync: () => starts++ };
