@@ -43,7 +43,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
       requests.push(`${u.host}${u.pathname}`);
-      requestDetails.push({ phase, method: route.request().method(), origin: u.origin, path: u.pathname, type: route.request().resourceType() });
+      requestDetails.push({ phase, method: route.request().method(), origin: u.origin, path: u.pathname, search: u.search, page: route.request().frame().url(), type: route.request().resourceType() });
       if (u.origin === SITE && u.pathname.startsWith('/ultra')) return route.fulfill({ contentType: 'text/html', body: PAGE });
       if (u.href === CSS_URL) return route.fulfill({ contentType: 'text/css', body: '.course-content-container{min-height:100vh}\n.panel-wrap{overscroll-behavior:contain}', headers: { 'cache-control': 'no-store' } });
       if (['/fixture/image.png', '/fixture/background.png'].includes(u.pathname) && [SITE, 'https://cdn.school.test'].includes(u.origin)) return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5FQAAAAASUVORK5CYII=', 'base64'), headers: { 'cache-control': 'no-store' } });
@@ -96,6 +96,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       await page.waitForSelector(`a[href="/ultra/courses/${cid}/outline"]`);
       await page.click(`a[href="/ultra/courses/${cid}/outline"]`);
       await settled(cid);
+    };
+    const switchTab = async (cid) => {
+      const previous = phase; phase = `tab-switch:${cid}`;
+      try { await page.click(`#gz-ctabs [data-course-id="${cid}"]`); await settled(cid); } finally { phase = previous; }
     };
     const scroller = () => page.evaluate(() => document.querySelector('.course-content-container > .panel-wrap')?.scrollTop);
 
@@ -204,10 +208,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.click('a[href*="/assessment/"]');
     await page.waitForFunction(() => location.pathname.includes('/assessment/'));
     const views = await page.evaluate(() => window.__assessmentViews);
-    await page.click('#gz-ctabs [data-course-id="_102_1"]');
-    await settled('_102_1');
-    await page.click('#gz-ctabs [data-course-id="_101_1"]');
-    await settled('_101_1');
+    await switchTab('_102_1');
+    await switchTab('_101_1');
     ok(await page.evaluate(() => location.pathname) === '/ultra/courses/_101_1/outline', `a tab left in an assessment goes back to the course's tool (${await page.evaluate(() => location.pathname)})`);
     ok(await page.evaluate(() => [window.__assessmentViews, window.__attempts]).then(([v, a]) => v === views && a === 0), 'the assessment wasn\'t opened again, nor an attempt started');
 
@@ -234,8 +236,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.keyboard.press('Delete');
     ok(await order() === '_103_1 _101_1', `Delete closes the focused tab (${await order()})`);
     await open('_104_1');
-    await page.click('#gz-ctabs [data-course-id="_101_1"]');
-    await settled('_101_1');
+    await switchTab('_101_1');
     await page.click('#gz-ctabs [data-course-id="_104_1"]', { button: 'middle' });
     ok(await order() === '_103_1 _101_1', `a middle click closes a tab (${await order()})`);
     await page.waitForTimeout(200);
@@ -369,8 +370,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     ok(!kept.length, `switched off: the strip goes, and every copy (${kept.length} left)`);
     await settings();
     await page.waitForSelector('#gz-ctabs [role="tab"]');
-    await page.click('#gz-ctabs [data-course-id="_103_1"]');
-    await settled('_103_1');
+    await switchTab('_103_1');
     await page.waitForTimeout(300);
     ok(Object.keys(await session()).some((k) => k.startsWith('snap:')), 'on again, a switch keeps a copy again');
     user = '_43_1';
