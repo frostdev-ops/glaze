@@ -976,7 +976,9 @@
     };
   };
   const syncScene = () => {
-    if (!chrome.runtime?.id || !settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
+    // Cut off by a reload of Glaze: the scene keeps its last frame (lib/scene.js) until the page loads again.
+    if (!chrome.runtime?.id) return;
+    if (!settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
     if (scene) return scene.update(sceneOpts());
     sceneLoad ||= import(chrome.runtime.getURL('lib/scene.js'));
     sceneLoad.then((mod) => {
