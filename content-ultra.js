@@ -40,7 +40,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
   const top = () => I.links.length && window.top === window && I.settings.enhance;
-  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
+  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
   const syncRemind = () => load(() => ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
 
@@ -381,11 +381,19 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
   // ---- code on demand ------------------------------------------------------------------------------
-  // Notes, widgets and the pet: Courses page panel and floating tiles.
-  // Ultra routes without reloading; this pass also places Course notes on the outline.
-  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || ((I.settings.enhance.notes || I.settings.enhance.pet) && /^\/ultra\/course\/?$/.test(location.pathname)));
+  // Notes, widgets and the pet: the Courses page's board, the tiles floating over every page, and the Dashboard (the
+  // Institution page, B7b; its own switch, enhance.dashboard, on by default). Ultra routes without reloading; this pass
+  // also places Course notes on the outline. Until the Dashboard is drawn, Ultra's own Institution page waits hidden
+  // (html[data-gz-dash], apps.css), so it doesn't show for a moment first. A page loaded at Ultra's start may go on to the
+  // Dashboard (opt-in, once: features/dashboard.js); from is its first address, kept until a pass has the settings.
+  let from = location.pathname;
+  const dash = () => top()?.dashboard && /^\/ultra\/institution-page\/?$/.test(location.pathname);
+  const widgetsHere = () => { const e = top(); return !!e && (dash() || e.widgets || e.notes || e.pet); };
   const syncWidgets = () => {
-    if (widgetsHere()) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    const on = widgetsHere();
+    if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
+    if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => html.setAttribute('data-gz-dash', 'ip')); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    if (from && top()?.dashboard) { const f = from; from = ''; if (/^\/ultra(\/(stream|course))?\/?$/.test(f)) need('features/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => GZ_DASH_UI.land(f), () => {}); }
     if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
   };
 

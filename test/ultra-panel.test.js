@@ -42,6 +42,7 @@ const page = ({ site = 'ultra', todo = true, local = {}, failLoad = false } = {}
     console, URL, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, setTimeout, clearTimeout,
     document: doc, location: site === 'ultra' ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     innerWidth: 1280, innerHeight: 900, addEventListener() {}, removeEventListener() {},
+    ResizeObserver: class { observe() {} disconnect() {} }, requestAnimationFrame: () => 0, cancelAnimationFrame() {},
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W,
     GZ_CTX: {
       site, t: (k) => k, locale: () => 'en', settings: () => settings,
