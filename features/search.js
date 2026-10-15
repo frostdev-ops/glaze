@@ -11,6 +11,7 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
   const t = (k, v) => ctx.t(k, v);
   const ultra = ctx.site === 'ultra';
   let kept = null, sources = null;
+  const retry = new Map();
   let quit = null; // stops the open palette's search
   // Whether Glaze and this search are on, as storage has it: content.js's own copy of the settings can lag behind a
   // change. Read from storage when the palette attaches, then followed through every change, even one that comes while
@@ -43,8 +44,8 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
     }
     if (!cmd.box.isConnected || cmd.stop || !allowed()) return;
     const S = globalThis.GZ_SEEK;
-    kept ||= S.cache();
-    if (ultra) sources ||= S.cache(300000, 60);
+    if (!ultra) kept ||= S.cache();
+
     // Screen readers hear the count once the search is done, not every arrival.
     const live = document.createElement('p');
     live.className = 'screenreader-only';
@@ -55,6 +56,8 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
     quit = () => {
       if (!cmd.box.isConnected) return;
       last = '';
+      kept = sources = null;
+      retry.clear();
       cmd.stop();
       cmd.found = null;
       cmd.seeking = false;
@@ -70,30 +73,41 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
           const U = globalThis.GZ_ULTRA;
           // shortcut: at most 30 requests per query and two pages (400 rows) per list; raise only after measuring large schools.
           const r = U.read({ origin: location.origin, signal: c.signal, maxPages: 2, maxRequests: 30 });
+          sources ||= S.cache(300000, 301);
           courses = sources.get('courses');
           if (!courses) {
-            const uid = await r.me();
-            const mem = await r.memberships(uid);
+            const mem = await ctx.myCourses();
+            if (c.signal.aborted) return;
             const terms = await r.terms().catch(() => []);
             if (c.signal.aborted) return;
             courses = Object.entries(U.courses(mem, { terms })).filter(([, x]) => !x.org)
-              .map(([id, x]) => ({ id, name: x.name, course_code: x.code, term: x.term }));
+              .map(([id, x]) => ({ id, name: x.name, course_code: x.code, term: x.term, closed: x.closed }));
             sources.set('courses', courses);
           }
-          courses = S.order(courses, ctx.courseId(), Date.now(), (id) => /^_\d+_\d+$/.test(id));
+          // shortcut: first 100 open current-term courses, so all three source lists fit the 301-entry cache.
+          const now = Date.now(), here = ctx.courseId();
+          courses = S.order(courses.filter((x) => !x.closed && (x.id === here || x.term && S.current(x, now))), here, now, (id) => /^_\d+_\d+$/.test(id)).slice(0, 100);
           adapter = { kinds: U.SEARCH_KINDS, conc: 3, load: async (course, k) => {
             const key = `${course.id}|${k.kind}`;
             let rows = sources.get(key);
             if (!rows) {
-              try { rows = await r.search(course, k, (html) => GZ_DOCTEXT.html(html)); }
-              catch (e) { if (c.signal.aborted || e.message === 'Ultra request budget') return []; rows = []; }
+              if (Date.now() < (retry.get(key) || 0)) return [];
+              try {
+                rows = (await r.search(course, k, (html) => GZ_DOCTEXT.html(html)))
+                  .map(({ text, ...row }) => ({ ...row, index: S.fold(`${row.title} ${text}`) }));
+                retry.delete(key);
+              } catch (e) {
+                if (c.signal.aborted || e.message === 'Ultra request budget') return [];
+                if (!/^HTTP (403|404)$/.test(e.message)) { retry.set(key, Date.now() + (e.message === 'HTTP 429' ? 30000 : 3000)); return []; }
+                rows = [];
+              }
               if (c.signal.aborted) return [];
               sources.set(key, rows);
             }
             const q = S.fold(term);
-            return rows.filter((x) => S.fold(`${x.title} ${x.text}`).includes(q));
+            return rows.filter((x) => x.until >= Date.now() && x.index.includes(q));
           } };
-        } else courses = S.order(await ctx.canvasCourses(), ctx.canvasCourseId(), Date.now());
+        } else { kept ||= S.cache(); courses = S.order(await ctx.canvasCourses(), ctx.canvasCourseId(), Date.now()); }
         const n = await S.search({
           term, courses, cache: ultra ? null : kept, signal: c.signal, get: (p) => get(p, c.signal), ...adapter,
           onBatch: (rs) => {

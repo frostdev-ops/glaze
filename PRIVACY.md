@@ -242,12 +242,19 @@ you import) are bundled. It makes requests in these cases:
   is kept in memory; only the items' ids are stored, as above. Nothing is sent anywhere else.
 - **Search in your courses on Blackboard Ultra** (on by default): after two typed characters and a 150 ms pause,
   Glaze reads your own site's public recursive content, announcement and discussion topic lists with GETs through
-  its Ultra reader. Only titles, availability and public body text are requested; no private content details, LTI
-  fields, discussion threads, attempts or messages. HTML becomes text locally and never loads its images or scripts.
-  Your query stays on the device. Results and the course/term list stay in memory for five minutes, never in storage.
-  At most three lists run together, 30 requests per query and two pages of up to 200 items per list. New input,
-  closing the palette, or switching search or Glaze off cancels pending reads. Content links use the native redirect;
-  announcement/discussion results open the course tool list only after you choose one. Search itself marks nothing read.
+  its Ultra reader, reusing the page's existing memberships. It searches this course and open courses in this term,
+  up to 100 courses. Only titles, availability, handler type and public body text are requested; no private content
+  details, LTI fields, discussion threads, attempts or messages. Content with future, expired, missing, malformed or
+  unsupported release conditions is omitted, including under restricted ancestors. HTML becomes text locally and
+  never loads its images or scripts. Your query stays on the device. Projected source text and the course/term list
+  are reused for five minutes in a bounded memory cache; expired rows are evicted on later cache reads/writes.
+  Switching search or Glaze off clears the caches; leaving the page clears them too. Nothing is stored on disk.
+  At most three lists run together, 30 search GETs per query and two pages of up to 200 items per list. The palette
+  shares its existing membership lookup. Temporary failures are not cached as empty: network/server errors pause
+  retries for three seconds and HTTP 429 for 30 seconds. Missing tools (403/404) can be cached as empty.
+  New input, closing the palette, or switching search or Glaze off cancels pending search reads. Content links use
+  the native redirect; announcement/discussion results open the course tool list only after you choose one.
+  Search itself marks nothing read.
 - **On Canvas.** At most every ten minutes, Glaze asks your own Canvas site for your planner items for the
   next seven days, the same list Canvas's own planner and To Do list show, and keeps what's still to do as
   the due list above. On the Dashboard (Grades on course cards) and when you open the command palette, it

@@ -838,7 +838,7 @@
   "Opens a new issue on Glaze's GitHub page with your Glaze version, browser, system and language filled in, and nothing about your school. GitHub receives that text when the page opens; nothing is posted until you add what happened and submit it.": "Öffnet ein neues Issue auf der GitHub-Seite von Glaze, mit deiner Glaze-Version, deinem Browser, System und deiner Sprache und nichts über deine Schule. GitHub erhält diesen Text, sobald die Seite öffnet; veröffentlicht wird nichts, bis du ergänzt, was passiert ist, und es absendest.",
   "Notes and widgets on the Canvas Dashboard, and What Glaze can do in Ctrl+K.": "Notizen und Widgets auf dem Canvas-Dashboard, und „Was Glaze kann“ unter Strg+K.",
   "Search in your courses": "Suche in deinen Kursen",
-  "On Canvas and Blackboard Ultra: search your courses from the command palette, this course and this term first. Canvas finds titles; Ultra also finds public document, announcement and discussion topic text. Answers stay in memory for five minutes.": "Auf Canvas und Blackboard Ultra: Durchsuche deine Kurse über die Befehlspalette, zuerst diesen Kurs und das aktuelle Semester. Canvas findet Titel; Ultra auch öffentliche Texte von Dokumenten, Ankündigungen und Diskussionsthemen. Antworten bleiben fünf Minuten im Arbeitsspeicher.",
+  "On Canvas and Blackboard Ultra: search your courses from the command palette. Ultra searches this course and open courses in this term. Canvas finds titles; Ultra also finds released document, announcement and discussion topic text. Answers are reused for five minutes.": "Auf Canvas und Blackboard Ultra: Durchsuche deine Kurse über die Befehlspalette. Ultra durchsucht diesen Kurs und offene Kurse im aktuellen Semester. Canvas findet Titel; Ultra auch freigegebene Texte von Dokumenten, Ankündigungen und Diskussionsthemen. Antworten werden fünf Minuten wiederverwendet.",
   "Searching your courses…": "Deine Kurse werden durchsucht…",
   "Results from your courses: {n}": "Ergebnisse aus deinen Kursen: {n}",
   "Nothing found in your courses.": "In deinen Kursen nichts gefunden.",
@@ -1486,4 +1486,5 @@
   "Couldn't delete the Glaze calendar, so nothing changed. Try again, or disconnect without deleting it.": "Der Glaze-Kalender konnte nicht gelöscht werden, daher hat sich nichts geändert. Versuche es erneut oder trenne die Verbindung, ohne ihn zu löschen.",
   "Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.": "Auf diesem Gerät getrennt. Google hat nicht bestätigt, dass der Zugriff von Glaze entfernt wurde: Du kannst ihn unter myaccount.google.com/connections entfernen.",
   "Disconnected.": "Getrennt.",
+  "Test": "Prüfung",
 };

@@ -1,23 +1,29 @@
 {
   "_note": "Glaze test fixture: Blackboard Ultra public search lists, synthetic values. Shapes: parity/spikes/B0.md #19, #21, #22.",
   "contents": [
-    { "id": "_700_1", "title": "Laboratory", "availability": { "available": "Yes" } },
-    { "id": "_701_1", "parentId": "_700_1", "title": "Reading: Cell membrane", "availability": { "available": "Yes" }, "body": "<p>Résumé &amp; safety notes: mitochondria.</p><img src=\"https://files.example.com/never-request\"><script>forbiddenword()</script>" },
-    { "id": "_702_1", "parentId": "_700_1", "title": "Lab report", "availability": { "available": "Yes" } },
-    { "id": "_703_1", "title": "Hidden unit", "availability": { "available": "No" } },
-    { "id": "_704_1", "parentId": "_703_1", "title": "Lab hidden child", "availability": { "available": "Yes" }, "body": "<p>Hidden material.</p>" },
-    { "id": "_705_1", "title": "Lab unknown availability" },
-    { "id": "_706_1", "parentId": "_707_1", "title": "Lab cycle", "availability": { "available": "Yes" } },
-    { "id": "_707_1", "parentId": "_706_1", "title": "Lab cycle", "availability": { "available": "Yes" } }
+    {"id": "_700_1", "title": "Laboratory", "availability": {"available": "Yes", "adaptiveRelease": {}}, "contentHandler": {"id": "resource/x-bb-folder"}},
+    {"id": "_701_1", "parentId": "_700_1", "title": "Reading: Cell membrane", "availability": {"available": "Yes", "adaptiveRelease": {}}, "body": "<p>Résumé &amp; safety notes: mitochondria.</p><img src=\"https://files.example.com/never-request\"><script>forbiddenword()</script>", "contentHandler": {"id": "resource/x-bb-document"}},
+    {"id": "_702_1", "parentId": "_700_1", "title": "Lab report", "availability": {"available": "Yes", "adaptiveRelease": {}}, "contentHandler": {"id": "resource/x-bb-asmt-test-link"}},
+    {"id": "_703_1", "title": "Hidden unit", "availability": {"available": "No", "adaptiveRelease": {}}},
+    {"id": "_704_1", "parentId": "_703_1", "title": "Lab hidden child", "availability": {"available": "Yes", "adaptiveRelease": {}}, "body": "<p>Hidden material.</p>"},
+    {"id": "_705_1", "title": "Lab unknown availability"},
+    {"id": "_706_1", "parentId": "_707_1", "title": "Lab cycle", "availability": {"available": "Yes", "adaptiveRelease": {}}},
+    {"id": "_707_1", "parentId": "_706_1", "title": "Lab cycle", "availability": {"available": "Yes", "adaptiveRelease": {}}},
+    {"id": "_710_1", "title": "Final exam answer key", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {"start": "2027-01-01T00:00:00Z"}}},
+    {"id": "_711_1", "title": "Expired answers", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {"end": "2025-01-01T00:00:00Z"}}},
+    {"id": "_712_1", "title": "Restricted answers", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {"grade": {"minimum": 80}}}},
+    {"id": "_713_1", "title": "Unknown release", "body": "<p>secret answer material</p>", "availability": {"available": "Yes"}},
+    {"id": "_714_1", "title": "Malformed release", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {"start": "not a date"}}},
+    {"id": "_715_1", "title": "Lab in future folder", "body": "<p>secret answer material</p>", "availability": {"available": "Yes", "adaptiveRelease": {}}, "parentId": "_710_1"}
   ],
   "announcements": [
-    { "id": "_801_1", "title": "Lab moved", "body": "<p>Meet in the laboratory.</p>", "availability": { "duration": { "type": "Permanent" } } },
-    { "id": "_802_1", "title": "Lab next year", "body": "<p>Not yet.</p>", "availability": { "duration": { "type": "Restricted", "start": "2027-01-01T00:00:00Z" } } },
-    { "id": "_803_1", "title": "Lab expired", "availability": { "duration": { "type": "Restricted", "end": "2025-01-01T00:00:00Z" } } }
+    {"id": "_801_1", "title": "Lab moved", "body": "<p>Meet in the laboratory.</p>", "availability": {"duration": {"type": "Permanent"}}},
+    {"id": "_802_1", "title": "Lab next year", "body": "<p>Not yet.</p>", "availability": {"duration": {"type": "Restricted", "start": "2027-01-01T00:00:00Z"}}},
+    {"id": "_803_1", "title": "Lab expired", "availability": {"duration": {"type": "Restricted", "end": "2025-01-01T00:00:00Z"}}}
   ],
   "discussions": [
-    { "id": "_901_1", "title": "Cell questions", "available": true, "topic": { "status": "Published", "body": "<p>Share laboratory safety questions.</p>", "isRead": false } },
-    { "id": "_902_1", "title": "Lab unavailable", "available": false, "topic": { "status": "Published", "body": "<p>Hidden.</p>" } },
-    { "id": "_903_1", "title": "Lab draft", "available": true, "topic": { "status": "Draft", "body": "<p>Hidden.</p>" } }
+    {"id": "_901_1", "title": "Cell questions", "available": true, "topic": {"status": "Published", "body": "<p>Share laboratory safety questions.</p>", "isRead": false}},
+    {"id": "_902_1", "title": "Lab unavailable", "available": false, "topic": {"status": "Published", "body": "<p>Hidden.</p>"}},
+    {"id": "_903_1", "title": "Lab draft", "available": true, "topic": {"status": "Draft", "body": "<p>Hidden.</p>"}}
   ]
 }

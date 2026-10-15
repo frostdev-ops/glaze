@@ -838,7 +838,7 @@
   "Opens a new issue on Glaze's GitHub page with your Glaze version, browser, system and language filled in, and nothing about your school. GitHub receives that text when the page opens; nothing is posted until you add what happened and submit it.": "Opent een nieuw issue op de GitHub-pagina van Glaze met je Glaze-versie, browser, systeem en taal ingevuld, en niets over je school. GitHub ontvangt die tekst zodra de pagina opent; er wordt niets geplaatst tot je aanvult wat er gebeurde en het verstuurt.",
   "Notes and widgets on the Canvas Dashboard, and What Glaze can do in Ctrl+K.": "Notities en widgets op het Canvas-dashboard, en Wat Glaze kan in Ctrl+K.",
   "Search in your courses": "Zoeken in je cursussen",
-  "On Canvas and Blackboard Ultra: search your courses from the command palette, this course and this term first. Canvas finds titles; Ultra also finds public document, announcement and discussion topic text. Answers stay in memory for five minutes.": "Op Canvas en Blackboard Ultra: doorzoek je cursussen vanuit het opdrachtenpalet, eerst deze cursus en deze periode. Canvas vindt titels; Ultra vindt ook openbare tekst van documenten, mededelingen en discussieonderwerpen. Antwoorden blijven vijf minuten in het geheugen.",
+  "On Canvas and Blackboard Ultra: search your courses from the command palette. Ultra searches this course and open courses in this term. Canvas finds titles; Ultra also finds released document, announcement and discussion topic text. Answers are reused for five minutes.": "Op Canvas en Blackboard Ultra: doorzoek je cursussen vanuit het opdrachtenpalet. Ultra doorzoekt deze cursus en open cursussen in deze periode. Canvas vindt titels; Ultra vindt ook vrijgegeven tekst van documenten, mededelingen en discussieonderwerpen. Antwoorden worden vijf minuten hergebruikt.",
   "Searching your courses…": "Je cursussen doorzoeken…",
   "Results from your courses: {n}": "Resultaten uit je cursussen: {n}",
   "Nothing found in your courses.": "Niets gevonden in je cursussen.",
@@ -1486,4 +1486,5 @@
   "Couldn't delete the Glaze calendar, so nothing changed. Try again, or disconnect without deleting it.": "De Glaze-agenda kon niet worden verwijderd, dus er is niets veranderd. Probeer het opnieuw, of ontkoppel zonder hem te verwijderen.",
   "Disconnected on this device. Google didn't confirm it removed Glaze's access: you can remove it at myaccount.google.com/connections.": "Ontkoppeld op dit apparaat. Google heeft niet bevestigd dat de toegang van Glaze is ingetrokken: je kunt die intrekken via myaccount.google.com/connections.",
   "Disconnected.": "Ontkoppeld.",
+  "Test": "Toets",
 };

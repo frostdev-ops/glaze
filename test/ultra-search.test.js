@@ -23,7 +23,7 @@ test('public search lists project only safe fields; bodies become text, unavaila
   assert.equal(rows[3].url, '/ultra/courses/_101_1/announcements');
   assert.equal(rows[4].url, '/ultra/courses/_101_1/engagement');
   assert.deepEqual(U.searchItems(U.SEARCH_KINDS[0], fixture.contents, { id: '../bad' }, D.html), []);
-  for (const k of U.SEARCH_KINDS) assert.doesNotMatch(k.fields, /contentDetail|contentHandler|isRead|secret|key|url|links/);
+  for (const k of U.SEARCH_KINDS) assert.doesNotMatch(k.fields, /contentDetail|contentHandler(?:,|$)|isRead|secret|key|url|links/);
 });
 
 test('Ultra shares the Canvas scheduler, course priority, title ranking, deduplication and 24-result cap', async () => {
@@ -75,22 +75,27 @@ test('public readers page only the same list, preserve projection, refuse redire
 });
 
 // The actual shared search UI, with synthetic API responses and a minimal palette DOM.
-const ui = ({ hold = false, count = 2, loading = null } = {}) => {
+const ui = ({ hold = false, count = 2, loading = null, members = null, failure = null } = {}) => {
+  let clock = now;
+  const calls = new Map();
   const timers = [], requests = [], changed = [], pending = [];
   const settings = { enhance: { search: true } };
   const live = { setAttribute() {}, textContent: '' };
   const cmd = { box: { isConnected: true }, input: { value: '', addEventListener(_, fn) { this.change = fn; } }, list: { after() {} }, shown: [] };
-  const memberships = Array.from({ length: count }, (_, i) => ({ courseId: `_${i + 101}_1`, courseCardColorIndex: i,
+  const memberships = members || Array.from({ length: count }, (_, i) => ({ courseId: `_${i + 101}_1`, courseCardColorIndex: i,
     course: { name: `Course ${i + 1}`, displayId: `C${i + 1}`, term: { id: '_1_1', name: 'Current' } } }));
   const ctx = vm.createContext({
     GZ_CTX: { site: 'ultra', on: () => true, settings: () => settings, t: (k, v) => k.replace('{n}', v?.n),
-      need: async () => { if (loading) await loading; }, courseId: () => '_102_1' },
+      need: async () => { if (loading) await loading; }, courseId: () => '_102_1', myCourses: async () => memberships },
     GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES,
     chrome: { runtime: {}, storage: { onChanged: { addListener: (fn) => changed.push(fn) }, sync: { get: (_, fn) => fn({ enabled: true, enhance: { search: true } }) } } },
     document: { createElement: () => live }, location: { origin, assign() {} },
     fetch: async (url, init) => {
       requests.push({ url, init });
       const u = new URL(url);
+      calls.set(u.pathname, (calls.get(u.pathname) || 0) + 1);
+      const status = failure?.(u.pathname, calls.get(u.pathname));
+      if (status) return { ok: false, status };
       if (u.pathname.endsWith('/users/me')) return json({ id: '_999_1' });
       if (u.pathname.endsWith('/memberships')) return json({ results: memberships });
       if (u.pathname.endsWith('/terms')) return json({ results: [] });
@@ -101,7 +106,7 @@ const ui = ({ hold = false, count = 2, loading = null } = {}) => {
       return json({ results: count > 2 ? [] : fixture[u.pathname.split('/').at(-1)] || [] });
     },
     setTimeout: (fn, ms) => { const x = { fn, ms }; timers.push(x); return x; }, clearTimeout: (x) => { if (x) x.fn = null; },
-    AbortController, URL, URLSearchParams, Date,
+    AbortController, URL, URLSearchParams, Date: class extends Date { static now() { return clock; } },
   });
   for (const f of ['lib/seek.js', 'lib/doctext.js', 'lib/ultra.js', 'features/search.js']) vm.runInContext(source(f), ctx);
   const type = async (value, run = true) => {
@@ -110,7 +115,7 @@ const ui = ({ hold = false, count = 2, loading = null } = {}) => {
     if (run) for (const timer of timers.splice(0)) timer.fn?.();
     for (let i = 0; i < 30; i++) await settle();
   };
-  return { cmd, live, requests, timers, settings, attach: () => ctx.GZ_SEARCH.attach(cmd, () => {}), type,
+  return { ctx, cmd, live, requests, timers, settings, advance: (ms) => { clock += ms; }, attach: () => ctx.GZ_SEARCH.attach(cmd, () => {}), type,
     change: (ch) => changed.forEach((fn) => fn(ch, 'sync')), release: () => pending.splice(0).forEach((fn) => fn()) };
 };
 
@@ -123,12 +128,12 @@ test('Ultra palette debounces, matches public body text and accents, prioritizes
   assert.equal(p.requests.length, 0);
   assert.equal(p.timers[0].ms, 150);
   await p.type('lab');
-  assert.equal(p.requests.length, 9, 'identity, memberships, terms, and three lists per course');
-  assert.ok(p.requests[3].url.includes('/courses/_102_1/contents?'), 'current course first');
+  assert.equal(p.requests.length, 7, 'shared memberships, terms, and three lists per course');
+  assert.ok(p.requests[1].url.includes('/courses/_102_1/contents?'), 'current course first');
   assert.equal(p.cmd.found.length, 8, 'title matches and the discussion opening post');
   assert.equal(p.live.textContent, 'Results from your courses: 8');
   await p.type('resume');
-  assert.equal(p.requests.length, 9, 'a different query searches the same cached lists');
+  assert.equal(p.requests.length, 7, 'a different query searches the same cached lists');
   assert.deepEqual(Array.from(p.cmd.found, (r) => r.label), ['Reading: Cell membrane', 'Reading: Cell membrane']);
   assert.equal(p.cmd.found[0].hint, 'C2');
   await p.type('forbiddenword');
@@ -140,7 +145,7 @@ test('Ultra cancels requests on typing, close and disabling search, without show
   const p = ui({ hold: true });
   await p.attach();
   await p.type('lab');
-  const first = p.requests.slice(3);
+  const first = p.requests.slice(1);
   assert.equal(first.length, 3, 'three lists at a time');
   await p.type('resume', false);
   assert.ok(first.every((r) => r.init.signal.aborted));
@@ -167,9 +172,9 @@ test('Ultra bounds empty queries to 30 requests and never asks threads, attempts
   assert.equal(p.requests.length, 30);
   assert.equal(p.cmd.seeking, false);
   assert.equal(p.cmd.found.length, 0);
-  for (const { url } of p.requests.slice(3)) {
+  for (const { url } of p.requests.slice(1)) {
     assert.match(new URL(url).pathname, /^\/learn\/api\/public\/v1\/courses\/_\d+_1\/(contents|announcements|discussions)$/);
-    assert.doesNotMatch(url, /contentDetail|contentHandler|attempt|thread|message/);
+    assert.doesNotMatch(url, /contentDetail|contentHandler(?:%2C|,|&|$)|attempt|thread|message/);
   }
 });
 
@@ -180,8 +185,96 @@ test('Ultra search stays on demand, with the existing palette accessibility and 
   for (const name of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
     const ctx = vm.createContext({});
     vm.runInContext(source(`i18n/${name}.js`), ctx);
-    for (const key of ['Search in your courses', 'Searching your courses…', 'Results from your courses: {n}', 'Nothing found in your courses.', 'Page', 'Announcement', 'Discussion']) assert.ok(ctx.GZ_LANGS[name][key], `${name}: ${key}`);
+    for (const key of ['Search in your courses', 'Searching your courses…', 'Results from your courses: {n}', 'Nothing found in your courses.', 'Document', 'Folder', 'Test', 'File', 'Link', 'Module', 'Announcement', 'Discussion']) assert.ok(ctx.GZ_LANGS[name][key], `${name}: ${key}`);
   }
   assert.match(source('features/palette.js'), /\['role', 'combobox'\]/);
   assert.match(source('features/search.js'), /setAttribute\('aria-live', 'polite'\)/);
+});
+
+
+test('review P1: date-restricted, malformed or unknown release conditions never disclose content or descendants', () => {
+  const rows = U.searchItems(U.SEARCH_KINDS[0], fixture.contents, course, D.html, now);
+  assert.deepEqual(rows.map((x) => x.id || x.title), ['Laboratory', 'Reading: Cell membrane', 'Lab report']);
+  assert.doesNotMatch(JSON.stringify(rows), /answer material|answer key|Unknown release|Malformed release/);
+  assert.match(U.SEARCH_KINDS[0].fields, /(?:^|,)availability(?:,|$)/);
+});
+
+test('review P2: only open current-term courses plus the current course are searched, and a warm large cache does not thrash', async () => {
+  const members = Array.from({ length: 30 }, (_, i) => ({ courseId: `_${i + 101}_1`, courseCardColorIndex: i,
+    course: { name: `Course ${i + 1}`, isClosed: i > 1 && i % 2 === 0,
+      term: { id: '_1_1', durationType: 'DATE_RANGE', startDate: i > 1 ? '2025-01-01' : '2026-08-01', endDate: i > 1 ? '2025-06-01' : '2026-12-31' } } }));
+  const p = ui({ members });
+  await p.attach();
+  await p.type('zz');
+  const ids = p.requests.filter((r) => r.url.includes('/courses/')).map((r) => new URL(r.url).pathname.split('/')[6]);
+  assert.deepEqual([...new Set(ids)].sort(), ['_101_1', '_102_1']);
+  const large = ui({ count: 30 });
+  await large.attach();
+  const asks = [];
+  for (let i = 0; i < 7; i++) { await large.type(`nothing ${i}`); asks.push(large.requests.length); }
+  assert.equal(asks[6], asks[5], 'once all selected lists are warm, queries make no more requests');
+  assert.equal(large.requests.filter((r) => new URL(r.url).pathname.endsWith('/courses/_102_1/contents')).length, 1, 'current course is retained');
+});
+
+test('review P2: transient errors are retried after backoff rather than cached as empty; absent tools are cached', async () => {
+  for (const status of [503, 429]) {
+    const p = ui({ failure: (url, n) => url.endsWith('/contents') && n === 1 ? status : 0 });
+    await p.attach();
+    await p.type('lab');
+    const before = p.requests.length;
+    await p.type('labo');
+    assert.equal(p.requests.length, before, `${status}: quiet during backoff`);
+    p.advance(31000);
+    await p.type('resume');
+    assert.equal(p.cmd.found.length, 2, `${status}: body matches return after recovery`);
+    assert.equal(p.requests.filter((r) => new URL(r.url).pathname.endsWith('/courses/_102_1/contents')).length, 2);
+  }
+  for (const status of [403, 404]) {
+    const p = ui({ failure: (url) => url.endsWith('/contents') ? status : 0 });
+    await p.attach(); await p.type('lab'); const before = p.requests.length;
+    p.advance(31000); await p.type('resume');
+    assert.equal(p.requests.length, before, `${status}: missing tools stay cached`);
+  }
+});
+
+test('review P3: content labels describe the native item and the discussion list owns forum results', () => {
+  const handlers = ['folder', 'document', 'asmt-test-link', 'file', 'blti-link', 'forumlink'];
+  const items = handlers.map((h, i) => ({ id: `_${920 + i}_1`, title: h,
+    availability: { available: 'Yes', adaptiveRelease: {} }, contentHandler: { id: `resource/x-bb-${h}` } }));
+  const rows = U.searchItems(U.SEARCH_KINDS[0], items, course, D.html, now);
+  assert.deepEqual(rows.map((x) => x.kind), ['Folder', 'Document', 'Test', 'File', 'Link']);
+  assert.match(U.SEARCH_KINDS[0].fields, /contentHandler\.id/);
+});
+
+test('review P3: memory cache is LRU, evicts expired rows on writes, and disabling search drops source text', async () => {
+  let at = 0;
+  const cache = S.cache(10, 2, () => at);
+  cache.set('a', 1); cache.set('b', 2); cache.get('a'); cache.set('c', 3);
+  assert.equal(cache.get('b'), undefined, 'the least recently used list is evicted');
+  at = 11; cache.set('fresh', 4);
+  assert.equal(cache.size, 1, 'a write drops expired rows too');
+  const p = ui(); await p.attach(); await p.type('lab'); const before = p.requests.length;
+  p.change({ enhance: { newValue: { search: false } } });
+  p.change({ enhance: { newValue: { search: true } } });
+  await p.type('resume');
+  assert.ok(p.requests.length > before, 'source text is re-read after disabling cleared it');
+});
+
+
+test('review P1: cached body text stops matching when its own or an ancestor release window ends', async () => {
+  const ends = new Date(now + 1000).toISOString();
+  const items = [{ id: '_950_1', title: 'Timed folder', availability: { available: 'Yes', adaptiveRelease: { end: ends } } },
+    { id: '_951_1', parentId: '_950_1', title: 'Timed document', availability: { available: 'Yes', adaptiveRelease: {} }, body: '<p>answer material</p>' }];
+  const rows = U.searchItems(U.SEARCH_KINDS[0], items, course, D.html, now);
+  assert.equal(rows[1].until, now + 1000, 'the child inherits the ancestor deadline');
+  assert.equal(U.searchItems(U.SEARCH_KINDS[0], items, course, D.html, now + 1001).length, 0);
+});
+
+test('review P3: warm queries fold only the query and never re-fold cached document text', async () => {
+  const p = ui(); await p.attach(); await p.type('lab');
+  const fold = p.ctx.GZ_SEEK.fold, inputs = [];
+  p.ctx.GZ_SEEK.fold = (value) => { inputs.push(value); return fold(value); };
+  await p.type('resume');
+  assert.ok(inputs.length > 0);
+  assert.ok(inputs.every((value) => value === 'resume'), 'document titles and text are folded once while indexing');
 });
