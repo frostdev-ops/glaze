@@ -70,6 +70,25 @@ All notable changes to Glaze are documented here. The format follows
   timeframe, past-due window and done rules, ticks and Canvas marks included, and shares its planner copy: the
   planner is asked once, whether or not the list is on. Every card style and the card grade fit
   beside it. Ctrl+K turns it on or off.
+- **Reminders and streak (Canvas, every part off by default; Extras, Reminders and streak):** each its own opt-in:
+  - Due-date reminders at any of 15 minutes, 1 hour, 3 hours, 1 day and 2 days before (several at once, free); a day
+    before means the same time the day before, in your Canvas time zone, across daylight-saving changes.
+  - Exam reminders: quizzes, and titles with exam, test, midterm, final, Klausur, Prüfung, examen, parcial, partiel,
+    contrôle, tentamen, toets, prova and the like in Glaze's six languages, 1 day to 1 week ahead.
+  - Plan reminders: Better To Do's "do on" days (at the start of the day) and focus sessions (up to an hour before).
+  - Shown only inside Canvas, in the tab you're looking at: one small toast in the corner that never takes focus,
+    is announced politely to screen readers, can be dismissed (Esc too) or snoozed for an hour, and doesn't slide in
+    under reduced motion. Never on a quiz you're taking or a tool's page. No notifications permission, no badge, no sound.
+  - What came due while no Canvas page was open shows once, as one toast that says how many more there are, not a pile;
+    a reminder shown in one tab doesn't show in another.
+  - A hub (the bell in the To Do header, or Ctrl+K "Reminders") lists what's coming up, lets you mute an item and bring
+    it back, and has the settings.
+  - Streak: days in a row with nothing missed, and your best, in the To Do header. Work past due and not handed in, or
+    handed in late, ends a run; excused work and work with nothing to hand in never count. Two free restores a month
+    put back a run. Never a guilt message.
+  - One timer to the next reminder, set again when the page is shown and at most ten minutes long: no polling. It
+    reuses Better To Do's planner copy. What's seen, snoozed, muted and the streak stay on this device, apart from
+    Canvas's own read state, which Glaze never changes.
 
 ### Changed
 

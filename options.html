@@ -450,6 +450,32 @@
           <label class="check"><input type="checkbox" data-key="todo.cardCross"><span>Cross out done tasks</span>
             <span class="desc">Done items stay on the card, crossed out, until their due date passes. Off: they leave it.</span></label>
         </div>
+        <div class="group" id="remind">
+          <h3>Reminders and streak</h3>
+          <p class="desc">Each is off until you turn it on. Reminders show only on Canvas pages, in the tab you're looking at: a small note in the corner, never a browser notification. They stay on this device and change nothing in Canvas. The bell in the To Do header and Ctrl+K "Reminders" list what's coming up.</p>
+          <label class="check"><input type="checkbox" data-key="enhance.remind"><span>Due-date reminders</span>
+            <span class="desc">A note before work is due, at each time you tick below.</span></label>
+          <p class="desc" id="remind-leads">Before a due date</p>
+          <div class="row" role="group" aria-labelledby="remind-leads">
+            <label class="check"><input type="checkbox" data-key="remind.m15"><span>15 minutes</span></label>
+            <label class="check"><input type="checkbox" data-key="remind.h1"><span>1 hour</span></label>
+            <label class="check"><input type="checkbox" data-key="remind.h3"><span>3 hours</span></label>
+            <label class="check"><input type="checkbox" data-key="remind.d1"><span>1 day</span></label>
+            <label class="check"><input type="checkbox" data-key="remind.d2"><span>2 days</span></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="enhance.remindExam"><span>Exam reminders</span>
+            <span class="desc">Quizzes, and titles with exam, test, midterm or final in any of Glaze's six languages.</span></label>
+          <div class="row">
+            <label>Before an exam <select data-key="remind.exam"><option value="1d">1 day</option><option value="2d">2 days</option><option value="3d">3 days</option><option value="1w">1 week</option></select></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="enhance.remindPlan"><span>Plan reminders</span>
+            <span class="desc">Your "do on" days and focus sessions from Better To Do.</span></label>
+          <div class="row">
+            <label>Before a focus session <select data-key="remind.plan"><option value="0">At the start</option><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="enhance.streak"><span>Streak</span>
+            <span class="desc">Days in a row with nothing missed, and your best, in the To Do header. Work handed in late or not at all ends a run; excused work never counts. Two restores a month put back a run, free.</span></label>
+        </div>
         <div class="group">
           <h3>Declutter</h3>
           <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
@@ -514,6 +540,7 @@
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
   <script src="lib/todo.js"></script>
+  <script src="lib/remind.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>

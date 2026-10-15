@@ -76,6 +76,8 @@ const GZ_SPEC = {
     quizLight: [false, 'bool'],
     // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
     gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'],
+    // Reminders and the streak, each opt-in (lib/remind.js has the rest).
+    remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], streak: [false, 'bool'],
   },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };

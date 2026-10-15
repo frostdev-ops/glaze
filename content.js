@@ -355,6 +355,9 @@
   // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
   const cardsHere = () => !ultra && links.length && settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
+  // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
+  const remindHere = () => !ultra && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'streak'].some((k) => settings.enhance[k]);
+  const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
   // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
@@ -695,6 +698,7 @@
     syncCourseMenu();
     syncTodo();
     syncCardTasks();
+    syncRemind();
   };
   // ---- page loads ------------------------------------------------------------------------------
   // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
@@ -2411,7 +2415,8 @@
   // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
-    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards' };
+    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards',
+    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', streak: 'Streak' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -2455,6 +2460,7 @@
       ...courses.filter((c) => c.name).map((c) => ({ label: c.friendly_name || c.name, hint: c.course_code || t('Course'), group: 'Courses', run: go(`/courses/${c.id}`) })),
       ...dueCmds(due),
       ...(globalThis.GZ_TODO_UI?.cmds() || []),
+      ...(globalThis.GZ_REMIND_UI?.cmds() || []),
       ...glazeCmds(),
     ];
   };
@@ -3320,7 +3326,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -3443,6 +3449,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     armFlip();
     syncTodo();
     syncCardTasks();
+    syncRemind();
     themeEditors();
     syncPageFade();
     stopScene();
