@@ -105,6 +105,12 @@ test('a route: the cheapest steps up from the grades now', () => {
   const capped = G.route([{ credits: 3, letter: 'B', score: 84, scale: S, max: 86.6 }, { credits: 3, letter: 'B', score: 84, scale: S }], 3.3, true);
   assert.deepEqual(capped.map((x) => x.letter), ['B', 'A-']);
   assert.equal(G.route([{ credits: 3, letter: 'B', score: 84, scale: S, max: 86.6 }], 3.3, true), null, 'and no route when none can');
+  // A best percent reaches a letter as Canvas rounds it (gradecalc's reaches, as letter() uses): 89.995 is an A-.
+  for (const [max, need, want] of [[89.996, 3.7, 'A-'], [89.995, 3.7, 'A-'], [89.994, 3.7, null], [90, 3.7, 'A-'], [93.995, 4, 'A'], [93.994, 4, null], [86.995, 3.3, 'B+'], [86.99, 3.3, null]]) {
+    const r = G.route([{ credits: 3, letter: 'B', score: 84, scale: S, max }], need, true);
+    assert.equal(r && r[0].letter, want, `best ${max}, need ${need}`);
+    assert.equal(want, require('../lib/gradecalc.js').points(require('../lib/gradecalc.js').letter(max), true) >= need ? want : null, 'the same letter Canvas would give');
+  }
   // The floor of a letter on a scale with fewer steps.
   assert.equal(G.floor([['A', 90], ['B', 80], ['C', 70], ['F', 0]], 'B+', true), 90);
 });
