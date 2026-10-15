@@ -282,3 +282,32 @@ test("Ultra: the agenda reads the day from Ultra's To Do and calendar (lib/ultra
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
   assert.equal(ultra.asked.length, 2, 'the next day once, today from memory');
 });
+
+// B7b with B7c: the timer's changes go through the worker's one queue (glaze:widgetTimer), which the nav's timer shares;
+// the page writes no widgetTimer of its own, and shows what the worker answers. No answer: nothing changed, it says so.
+test('the timer asks the worker to start, pause and reset it, and shows its answer; without one it says nothing changed', async () => {
+  const clock = { t: 1e12 };
+  const running = { phase: 'work', end: clock.t + 25 * 6e4, left: 0 };
+  const p = page({ clock, replies: [{ ok: true, timer: running }, { ok: false, error: 'busy' }, undefined] });
+  const body = new E();
+  p.ui.probe.WIDGETS.timer(body);
+  p.answer();
+  await settle();
+  const start = find(body, (e) => e.className === 'gz-w-btn gz-w-main');
+  const reset = find(body, (e) => e.tagName === 'BUTTON' && e.textContent === 'Reset');
+  const status = find(body, (e) => e.className === 'gz-w-status');
+  start.fire('click');
+  await settle();
+  assert.equal(JSON.stringify(p.sent.at(-1)), '{"type":"glaze:widgetTimer","op":"toggle"}');
+  assert.equal(body.dataset.running, 'yes', "the worker's answer is shown");
+  assert.equal(start.textContent, 'Pause');
+  reset.fire('click');
+  await settle();
+  assert.equal(JSON.stringify(p.sent.at(-1)), '{"type":"glaze:widgetTimer","op":"reset"}');
+  assert.match(status.textContent, /Nothing changed/);
+  assert.equal(body.dataset.running, 'yes', 'still the stored state');
+  start.fire('click');
+  await settle();
+  assert.match(status.textContent, /Nothing changed/, 'no answer at all: the same');
+  assert.ok(!('widgetTimer' in p.local), 'the page itself never writes the timer');
+});

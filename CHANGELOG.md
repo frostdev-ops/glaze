@@ -30,6 +30,28 @@ All notable changes to Glaze are documented here. The format follows
   content titles and released public document, announcement and discussion topic text, with native type labels. Current course and term first, up to
   24 results; open current-term courses only, nothing stored, five-minute cache reuse, cancellation on typing, closing or disabling. Unknown release conditions are omitted and transient errors retry after backoff. Read-only public
   lists only, bounded to 30 requests per query and two pages per list. No addition to any site's first content script.
+- **Free-placed widgets and a Glaze Dashboard on Blackboard Ultra** (B7b; the same Notes and Widgets switches):
+  - The Courses page's widgets float over the page instead of sitting in the side column. They start where the panel
+    had them, at the top of its right column, which keeps room for every widget over it (Ultra's To Do and Better To Do
+    are never under one); the panel keeps its bar (Edit layout, Reminders, What Glaze can do, Insights).
+  - The Institution page becomes Glaze's **Dashboard**: two tabs in its header (a real tablist: arrow keys, Home, End),
+    *Dashboard* (the default; its own layout, starting with Canvas's default widgets) and *Institution page* (Ultra's own,
+    themed, nothing over it). The last tab is kept. Ultra's page waits hidden until the Dashboard is drawn, so it doesn't
+    flash first. Ctrl+K has a Dashboard entry.
+  - **Edit layout** (then Reset layout and Done; Esc ends it too) moves a widget anywhere, by its heading or with the
+    arrow keys on its handle (a grid step; Shift: four), and says where it went. It snaps to a 16px grid, the page's
+    edges, the other widgets' edges and centres and Ultra's column, with a guide while you drag; Alt places freely. The
+    one you moved goes on top. Fold any widget to its heading. Outside Edit layout a click never moves anything.
+  - Each board keeps its own layout on this device (which widgets, size, place, folded, stacking order), kept from the
+    nearer side so it holds as the window changes. A window narrower than the one you arranged in stacks the widgets in
+    reading order instead, and the layout comes back on a wider one. Today's layout carries over: every widget that was
+    on stays on, on the Courses page where the panel had it. The notes, timer, music link and pet are shared.
+  - **Open Blackboard on the dashboard** (off by default): when Ultra opens on its start page right after sign-in (its
+    bare address, or its stream or Courses page coming from the sign-in page), go on to the Dashboard once in that tab.
+    Never on a reload or Back, never from a page you opened by address, bookmark or link.
+  - Widgets no longer float over every other Ultra page (Canvas's still can). The focus timer's Start, Pause and Reset
+    go through one queue in the background (shared with the nav's timer), and say so if it couldn't change.
+  - `scripts/ultra-boards-check.js` checks it all headless on synthetic Ultra pages, with screenshots.
 - **Notes and widgets on Blackboard Ultra** (the same Notes and Widgets switches, off by default): Ultra has no
   Dashboard, so they sit in Glaze's panel at the top of the Courses page's right column, above Ultra's own To Do. Its
   heading folds it away (kept on this device); on a narrow window Ultra puts that column under the courses, and the

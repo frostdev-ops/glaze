@@ -43,7 +43,7 @@ class El {
   setAttribute(k, v) { if (k === 'id') this.id = String(v); else if (k === 'class') this.className = String(v); else if (k.startsWith('data-')) this.dataset[camel(k)] = String(v); else this.attrs[k] = String(v); }
   getAttribute(k) { if (k === 'id') return this.id || null; if (k === 'class') return this.className || null; if (k === 'hidden') return this.hidden ? '' : null; if (k.startsWith('data-')) return this.dataset[camel(k)] ?? null; return this.attrs[k] ?? null; }
   hasAttribute(k) { return this.getAttribute(k) != null; }
-  removeAttribute(k) { if (k.startsWith('data-')) delete this.dataset[camel(k)]; else delete this.attrs[k]; }
+  removeAttribute(k) { if (k === 'style') this.style = { setProperty() {} }; if (k.startsWith('data-')) delete this.dataset[camel(k)]; else delete this.attrs[k]; }
   get textContent() { return this._html ? this._html.replace(/<[^>]*>/g, '') : this.children.map((c) => c.textContent).join(''); }
   set textContent(v) { this.replaceChildren(...(String(v) ? [String(v)] : [])); }
   get innerHTML() { return this._html || this.children.map((c) => (c instanceof El ? `<${c.tagName.toLowerCase()}>${c.innerHTML}</${c.tagName.toLowerCase()}>` : c.textContent)).join(''); }
@@ -64,11 +64,14 @@ class El {
   click() { this.doc.fire(this, 'click', { trusted: false }); }
   showModal() { this.open = true; }
   close() { if (!this.open) return; this.open = false; this.dispatchEvent({ type: 'close' }); }
-  // A test can give an element a box ({ left, top, width, height }); without one, every element is the same small box.
-  getBoundingClientRect() { const b = this.box; return b ? { ...b, right: b.left + b.width, bottom: b.top + b.height } : { left: 0, right: 100, top: 0, bottom: 20 }; }
-  get clientWidth() { return this.box?.width ?? 0; }
-  get offsetWidth() { return this.box?.width ?? 0; }
-  get offsetHeight() { return this.box?.height ?? 0; }
-  get scrollHeight() { return this.box?.height ?? 0; }
+  // A test can give an element a box ({ left, top, width, height }), or the document a boxOf(el) that lays elements out;
+  // without either, every element is the same small box.
+  get layoutBox() { return this.box || this.doc.boxOf?.(this) || null; }
+  getBoundingClientRect() { const b = this.layoutBox; return b ? { ...b, right: b.left + b.width, bottom: b.top + b.height } : { left: 0, right: 100, top: 0, bottom: 20 }; }
+  get clientWidth() { return this.layoutBox?.width ?? 0; }
+  get offsetWidth() { return this.layoutBox?.width ?? 0; }
+  get offsetHeight() { return this.layoutBox?.height ?? 0; }
+  get scrollHeight() { return this.layoutBox?.height ?? 0; }
+  setPointerCapture() {}
 }
 module.exports = { El, matches };

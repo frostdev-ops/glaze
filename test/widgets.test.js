@@ -282,7 +282,7 @@ test('arrange: spots kept from their side, new tiles in free room, and a stack w
   for (const a of Object.values(rows.at)) for (const b of Object.values(rows.at)) if (a !== b) assert.ok(!(a.left < b.left + b.w && b.left < a.left + a.w && a.top < b.top + b.h && b.top < a.top + a.h), 'none overlap');
   // The Courses page: down the column, from the right, where the panel was.
   const col = W.arrange(fresh(['notes', 'timer']), dims, 1000, { col: { right: 16, top: 60 } });
-  assert.deepEqual([col.at.notes.left, col.at.notes.top, col.at.timer.left, col.at.timer.top], [1000 - 16 - 384, 60, 1000 - 16 - 288, 380]);
+  assert.deepEqual([col.at.notes.left, col.at.notes.top, col.at.timer.left, col.at.timer.top], [1000 - 16 - 384, 60, 1000 - 16 - 288, 60 + 300 + W.GAP]);
   assert.ok(col.at.notes.r && col.at.timer.r);
   // Kept spots: from the left, or from the right edge, which follows the window.
   const kept = [{ id: 'notes', on: true, x: 24, y: 40, r: false }, { id: 'timer', on: true, x: 16, y: 40, r: true }];
@@ -290,10 +290,16 @@ test('arrange: spots kept from their side, new tiles in free room, and a stack w
   assert.deepEqual([wide.at.notes.left, wide.at.timer.left], [24, 1400 - 16 - 288]);
   assert.deepEqual(wide.order, ['notes', 'timer'], 'reading order');
   assert.equal(wide.stack, false);
-  // Narrower: the one from the left and the one from the right would meet: a stack, and the spots are untouched.
-  const narrow = W.arrange(kept, dims, 600);
+  // Narrower than the room they were placed in: the one from the left and the one from the right would meet: a stack,
+  // and the spots are untouched. As wide or wider: never.
+  const narrow = W.arrange(kept, dims, 600, { w0: 1400 });
   assert.equal(narrow.stack, true);
   assert.deepEqual(kept[1], { id: 'timer', on: true, x: 16, y: 40, r: true });
+  assert.equal(W.arrange(kept, dims, 1600, { w0: 1400 }).stack, false);
+  // One from the left laid over one from the right on purpose (they met where they were placed) stays so.
+  const laid = [{ id: 'notes', on: true, x: 500, y: 40, r: false }, { id: 'timer', on: true, x: 200, y: 100, r: true }];
+  assert.equal(W.arrange(laid, dims, 1000, { w0: 1000 }).stack, false);
+  assert.equal(W.arrange(laid, dims, 900, { w0: 1000 }).stack, false, 'narrower, but they met already');
   // A tile that would cross the room's edge stacks them too; overlaps the student made (same side) don't.
   assert.equal(W.arrange([{ id: 'notes', on: true, x: 500, y: 0, r: false }], dims, 800).stack, true);
   const overlap = W.arrange([{ id: 'notes', on: true, x: 24, y: 40, r: false }, { id: 'agenda', on: true, x: 100, y: 100, r: false }], dims, 1000);
@@ -307,10 +313,10 @@ test('spots, the Courses column kept clear, and the stacking order', () => {
   // A spot is kept from the nearer side, in whole pixels.
   assert.deepEqual(W.spotOf({ left: 100.4, top: 50.6, w: 288 }, 1000), { x: 100, y: 51, r: false });
   assert.deepEqual(W.spotOf({ left: 696, top: 60, w: 288 }, 1000), { x: 16, y: 60, r: true });
-  // The column keeps room for the tiles stacked at its top (gaps of up to GAP join them), not for one further down
-  // nor one beside the column.
-  const rects = [{ left: 700, top: 60, w: 288, h: 200 }, { left: 700, top: 276, w: 288, h: 100 }, { left: 700, top: 900, w: 288, h: 100 }, { left: 100, top: 60, w: 288, h: 900 }];
-  assert.equal(W.reserve(rects, 690, 1000, 60), 376 - 60);
+  // The column keeps room for every tile over it, however far down (its To Do is never under one), and not for one
+  // beside it.
+  const rects = [{ left: 700, top: 60, w: 288, h: 200 }, { left: 700, top: 276, w: 288, h: 100 }, { left: 600, top: 900, w: 288, h: 100 }, { left: 100, top: 60, w: 288, h: 1900 }];
+  assert.equal(W.reserve(rects, 690, 1000, 60), 1000 - 60);
   assert.equal(W.reserve([], 690, 1000, 60), 0);
   // On top: the one moved goes over the others, the rest keep their order.
   const b = [{ id: 'a', z: 2 }, { id: 'b', z: 0 }, { id: 'c', z: 1 }];

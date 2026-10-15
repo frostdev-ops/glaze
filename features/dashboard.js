@@ -11,8 +11,8 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
   const html = document.documentElement;
   const PATH = '/ultra/institution-page';
   const local = () => { try { return chrome.storage.local; } catch { return null; } };
-  let tab = 'dash', bar = null, board = null;
-  try { local()?.get('dashTab', (r) => { if (!chrome.runtime.lastError && r?.dashTab === 'ip') { tab = 'ip'; if (board) show(); } }); } catch { /* reloaded */ }
+  let tab = 'dash', chosen = false, bar = null, board = null;
+  try { local()?.get('dashTab', (r) => { if (!chosen && !chrome.runtime.lastError && r?.dashTab === 'ip') { tab = 'ip'; if (board) show(); } }); } catch { /* reloaded */ }
 
   const show = (focus) => {
     html.setAttribute('data-gz-dash', tab);
@@ -25,7 +25,9 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
     }
   };
   const pick = (next, focus) => {
-    if (next !== tab) { tab = next; try { local()?.set({ dashTab: tab }); } catch { /* reloaded */ } }
+    chosen = true;
+    tab = next;
+    try { local()?.set({ dashTab: tab }); } catch { /* reloaded */ }
     show(focus);
   };
   // A real tablist: the chosen tab is the one in the Tab order; the arrow keys, Home and End move between them and choose.
@@ -44,7 +46,7 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
       b.addEventListener('click', () => pick(id));
       box.append(b);
     }
-    box.firstChild.setAttribute('aria-controls', 'gz-dash');
+    box.firstElementChild.setAttribute('aria-controls', 'gz-dash');
     box.addEventListener('keydown', (e) => {
       const i = ['dash', 'ip'].indexOf(tab);
       const to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: 1 }[e.key];
@@ -80,8 +82,9 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
     // Marked before it goes, so it can't happen twice in this tab; if it can't be marked, it doesn't go.
     try { sessionStorage.setItem('gz-landed', '1'); } catch { return; }
     pick('dash');
-    const link = [...document.querySelectorAll(`a[href$="${PATH}"]`)].find((a) => new URL(a.href, location.href).pathname === PATH);
-    if (link) link.click(); else location.assign(PATH);
+    const link = [...document.querySelectorAll('a[href]')].find((a) => { try { return new URL(a.getAttribute('href'), location.href).pathname === PATH; } catch { return false; } });
+    // Absolute: Ultra's <base href> is its CDN's.
+    if (link) link.click(); else location.assign(`${location.origin}${PATH}`);
   };
 
   return { tabs, land, PATH };

@@ -102,7 +102,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (rm && rm.hidden !== off) rm.hidden = off;
   };
   const placed = (h) => (board === 'courses' ? h.firstElementChild === panel && panel.contains(grid) && roomHost(h).firstElementChild === room
-    : board === 'dash' ? grid.parentNode === h && (!grid.nextElementSibling || grid.nextElementSibling.matches('institution-page-home')) : h.nextElementSibling === grid);
+    : board === 'dash' ? grid.parentNode === h && (!grid.nextElementSibling || grid.nextElementSibling.tagName === 'INSTITUTION-PAGE-HOME') : h.nextElementSibling === grid);
   const allowed = (id) => (id === 'pet' ? ctx.settings().enhance.pet : id === 'notes' ? ctx.settings().enhance.notes : ctx.settings().enhance.widgets);
   const saveLayout = (next) => { lay = next; put({ widgetLayout: lay }); draw(); };
   // Who's signed in (their id names their notes; their Canvas time zone counts the agenda's days), asked only when a
@@ -536,7 +536,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const say = (text) => {
     const at = grid || floats;
     if (!at) return;
-    if (live?.parentNode !== at) { live = make('p', { className: 'gz-sr', role: 'status' }); at.append(live); }
+    if (live?.parentNode !== at) { live = make('p', { className: 'gz-sr' }); live.setAttribute('role', 'status'); at.append(live); }
     live.textContent = text;
   };
   // The guides a dragged tile shows on the lines it met (snap's guides), in its room: len, how far they reach.
@@ -579,7 +579,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // nothing else moves), and this one goes to its new spot, on top.
   const settle = (id, spot) => {
     const b = W.front(lay.boards[board].map((x) => (x.x === null && lastAt[x.id] ? { ...x, ...W.spotOf(lastAt[x.id], lastW) } : x)), id);
-    saveLayout({ ...lay, boards: { ...lay.boards, [board]: b.map((x) => (x.id === id ? { ...x, ...spot } : x)) } });
+    saveLayout({ ...lay, widths: { ...lay.widths, [board]: Math.round(lastW) }, boards: { ...lay.boards, [board]: b.map((x) => (x.id === id ? { ...x, ...spot } : x)) } });
   };
   const drag = (el, head, grip, id) => {
     const to = (left, top, f, free) => {
@@ -664,7 +664,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const edit = button(t(board ? 'Edit layout' : 'Edit widgets'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
     const reset = board && button(t('Reset layout'), () => {
-      saveLayout({ ...lay, boards: { ...lay.boards, [board]: lay.boards[board].map((x) => ({ ...x, x: null, y: null, r: false, z: 0, fold: false })) } });
+      saveLayout({ ...lay, widths: { ...lay.widths, [board]: 0 }, boards: { ...lay.boards, [board]: lay.boards[board].map((x) => ({ ...x, x: null, y: null, r: false, z: 0, fold: false })) } });
       say(t('Layout reset.'));
     }, { className: 'gz-w-small gz-dash-reset', hidden: true });
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
@@ -746,6 +746,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const hasGrid = placeGrid();
     const want = wanted(hasGrid);
     if (!board && want.some((x) => x.float) && !floats?.isConnected) { floats = make('div', { id: 'gz-float' }); document.body.append(floats); }
+    // A board is laid out again when its room's width or a tile's height changes (the nav folding, what a tile shows),
+    // once a frame at most.
+    if (board && hasGrid) {
+      ro ||= new ResizeObserver(() => { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board) layoutBoard(); }); });
+      ro.observe(roomEl());
+    }
     for (const [id, x] of tiles) if (!want.some((w) => w.id === id)) { x.stop?.(); x.el.remove(); tiles.delete(id); }
     const last = new Map(); // home -> the tile placed last in it
     for (const tile of want) {
@@ -754,11 +760,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         x = tileEl(tile.id);
         Object.assign(x, (WIDGETS[tile.id] || added.get(tile.id))(x.body, api(tile.id)) || {});
         tiles.set(tile.id, x);
-        if (board) {
-          // A tile's height changes with what it shows: the board is laid out again, once a frame at most.
-          ro ||= new ResizeObserver(() => { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board) layoutBoard(); }); });
-          ro.observe(x.el);
-        }
+        ro?.observe(x.el);
       }
       x.el.dataset.size = tile.size;
       x.el.draggable = editing && !board && !tile.float;
@@ -811,7 +813,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       lines = [g.left - r.left, g.right - r.left];
       side = g.width > 0 && g.width <= width / 2;
     }
-    const res = W.arrange(list, dims, width, { col });
+    const res = W.arrange(list, dims, width, { col, w0: lay.widths[board] });
     lastAt = res.at;
     lastW = width;
     stacked = !side || res.stack;

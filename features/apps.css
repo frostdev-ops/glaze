@@ -261,7 +261,7 @@ html:not([data-gz-motion="off"]) #gz-panel .gz-panel-toggle::after { transition:
 #gz-dash[data-board="dash"] { margin: 0; padding: 1rem 1.5rem 2rem; font-family: var(--gz-font); }
 #gz-dash[data-board="dash"] .gz-dash-grid:not([data-stack]) { position: relative; display: block; min-height: 24rem; }
 :is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w { outline: 1px dashed var(--gz-line-strong); outline-offset: 3px; }
-:is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w .gz-w-head { cursor: grab; touch-action: none; }
+:is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w .gz-w-head { cursor: grab; touch-action: none; user-select: none; }
 #gz-dash[data-board] .gz-dash-grid[data-stack] .gz-w { cursor: auto; }
 #gz-dash[data-board] .gz-dash-grid[data-stack] .gz-w-grip { display: none; }
 :is(#gz-room, #gz-dash[data-board]) .gz-w[data-dragging] { cursor: grabbing; opacity: 0.92; }
