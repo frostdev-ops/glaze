@@ -731,6 +731,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const sync = (want) => {
     if (signedOut) want = false;
     if (!want) {
+      html.removeAttribute('data-gz-ctabs');
       if (!on) return;
       on = false;
       listen(false);
@@ -790,7 +791,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     addEventListener('message', (e) => { if (e.data?.gzPreview) follow(); });
     follow();
   }
-  return { sync, held, snapshots: () => snaps.size };
+  return { sync, held, showing: () => !!go?.over, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
 
 GZ_CTABS;

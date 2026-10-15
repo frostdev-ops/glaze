@@ -236,6 +236,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
   const renderNew = () => {
+    if (globalThis.GZ_CTABS?.showing?.()) return;
     const { newgrades, newcontent } = I.settings.enhance;
     if (!(newgrades || newcontent) || window.top !== window || !I.observer) return;
     if (!seen) return loadSeen();
@@ -376,7 +377,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // ---- course tabs: features/coursetabs.js (after lib/coursetabs.js), in the top frame and the preview -------------
   // Until it's in, extras.css holds the strip's place from data-gz-ctabs (paintCourses): the place and size it last had in
   // this browser tab, else the defaults; gate hands it Ultra's new top bar before that is painted.
-  const tabsOn = () => !!I.links.length && (isPreview || window.top === window) && I.settings.enhance.tabs;
+  const tabsOn = () => !!I.links.length && (isPreview || window.top === window) && I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.();
   const syncTabs = () => (tabsOn() ? need('lib/coursetabs.js', () => globalThis.GZ_CTABS_LIB).then(() => need('features/coursetabs.js', () => globalThis.GZ_CTABS))
     .then(() => GZ_CTABS.sync(tabsOn()), () => {}) : globalThis.GZ_CTABS?.sync(false));
 

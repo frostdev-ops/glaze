@@ -80,7 +80,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text + ': ' + result.exceptionDetails.exception?.description);
       return result.result.value;
     };
-    await settings();
+    await settings(process.env.GZ_B8_REQUEST_PROBE ? { enhance: { newcontent: false } } : {});
     const page = await ctx.newPage();
     page.on('pageerror', (error) => console.error(`page error: ${error.stack || error.message}`));
     const strip = () => page.evaluate(() => {
@@ -111,6 +111,21 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
     await page.click('a[href="/ultra/courses/_101_1/outline"]');
     await settled('_101_1');
+    if (process.env.GZ_B8_REQUEST_PROBE) await isolated(() => {
+      globalThis.__b8Net = []; globalThis.__b8SeenWrites = [];
+      const stored = chrome.storage.local.set;
+      chrome.storage.local.set = (...args) => { if (args[0]?.seenContent) __b8SeenWrites.push({ at: performance.now(), active: GZ_CTABS.showing?.(), page: location.href, native: document.querySelector('div.bb-course-navigation a.js-course-outline-tool')?.getAttribute('href'), value: args[0].seenContent }); return stored.apply(chrome.storage.local, args); };
+      globalThis.__b8Pending = 0; globalThis.__b8Settled = performance.now();
+      const original = fetch;
+      globalThis.fetch = async (...args) => {
+        const over = document.getElementById('gz-ctabs-snap');
+        __b8Net.push({ url: String(args[0]), at: performance.now(), page: location.href, active: GZ_CTABS.showing?.(), overlay: !!over, opacity: over?.style.opacity,
+          spinner: !!document.querySelector('.spinner'), native: document.querySelector('div.bb-course-navigation a.js-course-outline-tool')?.getAttribute('href'), stack: new Error().stack });
+        __b8Pending++;
+        try { return await original(...args); } finally { __b8Pending--; __b8Settled = performance.now(); }
+      };
+      return true;
+    });
     let s = await strip();
     ok(s.tabs.length === 1 && s.tabs[0].sel && s.tabs[0].label === 'Computer Science I', `a course opened gets a tab, named and selected (${JSON.stringify(s.tabs)})`);
     ok(s.at === 'above', `above the course's bar by default (${s.at})`);
@@ -167,6 +182,40 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     ok(builtinCounts.defined === 1 && builtinCounts.late === 0, `customized built-ins run no capture or replay constructors (${JSON.stringify(builtinCounts)})`);
     const copies = Object.values(await session()).filter((v) => v?.layers).map((v) => JSON.stringify(v));
     ok(!copies.some((x) => x.includes('invented-secret')), 'snapshots discard arbitrary data attributes and credentials');
+    if (process.env.GZ_B8_REQUEST_PROBE) {
+      // A real SPA can leave the previous outline's rows in place under the restored URL while its next view loads.
+      await page.click('a.js-course-outline-tool');
+      await page.waitForFunction(() => !document.querySelector('.spinner') && document.querySelector('.content-list-item'));
+      await opts.evaluate(async () => { const { enhance } = await chrome.storage.sync.get('enhance'); await chrome.storage.sync.set({ enhance: { ...enhance, newcontent: true } }); });
+      const quiet = () => isolated(async () => {
+        const start = performance.now();
+        while (performance.now() - start < 3000) {
+          if (!__b8Pending && performance.now() - __b8Settled > 500) return { pending: __b8Pending, quietFor: performance.now() - __b8Settled, timeOrigin: performance.timeOrigin, page: location.href };
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        throw new Error('fixture reads did not become quiescent');
+      });
+      await isolated(async () => { const start = performance.now(); while (!GZ_CTX.settings().enhance.newcontent && performance.now() - start < 3000) await new Promise((r) => setTimeout(r, 25)); if (!GZ_CTX.settings().enhance.newcontent) throw new Error('newcontent did not activate'); return true; });
+      console.log('before restore quiescence: ' + JSON.stringify(await quiet()));
+      const seen = await isolated(() => __b8Net.length);
+      await page.evaluate(() => addEventListener('popstate', (e) => {
+        e.stopImmediatePropagation();
+        document.querySelector('section.course').append(document.createElement('div'));
+        setTimeout(() => dispatchEvent(new PopStateEvent('popstate')), 900);
+      }, { capture: true, once: true }));
+      await switchTab('_102_1');
+      console.log('after restore quiescence: ' + JSON.stringify(await quiet()));
+      const trace = await isolated(() => __b8Net);
+      fs.writeFileSync(path.join(out, 'fetch-starts.json'), JSON.stringify(trace, null, 2));
+      console.log('restore fetch starts: ' + JSON.stringify(trace.slice(seen)));
+      const writes = await isolated(() => __b8SeenWrites);
+      fs.writeFileSync(path.join(out, 'seen-writes.json'), JSON.stringify(writes, null, 2));
+      console.log('seenContent writes: ' + JSON.stringify(writes));
+      ok(!trace.slice(seen).some((r) => r.active && r.url.includes('/contents')), 'no automatic contents read starts while the cached view is active');
+      ok(trace.slice(seen).some((r) => !r.active && !r.spinner && r.native === '/ultra/courses/_102_1/outline' && r.url.includes('/_102_1/contents')), 'newcontent still reads the genuine live target after the copy is released');
+      process.exitCode = fails ? 1 : 0;
+      return;
+    }
     if (process.env.GZ_B8_FOCUSED) {
       phase = 'account-boundary';
       user = '_43_1';
@@ -177,6 +226,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       console.log('new account settled: ' + JSON.stringify(await other.evaluate(() => ({ timeOrigin: performance.timeOrigin, spinner: !!document.querySelector('.spinner'), loading: !!document.querySelector('[data-gz-loading]') }))));
       await page.waitForTimeout(300);
       ok(await page.locator('#gz-ctabs').count() === 0 && await isolated(() => GZ_CTABS.snapshots()) === 0, 'another document changing account clears the old in-page copies and strip');
+      ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctabs') && !sessionStorage.getItem('gz-ctabs')), 'account revocation leaves no page reservation or phantom strip gap');
       await isolated(() => { GZ_CTABS.sync(true); return true; });
       await page.waitForTimeout(100);
       ok(await page.locator('#gz-ctabs').count() === 0, 'an older document cannot reenable its cached account');
@@ -371,6 +421,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForTimeout(300);
     kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));
     ok(!kept.length, `switched off: the strip goes, and every copy (${kept.length} left)`);
+    ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctabs') && !sessionStorage.getItem('gz-ctabs')), 'switching off clears the page reservation too');
     await settings();
     await page.waitForSelector('#gz-ctabs [role="tab"]');
     await switchTab('_103_1');
