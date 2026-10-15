@@ -4,6 +4,19 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Looks gallery:** free Looks and palettes shared openly at frostdev.io/glaze/looks, with no accounts,
+  likes or tracking. **Use this Look in Glaze** there opens the editor with the Look in its preview;
+  nothing changes until you choose Use this theme. A code made of a palette alone changes only your colors.
+- **Favorites:** save a gallery Look or any theme code from its preview, and preview it again later.
+  Kept on this device.
+- **Looks history and Previous Look:** the last 20 themes you wore, from the popup, the editor or Ctrl+K,
+  with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
+  kept on this device.
+
 ## [2.2.0] — 2026-10-15
 
 ### Added

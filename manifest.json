@@ -80,6 +80,14 @@
         "lib/detect.js"
       ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://frostdev.io/glaze/looks*"
+      ],
+      "js": [
+        "lib/gallery.js"
+      ]
     }
   ],
   "web_accessible_resources": [

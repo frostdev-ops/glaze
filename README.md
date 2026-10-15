@@ -30,6 +30,7 @@ domain, and on Canvas, which Glaze recognizes on any school's domain.
 - **Looks** — ten ready-made combinations (Graveyard and Pumpkin Patch are for Halloween) of palette, fonts, shape and background, one click each in the popup or the editor, or one for a single course.
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
+- **Looks gallery** — free Looks shared openly at [frostdev.io/glaze/looks](https://frostdev.io/glaze/looks). Use this Look in Glaze opens it in the editor's preview; save favorites, and go back with Previous Look from a history of the themes you wore. Both stay on your device.
 - **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain.
@@ -193,7 +194,8 @@ It keeps the course names your LMS lists, which grades and course
 items you've seen and a backup of what you type in Blackboard's editors (until it's posted, 14 days at most) on your own
 device. On Canvas it also keeps course names, codes and colors, unread-grade counts, module-item ids and your place,
 with site and account identifiers for badge records. Supported new Inbox drafts keep the body, subject and destination
-identifiers locally for up to 14 days. Canvas's own what-if scores and editor recovery remain with Canvas.
+identifiers locally for up to 14 days. Your Looks history (the last 20 themes) and favorites stay on your device too;
+the Looks gallery is a website you visit yourself, and Glaze sends it nothing. Canvas's own what-if scores and editor recovery remain with Canvas.
 It has no analytics. The extension's read-only requests go to your own Blackboard or Canvas site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards;

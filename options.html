@@ -61,6 +61,7 @@
   .courses .name small { display: block; overflow: hidden; text-overflow: ellipsis; font-size: 0.78em; color: var(--gz-ink-faint); }
   .courses li > button[hidden] { display: inline-block !important; visibility: hidden; }
   button.danger:hover { color: var(--gz-err); border-color: var(--gz-err); }
+  button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   body.off .editor > section:not(#data) { opacity: 0.5; }
   [hidden] { display: none !important; }
   .swatch.bg-set::after { display: none; }
@@ -85,6 +86,13 @@
   .offer { display: grid; gap: 0.6rem; padding: 0.75rem 0.9rem; border: 1px solid var(--gz-accent); border-radius: 10px; background: var(--gz-accent-soft); }
   .offer p { margin: 0; color: var(--gz-ink); }
   .offer .desc { display: block; margin-top: 0.25rem; }
+  .saved { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+  .saved li { display: flex; align-items: center; gap: 0.6rem; }
+  .saved .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .saved .name small { margin-left: 0.4rem; color: var(--gz-ink-faint); }
+  .chips { display: flex; flex: none; border: 1px solid var(--gz-line-strong); border-radius: 999px; overflow: hidden; }
+  .chips i { width: 14px; height: 18px; }
+  a.button { display: inline-block; text-decoration: none; }
   .font-card .meta { font-size: 11px; color: var(--gz-ink-faint); }
   /* Search: misses hide; matches are painted by the Highlight API where there is one. */
   .find { display: flex; align-items: center; gap: 0.6rem; flex: 0 1 17rem; min-width: 0; }
@@ -363,7 +371,23 @@
         </div>
         <div class="offer" id="share-offer" hidden>
           <p id="share-what"></p>
-          <div class="row"><button type="button" id="share-apply" class="primary">Use this theme</button><button type="button" id="share-cancel">Cancel</button></div>
+          <div class="row"><button type="button" id="share-apply" class="primary">Use this theme</button><button type="button" id="share-fav">Save to favorites</button><button type="button" id="share-cancel">Cancel</button></div>
+        </div>
+        <div class="group">
+          <h3>Gallery</h3>
+          <p class="desc" id="gallery-note">Free Looks shared by other students. Pick one there and Glaze opens it here to preview before anything changes. Opening the gallery is an ordinary visit to frostdev.io; Glaze sends nothing.</p>
+          <div class="row"><a class="button" id="gallery-link" href="https://frostdev.io/glaze/looks/" target="_blank" rel="noopener" aria-describedby="gallery-note">Open the gallery</a></div>
+        </div>
+        <div class="group">
+          <h3>Favorites</h3>
+          <p class="desc" id="favorites-note">Themes you saved from the gallery or a theme code, kept on this computer.</p>
+          <ul class="saved" id="favorites" aria-label="Favorites"></ul>
+        </div>
+        <div class="group">
+          <h3>History</h3>
+          <p class="desc" id="history-note">The themes you wore lately, newest first, kept on this computer.</p>
+          <div class="row"><button type="button" id="history-back" aria-describedby="history-note">Previous Look</button><button type="button" id="history-clear" class="danger">Clear history</button></div>
+          <ul class="saved" id="history" aria-label="History"></ul>
         </div>
         <div class="row">
           <button type="button" id="export">Export settings</button>
@@ -383,6 +407,7 @@
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
   <script src="lib/share.js"></script>
+  <script src="lib/history.js"></script>
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
   <script src="i18n/de.js"></script>

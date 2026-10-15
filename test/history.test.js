@@ -1,0 +1,119 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const H = require('../lib/history.js');
+const G = require('../defaults.js');
+const m = require('../manifest.json');
+
+const looks = Object.fromEntries(G.GZ_LOOKS.map((L) => [L.name, L]));
+const wearing = (name, s = G.GZ_DEFAULTS) => G.GZ_SANITIZE({ ...s, ...G.GZ_LOOK_APPLY(s, looks[name]) });
+
+test('history keeps one entry per theme, newest first, capped', () => {
+  let list = H.add([], G.GZ_DEFAULTS, 1);
+  assert.equal(H.add(list, G.GZ_DEFAULTS, 2), list, 'wearing the same theme again changes nothing');
+  list = H.add(list, wearing('Terminal'), 2);
+  list = H.add(list, G.GZ_DEFAULTS, 3);
+  assert.deepEqual(list.map((e) => e.at), [3, 2], 'the defaults moved to the front, once');
+  // Tooltips and hints are behavior, not a theme.
+  assert.equal(H.add(list, { ...G.GZ_DEFAULTS, look: { ...G.GZ_DEFAULTS.look, tooltips: false } }, 4), list);
+  for (let i = 0; i < 30; i++) list = H.add(list, { ...G.GZ_DEFAULTS, look: { ...G.GZ_DEFAULTS.look, radius: i } }, 10 + i);
+  assert.equal(list.length, H.MAX);
+});
+
+test('Previous Look is the newest theme that is not the one worn, and wearing it keeps tooltips and hints', () => {
+  const mine = G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, look: { ...G.GZ_DEFAULTS.look, tooltips: false, hints: false, radius: 3 }, auto: { on: true, light: 'Paper', dark: 'Midnight' } });
+  const now = wearing('Synthwave', mine);
+  const list = H.add(H.add([], mine, 1), now, 2);
+  const back = H.previous(list, now);
+  assert.ok(back && !H.wearing(now, back));
+  const patch = H.wear(now, back);
+  assert.deepEqual(Object.keys(patch).sort(), [...H.KEYS].sort());
+  const after = G.GZ_SANITIZE({ ...now, ...patch });
+  assert.equal(after.look.radius, 3);
+  assert.deepEqual(after.auto, mine.auto, 'auto light/dark comes back with it');
+  assert.equal(after.look.tooltips, false);
+  assert.ok(H.wearing(after, back));
+  assert.equal(H.previous(H.add(list, after, 3), after).theme.colors['--gz-accent'], looks.Synthwave.colors['--gz-accent'], 'and back again');
+  assert.equal(H.previous([], now), null);
+});
+
+test('favorites are one per code, newest first, capped; bad stored lists are dropped', () => {
+  let favs = [];
+  for (let i = 0; i < 120; i++) favs = H.favor(favs, { code: `glaze1:${i % 110}`, name: `n${i}`, author: '', at: i });
+  assert.equal(favs.length, H.MAX_FAVORITES);
+  assert.equal(favs[0].name, 'n119');
+  assert.equal(new Set(favs.map((f) => f.code)).size, favs.length);
+  assert.deepEqual(H.favorites([null, { code: 1, name: 'x' }, { code: 'glaze1:a', name: 'ok' }, 'x']), [{ code: 'glaze1:a', name: 'ok' }]);
+  assert.deepEqual(H.favorites('nope'), []);
+  assert.deepEqual(H.entries([null, { theme: 'x' }, { theme: {}, at: 1 }]), [{ theme: {}, at: 1 }]);
+});
+
+// The background, run as the browser would: the gallery hand-off and the history it records.
+const worker = () => {
+  const on = { message: [], changed: [] };
+  const local = {};
+  const sync = {};
+  const timers = [];
+  const opened = [];
+  const area = (store) => ({
+    get: async (k) => (k === null ? structuredClone(store) : Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, structuredClone(store[x])]))),
+    set: async (v) => { Object.assign(store, structuredClone(v)); },
+  });
+  const context = vm.createContext({
+    URL, console, TextEncoder, structuredClone, Promise, Date,
+    setTimeout: (f) => timers.push(f), clearTimeout: () => timers.splice(0),
+    importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
+    chrome: {
+      runtime: {
+        getURL: () => 'chrome-extension://x/', getManifest: () => m,
+        openOptionsPage: () => { opened.push('options'); return Promise.resolve(); },
+        onMessage: { addListener: (f) => on.message.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
+      },
+      storage: { local: area(local), sync: area(sync), onChanged: { addListener: (f) => on.changed.push(f) } },
+    },
+  });
+  vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), context);
+  const send = (msg, sender) => on.message.forEach((f) => f(msg, sender));
+  const change = (changes) => on.changed.forEach((f) => f(changes, 'sync'));
+  const tick = () => new Promise(setImmediate);
+  return { send, change, tick, timers, local, sync, opened };
+};
+
+test('the gallery content script runs only on the gallery, and the background takes codes only from there', async () => {
+  const entry = m.content_scripts.find((c) => c.js.includes('lib/gallery.js'));
+  assert.deepEqual(entry.matches, ['https://frostdev.io/glaze/looks*']);
+  assert.ok(!entry.all_frames);
+  assert.deepEqual(m.permissions, ['storage', 'scripting'], 'no new permission');
+  const w = worker();
+  const code = 'glaze1:abc';
+  for (const [url, frameId] of [['https://evil.example/glaze/looks/', 0], ['https://frostdev.io/glaze', 0], ['https://frostdev.io/glaze/looks/', 3], [undefined, 0]]) {
+    w.send({ gallery: { code, name: 'X', author: 'y' } }, { url, frameId });
+  }
+  w.send({ gallery: { code: 'x'.repeat(4001), name: 'X' } }, { url: 'https://frostdev.io/glaze/looks/', frameId: 0 });
+  await w.tick();
+  assert.deepEqual(w.local, {});
+  assert.deepEqual(w.opened, []);
+  w.send({ gallery: { code, name: 'Aurora Night', author: 'frostdev-ops', extra: 1 } }, { url: 'https://frostdev.io/glaze/looks/#aurora-night', frameId: 0 });
+  await w.tick();
+  assert.deepEqual(w.local.galleryOffer, { code, name: 'Aurora Night', author: 'frostdev-ops' });
+  assert.deepEqual(w.opened, ['options']);
+});
+
+test('the background records the theme left and the theme worn once a burst of changes rests', async () => {
+  const w = worker();
+  const before = G.GZ_SANITIZE({});
+  const after = wearing('Lagoon', before);
+  Object.assign(w.sync, after);
+  w.change({ colors: { oldValue: before.colors, newValue: after.colors }, look: { oldValue: before.look, newValue: after.look }, bg: { oldValue: before.bg, newValue: after.bg } });
+  w.change({ enabled: { oldValue: true, newValue: false } }); // not a theme: ignored
+  await w.tick();
+  assert.equal(w.timers.length, 1, 'one timer for the burst');
+  w.timers.shift()();
+  for (let i = 0; i < 5; i++) await w.tick();
+  const list = w.local.lookHistory;
+  assert.equal(list.length, 2);
+  assert.ok(H.wearing(after, list[0]));
+  assert.ok(H.wearing(before, list[1]));
+  assert.ok(H.wearing(before, H.previous(list, after)));
+});
