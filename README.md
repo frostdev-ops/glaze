@@ -100,18 +100,13 @@ Use it only when you mean to regenerate the project. It doesn't know about the i
 
 The Developer ID build stages Sparkle 2.10.0 in a temporary Mac project through
 `scripts/stage-safari-dmg.py`; the checked-in App Store project stays free of Sparkle.
-Once, run the [Sparkle distribution's key generator](https://sparkle-project.org/documentation/#eddsa-ed25519-signatures)
-yourself:
-
-```sh
-/path/to/Sparkle/bin/generate_keys
-export SAFARI_UPDATE_PUBLIC_KEY='paste the printed public key here'
-```
-
-The generator saves the private signing key in your login Keychain; keep it safe. The build passes
-the public key into `SUPublicEDKey` in the staged Mac app's `Glaze/Info.plist`, replacing
-`REPLACE_WITH_SPARKLE_EDDSA_PUBLIC_KEY`. Staging without a key leaves updates disabled; a release
-build rejects that placeholder. Keep this environment variable set when running the build above.
+Glaze's signing key was made once with the [Sparkle distribution's key generator](https://sparkle-project.org/documentation/#eddsa-ed25519-signatures)
+(`bin/generate_keys`), which keeps the private key in the login Keychain (account `ed25519`) of the Mac
+that made it. Back it up with `generate_keys -x <file>` and keep that file somewhere safe: without it,
+no update can be signed for apps already installed. `scripts/build-safari.sh` passes the public key
+(`0lbeC9MO1QDsjSGjs6iyxSBwXKMpEiKVoB+5wZwQEqY=`, or `SAFARI_UPDATE_PUBLIC_KEY` if set) into
+`SUPublicEDKey` in the staged Mac app's `Glaze/Info.plist`. Staging on its own without a key leaves
+updates disabled; a release build rejects the `REPLACE_WITH_SPARKLE_EDDSA_PUBLIC_KEY` placeholder.
 
 After building and notarizing a release, generate its signed update entry locally (replace
 `<version>` with the manifest version):

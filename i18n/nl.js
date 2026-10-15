@@ -414,4 +414,7 @@
   "On Canvas: g then d, c, a, g or m for Dashboard, Courses, Calendar, Grades, Inbox; g then ? for the list.": "Op Canvas: g en dan d, c, a, g of m voor Dashboard, Cursussen, Agenda, Cijfers, Inbox; g en dan ? voor de lijst.",
   "On Canvas: new Inbox messages; Canvas recovers its own editors.": "Op Canvas: nieuwe berichten in de Inbox; Canvas herstelt zijn eigen editors zelf.",
   "On Canvas: a bar above pages, assignments and file previews.": "Op Canvas: een balk boven pagina's, opdrachten en bestandsvoorbeelden.",
+  "Glaze works on Canvas now, on your school's own address or on instructure.com.": "Glaze werkt nu ook op Canvas, op het adres van je school of op instructure.com.",
+  "The extras come along, on Canvas's Modules, Assignments, Grades and To Do.": "De extra's komen mee, naar Modules, Opdrachten, Cijfers en Taken van Canvas.",
+  "Two Looks for Halloween, Graveyard and Pumpkin Patch, each with its own animated scene.": "Twee uiterlijken voor Halloween, Kerkhof en Pompoenveld, elk met een eigen bewegende scène.",
 };
