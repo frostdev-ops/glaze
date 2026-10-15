@@ -9,7 +9,7 @@ their separate, existing URL handling.
 
 ## Optional encrypted share sessions
 
-Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's extension-owned Sessions page. Glaze checks the selected origin's browser permission and requests it only if missing. The optional default `https://share.frostdev.io/*` remains declared, alongside optional `http://localhost/*` and `http://127.0.0.1/*` for local testing. Glaze already requires broad HTTPS access for LMS detection, so the optional default declaration does not technically reduce existing HTTPS access. Device-local consent gates session traffic independently. Pause aborts requests and closes the live connections. Backup/key restore never enables sharing. No session connection runs without an open Notes, To Do or Sessions surface. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
+Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's extension-owned Sessions page. Glaze checks the selected origin's browser permission and requests it only if missing. Glaze's required `https://*/*` access for LMS detection already covers the default and custom HTTPS relays; Chrome flags an optional default-relay declaration as redundant, so it is omitted. Only `http://localhost/*` and `http://127.0.0.1/*` are declared as optional hosts for local testing. A browser prompt is only needed when the selected origin's access is missing or withheld. Device-local consent gates session traffic independently. Pause aborts requests and closes the live connections. Backup/key restore never enables sharing. No session connection runs without an open Notes, To Do or Sessions surface. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
 
 The Relay preference (`shareRelay`) is stored in browser sync, without credentials, and applies only to new sessions. Each existing session and backup key retains its own server. Entering or saving a relay URL makes no request and grants no host consent. **Test connection** explicitly sends a credential-free HTTP `GET /health` to the entered server, bounded to five seconds and 1 KiB of response, refusing redirects and suppressing the referrer; it does not save the URL or enable sharing. HTTP session requests also omit browser credentials and refuse redirects; live updates keep the existing native WebSocket transport. A custom-server invite names its host and requires confirmation in the extension before permission checks or joining. Device-local approved hosts (`shareHosts`) do not sync. Imported keys stay paused; Resume confirms previously unapproved hosts.
 
@@ -237,6 +237,20 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   record, keeping only when it was deleted (so a late save from another tab can't bring it back); the GPA scale and
   tasks stay until you change them there. Only the first 200,000 characters of a syllabus are read, and the review says
   so when there were more.
+- **Course tabs** (Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
+  signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
+  pinned, when it was last used, and where you were in the course: the address of a course tool, document or folder
+  (never a test, attempt, assessment, discussion or message) and how far down. Closing a tab removes it.
+  **Copies of course pages for instant switching** are kept in memory only and never written to disk: in the page while
+  it is open, and in the browser's session storage (`chrome.storage.session`, which the browser holds in memory and
+  which Blackboard pages can't read; Glaze's background worker keeps it), per site and account. A copy is what was
+  already on your screen when you left a course, without scripts, frames, form fields, media, handlers or arbitrary
+  data attributes. Loaded pictures become local bitmaps when the browser permits; unreadable pictures and stylesheet
+  resources are omitted. The serialized copy, including its ancestor metadata, is at most 1,000,000 characters each
+  and 6,000,000 in all, the oldest dropped first. They are dropped when the
+  browser closes, when you turn the tabs or Glaze off, when another account turns up on the site, and when you use
+  Blackboard's Sign Out. Session-only account/cache metadata also keeps up to 64 known document ids and tab ids per
+  site, with document birth times and a cache generation, so an old page cannot restore a previous account's copies.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -259,6 +273,12 @@ you import) are bundled. It makes requests in these cases:
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
   site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
   session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
+- **Course tabs.** To keep each account's tabs apart, Glaze asks your own Blackboard site who is signed in (Ultra's
+  `/learn/api/v1/users/me`, which Ultra itself asks on every page), once a page, shared with the grade and course-list
+  reads above. Replaying the copy makes no requests: the page's existing stylesheets remain in place and unreadable
+  stylesheets are never linked again. Blackboard routes the selected course normally; if it fails to switch in place
+  within 2.5 seconds, Glaze loads that selected course's own-site address. Glaze never prefetches a course or opens one
+  in the background.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette

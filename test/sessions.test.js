@@ -267,7 +267,9 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.match(ui, /const human = \(e\) => e\.isTrusted/);
   assert.match(ui, /if \(!human\(e\) \|\| busy \|\| !state\) return;/);
   assert.match(ui, /if \(!e\.isTrusted\) return;/);
-  assert.deepEqual(require('../manifest.json').optional_host_permissions, ['https://share.frostdev.io/*', 'http://localhost/*', 'http://127.0.0.1/*']);
+  // Required HTTPS access covers the default/custom relay; optional hosts are only for explicit local testing.
+  assert.deepEqual(require('../manifest.json').optional_host_permissions, ['http://localhost/*', 'http://127.0.0.1/*']);
+  assert.ok(require('../manifest.json').host_permissions.includes('https://*/*'));
 });
 
 test('session worker accepts only exact extension pages; an LMS or another extension cannot ask for keys', async () => {

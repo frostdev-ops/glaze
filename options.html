@@ -149,7 +149,7 @@
     </div>
     <nav aria-label="Sections">
       <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
-      <a href="#motion">Motion</a><a href="#sidebar">Canvas and Blackboard navigation</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
+      <a href="#motion">Motion</a><a href="#sidebar">Canvas and Blackboard navigation</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#tabs">Course tabs</a><a href="#extras">Extras</a><a href="#data">Share</a>
     </nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
@@ -444,6 +444,55 @@
           <span class="desc">A + on each card to message the class, or start a discussion where the course allows it.</span></label>
         <div class="row" id="card-set" hidden><span class="desc" id="card-set-note"></span><button type="button" id="card-set-clear" aria-describedby="card-set-note">Remove</button></div>
       </section>
+      <section id="tabs">
+        <h2>Course tabs</h2>
+        <p class="desc">On Blackboard Ultra, each course you open gets a tab, as pages do in your browser. A tab takes you back to where you were in its course; one left in a test or an assignment opens at the course's tool instead, never in the test.</p>
+        <label class="check"><input type="checkbox" data-key="enhance.tabs"><span>Course tabs</span>
+          <span class="desc">Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.</span></label>
+        <div class="field wide"><span>Where</span>
+          <div class="seg wrap" role="radiogroup" aria-label="Where the tabs go">
+            <label><input type="radio" name="tabs.at" value="above">Above the course's bar</label>
+            <label><input type="radio" name="tabs.at" value="between">Between its rows</label>
+            <label><input type="radio" name="tabs.at" value="below">Below it</label>
+          </div></div>
+        <label class="field"><span>Most tabs</span><input type="range" data-key="tabs.cap" min="2" max="20" step="1" aria-describedby="tabs-cap-note"><output data-for="tabs.cap"></output></label>
+        <p class="desc" id="tabs-cap-note">With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.</p>
+        <label class="check"><input type="checkbox" data-key="tabs.place"><span>Go back to where you were</span>
+          <span class="desc">A tab opens its course at the page and scroll you left it at. Off: always at the course's content.</span></label>
+        <div class="group">
+          <h3>Tab buttons</h3>
+          <div class="field wide"><span>Shape</span>
+            <div class="seg wrap" role="radiogroup" aria-label="Tab shape">
+              <label><input type="radio" name="tabs.shape" value="tab">Tab</label>
+              <label><input type="radio" name="tabs.shape" value="rounded">Rounded</label>
+              <label><input type="radio" name="tabs.shape" value="pill">Pill</label>
+              <label><input type="radio" name="tabs.shape" value="square">Square</label>
+            </div></div>
+          <div class="field wide"><span>Size</span>
+            <div class="seg" role="radiogroup" aria-label="Tab size">
+              <label><input type="radio" name="tabs.size" value="small">Small</label>
+              <label><input type="radio" name="tabs.size" value="medium">Medium</label>
+              <label><input type="radio" name="tabs.size" value="large">Large</label>
+            </div></div>
+          <label class="field"><span>Widest tab</span><input type="range" data-key="tabs.width" min="96" max="320" step="4"><output data-for="tabs.width" data-format="px"></output></label>
+          <label class="field"><span>Name</span><select data-key="tabs.label"><option value="name">Course name</option><option value="code">Course code</option></select></label>
+          <div class="field wide"><span>Marker</span>
+            <div class="seg" role="radiogroup" aria-label="Tab marker">
+              <label><input type="radio" name="tabs.mark" value="dot">Colour dot</label>
+              <label><input type="radio" name="tabs.mark" value="icon">Icon</label>
+              <label><input type="radio" name="tabs.mark" value="none">None</label>
+            </div></div>
+          <div class="field wide"><span>Course colour</span>
+            <div class="seg" role="radiogroup" aria-label="Course colour on tabs">
+              <label><input type="radio" name="tabs.color" value="off">Plain</label>
+              <label><input type="radio" name="tabs.color" value="tint">Tint</label>
+              <label><input type="radio" name="tabs.color" value="theme">Strong</label>
+            </div></div>
+          <p class="desc">Each course's colour and nickname are the ones under Courses and in a course card's menu.</p>
+        </div>
+        <p class="desc">Switching tabs shows a still copy of the course as you last saw it at once, then Blackboard's live page fades in. The copies stay in memory and are never written to disk; they go when the browser closes, when you turn the tabs or Glaze off, or when someone else signs in. Glaze never opens or loads a course in the background.</p>
+      </section>
+
       <section id="extras">
         <h2>Extras</h2>
         <p class="desc">Extras work on Blackboard and Canvas. On Canvas they sit where Canvas keeps the same things: Modules for course content, the Assignments list and To Do for due dates, the Dashboard for course cards.</p>
@@ -773,6 +822,7 @@
   <script src="lib/remind.js"></script>
   <script src="lib/gradescope.js"></script>
   <script src="lib/gcal.js"></script>
+  <script src="lib/coursetabs.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>
