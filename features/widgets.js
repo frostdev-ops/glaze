@@ -1011,6 +1011,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       ...(ultra ? HUB_ULTRA : HUB).map(([group, keys]) => make('fieldset', {}, make('legend', { textContent: t(group) }),
         ...keys.map((k) => {
           const box = make('input', { type: 'checkbox', checked: !!s.enhance[k] });
+          box.setAttribute('role', 'switch');
           box.dataset.key = k;
           box.addEventListener('change', () => set(k, box.checked));
           return make('label', { className: 'gz-w-check' }, box, make('span', { textContent: t(EXTRA[k]) }));
