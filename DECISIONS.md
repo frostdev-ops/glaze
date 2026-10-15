@@ -656,6 +656,20 @@ owner's screenshot. Checked by `scripts/ultra-cards-check.js` on `test/fixtures/
 
 Bounds: 20 sessions, 200 selected notes/tasks per session, 16 MiB serialized session state, 64 MiB referenced files per session and 200 MiB retained session files on the device. Oversized or unreadable state fails closed. Files stay within the existing Notes 20 MiB attachment / 5 MiB displayed-picture limits. Deleted shared items keep their detached local copies; per-file relay garbage collection is outside S6b. Native Safari/Firefox live-worker behavior and relay deployment are separate checks.
 
+## Custom share relay and editor handoff (E1)
+
+| Decision | Considered | Why |
+|---|---|---|
+| A separate sanitized sync item, `shareRelay`, applies only at Create; sessions/keys retain `st.server` | Repointing every saved session when the preference changes | Existing shares live on their own server. Changing a preference cannot migrate ciphertext or break their invites. Keeping this extension-only preference outside startup `GZ_SPEC` adds no LMS first-script bytes. |
+| HTTPS origins only; HTTP `localhost`/`127.0.0.1` for local testing, with explicit optional declarations | Arbitrary HTTP, path-based relay roots or silently stripping credentials | The public relay uses root-relative endpoints. Origin validation rejects paths, credentials, queries and fragments before any request. |
+| Keep required `https://*/*` and the optional default host; check `permissions.contains` and request only missing origins | Treating the optional default permission as a technical HTTPS restriction | The existing required wildcard normally grants custom HTTPS access already. Permission is capability, not user consent. An unknown custom Join therefore confirms its host in the extension first, independently of browser prompts, and the worker checks the confirmed origin too. |
+| Per-device `shareHosts` consent; imported keys restore paused and new hosts need Resume confirmation | Syncing approvals or letting a backup silently authorize another host | A URL edit, sync update or backup restore must not cause silent requests to a previously unknown operator. Saving the preference is offline; only Test connection, Create, Join or Resume can explicitly initiate new relay traffic. |
+| Five-second, 1 KiB `GET /health` test; HTTP credentials omitted, referrer suppressed and redirects refused | Saving or enabling sharing as a side effect of testing | Testing needs a clear outcome without sending session keys or following another destination. Session HTTP requests use the same credential/referrer/redirect rules. The existing native WebSocket transport is retained unchanged; no equivalent WebSocket credential claim is made. |
+| One live socket per immutable session server; retain S6b's interrupt and generation checks | One global default-relay socket | A device can hold default and custom shares together. Pause and withdrawal still close all owned sockets and prevent older callbacks reconnecting. |
+| Record the tab/section/faithful-preview design now; relocate options only after B7c/B8 land | Restructuring files while other packages still own their controls | Preserve the union of navigation and course-tab controls, their IDs, storage keys, import/export semantics and resets. See `parity/spikes/E1.md`. |
+
+The self-host guide derives the public API, storage, limits and trust boundaries from the accepted S6 interface/report. nginx/Caddy configurations are operator examples; the deployed nginx config was not available locally and was not inspected. No deployment, server credential access, core crypto/relay audit or dependency change belongs to E1.
+
 ## Free-placed widgets and the Glaze Dashboard on Blackboard Ultra (B7b, Oct 2026)
 
 Owner decisions (`parity/BLACKBOARD-PLAN.md` § B7): the widgets float; separate layouts for the Courses page and the

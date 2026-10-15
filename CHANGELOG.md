@@ -15,6 +15,7 @@ All notable changes to Glaze are documented here. The format follows
   unavailable widget files leave the native Institution page reachable.
 
 ### Added
+- **Custom share relay.** Share sessions can save an HTTPS origin (or localhost HTTP for testing) for new sessions, test `/health` with a bounded deadline, and explicitly confirm custom invite hosts before joining. Existing sessions and restored keys keep their original server. HTTP requests omit browser credentials and refuse redirects; device-local host consent stays separate from browser permissions and sync. A public self-host guide covers Node/Docker, TLS proxies, disk/R2 storage, backups, limits and updates. The tabbed-editor/preview design is recorded in `parity/spikes/E1.md`; its editor restructure follows the shared-file handoff.
 - Blackboard Ultra: hide folders and learning modules locally, with a Show hidden folders count and per-account/course choices included in Export all. Controls follow reused outline rows, save only on your own activation, and malformed imported records preserve saved choices.
 
 - **Blackboard navigation:** the newer MUI drawer and legacy rail now share Glaze's styling, with a bundled Glaze logo

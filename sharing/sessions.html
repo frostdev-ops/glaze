@@ -1,10 +1,18 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"><title>Share sessions</title><link rel="stylesheet" href="../ui.css"><link rel="stylesheet" href="sessions.css"></head>
 <body><main>
-<header><p translate="no">Glaze</p><h1>Share sessions</h1><p>Invite only, end-to-end encrypted through https://share.frostdev.io. Your local copies keep working without the server.</p></header>
+<header><p translate="no">Glaze</p><h1>Share sessions</h1><p>Invite only, end-to-end encrypted. Your local copies keep working without the relay.</p></header>
 <p id="status" role="status" aria-live="polite"></p>
 <section><h2>Connection</h2><p id="connection"></p><div class="row"><button id="resume" type="button">Resume sessions</button><button id="pause" type="button">Pause sharing</button><button id="refresh" type="button">Sync now</button></div></section>
+<section id="relay"><h2>Relay</h2><p id="relay-help">The relay applies to new sessions only. Existing sessions keep their own server. Saving never connects.</p>
+<label>Server for new sessions<select id="relay-kind"><option value="default">frostdev.io (default)</option><option value="custom">Custom</option></select></label>
+<label id="relay-custom" hidden>Custom relay URL<input id="relay-url" type="url" translate="no" maxlength="512" placeholder="https://relay.example.edu" autocomplete="off" spellcheck="false" aria-describedby="relay-help relay-url-help"></label>
+<p id="relay-url-help">Use an HTTPS origin without a path, query, fragment or credentials. HTTP is allowed only on localhost or 127.0.0.1 for self-testing.</p>
+<p>With a custom relay, encrypted data goes to its operator. Glaze cannot vouch for that server.</p>
+<div class="row"><button id="relay-save" type="button">Save relay</button><button id="relay-test" type="button">Test connection</button><a href="https://github.com/frostdev-ops/glaze/blob/main/server/README.md" target="_blank" rel="noopener noreferrer">Run your own</a></div>
+<p id="relay-status" role="status" aria-live="polite"></p></section>
 <section><h2>Create a session</h2><p>Only the selected notes, Look or custom tasks and their plans are shared. Course account identifiers and LMS assignments are not carried.</p>
+<p id="create-relay"></p>
 <label>Your name on this device<input id="name" maxlength="60" autocomplete="off"></label>
 <label>Session name<input id="title" maxlength="80" autocomplete="off"></label>
 <label>What to share<select id="kind"><option value="notes">Notes</option><option value="look">Current Look</option><option value="todo">Custom tasks and plans</option></select></label>
@@ -12,11 +20,11 @@
 <label class="check"><input id="expire" type="checkbox"><span>Delete after a year unused</span></label>
 <button id="create" type="button">Create encrypted session</button></section>
 <section><h2>Join from an invite link</h2><p>Paste the full link here. Anyone holding an edit link can change the session; anyone holding a view link can read it. Keep links private.</p>
-<label>Invite link<input id="invite" type="password" maxlength="200" autocomplete="off" spellcheck="false"></label><button id="join" type="button">Join encrypted session</button>
+<label>Invite link<input id="invite" type="password" maxlength="1024" autocomplete="off" spellcheck="false"></label><button id="join" type="button">Join encrypted session</button>
 <p>Joining keeps a separate local copy. Choose Copy into Notes or To Do to add new local items without replacing existing work.</p></section>
 <section><h2>Your sessions</h2><div id="sessions"></div></section>
 <section id="backup" hidden><h2>Export all</h2><p>Includes all share keys and creator delete tokens, even while sharing is paused. Anyone with this backup can open those sessions and may change or delete them. Keep it private.</p><div class="row"><button id="export-notes" type="button">Export notes and share keys</button><button id="import-notes" type="button">Import notes and share keys</button><input type="file" id="import-file" accept=".zip,application/zip" hidden></div><p>Import restores keys locally. It connects only after you create, join or resume a session.</p></section>
 </main>
-<script src="../lib/color.js"></script><script src="../lib/fonts.js"></script><script src="../defaults.js"></script><script src="../lib/cards.js"></script><script src="../lib/share.js"></script><script src="../lib/doctext.js"></script><script src="../lib/zip.js"></script><script src="../lib/notes.js"></script>
+<script src="../lib/relay.js"></script><script src="../lib/color.js"></script><script src="../lib/fonts.js"></script><script src="../defaults.js"></script><script src="../lib/cards.js"></script><script src="../lib/share.js"></script><script src="../lib/doctext.js"></script><script src="../lib/zip.js"></script><script src="../lib/notes.js"></script>
 <script src="../i18n/de.js"></script><script src="../i18n/es.js"></script><script src="../i18n/fr.js"></script><script src="../i18n/nl.js"></script><script src="../i18n/pt-BR.js"></script><script src="../lib/i18n.js"></script><script src="sessions.js"></script>
 </body></html>
