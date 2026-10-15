@@ -157,10 +157,19 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
       toast(show[0], p.show.length - 1);
       for (const id of mine) drawn.add(id); // the toast stands for all of them ("N more")
       unacked = { ids: [...mine], lease: r.lease };
+      tries = 0;
       return ack().then((x) => { ok = x; });
     }).finally(() => settled(ok));
   };
-  const retry = () => { busy = true; ack().then(settled, () => settled(false)); };
+  // At most ACKS retries, a lease apart; then this page lets it go. It never draws it again; a later page may.
+  const ACKS = 5;
+  let tries = 0;
+  const retry = () => {
+    busy = true;
+    tries++;
+    const done = (ok) => { if (!ok && tries >= ACKS) unacked = null; settled(ok); };
+    ack().then(done, () => done(false));
+  };
   const keepStreak = (b, now) => {
     const s = R.streak(b, st.streak, T.dayOf(now, who.tz));
     run = s;
