@@ -239,6 +239,12 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Changed
 
+- **Better To Do is on by default** on Canvas (owner decision). One switch in the editor turns it off and brings back
+  Canvas's own To Do; What's new says so once.
+- **Rose palette:** its accent is a little darker (#c026d3 → #b31fc4), so links and active labels pass 4.5:1 on Rose's
+  backgrounds.
+- **Notes are never cleared for space:** Glaze asks for `unlimitedStorage`, which Chrome shows no warning for.
+
 - **Dark documents** is now a choice: off, dimmed (pictures stay true) or inverted (as before). If you had it on, it
   stays inverted. The moon button beside a preview switches between dimmed and off.
 

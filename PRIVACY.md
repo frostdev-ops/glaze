@@ -418,7 +418,9 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 
 - `storage` — to save the settings, GPA choices, past terms and goal, the Insights summary, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
   typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, and Safari update-check timestamp described above.
-  Notes' text, pictures and attachments are in the extension's own IndexedDB, which needs no permission (not `unlimitedStorage` either).
+  Notes' text, pictures and attachments are in the extension's own IndexedDB.
+- `unlimitedStorage` — so the browser never clears your notes, pictures and attachments to free space. Nothing more is
+  stored or sent because of it; Chrome shows no warning for it.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is

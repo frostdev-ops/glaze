@@ -28,7 +28,7 @@ test('injecting and registering need scripting and host access', () => {
 });
 
 test('Chrome retains exactly its existing permissions without native messaging', () => {
-  assert.deepEqual(m.permissions, ['storage', 'scripting']);
+  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage']); // notes are never cleared for space (owner, 2026-10-15)
   assert.ok(!m.permissions.includes('nativeMessaging'));
 });
 
@@ -54,7 +54,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
     // A clean Chrome manifest also gains the permission on its first conversion.
     fs.writeFileSync(file, JSON.stringify(m));
     rewrite();
-    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).permissions, ['storage', 'scripting', 'nativeMessaging']);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).permissions, ['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging']);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

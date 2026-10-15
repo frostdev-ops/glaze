@@ -279,7 +279,7 @@ test('planner items are kept small and on their own site', () => {
 });
 
 test('its settings join GZ_SPEC from here, so the first content script carries only the switch', () => {
-  assert.equal(D.GZ_SPEC.enhance.todo[0], false); // off until the student turns it on
+  assert.equal(D.GZ_SPEC.enhance.todo[0], true); // on by default (owner, 2026-10-15); one switch turns it off
   assert.equal(D.GZ_SPEC.todo, T.SPEC);
   assert.deepEqual(D.GZ_SANITIZE({}).todo, { span: 'week', n: 7, unit: 'days', start: 'rolling', past: 'week', rel: false, urgent: true, teacher: true, progress: true, done: 'auto', group: true, sync: false, cardN: 4, cardStatus: true, cardCross: false, gsDaily: false,
     icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsClasses: true, icsRange: '4w' });

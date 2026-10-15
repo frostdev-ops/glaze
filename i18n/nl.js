@@ -526,7 +526,7 @@
   "No date": "Zonder datum",
   "Upcoming": "Binnenkort",
   "Clear date": "Datum wissen",
-  "Better To Do on Canvas: your To Do by day, with your own tasks and focus sessions.": "Better To Do op Canvas: je taken per dag, met je eigen taken en focussessies.",
+  "Better To Do, now on for everyone on Canvas: your To Do by day. Turn it off in the editor.": "Better To Do, nu voor iedereen aan op Canvas: je taken per dag. Zet het uit in de editor.",
   "Couldn't save that on this device, so nothing changed.": "Dat kon niet op dit apparaat worden opgeslagen, dus er is niets veranderd.",
   "Canvas didn't confirm that, so your list is checking with Canvas again.": "Canvas heeft dat niet bevestigd, dus je lijst vraagt het Canvas opnieuw.",
   "Couldn't import {file}, so nothing changed.": "{file} kon niet worden geïmporteerd, dus er is niets veranderd.",

@@ -526,7 +526,7 @@
   "No date": "Sin fecha",
   "Upcoming": "Próximamente",
   "Clear date": "Quitar fecha",
-  "Better To Do on Canvas: your To Do by day, with your own tasks and focus sessions.": "Better To Do en Canvas: tus tareas por día, con tus propias tareas y sesiones de concentración.",
+  "Better To Do, now on for everyone on Canvas: your To Do by day. Turn it off in the editor.": "Better To Do, ahora activado para todos en Canvas: tus tareas por día. Desactívalo en el editor.",
   "Couldn't save that on this device, so nothing changed.": "No se pudo guardar en este dispositivo, así que no ha cambiado nada.",
   "Canvas didn't confirm that, so your list is checking with Canvas again.": "Canvas no lo confirmó, así que tu lista está consultando a Canvas de nuevo.",
   "Couldn't import {file}, so nothing changed.": "No se pudo importar {file}, así que no ha cambiado nada.",
