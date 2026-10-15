@@ -31,10 +31,13 @@ const hint = (msg, err = false) => {
 // titles and labels, its section and group headings, and the notes it names by aria-describedby or
 // aria-labelledby, which show and hide with it. Nothing here lists the settings. ----
 const finder = $('#find');
+let followSection = () => {}, searchPreview = () => {};
+const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
 const filter = () => {
   const words = GZ_FIND.parse(finder.value);
   const on = words.length > 0;
   document.body.classList.toggle('finding', on);
+  editor.finding(on); searchPreview(on);
   const marks = [];
   const mark = (root, heading = false) => {
     const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -53,9 +56,9 @@ const filter = () => {
   const said = (el) => [el, ...el.querySelectorAll('[title], [aria-label], [placeholder]')]
     .map((e) => `${e.title} ${e.getAttribute('aria-label') || ''} ${e.placeholder || ''}`).join(' ');
   let n = 0;
-  for (const sec of $$('.editor > section')) {
+  for (const sec of $$('[data-editor-section]')) {
     const h2 = sec.querySelector('h2');
-    const parts = [...sec.querySelectorAll(':scope > :not(h2, .group), :scope > .group > :not(h3)')];
+    const parts = [...sec.querySelectorAll(':scope > :not(.section-heading, .section-path, .section-note, .site-scope, .group), :scope > .group > :not(h3)')];
     const notes = new Map(parts.map((el) => [el, named(el)]));
     const isNote = new Set([...notes.values()].flat());
     for (const el of isNote) el.classList.toggle('miss', on);
@@ -64,7 +67,8 @@ const filter = () => {
       if (isNote.has(el)) continue;
       const h3 = el.parentElement.querySelector(':scope > h3');
       const text = [el.textContent, said(el), ...notes.get(el).map((x) => x.textContent)].join(' ');
-      const hit = !on || (!el.closest('[hidden]') && GZ_FIND.matches(`${h2.textContent} ${h3?.textContent || ''}`, text, words));
+      const tab = $(`[data-editor-tab="${sec.dataset.editorSection.split('/')[0]}"]`).textContent;
+      const hit = !on || (!el.closest('[hidden]') && GZ_FIND.matches(`${tab} ${h2.textContent} ${h3?.textContent || ''}`, `${sec.dataset.sites} ${text}`, words));
       el.classList.toggle('miss', !hit);
       if (!hit || !on) continue;
       any = true;
@@ -79,7 +83,7 @@ const filter = () => {
     sec.classList.toggle('miss', on && !any);
     if (on && any) mark(h2, true);
   }
-  for (const a of $$('.top nav a')) a.classList.toggle('miss', !!$(a.hash)?.classList.contains('miss'));
+  for (const panel of $$('[data-editor-panel]')) panel.classList.toggle('miss', on && !panel.querySelector('[data-editor-section]:not(.miss)'));
   if (window.Highlight) CSS.highlights.set('find', new Highlight(...marks));
   const msg = !on ? '' : n ? t('{n} settings', { n }) : t('No settings match');
   if ($('#find-status').textContent !== msg) $('#find-status').textContent = msg;
@@ -115,25 +119,52 @@ GZ_UI.load().then((s) => {
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
+  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs'], canvas: ['courses', 'outline', 'dashboard', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
+  let previewSite = 'ultra', previewPage = 'outline', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
+  const sizePreview = () => {
+    const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;
+    const stage = $('.preview-stage'), available = stage.clientWidth, scale = Math.min(1, available / width);
+    Object.assign(frame.style, { width: `${width}px`, height: `${height}px`, transform: `scale(${scale})`, left: `${Math.max(0, (available - width * scale) / 2)}px` });
+    stage.style.height = `${Math.ceil(height * scale)}px`; $('#preview-size-label').textContent = `${width} × ${height} CSS px`;
+  };
   const preview = () => {
-    const sec = frame.contentDocument?.querySelector('section.course');
-    // The mock is a course: it shows as the first course picked for tinting, in that course's color.
-    const first = courses[s.courses.tinted[0]];
-    if (sec && first) {
-      sec.className = `course course-color-${first.slot}`;
-      sec.style.cssText = Object.entries(GZ_COURSE_VARS(GZ_COURSE_COLORS(courses, s.courses.colors)[s.courses.tinted[0]])).map(([k, v]) => `${k}:${v}`).join(';');
-      sec.querySelector('.pv-course').textContent = first.name;
-    }
     const settings = offer || s, mode = $('#nav-preview-mode').value, scheme = $('#nav-preview-scheme').value;
     const nav = { ...settings.nav };
     if (mode !== 'current') { nav.collapsed = mode === 'collapsed'; nav.labels = mode === 'icons' ? 'icons' : nav.labels === 'icons' ? 'normal' : nav.labels; }
     const colors = scheme === 'current' ? null : GZ_PRESET(scheme === 'light' ? 'Paper' : 'Frost');
+    frame.contentWindow?.postMessage({ gzPreviewContext: { site: previewSite, page: previewPage, viewport: $('#preview-size').value } }, location.origin);
     frame.contentWindow?.postMessage({ gzPreview: { ...settings, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) } }, location.origin);
-    renderNav();
-    frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin);
+    renderNav(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
   };
+  const contextPreview = (site, page) => {
+    if (!supportedPages[site].includes(page)) page = 'courses';
+    const reload = site !== previewSite; previewSite = site; previewPage = page;
+    $('#preview-site').value = site; $('#preview-page').value = page;
+    for (const option of $('#preview-page').options) option.disabled = !supportedPages[site].includes(option.value);
+    $('#nav-preview-control').hidden = site !== 'ultra';
+    if (reload) frame.src = `preview.html?site=${site}`;
+    frame.title = t('Live preview: {site}, {page}', { site: $('#preview-site').selectedOptions[0].textContent, page: $('#preview-page').selectedOptions[0].textContent });
+    preview();
+  };
+  followSection = (route) => {
+    let site = previewSite, page = previewPage;
+    if (route.startsWith('blackboard/')) { site = 'ultra'; page = route.endsWith('/tabs') ? 'tabs' : route.endsWith('/dashboard') ? 'dashboard' : 'outline'; }
+    else if (route.startsWith('canvas/')) { site = 'canvas'; page = route.endsWith('/documents') ? 'document' : route.endsWith('/quizzes') ? 'quiz' : 'courses'; }
+    else if (route.startsWith('moodle/')) { site = 'moodle'; page = 'courses'; }
+    else if (/\/(cards|courses|palette|background)$/.test(route)) page = 'courses';
+    else if (route === 'study/widgets' || route === 'study/todo' || route === 'study/grades') { if (site === 'moodle') site = 'ultra'; page = 'dashboard'; }
+    contextPreview(site, page);
+  };
+  $('.editor').addEventListener('focusin', (e) => { const section = e.target.closest('[data-editor-section]'); if (section) followSection(section.dataset.editorSection); });
+  for (const el of $$('#preview-site, #preview-page')) el.addEventListener('change', () => contextPreview($('#preview-site').value, $('#preview-page').value));
+  for (const el of $$('#nav-preview-mode, #nav-preview-scheme, #preview-size')) el.addEventListener('change', preview);
+  const showPreview = () => { $('#preview-body').hidden = previewCollapsed; $('#preview-toggle').setAttribute('aria-expanded', String(!previewCollapsed)); $('#preview-toggle').textContent = t(previewCollapsed ? 'Show preview' : 'Hide preview'); if (!previewCollapsed) sizePreview(); };
+  $('#preview-toggle').addEventListener('click', () => { previewCollapsed = !previewCollapsed; showPreview(); });
+  searchPreview = (on) => { if (on !== searchWasOn) { if (on) { beforeSearch = previewCollapsed; previewCollapsed = true; } else previewCollapsed = beforeSearch; searchWasOn = on; showPreview(); } };
   frame.addEventListener('load', preview);
-  for (const el of $$('#nav-preview-mode, #nav-preview-scheme')) el.addEventListener('change', preview);
+  addEventListener('message', (e) => { if (e.origin === location.origin && e.source === frame.contentWindow && e.data?.gzPreviewReady) preview(); });
+  const geometry = new ResizeObserver(() => { document.documentElement.style.setProperty('--editor-header', `${$('.top').getBoundingClientRect().height}px`); sizePreview(); });
+  geometry.observe($('.top')); geometry.observe($('.preview-stage'));
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
   const pending = new Set(), pendingNav = new Set();
@@ -157,6 +188,46 @@ GZ_UI.load().then((s) => {
   const get = (path) => path.startsWith('nav.') && Object.hasOwn(GZ_NAV.dimensions(s.nav), path.slice(4)) ? GZ_NAV.dimensions(s.nav)[path.slice(4)] : path.split('.').reduce((o, k) => o[k], s);
   const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); };
   const group = (path) => path.split('.')[0];
+
+  // Relay preference and explicit health action only; session keys and joins stay on the Sessions page.
+  const defaultRelay = 'https://share.frostdev.io';
+  let relayBusy = false;
+  const relayStatus = (text, error = false) => { $('#relay-status').textContent = text; $('#relay-status').classList.toggle('error', error); };
+  const relayValue = () => $('#relay-kind').value === 'default' ? defaultRelay : GZ_RELAY.normalize($('#relay-url').value);
+  const relaySend = async (op, server) => {
+    const result = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op, server });
+    if (!result?.ok) throw new Error('relay'); return result;
+  };
+  const relayAction = async (test) => {
+    if (relayBusy) return;
+    const server = relayValue();
+    if (!server) return relayStatus(t('Enter an HTTPS origin, or HTTP localhost or 127.0.0.1, without a path, query, fragment or credentials.'), true);
+    relayBusy = true; $('#relay-save').disabled = $('#relay-test').disabled = true;
+    try {
+      if (!test) {
+        await relaySend('relaySave', server);
+        if ($('#relay-kind').value === 'custom') $('#relay-url').value = server;
+        relayStatus(t('Relay saved for new sessions. Existing sessions keep their own server.')); return;
+      }
+      const origins = [server + '/*'];
+      if (!await chrome.permissions.contains({ origins }) && !await chrome.permissions.request({ origins })) return relayStatus(t('Host permission was not granted. No connection was made.'), true);
+      relayStatus(t('Testing {server}…', { server }));
+      const result = await relaySend('relayTest', server);
+      const messages = { connected: 'Connected to {server}.', timeout: 'Connection to {server} timed out.', http: 'The relay returned HTTP {status}.', invalid: 'The server did not return a valid Glaze health response.', cancelled: 'Connection test cancelled.', network: 'Could not connect. Check the URL, TLS and relay availability; redirects are refused.' };
+      relayStatus(t(messages[result.result], { server, status: result.status }), result.result !== 'connected');
+    } catch { relayStatus(t('Could not finish. Your local copies are kept. Try again.'), true); }
+    finally { relayBusy = false; $('#relay-save').disabled = $('#relay-test').disabled = false; }
+  };
+  const relayHuman = (e) => e.isTrusted && (navigator.userActivation?.isActive ?? true);
+  const resetRelay = () => { if (relayBusy) return; $('#relay-kind').value = 'default'; $('#relay-custom').hidden = true; $('#relay-url').value = ''; return relayAction(false); };
+  $('#relay-kind').addEventListener('change', () => { $('#relay-custom').hidden = $('#relay-kind').value !== 'custom'; relayStatus(''); });
+  $('#relay-url').addEventListener('input', () => relayStatus(''));
+  $('#relay-save').addEventListener('click', (e) => { if (relayHuman(e)) relayAction(false); });
+  $('#relay-test').addEventListener('click', (e) => { if (relayHuman(e)) relayAction(true); });
+  chrome.storage.sync.get('shareRelay').then((r) => {
+    const server = GZ_RELAY.normalize(r.shareRelay) || defaultRelay;
+    $('#relay-kind').value = server === defaultRelay ? 'default' : 'custom'; $('#relay-url').value = server === defaultRelay ? '' : server; $('#relay-custom').hidden = server === defaultRelay;
+  }).catch(() => {});
 
   // ---- palette ----
   const colorInputs = {};
@@ -1020,7 +1091,7 @@ GZ_UI.load().then((s) => {
     await local.remove('galleryOffer');
     $('#share-code').value = g.code;
     await tryCode({ name: g.name || t('Custom theme'), author: g.author || '' });
-    $('#data').scrollIntoView();
+    editor.show('look/palette', { scroll: true });
     if (offer) $('#share-apply').focus({ preventScroll: true });
   };
   local.get(['lookFavorites', 'lookHistory'], (r) => {
@@ -1155,19 +1226,26 @@ GZ_UI.load().then((s) => {
     clearTimeout(armed);
     armed = 0;
     b.textContent = t('Reset everything');
-    Object.assign(s, GZ_SANITIZE({ presets: s.presets }), { card: GZ_CARDS.settings() });
+    const defaults = { ...GZ_SANITIZE(), card: GZ_CARDS.settings() };
+    const touched = GZ_EDITOR.reset(s, Object.keys(defaults), defaults);
     pendingNav.clear();
-    writeNavItems(N.clean());
-    save(Object.keys(s));
-    // Card styles and bookmarks too, and the pictures kept for them on this computer.
-    cardsOp({ reset: true, nav: GZ_DEFAULTS.nav }).then(async (ok) => await cardsOp({ ultra: true, reset: true }) && ok).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });
-    // Stickers, your sticker pictures and pointer, and Look rotation's list (lib/lookx.js): this computer's, gone too,
-    // through the worker's queue, so a tab's sticker change still on its way can't bring one back.
-    chrome.runtime.sendMessage({ type: 'glaze:stickers', reset: true }, (r) => { if (chrome.runtime.lastError || !r?.ok) hint(t('Not saved. Try again in a moment.'), true); });
+    // Keep image IDs, per-course styles/bookmarks, local data and share keys. No destructive worker reset.
+    save(touched);
     fill();
-    hint(t('Everything is back to the defaults. Your presets are kept.'));
+    hint(t('Preferences reset. Your presets and local data are kept.'));
 
   });
+
+  for (const button of $$('[data-reset-section]')) button.addEventListener('click', (e) => {
+    if (!e.isTrusted) return;
+    if (button.dataset.resetSection === 'sharing/relay') return resetRelay();
+    const section = button.closest('[data-editor-section]'), paths = GZ_EDITOR.keys(section);
+    const touched = GZ_EDITOR.reset(s, paths, { ...GZ_SANITIZE(), card: GZ_CARDS.settings() });
+    if (touched.includes('nav')) for (const key of paths.filter((p) => p.startsWith('nav.') && !['nav.i', 'nav.li'].includes(p))) pendingNav.add(key.slice(4));
+    fill(); save(touched); hint(t('Section reset. Your local data is kept.'));
+  });
+  $('#editor-version').textContent = `Glaze ${chrome.runtime.getManifest().version}`;
+  followSection(editor.route());
 
   // Report a problem: a GitHub issue filled in here with the version, browser and system (lib/widgets.js feedback).
   $('#report-link').href = GZ_WIDGETS.feedback({ version: chrome.runtime.getManifest().version, ua: navigator.userAgent, lang: navigator.language });

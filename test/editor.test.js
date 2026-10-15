@@ -1,11 +1,12 @@
-// Phase-2 acceptance test SOURCE ONLY. Run explicitly with node --test after the options handoff.
-// Kept outside automatic test discovery until phase 2 supplies the tab/section DOM contract below.
+// Editor ownership and safe-reset regressions; real generated DOM ownership is also checked by the browser gate.
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
-const root = path.resolve(__dirname, '../..'), D = require(path.join(root, 'defaults.js'));
-for (const file of ['todo', 'widgets', 'remind', 'nav']) require(path.join(root, `lib/${file}.js`));
+const vm = require('node:vm');
+const root = path.resolve(__dirname, '..'), D = require(path.join(root, 'defaults.js'));
+for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(path.join(root, `lib/${file}.js`));
+const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
 const TABS = ['look', 'blackboard', 'canvas', 'moodle', 'study', 'sharing', 'backup', 'about'];
-const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses' };
+const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', tabs: 'blackboard/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses' };
 const ENHANCE = {
   'study/tools': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'keys', 'newcontent', 'palette', 'drafts', 'download', 'search', 'place', 'coursemenu', 'docPages', 'toggles'],
   'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
@@ -14,14 +15,14 @@ const ENHANCE = {
   'study/pet': ['pet'],
   'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
   'study/imports': ['syllabus', 'insights'],
-  'blackboard/dashboard': ['dashboard'], 'blackboard/folders': ['hideFolders'],
+  'blackboard/tabs': ['tabs'], 'blackboard/dashboard': ['dashboard'], 'blackboard/folders': ['hideFolders'],
   'canvas/documents': ['docTheme', 'docInk'], 'canvas/quizzes': ['quizLight'],
 };
 const OVERRIDE = {
   enabled: 'header', footer: 'blackboard/declutter', preset: 'look/palette', presets: 'look/palette',
   'widgets.land': 'blackboard/dashboard',
   ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
-  ...Object.fromEntries(['width', 'icon', 'text', 'height', 'gap', 'padding', 'detailed', 'brand', 'li'].map((key) => [`nav.${key}`, 'blackboard/nav'])),
+  ...Object.fromEntries(Object.keys(N.SPEC).map((key) => [`nav.${key}`, 'blackboard/nav'])),
   ...Object.fromEntries(['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((key) => [`todo.${key}`, 'study/schedule'])),
 };
 // These are real existing picker/group carriers, not invented inputs for internal bookkeeping or storage IDs.
@@ -115,4 +116,57 @@ test('E1 eight labelled tabs own panels and existing action IDs survive in their
     assert.equal(byId(id).length, 1, `Missing/duplicate action #${id}`); assert.equal(owner(byId(id)[0]), route, `#${id} moved to the wrong section`);
   }
   for (const id of ['gcal-bye', 'gcal-drop']) assert.equal(byId(id).length, 1, `Preserve external modal #${id}`);
+  for (const [id, owned] of Object.entries({ 'nav-items': ['navItems.order', 'navItems.hidden'], 'nav-link-editor': ['navItems.links'], 'nav-widgets': ['navItems.widgets'] })) {
+    assert.deepEqual(byId(id)[0].attrs['data-setting-owner'].split(' '), owned);
+    assert.equal(owner(byId(id)[0]), 'blackboard/nav');
+  }
+});
+
+test('E1 section and global preference resets preserve pictures, preset libraries and unrelated data', () => {
+  const defaults = { ...D.GZ_SANITIZE(), card: cards.settings() };
+  const state = structuredClone(defaults);
+  state.look.scale = 1.2; state.motion.level = 'off'; state.nav.i = 'background-image'; state.nav.li = 'logo-image';
+  state.presets = [{ name: 'My palette', colors: { ...defaults.colors } }];
+  const device = { notes: 'kept', tasks: 'kept', shareKeys: 'kept', pictures: ['background-image', 'logo-image'] };
+  state.device = device;
+  assert.deepEqual(E.reset(state, ['look.scale'], defaults), ['look']);
+  assert.equal(state.look.scale, defaults.look.scale); assert.equal(state.motion.level, 'off');
+  E.reset(state, Object.keys(defaults), defaults);
+  assert.equal(state.nav.i, 'background-image'); assert.equal(state.nav.li, 'logo-image');
+  assert.equal(state.presets[0].name, 'My palette'); assert.equal(state.device, device);
+  const js = fs.readFileSync(path.join(root, 'options.js'), 'utf8').split("$('#reset-all').addEventListener")[1];
+  assert.doesNotMatch(js, /cardsOp\(\{[^}]*reset: true|glaze:stickers[^\n]*reset: true/);
+  assert.ok(js.includes('GZ_EDITOR.reset'));
+});
+
+test('E1 routes, remembered tabs, legacy entry points and tab-only keyboard handling reveal the owning panel', async () => {
+  const events = {}, kept = [], wrappers = new Map(); let focused;
+  for (const n of nodes) wrappers.set(n, {
+    id: n.attrs.id || '', dataset: Object.fromEntries(Object.entries(n.attrs).filter(([k]) => k.startsWith('data-')).map(([k, v]) => [k.slice(5).replace(/-([a-z])/g, (_, x) => x.toUpperCase()), v])),
+    attrs: { ...n.attrs }, hidden: Object.hasOwn(n.attrs, 'hidden'), events: {},
+    setAttribute(k, v) { this.attrs[k] = v; }, addEventListener(k, f) { this.events[k] = f; }, focus() { focused = this; }, scrollIntoView() {},
+    closest() { return wrappers.get([n, ...n.parents.toReversed()].find((x) => x.attrs['data-editor-section'])); },
+  });
+  const all = [...wrappers.values()], doc = { querySelectorAll: (selector) => {
+    if (selector === '[data-editor-tab]') return all.filter((x) => x.dataset.editorTab);
+    if (selector === '[data-editor-panel]') return all.filter((x) => x.dataset.editorPanel);
+    if (selector === '[data-editor-section]') return all.filter((x) => x.dataset.editorSection);
+    return all.filter((x) => x.id && x.closest());
+  } };
+  const ctx = vm.createContext({ document: doc, structuredClone, location: { hash: '#tabs' }, scrollY: 50, scrollTo() {}, requestAnimationFrame: (f) => f(),
+    addEventListener: (k, f) => { events[k] = f; }, chrome: { storage: { local: { get: async () => ({ editorTab: 'about' }), set: async (v) => { kept.push(v); } } } } });
+  vm.runInContext(fs.readFileSync(path.join(root, 'lib/editor.js'), 'utf8'), ctx);
+  const ui = ctx.GZ_EDITOR.mount();
+  for (const [hash, route] of Object.entries({ '#tabs': 'blackboard/tabs', '#sidebar': 'look/navigation', '#todo': 'study/todo', '#gcal': 'sharing/calendar', '#data': 'backup/privacy', '#background': 'look/background', '#blackboard/nav': 'blackboard/nav', '#unknown/section': 'look/palette' })) {
+    ctx.location.hash = hash; events.hashchange(); assert.equal(ui.route(), route);
+    assert.equal(all.find((x) => x.dataset.editorPanel === route.split('/')[0]).hidden, false);
+    assert.equal(all.filter((x) => x.dataset.editorTab && x.tabIndex === 0).length, 1);
+  }
+  const first = all.find((x) => x.dataset.editorTab === 'look'); let prevented = false;
+  first.events.keydown({ key: 'End', preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true); assert.equal(focused.dataset.editorTab, 'about'); assert.equal(ui.route(), 'about/glaze');
+  assert.ok(!all.find((x) => x.attrs['data-key'] === 'look.scale').events.keydown, 'native range keys are never intercepted');
+  ui.finding(true); assert.ok(all.filter((x) => x.dataset.editorPanel).every((x) => !x.hidden && x.attrs.role === 'region'));
+  ui.finding(false); assert.equal(all.filter((x) => x.dataset.editorPanel && !x.hidden).length, 1);
+  await Promise.resolve(); assert.ok(kept.length);
 });

@@ -294,6 +294,28 @@ test('session worker accepts only exact extension pages; an LMS or another exten
   assert.ok(!imported.includes('sharing.js'), 'refused callers do not even load the crypto dependency');
 });
 
+test('E1 editor relay caller is limited to the exact extension top frame and two relay operations', async () => {
+  const listeners = [], handled = [], area = localArea();
+  const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
+    GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(m.op); return { ok: true }; } }) },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
+  vm.runInContext(read('lib/background.js'), ctx);
+  const editor = { id: 'glaze', url: 'chrome-extension://glaze/options.html#sharing/relay', origin: 'chrome-extension://glaze', frameId: 0 };
+  const send = (op, sender = editor) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op, server: 'http://127.0.0.1:8787' }, sender, resolve) === true) return; });
+  for (const sender of [{ ...editor, frameId: 1 }, { ...editor, origin: 'https://school.instructure.com' }, { ...editor, id: 'other' },
+    { ...editor, url: 'chrome-extension://glaze/preview.html' }, { ...editor, url: 'https://school.instructure.com/options.html' },
+    { ...editor, url: 'chrome-extension://glaze/options.html.evil' }, { ...editor, url: 'chrome-extension://other/options.html' }]) {
+    for (const op of ['relaySave', 'relayTest']) assert.equal((await send(op, sender)).error, 'sender');
+  }
+  for (const op of ['create', 'join', 'resume', 'list', 'unknown']) assert.equal((await send(op)).error, 'sender');
+  assert.deepEqual(handled, []);
+  for (const op of ['relaySave', 'relayTest']) assert.equal((await send(op)).ok, true);
+  assert.deepEqual(handled, ['relaySave', 'relayTest']);
+});
+
 test('Pause interrupts a running sync before waiting for the shared storage queue', async () => {
   const listeners = [], area = localArea();
   let release, entered, stopped = 0, syncs = 0;
