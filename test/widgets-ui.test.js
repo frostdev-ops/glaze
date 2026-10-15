@@ -26,7 +26,8 @@ class E {
   remove() {}
 }
 
-const page = ({ local = {}, replies = [], clock = { t: Date.now() } } = {}) => {
+const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false } = {}) => {
+  const held = []; // replies the test lets through by hand (hold)
   const FakeDate = class extends Date {};
   FakeDate.now = () => clock.t;
   const timers = new Map();
@@ -43,7 +44,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() } } = {}) => {
     clearTimeout: (id) => timers.delete(id),
     addEventListener() {}, removeEventListener() {},
     chrome: {
-      runtime: { lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; Promise.resolve().then(() => cb(r)); } },
+      runtime: { lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
       storage: {
         local: { get: (keys, cb) => reads.push(() => cb(Object.fromEntries([keys].flat().filter((k) => k in local).map((k) => [k, local[k]])))), set: (v, cb) => { Object.assign(local, v); cb?.(); } },
         sync: { get: (k, cb) => cb({}) },
@@ -60,7 +61,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() } } = {}) => {
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: '3', tz: 'UTC' });
   const answer = () => { while (reads.length) reads.shift()(); };
-  return { ui, timers, answer, sent, listeners, local, clock };
+  return { ui, timers, answer, sent, listeners, local, clock, held };
 };
 const find = (el, pred) => (pred(el) ? el : el.children?.map((c) => find(c, pred)).find(Boolean) || null);
 
@@ -148,4 +149,39 @@ test('the grid shows tiles in their saved order, which is also the keyboard and 
   const rules = [...css.matchAll(/([^{}]*\.gz-dash-grid[^{}]*)\{([^}]*)\}/g)];
   assert.ok(rules.length);
   for (const [, sel, body] of rules) assert.doesNotMatch(body, /grid-auto-flow:\s*[^;]*dense/, sel.trim());
+});
+
+test('a save confirmed after a newer edit confirms only itself, and the newer edit is saved next', async () => {
+  const clock = { t: 100 };
+  const p = page({ clock, hold: true });
+  const body = new E();
+  p.ui.probe.WIDGETS.notes(body);
+  p.answer();
+  await settle();
+  const text = find(body, (e) => e.tagName === 'TEXTAREA');
+  const view = find(body, (e) => e.className === 'gz-w-note-view');
+  // A typed at 100 and saved on blur; its answer is still on its way.
+  view.fire('click');
+  text.value = 'A';
+  text.fire('input');
+  text.fire('blur');
+  assert.deepEqual(p.sent.map((m) => [m.text, m.at]), [['A', 100]]);
+  // B typed at 200 and blurred while A is saving.
+  clock.t = 200;
+  view.fire('click');
+  text.value = 'B';
+  text.fire('input');
+  text.fire('blur');
+  assert.equal(p.sent.length, 1, 'one save at a time');
+  // A is confirmed: that confirms A only, and B goes next with its own time.
+  p.held.shift()();
+  await settle();
+  assert.deepEqual(p.sent.map((m) => [m.text, m.at]), [['A', 100], ['B', 200]]);
+  p.held.shift()();
+  await settle();
+  view.fire('click');
+  assert.equal(text.value, 'B', 'reopening shows the newest text');
+  text.fire('blur');
+  await settle();
+  assert.equal(p.sent.length, 2, 'nothing left to save, and A is never sent again');
 });
