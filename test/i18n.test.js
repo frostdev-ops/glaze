@@ -44,7 +44,7 @@ const fromJs = (js) => {
   }
   return out;
 };
-const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js'];
+const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'features/todo.js'];
 const used = new Set([
   ...['options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),

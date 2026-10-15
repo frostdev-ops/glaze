@@ -43,6 +43,12 @@ _Last updated: 2026-10-15_
   replies and group recipients are not backed up. Copies are kept until a matching sent message is
   confirmed, the body is cleared or the offer dismissed, or 14 days pass. Switching the Extra off deletes
   them. Canvas's own editor recovery and what-if scores stay with Canvas.
+- **Better To Do** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site and
+  signed-in user id: the tasks you add (title, course, due date, notes), the steps, "do on" days and focus sessions
+  you plan, and what you tick off while "Tick off in Canvas too" is off. Export settings includes them, so you can
+  move them; nothing else sends them anywhere. It also keeps a copy of your planner items (title, course, dates,
+  submission status, your planner marks) and, for teachers, the work waiting to be graded with its counts, for two
+  minutes between pages, replaced each time it's fetched.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
@@ -103,7 +109,7 @@ animated backgrounds) are bundled. It makes requests in these cases:
   asks for your active courses with their current scores and, inside a course, that course's navigation
   tabs. Extras also read native course colors, assignments and submission status, module completion
   requirements and items, folder and file metadata, and the server-rendered Grades page's unread dots.
-  These requests are read-only GETs to your own Canvas site with your existing session. Only the due
+  These requests are read-only GETs to your own Canvas site with your existing session (Better To Do's opt-in tick, below, is the one write). Only the due
   list, course details and badge records described above are stored; other answers stay in memory.
   For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking
   a send, your sent conversations and matching conversation details without marking mail read. It
@@ -111,6 +117,18 @@ animated backgrounds) are bundled. It makes requests in these cases:
   files. The extension's background worker fetches them from your school's file host without cookies.
   Links and file bytes stay in memory while Glaze makes the zip; they are not saved in extension storage.
   The resulting zip is saved to your device.
+- **Better To Do** (Canvas, off by default). On the Dashboard and a course's home page, Glaze asks your own Canvas
+  site for your profile (for your user id and time zone), your planner items from a week back (longer if you choose
+  to keep past-due work longer) to the end of your timeframe, and your active courses. If you teach or assist a
+  course, it also asks for your To Do list's grading items and, with grading progress on, each listed assignment's
+  submission counts. It asks again only after two minutes, when the page is shown again. These are read-only GETs with
+  your existing session. The same answer becomes the due list above, so it isn't asked twice.
+- **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). This is the only change Glaze
+  makes to any site. When you tick or untick an item, Glaze writes Canvas's own planner mark for it, as Canvas's List
+  View checkbox does: one request to your own Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark
+  that already exists) with the item's type and id, your user id and done or not done, and the page's own CSRF token.
+  Nothing is written at any other time, and nothing else is written. If Canvas refuses, the tick goes back and the
+  list says so. Off, ticks stay on this device.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an
@@ -154,8 +172,8 @@ To recognize Canvas on any school's domain, Glaze checks the head of each https 
 
 ## Permissions
 
-- `storage` — to save the settings, course names, places, what-if scores, due list, typed-text backups,
-  Looks history and favorites, and Safari update-check timestamp described above.
+- `storage` — to save the settings, course names, places, what-if scores, due list, Better To Do's tasks and plans,
+  typed-text backups, Looks history and favorites, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is

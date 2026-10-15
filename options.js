@@ -649,12 +649,14 @@ GZ_UI.load().then((s) => {
   takeOffer();
 
   // ---- backup ----
-  $('#export').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+  // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`.
+  $('#export').addEventListener('click', () => chrome.storage.local.get(null, (all) => {
+    const tasks = Object.fromEntries(Object.entries(all || {}).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
+    const blob = new Blob([JSON.stringify({ ...s, tasks }, null, 2)], { type: 'application/json' });
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
+  }));
   $('#import-btn').addEventListener('click', () => $('#import').click());
   $('#import').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -667,6 +669,9 @@ GZ_UI.load().then((s) => {
     }
     Object.assign(s, GZ_SANITIZE(raw));
     save(Object.keys(s));
+    if (raw.tasks && typeof raw.tasks === 'object') {
+      chrome.storage.local.set(Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])));
+    }
     fill();
     hint(t('Imported {file}.', { file: file.name }));
   });
