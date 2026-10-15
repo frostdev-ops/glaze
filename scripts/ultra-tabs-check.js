@@ -57,15 +57,19 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${extensionId(ext)}/options.html`);
     const settings = (o = {}) => opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); },
-      { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === (o.preset || 'Frost'))[1], preset: o.preset || 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, ...o.enhance }, tabs: { ...G.GZ_SANITIZE({}).tabs, ...o.tabs } });
+      { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === (o.preset || 'Frost'))[1], preset: o.preset || 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, ...o.enhance }, tabs: { ...G.GZ_SANITIZE({}).tabs, ...o.tabs }, nav: { ...G.GZ_DEFAULTS.nav, ...o.nav } });
     const session = () => opts.evaluate(() => chrome.storage.session.get(null));
     let cdp, world;
+    const worlds = [];
     const isolated = async (func) => {
       if (!cdp) {
         cdp = await ctx.newCDPSession(page);
-        const worlds = [];
         cdp.on('Runtime.executionContextCreated', ({ context }) => worlds.push(context));
+        cdp.on('Runtime.executionContextDestroyed', ({ executionContextId }) => { if (world === executionContextId) world = null; });
+        cdp.on('Runtime.executionContextsCleared', () => { world = null; worlds.length = 0; });
         await cdp.send('Runtime.enable');
+      }
+      if (!world) {
         for (const candidate of worlds.filter((x) => !x.auxData?.isDefault)) {
           const result = await cdp.send('Runtime.evaluate', { expression: 'typeof GZ_CTABS', contextId: candidate.id }).catch(() => null);
           if (result?.result.value === 'object') world = candidate.id;
@@ -78,6 +82,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     };
     await settings();
     const page = await ctx.newPage();
+    page.on('pageerror', (error) => console.error(`page error: ${error.stack || error.message}`));
     const strip = () => page.evaluate(() => {
       const s = document.getElementById('gz-ctabs');
       return s && { at: s.dataset.at, tabs: [...s.querySelectorAll('[role="tab"]')].map((e) => ({ cid: e.dataset.courseId, sel: e.getAttribute('aria-selected') === 'true', pin: e.hasAttribute('data-pin'), label: e.getAttribute('aria-label') })), note: s.querySelector('.gz-ctabs-note')?.textContent || '' };
@@ -114,6 +119,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       customElements.define('b8-snapshot-probe', class extends HTMLElement { constructor() { super(); window.__snapshotConstructors++; } });
       const root = document.querySelector('.course-content-container section.course');
       root.append(document.createElement('b8-snapshot-probe'));
+      root.append(document.createElement('b8-late-snapshot-probe'));
       const box = document.createElement('div'); box.dataset.token = 'invented-secret'; box.style.backgroundImage = 'url(https://cdn.school.test/fixture/background.png)'; root.append(box);
       for (const origin of [location.origin, 'https://cdn.school.test']) {
         const img = new Image(); img.src = origin + '/fixture/image.png'; root.append(img); await img.decode();
@@ -125,7 +131,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.click('a[href="/ultra/courses/_102_1/outline"]');
     await settled('_102_1');
     await open('_103_1');
+    await page.evaluate(() => { window.__lateSnapshotConstructors = 0; customElements.define('b8-late-snapshot-probe', class extends HTMLElement { constructor() { super(); window.__lateSnapshotConstructors++; } }); });
     ok(await order() === '_101_1 _102_1 _103_1', `each course opened gets a tab, in order (${await order()})`);
+
+    console.log('isolated platform: ' + JSON.stringify(await isolated(() => ({ nullRegistry: customElements === null, styleIterator: typeof document.documentElement.style[Symbol.iterator] }))));
 
     // ---- a switch: the copy at once, then the live page, back where the tab was ----
     const before = requests.length;
@@ -133,6 +142,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.click('#gz-ctabs [data-course-id="_101_1"]');
     const snapAt = await page.waitForSelector('#gz-ctabs-snap', { timeout: 300 }).then(() => true, () => false);
     ok(snapAt, 'a click on a tab shows its course\'s copy at once');
+    ok((await strip()).tabs.find((x) => x.cid === '_101_1')?.sel, 'the selected tab updates as soon as its snapshot appears');
     await page.screenshot({ path: path.join(out, 'switch-copy-frost-1280.png') });
     ok(await page.evaluate(() => !!document.querySelector('.spinner')), 'while Ultra is still building the live page (its spinner is under the copy)');
     await settled('_101_1');
@@ -140,9 +150,46 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForTimeout(500);
     ok(Math.abs((await scroller()) - 600) <= 2, `and its scroll (${await scroller()})`);
     ok(requests.length === before, `no request for the switch (${requests.slice(before).join(', ') || 'none'})`);
+    ok(await page.evaluate(() => window.__lateSnapshotConstructors === 0), 'a tag registered after capture runs no constructor when replay connects');
     ok(await page.evaluate(() => window.__snapshotConstructors === 1), 'capturing/replaying a defined custom element runs no constructor');
     const copies = Object.values(await session()).filter((v) => v?.layers).map((v) => JSON.stringify(v));
     ok(!copies.some((x) => x.includes('invented-secret')), 'snapshots discard arbitrary data attributes and credentials');
+    if (process.env.GZ_B8_FOCUSED) {
+      phase = 'account-boundary';
+      user = '_43_1';
+      const other = await ctx.newPage();
+      await other.goto(`${SITE}/ultra/courses/_103_1/outline`);
+      await other.waitForSelector('#gz-ctabs [role="tab"]');
+      await other.waitForFunction(() => !document.querySelector('.spinner, [data-gz-loading]') && [...document.querySelectorAll('div.bb-course-navigation a[href]')].some((a) => a.getAttribute('href') === '/ultra/courses/_103_1/outline'));
+      console.log('new account settled: ' + JSON.stringify(await other.evaluate(() => ({ timeOrigin: performance.timeOrigin, spinner: !!document.querySelector('.spinner'), loading: !!document.querySelector('[data-gz-loading]') }))));
+      await page.waitForTimeout(300);
+      ok(await page.locator('#gz-ctabs').count() === 0 && await isolated(() => GZ_CTABS.snapshots()) === 0, 'another document changing account clears the old in-page copies and strip');
+      await isolated(() => { GZ_CTABS.sync(true); return true; });
+      await page.waitForTimeout(100);
+      ok(await page.locator('#gz-ctabs').count() === 0, 'an older document cannot reenable its cached account');
+      ok((await session())[`snapwho:${SITE}`]?.uid === '_43_1', 'the newer document retains account ownership');
+      await other.click('[data-analytics-id="course.header.home"]');
+      await other.click('a[href="/ultra/courses/_102_1/outline"]');
+      await other.waitForFunction(() => !document.querySelector('.spinner') && document.querySelector('#gz-ctabs [data-course-id="_102_1"][aria-selected="true"]'));
+      await page.waitForTimeout(200);
+      ok(Object.keys(await session()).some((k) => k.startsWith('snap:')), 'the newer account still captures viewed courses');
+      const epochBefore = (await session())[`snapwho:${SITE}`]?.epoch || 0;
+      phase = 'rapid-toggle';
+      await opts.evaluate(async () => {
+        const { enhance } = await chrome.storage.sync.get('enhance');
+        await chrome.storage.sync.set({ enhance: { ...enhance, tabs: false } });
+        await chrome.storage.sync.set({ enhance: { ...enhance, tabs: true } });
+      });
+      await page.waitForTimeout(350);
+      const state = await session();
+      ok(!Object.keys(state).some((k) => k.startsWith('snap:')) && state[`snapwho:${SITE}`]?.epoch > epochBefore, 'rapid off/on clears the observed cache generation');
+      await other.waitForSelector('#gz-ctabs [role="tab"]');
+      ok(await other.locator('#gz-ctabs').count() === 1 && await page.locator('#gz-ctabs').count() === 0, 'rapid off/on keeps one current-account strip and cannot revive the old account');
+      await other.close();
+      console.log(`${fails ? 'FAILED' : 'passed'} focused snapshot/account/toggle controls`);
+      process.exitCode = fails ? 1 : 0;
+      return;
+    }
     phase = 'interactions';
 
     // ---- never back into an assessment ----
@@ -255,7 +302,22 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       await page.waitForSelector('a[href*="/document/"]');
       await page.click('a[href*="/document/"]');
       await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
-      await page.screenshot({ path: path.join(out, `nested-${preset.toLowerCase()}-1280.png`) });
+      for (const at of ['above', 'between', 'below']) {
+        for (const width of [1280, 375]) {
+          await page.setViewportSize({ width, height: 860 });
+          await settings({ preset, tabs: { at } });
+          await page.waitForTimeout(150);
+          const g = await page.evaluate(() => {
+            const strip = document.getElementById('gz-ctabs'), header = strip.parentElement.querySelector('.panel-header');
+            const a = strip.getBoundingClientRect(), b = header.getBoundingClientRect();
+            const hit = document.elementFromPoint(a.left + Math.min(40, a.width / 2), a.top + a.height / 2);
+            return { strip: a.toJSON(), header: b.toJSON(), hit: !!hit?.closest('#gz-ctabs'), at: strip.dataset.at };
+          });
+          const clear = at === 'above' ? g.strip.bottom <= g.header.top + 1 : g.header.bottom <= g.strip.top + 1;
+          ok(g.at === 'nested' && clear && g.hit && g.strip.right <= width + 1, `nested panel ${at}/${preset}/${width}px: strip and native header stay clear and reachable`);
+          await page.screenshot({ path: path.join(out, `nested-${at}-${preset.toLowerCase()}-${width}.png`) });
+        }
+      }
       await page.click('.panel-header a');
       await page.click('[data-analytics-id="course.header.home"]');
       await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'page');
@@ -263,6 +325,33 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       await page.click('a[href="/ultra/courses/_105_1/outline"]');
       await settled('_105_1');
     }
+
+    // B7b's real global float consumes B8's keep-clear marker; B7c's nav sizes must leave both on-screen.
+    phase = 'cross-feature-layout';
+    await opts.evaluate(() => chrome.storage.local.set({ widgetLayout: { boards: { pages: [{ id: 'timer', on: true, size: 's', x: 0, y: 0 }] } } }));
+    const crossLayout = [];
+    for (const size of ['small', 'medium', 'large']) {
+      for (const at of ['above', 'between', 'below']) {
+        for (const width of [1280, 375]) {
+          await page.setViewportSize({ width, height: 860 });
+          await settings({ enhance: { widgets: true }, tabs: { at }, nav: { size } });
+          await page.waitForSelector('#gz-float section.gz-w[data-tile="timer"]');
+          await page.waitForTimeout(150);
+          const g = await page.evaluate(() => {
+            const r = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();
+            return { timer: r('#gz-float section.gz-w[data-tile="timer"]'), strip: r('#gz-ctabs'), bar: r('div.bb-course-navigation'), nav: r('.MuiDrawer-paper'), copies: document.querySelectorAll('section.gz-w[data-tile="timer"]').length, marker: document.getElementById('gz-ctabs').hasAttribute('data-gz-keep-clear'), width: innerWidth };
+          });
+          const left = Math.max(0, g.nav.right), top = Math.max(g.bar.bottom, g.strip.bottom);
+          ok(g.marker && g.copies === 1 && g.timer.left >= left - 1 && g.timer.top >= top - 1 && g.timer.right <= width + 1, `B7b float/B8 ${at}/B7c ${size}/${width}px: one timer stays clear and on screen`);
+          crossLayout.push({ size, at, width, ...g });
+        }
+      }
+    }
+    fs.writeFileSync(path.join(out, 'cross-layout.json'), JSON.stringify(crossLayout, null, 2));
+    await settings();
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await page.waitForTimeout(250);
+    phase = 'interactions';
 
     // ---- the copies: in the worker's memory only, dropped on switch-off and on another account ----
     let kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));
@@ -284,7 +373,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForSelector('#gz-ctabs [role="tab"]');
     await page.waitForTimeout(500);
     kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));
-    ok(!kept.length && (await session())[`snapwho:${SITE}`] === '_43_1', `another account on the site: the last one's copies go (${kept.length} left)`);
+    ok(!kept.length && ((await session())[`snapwho:${SITE}`]?.uid || (await session())[`snapwho:${SITE}`]) === '_43_1', `another account on the site: the last one's copies go (${kept.length} left)`);
     ok(await order() === '_103_1', `and it starts its own list (${await order()})`);
     // The student's two page loads (the first and the reload), each with Ultra's stylesheet: the copies' own link to it
     // came from the browser's cache, and no course page was ever fetched or opened.
@@ -399,6 +488,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await opts.locator('#tabs').scrollIntoViewIfNeeded();
     await opts.screenshot({ path: path.join(out, 'editor-frost-1280.png') });
   } finally {
+    fs.writeFileSync(path.join(out, 'requests.json'), JSON.stringify(requestDetails, null, 2));
     await ctx.close();
     fs.rmSync(tmp, { recursive: true, force: true });
   }

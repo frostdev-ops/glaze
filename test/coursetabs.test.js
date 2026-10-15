@@ -103,7 +103,7 @@ test('the snapshot cache: the least recently kept go first past the total', () =
 });
 
 test('a snapshot keeps nothing that runs, loads or takes input', () => {
-  for (const tag of ['script', 'iframe', 'object', 'embed', 'input', 'textarea', 'select', 'video', 'audio', 'canvas', 'link', 'meta', 'base', 'style', 'template', 'frame']) assert.ok(L.DROP.has(tag), tag);
+  for (const tag of ['script', 'iframe', 'object', 'embed', 'input', 'textarea', 'select', 'video', 'audio', 'canvas', 'link', 'meta', 'base', 'style', 'template', 'frame', 'animatemotion', 'animatetransform', 'discard']) assert.ok(L.DROP.has(tag), tag);
   for (const tag of ['div', 'a', 'button', 'svg', 'img', 'section', 'course-page-header']) assert.ok(!L.DROP.has(tag), tag);
   for (const [k, v] of [['onclick', 'x()'], ['ONLOAD', 'x'], ['srcset', 'a.png 2x'], ['srcdoc', '<p>'], ['formaction', '/x'], ['ping', '/p'], ['tabindex', '0'], ['contenteditable', 'true'],
     ['href', 'javascript:alert(1)'], ['href', ' JavaScript:x'], ['xlink:href', 'javascript:x'], ['src', 'data:text/html,<script>'], ['data-gz-loading', ''], ['autofocus', '']]) assert.equal(L.keepAttr(k, v), false, `${k}=${v}`);
@@ -127,7 +127,8 @@ test('snapshot attributes cannot load network resources or keep page credentials
     ['src', 'https://cdn.school.test/image.png', 'img'], ['href', 'https://cdn.school.test/image.svg', 'image'],
     ['href', '/sprite.svg#icon', 'use'], ['src', 'data:image/svg+xml,<svg/>', 'img'],
     ['style', 'background:url(https://cdn.school.test/image.png)', 'div'], ['fill', 'url(https://cdn.school.test/s.svg#x)', 'path'],
-    ['style', 'background:u\\72l(https://cdn.school.test/image.png)', 'div'], ['background', 'https://cdn.school.test/x.png', 'table'],
+    ['style', 'background:u\\72l(https://cdn.school.test/image.png)', 'div'],
+    ['style', 'background:paint(page-code)', 'div'], ['style', 'background:image("https://cdn.school.test/image.png")', 'div'], ['background', 'https://cdn.school.test/x.png', 'table'],
     ['data-token', 'private-token', 'div'], ['value', 'password', 'button'], ['is', 'live-widget', 'button'],
   ]) assert.equal(L.keepAttr(name, value, tag), false, `${tag} ${name}=${value}`);
   assert.equal(L.keepAttr('href', '#local-icon', 'use'), false, 'the page base may point at a CDN, even for fragments');

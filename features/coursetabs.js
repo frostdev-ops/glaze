@@ -23,6 +23,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   let on = false;
   let signedOut = false;
   let prefs = null; // storage.sync `tabs`, cleaned
+  let epoch = 0; // worker cache generation; pending replies from an older generation are ignored
   let who = null; // the account: Ultra's user id
   let loaded = false; // the stored list is in (or can't be: then this page's list only)
   let tabs = []; // lib/coursetabs.js's list
@@ -44,7 +45,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // The worker keeps snapshots across reloads (lib/background.js 'glaze:snap'), for this site and account only.
   const send = (m) => {
     if (preview || !who) return Promise.resolve(null);
-    try { return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:snap', uid: who, ...m })).catch(() => null); } catch { return Promise.resolve(null); }
+    try { const sent = epoch; return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:snap', uid: who, born: performance.timeOrigin, epoch, ...m })).then((r) => m.op === 'hello' || sent === epoch ? r : null, () => null); } catch { return Promise.resolve(null); }
   };
   const readPrefs = () => new Promise((res) => { try { chrome.storage.sync.get('tabs', (r) => res(r?.tabs)); } catch { res(); } })
     .then((raw) => { prefs = GZ_SANITIZE({ tabs: raw }).tabs; });
@@ -155,7 +156,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const draw = () => {
     if (!strip) return;
     const p = P();
-    const cur = here();
+    const cur = go?.cid || here();
     const known = ctx.courseList();
     const rows = (loaded ? tabs : []).map((x) => {
       const c = known[x.cid] || {};
@@ -251,32 +252,33 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const chain = (l) => {
     const out = [];
     for (let p = l.parentElement; p && p !== document.body && p !== html && out.length < 30; p = p.parentElement) {
-      out.unshift([own(p) ? 'div' : p.localName, p.id, p.getAttribute('class') || '', p.getAttribute('style') || '', p.getAttribute('bb-course-membership-markups') || '']);
+      out.unshift([p.localName, p.id, p.getAttribute('class') || '', p.getAttribute('style') || '', p.getAttribute('bb-course-membership-markups') || '']);
     }
     return out;
   };
   // Nothing that runs, loads or takes input (lib/coursetabs.js DROP, keepAttr); hidden parts left out.
   const sanitize = (root) => {
-    if (L.DROP.has(root.localName)) return null;
-    if (customElements.get(root.localName)) root = asDiv(root);
+    if (L.DROP.has(root.localName.toLowerCase())) return null;
+    if (own(root)) root = asDiv(root);
     const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_COMMENT);
     const drop = [], defined = [];
     for (let n = w.currentNode; n; n = w.nextNode()) {
-      if (n.nodeType === 8 || L.DROP.has(n.localName) || n.hasAttribute('hidden') || n.classList.contains('ng-hide') || n.style?.display === 'none' || n.style?.visibility === 'hidden') { if (n !== root) drop.push(n); continue; }
+      if (n.nodeType === 8 || L.DROP.has(n.localName.toLowerCase()) || n.hasAttribute('hidden') || n.classList.contains('ng-hide') || n.style?.display === 'none' || n.style?.visibility === 'hidden') { if (n !== root) drop.push(n); continue; }
       for (const a of [...n.attributes]) if (!L.keepAttr(a.name, a.value, n.localName)) n.removeAttribute(a.name);
       if (n.hasAttribute('style')) n.style.cssText = styleText(n.style);
-      if (customElements.get(n.localName)) defined.push(n);
+      if (own(n)) defined.push(n);
     }
     for (const n of drop) n.remove();
     for (const n of defined) if (n !== root && root.contains(n)) asDiv(n);
     return root;
   };
-  // A custom element the page defined runs the page's own code when it is connected: in a copy it becomes a <div>. One that
-  // is only a name (an AngularJS directive's, course-page-header) keeps its name, which CSS matches.
-  const own = (e) => e.localName.includes('-') && e.matches(':defined');
+  // Chrome's isolated world has no custom-element registry. Every custom name becomes a div before connection,
+  // including tags registered after capture; data-gz-tag lets readable CSS keep matching its ordinary type selectors.
+  const own = (e) => e.localName.includes('-');
   const asDiv = (y) => {
     const d = document.createElement('div');
     for (const a of y.attributes) d.setAttribute(a.name, a.value);
+    d.setAttribute('data-gz-tag', y.localName);
     d.append(...y.childNodes);
     y.replaceWith(d);
     return d;
@@ -317,8 +319,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       ph.style.height = `${gap[1]}px`;
       gap[0].replaceWith(ph);
     }
-    for (const y of defined) if (y.isConnected || c.contains(y)) asDiv(y);
-    if (own(c)) return '';
+    for (const y of defined) if (y !== c && c.contains(y)) asDiv(y);
     return sanitize(c).outerHTML;
   };
   const capture = (cid = ctx.courseId(), path = L.safe(location.pathname, location.search)) => {
@@ -367,10 +368,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (el && !el.closest('#gz-ctabs')) {
       const href = el.getAttribute('href') || '';
       if (el.closest('.MuiDrawer-paper, #base_tools') && (href === '#' || /logout/i.test(href))) {
-        signedOut = true;
-        sync(false);
-        who = null;
-        tabs = [];
+        send({ op: 'drop', signout: true });
+        revoke();
         return;
       }
     }
@@ -389,18 +388,23 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const styleText = (style) => [...style].filter((k) => L.cssSafe(style.getPropertyValue(k))
     && !(/^(?:background|border-image|mask|list-style|cursor|content|filter|clip-path|shape-outside|offset-path|fill|stroke|marker|-webkit-mask|-webkit-box-reflect)/.test(k) && /var\s*\(/i.test(style.getPropertyValue(k))))
     .map((k) => `${k}:${style.getPropertyValue(k)}${style.getPropertyPriority(k) ? ' !important' : ''}`).join(';');
-  const ruleText = (r) => {
+  const ruleText = (r, tags) => {
     if (r instanceof CSSImportRule || r instanceof CSSFontFaceRule) return '';
-    if (r.cssRules) return `${r.cssText.slice(0, r.cssText.indexOf('{'))}{${[...r.cssRules].map(ruleText).join('\n')}}`;
-    if (r.style) return `${r.selectorText || r.keyText || ''}{${styleText(r.style)}}`;
+    const nested = r.cssRules ? [...r.cssRules].map((x) => ruleText(x, tags)).join('\n') : '';
+    if (r.style) {
+      const text = `${styleText(r.style)};${nested}`;
+      const head = r.cssText.slice(0, r.cssText.indexOf('{'));
+      return r.cssText.includes('{') ? `${head.startsWith('@') ? head : L.selectors(head, tags)}{${text}}` : text;
+    }
+    if (r.cssRules) return `${r.cssText.slice(0, r.cssText.indexOf('{'))}{${nested}}`;
     return L.cssSafe(r.cssText) ? r.cssText : '';
   };
-  const mirror = () => {
+  const mirror = (tags) => {
     const fragment = document.createDocumentFragment();
     for (const sheet of document.styleSheets) {
       if (sheet.disabled) continue;
       let text;
-      try { text = [...sheet.cssRules].map(ruleText).join('\n'); } catch { continue; }
+      try { text = [...sheet.cssRules].map((r) => ruleText(r, tags)).join('\n'); } catch { continue; }
       const e = Object.assign(document.createElement('style'), { textContent: text });
       if (sheet.media?.mediaText) e.media = sheet.media.mediaText;
       fragment.append(e);
@@ -417,7 +421,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const host = document.createElement('div');
     over.append(host);
     const root = host.attachShadow({ mode: 'closed' });
-    root.append(mirror(), Object.assign(document.createElement('style'), { textContent: OWN }));
+    const tags = new Set();
     for (const l of s.layers) {
       const inset = l.at.map((v) => `${Math.max(0, v)}px`).join(' ');
       const at = Object.assign(document.createElement('div'), { className: 'gz-at', inert: true });
@@ -433,7 +437,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       let p = b;
       for (const [tag, id, cls, style, cm] of l.chain) {
         if (!NAME.test(tag) || L.DROP.has(tag)) continue;
-        const e = document.createElement(customElements.get(tag) ? 'div' : tag);
+        const custom = tag.includes('-');
+        const e = document.createElement(custom ? 'div' : tag);
+        if (custom) { e.setAttribute('data-gz-tag', tag); tags.add(tag); }
         if (id) e.id = id;
         if (cls) e.setAttribute('class', cls);
         if (cm) e.setAttribute('bb-course-membership-markups', cm);
@@ -449,6 +455,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const safeLayer = sanitize(lay);
       if (!safeLayer) continue;
       safeLayer.setAttribute('data-gz-layer', '');
+      for (const e of [safeLayer, ...safeLayer.querySelectorAll('[data-gz-tag]')]) {
+        const tag = e.getAttribute('data-gz-tag');
+        if (tag) tags.add(tag);
+      }
       p.append(safeLayer);
       at.append(h);
       const catcher = Object.assign(document.createElement('div'), { className: 'gz-catch' });
@@ -456,6 +466,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       catcher.addEventListener('click', (e) => remember(root, e));
       root.append(at, catcher);
     }
+    root.prepend(mirror(tags), Object.assign(document.createElement('style'), { textContent: OWN }));
     if (s.strip) for (const [k, v] of [['t', s.strip[0]], ['l', s.strip[1]], ['w', s.strip[2]]]) over.style.setProperty(`--gz-snap-${k}`, `${v}px`);
     html.append(over);
     for (const e of root.querySelectorAll('[data-gz-top], [data-gz-left]')) { e.scrollTop = +e.getAttribute('data-gz-top') || 0; e.scrollLeft = +e.getAttribute('data-gz-left') || 0; }
@@ -506,6 +517,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       });
     }
     route(url);
+    draw();
     tick();
   };
   const tick = () => { if (go) go.timer = setTimeout(() => { check(); tick(); }, 50); };
@@ -532,9 +544,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     go = null;
     clearTimeout(g.timer);
     place();
-    if (g.over) fade(g.over);
-    if (cut) return;
+    if (g.over) { if (cut) g.over.remove(); else fade(g.over); }
     draw();
+    if (cut) return;
     if (g.top) scrollBack(g.top);
     if (g.click && [...document.querySelectorAll('a[href]')].some((a) => a.getAttribute('href') === g.click.href && a.textContent.trim() === g.click.text && shown(a))) route(g.click.href);
   };
@@ -674,22 +686,25 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (!on) return;
       if (typeof uid !== 'string' || !/^_\d+_\d+$/.test(uid)) { loaded = true; pass(); return; }
       who = uid;
-      send({ op: 'hello' });
-      local((s) => s.get(key(), (r) => {
-        const kept = L.clean(r?.[key()]?.tabs);
-        tabs = [...kept, ...tabs.filter((x) => !kept.some((y) => y.cid === x.cid))];
-        loaded = true;
-        last = undefined;
-        pass();
-        // Arrived by a full load from a switch on the last page: its copy, from the worker, until this one is built.
-        if (pending?.[1] === who && pending[0] === ctx.courseId() && !go) {
-          const url = location.pathname + location.search;
-          const tab = tabs.find((x) => x.cid === pending[0]);
-          go = { cid: pending[0], url, at: performance.now(), top: P().place && tab?.path === url ? tab.top : 0 };
-          send({ op: 'get', cid: go.cid }).then((x) => { if (go?.cid === pending[0] && !go.over && x?.snap?.path === go.url) cover(x.snap); });
-          tick();
-        }
-      }));
+      hello().then(() => {
+        if (!on || signedOut || who !== uid) return;
+        local((s) => s.get(key(), (r) => {
+          if (!on || signedOut || who !== uid) return;
+          const kept = L.clean(r?.[key()]?.tabs);
+          tabs = [...kept, ...tabs.filter((x) => !kept.some((y) => y.cid === x.cid))];
+          loaded = true;
+          last = undefined;
+          pass();
+          // Arrived by a full load from a switch on the last page: its copy, from the worker, until this one is built.
+          if (pending?.[1] === who && pending[0] === ctx.courseId() && !go) {
+            const url = location.pathname + location.search;
+            const tab = tabs.find((x) => x.cid === pending[0]);
+            go = { cid: pending[0], url, at: performance.now(), top: P().place && tab?.path === url ? tab.top : 0 };
+            send({ op: 'get', cid: go.cid }).then((x) => { if (go?.cid === pending[0] && !go.over && x?.snap?.path === go.url) cover(x.snap); });
+            tick();
+          }
+        }));
+      });
     }, () => { loaded = true; pass(); }); // no account: this page's list only, kept nowhere
   };
   const pass = () => {
@@ -721,6 +736,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       saveNow();
       if (go) end(true);
       strip?.remove();
+      for (const copy of document.querySelectorAll('#gz-ctabs-snap')) copy.remove();
       // Switched off (Glaze or the tabs): nothing of the courses is kept in memory any more.
       snaps.clear();
       send({ op: 'drop' });
@@ -732,10 +748,37 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (!strip) make();
       listen(true);
       if (!prefs && !loaded) start();
-      else { send({ op: 'hello' }); drawn = ''; local((s) => s.get(key(), (r) => { if (who) tabs = L.clean(r?.[key()]?.tabs); pass(); })); }
+      else { hello().then(() => { if (!on || signedOut) return; drawn = ''; local((s) => s.get(key(), (r) => { if (who) tabs = L.clean(r?.[key()]?.tabs); pass(); })); }); }
     }
     pass();
   };
+  const revoke = () => {
+    saveNow();
+    who = null;
+    signedOut = true;
+    sync(false);
+    tabs = [];
+    loaded = false;
+  };
+  const invalidate = (next) => {
+    if (next <= epoch) return;
+    epoch = next;
+    snaps.clear();
+    if (go?.over) { const old = go.over; go.over = null; place(); old.remove(); }
+    for (const copy of document.querySelectorAll('#gz-ctabs-snap')) copy.remove();
+  };
+  const hello = async () => {
+    const r = await send({ op: 'hello' });
+    if (r?.stale) return revoke();
+    if (r?.ok && Number.isSafeInteger(r.epoch)) invalidate(r.epoch);
+  };
+  // One listener for this document, including while the feature is off; never added by a route or toggle.
+  if (!preview) chrome.runtime.onMessage.addListener((m, s, reply) => {
+    if (m?.type !== 'glaze:tabs-state' || s.id !== chrome.runtime.id || s.tab || m.site !== location.origin || !Number.isSafeInteger(m.epoch) || m.epoch <= 0) return;
+    if (who && m.uid !== who) revoke();
+    else invalidate(m.epoch);
+    reply({ ok: true });
+  });
   // The editor's preview has this file as a <script> after content.js, so its first ask may come before the file is in:
   // here it follows the editor's edits itself.
   if (preview) {

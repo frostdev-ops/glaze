@@ -224,7 +224,8 @@ _Last updated: 2026-10-15_
   resources are omitted. The serialized copy, including its ancestor metadata, is at most 1,000,000 characters each
   and 6,000,000 in all, the oldest dropped first. They are dropped when the
   browser closes, when you turn the tabs or Glaze off, when another account turns up on the site, and when you use
-  Blackboard's Sign Out.
+  Blackboard's Sign Out. Session-only account/cache metadata also keeps up to 64 known document ids and tab ids per
+  site, with document birth times and a cache generation, so an old page cannot restore a previous account's copies.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
