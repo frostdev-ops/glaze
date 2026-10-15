@@ -165,12 +165,17 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         ok((await strip())?.at === 'routed', `strip remains on ${cls}`);
         ok(await page.evaluate(() => !document.querySelector('div.bb-course-navigation, .panel-wrap, #main-content, #main-content-inner')), `${cls} uses the full routed structure`);
       };
-      const position = (top) => page.evaluate((n) => {
+      const position = async (top) => {
+        const measured = await page.evaluate((n) => {
         const main = document.querySelector('main[class*="contentGridArea"]');
         let sc = main;
         while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
-        (sc === document.body ? document.scrollingElement : sc).scrollTop = n;
-      }, top);
+        sc = sc === document.body ? document.scrollingElement : sc;
+        sc.scrollTop = n;
+        return { tag: sc.localName, cls: sc.className, client: sc.clientHeight, height: sc.scrollHeight, requested: n, actual: sc.scrollTop };
+        }, top);
+        ok(measured.actual === top, `native routed scroller accepts its saved position (${JSON.stringify(measured)})`);
+      };
       const saved = (route, top, cid = '_101_1') => opts.evaluate(async ({ route, top, cid }) => {
         const until = performance.now() + 4000;
         while (performance.now() < until) {
