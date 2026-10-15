@@ -14,7 +14,7 @@ domain, and on Canvas and Moodle, which Glaze recognizes on any school's domain.
 
 Ultra's in-page route changes remain visible while Blackboard builds them. Only the initial document paint can wait
 for Glaze's local stylesheets, with the existing one-second limit.
-If Glaze is reloaded while an LMS tab stays open, its old feature work stops until that tab reloads too.
+If Glaze is reloaded while an LMS tab stays open, its old extension API work stops until that tab reloads too.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
