@@ -1625,4 +1625,10 @@
   "Hide folder: {title}": "Masquer le dossier : {title}",
   "Unhide folder: {title}": "Afficher le dossier : {title}",
   "Show hidden folders ({n})": "Afficher les dossiers masqués ({n})",
+  "Hide them again ({n})": "Masquer à nouveau ({n})",
+  "Hidden": "Masqué",
+  "Folder hidden.": "Dossier masqué.",
+  "Folder shown.": "Dossier affiché.",
+  "Showing {n} hidden folders.": "Affichage de {n} dossiers masqués.",
+  "Hiding {n} folders.": "Masquage de {n} dossiers.",
 };

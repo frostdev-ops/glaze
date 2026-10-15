@@ -1625,4 +1625,10 @@
   "Hide folder: {title}": "Ocultar pasta: {title}",
   "Unhide folder: {title}": "Mostrar pasta: {title}",
   "Show hidden folders ({n})": "Mostrar pastas ocultas ({n})",
+  "Hide them again ({n})": "Ocultar novamente ({n})",
+  "Hidden": "Oculto",
+  "Folder hidden.": "Pasta oculta.",
+  "Folder shown.": "Pasta exibida.",
+  "Showing {n} hidden folders.": "Exibindo {n} pastas ocultas.",
+  "Hiding {n} folders.": "Ocultando {n} pastas.",
 };

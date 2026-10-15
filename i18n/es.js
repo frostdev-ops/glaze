@@ -1625,4 +1625,10 @@
   "Hide folder: {title}": "Ocultar carpeta: {title}",
   "Unhide folder: {title}": "Mostrar carpeta: {title}",
   "Show hidden folders ({n})": "Mostrar carpetas ocultas ({n})",
+  "Hide them again ({n})": "Volver a ocultarlas ({n})",
+  "Hidden": "Oculto",
+  "Folder hidden.": "Carpeta oculta.",
+  "Folder shown.": "Carpeta visible.",
+  "Showing {n} hidden folders.": "Mostrando {n} carpetas ocultas.",
+  "Hiding {n} folders.": "Ocultando {n} carpetas.",
 };

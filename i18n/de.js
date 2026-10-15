@@ -1625,4 +1625,10 @@
   "Hide folder: {title}": "Ordner ausblenden: {title}",
   "Unhide folder: {title}": "Ordner einblenden: {title}",
   "Show hidden folders ({n})": "Ausgeblendete Ordner anzeigen ({n})",
+  "Hide them again ({n})": "Wieder ausblenden ({n})",
+  "Hidden": "Ausgeblendet",
+  "Folder hidden.": "Ordner ausgeblendet.",
+  "Folder shown.": "Ordner eingeblendet.",
+  "Showing {n} hidden folders.": "{n} ausgeblendete Ordner werden angezeigt.",
+  "Hiding {n} folders.": "{n} Ordner werden ausgeblendet.",
 };

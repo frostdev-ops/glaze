@@ -1625,4 +1625,10 @@
   "Hide folder: {title}": "Map verbergen: {title}",
   "Unhide folder: {title}": "Map tonen: {title}",
   "Show hidden folders ({n})": "Verborgen mappen tonen ({n})",
+  "Hide them again ({n})": "Weer verbergen ({n})",
+  "Hidden": "Verborgen",
+  "Folder hidden.": "Map verborgen.",
+  "Folder shown.": "Map getoond.",
+  "Showing {n} hidden folders.": "{n} verborgen mappen worden getoond.",
+  "Hiding {n} folders.": "{n} mappen worden verborgen.",
 };
