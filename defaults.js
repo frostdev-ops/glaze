@@ -28,9 +28,9 @@ const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], [
 // Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
-// 'font-auto' (the same, or 'auto'). GZ_SANITIZE walks this.
+// 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM"). GZ_SANITIZE walks this.
 const GZ_SPEC = {
-  auto: { on: [false, 'bool'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
+  auto: { on: [false, 'bool'], mode: ['device', ['device', 'schedule']], from: ['20:00', 'time'], to: ['08:00', 'time'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
     // Text, headings and code. Headings on auto follow the text; code on auto is left as Ultra has it.
     font: ['system', 'font'], head: ['auto', 'font-auto'], mono: ['auto', 'font-auto'],
@@ -54,6 +54,11 @@ const GZ_SPEC = {
     style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
     scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins']], intensity: [50, [0, 100]],
   },
+  nav: {
+    k: ['default', ['default', 'solid', 'gradient', 'image']], c: ['#243447', 'hex'], d: ['#57748c', 'hex'], a: [135, [0, 360]],
+    u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', ['none', 'vivid', 'mono', 'noir', 'warm', 'cool', 'faded', 'dreamy']], ink: ['#ffffff', 'hex'],
+    logo: [true, 'bool'], labels: ['normal', ['normal', 'small', 'icons']], size: ['medium', ['small', 'medium', 'large']], collapsed: [false, 'bool'],
+  },
   motion: {
     level: ['subtle', ['off', 'subtle', 'expressive']],
     followSystem: [true, 'bool'],
@@ -65,15 +70,25 @@ const GZ_SPEC = {
     urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
-    download: [true, 'bool'],
-    // place: a course's content reopens where you left it (open folders, scroll).
+    download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
+    notes: [false, 'bool'], widgets: [false, 'bool'], pet: [false, 'bool'],
+    // place: reopen course content at its saved folders and scroll.
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
     coursemenu: [true, 'bool'],
-    // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
-    // document buttons themselves.
-    darkDocs: [false, 'bool'], toggles: [true, 'bool'],
+    // docPages: previews in a dark palette, plain, dimmed or inverted (the floating button too); toggles: the floating
+    // document buttons. Canvas's document viewer: docTheme its palette, docInk the pen.
+    docPages: ['plain', ['plain', 'dim', 'dark']], toggles: [true, 'bool'], docTheme: [true, 'bool'], docInk: [false, 'bool'],
+    quizLight: [false, 'bool'],
+    // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
+    gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'], insights: [false, 'bool'],
+    // Reminders and the streak, each opt-in (lib/remind.js has the rest).
+    remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], remindClass: [false, 'bool'], streak: [false, 'bool'],
+    // Syllabus import on a course's home and Syllabus page (features/syllabus.js).
+    syllabus: [false, 'bool'],
   },
+  // features/lookx.js. cursor 'own': a picture kept on this device.
+  extras: { cursor: ['off', ['off', 'aqua', 'lilac', 'pearl', 'own']], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };
 
@@ -117,7 +132,7 @@ const GZ_PRESETS = [
     '#ffffff', '#f4f5f7', '#14181f', '#5b6472', '#848b96', '#e3e6ea', '#c8cdd4',
     '#15803d', '#b45309', '#b91c1c')],
   ['Rose', GZ_PALETTE(
-    '#c026d3', '#a21caf', '#fbe3fb', '#ffffff',
+    '#b31fc4', '#a21caf', '#fbe3fb', '#ffffff',
     '#fff7fa', '#fdeef4', '#2a1622', '#6d4d61', '#997d8d', '#f4dbe6', '#e5bfd1',
     '#15803d', '#b45309', '#be123c')],
 ];
@@ -176,8 +191,8 @@ const GZ_SCENE_LOOK = (intensity) => {
 const HEX = /^#[0-9a-f]{6}$/i;
 // Ultra gives each course one of ten colour slots (.course-color-1…10), the same on every page.
 const COURSE_SLOT = /^([1-9]|10)$/;
-// Canvas keys include the origin: two schools can both have a course 25.
-const COURSE_ID = /^(?:_\d+_\d+|canvas:https?:\/\/[a-z\d.-]+(?::\d+)?\/\d+)$/i;
+// Canvas and Moodle keys include the site (Moodle's can be in a folder): two schools can both have a course 25.
+const COURSE_ID = /^(?:_\d+_\d+|canvas:https?:\/\/[a-z\d.-]+(?::\d+)?\/\d+|moodle:https?:\/\/[a-z\d.-]+(?::\d+)?(?:\/[\w.~-]+)*\/\d+)$/i;
 const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 const cleanName = (n) => (typeof n === 'string' ? n.trim().slice(0, 40) : '');
 // A course's nickname: one line, 60 characters at most (counted as people count them, not as UTF-16 units).
@@ -204,6 +219,9 @@ const cleanNicks = (raw, room) => {
 
 const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
+  if (rule === 'hex') return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : d;
+  if (rule === 'picture') return typeof v === 'string' && /^[a-z0-9]{12}$/.test(v) ? v : d;
+  if (rule === 'time') return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : d;
   if (rule === 'name') return cleanName(v) || d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];
   if (rule === 'font' || rule === 'font-auto') {
@@ -264,7 +282,7 @@ const GZ_LOOKS = [
     '#fb923c', '#fdba74', '#3d1d0c', '#1f0d03',
     '#1e1426', '#120b18', '#fdf2e9', '#c9b2a6', '#8e7b86', '#2f2236', '#47334f',
     '#a3e635', '#facc15', '#f87171'), { font: 'nunito', head: 'fredoka', radius: 20, glass: 16, depth: 2 }, { kind: 'scene', scene: 'pumpkins', intensity: 60, colors: ['#fb923c', '#a855f7', '#fde047'] }],
-].map(([name, palette, look, bg]) => ({ name, palette: typeof palette === 'string' ? palette : null, colors: typeof palette === 'string' ? GZ_PRESETS.find(([n]) => n === palette)[1] : palette, look, bg }));
+].map(([name, palette, look, bg, card]) => ({ name, palette: typeof palette === 'string' ? palette : null, colors: typeof palette === 'string' ? GZ_PRESETS.find(([n]) => n === palette)[1] : palette, look, bg, card }));
 // The settings a look changes, from settings `s`: { colors, preset, auto, look, bg }. A look with its own
 // colors (Synthwave) has no preset name, like any unsaved palette.
 const GZ_LOOK_APPLY = (s, L) => ({
@@ -296,6 +314,8 @@ const GZ_SANITIZE = (raw) => {
     const src = isObj(raw[g]) ? raw[g] : {};
     out[g] = Object.fromEntries(Object.entries(keys).map(([k, [d, rule]]) => [k, cleanValue(src[k], d, rule)]));
   }
+  // 2.2's darkDocs inverted.
+  if (isObj(raw.enhance) && raw.enhance.docPages === undefined && raw.enhance.darkDocs === true) out.enhance.docPages = 'dark';
   // 1.0 had only the three motion switches: all off meant "no motion".
   if (!raw.version && isObj(raw.motion) && raw.motion.level === undefined) {
     out.motion.level = out.motion.enter || out.motion.hover || out.motion.transitions ? 'subtle' : 'off';
@@ -321,10 +341,21 @@ const GZ_SANITIZE = (raw) => {
   return out;
 };
 
-// The palette to paint: the user's colors, or with auto on, the light/dark preset for the OS mode.
-const GZ_ACTIVE_COLORS = (s, prefersDark) => {
+// Dark from `from` until `to`, never if equal. Dark-now and the next flip share these windows, as local dates: a time
+// DST skips is the hour after, a repeated one counts once.
+const hhmm = (v) => +v.slice(0, 2) * 60 + +v.slice(3);
+const darkWindows = (from, to, now) => (from === to ? [] : [-1, 0, 1, 2].map((d) => {
+  const at = (v, e) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + d + e, 0, hhmm(v));
+  return [at(from, 0), at(to, +(to < from))];
+}).filter(([s, e]) => e > s));
+const GZ_SCHEDULE_DARK = (from, to, now) => darkWindows(from, to, now).some(([s, e]) => s <= now && now < e);
+const GZ_SCHEDULE_NEXT = (from, to, now) => darkWindows(from, to, now).flat()
+  .filter((t) => t > now && GZ_SCHEDULE_DARK(from, to, t) !== GZ_SCHEDULE_DARK(from, to, new Date(t - 1))).sort((a, b) => a - b)[0] || null;
+// The palette to paint: the user's colors, or with auto on, the light/dark preset for the OS mode or the schedule.
+const GZ_ACTIVE_COLORS = (s, prefersDark, now = new Date()) => {
   if (!s.auto.on) return s.colors;
-  return GZ_PRESET(prefersDark ? s.auto.dark : s.auto.light, s.presets) || s.colors;
+  const dark = s.auto.mode === 'schedule' ? GZ_SCHEDULE_DARK(s.auto.from, s.auto.to, now) : prefersDark;
+  return GZ_PRESET(dark ? s.auto.dark : s.auto.light, s.presets) || s.colors;
 };
 
 // ---- contrast ---------------------------------------------------------------------------------
@@ -504,5 +535,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }

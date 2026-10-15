@@ -1,0 +1,54 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See parity/spikes/B0.md.",
+ "paging": {
+  "limit": 200,
+  "nextPage": "",
+  "previousPage": "",
+  "offset": 0
+ },
+ "results": [
+  {
+   "daysOfUse": 0,
+   "description": {
+    "rawText": "",
+    "displayText": "",
+    "webLocation": null,
+    "fileLocation": null
+   },
+   "isAvailable": true,
+   "endDate": "2026-12-22T04:59:00.000Z",
+   "startDate": "2026-08-31T04:00:00.000Z",
+   "durationType": "DATE_RANGE",
+   "name": "Fall 2026",
+   "permissions": {
+    "edit": false,
+    "delete": false
+   },
+   "id": "_51_1"
+  },
+  {
+   "daysOfUse": 0,
+   "description": {
+    "rawText": "",
+    "displayText": "",
+    "webLocation": null,
+    "fileLocation": null
+   },
+   "isAvailable": true,
+   "endDate": "2027-05-20T03:59:00.000Z",
+   "startDate": "2027-01-19T05:00:00.000Z",
+   "durationType": "DATE_RANGE",
+   "name": "Spring 2027",
+   "permissions": {
+    "edit": false,
+    "delete": false
+   },
+   "id": "_52_1"
+  }
+ ],
+ "permissions": {
+  "create": false,
+  "edit": false,
+  "delete": false
+ }
+}

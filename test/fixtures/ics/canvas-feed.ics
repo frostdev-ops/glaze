@@ -1,0 +1,420 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:icalendar-ruby
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Sam Taylor Calendar (Canvas)
+X-WR-CALDESC:Calendar events for the user\, Sam Taylor
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-183
+DTSTART;VALUE=DATE;VALUE=DATE:20260920
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Homework 1. Follow the rubric in the syllabus.
+SEQUENCE:0
+SUMMARY:Homework 1 [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=09&year=2026#assignment_183
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Homework 1. Follow the rub
+ ric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-176
+DTSTART;VALUE=DATE;VALUE=DATE:20260923
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Reading response 1. Follow the rubric in the s
+ yllabus.
+SEQUENCE:0
+SUMMARY:Reading response 1 [ENG 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_26&mo
+ nth=09&year=2026#assignment_176
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Reading response 1. Follow
+  the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-191
+DTSTART;VALUE=DATE;VALUE=DATE:20260925
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Primary source analysis 1. Follow the rubric i
+ n the syllabus.
+SEQUENCE:0
+SUMMARY:Primary source analysis 1 [HIST 2010]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_28&mo
+ nth=09&year=2026#assignment_191
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Primary source analysis 1.
+  Follow the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-169
+DTSTART;VALUE=DATE;VALUE=DATE:20260926
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Lab report 1: Microscopy. Follow the rubric in
+  the syllabus.
+SEQUENCE:0
+SUMMARY:Lab report 1: Microscopy [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=09&year=2026#assignment_169
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Lab report 1: Microscopy. 
+ Follow the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-184
+DTSTART;VALUE=DATE;VALUE=DATE:20260927
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Homework 2. Follow the rubric in the syllabus.
+SEQUENCE:0
+SUMMARY:Homework 2 [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=09&year=2026#assignment_184
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Homework 2. Follow the rub
+ ric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-185
+DTSTART;VALUE=DATE;VALUE=DATE:20260929
+CLASS:PUBLIC
+DESCRIPTION:10 questions\, one attempt.
+SEQUENCE:0
+SUMMARY:Limits quiz [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=09&year=2026#assignment_185
+X-ALT-DESC;FMTTYPE=text/html:<p>10 questions\, one attempt.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-170
+DTSTART;VALUE=DATE;VALUE=DATE:20260930
+CLASS:PUBLIC
+DESCRIPTION:10 questions\, one attempt.
+SEQUENCE:0
+SUMMARY:Unit 1 quiz [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=09&year=2026#assignment_170
+X-ALT-DESC;FMTTYPE=text/html:<p>10 questions\, one attempt.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-177
+DTSTART;VALUE=DATE;VALUE=DATE:20261002
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Narrative essay draft. Follow the rubric in th
+ e syllabus.
+SEQUENCE:0
+SUMMARY:Narrative essay draft [ENG 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_26&mo
+ nth=10&year=2026#assignment_177
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Narrative essay draft. Fol
+ low the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-192
+DTSTART;VALUE=DATE;VALUE=DATE:20261003
+CLASS:PUBLIC
+DESCRIPTION:10 questions\, one attempt.
+SEQUENCE:0
+SUMMARY:Map quiz [HIST 2010]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_28&mo
+ nth=10&year=2026#assignment_192
+X-ALT-DESC;FMTTYPE=text/html:<p>10 questions\, one attempt.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-186
+DTSTART;VALUE=DATE;VALUE=DATE:20261004
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Homework 3. Follow the rubric in the syllabus.
+SEQUENCE:0
+SUMMARY:Homework 3 [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=10&year=2026#assignment_186
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Homework 3. Follow the rub
+ ric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-178
+DTSTART;VALUE=DATE;VALUE=DATE:20261005
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Peer review. Follow the rubric in the syllabus
+ .
+SEQUENCE:0
+SUMMARY:Peer review [ENG 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_26&mo
+ nth=10&year=2026#assignment_178
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Peer review. Follow the ru
+ bric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-187
+DTSTART;VALUE=DATE;VALUE=DATE:20261006
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Exam 1. Follow the rubric in the syllabus.
+SEQUENCE:0
+SUMMARY:Exam 1 [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=10&year=2026#assignment_187
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Exam 1. Follow the rubric 
+ in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-193
+DTSTART;VALUE=DATE;VALUE=DATE:20261009
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Primary source analysis 2. Follow the rubric i
+ n the syllabus.
+SEQUENCE:0
+SUMMARY:Primary source analysis 2 [HIST 2010]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_28&mo
+ nth=10&year=2026#assignment_193
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Primary source analysis 2.
+  Follow the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-171
+DTSTART;VALUE=DATE;VALUE=DATE:20261010
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Lab report 2: Enzyme activity. Follow the rubr
+ ic in the syllabus.
+SEQUENCE:0
+SUMMARY:Lab report 2: Enzyme activity [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=10&year=2026#assignment_171
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Lab report 2: Enzyme activ
+ ity. Follow the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-188
+DTSTART;VALUE=DATE;VALUE=DATE:20261011
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Homework 4. Follow the rubric in the syllabus.
+SEQUENCE:0
+SUMMARY:Homework 4 [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=10&year=2026#assignment_188
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Homework 4. Follow the rub
+ ric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-179
+DTSTART;VALUE=DATE;VALUE=DATE:20261012
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Reading response 4. Follow the rubric in the s
+ yllabus.
+SEQUENCE:0
+SUMMARY:Reading response 4 [ENG 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_26&mo
+ nth=10&year=2026#assignment_179
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Reading response 4. Follow
+  the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-194
+DTSTART;VALUE=DATE;VALUE=DATE:20261014
+CLASS:PUBLIC
+DESCRIPTION:5 questions\, one attempt.
+SEQUENCE:0
+SUMMARY:Reading quiz 6 [HIST 2010]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_28&mo
+ nth=10&year=2026#assignment_194
+X-ALT-DESC;FMTTYPE=text/html:<p>5 questions\, one attempt.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-calendar-event-31
+DTSTART:20261015T140000Z
+DTEND:20261015T155000Z
+CLASS:PUBLIC
+LOCATION:Science Hall 214
+SEQUENCE:0
+SUMMARY:Lab section [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=10&year=2026#calendar_event_31
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-180
+DTSTART;VALUE=DATE;VALUE=DATE:20261015
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Reading response 5. Follow the rubric in the s
+ yllabus.
+SEQUENCE:0
+SUMMARY:Reading response 5 [ENG 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_26&mo
+ nth=10&year=2026#assignment_180
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Reading response 5. Follow
+  the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-calendar-event-33
+DTSTART:20261016T170000Z
+DTEND:20261016T180000Z
+CLASS:PUBLIC
+LOCATION:Science Hall 214
+SEQUENCE:0
+SUMMARY:Office hours [ENG 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_26&mo
+ nth=10&year=2026#calendar_event_33
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-189
+DTSTART;VALUE=DATE;VALUE=DATE:20261016
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Homework 5. Follow the rubric in the syllabus.
+SEQUENCE:0
+SUMMARY:Homework 5 [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=10&year=2026#assignment_189
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Homework 5. Follow the rub
+ ric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-172
+DTSTART;VALUE=DATE;VALUE=DATE:20261016
+CLASS:PUBLIC
+DESCRIPTION:10 questions\, one attempt.
+SEQUENCE:0
+SUMMARY:Unit 2 quiz [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=10&year=2026#assignment_172
+X-ALT-DESC;FMTTYPE=text/html:<p>10 questions\, one attempt.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-calendar-event-34
+DTSTART:20261017T200000Z
+DTEND:20261017T213000Z
+CLASS:PUBLIC
+LOCATION:Science Hall 214
+SEQUENCE:0
+SUMMARY:Review session [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=10&year=2026#calendar_event_34
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-190
+DTSTART;VALUE=DATE;VALUE=DATE:20261018
+CLASS:PUBLIC
+DESCRIPTION:10 questions\, one attempt.
+SEQUENCE:0
+SUMMARY:Unit 4 quiz [MATH 1350]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_27&mo
+ nth=10&year=2026#assignment_190
+X-ALT-DESC;FMTTYPE=text/html:<p>10 questions\, one attempt.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-173
+DTSTART;VALUE=DATE;VALUE=DATE:20261019
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Lab report 3: Photosynthesis. Follow the rubri
+ c in the syllabus.
+SEQUENCE:0
+SUMMARY:Lab report 3: Photosynthesis [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=10&year=2026#assignment_173
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Lab report 3: Photosynthes
+ is. Follow the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-181
+DTSTART;VALUE=DATE;VALUE=DATE:20261020
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Argument essay outline. Follow the rubric in t
+ he syllabus.
+SEQUENCE:0
+SUMMARY:Argument essay outline [ENG 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_26&mo
+ nth=10&year=2026#assignment_181
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Argument essay outline. Fo
+ llow the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-calendar-event-35
+DTSTART:20261022T150000Z
+DTEND:20261022T170000Z
+CLASS:PUBLIC
+LOCATION:Science Hall 214
+SEQUENCE:0
+SUMMARY:Museum visit [HIST 2010]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_28&mo
+ nth=10&year=2026#calendar_event_35
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220800Z
+UID:event-assignment-195
+DTSTART;VALUE=DATE;VALUE=DATE:20261023
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Museum visit reflection. Follow the rubric in 
+ the syllabus.
+SEQUENCE:0
+SUMMARY:Museum visit reflection [HIST 2010]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_28&mo
+ nth=10&year=2026#assignment_195
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Museum visit reflection. F
+ ollow the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-174
+DTSTART;VALUE=DATE;VALUE=DATE:20261026
+CLASS:PUBLIC
+SEQUENCE:0
+SUMMARY:Genetics problem set [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=10&year=2026#assignment_174
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-182
+DTSTART;VALUE=DATE;VALUE=DATE:20261029
+CLASS:PUBLIC
+DESCRIPTION:Instructions for Annotated bibliography. Follow the rubric in t
+ he syllabus.
+SEQUENCE:0
+SUMMARY:Annotated bibliography [ENG 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_26&mo
+ nth=10&year=2026#assignment_182
+X-ALT-DESC;FMTTYPE=text/html:<p>Instructions for Annotated bibliography. Fo
+ llow the rubric in the syllabus.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-calendar-event-32
+DTSTART:20261101T200000Z
+DTEND:20261101T210000Z
+CLASS:PUBLIC
+LOCATION:Science Hall 214
+SEQUENCE:0
+SUMMARY:Exam review [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=11&year=2026#calendar_event_32
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261014T220700Z
+UID:event-assignment-175
+DTSTART;VALUE=DATE;VALUE=DATE:20261103
+CLASS:PUBLIC
+SEQUENCE:0
+SUMMARY:Midterm exam [BIO 1100]
+URL;VALUE=URI:https://localhost:3000/calendar?include_contexts=course_25&mo
+ nth=11&year=2026#assignment_175
+END:VEVENT
+END:VCALENDAR

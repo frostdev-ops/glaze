@@ -1,0 +1,322 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See parity/spikes/B0.md.",
+ "paging": {
+  "limit": 200,
+  "nextPage": "",
+  "previousPage": "",
+  "count": 3,
+  "offset": 0
+ },
+ "results": [
+  {
+   "firstAttemptId": "_811_1",
+   "lastAttemptId": "_811_1",
+   "averageScore": 80,
+   "isCalculatedColumnGrade": false,
+   "studentReviewedTimestamp": null,
+   "courseId": "_102_1",
+   "userId": "_900_1",
+   "manualGrade": null,
+   "pointsPossible": 100,
+   "lowestAttemptId": null,
+   "highestAttemptId": null,
+   "columnId": "_611_1",
+   "id": "_911_1",
+   "version": 1,
+   "manualStatus": "NO_OVERRIDE",
+   "isExempt": false,
+   "gradeScoreDesignation": "-",
+   "isCorrupt": false,
+   "hasAllAttemptsExcluded": false,
+   "column": {
+    "visible": true,
+    "calculationType": "NON_CALCULATED",
+    "multipleAttempts": 1,
+    "possible": 100,
+    "description": {
+     "rawText": "",
+     "displayText": ""
+    },
+    "courseId": "_102_1",
+    "scoreProviderHandle": "resource/x-bb-assessment",
+    "peerGrading": false,
+    "gradingSchemaId": "_401_1",
+    "contentId": "_711_1",
+    "dueDate": "2026-09-25T03:59:00.000Z",
+    "anonymousGrading": false,
+    "deleted": false,
+    "columnName": "Essay 1",
+    "userCreatedColumn": false,
+    "permanentAnonymous": false,
+    "scorable": true,
+    "aggregationModel": "LAST",
+    "visibleInBook": true,
+    "ltiDomainId": null,
+    "ltiTag": "",
+    "ltiResourceId": "",
+    "gradesReleased": true,
+    "enforceDueDate": false,
+    "hasAnonymousSubmissions": false,
+    "gradebookCategory": {
+     "description": "",
+     "courseId": "_102_1",
+     "title": "Assignment",
+     "localizableTitle": {
+      "languageKey": "gradebook.category.assignment",
+      "bundle": "common"
+     },
+     "isUserDefined": false,
+     "id": "_201_1"
+    },
+    "id": "_611_1",
+    "learningOutcome": {
+     "columnScale": [],
+     "isSignature": false,
+     "entityScale": []
+    },
+    "localizedColumnName": {
+     "languageKey": "",
+     "bundle": ""
+    },
+    "effectiveColumnName": "Essay 1",
+    "isAttemptBased": true,
+    "gradeScoreDesignation": "-",
+    "isFormative": false,
+    "gradebookCategoryId": "_201_1",
+    "position": 1,
+    "groupContent": false
+   },
+   "columnUrl": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/columns/_611_1",
+   "status": "GRADED",
+   "displayGrade": {
+    "isOverride": false,
+    "requiresSchemaKnowledgeToDisplay": false,
+    "score": 85
+   },
+   "effectiveScore": 85,
+   "hasBeenViewedByStudent": true,
+   "lastAttemptUrl": "https://lms.example.edu/learn/api/v1/x",
+   "firstAttemptUrl": "https://lms.example.edu/learn/api/v1/x",
+   "submissionStatus": {
+    "actionCount": null,
+    "status": "GRADED"
+   },
+   "attemptsLeft": 0,
+   "hasAttemptOrGradeFeedback": true,
+   "canStudentViewGradeResults": true,
+   "lastAttempt": {
+    "override": false,
+    "courseId": "_102_1",
+    "userId": "_900_1",
+    "overrideStatus": "NO_OVERRIDE",
+    "gradeId": "_911_1",
+    "exempt": false,
+    "modifiedDate": "2026-09-30T15:00:00.000Z",
+    "attemptDate": "2026-09-24T22:00:00.000Z",
+    "readyToPost": true,
+    "id": "_811_1",
+    "submissionHasFilePartsWithErrors": false,
+    "creationDate": "2026-09-24T21:30:00.000Z",
+    "status": "COMPLETED",
+    "displayGrade": {
+     "requiresSchemaKnowledgeToDisplay": false,
+     "score": 85
+    },
+    "@id": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/attempts/_811_1",
+    "attemptReceipt": {
+     "receiptId": "r-0001",
+     "submissionDate": "2026-09-24T22:00:00.000Z",
+     "submissionTotalSize": 20480,
+     "submissionType": "MANUALLY_SUBMITTED"
+    },
+    "attemptFirstGradedDate": "2026-09-30T15:00:00.000Z",
+    "attemptLastGradedDate": "2026-09-30T15:00:00.000Z",
+    "score": 85,
+    "grade": "85"
+   }
+  },
+  {
+   "firstAttemptId": "_812_1",
+   "lastAttemptId": "_812_1",
+   "averageScore": 80,
+   "isCalculatedColumnGrade": false,
+   "studentReviewedTimestamp": null,
+   "courseId": "_102_1",
+   "userId": "_900_1",
+   "manualGrade": null,
+   "pointsPossible": 100,
+   "lowestAttemptId": null,
+   "highestAttemptId": null,
+   "columnId": "_612_1",
+   "id": "_912_1",
+   "version": 1,
+   "manualStatus": "NO_OVERRIDE",
+   "isExempt": false,
+   "gradeScoreDesignation": "-",
+   "isCorrupt": false,
+   "hasAllAttemptsExcluded": false,
+   "column": {
+    "visible": true,
+    "calculationType": "NON_CALCULATED",
+    "multipleAttempts": 1,
+    "possible": 100,
+    "description": {
+     "rawText": "",
+     "displayText": ""
+    },
+    "courseId": "_102_1",
+    "scoreProviderHandle": "resource/x-bb-assessment",
+    "peerGrading": false,
+    "gradingSchemaId": "_401_1",
+    "contentId": "_712_1",
+    "dueDate": "2026-10-09T03:59:00.000Z",
+    "anonymousGrading": false,
+    "deleted": false,
+    "columnName": "Essay 2",
+    "userCreatedColumn": false,
+    "permanentAnonymous": false,
+    "scorable": true,
+    "aggregationModel": "LAST",
+    "visibleInBook": true,
+    "ltiDomainId": null,
+    "ltiTag": "",
+    "ltiResourceId": "",
+    "gradesReleased": true,
+    "enforceDueDate": false,
+    "hasAnonymousSubmissions": false,
+    "gradebookCategory": {
+     "description": "",
+     "courseId": "_102_1",
+     "title": "Assignment",
+     "localizableTitle": {
+      "languageKey": "gradebook.category.assignment",
+      "bundle": "common"
+     },
+     "isUserDefined": false,
+     "id": "_201_1"
+    },
+    "id": "_612_1",
+    "learningOutcome": {
+     "columnScale": [],
+     "isSignature": false,
+     "entityScale": []
+    },
+    "localizedColumnName": {
+     "languageKey": "",
+     "bundle": ""
+    },
+    "effectiveColumnName": "Essay 2",
+    "isAttemptBased": true,
+    "gradeScoreDesignation": "-",
+    "isFormative": false,
+    "gradebookCategoryId": "_201_1",
+    "position": 1,
+    "groupContent": false
+   },
+   "columnUrl": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/columns/_612_1",
+   "status": "NEEDS_GRADING",
+   "submissionStatus": {
+    "actionCount": null,
+    "status": "SUBMITTED"
+   },
+   "attemptsLeft": 0,
+   "hasAttemptOrGradeFeedback": false,
+   "lastAttempt": {
+    "override": false,
+    "courseId": "_102_1",
+    "userId": "_900_1",
+    "overrideStatus": "NO_OVERRIDE",
+    "gradeId": "_912_1",
+    "exempt": false,
+    "modifiedDate": "2026-10-10T12:00:00.000Z",
+    "attemptDate": "2026-10-10T02:15:00.000Z",
+    "readyToPost": false,
+    "id": "_812_1",
+    "submissionHasFilePartsWithErrors": false,
+    "creationDate": "2026-10-09T20:00:00.000Z",
+    "status": "NEEDS_GRADING",
+    "displayGrade": {
+     "requiresSchemaKnowledgeToDisplay": false
+    },
+    "@id": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/attempts/_812_1",
+    "attemptReceipt": {
+     "receiptId": "r-0001",
+     "submissionDate": "2026-10-10T02:15:00.000Z",
+     "submissionTotalSize": 20480,
+     "submissionType": "MANUALLY_SUBMITTED"
+    }
+   }
+  },
+  {
+   "courseId": "_102_1",
+   "userId": "_900_1",
+   "columnId": "_613_1",
+   "isCorrupt": false,
+   "column": {
+    "visible": true,
+    "calculationType": "NON_CALCULATED",
+    "multipleAttempts": 1,
+    "possible": 100,
+    "description": {
+     "rawText": "",
+     "displayText": ""
+    },
+    "courseId": "_102_1",
+    "scoreProviderHandle": "resource/x-bb-assessment",
+    "peerGrading": false,
+    "gradingSchemaId": "_401_1",
+    "contentId": "_713_1",
+    "dueDate": "2026-10-23T03:59:00.000Z",
+    "anonymousGrading": false,
+    "deleted": false,
+    "columnName": "Essay 3",
+    "userCreatedColumn": false,
+    "permanentAnonymous": false,
+    "scorable": true,
+    "aggregationModel": "LAST",
+    "visibleInBook": true,
+    "ltiDomainId": null,
+    "ltiTag": "",
+    "ltiResourceId": "",
+    "gradesReleased": true,
+    "enforceDueDate": false,
+    "hasAnonymousSubmissions": false,
+    "gradebookCategory": {
+     "description": "",
+     "courseId": "_102_1",
+     "title": "Assignment",
+     "localizableTitle": {
+      "languageKey": "gradebook.category.assignment",
+      "bundle": "common"
+     },
+     "isUserDefined": false,
+     "id": "_201_1"
+    },
+    "id": "_613_1",
+    "learningOutcome": {
+     "columnScale": [],
+     "isSignature": false,
+     "entityScale": []
+    },
+    "localizedColumnName": {
+     "languageKey": "",
+     "bundle": ""
+    },
+    "effectiveColumnName": "Essay 3",
+    "isAttemptBased": true,
+    "gradeScoreDesignation": "-",
+    "isFormative": false,
+    "gradebookCategoryId": "_201_1",
+    "position": 1,
+    "groupContent": false
+   },
+   "submissionStatus": {
+    "actionCount": null,
+    "status": "UNOPENED"
+   },
+   "attemptsLeft": -1,
+   "columnUrl": "https://lms.example.edu/learn/api/v1/x"
+  }
+ ],
+ "permissions": {}
+}

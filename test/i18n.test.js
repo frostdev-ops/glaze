@@ -44,7 +44,8 @@ const fromJs = (js) => {
   }
   return out;
 };
-const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js'];
+// And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
+const JS = ['content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/todo.js', 'lib/ultra.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 const used = new Set([
   ...['options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
@@ -65,7 +66,7 @@ test('every language has every key, and nothing else', () => {
 });
 
 test('every key is still used', () => {
-  const src = squash([...JS, 'lib/grades.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html'].map(read).join(' '));
+  const src = squash([...JS, 'lib/lookx.js', 'lib/grades.js', 'lib/gradecalc.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html'].map(read).join(' '));
   for (const k of keys) assert.ok(src.includes(k), `"${k}" is in no source file`);
 });
 
@@ -85,11 +86,18 @@ test('translations keep their placeholders, and counts have an other form', () =
 });
 
 test('every catalogue is loaded wherever Glaze speaks', () => {
-  const content = require('../manifest.json').content_scripts[0].js;
+  // On the LMS, only the page's own, on demand (content.js words(), lib/background.js LOADABLE); the extension's
+  // pages have them all.
+  const content = require('../manifest.json').content_scripts.flatMap((c) => c.js);
+  assert.deepEqual(I.CODES, files.map((f) => f.replace(/\.js$/, '')), 'GZ_I18N.CODES lists i18n/');
   for (const f of files) {
-    assert.ok(content.indexOf(`i18n/${f}`) >= 0 && content.indexOf(`i18n/${f}`) < content.indexOf('lib/page.js'), `manifest: i18n/${f}`);
+    assert.ok(!content.includes(`i18n/${f}`), `manifest: i18n/${f} loads on demand, not with every page`);
+    assert.ok(read('lib/background.js').includes(`'i18n/${f}'`), `lib/background.js LOADABLE: i18n/${f}`);
     for (const page of ['options.html', 'popup.html']) assert.ok(read(page).includes(`<script src="i18n/${f}"></script>`), `${page}: i18n/${f}`);
   }
+  assert.equal(I.file('de-AT'), 'i18n/de.js');
+  assert.equal(I.file('pt-PT'), 'i18n/pt-BR.js');
+  for (const tag of ['en', 'en-GB', 'ja', '', undefined, 'not a locale!']) assert.equal(I.file(tag), null, String(tag));
   assert.ok(content.indexOf('lib/i18n.js') < content.indexOf('lib/page.js'));
   assert.ok(read('preview.html').includes('<script src="lib/i18n.js"></script>'));
 });
@@ -134,5 +142,13 @@ test('the manifest description is localized and fits the stores', () => {
     const msgs = JSON.parse(read(`_locales/${d}/messages.json`));
     assert.deepEqual(Object.keys(msgs), ['description'], d);
     assert.ok(msgs.description.message.length <= 132, `${d}: Chrome Web Store allows 132 characters`);
+  }
+});
+
+test('no catalogue lists the same English key twice', () => {
+  for (const f of files) {
+    const keys = [...read(`i18n/${f}`).matchAll(/^\s*(['"])((?:(?!\1)[^\\]|\\.)+)\1\s*:/gm)].map((m) => m[2].replace(/\\(.)/g, '$1'));
+    const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
+    assert.deepEqual(dup, [], `${f} repeats ${dup.join(', ')}`);
   }
 });

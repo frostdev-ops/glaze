@@ -1,0 +1,822 @@
+/* Glaze — Moodle. The stylesheet content.js loads on Moodle pages (the hosts lib/detect.js finds) in place of
+   theme.css and extras.css, as canvas.css does on Canvas; motion.css loads beside it for the motion knobs.
+   It matches what content.js puts on <html> (the --gz-* vars, the data-gz-* attributes) and the sweep's tags.
+   Written against Boost, Moodle's default theme: 5.x (Bootstrap 5, measured on 5.3) and, where the markup is the
+   same, 4.x (Bootstrap 4; not measured here, so its rules are kept to stable ids and classes).
+   How Moodle is reached, cheapest first:
+   1. Boost draws nearly everything through custom properties: Bootstrap's (--bs-*: the greys, the body, links,
+      borders) and Moodle's design-system tokens (--mds-*). Its own dark mode works by remapping exactly those, so
+      remapping them to the palette below recolors the dashboard, drawers, cards, tables, forms, menus and dialogs
+      with no selector at all, in a light palette and a dark one alike.
+   2. What Bootstrap writes as an rgb() triplet (.bg-white, .bg-body, .text-primary…) or a literal (button
+      variants, the message bubbles, quiz feedback) is restated by class.
+   3. Bootstrap 4 (Moodle 4.x) has few of those properties: its page frame and components are restated by class
+      too, and :root's own variables are harmless there.
+   4. What is left (an instructor's inline colours, an activity's own literals) is the sweep's: data-gz-light and
+      data-gz-dark, on a dark palette. */
+
+/* Bundled faces, as in theme.css (which Moodle doesn't load). Relative URLs resolve against this sheet's own URL. */
+@font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+
+/* Colors and look values are not defaulted here: content.js writes every --gz-* value on <html> first. */
+:root {
+  --gz-radius-sm: calc(var(--gz-radius) * 2 / 3);
+  --gz-shadow-ink: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 55%) 35%, transparent);
+  --gz-shadow: 0 8px 24px var(--gz-shadow-ink);
+  --gz-ground: var(--gz-surface-2);
+  --gz-panel: var(--gz-surface);
+  --gz-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* A band on a panel (a table head, a recessed area): a hint of ink, lighter on a dark palette, darker on a light one. */
+  --gz-band: color-mix(in srgb, var(--gz-ink) 6%, var(--gz-surface));
+  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface));
+  --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
+  --gz-tip-bg: color-mix(in srgb, var(--gz-surface) 78%, var(--gz-line-strong));
+  --gz-glass-bar: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent);
+}
+html { --gz-on-soft: var(--gz-accent); --gz-rest-shadow: none; --gz-space: 1; }
+html:not([data-gz-dark-theme]) { --gz-on-soft: var(--gz-accent-hi); }
+html[data-gz-depth="0"] { --gz-shadow: none; }
+html[data-gz-depth="2"] { --gz-shadow: 0 12px 32px var(--gz-shadow-ink), 0 2px 6px var(--gz-shadow-ink); --gz-rest-shadow: 0 1px 3px var(--gz-shadow-ink); }
+html[data-gz-depth="3"] { --gz-shadow: 0 20px 48px var(--gz-shadow-ink), 0 4px 12px var(--gz-shadow-ink); --gz-rest-shadow: 0 4px 14px var(--gz-shadow-ink); }
+html[data-gz-density="compact"] { --gz-space: 0.6; }
+html[data-gz-density="roomy"] { --gz-space: 1.4; }
+/* Text size: Boost sizes text in rem off the root. */
+html { font-size: calc(100% * var(--gz-scale, 1)) !important; }
+
+/* ---- Moodle's own palette, remapped. The doubled :root outranks Boost's :root and its [data-bs-theme] modes.
+   The greys are roles, as Moodle's dark mode uses them: white is a raised surface, 100 the page, 200 a recessed
+   area, 300/400 lines, 500-700 secondary ink, 900 and black the text. ---- */
+:root:root {
+  --bs-white: var(--gz-panel);
+  --bs-gray-100: var(--gz-surface-2);
+  --bs-gray-200: var(--gz-band);
+  --bs-gray-300: var(--gz-line);
+  --bs-gray-400: var(--gz-line-strong);
+  --bs-gray-500: var(--gz-ink-faint);
+  --bs-gray-600: var(--gz-ink-muted);
+  --bs-gray-700: color-mix(in srgb, var(--gz-ink-muted) 50%, var(--gz-ink));
+  --bs-gray-800: color-mix(in srgb, var(--gz-ink-muted) 25%, var(--gz-ink));
+  --bs-gray-900: var(--gz-ink);
+  --bs-black: var(--gz-ink);
+  --bs-gray: var(--gz-ink-muted);
+  --bs-gray-dark: var(--gz-ink);
+  --bs-primary: var(--gz-accent);
+  --bs-secondary: var(--gz-line-strong);
+  --bs-success: var(--gz-ok);
+  --bs-info: var(--gz-accent);
+  --bs-warning: var(--gz-warn);
+  --bs-danger: var(--gz-err);
+  --bs-light: var(--gz-surface);
+  --bs-dark: var(--gz-ink);
+  --bs-body-color: var(--gz-ink);
+  --bs-body-bg: var(--gz-surface);
+  --bs-emphasis-color: var(--gz-ink);
+  --bs-secondary-color: var(--gz-ink-muted);
+  --bs-tertiary-color: var(--gz-ink-faint);
+  --bs-secondary-bg: var(--gz-band);
+  --bs-tertiary-bg: color-mix(in srgb, var(--gz-ink) 3%, var(--gz-surface));
+  --bs-heading-color: inherit;
+  --bs-link-color: var(--gz-on-soft);
+  --bs-link-hover-color: var(--gz-on-soft);
+  --bs-code-color: var(--gz-accent);
+  --bs-highlight-color: var(--gz-ink);
+  --bs-highlight-bg: var(--gz-accent-soft);
+  --bs-border-color: var(--gz-line);
+  --bs-border-color-translucent: var(--gz-line-strong);
+  --bs-focus-ring-color: color-mix(in srgb, var(--gz-accent) 60%, transparent);
+  --bs-form-valid-color: var(--gz-ok);
+  --bs-form-valid-border-color: var(--gz-ok);
+  --bs-form-invalid-color: var(--gz-err);
+  --bs-form-invalid-border-color: var(--gz-err);
+  --bs-box-shadow: var(--gz-shadow);
+  --bs-box-shadow-sm: var(--gz-rest-shadow);
+  --bs-box-shadow-lg: var(--gz-shadow);
+  --bs-border-radius: var(--gz-radius-sm);
+  --bs-border-radius-lg: var(--gz-radius);
+  --bs-border-radius-xl: var(--gz-radius);
+  /* The status colours: ink on a tint of the status, with an edge in it (alerts, badges, notices). */
+  --bs-primary-text-emphasis: var(--gz-ink);
+  --bs-secondary-text-emphasis: var(--gz-ink);
+  --bs-success-text-emphasis: var(--gz-ink);
+  --bs-info-text-emphasis: var(--gz-ink);
+  --bs-warning-text-emphasis: var(--gz-ink);
+  --bs-danger-text-emphasis: var(--gz-ink);
+  --bs-light-text-emphasis: var(--gz-ink-muted);
+  --bs-dark-text-emphasis: var(--gz-ink);
+  --bs-primary-bg-subtle: color-mix(in srgb, var(--gz-accent) 14%, var(--gz-surface));
+  --bs-secondary-bg-subtle: var(--gz-band);
+  --bs-success-bg-subtle: color-mix(in srgb, var(--gz-ok) 14%, var(--gz-surface));
+  --bs-info-bg-subtle: color-mix(in srgb, var(--gz-accent) 14%, var(--gz-surface));
+  --bs-warning-bg-subtle: color-mix(in srgb, var(--gz-warn) 14%, var(--gz-surface));
+  --bs-danger-bg-subtle: color-mix(in srgb, var(--gz-err) 14%, var(--gz-surface));
+  --bs-light-bg-subtle: var(--gz-surface);
+  --bs-dark-bg-subtle: var(--gz-band);
+  --bs-primary-border-subtle: color-mix(in srgb, var(--gz-accent) 45%, var(--gz-surface));
+  --bs-secondary-border-subtle: var(--gz-line-strong);
+  --bs-success-border-subtle: color-mix(in srgb, var(--gz-ok) 45%, var(--gz-surface));
+  --bs-info-border-subtle: color-mix(in srgb, var(--gz-accent) 45%, var(--gz-surface));
+  --bs-warning-border-subtle: color-mix(in srgb, var(--gz-warn) 45%, var(--gz-surface));
+  --bs-danger-border-subtle: color-mix(in srgb, var(--gz-err) 45%, var(--gz-surface));
+  --bs-light-border-subtle: var(--gz-line);
+  --bs-dark-border-subtle: var(--gz-line-strong);
+  --bs-state-success-bg: var(--bs-success-bg-subtle);
+  --bs-state-success-border: var(--bs-success-border-subtle);
+  --bs-state-info-bg: var(--bs-info-bg-subtle);
+  --bs-state-info-border: var(--bs-info-border-subtle);
+  --bs-state-warning-bg: var(--bs-warning-bg-subtle);
+  --bs-state-warning-border: var(--bs-warning-border-subtle);
+  --bs-state-danger-bg: var(--bs-danger-bg-subtle);
+  --bs-state-danger-border: var(--bs-danger-border-subtle);
+  --bs-collapse-list-item-hover-bg: var(--gz-row-hover);
+  --bs-collapse-list-item-hover-border: var(--gz-accent);
+  --bs-link-focus-bg: var(--gz-accent-soft);
+  --bs-link-focus-underline: var(--gz-accent);
+  /* Moodle's design system. */
+  --mds-text-default: var(--gz-ink);
+  --mds-text-emphasis: var(--gz-ink);
+  --mds-text-subtle: var(--gz-ink-muted);
+  --mds-text-muted: var(--gz-ink-muted);
+  --mds-text-inverse: var(--gz-accent-ink);
+  --mds-text-danger: var(--gz-err);
+  --mds-text-danger-disabled: color-mix(in srgb, var(--gz-err) 55%, transparent);
+  --mds-text-link-primary-default: var(--gz-on-soft);
+  --mds-text-link-primary-hover: var(--gz-on-soft);
+  --mds-text-link-primary-disabled: var(--gz-ink-faint);
+  --mds-text-feedback-primary: var(--gz-ink);
+  --mds-text-feedback-secondary: var(--gz-ink);
+  --mds-text-feedback-success: var(--gz-ink);
+  --mds-text-feedback-info: var(--gz-ink);
+  --mds-text-feedback-warning: var(--gz-ink);
+  --mds-text-feedback-danger: var(--gz-ink);
+  --mds-focus-default: var(--gz-accent);
+  --mds-focus-danger: var(--gz-err);
+  --mds-bg-surface-default: var(--gz-panel);
+  --mds-bg-surface-subtle: color-mix(in srgb, var(--gz-ink) 3%, var(--gz-panel));
+  --mds-bg-surface-strong: var(--gz-band);
+  --mds-border-default: var(--gz-line);
+  --mds-border-subtle: var(--gz-line);
+  --mds-border-translucent: transparent;
+  --mds-border-interactive-secondary-default: var(--gz-line-strong);
+  --mds-border-interactive-secondary-hover: var(--gz-ink-faint);
+  --mds-border-interactive-secondary-active: var(--gz-ink-muted);
+  --mds-border-interactive-secondary-disabled: var(--gz-line);
+  --mds-border-interactive-primary-default: var(--gz-accent);
+  --mds-border-interactive-primary-hover: var(--gz-accent-hi);
+  --mds-border-interactive-primary-active: var(--gz-accent-hi);
+  --mds-border-interactive-primary-disabled: color-mix(in srgb, var(--gz-accent) 45%, transparent);
+  --mds-border-feedback-primary: var(--bs-primary-border-subtle);
+  --mds-border-feedback-secondary: var(--gz-line);
+  --mds-border-feedback-success: var(--bs-success-border-subtle);
+  --mds-border-feedback-info: var(--bs-info-border-subtle);
+  --mds-border-feedback-warning: var(--bs-warning-border-subtle);
+  --mds-border-feedback-danger: var(--bs-danger-border-subtle);
+  --mds-bg-nav-pill-hover: var(--gz-row-hover);
+  --mds-bg-nav-pill-pressed: var(--gz-accent-soft);
+  --mds-bg-nav-pill-selected: var(--gz-accent-soft);
+  --mds-bg-interactive-primary-default: var(--gz-accent);
+  --mds-bg-interactive-primary-hover: var(--gz-accent-hi);
+  --mds-bg-interactive-primary-active: var(--gz-accent-hi);
+  --mds-bg-interactive-primary-disabled: color-mix(in srgb, var(--gz-accent) 45%, var(--gz-surface));
+  --mds-bg-interactive-primary-default-light: var(--gz-accent-soft);
+  --mds-bg-interactive-secondary-default: var(--gz-band);
+  --mds-bg-interactive-secondary-hover: var(--gz-hover-fill);
+  --mds-bg-interactive-secondary-active: var(--gz-hover-fill);
+  --mds-bg-interactive-secondary-disabled: var(--gz-band);
+  --mds-bg-interactive-danger-default: var(--gz-err);
+  --mds-bg-interactive-danger-default-light: var(--bs-danger-bg-subtle);
+  --mds-bg-feedback-primary-default: var(--gz-accent);
+  --mds-bg-feedback-primary-light: var(--bs-primary-bg-subtle);
+  --mds-bg-feedback-primary-subtle: var(--bs-primary-bg-subtle);
+  --mds-bg-feedback-secondary-default: var(--gz-band);
+  --mds-bg-feedback-secondary-subtle: var(--gz-band);
+  --mds-bg-feedback-success-light: var(--bs-success-bg-subtle);
+  --mds-bg-feedback-success-subtle: var(--bs-success-bg-subtle);
+  --mds-bg-feedback-info-light: var(--bs-info-bg-subtle);
+  --mds-bg-feedback-info-subtle: var(--bs-info-bg-subtle);
+  --mds-bg-feedback-warning-light: var(--bs-warning-bg-subtle);
+  --mds-bg-feedback-warning-subtle: var(--bs-warning-bg-subtle);
+  --mds-bg-feedback-danger-light: var(--bs-danger-bg-subtle);
+  --mds-bg-feedback-danger-subtle: var(--bs-danger-bg-subtle);
+  --mds-bg-switch-track-default: var(--gz-line-strong);
+  --mds-bg-switch-track-hover: var(--gz-ink-faint);
+  --mds-bg-switch-track-disabled: var(--gz-line);
+  --mds-bg-switch-thumb-default: var(--gz-ink-muted);
+  --mds-bg-switch-thumb-hover: var(--gz-ink-muted);
+  --mds-bg-switch-thumb-disabled: var(--gz-ink-faint);
+}
+/* Fonts: Boost's face is a variable; "The site's own" keeps it (Noto Sans on 5.x, the system face on 4.x). */
+html:not([data-gz-font="blackboard"]) { --bs-font-sans-serif: var(--gz-font); --bs-body-font-family: var(--gz-font); --mds-font-family-base: var(--gz-font); }
+html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font); }
+html[data-gz-font="blackboard"] { --gz-font: var(--mds-font-family-base, "Noto Sans"), system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important; }
+html[data-gz-font-mono] { --bs-font-monospace: var(--gz-font-mono); }
+html :is(h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6) { font-family: var(--gz-font-head, inherit); }
+
+/* ---- backgrounds: one fixed layer drawn by ::before on <html>, behind a page whose frame is see-through
+   (as canvas.css; the picture is --gz-bg-grad, an image or the aurora, and a scene draws over it) ---- */
+html[data-gz-bg]:not([data-gz-bg="solid"]) {
+  --gz-ground: transparent;
+  --gz-panel: color-mix(in srgb, var(--gz-surface) 88%, transparent);
+  --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) var(--gz-bg-dim, 60%), transparent);
+  --gz-bg-art: var(--gz-bg-grad), var(--gz-surface-2);
+  --gz-bg-grain: linear-gradient(transparent, transparent);
+  background: var(--gz-surface-2) !important;
+}
+html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
+  --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
+html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before {
+  content: ""; position: fixed; inset: calc(var(--gz-bg-blur, 0px) * -2); z-index: -1; pointer-events: none;
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain), var(--gz-bg-art);
+  filter: blur(var(--gz-bg-blur, 0px));
+}
+html[data-gz-bg="aurora"]::before {
+  inset: -18%;
+  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
+    radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-bg-1) 46%, transparent), transparent 70%),
+    radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-bg-2) 36%, transparent), transparent 70%),
+    radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
+    radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
+    var(--gz-surface-2);
+  animation: gz-aurora 42s ease-in-out infinite alternate; animation-play-state: var(--gz-ambient); will-change: transform;
+}
+@keyframes gz-aurora {
+  0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
+  50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
+  100% { transform: translate3d(-2%, 5%, 0) rotate(-2deg) scale(1.02); }
+}
+#gz-scene {
+  position: fixed; left: calc(var(--gz-bg-blur, 0px) * -2); top: calc(var(--gz-bg-blur, 0px) * -2);
+  width: calc(100% + var(--gz-bg-blur, 0px) * 4); height: calc(100% + var(--gz-bg-blur, 0px) * 4);
+  z-index: -1; pointer-events: none; filter: blur(var(--gz-bg-blur, 0px));
+}
+
+/* ---- ground: the page and the frames around content are the ground, see-through over a background ---- */
+html, body, #page-wrapper, #page, #page.drawers, #page-content, #region-main-box, #topofscroll, #page.drawers .main-inner, #region-main,
+.pagelayout-login #page, #page-footer, .footer-popover {
+  background-color: var(--gz-ground) !important;
+  color: var(--gz-ink);
+}
+#page.drawers { scrollbar-color: var(--gz-line-strong) transparent; }
+#page.drawers::-webkit-scrollbar-track { background: transparent; }
+#page.drawers::-webkit-scrollbar-thumb { background-color: var(--gz-line-strong); border-color: transparent; }
+::selection { background: var(--gz-accent-soft); color: var(--gz-ink); }
+:is(code, pre, kbd) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); border-color: var(--gz-line); }
+html :is(hr) { border-color: var(--gz-line); opacity: 1; }
+/* Bootstrap's rgb() utilities, which the variables above can't reach. Its dark ones stay dark: they are meant to stand out. */
+html :is(.bg-white, .bg-body, .bg-light, .bg-body-tertiary, .bg-body-secondary) { background-color: var(--gz-panel) !important; }
+html .bg-secondary { background-color: var(--gz-band) !important; }
+html .bg-primary { background-color: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+html .bg-success { background-color: var(--gz-ok) !important; color: var(--gz-accent-ink) !important; }
+html .bg-warning { background-color: var(--gz-warn) !important; color: var(--gz-accent-ink) !important; }
+html .bg-danger { background-color: var(--gz-err) !important; color: var(--gz-accent-ink) !important; }
+html .bg-info { background-color: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+html :is(.text-bg-secondary, .text-bg-light) { background-color: var(--gz-band) !important; color: var(--gz-ink) !important; }
+html :is(.text-bg-primary, .text-bg-info) { background-color: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+html .text-bg-success { background-color: var(--gz-ok) !important; color: var(--gz-accent-ink) !important; }
+html .text-bg-warning { background-color: var(--gz-warn) !important; color: var(--gz-accent-ink) !important; }
+html .text-bg-danger { background-color: var(--gz-err) !important; color: var(--gz-accent-ink) !important; }
+/* Loading placeholders pulse between two literal greys. */
+html .bg-pulse-grey { animation-name: gz-pulse; animation-play-state: var(--gz-ambient, running); }
+@keyframes gz-pulse { 0%, 100% { background-color: var(--gz-band); } 50% { background-color: var(--gz-line); } }
+html :is(.text-dark, .text-body, .text-black, .text-body-emphasis) { color: var(--gz-ink) !important; }
+html :is(.text-muted, .text-secondary, .text-body-secondary, .dimmed_text, .dimmed, .dimmed_category) { color: var(--gz-ink-muted) !important; }
+html .text-primary { color: var(--gz-on-soft) !important; }
+html .text-success { color: var(--gz-ok) !important; }
+html .text-warning { color: var(--gz-warn) !important; }
+html .text-danger { color: var(--gz-err) !important; }
+html .text-info { color: var(--gz-accent) !important; }
+html :is(.border, .border-top, .border-bottom, .border-start, .border-end, .border-left, .border-right) { border-color: var(--gz-line) !important; }
+html .border-primary { border-color: var(--gz-accent) !important; }
+
+/* ---- the top bar: glass over the ground; the page scrolls under it ---- */
+html .navbar.fixed-top {
+  background: var(--gz-glass-bar) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
+  border-bottom: 1px solid var(--gz-line) !important;
+  --bs-navbar-color: var(--gz-ink-muted); --bs-navbar-hover-color: var(--gz-ink); --bs-navbar-active-color: var(--gz-ink);
+  --bs-navbar-brand-color: var(--gz-ink); --bs-navbar-brand-hover-color: var(--gz-accent);
+}
+html .navbar.fixed-top :is(.navbar-brand, .nav-link, .usermenu .dropdown-toggle, .popover-region-toggle, .btn-open, .langmenu .dropdown-toggle, .editmode-switch-form label) { color: var(--gz-ink-muted); }
+html .navbar.fixed-top :is(.nav-link, .popover-region-toggle, .usermenu .dropdown-toggle):is(:hover, :focus-visible) { color: var(--gz-ink); background: var(--gz-row-hover); }
+html .navbar.fixed-top .divider { background-color: var(--gz-line); }
+/* The current section of the main menu: the accent, underlined, as Moodle marks it in its blue. */
+html .primary-navigation .navigation .nav-link { color: var(--gz-ink-muted); border-bottom-color: transparent; }
+html .primary-navigation .navigation .nav-link.active { color: var(--gz-ink); border-bottom-color: var(--gz-accent); }
+html .navbar.fixed-top .navbar-brand .logo { border-radius: calc(var(--gz-radius-sm) / 2); }
+/* The unread counts. */
+html :is(.popover-region .count-container, .navbar .badge) { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+/* Moodle's own skip link and the user tour's spotlight. */
+html .sr-only-focusable:focus, html .visually-hidden-focusable:focus { background: var(--gz-accent); color: var(--gz-accent-ink); }
+
+/* ---- drawers: the course index (left) and the blocks (right) are glass panels at the edge ---- */
+html .drawer {
+  background: var(--gz-glass-bar) !important; color: var(--gz-ink);
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
+}
+html .drawer.drawer-left { border-right: 1px solid var(--gz-line); }
+html .drawer.drawer-right { border-left: 1px solid var(--gz-line); }
+html .drawer .drawercontent { scrollbar-color: var(--gz-line-strong) transparent; }
+html .drawer .drawercontent::-webkit-scrollbar-track { background: transparent; }
+html .drawer .drawercontent::-webkit-scrollbar-thumb { background-color: var(--gz-line-strong); border-color: transparent; }
+html .drawer .drawerheader .draweractions .btn, html .drawer-toggles .drawer-toggler .btn {
+  background: var(--gz-surface); color: var(--gz-ink-muted); border: 1px solid var(--gz-line-strong); box-shadow: var(--gz-rest-shadow);
+}
+html .drawer-toggles .drawer-toggler .btn:hover, html .drawer .drawerheader .draweractions .btn:hover { background: var(--gz-hover-fill); color: var(--gz-ink); }
+/* Course index: rows on the glass, the page you're on marked like the main menu's current section. */
+html .courseindex .courseindex-item { color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm); }
+html .courseindex .courseindex-item :is(.courseindex-link, .courseindex-chevron) { color: inherit; }
+html .courseindex .courseindex-item:is(:hover, :focus) { background: var(--gz-row-hover); color: var(--gz-ink); }
+html .courseindex .courseindex-item.active { background: color-mix(in srgb, var(--gz-accent-soft) 55%, transparent); color: var(--gz-ink); }
+html .courseindex .courseindex-item.pageitem { background: var(--gz-accent-soft); color: var(--gz-on-soft); box-shadow: inset 3px 0 0 var(--gz-accent); }
+html .courseindex .courseindex-item.pageitem :is(.courseindex-link, .courseindex-chevron) { color: inherit; }
+html .courseindex .courseindex-section-title .courseindex-link { color: var(--gz-ink); }
+html .courseindex .completioninfo.completion_complete { color: var(--gz-ok); }
+html .courseindex .completioninfo.completion_fail { color: var(--gz-err); }
+
+/* ---- page header and the course's tabs ---- */
+html #page-header :is(h1, h2, .h2) { color: var(--gz-ink); letter-spacing: -0.01em; }
+html .page-context-header .page-header-headings { color: var(--gz-ink); }
+html .breadcrumb { background: transparent; }
+html .breadcrumb-item, html .breadcrumb-item a { color: var(--gz-ink-muted); }
+html .breadcrumb-item a:hover { color: var(--gz-accent); }
+html .breadcrumb-item.active, html .breadcrumb-item [aria-current="page"] { color: var(--gz-ink); }
+html .secondary-navigation .navigation {
+  background: var(--gz-glass-bar) !important; border-bottom: 1px solid var(--gz-line);
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
+}
+html :is(.nav-tabs:not(.more-nav), .nav-pills) { background-color: transparent; }
+html .moremenu .nav-link { color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0; }
+html .moremenu .nav-link:is(:hover, :focus) { background-color: var(--gz-row-hover); color: var(--gz-ink); }
+html .moremenu .nav-link.active { background-color: transparent; color: var(--gz-ink); border-bottom-color: var(--gz-accent); }
+html .nav-tabs .nav-link.active { background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-line) var(--gz-line) var(--gz-panel); }
+html .nav-tabs { border-color: var(--gz-line); --bs-nav-tabs-link-active-color: var(--gz-ink); --bs-nav-tabs-link-active-bg: var(--gz-panel); --bs-nav-tabs-link-active-border-color: var(--gz-line) var(--gz-line) var(--gz-panel); --bs-nav-tabs-link-hover-border-color: transparent; }
+html .nav-pills { --bs-nav-pills-link-active-color: var(--gz-on-soft); --bs-nav-pills-link-active-bg: var(--gz-accent-soft); }
+/* Moodle 5's menus are pills drawn from the tokens above; the open page's pill reads in the accent, as Glaze marks it. */
+html :is(.mds-nav-pill--selected, .secondary-navigation .mds-nav-pill.active) { color: var(--gz-on-soft); }
+html .mds-nav-pill { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
+html .nav-link { color: var(--gz-ink-muted); }
+html .nav-link:is(:hover, :focus) { color: var(--gz-accent-hi); }
+
+/* ---- cards and blocks ---- */
+/* The properties as well as Bootstrap 5's variables: Bootstrap 4 (Moodle 4.x) writes these surfaces as literals. */
+html .card {
+  --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-line); --bs-card-cap-bg: var(--gz-band); --bs-card-color: var(--gz-ink);
+  background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-line); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+html .card .card-title { color: var(--gz-ink); }
+html .card-footer, html .card-header { background-color: transparent; border-color: var(--gz-line); }
+html .block .block-cards span.categoryname, html .block .block-cards .btn-link { color: var(--gz-ink-muted); }
+/* The course cards (Dashboard and My courses, all three views). */
+html [data-region="course-content"].card {
+  overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter);
+}
+html [data-region="course-content"].card:hover { transform: var(--gz-lift); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-line-strong); }
+html [data-region="course-content"] .card-footer.menu { background: transparent !important; }
+html [data-region="course-content"] .coursename { color: var(--gz-ink); }
+html [data-region="course-content"] .coursename:hover { color: var(--gz-on-soft); }
+html :is(.course-listitem, .course-summaryitem) { background: var(--gz-panel); border-color: var(--gz-line) !important; transition: background var(--gz-t) var(--gz-ease); }
+html :is(.course-listitem, .course-summaryitem):hover { background: var(--gz-hover-fill); }
+html [data-region="card-deck"] > :nth-child(2) > [data-region="course-content"] { animation-delay: calc(var(--gz-stagger) * 1); }
+html [data-region="card-deck"] > :nth-child(3) > [data-region="course-content"] { animation-delay: calc(var(--gz-stagger) * 2); }
+html [data-region="card-deck"] > :nth-child(4) > [data-region="course-content"] { animation-delay: calc(var(--gz-stagger) * 3); }
+html [data-region="card-deck"] > :nth-child(n+5) > [data-region="course-content"] { animation-delay: calc(var(--gz-stagger) * 4); }
+html .progress { --bs-progress-bg: var(--gz-line); --bs-progress-bar-bg: var(--gz-accent); background-color: var(--gz-line); }
+html .progress-bar { background-color: var(--gz-accent); }
+/* Expressive: a lifted card picks up an accent edge and the pointer's light (content.js feeds --gz-mx/--gz-my). */
+html[data-gz-motion="expressive"] [data-region="course-content"].card:hover {
+  box-shadow: var(--gz-hover-shadow), 0 0 0 1px color-mix(in srgb, var(--gz-accent) 40%, transparent);
+  background-image: radial-gradient(240px circle at var(--gz-mx, -999px) var(--gz-my, -999px), color-mix(in srgb, var(--gz-accent) 12%, transparent), transparent 70%);
+  background-attachment: fixed;
+}
+
+/* ---- the course page: sections are cards, activities rows on them ---- */
+html .course-section .section-item { background: var(--gz-panel); border-color: var(--gz-line); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow); animation: var(--gz-enter); }
+html .course-section .section-item .course-content-item-content .section-content-inner { background: transparent; border-color: var(--gz-line); }
+html .course-section .sectionname a, html .course-section .sectionname { color: var(--gz-ink); }
+html .course-section .summarytext { color: var(--gz-ink-muted); }
+html .course-section .availabilityinfo { background: var(--gz-band); color: var(--gz-ink-muted); }
+html .activity-item { background: transparent; border-color: var(--gz-line); border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease); }
+html .activity-item:hover:not(:has(.delegated-section)) { background: var(--gz-row-hover); border-color: var(--gz-line-strong); }
+html .activity-item .activityname :is(a, .aalink), html .activity-item .activity-name-area .activityname :is(.aalink, a.autolink) { color: var(--gz-ink); }
+html .activity-item .activityname a:hover { color: var(--gz-on-soft); }
+html .activity-item .activity-altcontent, html .activity-item .activity-dates, html .activity-information { color: var(--gz-ink-muted); }
+html .activity-item .activitybadge.badge-none { background: transparent; border-color: var(--gz-line); color: var(--gz-ink-muted); }
+/* Moodle 4.x's sections: a list with rules between them. */
+html .course-content :is(li.section, .section.main) { border-color: var(--gz-line); }
+html .course-content .divider hr, html .course-content .divider .divider-content { border-color: var(--gz-line); }
+
+/* ---- an activity's own page: its header and description ---- */
+html .activity-header { color: var(--gz-ink-muted); border-color: var(--gz-line); }
+html .path-mod .activity-details:not(:empty), html .activity-header .activity-information { background: transparent; }
+html .activity-description, html #intro { color: var(--gz-ink); }
+html .automatic-completion-conditions .badge, html .completion-info .badge { background: var(--gz-band) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line); }
+html .automatic-completion-conditions .badge.alert-success, html .badge.bg-success, html .completion-info .badge.alert-success { color: var(--gz-ok) !important; border-color: color-mix(in srgb, var(--gz-ok) 50%, transparent); background: color-mix(in srgb, var(--gz-ok) 14%, transparent) !important; }
+html .generalbox, html .box.py-3, html .box.generalbox { background: transparent; color: inherit; border-color: var(--gz-line); }
+/* Assignment status: Moodle prints its states on literal greens, yellows and pinks with black text. */
+html .path-mod-assign :is(td, div, a:link):is(.submissionstatus, .submissionstatusdraft, .submissionstatussubmitted, .submissionlocked, .submissionreopened, .submissiongraded, .submissionnotgraded, .latesubmission, .earlysubmission, .gradingreminder) {
+  color: var(--gz-ink); background-color: var(--gz-panel);
+}
+html .path-mod-assign :is(.submissionstatussubmitted, .submissiongraded, .earlysubmission) { background-color: color-mix(in srgb, var(--gz-ok) 16%, var(--gz-surface)) !important; }
+html .path-mod-assign :is(.submissionstatusdraft, .submissionlocked) { background-color: color-mix(in srgb, var(--gz-warn) 16%, var(--gz-surface)) !important; }
+html .path-mod-assign :is(.latesubmission, .gradingreminder) { background-color: color-mix(in srgb, var(--gz-err) 16%, var(--gz-surface)) !important; }
+html .path-mod-assign :is(.submittedlate, td.submissioneditable, .overdue) { color: var(--gz-err); }
+/* Quiz: the summary of attempts, its navigation buttons and its feedback boxes (literal tints in Boost). */
+html .path-mod-quiz #mod_quiz_navblock .qnbutton { background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-line-strong); }
+html .path-mod-quiz #mod_quiz_navblock .qnbutton .trafficlight { background-color: var(--gz-panel); }
+html .path-mod-quiz #mod_quiz_navblock .qnbutton.thispage { border-color: var(--gz-accent); }
+/* An answered question's button is tinted by its result (literal pale greens, pinks and yellows in Boost). */
+html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton.correct { --gz-state: var(--gz-ok); }
+html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.incorrect, .notanswered) { --gz-state: var(--gz-err); }
+html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton.partiallycorrect { --gz-state: var(--gz-warn); }
+html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.correct, .incorrect, .notanswered, .partiallycorrect) :is(.trafficlight),
+html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.correct, .incorrect, .notanswered, .partiallycorrect) {
+  background-color: color-mix(in srgb, var(--gz-state) 22%, var(--gz-surface)); color: var(--gz-ink);
+}
+html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.correct, .incorrect, .notanswered, .partiallycorrect) .thispageholder { border-color: var(--gz-state); }
+html .que :is(.info) { background-color: var(--gz-band); border-color: var(--gz-line); color: var(--gz-ink); }
+html .que .formulation { background-color: color-mix(in srgb, var(--gz-accent) 10%, var(--gz-surface)); border-color: color-mix(in srgb, var(--gz-accent) 35%, var(--gz-surface)); color: var(--gz-ink); }
+html .que :is(.outcome, .comment) { background-color: color-mix(in srgb, var(--gz-warn) 12%, var(--gz-surface)); border-color: color-mix(in srgb, var(--gz-warn) 40%, var(--gz-surface)); color: var(--gz-ink); }
+html .que :is(.formulation, .outcome, .comment) a { color: var(--gz-on-soft); }
+html .que .correct { color: var(--gz-ok); }
+html .que .incorrect { color: var(--gz-err); }
+html .quizinfo, html .quizattemptcounts { color: var(--gz-ink-muted); }
+/* Forum: the discussion list and the posts. */
+html .forumpost, html .forum-post-container .forumpost { background: var(--gz-panel); border-color: var(--gz-line); border-radius: var(--gz-radius); }
+html .forumpost .author, html .forumpost .post-info { color: var(--gz-ink-muted); }
+html .discussion-list :is(th, td) { border-color: var(--gz-line); }
+html .discussion-list .discussion.pinned { background: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent); }
+
+/* ---- tables: the header row a label, rows on hairlines, hover a tint ---- */
+html .table, html table.generaltable {
+  --bs-table-bg: transparent; --bs-table-color: var(--gz-ink); --bs-table-border-color: var(--gz-line);
+  --bs-table-striped-bg: color-mix(in srgb, var(--gz-ink) 4%, transparent); --bs-table-striped-color: var(--gz-ink);
+  --bs-table-hover-bg: var(--gz-row-hover); --bs-table-hover-color: var(--gz-ink);
+  --bs-table-active-bg: var(--gz-accent-soft); --bs-table-active-color: var(--gz-ink);
+  color: var(--gz-ink); border-color: var(--gz-line);
+}
+html table.generaltable :is(th, td), html .table :is(th, td) { background-color: transparent; border-color: var(--gz-line); }
+html :is(table.generaltable, .table) thead th, html :is(table.generaltable, .table) th.header {
+  color: var(--gz-ink-muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; border-bottom: 1px solid var(--gz-line-strong);
+}
+html table.generaltable.table-striped tbody tr:nth-of-type(odd) > * { --bs-table-bg-type: color-mix(in srgb, var(--gz-ink) 4%, transparent); }
+html table.generaltable tbody tr:hover > * { --bs-table-bg-state: var(--gz-row-hover); }
+
+/* ---- grades: the overview report and a course's user report ---- */
+html .user-grade { background: transparent; }
+html .user-grade :is(th, td) { background-color: transparent !important; border-color: var(--gz-line) !important; color: var(--gz-ink); }
+html .user-grade .category, html .user-grade th.category { background: var(--gz-band) !important; }
+html .user-grade :is(.column-itemname, .column-itemname a) { color: var(--gz-ink); }
+html .user-grade .baggt, html .user-grade .baggb { background: var(--gz-band) !important; }
+html .path-grade-report :is(.gradeitemheader, .rowtitle) { color: var(--gz-ink); }
+html .gradeparent :is(.cell, th, td) { background-color: transparent !important; border-color: var(--gz-line) !important; color: var(--gz-ink); }
+html .gradeparent :is(.heading .cell, .cell.category, .avg .cell) { background-color: var(--gz-band) !important; }
+
+/* ---- buttons ---- */
+html .btn { border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), filter var(--gz-t) var(--gz-ease), scale var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease); }
+html .btn:active { scale: var(--gz-press); }
+html .btn-primary {
+  --bs-btn-color: var(--gz-accent-ink); --bs-btn-bg: var(--gz-accent); --bs-btn-border-color: var(--gz-accent);
+  --bs-btn-hover-color: var(--gz-accent-ink); --bs-btn-hover-bg: var(--gz-accent-hi); --bs-btn-hover-border-color: var(--gz-accent-hi);
+  --bs-btn-active-color: var(--gz-accent-ink); --bs-btn-active-bg: var(--gz-accent-hi); --bs-btn-active-border-color: var(--gz-accent-hi);
+  --bs-btn-disabled-color: var(--gz-accent-ink); --bs-btn-disabled-bg: var(--gz-accent); --bs-btn-disabled-border-color: var(--gz-accent);
+  background-color: var(--bs-btn-bg); color: var(--bs-btn-color); border-color: var(--bs-btn-border-color);
+}
+html .btn-primary:is(:hover, :focus-visible) { background-color: var(--bs-btn-hover-bg); color: var(--bs-btn-hover-color); }
+html :is(.btn-secondary, .btn-light, .btn-subtle-body, .btn-outline-secondary, .btn-outline-light, .btn-outline-dark, .btn-dark, .btn-default) {
+  --bs-btn-color: var(--gz-ink); --bs-btn-bg: var(--gz-surface); --bs-btn-border-color: var(--gz-line-strong);
+  --bs-btn-hover-color: var(--gz-ink); --bs-btn-hover-bg: var(--gz-hover-fill); --bs-btn-hover-border-color: var(--gz-line-strong);
+  --bs-btn-active-color: var(--gz-on-soft); --bs-btn-active-bg: var(--gz-accent-soft); --bs-btn-active-border-color: var(--gz-accent);
+  --bs-btn-disabled-color: var(--gz-ink-faint); --bs-btn-disabled-bg: var(--gz-surface); --bs-btn-disabled-border-color: var(--gz-line);
+  background-color: var(--bs-btn-bg); color: var(--bs-btn-color); border-color: var(--bs-btn-border-color);
+}
+html :is(.btn-secondary, .btn-light, .btn-subtle-body, .btn-outline-secondary, .btn-outline-light, .btn-outline-dark, .btn-dark, .btn-default):is(:hover, :focus-visible) { background-color: var(--bs-btn-hover-bg); color: var(--bs-btn-hover-color); }
+html :is(.btn-outline-primary, .btn-outline-info) {
+  --bs-btn-color: var(--gz-accent); --bs-btn-border-color: var(--gz-accent); --bs-btn-hover-color: var(--gz-accent-ink); --bs-btn-hover-bg: var(--gz-accent);
+  --bs-btn-hover-border-color: var(--gz-accent); --bs-btn-active-color: var(--gz-accent-ink); --bs-btn-active-bg: var(--gz-accent-hi); --bs-btn-active-border-color: var(--gz-accent-hi);
+  color: var(--bs-btn-color); border-color: var(--bs-btn-border-color);
+}
+html :is(.btn-danger, .btn-outline-danger:is(:hover, :active)) { --bs-btn-color: var(--gz-accent-ink); --bs-btn-bg: var(--gz-err); --bs-btn-border-color: var(--gz-err); --bs-btn-hover-bg: color-mix(in srgb, var(--gz-err) 85%, var(--gz-ink)); --bs-btn-hover-color: var(--gz-accent-ink); background-color: var(--bs-btn-bg); color: var(--bs-btn-color); }
+html .btn-outline-danger { --bs-btn-color: var(--gz-err); --bs-btn-border-color: var(--gz-err); }
+html .btn-success { --bs-btn-color: var(--gz-accent-ink); --bs-btn-bg: var(--gz-ok); --bs-btn-border-color: var(--gz-ok); background-color: var(--bs-btn-bg); color: var(--bs-btn-color); }
+html .btn-link, html .btn-icon { --bs-btn-color: var(--gz-on-soft); --bs-btn-hover-color: var(--gz-on-soft); color: var(--bs-btn-color); background-color: transparent; }
+html .btn-icon:is(:hover, :focus-visible) { background-color: var(--gz-row-hover) !important; color: var(--gz-ink); }
+html .btn-icon { color: var(--gz-ink-muted); }
+html .btn-close { --bs-btn-close-color: var(--gz-ink); }
+html[data-gz-dark-theme] .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+html .btn-primary:hover { filter: var(--gz-hover-filter); }
+
+/* ---- forms: fields are surfaces with an edge, the accent ring while you type ---- */
+html :is(.form-control, .form-select, .custom-select, select, textarea, input:not([type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="file"], [type="range"], [type="color"], [type="image"], [type="hidden"])):not(#gz-cmd *) {
+  background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong);
+}
+html :is(.form-control, .form-select, .custom-select, select, textarea, input):not(#gz-cmd *):focus { border-color: var(--gz-accent); box-shadow: 0 0 0 3px var(--gz-accent-soft); outline: 0; }
+html ::placeholder { color: var(--gz-ink-faint) !important; opacity: 1; }
+html :is(.form-control:disabled, .form-control[readonly], .form-select:disabled) { background-color: var(--gz-band); color: var(--gz-ink-muted); }
+html .input-group-text { background-color: var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-line-strong); }
+html :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--gz-accent); }
+html .form-check-input { --bs-form-check-bg: var(--gz-surface); border-color: var(--gz-line-strong); }
+html .form-check-input:checked { background-color: var(--gz-accent); border-color: var(--gz-accent); }
+html .form-switch .form-check-input:not(:checked) { --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23888'/%3e%3c/svg%3e"); }
+/* The select's arrow is a dark data: image; on a dark palette it is turned light. */
+html[data-gz-dark-theme] :is(.form-select, .custom-select) { --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23c8d0da' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e"); }
+html :is(label, legend, .col-form-label) { color: var(--gz-ink); }
+html .mform fieldset { border-color: var(--gz-line); }
+html .mform .ftoggler, html .collapsible-actions a { color: var(--gz-ink); }
+html .form-text, html .form-text.text-muted { color: var(--gz-ink-muted) !important; }
+html :is(.form-autocomplete-suggestions, .simplesearchform .collapse.show) { background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); }
+html .form-autocomplete-suggestions li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-on-soft); }
+html .simplesearchform .btn-submit { background-color: var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-line-strong); }
+
+/* ---- badges, alerts and notices ---- */
+html .badge { --bs-badge-color: var(--gz-accent-ink); }
+html :is(.badge.bg-secondary, .badge.bg-light, .badge-secondary, .badge-light, .badge.text-bg-light, .badge.text-bg-secondary) { background: var(--gz-band) !important; color: var(--gz-ink) !important; }
+html :is(.badge.bg-info, .badge-info, .badge.text-bg-info, .badge.bg-primary, .badge-primary, .badge.text-bg-primary) { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+html :is(.badge.bg-success, .badge-success, .badge.text-bg-success) { background: var(--gz-ok) !important; color: var(--gz-accent-ink) !important; }
+html :is(.badge.bg-warning, .badge-warning, .badge.text-bg-warning) { background: var(--gz-warn) !important; color: var(--gz-accent-ink) !important; }
+html :is(.badge.bg-danger, .badge-danger, .badge.text-bg-danger) { background: var(--gz-err) !important; color: var(--gz-accent-ink) !important; }
+html .alert { --gz-status: var(--gz-accent); background: var(--gz-surface); color: var(--gz-ink); border: 1px solid var(--gz-line); border-left: 4px solid var(--gz-status); border-radius: var(--gz-radius-sm); }
+html .alert-success { --gz-status: var(--gz-ok); }
+html .alert-warning { --gz-status: var(--gz-warn); }
+html .alert-danger, html .alert-error { --gz-status: var(--gz-err); }
+html .alert :is(a, .alert-link) { color: var(--gz-on-soft); }
+html .alert .btn-close, html .alert .close { color: var(--gz-ink-muted); opacity: 1; }
+
+/* ---- floating: menus, popovers, tooltips, dialogs, toasts. Opaque surfaces with an edge and a lift ---- */
+html .dropdown-menu {
+  --bs-dropdown-bg: var(--gz-surface); --bs-dropdown-color: var(--gz-ink); --bs-dropdown-border-color: var(--gz-line-strong);
+  --bs-dropdown-link-color: var(--gz-ink); --bs-dropdown-link-hover-color: var(--gz-ink); --bs-dropdown-link-hover-bg: var(--gz-hover-fill);
+  --bs-dropdown-link-active-color: var(--gz-on-soft); --bs-dropdown-link-active-bg: var(--gz-accent-soft); --bs-dropdown-divider-bg: var(--gz-line);
+  --bs-dropdown-header-color: var(--gz-ink-faint); --bs-dropdown-link-disabled-color: var(--gz-ink-faint);
+  background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); box-shadow: var(--gz-shadow); border-radius: var(--gz-radius-sm);
+  animation: var(--gz-tip-in);
+}
+html .dropdown-item { color: var(--gz-ink); }
+html .dropdown-item:is(:hover, :focus) { background-color: var(--gz-hover-fill); color: var(--gz-ink); }
+html .dropdown-item:is(.active, :active, [aria-current="true"]) { background-color: var(--gz-accent-soft); color: var(--gz-on-soft); }
+html .moremenu .dropdownmoremenu > .dropdown-menu .dropdown-item, html .dropdownmoremenu > .dropdown-menu .dropdown-submenu > .dropdown-menu .dropdown-item { background-color: transparent; }
+html .popover { --bs-popover-bg: var(--gz-surface); --bs-popover-border-color: var(--gz-line-strong); --bs-popover-header-bg: var(--gz-band); --bs-popover-header-color: var(--gz-ink); --bs-popover-body-color: var(--gz-ink); --bs-popover-arrow-border: var(--gz-line-strong); background-color: var(--gz-surface); border-color: var(--gz-line-strong); box-shadow: var(--gz-shadow); }
+html :is(.popover-header, .popover-body) { color: var(--gz-ink); }
+html .popover-header { background-color: var(--gz-band); border-color: var(--gz-line); }
+html .popover-region-container { background: var(--gz-surface); border-color: var(--gz-line-strong); box-shadow: var(--gz-shadow); color: var(--gz-ink); }
+html .popover-region-header-container, html .popover-region-footer-container { background: var(--gz-band); border-color: var(--gz-line); }
+html .popover-region .content-item-container { border-color: var(--gz-line); }
+html .popover-region .content-item-container.unread { background: color-mix(in srgb, var(--gz-accent-soft) 45%, var(--gz-surface)); }
+html .popover-region .content-item-container:hover { background: var(--gz-hover-fill); }
+html .tooltip { --bs-tooltip-bg: var(--gz-tip-bg); --bs-tooltip-color: var(--gz-ink); --bs-tooltip-opacity: 1; }
+html .tooltip .tooltip-inner { border: 1px solid var(--gz-line-strong); box-shadow: var(--gz-shadow); }
+html .modal { --bs-modal-bg: var(--gz-surface); --bs-modal-color: var(--gz-ink); --bs-modal-border-color: var(--gz-line-strong); --bs-modal-header-border-color: var(--gz-line); --bs-modal-footer-border-color: var(--gz-line); }
+html .modal-content { background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-enter-panel); }
+html :is(.modal-header, .modal-footer) { border-color: var(--gz-line); }
+html .modal-backdrop { --bs-backdrop-bg: var(--gz-surface-2); background-color: var(--gz-surface-2); }
+html .modal-backdrop.show { opacity: 0.7; }
+html :is(.toast, .toast-header) { background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); }
+html .toast { --bs-toast-bg: var(--gz-surface); --bs-toast-color: var(--gz-ink); --bs-toast-border-color: var(--gz-line-strong); --bs-toast-header-bg: var(--gz-band); --bs-toast-header-color: var(--gz-ink-muted); box-shadow: var(--gz-shadow); }
+html .list-group-item { background-color: transparent; color: var(--gz-ink); border-color: var(--gz-line); }
+html .list-group-item.active { background-color: var(--gz-accent-soft); color: var(--gz-on-soft); border-color: var(--gz-accent); }
+html .list-group { --bs-list-group-bg: transparent; --bs-list-group-color: var(--gz-ink); --bs-list-group-border-color: var(--gz-line); --bs-list-group-action-color: var(--gz-ink); --bs-list-group-action-hover-color: var(--gz-ink); --bs-list-group-action-hover-bg: var(--gz-row-hover); --bs-list-group-action-active-bg: var(--gz-accent-soft); --bs-list-group-active-bg: var(--gz-accent-soft); --bs-list-group-active-color: var(--gz-on-soft); --bs-list-group-active-border-color: var(--gz-accent); }
+html .pagination { --bs-pagination-bg: var(--gz-surface); --bs-pagination-color: var(--gz-on-soft); --bs-pagination-border-color: var(--gz-line); --bs-pagination-hover-bg: var(--gz-hover-fill); --bs-pagination-hover-color: var(--gz-accent-hi); --bs-pagination-active-bg: var(--gz-accent); --bs-pagination-active-color: var(--gz-accent-ink); --bs-pagination-active-border-color: var(--gz-accent); --bs-pagination-disabled-bg: var(--gz-band); --bs-pagination-disabled-color: var(--gz-ink-faint); }
+html .page-link { background-color: var(--bs-pagination-bg); border-color: var(--bs-pagination-border-color); }
+html .page-item.active .page-link { background-color: var(--gz-accent); color: var(--gz-accent-ink); border-color: var(--gz-accent); }
+html .accordion { --bs-accordion-bg: transparent; --bs-accordion-color: var(--gz-ink); --bs-accordion-border-color: var(--gz-line); --bs-accordion-btn-color: var(--gz-ink); --bs-accordion-active-color: var(--gz-ink); --bs-accordion-active-bg: var(--gz-accent-soft); }
+html .hover-tooltip-container .hover-tooltip { background: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); }
+html .hover-tooltip-container .hover-tooltip::after { border-top-color: var(--gz-surface); }
+html :is(.user-initials, .userinitials) { background-color: var(--gz-accent-soft); color: var(--gz-on-soft); }
+/* The help button and its popover at the foot of the page. */
+html .btn-footer-popover { background: var(--gz-surface) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line-strong); box-shadow: var(--gz-rest-shadow); }
+html .btn-footer-popover:hover { background: var(--gz-hover-fill) !important; color: var(--gz-ink) !important; }
+html .footer-popover .footer-section { border-color: var(--gz-line); }
+html .footer-popover a { color: var(--gz-on-soft); }
+
+/* ---- calendar: the month grid is one card, today marked, events chips in their kind's colour ---- */
+html .maincalendar .calendarmonth { border-color: var(--gz-line); background: var(--gz-panel); box-shadow: var(--gz-rest-shadow); }
+html .maincalendar .calendarmonth :is(ul li a, .eventname) { color: var(--gz-ink); }
+html .maincalendar .calendarmonth ul li a:hover { color: var(--gz-on-soft); }
+html .maincalendar .calendarmonth :is(td, th) { border-color: var(--gz-line) !important; background: transparent; }
+html .maincalendar .calendarmonth th { color: var(--gz-ink-muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+html .maincalendar .calendarmonth td.clickable:hover { background-color: var(--gz-row-hover) !important; }
+html .maincalendar .calendarmonth td.dayblank, html .maincalendar .calendarmonth td.weekend { background-color: color-mix(in srgb, var(--gz-ink) 3%, transparent); }
+html .calendartable .day-number-circle, html .calendarmonth .today .day-number-circle { border-radius: 999px; }
+html :is(.maincalendar, .block_calendar_month) .calendarmonth td.today .day-number-circle { background-color: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+html .block.block_calendar_month .maincalendar .calendartable.calendarmonth td.clickable:not(.today):hover .day-number-circle { background-color: var(--gz-accent-soft); }
+/* Moodle tints events by kind with pale literals (peach course, green site, lilac category, yellow group, blue user) and
+   dark text: here a tint of the same hue over the surface, with the palette's ink on it. */
+html .calendar_event_course { --gz-kind: #ff7518; }
+html .calendar_event_site { --gz-kind: #4caf50; }
+html .calendar_event_category { --gz-kind: #a35fc0; }
+html .calendar_event_group { --gz-kind: #f0ad4e; }
+html .calendar_event_user { --gz-kind: #2b9cd8; }
+html .calendar_event_other { --gz-kind: var(--gz-ink-faint); }
+html :is(.calendar_event_course, .calendar_event_site, .calendar_event_category, .calendar_event_group, .calendar_event_user, .calendar_event_other) {
+  background-color: color-mix(in srgb, var(--gz-kind) 32%, var(--gz-surface)) !important; color: var(--gz-ink);
+}
+html .maincalendar .calendarmonth .day-number { color: var(--gz-ink); }
+html .maincalendar .calendarmonth td.today .day-number { color: var(--gz-accent-ink); }
+html .maincalendar :is(.event, .eventlist .card) { background: var(--gz-panel); border-color: var(--gz-line); color: var(--gz-ink); }
+html .maincalendar .calendar-controls :is(a, .current) { color: var(--gz-ink); }
+html .maincalendar .header { color: var(--gz-ink); }
+
+/* ---- messages: the drawer and the full page. Moodle's bubbles are literal greys and blues ---- */
+html :is(.message-app, .message-drawer) { background-color: var(--gz-surface) !important; color: var(--gz-ink); }
+html .message-app :is(.panel-header-container, .footer-container, .header-container) { background-color: var(--gz-band) !important; border-color: var(--gz-line) !important; }
+html .message-app .list-group-item { background: transparent; border-color: var(--gz-line); color: var(--gz-ink); }
+html .message-app .list-group-item:is(:hover, :focus) { background: var(--gz-row-hover); }
+html .message-app .message.received { background-color: var(--gz-band); color: var(--gz-ink); }
+html .message-app .message.received .tail { border-bottom-color: var(--gz-band); }
+html .message-app .message.send { background-color: var(--gz-accent-soft); color: var(--gz-ink); }
+html .message-app .message.send .tail { border-bottom-color: var(--gz-accent-soft); }
+html .message-app .message :is(.time, .time *) { color: var(--gz-ink-muted); }
+html .message-app :is(.day, .text-muted) { color: var(--gz-ink-muted); }
+html .message-app .view-overview-body .section .card-header { background: transparent; }
+html .message-app .btn.btn-link { color: var(--gz-ink); }
+html .message-app .btn.btn-link:hover { color: var(--gz-accent); }
+
+/* ---- the login page: the form on a panel, over the ground (or the school's picture beside it) ---- */
+html .pagelayout-login #page { background-color: var(--gz-ground) !important; }
+html .login-container { background: var(--gz-panel); color: var(--gz-ink); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
+html .login-container :is(.login-heading, h1, h2) { color: var(--gz-ink); }
+html .login-container .login-form .login-input-wrapper .form-control { background-color: var(--gz-surface) !important; border-color: var(--gz-line-strong); }
+html .login-container .login-form .login-input-wrapper .login-input-icon { color: var(--gz-ink-faint); }
+html .login-container .login-form .toggle-sensitive-wrapper .toggle-sensitive-btn { --bs-btn-bg: var(--gz-surface); --bs-btn-hover-bg: var(--gz-hover-fill); --bs-btn-active-bg: var(--gz-surface); --bs-btn-border-color: var(--gz-line-strong); color: var(--gz-ink-muted); }
+html .login-container .login-identityprovider-btn { background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); }
+html .login-divider { border-color: var(--gz-line); }
+html .login-layout-left::after { color: #fff; }
+
+/* ---- the rich text editor (TinyMCE; content.js themes its writing area inside the frame) ---- */
+html .tox.tox-tinymce { border-color: var(--gz-line-strong); border-radius: var(--gz-radius-sm); }
+html .tox :is(.tox-editor-header, .tox-menubar, .tox-toolbar, .tox-toolbar__primary, .tox-toolbar-overlord, .tox-statusbar, .tox-toolbar__overflow, .tox-promotion) { background: var(--gz-band) !important; border-color: var(--gz-line) !important; }
+html .tox :is(.tox-tbtn, .tox-mbtn, .tox-statusbar a, .tox-statusbar__path-item, .tox-statusbar__wordcount, .tox-split-button) { color: var(--gz-ink) !important; background: transparent; }
+html .tox :is(.tox-tbtn, .tox-split-button__chevron) svg { fill: var(--gz-ink) !important; }
+html .tox :is(.tox-tbtn, .tox-mbtn):hover, html .tox .tox-tbtn--enabled { background: var(--gz-hover-fill) !important; }
+html .tox .tox-edit-area__iframe { background-color: var(--gz-surface); }
+html .tox :is(.tox-menu, .tox-collection--list, .tox-dialog, .tox-dialog__header, .tox-dialog__footer, .tox-dialog__body) { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border-color: var(--gz-line-strong) !important; }
+html .tox .tox-collection__item { color: var(--gz-ink) !important; }
+html .tox .tox-collection__item--active { background: var(--gz-hover-fill) !important; }
+html .tox .tox-collection__item svg { fill: var(--gz-ink) !important; }
+/* Moodle 4.x's older editor. */
+html :is(.editor_atto_content_wrap, .editor_atto_content) { background-color: var(--gz-surface); color: var(--gz-ink); }
+html .editor_atto_toolbar { background-color: var(--gz-band); border-color: var(--gz-line); }
+html .editor_atto_toolbar button { background: var(--gz-surface); color: var(--gz-ink-muted); border-color: var(--gz-line); }
+/* File pickers. */
+html :is(.fp-panel-button, .file-picker .fp-content, .filemanager-container, .filepicker-filelist, .fp-iconview .fp-thumbnail, .fp-iconview .fp-filename-field .fp-filename) { background: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line); }
+html .filemanager .yui3-datatable-header { background: var(--gz-band) !important; color: var(--gz-ink-muted) !important; border-color: var(--gz-line) !important; }
+html .filemanager .yui3-datatable-even .yui3-datatable-cell { background-color: transparent !important; }
+html :is(.filepicker-filelist .dndupload-target, .filemanager-container .dndupload-target) { background: var(--gz-band); border-color: var(--gz-line-strong); color: var(--gz-ink-muted); }
+
+/* ---- user content: what instructors write. Their art stays; ink and pictures are kept readable ---- */
+html[data-gz-dark-theme] :is(.no-overflow, .activity-description, .summarytext, .box.generalbox) img:not(:hover) { filter: brightness(0.9); }
+
+/* ---- the long tail: content.js tags anything still painted light / with dark text (on a dark palette) ---- */
+[data-gz-light] { background-color: var(--gz-surface) !important; }
+[data-gz-dark] { color: var(--gz-ink) !important; }
+[data-gz-hover]:is(:hover, :focus, :focus-visible) { background-color: var(--gz-hover-fill) !important; }
+html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg); opacity: 0.5; }
+
+/* ---- focus: always the accent ---- */
+:is(:focus, :focus-visible) { outline-color: var(--gz-accent) !important; }
+html :is(a, .btn, button, [tabindex]):focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 55%, transparent); outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+/* Moodle's own link focus is a wash and an underline in its blue. */
+html :is(#page-header, #region-main, #page-footer) a:not([class]):focus { background-color: var(--gz-accent-soft); color: var(--gz-ink); box-shadow: 0 -0.25rem var(--gz-accent-soft), 0 0.25rem var(--gz-accent); }
+/* Links: the accent on a dark palette; on a light one the deeper accent-hi, as the accent there can fall under 4.5:1
+   on a panel or a striped row (Rose, Paper). Hover underlines. */
+html a { color: var(--gz-on-soft); }
+html a:hover { color: var(--gz-on-soft); text-decoration: underline; }
+
+/* ---- entrances and page transitions (as canvas.css: every Moodle page is a full load) ---- */
+#region-main, [data-region="blocks-column"] { animation: var(--gz-enter-page); }
+html:not([data-gz-motion="off"], [data-gz-no-enter]) .navbar.fixed-top { view-transition-name: gz-rail; }
+html:not([data-gz-motion="off"], [data-gz-no-enter]) #theme_boost-drawers-courseindex { view-transition-name: gz-course-nav; }
+::view-transition-group(*) { animation-duration: var(--gz-t-page); animation-timing-function: var(--gz-ease); }
+html[data-gz-motion="expressive"]::view-transition-new(root) { animation-name: gz-vt-focus; }
+html[data-gz-motion="expressive"]::view-transition-old(root), html[data-gz-motion="expressive"]::view-transition-new(root) { mix-blend-mode: plus-lighter; }
+@keyframes gz-vt-focus { from { opacity: 0; filter: blur(var(--gz-reveal-blur)); } }
+:root[data-gz-vt-in] { --gz-enter-page: none; --gz-enter: none; --gz-stagger: 0s; }
+
+/* ---- what Glaze draws itself ---- */
+#gz-footer {
+  position: relative; z-index: 1; display: flex; justify-content: center; align-items: center;
+  min-height: 2rem; box-sizing: border-box; padding: 0.5rem 1rem; background: var(--gz-surface-2);
+  border-top: 1px solid var(--gz-line); font: 500 11px/1 ui-sans-serif, system-ui, sans-serif;
+}
+#gz-footer a { color: var(--gz-ink-faint); text-decoration: none; }
+#gz-footer a:hover { color: var(--gz-accent); }
+/* Tooltips: Glaze's own, which takes over a title while it is pointed at. */
+.gz-tip {
+  position: fixed; z-index: 2147483002; max-width: 280px; padding: 0.35rem 0.6rem; pointer-events: none;
+  font: 500 12px/1.35 var(--gz-font); letter-spacing: 0.01em; white-space: normal; overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); color: var(--gz-ink); border: 1px solid var(--gz-line-strong);
+  border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); backdrop-filter: blur(var(--gz-glass)); animation: var(--gz-tip-in);
+}
+.gz-tip-sub { display: block; margin-top: 0.1rem; font-weight: 400; color: var(--gz-ink-muted); }
+/* Grades on course cards: features/moodle.js tags a card's name with the course's total from Moodle's grades overview
+   (data-gz-grade) and, where it is a percentage, its band (data-gz-chip). The chip has a surface of its own. */
+html[data-gz-enhance-overall] [data-region="course-content"] [data-gz-grade]::after {
+  content: attr(data-gz-grade);
+  display: inline-block; margin-left: 0.5em; padding: 0 0.5em; border-radius: 999px;
+  font-size: 0.85em; font-weight: 600; line-height: 1.6; vertical-align: 0.05em; white-space: nowrap;
+  color: var(--gz-chip, var(--gz-ink-muted));
+  background: color-mix(in srgb, var(--gz-chip, var(--gz-ink-muted)) 14%, var(--gz-surface));
+}
+[data-region="course-content"] [data-gz-chip="graded-hi"] { --gz-chip: var(--gz-ok); }
+[data-region="course-content"] [data-gz-chip="graded-mid"] { --gz-chip: var(--gz-warn); }
+[data-region="course-content"] [data-gz-chip="graded-lo"] { --gz-chip: var(--gz-err); }
+/* Command palette (Ctrl+K). */
+#gz-cmd {
+  position: fixed; inset: 0; z-index: 2147483003; display: grid; justify-items: center; align-items: start; padding-top: min(14vh, 120px);
+  background: color-mix(in srgb, var(--gz-surface-2) 55%, transparent); backdrop-filter: blur(4px);
+  animation: gz-fade var(--gz-t) var(--gz-ease) both;
+}
+#gz-cmd .gz-cmd-panel {
+  width: min(600px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden; font: 14px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow, 0 12px 32px color-mix(in srgb, #000 40%, transparent));
+  animation: var(--gz-enter-panel);
+}
+#gz-cmd input {
+  box-sizing: border-box; width: 100%; height: auto; margin: 0; padding: 0.9rem 1.1rem; font: inherit; font-size: 16px; color: var(--gz-ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--gz-line); border-radius: 0; outline: none; box-shadow: none;
+}
+#gz-cmd input::placeholder { color: var(--gz-ink-faint); }
+#gz-cmd ul { list-style: none; margin: 0; padding: 0.35rem; overflow: auto; overscroll-behavior: contain; }
+#gz-cmd li { display: flex; align-items: baseline; gap: 0.75rem; margin: 0; padding: 0.45rem 0.75rem; border-radius: calc(var(--gz-radius) * 2 / 3); cursor: pointer; }
+#gz-cmd li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-cmd li small { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-faint); }
+#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
+#gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
+#gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
+#gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-line); }
+/* Keyboard shortcuts' list (g then ?). */
+#gz-keys { position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center; background: color-mix(in srgb, var(--gz-surface-2) 75%, transparent); }
+#gz-keys .gz-keys-panel { width: min(360px, calc(100vw - 32px)); box-sizing: border-box; padding: 1.25rem; font: 14px/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
+#gz-keys h2 { margin: 0 0 0.6rem; font-size: 15px; color: var(--gz-ink); }
+#gz-keys dl { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; }
+#gz-keys dt { display: flex; gap: 0.25rem; }
+#gz-keys dd { margin: 0; }
+#gz-keys kbd { padding: 0.1rem 0.4rem; font-size: 12px; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 4px; }
+#gz-keys button { padding: 0.4rem 0.75rem; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); cursor: pointer; }
+/* The course menu on course cards (Dashboard's recent courses, My courses' three views): tint and look. */
+html .gz-cm-btn {
+  position: absolute; top: var(--gz-cm-top, 8px); right: var(--gz-cm-right, 8px); z-index: 2;
+  display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer; opacity: 0; color: var(--gz-ink-muted);
+  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass));
+  border: 1px solid var(--gz-line-strong); border-radius: 999px; box-shadow: var(--gz-rest-shadow);
+  transition: opacity var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), scale var(--gz-t-slow) var(--gz-spring) !important;
+}
+html .gz-cm-btn:is(:hover, :focus-visible, [aria-expanded="true"]) { color: var(--gz-accent) !important; border-color: var(--gz-accent); }
+*:is(:hover, :focus-within) > .gz-cm-btn, html .gz-cm-btn:is(:focus-visible, [aria-expanded="true"]) { opacity: 1; }
+html .gz-cm-btn:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.gz-cm-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
+@media (hover: none) { html .gz-cm-btn { opacity: 0.85; } }
+@media (pointer: coarse) { html .gz-cm-btn { width: 36px; height: 36px; } }
+[data-region="course-content"]:has(> .gz-cm-btn) { position: relative; }
+/* A list or summary row keeps its actions menu at the right: the button sits left of it, centered. */
+.course-listitem[data-region="course-content"] { --gz-cm-top: calc(50% - 14px); --gz-cm-right: 56px; }
+#gz-cm {
+  position: fixed; z-index: 2147483002; box-sizing: border-box; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto;
+  display: grid; gap: 0.35rem; padding: 0.8rem 0.9rem 0.9rem; font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  transform-origin: var(--gz-cm-origin, top right); animation: var(--gz-tip-in);
+}
+#gz-cm * { box-sizing: border-box; }
+#gz-cm .gz-cm-cap { margin-top: 0.4rem; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-faint); }
+#gz-cm :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-cm button { font: inherit; }
+#gz-cm .gz-cm-note { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-cm .gz-cm-note[hidden] { display: none; }
+#gz-cm .gz-cm-tint { display: flex; align-items: center; gap: 0.6rem; margin: 0; cursor: pointer; color: var(--gz-ink); }
+#gz-cm .gz-cm-tint input {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 34px; height: 20px; margin: 0; cursor: pointer;
+  background: var(--gz-line-strong) !important; border: 0 !important; border-radius: 999px !important;
+}
+#gz-cm .gz-cm-tint input::before {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--gz-ink); transition: transform var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease);
+}
+#gz-cm .gz-cm-tint input:checked { background: var(--gz-accent) !important; }
+#gz-cm .gz-cm-tint input:checked::before { transform: translateX(14px); background: var(--gz-accent-ink); }
+#gz-cm .gz-cm-looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+#gz-cm .gz-cm-look {
+  min-width: 0; padding: 0.35rem 0.4rem 0.35rem 0.6rem; text-align: left; font-weight: 600; font-size: 11.5px; line-height: 1.3; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gz-ink-muted); background: var(--gz-surface-2);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm);
+}
+#gz-cm .gz-cm-look:hover { transform: var(--gz-lift); }
+#gz-cm .gz-cm-look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
+/* A card in its course's own Look or tint: features/moodle.js puts that palette on the card (--gz-*), and what the page
+   derives from the palette is derived again here, from the card's. */
+html [data-region="course-content"][data-gz-course-look] {
+  --gz-panel: var(--gz-surface);
+  --gz-band: color-mix(in srgb, var(--gz-ink) 6%, var(--gz-surface));
+  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface));
+  --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
+  --gz-on-soft: var(--gz-accent);
+  --bs-white: var(--gz-panel); --bs-body-bg: var(--gz-surface); --bs-body-color: var(--gz-ink); --bs-emphasis-color: var(--gz-ink);
+  --bs-secondary-color: var(--gz-ink-muted); --bs-tertiary-color: var(--gz-ink-faint); --bs-primary: var(--gz-accent);
+  --bs-link-color: var(--gz-on-soft); --bs-link-hover-color: var(--gz-on-soft); --bs-border-color: var(--gz-line);
+  --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-line); --bs-card-color: var(--gz-ink);
+  color: var(--gz-ink); background-color: var(--gz-panel); border-color: var(--gz-line) !important;
+}
+html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft: var(--gz-accent-hi); }

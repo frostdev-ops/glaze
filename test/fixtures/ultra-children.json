@@ -1,0 +1,131 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See parity/spikes/B0.md.",
+ "paging": {
+  "limit": 200,
+  "nextPage": "",
+  "previousPage": "",
+  "offset": 0
+ },
+ "results": [
+  {
+   "id": "_731_1",
+   "parentId": "_730_1",
+   "title": "Week 2",
+   "position": 0,
+   "contentHandler": "resource/x-bb-folder",
+   "state": "Started",
+   "genericReadOnlyData": {},
+   "contentDetail": {
+    "resource/x-bb-folder": {
+     "isFolder": true,
+     "isBbPage": false
+    }
+   }
+  },
+  {
+   "id": "_732_1",
+   "parentId": "_730_1",
+   "title": "Lecture notes",
+   "position": 0,
+   "contentHandler": "resource/x-bb-folder",
+   "state": "Completed",
+   "genericReadOnlyData": {},
+   "contentDetail": {
+    "resource/x-bb-folder": {
+     "isFolder": true,
+     "isBbPage": true
+    }
+   }
+  },
+  {
+   "id": "_733_1",
+   "parentId": "_730_1",
+   "title": "Handout",
+   "position": 0,
+   "contentHandler": "resource/x-bb-file",
+   "state": "Completed",
+   "genericReadOnlyData": {},
+   "contentDetail": {
+    "resource/x-bb-file": {
+     "file": {
+      "permanentUrl": "/bbcswebdav/pid-1-dt-content-rid-8_1/xid-8_1",
+      "fileName": "handout.pdf",
+      "fileSize": 4096,
+      "mimeType": "application/pdf"
+     }
+    }
+   }
+  },
+  {
+   "id": "_734_1",
+   "parentId": "_730_1",
+   "title": "Answers",
+   "position": 0,
+   "contentHandler": "resource/x-bb-file",
+   "state": "None",
+   "genericReadOnlyData": {},
+   "contentDetail": {
+    "resource/x-bb-file": {
+     "file": {
+      "permanentUrl": "/bbcswebdav/pid-1-dt-content-rid-7_1/xid-7_1",
+      "fileName": "answers.pdf",
+      "fileSize": 1024,
+      "mimeType": "application/pdf"
+     }
+    }
+   }
+  },
+  {
+   "id": "_735_1",
+   "parentId": "_730_1",
+   "title": "Publisher tool",
+   "position": 0,
+   "contentHandler": "resource/x-bb-blti-link",
+   "state": "None",
+   "genericReadOnlyData": {},
+   "contentDetail": {
+    "resource/x-bb-blti-link": {
+     "url": "https://tool.example.com/launch",
+     "key": "synthetic-lti-key",
+     "secret": "synthetic-lti-secret",
+     "launchInNewWindow": true
+    }
+   }
+  },
+  {
+   "id": "_736_1",
+   "parentId": "_730_1",
+   "title": "Old-style document",
+   "position": 0,
+   "contentHandler": "resource/x-bb-document",
+   "state": "Started",
+   "genericReadOnlyData": {},
+   "contentDetail": {
+    "resource/x-bb-document": {
+     "isBbPage": false
+    }
+   },
+   "body": {
+    "rawText": "<p><a href=\"https://lms.example.edu/bbcswebdav/pid-1-dt-content-rid-9_1/xid-9_1\" data-bbfile=\"{&quot;linkName&quot;:&quot;slides.pdf&quot;,&quot;fileSize&quot;:2048}\">slides.pdf</a></p>",
+    "displayText": "<p><a href=\"https://lms.example.edu/bbcswebdav/pid-1-dt-content-rid-9_1/xid-9_1\" data-bbfile=\"{&quot;linkName&quot;:&quot;slides.pdf&quot;,&quot;fileSize&quot;:2048}\">slides.pdf</a></p>"
+   }
+  },
+  {
+   "id": "_703_1",
+   "parentId": "_730_1",
+   "title": "Lab Report 3",
+   "position": 0,
+   "contentHandler": "resource/x-bb-asmt-test-link",
+   "state": "None",
+   "genericReadOnlyData": {
+    "dueDate": "2026-10-19T03:59:00.000Z"
+   },
+   "contentDetail": {
+    "resource/x-bb-asmt-test-link": {
+     "assessmentId": "_501_1",
+     "gradeColumnId": "_603_1"
+    }
+   }
+  }
+ ]
+}

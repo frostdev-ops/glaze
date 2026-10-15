@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const R = require('../lib/grades.js');
+const C = require('../lib/gradecalc.js'); // the what-if calculator, loaded on demand
 
 // A gradebook record as Ultra returns it with expand=column.
 let n = 0;
@@ -31,7 +32,7 @@ const spanish = () => {
 };
 
 test('weighted overall: reproduces Blackboard, then answers what-ifs', () => {
-  const m = R.model(spanish());
+  const m = C.model(spanish());
   assert.equal(m.kind, 'weighted');
   assert.ok(Math.abs(m.percent() - 82.45625) < 1e-9);
   // The two tests (20%) at full marks: the empty category joins.
@@ -48,22 +49,22 @@ test('weighted overall: reproduces Blackboard, then answers what-ifs', () => {
 test('exempt items leave the calculation; equal weighting averages the items', () => {
   const f = weights([['c_1', 50, { mode: 'equal' }], ['c_2', 50]]);
   const rows = [g('_1_1', 10, 10), g('_1_1', 100, 50), g('_2_1', 100, 80), g('_2_1', 100, 0, { isExempt: true }), overall(f, 77.5)];
-  const m = R.model(rows);
+  const m = C.model(rows);
   assert.equal(m.kind, 'weighted');
   assert.equal(m.percent(), 77.5); // (75% + 80%) / 2
 });
 
 test("what Glaze can't read, it says so instead of guessing", () => {
   const drop = weights([['c_1', 100, { drop_lowest: 1 }]]);
-  assert.equal(R.model([g('_1_1', 10, 5), overall(drop, 50)]).kind, 'unsupported');
-  assert.equal(R.model([g('_1_1', 10, 5), overall({ isTotalCalculation: true, formula: '<math><mi>@X@BBCalColElem(tot:{"elements":[]})@X@</mi></math>' }, 5)]).kind, 'unsupported');
-  assert.match(R.model([g('_1_1', 10, 5), overall({ formula: 'garbage' }, 5)]).note, /can't work out/);
+  assert.equal(C.model([g('_1_1', 10, 5), overall(drop, 50)]).kind, 'unsupported');
+  assert.equal(C.model([g('_1_1', 10, 5), overall({ isTotalCalculation: true, formula: '<math><mi>@X@BBCalColElem(tot:{"elements":[]})@X@</mi></math>' }, 5)]).kind, 'unsupported');
+  assert.match(C.model([g('_1_1', 10, 5), overall({ formula: 'garbage' }, 5)]).note, /can't work out/);
   // Parsed, but doesn't come out at Blackboard's number.
-  assert.equal(R.model([g('_1_1', 10, 5), overall(weights([['c_1', 100]]), 70)]).kind, 'unsupported');
+  assert.equal(C.model([g('_1_1', 10, 5), overall(weights([['c_1', 100]]), 70)]).kind, 'unsupported');
 });
 
 test('no overall grade in Blackboard: a plain share of points, said to be just that', () => {
-  const m = R.model([g('_1_1', 10, 8), g('_2_1', 30, 15), g('_2_1', 60, null)]);
+  const m = C.model([g('_1_1', 10, 8), g('_2_1', 30, 15), g('_2_1', 60, null)]);
   assert.equal(m.kind, 'points');
   assert.ok(Math.abs(m.percent() - 57.5) < 1e-9); // 23 of 40 graded points
   assert.match(m.note, /no overall grade/);
@@ -110,19 +111,71 @@ test('late: the latest attempt after the due date, for work waiting to be graded
   assert.ok(!R.late(null, waiting.column.dueDate));
 });
 
-test('what-if scores: kept while their item waits for a grade, for the last 20 courses', () => {
-  const m = R.model(spanish());
-  const [open, other] = m.remaining(new Map());
+test("the old Ultra what-if's saved scores move into the what-if store, and go once graded", () => {
+  const m = C.model(spanish());
+  const [open] = m.remaining(new Map());
   const graded = m.items.find((i) => i.score != null);
-  const kept = R.keptScores(new Map([[open.id, 40], [graded.id, 10], ['_gone_1', 5], [other.id, 'x']]), m.items);
-  assert.deepEqual([...kept], [[open.id, 40]], 'graded, gone and malformed scores go');
-  let all = R.storeScores(undefined, '_1_1', kept);
-  assert.deepEqual(all, { _1_1: { [open.id]: 40 } });
-  for (let i = 2; i <= 21; i++) all = R.storeScores(all, `_${i}_1`, kept);
-  assert.equal(Object.keys(all).length, 20);
-  assert.ok(!all._1_1, 'the course touched longest ago goes first');
-  all = R.storeScores(all, '_5_1', new Map());
-  assert.ok(!('_5_1' in all), 'cleared: nothing stored for the course');
+  // Glaze 2.2 kept { course: { column: score } } in whatIf, for work not graded yet.
+  const old = { _1_1: { [open.id]: 40, [graded.id]: 10, bad: 'x', '../x': 5 }, _2_1: { [open.id]: 7 } };
+  const s = C.oldScores(old, '_1_1');
+  assert.deepEqual(s, { [open.id]: [40, null], [graded.id]: [10, null] }, 'saved against no grade; malformed ones dropped');
+  assert.deepEqual(C.oldScores(undefined, '_1_1'), {});
+  assert.deepEqual(C.oldScores({ _1_1: 'x' }, '_1_1'), {});
+  // reconcile keeps the one still waiting for a grade; the graded one goes, and says so.
+  const r = C.reconcile({ s, h: [], p: [] }, m.course);
+  assert.deepEqual(r.kept.s, { [open.id]: [40, null] });
+  assert.deepEqual(r.gone.map((x) => x.id), [graded.id]);
+  assert.ok(Math.abs(m.percent(new Map(Object.entries(r.what.scores))) - C.calc(m.course, r.what).current) < 1e-12);
+  // Kept as the worker keeps Canvas's (lib/background.js 'glaze:whatif'), by Ultra's ids.
+  const all = C.applyWhatIf({ op: 'course', cid: '_1_1', at: 5, rec: { ...r.kept, p: [{ id: 'pa1', g: '_6_1', n: 'Final', s: 90, pp: 100 }] } }, {}, 0).all;
+  assert.deepEqual(Object.keys(all), ['_1_1']);
+  assert.deepEqual(all._1_1.s[open.id].slice(0, 2), [40, null]);
+  assert.equal(all._1_1.p[0].g, '_6_1');
+});
+
+test('the old store moves in one step: never over a part already there, never past a Clear all, and only what was seen leaves', () => {
+  const legacy = { _1_1: { _3_1: 100, _4_1: 50, _5_1: 7 }, _2_1: { _9_1: 1 } };
+  const stored = { _1_1: { s: { _4_1: [60, null, 9] }, h: ['_6_1'], ht: { _6_1: 9 }, p: [], at: 9 } };
+  // Seen: _3_1 and _4_1 as read, and _5_1 with a value that has changed since (left alone). Waiting: _3_1, _4_1.
+  const m = { cid: '_1_1', at: 5, seen: { _3_1: 100, _4_1: 50, _5_1: 8 }, keep: ['_3_1', '_4_1'] };
+  const r = C.moveLegacy(m, stored, legacy, 0);
+  assert.deepEqual(r.moved, ['_3_1'], "_4_1 already has a score: that one stays");
+  assert.deepEqual(r.all._1_1.s, { _4_1: [60, null, 9], _3_1: [100, null, 1] });
+  assert.deepEqual([r.all._1_1.h, r.all._1_1.ht], [['_6_1'], { _6_1: 9 }]);
+  assert.deepEqual(r.legacy, { _2_1: { _9_1: 1 }, _1_1: { _5_1: 7 } }, 'only the entries seen, with the values seen');
+  // Cleared since: nothing comes in, and what was seen still leaves the old store.
+  const c = C.moveLegacy(m, stored, legacy, 3);
+  assert.deepEqual(c.moved, []);
+  assert.equal(c.all._1_1.s._3_1, undefined);
+  assert.deepEqual(c.legacy, r.legacy);
+  // The last entry gone: nothing is left of the old store.
+  assert.equal(C.moveLegacy({ cid: '_2_1', seen: { _9_1: 1 }, keep: [] }, {}, { _2_1: { _9_1: 1 } }, 0).legacy, null);
+  // A part moved in is older than any later clear.
+  assert.deepEqual(Object.keys(C.applyWhatIf({ op: 'clear', at: 2 }, r.all, 0).all._1_1.s), ['_4_1']);
+});
+
+test('the same calculator: what-ifs, left-out work and pretend items on an Ultra course, by its own recipe', () => {
+  const m = C.model(spanish());
+  const base = C.calc(m.course, {});
+  assert.ok(Math.abs(base.current - 82.45625) < 1e-9, "current is Blackboard's running total");
+  // A pretend test at full marks in the empty tests category is the same as one real test at full marks there.
+  const pretend = C.calc(m.course, { extra: [{ id: 'pa1', group: '_6_1', name: 'Test', possible: 100, score: 100 }] }).current;
+  const real = m.percent(new Map([[m.items.find((i) => i.cat === '_6_1').id, 100]]));
+  assert.ok(Math.abs(pretend - real) < 1e-9);
+  // Leaving out the one zero in category 3 takes that category out of the running total: 65.965 of 70 weight.
+  const zero = m.items.find((i) => i.cat === '_3_1').id;
+  assert.ok(Math.abs(C.calc(m.course, { hidden: [zero] }).current - (65.965 / 70) * 100) < 1e-9);
+  // Not a running total: work not graded yet counts as zero, and that is the overall grade.
+  const f = weights([['c_1', 50], ['c_2', 50]], { running: false });
+  const z = C.model([g('_1_1', 10, 10), g('_1_1', 10, null), g('_2_1', 10, 5), overall(f, 50)]);
+  assert.equal(z.kind, 'weighted');
+  assert.equal(z.zeros, true);
+  assert.equal(z.percent(), 50); // (10/20 + 5/10) / 2
+  assert.equal(z.percent(new Map([[z.remaining(new Map())[0].id, 10]])), 75);
+  // Weights over 100 are scaled as Blackboard scales them.
+  const over = C.model([g('_1_1', 10, 8), g('_2_1', 10, 6), overall(weights([['c_1', 60], ['c_2', 60]]), 70)]);
+  assert.equal(over.kind, 'weighted');
+  assert.ok(Math.abs(over.percent() - 70) < 1e-9);
 });
 
 test('Canvas new items: only available module content, with stable string ids', () => {

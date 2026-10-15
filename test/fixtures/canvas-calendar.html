@@ -1,0 +1,424 @@
+<!-- Glaze test fixture: /calendar on the local Canvas (seed: ~/Projects/canvas-lms/glaze/seed.rb), rendered DOM after load. Made by scripts/canvas-shots.js --html; scripts emptied, tokens redacted, repeated rows trimmed. -->
+<!doctype html>
+<html dir="ltr" lang="en" style=""><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#334451">
+  
+  <meta name="robots" content="noindex,nofollow">
+  
+  
+  <title>Calendar</title>
+
+  <link rel="preload" href="/dist/fonts/lato/extended/Lato-Regular-bd03a2cc27.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="preload" href="/dist/fonts/lato/extended/Lato-Bold-cccb897485.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="preload" href="/dist/fonts/lato/extended/Lato-Italic-4eb103b4d1.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <link rel="stylesheet" href="/dist/brandable_css/no_variables/bundles/fonts-ebd92a888d.css" media="screen">
+  <link rel="stylesheet" href="/dist/brandable_css/default/variables-9dec371ad57e3dd0396f0b2eddb63479.css" media="all">
+  <script type="text/javascript"></script>
+  <link rel="stylesheet" href="/dist/brandable_css/new_styles_normal_contrast/bundles/common-b3e8ad73d3.css" media="all">
+  <link rel="stylesheet" href="/dist/brandable_css/new_styles_normal_contrast/bundles/calendar2-c8dd6087cc.css" media="screen"><link rel="stylesheet" href="/dist/brandable_css/new_styles_normal_contrast/bundles/agenda_view-d15d0b650d.css" media="screen">
+  <link rel="apple-touch-icon" href="/dist/images/apple-touch-icon-585e5d997d.png">
+  <link rel="icon" type="image/x-icon" href="/dist/images/favicon-green-19a39adc12.ico">
+  <link rel="alternate" type="application/atom+xml" title="Course Calendar Atom Feed" href="http://localhost:3000/feeds/calendars/REDACTED.atom">
+  
+  
+  <script></script>
+  <script></script>
+  <script src="/dist/brandable_css/default/variables-9dec371ad57e3dd0396f0b2eddb63479.js" defer="defer"></script><script src="/dist/timezone/America/New_York-692f7d27e4.js" defer="defer"></script><script src="/dist/timezone/America/New_York-692f7d27e4.js" defer="defer"></script><script src="/dist/timezone/en_US-80a0ce259b.js" defer="defer"></script>
+  <script src="/dist/webpack-dev/react-entry-741f4a331cc97bc3.js" crossorigin="anonymous" defer="defer"></script><script src="/dist/webpack-dev/main-entry-0ecfc1f8133aba76.js" crossorigin="anonymous" defer="defer"></script>
+<script></script>
+  
+<style type="text/css"></style><link rel="stylesheet" href="/dist/brandable_css/new_styles_normal_contrast/jst/calendar/calendarApp-4f08cc66f8.css" data-loaded-by-brandablecss="true"><style type="text/css"></style><style type="text/css"></style></head>
+
+<body class="full-width no-page-block with-right-side primary-nav-expanded context-user_3 webkit chrome no-touch">
+
+<noscript>
+  <div role="alert" class="ic-flash-static ic-flash-error">
+    <div class="ic-flash__icon" aria-hidden="true">
+      <i class="icon-warning"></i>
+    </div>
+    <h1>You need to have JavaScript enabled in order to access this site.</h1>
+  </div>
+</noscript>
+
+
+
+
+<div id="flash_message_holder"></div>
+<div id="flash_screenreader_holder" role="alert" aria-live="assertive" aria-relevant="additions" class="screenreader-only" aria-atomic="true"></div>
+
+  <div id="drawer-layout-mount-point"></div>
+<div id="application" class="ic-app ">
+  
+
+
+
+
+<header id="mobile-header" class="no-print">
+  <button type="button" class="Button Button--icon-action-rev Button--large mobile-header-hamburger">
+    <i class="icon-solid icon-hamburger"></i>
+    <span id="mobileHeaderInboxUnreadBadge" class="menu-item__badge" style="min-width: 0; top: 12px; height: 12px; right: 6px; display:none;"></span>
+    <span class="screenreader-only">Global Navigation Menu</span>
+  </button>
+  <div class="mobile-header-space"></div>
+    <span class="mobile-header-title">Calendar</span>
+
+  <div id="nutrition_facts_mobile_container"></div>
+
+
+    <div class="mobile-header-space"></div>
+    <div id="mobile-top-nav-tools-mount-point"></div>
+    <div class="mobile-header-space"></div>
+</header>
+<nav id="mobileContextNavContainer" aria-expanded="false"><div></div></nav>
+
+<header id="header" class="ic-app-header no-print " aria-label="Global Header">
+  <a href="#content" id="skip_navigation_link">Skip To Content</a>
+  <div role="region" class="ic-app-header__main-navigation" aria-label="Global Navigation">
+      <div class="ic-app-header__logomark-container">
+        <a href="http://localhost:3000/" class="ic-app-header__logomark">
+          <span class="screenreader-only">Dashboard</span>
+        </a>
+      </div>
+    <ul id="menu" class="ic-app-header__menu-list">
+        <li class="menu-item ic-app-header__menu-list-item ">
+          <a id="global_nav_profile_link" role="button" href="/profile/settings" class="ic-app-header__menu-list-link">
+            <div class="menu-item-icon-container">
+              <div aria-hidden="true" class="fs-exclude ic-avatar ">
+                <img src="http://canvas.instructure.com/images/messages/avatar-50.png" alt="Sam Taylor">
+              </div>
+              <span class="menu-item__badge"></span>
+            </div>
+            <div class="menu-item__text">
+              Account
+            </div>
+          </a>
+        </li>
+      <li class="ic-app-header__menu-list-item ">
+        <a id="global_nav_dashboard_link" href="http://localhost:3000/" class="ic-app-header__menu-list-link">
+          <div class="menu-item-icon-container" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ic-icon-svg ic-icon-svg--dashboard" version="1.1" x="0" y="0" viewBox="0 0 280 200" enable-background="new 0 0 280 200" xml:space="preserve"><path d="M273.09,180.75H197.47V164.47h62.62A122.16,122.16,0,1,0,17.85,142a124,124,0,0,0,2,22.51H90.18v16.29H6.89l-1.5-6.22A138.51,138.51,0,0,1,1.57,142C1.57,65.64,63.67,3.53,140,3.53S278.43,65.64,278.43,142a137.67,137.67,0,0,1-3.84,32.57ZM66.49,87.63,50.24,71.38,61.75,59.86,78,76.12Zm147,0L202,76.12l16.25-16.25,11.51,11.51ZM131.85,53.82v-23h16.29v23Zm15.63,142.3a31.71,31.71,0,0,1-28-16.81c-6.4-12.08-15.73-72.29-17.54-84.25a8.15,8.15,0,0,1,13.58-7.2c8.88,8.21,53.48,49.72,59.88,61.81a31.61,31.61,0,0,1-27.9,46.45ZM121.81,116.2c4.17,24.56,9.23,50.21,12,55.49A15.35,15.35,0,1,0,161,157.3C158.18,152,139.79,133.44,121.81,116.2Z"></path></svg>
+
+          </div>
+          <div class="menu-item__text">
+            Dashboard
+          </div>
+        </a>
+      </li>
+        <li class="menu-item ic-app-header__menu-list-item ">
+          <a id="global_nav_courses_link" role="button" href="/courses" class="ic-app-header__menu-list-link">
+            <div class="menu-item-icon-container" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" class="ic-icon-svg ic-icon-svg--courses" version="1.1" x="0" y="0" viewBox="0 0 280 259" enable-background="new 0 0 280 259" xml:space="preserve"><path d="M73.31,198c-11.93,0-22.22,8-24,18.73a26.67,26.67,0,0,0-.3,3.63v.3a22,22,0,0,0,5.44,14.65,22.47,22.47,0,0,0,17.22,8H200V228.19h-134V213.08H200V198Zm21-105.74h90.64V62H94.3ZM79.19,107.34V46.92H200v60.42Zm7.55,30.21V122.45H192.49v15.11ZM71.65,16.71A22.72,22.72,0,0,0,49,39.36V190.88a41.12,41.12,0,0,1,24.32-8h157V16.71ZM33.88,39.36A37.78,37.78,0,0,1,71.65,1.6H245.36V198H215.15v45.32h22.66V258.4H71.65a37.85,37.85,0,0,1-37.76-37.76Z"></path></svg>
+
+            </div>
+            <div class="menu-item__text">
+              Courses
+            </div>
+          </a>
+        </li>
+      <li class="menu-item ic-app-header__menu-list-item ic-app-header__menu-list-item--active" aria-current="page">
+        <a id="global_nav_calendar_link" href="/calendar" class="ic-app-header__menu-list-link">
+          <div class="menu-item-icon-container" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ic-icon-svg ic-icon-svg--calendar" version="1.1" x="0" y="0" viewBox="0 0 280 280" enable-background="new 0 0 280 280" xml:space="preserve"><path d="M197.07,213.38h16.31V197.07H197.07Zm-16.31,16.31V180.76h48.92v48.92Zm-48.92-16.31h16.31V197.07H131.85Zm-16.31,16.31V180.76h48.92v48.92ZM66.62,213.38H82.93V197.07H66.62ZM50.32,229.68V180.76H99.24v48.92Zm146.75-81.53h16.31V131.85H197.07Zm-16.31,16.31V115.54h48.92v48.92Zm-48.92-16.31h16.31V131.85H131.85Zm-16.31,16.31V115.54h48.92v48.92ZM66.62,148.15H82.93V131.85H66.62ZM50.32,164.46V115.54H99.24v48.92ZM34,262.29H246V82.93H34ZM246,66.62V42.16A8.17,8.17,0,0,0,237.84,34H213.38v8.15a8.15,8.15,0,1,1-16.31,0V34H82.93v8.15a8.15,8.15,0,0,1-16.31,0V34H42.16A8.17,8.17,0,0,0,34,42.16V66.62Zm-8.15-48.92a24.49,24.49,0,0,1,24.46,24.46V278.6H17.71V42.16A24.49,24.49,0,0,1,42.16,17.71H66.62V9.55a8.15,8.15,0,0,1,16.31,0v8.15H197.07V9.55a8.15,8.15,0,1,1,16.31,0v8.15Z"></path></svg>
+
+          </div>
+          <div class="menu-item__text">
+            Calendar
+          </div>
+        </a>
+      </li>
+      <li class="menu-item ic-app-header__menu-list-item ">
+      <!-- TODO: Add back global search when available -->
+        <a id="global_nav_conversations_link" href="/conversations" class="ic-app-header__menu-list-link">
+          <div class="menu-item-icon-container">
+            <span aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" class="ic-icon-svg ic-icon-svg--inbox" version="1.1" x="0" y="0" viewBox="0 0 280 280" enable-background="new 0 0 280 280" xml:space="preserve"><path d="M91.72,120.75h96.56V104.65H91.72Zm0,48.28h80.47V152.94H91.72Zm0-96.56h80.47V56.37H91.72Zm160.94,34.88H228.52V10.78h-177v96.56H27.34A24.17,24.17,0,0,0,3.2,131.48V244.14a24.17,24.17,0,0,0,24.14,24.14H252.66a24.17,24.17,0,0,0,24.14-24.14V131.48A24.17,24.17,0,0,0,252.66,107.34Zm0,16.09a8.06,8.06,0,0,1,8,8v51.77l-32.19,19.31V123.44ZM67.58,203.91v-177H212.42v177ZM27.34,123.44H51.48v79.13L19.29,183.26V131.48A8.06,8.06,0,0,1,27.34,123.44ZM252.66,252.19H27.34a8.06,8.06,0,0,1-8-8V202l30,18H230.75l30-18v42.12A8.06,8.06,0,0,1,252.66,252.19Z"></path></svg>
+</span>
+            <span class="menu-item__badge"></span>
+          </div>
+          <div class="menu-item__text">
+            Inbox
+          </div>
+        </a>
+      </li>
+        
+
+      <li class="ic-app-header__menu-list-item">
+        <a id="global_nav_help_link" role="button" class="ic-app-header__menu-list-link" data-track-category="help system" data-track-label="help button" href="#">
+          <div class="menu-item-icon-container" role="presentation">
+              <svg xmlns="http://www.w3.org/2000/svg" class="ic-icon-svg menu-item__icon svg-icon-help" version="1.1" x="0" y="0" viewBox="0 0 200 200" enable-background="new 0 0 200 200" xml:space="preserve" fill="currentColor"><path d="M100,127.88A11.15,11.15,0,1,0,111.16,139,11.16,11.16,0,0,0,100,127.88Zm8.82-88.08a33.19,33.19,0,0,1,23.5,23.5,33.54,33.54,0,0,1-24,41.23,3.4,3.4,0,0,0-2.74,3.15v9.06H94.42v-9.06a14.57,14.57,0,0,1,11.13-14,22.43,22.43,0,0,0,13.66-10.27,22.73,22.73,0,0,0,2.31-17.37A21.92,21.92,0,0,0,106,50.59a22.67,22.67,0,0,0-19.68,3.88,22.18,22.18,0,0,0-8.65,17.64H66.54a33.25,33.25,0,0,1,13-26.47A33.72,33.72,0,0,1,108.82,39.8ZM100,5.2A94.8,94.8,0,1,0,194.8,100,94.91,94.91,0,0,0,100,5.2m0,178.45A83.65,83.65,0,1,1,183.65,100,83.73,83.73,0,0,1,100,183.65" transform="translate(-5.2 -5.2)"></path></svg>
+
+            <span class="menu-item__badge"></span>
+          </div>
+          <div class="menu-item__text">
+            Help
+          </div>
+</a>      </li>
+    </ul>
+  </div>
+  <div class="ic-app-header__secondary-navigation">
+    <ul class="ic-app-header__menu-list">
+      <li class="menu-item ic-app-header__menu-list-item">
+        <a id="primaryNavToggle" role="button" href="#" class="ic-app-header__menu-list-link ic-app-header__menu-list-link--nav-toggle" aria-label="Minimize global navigation" title="Minimize global navigation">
+          <div class="menu-item-icon-container" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" class="ic-icon-svg ic-icon-svg--navtoggle" version="1.1" x="0" y="0" width="40" height="32" viewBox="0 0 40 32" xml:space="preserve">
+  <path d="M39.5,30.28V2.48H37.18v27.8Zm-4.93-13.9L22.17,4,20.53,5.61l9.61,9.61H.5v2.31H30.14l-9.61,9.61,1.64,1.64Z"></path>
+</svg>
+
+          </div>
+        </a>
+      </li>
+    </ul>
+  </div>
+  <div id="global_nav_tray_container"></div>
+  <div id="global_nav_tour"></div>
+</header>
+
+
+  <div id="instructure_ajax_error_box">
+    <div style="text-align: right; background-color: #fff;"><a href="#" class="close_instructure_ajax_error_box_link">Close</a></div>
+    <iframe id="instructure_ajax_error_result" src="about:blank" style="border: 0;" title="Error"></iframe>
+  </div>
+
+  <div id="wrapper" class="ic-Layout-wrapper">
+    <div id="main" class="ic-Layout-columns">
+        <div class="ic-Layout-watermark" aria-hidden="true"></div>
+      <div id="not_right_side" class="ic-app-main-content">
+        <div id="content-wrapper" class="ic-Layout-contentWrapper">
+          
+          <div id="content" class="ic-Layout-contentMain" role="main">
+            
+<h1 class="screenreader-only">Calendar</h1>
+
+
+
+<div id="calendar_header">
+<div class="header-bar-outer-container calendar_header">
+    <div class="sticky-toolbar" data-sticky="">
+        <div class="header-bar flex-container">
+            <div class="header-bar-left header-left-flex">
+                <div class="calendar_navigator">
+<button class="navigate_today btn">Today</button>
+<span class="navigation_buttons ui-buttonset">
+  <button class="navigate_prev btn ui-button ui-widget ui-state-default ui-button-text-only ui-corner-left" role="button" aria-disabled="false"><span class="ui-button-text">
+    <i class="icon-arrow-left" style="vertical-align: middle" aria-hidden="true"></i>
+    <span class="screenreader-only">Previous Month</span>
+  </span></button>
+  <button class="navigate_next btn ui-button ui-widget ui-state-default ui-button-text-only ui-corner-right" role="button" aria-disabled="false"><span class="ui-button-text">
+    <i class="icon-arrow-right" style="vertical-align: middle" aria-hidden="true"></i>
+    <span class="screenreader-only">Next Month</span>
+  </span></button>
+</span>
+<h2 class="navigation_title" tabindex="-1"><span role="button" class="navigation_title_text" tabindex="0" aria-label="October 2026 click to change">October 2026</span></h2>
+<span class="date_field_wrapper" style="display: none;">
+    <label class="screenreader-only" id="calendar_navigation_date_accessible_label">
+      Enter the date you would like to navigate to.
+      Format Like YYYY-MM-DD
+    </label>
+    <div class="input-append"><input type="text" name="start date" style="width: 100px;" class="date_field datetime_field_enabled hasDatepicker" aria-labelledby="calendar_navigation_date_accessible_label" data-tooltip="" title="YYYY-MM-DD" id="dp1792042451734" aria-invalid="false"><button type="button" class="ui-datepicker-trigger btn" aria-hidden="true" tabindex="-1"><i class="icon-calendar-month"></i></button></div><div class="datetime_suggest" style="display: none;"></div>
+</span>
+
+</div>
+            </div>
+
+            <div class="header-bar-right header-right-flex">
+                <div class="recommend_agenda screenreader-only" style="">
+                    <button id="use_agenda" class="accessibility-warning">Warning: For improved accessibility, please use the "Agenda view" Calendar.</button>
+                </div>
+                <span id="refresh_calendar_link" title="Loading" data-tooltip="" class="">
+                    <span class="screenreader-only">Loading</span>
+                </span>
+                <span class="calendar_view_buttons btn-group" role="tablist">
+                    <button type="button" id="week" class="btn calendar-button" role="tab" aria-selected="false" aria-controls="calendar-app" tabindex="-1">
+                        Week
+                    </button>
+                    <button type="button" id="month" class="btn calendar-button active" role="tab" aria-selected="true" aria-controls="calendar-app" tabindex="0">
+                        Month
+                    </button>
+                    <button type="button" id="agenda" class="btn" role="tab" aria-selected="false" aria-controls="calendar-app" tabindex="-1">
+                        Agenda
+                    </button>
+                  </span>
+                <a href="#" id="create_new_event_link" class="btn" title="Create New Event" data-tooltip="" role="button">
+                    <i class="icon-plus"></i>
+                    <span class="screenreader-only">Create New Event</span>
+                </a>
+                
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+<div id="calendar-app" role="tabpanel" class="inline-calendar-event-titles"><div class="scheduler-wrapper" style="display: none">
+  <div class="appointment-list">
+    <div class="list-wrapper"></div>
+  </div>
+</div>
+<div class="agenda-wrapper"></div>
+<div class="scheduler_navigator"></div>
+<div class="calendar fc fc-unthemed fc-ltr"><div class="fc-view-container" style=""><div class="fc-view fc-month-view fc-basic-view" style=""><table class=""><thead class="fc-head"><tr><td class="fc-head-container fc-widget-header"><div class="fc-row fc-widget-header"><table class=""><thead><tr><th class="fc-day-header fc-widget-header fc-sun"><span>Sun</span></th><th class="fc-day-header fc-widget-header fc-mon"><span>Mon</span></th><th class="fc-day-header fc-widget-header fc-tue"><span>Tue</span></th><th class="fc-day-header fc-widget-header fc-wed"><span>Wed</span></th><th class="fc-day-header fc-widget-header fc-thu"><span>Thu</span></th><th class="fc-day-header fc-widget-header fc-fri"><span>Fri</span></th><th class="fc-day-header fc-widget-header fc-sat"><span>Sat</span></th></tr></thead></table></div></td></tr></thead><tbody class="fc-body"><tr><td class="fc-widget-content"><div class="fc-scroller fc-day-grid-container" style="overflow: hidden; height: 662px;"><div class="fc-day-grid fc-unselectable"><div class="fc-row fc-week fc-widget-content" style="height: 132px;"><div class="fc-bg"><table class=""><tbody><tr><td class="fc-day fc-widget-content fc-sun fc-other-month fc-past" data-date="2026-09-27"></td><td class="fc-day fc-widget-content fc-mon fc-other-month fc-past" data-date="2026-09-28"></td><td class="fc-day fc-widget-content fc-tue fc-other-month fc-past" data-date="2026-09-29"></td><td class="fc-day fc-widget-content fc-wed fc-other-month fc-past" data-date="2026-09-30"></td><td class="fc-day fc-widget-content fc-thu fc-past" data-date="2026-10-01"></td><td class="fc-day fc-widget-content fc-fri fc-past" data-date="2026-10-02"></td><td class="fc-day fc-widget-content fc-sat fc-past" data-date="2026-10-03"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table><thead><tr><td class="fc-day-top fc-sun fc-other-month fc-past" data-date="2026-09-27"><span class="fc-day-number">27</span></td><td class="fc-day-top fc-mon fc-other-month fc-past" data-date="2026-09-28"><span class="fc-day-number">28</span></td><td class="fc-day-top fc-tue fc-other-month fc-past" data-date="2026-09-29"><span class="fc-day-number">29</span></td><td class="fc-day-top fc-wed fc-other-month fc-past" data-date="2026-09-30"><span class="fc-day-number">30</span></td><td class="fc-day-top fc-thu fc-past" data-date="2026-10-01"><span class="fc-day-number">1</span></td><td class="fc-day-top fc-fri fc-past" data-date="2026-10-02"><span class="fc-day-number">2</span></td><td class="fc-day-top fc-sat fc-past" data-date="2026-10-03"><span class="fc-day-number">3</span></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div><div class="fc-row fc-week fc-widget-content" style="height: 132px;"><div class="fc-bg"><table class=""><tbody><tr><td class="fc-day fc-widget-content fc-sun fc-past" data-date="2026-10-04"></td><td class="fc-day fc-widget-content fc-mon fc-past" data-date="2026-10-05"></td><td class="fc-day fc-widget-content fc-tue fc-past" data-date="2026-10-06"></td><td class="fc-day fc-widget-content fc-wed fc-past" data-date="2026-10-07"></td><td class="fc-day fc-widget-content fc-thu fc-past" data-date="2026-10-08"></td><td class="fc-day fc-widget-content fc-fri fc-past" data-date="2026-10-09"></td><td class="fc-day fc-widget-content fc-sat fc-past" data-date="2026-10-10"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table><thead><tr><td class="fc-day-top fc-sun fc-past" data-date="2026-10-04"><span class="fc-day-number">4</span></td><td class="fc-day-top fc-mon fc-past" data-date="2026-10-05"><span class="fc-day-number">5</span></td><td class="fc-day-top fc-tue fc-past" data-date="2026-10-06"><span class="fc-day-number">6</span></td><td class="fc-day-top fc-wed fc-past" data-date="2026-10-07"><span class="fc-day-number">7</span></td><td class="fc-day-top fc-thu fc-past" data-date="2026-10-08"><span class="fc-day-number">8</span></td><td class="fc-day-top fc-fri fc-past" data-date="2026-10-09"><span class="fc-day-number">9</span></td><td class="fc-day-top fc-sat fc-past" data-date="2026-10-10"><span class="fc-day-number">10</span></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div><div class="fc-row fc-week fc-widget-content" style="height: 132px;"><div class="fc-bg"><table class=""><tbody><tr><td class="fc-day fc-widget-content fc-sun fc-past" data-date="2026-10-11"></td><td class="fc-day fc-widget-content fc-mon fc-past" data-date="2026-10-12"></td><td class="fc-day fc-widget-content fc-tue fc-past" data-date="2026-10-13"></td><td class="fc-day fc-widget-content fc-wed fc-past" data-date="2026-10-14"></td><td class="fc-day fc-widget-content fc-thu fc-today " data-date="2026-10-15"></td><td class="fc-day fc-widget-content fc-fri fc-future" data-date="2026-10-16"></td><td class="fc-day fc-widget-content fc-sat fc-future" data-date="2026-10-17"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table><thead><tr><td class="fc-day-top fc-sun fc-past" data-date="2026-10-11"><span class="fc-day-number">11</span></td><td class="fc-day-top fc-mon fc-past" data-date="2026-10-12"><span class="fc-day-number">12</span></td><td class="fc-day-top fc-tue fc-past" data-date="2026-10-13"><span class="fc-day-number">13</span></td><td class="fc-day-top fc-wed fc-past" data-date="2026-10-14"><span class="fc-day-number">14</span></td><td class="fc-day-top fc-thu fc-today " data-date="2026-10-15"><span class="fc-day-number">15</span></td><td class="fc-day-top fc-fri fc-future" data-date="2026-10-16"><span class="fc-day-number">16</span></td><td class="fc-day-top fc-sat fc-future" data-date="2026-10-17"><span class="fc-day-number">17</span></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div><div class="fc-row fc-week fc-widget-content" style="height: 132px;"><div class="fc-bg"><table class=""><tbody><tr><td class="fc-day fc-widget-content fc-sun fc-future" data-date="2026-10-18"></td><td class="fc-day fc-widget-content fc-mon fc-future" data-date="2026-10-19"></td><td class="fc-day fc-widget-content fc-tue fc-future" data-date="2026-10-20"></td><td class="fc-day fc-widget-content fc-wed fc-future" data-date="2026-10-21"></td><td class="fc-day fc-widget-content fc-thu fc-future" data-date="2026-10-22"></td><td class="fc-day fc-widget-content fc-fri fc-future" data-date="2026-10-23"></td><td class="fc-day fc-widget-content fc-sat fc-future" data-date="2026-10-24"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table><thead><tr><td class="fc-day-top fc-sun fc-future" data-date="2026-10-18"><span class="fc-day-number">18</span></td><td class="fc-day-top fc-mon fc-future" data-date="2026-10-19"><span class="fc-day-number">19</span></td><td class="fc-day-top fc-tue fc-future" data-date="2026-10-20"><span class="fc-day-number">20</span></td><td class="fc-day-top fc-wed fc-future" data-date="2026-10-21"><span class="fc-day-number">21</span></td><td class="fc-day-top fc-thu fc-future" data-date="2026-10-22"><span class="fc-day-number">22</span></td><td class="fc-day-top fc-fri fc-future" data-date="2026-10-23"><span class="fc-day-number">23</span></td><td class="fc-day-top fc-sat fc-future" data-date="2026-10-24"><span class="fc-day-number">24</span></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div><div class="fc-row fc-week fc-widget-content" style="height: 134px;"><div class="fc-bg"><table class=""><tbody><tr><td class="fc-day fc-widget-content fc-sun fc-future" data-date="2026-10-25"></td><td class="fc-day fc-widget-content fc-mon fc-future" data-date="2026-10-26"></td><td class="fc-day fc-widget-content fc-tue fc-future" data-date="2026-10-27"></td><td class="fc-day fc-widget-content fc-wed fc-future" data-date="2026-10-28"></td><td class="fc-day fc-widget-content fc-thu fc-future" data-date="2026-10-29"></td><td class="fc-day fc-widget-content fc-fri fc-future" data-date="2026-10-30"></td><td class="fc-day fc-widget-content fc-sat fc-future" data-date="2026-10-31"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table><thead><tr><td class="fc-day-top fc-sun fc-future" data-date="2026-10-25"><span class="fc-day-number">25</span></td><td class="fc-day-top fc-mon fc-future" data-date="2026-10-26"><span class="fc-day-number">26</span></td><td class="fc-day-top fc-tue fc-future" data-date="2026-10-27"><span class="fc-day-number">27</span></td><td class="fc-day-top fc-wed fc-future" data-date="2026-10-28"><span class="fc-day-number">28</span></td><td class="fc-day-top fc-thu fc-future" data-date="2026-10-29"><span class="fc-day-number">29</span></td><td class="fc-day-top fc-fri fc-future" data-date="2026-10-30"><span class="fc-day-number">30</span></td><td class="fc-day-top fc-sat fc-future" data-date="2026-10-31"><span class="fc-day-number">31</span></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div></div></div></td></tr></tbody></table></div></div></div>
+</div>
+<div id="calendar-drag-and-drop-container"></div>
+
+          </div>
+        </div>
+        <div id="right-side-wrapper" class="ic-app-main-content__secondary">
+          <aside id="right-side">
+              <div class="rs-section hidden-phone">
+    <div id="minical" class="fc fc-unthemed fc-ltr" role="region" aria-label="Mini calendar view"><div class="fc-toolbar fc-header-toolbar"><div class="fc-left"><button type="button" class="fc-prev-button fc-button fc-state-default fc-corner-left fc-corner-right prev_month_link" aria-label="Previous month" role="button"><span class="fc-icon fc-icon-left-single-arrow"></span></button></div><div class="fc-right"><button type="button" class="fc-next-button fc-button fc-state-default fc-corner-left fc-corner-right next_month_link" aria-label="Next month" role="button"><span class="fc-icon fc-icon-right-single-arrow"></span></button></div><div class="fc-center"><h2>October 2026</h2></div><div class="fc-clear"></div></div><div class="fc-view-container" style=""><div class="fc-view fc-month-view fc-basic-view" style=""><table class="" role="presentation"><thead class="fc-head" role="presentation"><tr role="presentation"><td class="fc-head-container fc-widget-header" role="presentation"><div class="fc-row fc-widget-header"><table class="" role="presentation"><thead role="presentation"><tr role="presentation"><th class="fc-day-header fc-widget-header fc-sun" role="presentation"><span>Sun</span></th><th class="fc-day-header fc-widget-header fc-mon" role="presentation"><span>Mon</span></th><th class="fc-day-header fc-widget-header fc-tue" role="presentation"><span>Tue</span></th><th class="fc-day-header fc-widget-header fc-wed" role="presentation"><span>Wed</span></th><th class="fc-day-header fc-widget-header fc-thu" role="presentation"><span>Thu</span></th><th class="fc-day-header fc-widget-header fc-fri" role="presentation"><span>Fri</span></th><th class="fc-day-header fc-widget-header fc-sat" role="presentation"><span>Sat</span></th></tr></thead></table></div></td></tr></thead><tbody class="fc-body" role="presentation"><tr role="presentation"><td class="fc-widget-content" role="presentation"><div class="fc-scroller fc-day-grid-container" style="overflow: hidden; height: 136.406px;"><div class="fc-day-grid fc-unselectable"><div class="fc-row fc-week fc-widget-content" style="height: 25px;"><div class="fc-bg"><table class="" role="presentation"><tbody role="presentation"><tr aria-hidden="true" role="presentation"><td class="fc-day fc-widget-content fc-sun fc-other-month fc-past" data-date="2026-09-27" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-mon fc-other-month fc-past" data-date="2026-09-28" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-tue fc-other-month fc-past" data-date="2026-09-29" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-wed fc-other-month fc-past" data-date="2026-09-30" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-thu fc-past" data-date="2026-10-01" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-fri fc-past" data-date="2026-10-02" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-sat fc-past" data-date="2026-10-03" role="presentation" tabindex="-1" style="cursor: pointer;"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table role="presentation"><thead role="presentation"><tr aria-hidden="false" role="presentation"><td class="fc-day-top fc-sun fc-other-month fc-past" data-date="2026-09-27" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Saturday, September 26, 2026, Previous month" title="Saturday, September 26, 2026, Previous month" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">27</button></td><td class="fc-day-top fc-mon fc-other-month fc-past" data-date="2026-09-28" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Sunday, September 27, 2026, Previous month" title="Sunday, September 27, 2026, Previous month" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">28</button></td><td class="fc-day-top fc-tue fc-other-month fc-past" data-date="2026-09-29" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Monday, September 28, 2026, Previous month" title="Monday, September 28, 2026, Previous month" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">29</button></td><td class="fc-day-top fc-wed fc-other-month fc-past" data-date="2026-09-30" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Tuesday, September 29, 2026, Previous month" title="Tuesday, September 29, 2026, Previous month" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">30</button></td><td class="fc-day-top fc-thu fc-past" data-date="2026-10-01" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Wednesday, September 30, 2026" title="Wednesday, September 30, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">1</button></td><td class="fc-day-top fc-fri fc-past" data-date="2026-10-02" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Thursday, October 1, 2026" title="Thursday, October 1, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">2</button></td><td class="fc-day-top fc-sat fc-past" data-date="2026-10-03" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Friday, October 2, 2026" title="Friday, October 2, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">3</button></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div><div class="fc-row fc-week fc-widget-content"><div class="fc-bg"><table class="" role="presentation"><tbody role="presentation"><tr aria-hidden="true" role="presentation"><td class="fc-day fc-widget-content fc-sun fc-past" data-date="2026-10-04" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-mon fc-past" data-date="2026-10-05" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-tue fc-past" data-date="2026-10-06" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-wed fc-past" data-date="2026-10-07" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-thu fc-past" data-date="2026-10-08" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-fri fc-past" data-date="2026-10-09" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-sat fc-past" data-date="2026-10-10" role="presentation" tabindex="-1" style="cursor: pointer;"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table role="presentation"><thead role="presentation"><tr aria-hidden="false" role="presentation"><td class="fc-day-top fc-sun fc-past" data-date="2026-10-04" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Saturday, October 3, 2026" title="Saturday, October 3, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">4</button></td><td class="fc-day-top fc-mon fc-past" data-date="2026-10-05" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Sunday, October 4, 2026" title="Sunday, October 4, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">5</button></td><td class="fc-day-top fc-tue fc-past" data-date="2026-10-06" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Monday, October 5, 2026" title="Monday, October 5, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">6</button></td><td class="fc-day-top fc-wed fc-past" data-date="2026-10-07" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Tuesday, October 6, 2026" title="Tuesday, October 6, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">7</button></td><td class="fc-day-top fc-thu fc-past" data-date="2026-10-08" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Wednesday, October 7, 2026" title="Wednesday, October 7, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">8</button></td><td class="fc-day-top fc-fri fc-past" data-date="2026-10-09" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Thursday, October 8, 2026" title="Thursday, October 8, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">9</button></td><td class="fc-day-top fc-sat fc-past" data-date="2026-10-10" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Friday, October 9, 2026" title="Friday, October 9, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">10</button></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div><div class="fc-row fc-week fc-widget-content"><div class="fc-bg"><table class="" role="presentation"><tbody role="presentation"><tr aria-hidden="true" role="presentation"><td class="fc-day fc-widget-content fc-sun fc-past" data-date="2026-10-11" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-mon fc-past" data-date="2026-10-12" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-tue fc-past" data-date="2026-10-13" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-wed fc-past" data-date="2026-10-14" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-thu fc-today" data-date="2026-10-15" role="presentation" tabindex="-1" style="background-color: rgb(224, 247, 250); cursor: pointer;"></td><td class="fc-day fc-widget-content fc-fri fc-future" data-date="2026-10-16" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-sat fc-future" data-date="2026-10-17" role="presentation" tabindex="-1" style="cursor: pointer;"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table role="presentation"><thead role="presentation"><tr aria-hidden="false" role="presentation"><td class="fc-day-top fc-sun fc-past" data-date="2026-10-11" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Saturday, October 10, 2026" title="Saturday, October 10, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">11</button></td><td class="fc-day-top fc-mon fc-past" data-date="2026-10-12" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Sunday, October 11, 2026" title="Sunday, October 11, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">12</button></td><td class="fc-day-top fc-tue fc-past" data-date="2026-10-13" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Monday, October 12, 2026" title="Monday, October 12, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">13</button></td><td class="fc-day-top fc-wed fc-past" data-date="2026-10-14" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Tuesday, October 13, 2026" title="Tuesday, October 13, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">14</button></td><td class="fc-day-top fc-thu fc-today" data-date="2026-10-15" role="presentation" style="background-color: rgb(224, 247, 250); cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Wednesday, October 14, 2026, Today" title="Wednesday, October 14, 2026, Today" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">15</button></td><td class="fc-day-top fc-fri fc-future" data-date="2026-10-16" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Thursday, October 15, 2026" title="Thursday, October 15, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">16</button></td><td class="fc-day-top fc-sat fc-future" data-date="2026-10-17" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Friday, October 16, 2026" title="Friday, October 16, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">17</button></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div><div class="fc-row fc-week fc-widget-content"><div class="fc-bg"><table class="" role="presentation"><tbody role="presentation"><tr aria-hidden="true" role="presentation"><td class="fc-day fc-widget-content fc-sun fc-future" data-date="2026-10-18" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-mon fc-future" data-date="2026-10-19" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-tue fc-future" data-date="2026-10-20" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-wed fc-future" data-date="2026-10-21" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-thu fc-future" data-date="2026-10-22" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-fri fc-future" data-date="2026-10-23" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-sat fc-future" data-date="2026-10-24" role="presentation" tabindex="-1" style="cursor: pointer;"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table role="presentation"><thead role="presentation"><tr aria-hidden="false" role="presentation"><td class="fc-day-top fc-sun fc-future" data-date="2026-10-18" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Saturday, October 17, 2026" title="Saturday, October 17, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">18</button></td><td class="fc-day-top fc-mon fc-future" data-date="2026-10-19" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Sunday, October 18, 2026" title="Sunday, October 18, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">19</button></td><td class="fc-day-top fc-tue fc-future" data-date="2026-10-20" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Monday, October 19, 2026" title="Monday, October 19, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">20</button></td><td class="fc-day-top fc-wed fc-future" data-date="2026-10-21" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Tuesday, October 20, 2026" title="Tuesday, October 20, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">21</button></td><td class="fc-day-top fc-thu fc-future" data-date="2026-10-22" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Wednesday, October 21, 2026" title="Wednesday, October 21, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">22</button></td><td class="fc-day-top fc-fri fc-future" data-date="2026-10-23" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Thursday, October 22, 2026" title="Thursday, October 22, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">23</button></td><td class="fc-day-top fc-sat fc-future" data-date="2026-10-24" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Friday, October 23, 2026" title="Friday, October 23, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">24</button></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div><div class="fc-row fc-week fc-widget-content" style="height: 26px;"><div class="fc-bg"><table class="" role="presentation"><tbody role="presentation"><tr aria-hidden="true" role="presentation"><td class="fc-day fc-widget-content fc-sun fc-future" data-date="2026-10-25" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-mon fc-future" data-date="2026-10-26" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-tue fc-future" data-date="2026-10-27" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-wed fc-future" data-date="2026-10-28" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-thu fc-future" data-date="2026-10-29" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-fri fc-future" data-date="2026-10-30" role="presentation" tabindex="-1" style="cursor: pointer;"></td><td class="fc-day fc-widget-content fc-sat fc-future" data-date="2026-10-31" role="presentation" tabindex="-1" style="cursor: pointer;"></td></tr></tbody></table></div><div class="fc-content-skeleton"><table role="presentation"><thead role="presentation"><tr aria-hidden="false" role="presentation"><td class="fc-day-top fc-sun fc-future" data-date="2026-10-25" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Saturday, October 24, 2026" title="Saturday, October 24, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">25</button></td><td class="fc-day-top fc-mon fc-future" data-date="2026-10-26" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Sunday, October 25, 2026" title="Sunday, October 25, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">26</button></td><td class="fc-day-top fc-tue fc-future" data-date="2026-10-27" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Monday, October 26, 2026" title="Monday, October 26, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">27</button></td><td class="fc-day-top fc-wed fc-future" data-date="2026-10-28" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Tuesday, October 27, 2026" title="Tuesday, October 27, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">28</button></td><td class="fc-day-top fc-thu fc-future" data-date="2026-10-29" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Wednesday, October 28, 2026" title="Wednesday, October 28, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">29</button></td><td class="fc-day-top fc-fri fc-future" data-date="2026-10-30" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Thursday, October 29, 2026" title="Thursday, October 29, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">30</button></td><td class="fc-day-top fc-sat fc-future" data-date="2026-10-31" role="presentation" style="cursor: pointer;"><button class="day-wrapper-button fc-day-number" tabindex="0" aria-label="Friday, October 30, 2026" title="Friday, October 30, 2026" style="border-width: medium; border-style: none; border-color: currentcolor; border-image: none; background: transparent; padding: 0px; margin: 0px; font: inherit; color: inherit; opacity: inherit; cursor: pointer; width: 100%; height: 100%; text-align: inherit; display: inline-block; vertical-align: baseline;">31</button></td></tr></thead><tbody><tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div></div></div></div></td></tr></tbody></table></div></div></div>
+  </div>
+  <div id="select-course-component" class="rs-section"></div>
+  <div class="rs-section">
+    <h2 tabindex="-1">
+      <span role="button" id="calendar-toggle-button" class="element_toggler" aria-controls="calendar-list-holder" aria-expanded="true" aria-label="Calendars toggle list visibility" tabindex="0">
+          <i class="icon-mini-arrow-down auto_rotate"></i> Calendars
+      </span>
+    </h2>
+    <div id="calendar-list-holder"><ul id="calendars-context-list">
+  
+  <li data-context="user_3" class="context_list_context hover-container checked" style="display:flex;">
+    <span class="context-list-toggle-box group_user_3" aria-labelledby="group_user_3_checkbox_label" tabindex="0" role="checkbox" style="flex-shrink:0;" "="" aria-checked="true"></span>
+    <label id="group_user_3_checkbox_label" style="flex-grow:1;">
+      Sam Taylor
+    </label>
+    
+    <div class="buttons-wrapper" style="flex-shrink:0;">
+    
+    <button type="button" tabindex="0" class="Button Button--icon-action ContextList__MoreBtn">
+      <i class="icon-more" aria-hidden="true"></i>
+      <span class="screenreader-only">
+        Open Sam Taylor Color Picker
+      </span>
+    </button>
+    </div>
+  </li>
+  
+  <li data-context="course_27" class="context_list_context hover-container not-checked" style="display:flex;">
+    <span class="context-list-toggle-box group_course_27" aria-labelledby="group_course_27_checkbox_label" tabindex="0" role="checkbox" style="flex-shrink:0;" "="" aria-checked="false"></span>
+    <label id="group_course_27_checkbox_label" style="flex-grow:1;">
+      Calculus I
+    </label>
+    
+    <div class="buttons-wrapper" style="flex-shrink:0;">
+    
+    <button type="button" tabindex="0" class="Button Button--icon-action ContextList__MoreBtn">
+      <i class="icon-more" aria-hidden="true"></i>
+      <span class="screenreader-only">
+        Open Calculus I Color Picker
+      </span>
+    </button>
+    </div>
+  </li>
+  
+  <li data-context="course_26" class="context_list_context hover-container not-checked" style="display:flex;">
+    <span class="context-list-toggle-box group_course_26" aria-labelledby="group_course_26_checkbox_label" tabindex="0" role="checkbox" style="flex-shrink:0;" "="" aria-checked="false"></span>
+    <label id="group_course_26_checkbox_label" style="flex-grow:1;">
+      College Writing
+    </label>
+    
+    <div class="buttons-wrapper" style="flex-shrink:0;">
+    
+    <button type="button" tabindex="0" class="Button Button--icon-action ContextList__MoreBtn">
+      <i class="icon-more" aria-hidden="true"></i>
+      <span class="screenreader-only">
+        Open College Writing Color Picker
+      </span>
+    </button>
+    </div>
+  </li>
+  
+  <li data-context="course_25" class="context_list_context hover-container not-checked" style="display:flex;">
+    <span class="context-list-toggle-box group_course_25" aria-labelledby="group_course_25_checkbox_label" tabindex="0" role="checkbox" style="flex-shrink:0;" "="" aria-checked="false"></span>
+    <label id="group_course_25_checkbox_label" style="flex-grow:1;">
+      Introduction to Biology
+    </label>
+    
+    <div class="buttons-wrapper" style="flex-shrink:0;">
+    
+    <button type="button" tabindex="0" class="Button Button--icon-action ContextList__MoreBtn">
+      <i class="icon-more" aria-hidden="true"></i>
+      <span class="screenreader-only">
+        Open Introduction to Biology Color Picker
+      </span>
+    </button>
+    </div>
+  </li>
+  
+  <li data-context="course_28" class="context_list_context hover-container not-checked" style="display:flex;">
+    <span class="context-list-toggle-box group_course_28" aria-labelledby="group_course_28_checkbox_label" tabindex="0" role="checkbox" style="flex-shrink:0;" "="" aria-checked="false"></span>
+    <label id="group_course_28_checkbox_label" style="flex-grow:1;">
+      World History Since 1500
+    </label>
+    
+    <div class="buttons-wrapper" style="flex-shrink:0;">
+    
+    <button type="button" tabindex="0" class="Button Button--icon-action ContextList__MoreBtn">
+      <i class="icon-more" aria-hidden="true"></i>
+      <span class="screenreader-only">
+        Open World History Since 1500 Color Picker
+      </span>
+    </button>
+    </div>
+  </li>
+  
+</ul>
+<div id="calendars_color_picker_holder"></div></div>
+  </div>
+  <div class="rs-section" id="undated-events-section">
+    <h2 tabindex="-1">
+      <span href="#" role="button" id="undated-events-button" class="element_toggler" aria-controls="undated-events" aria-expanded="false" aria-label="Undated items toggle list visibility" tabindex="0">
+        <i class="icon-mini-arrow-right auto_rotate"></i> Undated
+      </span>
+    </h2>
+    <div id="undated-events">
+  <div class="spin_holder"></div>
+  <a href="#" data-text-while-loading="Loading undated items..." class="undated-events-link" style="display: none;">Show undated items</a>
+
+</div>
+  </div>
+  <div class="rs-section" id="calendar-feed">
+    <button id="calendar-feed-button" class="Button Button--link" data-dialog-opts="{&quot;resizable&quot;:false, &quot;width&quot;: 400}">
+      <i class="icon-calendar-days"></i> Calendar Feed
+    </button>
+  </div>
+
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+    <div style="display:none;"><!-- Everything inside of this should always stay hidden -->
+    </div>
+  <div id="aria_alerts" class="hide-text affix" role="alert" aria-live="assertive"></div>
+  <div id="StudentTray__Container"></div>
+  <div id="react-router-portals"></div>
+
+
+  
+
+  <iframe src="http://localhost:3000/post_message_forwarding?rev=e6aca5e55d-87e5fa8c76e8ef76&amp;token=REDACTED" name="post_message_forwarding" title="post_message_forwarding" id="post_message_forwarding" sandbox="allow-scripts allow-same-origin" style="display:none;"></iframe>
+
+
+  <script></script>
+
+
+
+
+
+</div> <!-- #application -->
+
+
+<div id="nav-tray-portal" style="position: relative; z-index: 99;"></div><div class="tinymce-a11y-checker-container"></div><div class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-draggable" tabindex="-1" role="dialog" aria-labelledby="ui-id-1" style="display: none; outline: 0px; z-index: 1000;"><div class="ui-dialog-titlebar ui-widget-header ui-corner-all ui-helper-clearfix ui-draggable-handle"><span id="ui-id-1" class="ui-dialog-title">Edit Event</span><button type="button" class="ui-dialog-titlebar-close ui-corner-all" aria-label="Close"><span class="ui-icon ui-icon-closethick">Close</span></button></div><div id="edit_event" class=""><div></div></div></div><div id="calendar_color_style_overrides"><style></style></div><div id="ui-datepicker-div" class="ui-datepicker ui-widget ui-widget-content ui-helper-clearfix ui-corner-all"></div><div id="minical-live-region" aria-live="polite" aria-atomic="true" class="screenreader-only"></div><div class="ui-dialog ui-widget ui-widget-content ui-corner-all ui-draggable" tabindex="-1" role="dialog" aria-labelledby="ui-id-2" style="display: none; outline: 0px; z-index: 1000;"><div class="ui-dialog-titlebar ui-widget-header ui-corner-all ui-helper-clearfix ui-draggable-handle"><span id="ui-id-2" class="ui-dialog-title">Calendar Feed</span><button class="ui-dialog-titlebar-close ui-corner-all" type="button" aria-label="Close"><span class="ui-icon ui-icon-closethick"></span></button></div><div style="" id="calendar_feed_box" class="ui-dialog-content ui-widget-content">
+  <p id="calendar-feed-message">
+    Copy the link below and paste it into any calendar app that takes iCal feeds (Google Calendar, iCal, Outlook, etc.)
+  </p>
+  <p id="calendar-feed-box-lower">
+    <label for="calendar-feed-url-input" class="screenreader-only">Calendar Feed Url</label>
+    <input id="calendar-feed-url-input" value="http://localhost:3000/feeds/calendars/REDACTED.ics" style=""><br>
+    <a href="http://localhost:3000/feeds/calendars/REDACTED.ics">Click to view Calendar Feed</a>
+  </p>
+</div></div></body></html>

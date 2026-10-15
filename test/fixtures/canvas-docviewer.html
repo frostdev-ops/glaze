@@ -1,0 +1,95 @@
+<!-- Glaze test fixture: the DocViewer (canvadocs) frame, hand-written. It keeps only the element structure, classes, ids
+     and control labels of Instructure's viewer as Glaze will key on them (W9); none of its markup, styles, scripts or the
+     document's content. Reduced from a capture made 2026-10-15, anonymously and without signing in, of the public file
+     page https://canvas.mit.edu/courses/10076/files/1691040 (Instructure-hosted Canvas), whose preview frame is
+     https://canvadocs.instructure.com/1/sessions/<session>/view (the page frames it from
+     /api/v1/canvadoc_session?blob=<session>). PDF through pdf.js; an anonymous viewer gets no annotation
+     tools, so their toolbar is not here. The capture itself is not in this repository. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>DocViewer</title>
+</head>
+<body>
+  <div id="App">
+    <h1 class="screenreader-only">Document</h1>
+    <nav class="ViewerControls">
+      <div class="ViewerControls-primary">
+        <div class="ViewerControls--title"></div>
+        <div class="ViewerControls--page-controls">
+          <span class="ViewerControls--page-number">Page
+            <div>
+              <button class="AnnotationControlButton" aria-label="Previous Page" title="Previous Page" disabled>
+                <div class="AnnotationControlButton-outer"><div class="AnnotationControlButton-inner"><svg viewBox="0 0 16 16" width="16" height="16"></svg></div></div>
+              </button>
+              <input class="ViewerControls--current-page" type="number" min="1" max="2" value="1" aria-label="Current Page Number">
+              <button class="AnnotationControlButton" aria-label="Next Page" title="Next Page">
+                <div class="AnnotationControlButton-outer"><div class="AnnotationControlButton-inner"><svg viewBox="0 0 16 16" width="16" height="16"></svg></div></div>
+              </button>
+            </div>
+            of 2</span>
+        </div>
+        <nav class="DocumentControls">
+          <div>
+            <button class="AnnotationControlButton" aria-label="Rotate Page Clockwise By 90 Degrees" title="Rotate Page Clockwise By 90 Degrees">
+              <div class="AnnotationControlButton-outer"><div class="AnnotationControlButton-inner"><svg viewBox="0 0 18 18" width="18" height="18"></svg></div></div>
+            </button>
+            <button class="AnnotationControlButton" aria-label="Zoom Out" title="Zoom Out">
+              <div class="AnnotationControlButton-outer"><div class="AnnotationControlButton-inner"><svg viewBox="0 0 14 2" width="14" height="2"></svg></div></div>
+            </button>
+            <span aria-hidden="true">Zoom</span>
+            <button class="AnnotationControlButton" aria-label="Zoom In" title="Zoom In">
+              <div class="AnnotationControlButton-outer"><div class="AnnotationControlButton-inner"><svg viewBox="0 0 14 14" width="14" height="14"></svg></div></div>
+            </button>
+          </div>
+          <div class="ViewerControls--page-controls">
+            <button class="AnnotationControlButton full-screen-button" aria-label="Enter Full Screen" title="Enter Full Screen">
+              <div class="AnnotationControlButton-outer"><div class="AnnotationControlButton-inner"><svg viewBox="0 0 16 16" width="16" height="16"></svg></div></div>
+            </button>
+          </div>
+        </nav>
+      </div>
+    </nav>
+    <div class="Pages">
+      <h2 class="screenreader-only">Pages</h2>
+      <div class="Page-container">
+        <div id="page-1" class="Page PageComponent">
+          <div class="Page-canvas-container"><canvas class="pageContainer" width="612" height="792"></canvas></div>
+          <div class="Draw Draw--not-drawing Draw--selection">
+            <div class="TextLayer-container">
+              <div class="textLayer">
+                <span class="markedContent"><span role="presentation" dir="ltr">Sample text</span><br role="presentation"></span>
+                <div class="endOfContent"></div>
+              </div>
+            </div>
+            <div class="PDFAnnotationLayer-container">
+              <div class="annotationLayer">
+                <section class="linkAnnotation"><a href="https://example.com/" title="https://example.com/" target="_blank" rel="noopener noreferrer nofollow"></a></section>
+              </div>
+            </div>
+            <div class="PageAnnotations"></div>
+          </div>
+        </div>
+        <div>
+          <div></div>
+          <div class="Page-comment-line-top-margin"></div>
+          <div class="PageContainerComments"><div><div class="CommentContainerOffset"></div></div></div>
+        </div>
+      </div>
+      <div class="Page-container">
+        <div id="page-2" class="Page PageComponent Page--not-rendered">
+          <div class="Page-canvas-container"><canvas class="pageContainer" width="612" height="792"></canvas></div>
+          <div class="Draw Draw--not-drawing Draw--selection">
+            <div class="TextLayer-container"><div class="textLayer"><div class="endOfContent"></div></div></div>
+            <div class="PDFAnnotationLayer-container"><div class="annotationLayer"></div></div>
+            <div class="PageAnnotations"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ScreenreaderAnnotations screenreader-only"><h2>Annotations</h2></div>
+    </div>
+  </div>
+  <canvas class="hiddenCanvasElement"></canvas>
+</body>
+</html>

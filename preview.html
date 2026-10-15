@@ -10,6 +10,13 @@
 <style>
   body { margin: 0; font-size: 14px; line-height: 1.5; }
   #site-wrap { min-height: 100vh; }
+  #base_tools { display: flex; gap: 8px; padding: 8px; }
+  #base_tools a { display: flex; align-items: center; gap: 6px; padding: 8px; text-decoration: none; }
+  #base_tools svg { width: 20px; height: 20px; }
+  .course-columns { padding: 14px; }
+  .course-element-card { overflow: hidden; }
+  .course-banner { min-height: 80px; background: var(--gz-course); }
+  .course-title, .course-status { padding: 8px 12px; }
   .panel-wrap { position: relative; min-height: 100vh; }
   course-page-header > header { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; }
   [data-analytics-id="course.header.home"] { display: grid; place-items: center; width: 30px; height: 30px; }
@@ -47,6 +54,8 @@
 </head>
 <body>
 <div id="site-wrap">
+  <nav id="base_tools" aria-label="Global navigation"><a class="base-navigation-button-content Mui-selected" href="#"><svg aria-hidden="true" viewBox="0 0 24 24"><path fill="currentColor" d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg><span>Courses</span></a><a class="base-navigation-button-content" href="#"><svg aria-hidden="true" viewBox="0 0 24 24"><path fill="currentColor" d="M3 4h18v17H3z"/></svg><span>Calendar</span></a></nav>
+  <section class="multi-column-view"><div class="course-columns"><article class="element-card course-element-card course-color-2" data-course-id="_1_1"><div class="course-banner"></div><h2 class="course-title">Computer Science</h2><div class="course-status">Open</div></article><article class="element-card course-element-card course-color-3" data-course-id="_2_1"><div class="course-banner"></div><h2 class="course-title">Spanish</h2><div class="course-status">Open</div></article></div></section>
   <section class="course course-color-2">
   <div class="panel-wrap">
     <course-page-header><header>
@@ -128,7 +137,12 @@
 <script src="lib/fonts.js"></script>
 <script src="lib/drafts.js"></script>
 <script src="lib/zip.js"></script>
+<script src="features/schedule.js"></script>
 <script src="defaults.js"></script>
+<script src="content-ultra.js"></script>
 <script src="content.js"></script>
+<script src="lib/cards.js"></script>
+<script src="features/cards.js"></script>
+<script src="features/nav.js"></script>
 </body>
 </html>

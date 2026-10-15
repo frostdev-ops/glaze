@@ -2,19 +2,32 @@
 const GZ_UI = (() => {
   const store = chrome.storage.sync;
 
+  // Settings, and the dashboard cards' (lib/cards.js keeps those apart, out of the content script's first load).
+  const clean = (raw) => ({ ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw?.card) });
   const load = () => new Promise((res) => {
-    try { store.get(null, (raw) => res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw))); } catch { res(GZ_SANITIZE()); }
+    try { store.get(null, (raw) => res(clean(chrome.runtime.lastError ? {} : raw))); } catch { res(clean()); }
   });
 
   // Writes only the given top-level keys: sync storage counts every write against a per-minute
   // quota, and the content script re-reads everything anyway. `note` gets '' or the error.
-  const save = (s, keys, note = () => {}) => {
+  const save = (s, keys, note = () => {}, navPatch) => {
     const patch = { version: 2 };
     for (const k of keys) patch[k] = s[k];
     const failed = (error) => GZ_I18N.t('Not saved: {error}', { error }, GZ_I18N.ui());
-    try {
-      store.set(patch, () => note(chrome.runtime.lastError ? failed(chrome.runtime.lastError.message) : ''));
-    } catch (e) { note(failed(e.message)); }
+    const write = () => {
+      try { store.set(patch, () => note(chrome.runtime.lastError ? failed(chrome.runtime.lastError.message) : '')); }
+      catch (e) { note(failed(e.message)); }
+    };
+    if ('nav' in patch) {
+      delete patch.nav;
+      try {
+        const nav = navPatch || s.nav; // Controls send only their changed fields; a Look or import replaces the group.
+        chrome.runtime.sendMessage({ type: 'glaze:nav', nav }, (r) => {
+          if (chrome.runtime.lastError || !r?.ok) return note(GZ_I18N.t('Not saved. Try again in a moment.', {}, GZ_I18N.ui()));
+          if (Object.keys(patch).length > 1) write(); else note('');
+        });
+      } catch (e) { note(failed(e.message)); }
+    } else write();
 
   };
 
@@ -76,8 +89,13 @@ const GZ_UI = (() => {
   // A look is an explicit choice too: palette, fonts, shape and background at once.
   const pickLook = (s, L) => {
     Object.assign(s, GZ_LOOK_APPLY(s, L));
-    return ['colors', 'preset', 'auto', 'look', 'bg'];
+    // Course cards only as far as the look names them.
+    if (L.card) s.card = GZ_CARDS.settings({ ...s.card, ...L.card });
+    return ['colors', 'preset', 'auto', 'look', 'bg', ...(L.card ? ['card'] : [])];
   };
 
-  return { load, save, paint, swatches, pickPreset, looks, pickLook };
+  // A theme's name in the history and favorites: the Look it is, else its palette's name.
+  const themeName = (th) => GZ_LOOKS.find((L) => GZ_LOOK_ON(th, L))?.name || th.preset || GZ_I18N.t('Custom theme', {}, GZ_I18N.ui());
+
+  return { load, save, paint, swatches, pickPreset, looks, pickLook, themeName };
 })();

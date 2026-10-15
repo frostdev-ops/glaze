@@ -56,6 +56,7 @@
   /* All eight looks, over the tiles. */
   #sheet { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 14px; border: 0; color: var(--gz-ink); background: var(--gz-surface-2); }
   #sheet header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+  #sheet #previous { margin-left: auto; }
   #sheet .back { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; }
   #sheet .looks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* Safari on iPhone shows the popup as a full-width sheet; on iPad, a popover sized to this minimum. */
@@ -96,6 +97,11 @@
       <b id="motion-name"></b>
     </button>
 
+    <button type="button" class="tile wide" id="auto">
+      <span class="cap">Auto light and dark</span>
+      <b id="auto-name"></b>
+    </button>
+
     <button type="button" class="tile wide editor" id="editor">
       <span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>
       <span class="text"><b>Open the editor</b><small>Every setting, with a live preview</small></span>
@@ -108,6 +114,7 @@
     <header>
       <button type="button" class="back" id="back" aria-label="Back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
       <h2 id="sheet-title">Looks</h2>
+      <button type="button" id="previous" hidden>Previous Look</button>
     </header>
     <div class="looks" id="looks"></div>
   </dialog>
@@ -115,6 +122,8 @@
   <script src="lib/color.js"></script>
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
+  <script src="lib/cards.js"></script>
+  <script src="lib/history.js"></script>
   <script src="lib/news.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>

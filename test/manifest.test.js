@@ -6,18 +6,29 @@ const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const m = require('../manifest.json');
 
-const [glaze, detector] = m.content_scripts;
+// Glaze's first content script, one entry per site with its own part: Ultra's and Canvas's.
+const glaze = m.content_scripts.filter((c) => c.js.at(-1) === 'content.js');
+const [ultra, canvas] = glaze;
+const detector = m.content_scripts.find((c) => c.js.includes('lib/detect.js'));
 
 test('Ultra matches its bare entry and descendants without matching lookalike paths', () => {
-  assert.deepEqual(glaze.matches.filter((pattern) => pattern.includes('/ultra')), ['https://*/ultra', 'https://*/ultra/*']);
+  assert.deepEqual(ultra.matches, ['https://*/ultra', 'https://*/ultra/*']);
+  assert.ok(ultra.js.includes('content-ultra.js') && !canvas.js.includes('content-ultra.js'));
 });
 
-// lib/background.js injects and registers content_scripts[0].js for hosts the detector finds.
+// lib/background.js injects and registers the Canvas entry's list for Canvas hosts the detector finds, and that list
+// without content-canvas.js for Moodle hosts.
 test('the first content script is Glaze, and the detector covers the rest of https', () => {
-  assert.equal(glaze.js.at(-1), 'content.js');
+  assert.equal(glaze.length, 2);
+  assert.deepEqual(canvas.matches, ['https://*.instructure.com/*']);
+  assert.ok(canvas.js.includes('content-canvas.js') && !ultra.js.includes('content-canvas.js'));
+  for (const g of glaze) assert.deepEqual([g.run_at, g.all_frames], ['document_start', true]);
+  // The two never both match a page: one list each, as the one entry was. Canvas's leaves canvadocs to its viewer script.
+  assert.deepEqual(ultra.exclude_matches, canvas.matches);
+  assert.deepEqual(canvas.exclude_matches, ['https://canvadocs.instructure.com/*']);
   assert.deepEqual(detector.js, ['lib/detect.js']);
   assert.deepEqual(detector.matches, ['https://*/*']);
-  assert.deepEqual(detector.exclude_matches, glaze.matches, 'what Glaze already matches is not detected twice');
+  assert.deepEqual(detector.exclude_matches, glaze.flatMap((g) => g.matches), 'what Glaze already matches is not detected twice');
   assert.ok(!detector.all_frames, 'top frame only');
   assert.equal(detector.run_at, 'document_start');
 });
@@ -28,7 +39,7 @@ test('injecting and registering need scripting and host access', () => {
 });
 
 test('Chrome retains exactly its existing permissions without native messaging', () => {
-  assert.deepEqual(m.permissions, ['storage', 'scripting']);
+  assert.deepEqual(m.permissions, ['storage', 'scripting', 'unlimitedStorage']); // notes are never cleared for space (owner, 2026-10-15)
   assert.ok(!m.permissions.includes('nativeMessaging'));
 });
 
@@ -41,6 +52,8 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   fs.writeFileSync(file, JSON.stringify(input));
   const expected = structuredClone(input);
   delete expected.options_ui.open_in_tab;
+  delete expected.oauth2; // Safari has no identity API: Google Calendar sync is Chrome's
+  delete expected.optional_permissions;
   expected.description = 'Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras.';
   for (const entry of expected.web_accessible_resources) delete entry.use_dynamic_url;
   try {
@@ -54,10 +67,17 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
     // A clean Chrome manifest also gains the permission on its first conversion.
     fs.writeFileSync(file, JSON.stringify(m));
     rewrite();
-    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).permissions, ['storage', 'scripting', 'nativeMessaging']);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).permissions, ['storage', 'scripting', 'unlimitedStorage', 'nativeMessaging']);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; the reader is the one page a site may frame, and loads only Glaze\'s files', () => {
+  assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" });
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html']);
+  const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
+  assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
 });
 
 test('every content script file exists', () => {

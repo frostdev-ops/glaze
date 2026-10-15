@@ -1,0 +1,15 @@
+<!-- Glaze test fixture: a Gradescope account page (/account/edit), hand-written from public knowledge of its profile form (inputs named user[...]); invented data, no account. Check against a real account before release. -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Edit Account | Gradescope</title></head>
+<body>
+<main>
+  <h1 class="pageHeading">Edit Account</h1>
+  <form action="/account" method="post">
+    <label>Name <input type="text" name="user[name]" value="Sam Student"></label>
+    <label>Email <input type="email" name="user[email]" value="sam.student@example.edu"></label>
+    <label>School <input type="text" name="user[school]" value="Example University"></label>
+  </form>
+</main>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See parity/spikes/B0.md.",
+ "results": [
+  {
+   "id": "_401_1",
+   "scaleType": "Score",
+   "symbols": []
+  },
+  {
+   "id": "_402_1",
+   "scaleType": "Percent",
+   "symbols": []
+  },
+  {
+   "id": "_403_1",
+   "scaleType": "Tabular",
+   "symbols": [
+    {
+     "text": "A",
+     "absoluteValue": 95
+    },
+    {
+     "text": "B",
+     "absoluteValue": 85
+    },
+    {
+     "text": "C",
+     "absoluteValue": 75
+    },
+    {
+     "text": "D",
+     "absoluteValue": 65
+    },
+    {
+     "text": "F",
+     "absoluteValue": 0
+    }
+   ]
+  }
+ ]
+}

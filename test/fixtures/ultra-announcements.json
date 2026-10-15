@@ -1,0 +1,75 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See parity/spikes/B0.md.",
+ "paging": {
+  "limit": 10,
+  "nextPage": "/learn/api/v1/courses/_101_1/announcements?offset=10",
+  "previousPage": "",
+  "count": 12,
+  "offset": 0
+ },
+ "results": [
+  {
+   "readStatus": {
+    "firstReadDate": null,
+    "isRead": false,
+    "updateDate": null
+   },
+   "pushNotify": false,
+   "readTracking": true,
+   "permanent": false,
+   "type": "COURSE",
+   "body": {
+    "rawText": "<p>Lab 3 is posted.</p>",
+    "displayText": "<p>Lab 3 is posted.</p>",
+    "webLocation": "https://lms.example.edu/x",
+    "fileLocation": "x"
+   },
+   "startDateRestriction": "2026-10-12T13:00:00.000Z",
+   "endDateRestriction": null,
+   "courseId": "_101_1",
+   "createdDate": "2026-10-12T13:00:00.000Z",
+   "modifiedDate": "2026-10-12T13:00:00.000Z",
+   "title": "Lab 3 is up",
+   "creatorUserId": "_950_1",
+   "isDraft": false,
+   "permissions": {
+    "viewCourseOrOrgAnnouncements": true
+   },
+   "id": "_1001_1",
+   "position": 1
+  },
+  {
+   "readStatus": {
+    "firstReadDate": "2026-09-02T14:00:00.000Z",
+    "isRead": true,
+    "updateDate": "2026-09-02T14:00:00.000Z"
+   },
+   "pushNotify": false,
+   "readTracking": true,
+   "permanent": true,
+   "type": "COURSE",
+   "body": {
+    "rawText": "<p>Welcome to Biology I.</p>",
+    "displayText": "<p>Welcome to Biology I.</p>",
+    "webLocation": "https://lms.example.edu/x",
+    "fileLocation": "x"
+   },
+   "startDateRestriction": "2026-08-31T12:00:00.000Z",
+   "endDateRestriction": null,
+   "courseId": "_101_1",
+   "createdDate": "2026-08-31T12:00:00.000Z",
+   "modifiedDate": "2026-08-31T12:00:00.000Z",
+   "title": "Welcome",
+   "creatorUserId": "_950_1",
+   "isDraft": false,
+   "permissions": {
+    "viewCourseOrOrgAnnouncements": true
+   },
+   "id": "_1002_1",
+   "position": 2
+  }
+ ],
+ "permissions": {
+  "create": false
+ }
+}
