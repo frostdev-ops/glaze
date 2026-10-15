@@ -203,7 +203,9 @@ It has no analytics. The extension's read-only requests go to your own Blackboar
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards;
 your course list and a course's items for the command palette and new-content badges), to Google Fonts or jsDelivr for a web
-font you choose, and to a background image you choose. The downloaded Mac app also checks
+font you choose, and to a background image you choose. For Canvas Download all, the extension's background worker
+fetches signed file links from your school's file host without cookies. Links and file bytes stay in memory while
+Glaze makes the zip; they are not saved in extension storage. The downloaded Mac app also checks
 `https://frostdev.io/projects/glaze/appcast.xml` about once a day and downloads updates from GitHub,
 with system profiling disabled. These services receive ordinary network requests, including your IP
 address. See [PRIVACY.md](PRIVACY.md).

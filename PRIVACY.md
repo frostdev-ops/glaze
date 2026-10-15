@@ -103,8 +103,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
   list, course details and badge records described above are stored; other answers stay in memory.
   For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking
   a send, your sent conversations and matching conversation details without marking mail read. It
-  sends no messages. Download all also fetches accessible module files to build a zip on your device.
-  Nothing is sent anywhere else.
+  sends no messages. When you click Download all, Canvas supplies signed links for accessible module
+  files. The extension's background worker fetches them from your school's file host without cookies.
+  Links and file bytes stay in memory while Glaze makes the zip; they are not saved in extension storage.
+  The resulting zip is saved to your device.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an
