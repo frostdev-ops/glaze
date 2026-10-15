@@ -18,8 +18,10 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // moved the draft backup, Ultra's what-if calculator, the document buttons and your place in a course: 223,687. Waves 3
 // and 4 took the one script every site loaded to 228,144; B0b split it into the shared content.js and each site's own
 // part (content-ultra.js, content-canvas.js; Moodle has none), so each site has its own first script and its own
-// baseline. New features load on demand too. When a cut lands, lower that site's baseline to its new total.
-const FIRST_SCRIPT_BASELINE = { ultra: 206952, canvas: 201446, moodle: 171507 };
+// baseline. New features load on demand too. When a cut lands, lower that site's baseline to its new total. B7 (the
+// owner's Ultra dashboard, floating widgets and nav rework) may grow Ultra's, by the owner's decision: raised from 206,952
+// for it, and lowered to what B7 actually measures once it lands.
+const FIRST_SCRIPT_BASELINE = { ultra: 216000, canvas: 201446, moodle: 171507 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -37,7 +39,7 @@ test('each site loads the shared core and its own part, and no other site\'s', (
   const core = FIRST_SCRIPT.moodle;
   assert.equal(core.at(-1), 'content.js');
   assert.ok(!core.some((f) => /^content-/.test(f)), 'Moodle has no part');
-  assert.deepEqual(FIRST_SCRIPT.ultra, [...core.slice(0, -1), 'content-ultra.js', 'content.js']);
+  assert.deepEqual(FIRST_SCRIPT.ultra, [...core.slice(0, -1), 'lib/nav.js', 'content-ultra.js', 'content.js']);
   assert.deepEqual(FIRST_SCRIPT.canvas, [...core.slice(0, -1), 'content-canvas.js', 'content.js']);
 });
 
@@ -49,8 +51,8 @@ test('the detector that runs on every other https page stays under 2 KB', () => 
 // ---- runtime work, read from the source -------------------------------------------------------------------------
 // Every first-party script Glaze ships, at any depth (features/, lib/, i18n/ and the root), whether it is in the
 // first content script, loaded on demand or in the extension's pages. Not the vendored three.js or OCR engine, nor the tools,
-// tests and app wrappers around the extension.
-const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'parity']);
+// tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
+const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'parity', 'server']);
 const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js']); // pdf.js is .mjs, not scanned
 const shipped = (dir = '') => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
   const rel = dir ? `${dir}/${e.name}` : e.name;

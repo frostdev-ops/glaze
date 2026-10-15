@@ -7,6 +7,13 @@ All notable changes to Glaze are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Blackboard Ultra: hide folders and learning modules locally, with a Show hidden folders count and per-account/course choices included in Export all.
+
+- **Blackboard navigation:** the newer MUI drawer and legacy rail now share Glaze's styling, with a bundled Glaze logo
+  at first paint, school/device-only custom logos, precise sizes and spacing, custom http/https links with built-in
+  icons, reversible native-item order/hiding and Reset. Institution page reads Dashboard at the same link. Optional
+  clock/date, cached next-due item, shared focus timer and pet level can sit at the top or bottom. The editor previews
+  the real Ultra nav rules; navigation settings and custom links are included in Export all.
 
 - **Planning on Blackboard Ultra.** Better To Do (on by default), tasks on course cards, reminders and the streak, Export
   calendar (.ics), the class schedule, Gradescope in To Do and Google Calendar sync now work on Blackboard Ultra too: the
@@ -30,6 +37,40 @@ All notable changes to Glaze are documented here. The format follows
   content titles and released public document, announcement and discussion topic text, with native type labels. Current course and term first, up to
   24 results; open current-term courses only, nothing stored, five-minute cache reuse, cancellation on typing, closing or disabling. Unknown release conditions are omitted and transient errors retry after backoff. Read-only public
   lists only, bounded to 30 requests per query and two pages per list. No addition to any site's first content script.
+- **Free-placed widgets and a Glaze Dashboard on Blackboard Ultra** (B7b; the Courses page and the floating widgets with
+  the Notes and Widgets switches, the Dashboard with its own, **Glaze Dashboard**, on by default):
+  - The Courses page's widgets float over the page instead of sitting in the side column. They start where the panel
+    had them, at the top of its right column, which keeps room for every widget over it (Ultra's To Do and Better To Do
+    are never under one); the panel keeps its bar (Edit layout, Reminders, What Glaze can do, Insights).
+  - The Institution page becomes Glaze's **Dashboard** (on by default; Glaze Dashboard in the editor, What Glaze can do
+    and Ctrl+K): two tabs in its header (a real tablist: arrow keys, Home, End; above the board where the header has no
+    place for them), *Dashboard* (the default, and the page's heading says so; its own layout, starting with Canvas's
+    default widgets and Better To Do as a widget) and *Institution page* (Ultra's own page and heading, themed, nothing
+    over it). The last tab is kept. Ultra's page waits hidden until the Dashboard is drawn, so it doesn't flash first.
+    The Dashboard's widgets need no other switch (the notes and the pet keep theirs); with every widget off it says how
+    to add them. Ctrl+K has a Dashboard entry.
+  - **Edit layout** (then Reset layout and Done; Esc ends it too) moves a widget anywhere, by its heading or with the
+    arrow keys on its handle (a grid step; Shift: four), and says where it went. It snaps to a 16px grid, the page's
+    edges, the other widgets' edges and centres and Ultra's column, with a guide while you drag; Alt places freely. The
+    one you moved goes on top. Fold any widget to its heading. Outside Edit layout a click never moves anything.
+  - Each board keeps its own layout on this device (which widgets, size, place, folded, stacking order), kept from the
+    nearer side so it holds as the window changes. A window narrower than the one you arranged in stacks the widgets in
+    reading order instead, and the layout comes back on a wider one. Today's layout carries over: every widget that was
+    on stays on, on the Courses page where the panel had it. The notes, timer, music link and pet are shared.
+  - **Float on every Blackboard page** (⇱ in Edit layout): a widget leaves its page's layout and floats over every Ultra
+    page, once (never on a board at the same time), from the window's bottom right, clear of the nav, a course's top bar
+    and Glaze's footer; moved, snapped, announced, folded and stacked as on the boards, and one column at the window's
+    edge when the window is too narrow. ⇲ puts it back where it was on the page's layout. Widgets that floated over every
+    Ultra page before still do, at their place. Canvas's floating widgets are as they were.
+  - **Open Blackboard on the dashboard** (off by default): when Ultra opens on its start page right after sign-in (its
+    bare address, or its stream or Courses page coming from the sign-in page), go on to the Dashboard once in that tab.
+    Never on a reload or Back, never from a page you opened by address, bookmark or link, and not if you clicked, typed
+    or went elsewhere meanwhile. The tab is remembered by Glaze's background page, not the school's site.
+  - Every change to the layout goes to Glaze's background page as a change (this tile on this board), applied to what
+    is stored then, so two tabs never undo each other's. The focus timer's Start, Pause and Reset go through one queue
+    there too (shared with the nav's timer), say so if it couldn't change, and never show an answer older than what is
+    stored since.
+  - `scripts/ultra-boards-check.js` checks it all headless on synthetic Ultra pages, with screenshots.
 - **Notes and widgets on Blackboard Ultra** (the same Notes and Widgets switches, off by default): Ultra has no
   Dashboard, so they sit in Glaze's panel at the top of the Courses page's right column, above Ultra's own To Do. Its
   heading folds it away (kept on this device); on a narrow window Ultra puts that column under the courses, and the
@@ -51,7 +92,7 @@ All notable changes to Glaze are documented here. The format follows
   protected and broken PDFs get a plain message. The extension grows by about 10 MB (the OCR models), and its pages may
   now compile WebAssembly ('wasm-unsafe-eval' in its content security policy); no new permission.
 
-- **Pet habitat**, opt-in and local: the study buddy earns XP from already-stored handed-in work, W11's verified closed streak days and W17 kept do-on plans, with five levels, unlockable looks and a keyboard-friendly habitat editor. Canvas and Ultra share one widget, palette renderer, account helper and app stylesheet; Ultra's hub offers Streak beside Pet habitat. Rewards reconcile idempotently through the background broker per site and account. Streak rewards stop at W11's saved calculation day; restores add days once. Historical hand-ins can earn their first reward outside the planner window, while existing synced work/plan values stay settled until a visible tick or submission correction can update them. Local, synced and manual unticks revoke work/plan credit; clearing Insights and deleting finished history preserve settled XP. Bounded records fail closed without resetting progress, and failed module loads back off quietly. No focus-session XP, notifications or missed-day losses. Includes original matching bandana artwork (9,760-byte transparent WebP), all six languages and table tests for the XP rules.
+- **Pet habitat**, opt-in and local: the study buddy earns XP from already-stored handed-in work, W11's verified closed streak days and W17 kept do-on plans, with five levels, unlockable looks and a keyboard-friendly habitat editor. Canvas and Ultra share one widget, palette renderer, account helper and app stylesheet; Ultra's hub offers Streak beside Pet habitat. Rewards reconcile idempotently through the background broker per site and account. Streak rewards stop at W11's saved calculation day; restores add days once. Historical hand-ins and kept plans can earn their first reward outside the planner window. Existing synced values stay settled until their native row returns; a fresh source proving a newer provider hand-in can also update work credit. Local, synced and manual unticks revoke work/plan credit; clearing Insights and deleting finished history preserve settled XP. Bounded records fail closed without resetting progress, and failed module loads back off quietly. No focus-session XP, notifications or missed-day losses. Includes original matching bandana artwork (9,760-byte transparent WebP), all six languages and table tests for the XP rules.
 
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
@@ -354,6 +395,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
+- **Blackboard Ultra, course cards:** the tasks on a card stay inside it. The card grows to fit them (and the courses
+  below move down), instead of the list spilling over the next term's heading and cards. A card shows its first tasks
+  (4 by default, up to 10) and then "and N more" (on Canvas too); never a scrolling box. Glaze's banner height now
+  sets the least height of the card, so a short banner no longer leaves a tall, empty card, and the list no longer
+  runs past the card's right edge. Glaze's card gap also reaches Ultra's newer Courses page.
 - **Notes:** a new, unsaved note's details line no longer shows the word "null".
 - **Dark palettes:** a page with a form holding a field named "id" no longer stops Glaze's pass that darkens
   what the stylesheet can't reach.

@@ -167,3 +167,114 @@ test('R2-1: a first-read visible synced untick stores zero without growing histo
   const open = run({ todoO, planner: [{ ...row, sub: { submitted: false } }], cache: { at: now + 1 } });
   assert.deepEqual(open.earned, {}); assert.deepEqual(open.seen, {});
 });
+
+
+const syncAuto = { sync: true, done: 'auto' };
+for (const [name, state] of [['new work', undefined], ['settled work', { earned: { 'work:assignment:1': 20 }, seen: { 'assignment:1': now } }]]) {
+  test(`R3-1: historical kept plan gets its first reward with ${name} and no native row`, () => {
+    const old = { at: now, courses: [{ id: '1', items: [{ k: 'assignment:1', n: 'Old', a: now - 21 * T.DAY, d: now - 20 * T.DAY, s: 'on' }] }] };
+    const data = { items: { 'assignment:1': { on: T.dayKey(today - 21) } } };
+    const sources = { insights: old, todo: data, todoO: syncAuto };
+    const first = run(sources, state);
+    assert.equal(view(first).plans, 8);
+    assert.equal(view(run({ ...sources, todoO: { ...syncAuto, sync: false } }, state)).plans, 8);
+    assert.deepEqual(run(sources, first), first);
+  });
+}
+test('R3-1: missing native row preserves settled plan values including explicit zero', () => {
+  for (const points of [0, 8]) {
+    const state = { earned: { 'work:assignment:1': 20, 'plan:assignment:1': points }, seen: { 'assignment:1': now } };
+    const after = run({ insights: { ...insights, at: now + 1000 }, todo, todoO: syncAuto }, state);
+    assert.equal(view(after).plans, points);
+  }
+});
+test('R3-1: a first visible native plan untick is settled zero, then row return resumes plan corrections', () => {
+  const sources = { insights, todo, todoO: syncAuto };
+  const first = run({ ...sources, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 1 } });
+  assert.equal(first.earned['plan:assignment:1'], 0);
+  assert.equal(view(run(sources, first)).plans, 0);
+  const ticked = run({ ...sources, planner: [{ ...row, ov: { done: true } }], cache: { at: now + 2 } }, first);
+  assert.equal(view(ticked).plans, 8);
+  const undone = run({ ...sources, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 3 } }, ticked);
+  assert.equal(view(undone).plans, 0);
+  const moved = run({ ...sources, todo: { items: { 'assignment:1': { on: T.dayKey(today + 1) } } }, planner: [{ ...row, ov: { done: true } }], cache: { at: now + 4 } }, undone);
+  assert.equal(view(moved).plans, 0, 'a known future plan remains a correction');
+  assert.equal(view(run({ ...sources, planner: [{ ...row, ov: { done: true } }], cache: { at: now + 5 } }, moved)).plans, 8);
+});
+test('R3-2: new late hand-in after visible redo can replace settled zero outside native window', () => {
+  const sources = { insights, todoO: syncAuto };
+  const first = run({ ...sources, planner: [row], cache: { at: now } });
+  const redo = run({ ...sources, planner: [{ ...row, sub: { submitted: true, redo: true } }], cache: { at: now + 1 } }, first);
+  const newer = { at: now + 900000, courses: [{ id: '1', items: [{ ...insights.courses[0].items[0], a: now + 800000, s: 'late' }] }] };
+  const fresh = { insights: newer, todoO: syncAuto, now: now + 1000000 };
+  const after = run(fresh, redo);
+  assert.deepEqual([view(first).work, view(redo).work, view(after).work], [20, 0, 10]);
+  assert.equal(view(run({ ...fresh, todoO: { ...syncAuto, sync: false } }, redo)).work, 10);
+  assert.deepEqual(run(fresh, after), after);
+});
+test('R3-2: refreshed, same, older or unproven hand-in timestamps preserve a native untick zero', () => {
+  const zero = run({ insights, todoO: syncAuto, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 1 } });
+  for (const [at, a] of [[now + 1000, now - 2 * T.DAY], [now + 1000, now - 3 * T.DAY], [now + 1000, 0], [now, now + 500], [now + 1, now + 500]]) {
+    const record = { at, courses: [{ id: '1', items: [{ ...insights.courses[0].items[0], a, s: 'late' }] }] };
+    assert.equal(view(run({ insights: record, todoO: syncAuto, now: now + 2000 }, zero)).work, 0);
+  }
+  const newer = { at: now + 1000, courses: [{ id: '1', items: [{ ...insights.courses[0].items[0], a: now + 500, s: 'late' }] }] };
+  const after = run({ insights: newer, todoO: syncAuto, now: now + 2000 }, zero);
+  assert.equal(view(after).work, 10, 'a genuinely new submitted hand-in can replace native zero');
+  assert.deepEqual(run({ insights: { ...newer, at: now + 3000 }, todoO: syncAuto, now: now + 4000 }, after), after, 'cache refresh alone leaves settled history unchanged');
+});
+
+
+const serverA = Date.parse('2026-10-15T10:00:00Z');
+const clockInsight = (at, a = serverA, status = 'on') => ({ at, courses: [{ id: '1', items: [{ k: 'assignment:1', n: 'Clock', d: serverA + T.DAY, a, s: status }] }] });
+const clockRow = { ...row, at: serverA + T.DAY };
+test('R4-1: slow device clock does not turn the same provider hand-in into a new reward after untick', () => {
+  const observed = serverA - 8 * 60000;
+  const zero = run({ now: observed, insights: clockInsight(observed - 1), planner: [{ ...clockRow, ov: { done: false } }], cache: { at: observed }, todoO: syncAuto });
+  const later = { now: observed + T.DAY, insights: clockInsight(observed + T.DAY), todoO: syncAuto };
+  assert.equal(view(zero).work, 0);
+  assert.equal(view(run(later, zero)).work, 0);
+});
+for (const [label, zero] of [['positive', false], ['native zero', true], ['redo zero', 'redo']]) {
+  test(`R4-1: fast device accepts a provider-newer hand-in after ${label}`, () => {
+    const observed = serverA + 12 * 60000;
+    const initial = run({ now: observed, insights: clockInsight(observed - 1), planner: [{ ...clockRow, ov: { done: zero === true ? false : true } }], cache: { at: observed }, todoO: syncAuto });
+    const settled = zero === 'redo' ? run({ now: observed + 1, insights: clockInsight(observed - 1), planner: [{ ...clockRow, sub: { submitted: true, redo: true } }], cache: { at: observed + 1 }, todoO: syncAuto }, initial) : initial;
+    const fresh = { now: observed + 60000, insights: clockInsight(observed + 60000, serverA + 5 * 60000, 'late'), todoO: syncAuto };
+    const after = run(fresh, settled);
+    assert.equal(view(settled).work, zero ? 0 : 20);
+    assert.equal(view(after).work, 10, 'new provider timestamp precedes fast device observation but is a new hand-in');
+    assert.deepEqual(run(fresh, after), after);
+  });
+}
+test('R4-1: provider baseline is retained across zero, clean and JSON view round trips without device-time clamping', () => {
+  const observed = serverA - 8 * 60000;
+  const first = run({ now: observed, insights: clockInsight(observed - 1), planner: [clockRow], cache: { at: observed }, todoO: syncAuto });
+  assert.equal(first.sub['assignment:1'], serverA);
+  const redo = run({ now: observed + 1, insights: clockInsight(observed - 1), planner: [{ ...clockRow, sub: { submitted: true, redo: true } }], cache: { at: observed + 1 }, todoO: syncAuto }, first);
+  assert.equal(redo.sub['assignment:1'], serverA);
+  assert.equal(P.clean(JSON.parse(JSON.stringify(redo)), observed).sub['assignment:1'], serverA);
+  assert.equal(P.view(redo).sub['assignment:1'], serverA);
+});
+test('R4-1: missing legacy provider baseline stays conservative and is not fabricated from a refresh', () => {
+  const legacy = { earned: { 'work:assignment:1': 0 }, seen: { 'assignment:1': serverA - 8 * 60000 } };
+  const after = run({ now: serverA + T.DAY, insights: clockInsight(serverA + T.DAY), todoO: syncAuto }, legacy);
+  assert.equal(view(after).work, 0);
+  assert.deepEqual(after.sub, {});
+});
+test('R4-1: malformed or oversized provider metadata fails closed without replacing stored history', async () => {
+  const key = 'pet:https://school.test/3';
+  for (const sub of [[], 'bad', null, { 'assignment:1': 'bad' }, { 'assignment:1': -1 }, { bad: serverA }, Object.fromEntries(Array.from({ length: P.MAX + 1 }, (_, i) => [`assignment:${i}`, serverA]))]) {
+    const raw = { earned: { 'work:assignment:1': 20 }, sub }, before = JSON.stringify(raw); let writes = 0;
+    assert.equal(P.clean(raw), null);
+    const r = await P.change({ key, op: 'read', tz }, { local: { get: async () => ({ [key]: raw }), set: async () => { writes++; return true; } } });
+    assert.equal(r.error, 'history'); assert.equal(writes, 0); assert.equal(JSON.stringify(raw), before);
+  }
+});
+test('R4-1: provider metadata capacity exhaustion preserves the original store and settled XP', async () => {
+  const key = 'pet:https://school.test/3';
+  const raw = { earned: { 'work:assignment:2': 20 }, sub: Object.fromEntries(Array.from({ length: P.MAX }, (_, i) => [`assignment:${i + 10}`, serverA])) };
+  const before = JSON.stringify(raw); let writes = 0;
+  const r = await P.change({ key, op: 'read', tz }, { local: { get: async () => ({ [key]: raw, 'insights:https://school.test/3': insights }), set: async () => { writes++; return true; } } });
+  assert.equal(r.error, 'history'); assert.equal(writes, 0); assert.equal(JSON.stringify(raw), before); assert.equal(r.data.work, 20);
+});
