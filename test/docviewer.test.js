@@ -28,7 +28,7 @@ test('the DocViewer script stays within its budget', () => {
 });
 
 // features/docs.js answers; content.js only hands it the message (and loads it for that).
-const page = ({ src, href = 'https://school.instructure.com/courses/1/modules' } = {}) => {
+const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', profile = () => Promise.resolve({ id: '170000000000077' }) } = {}) => {
   const sent = [];
   const frame = { closed: false, postMessage: (msg, origin) => sent.push({ msg, origin }) };
   const iframe = { src, contentWindow: frame };
@@ -43,10 +43,11 @@ const page = ({ src, href = 'https://school.instructure.com/courses/1/modules' }
     },
   });
   ctx.globalThis = ctx;
-  ctx.GZ_CTX = { site: 'canvas', t: (w) => ({ Pen: 'Stift' })[w] || w, on: () => true, darkTheme: () => true, settings: () => settings, wordsIn: later, PREVIEWS: 'iframe', DOC: '.doc' };
+  ctx.GZ_CTX = { site: 'canvas', t: (w) => ({ Pen: 'Stift' })[w] || w, on: () => true, darkTheme: () => true, settings: () => settings, wordsIn: later, PREVIEWS: 'iframe', DOC: '.doc',
+    profile: () => { ctx.profiles = (ctx.profiles || 0) + 1; return profile(); } };
   vm.runInContext(fs.readFileSync(path.join(root, 'features/docs.js'), 'utf8'), ctx);
   const ask = (data, origin = 'https://canvadocs.instructure.com', source = frame) => ctx.GZ_DOCS.ask({ data, origin, source });
-  return { sent, ask, frame, docs: ctx.GZ_DOCS, later, settings };
+  return { sent, ask, frame, docs: ctx.GZ_DOCS, later, settings, ctx };
 };
 
 test('content.js loads features/docs.js for a canvadocs frame\'s question only, and hands it the message', async () => {
@@ -85,6 +86,32 @@ test('the file comes from the page when the frame\'s address has no session blob
   assert.equal(sent[0].origin, 'https://canvadocs-syd.instructure.com');
   assert.equal(sent[0].msg.file, '77');
   assert.equal(sent[0].msg.user, '');
+});
+
+test('with no user in the blob, Canvas names you; signed out is "anon"; any other failure is no one', async () => {
+  const src = 'https://canvadocs.instructure.com/1/sessions/x/view';
+  for (const [profile, want] of [[() => Promise.resolve({ id: '170000000000077' }), '170000000000077'], [() => Promise.reject(401), 'anon'],
+    [() => Promise.reject(403), 'anon'], [() => Promise.reject(500), ''], [() => Promise.reject(new TypeError('offline')), ''], [() => Promise.resolve({}), '']]) {
+    const { sent, ask } = page({ src, href: 'https://school.instructure.com/courses/1/files/77', profile });
+    ask({ gz: 'docs?' });
+    assert.equal(sent[0].msg.user, '', 'not known yet: no one');
+    await new Promise(setImmediate);
+    assert.equal(sent.at(-1).msg.user, want, String(want));
+  }
+});
+
+test('Canvas is asked who you are only while annotations are on, and once', async () => {
+  const { ask, ctx, settings, docs } = page({ src: 'https://canvadocs.instructure.com/1/sessions/x/view' });
+  settings.enhance = { ...settings.enhance, docInk: false };
+  ask({ gz: 'docs?' });
+  docs.sync();
+  assert.equal(ctx.profiles, undefined);
+  settings.enhance = { ...settings.enhance, docInk: true };
+  docs.sync();
+  docs.sync();
+  await new Promise(setImmediate);
+  docs.sync();
+  assert.equal(ctx.profiles, 1);
 });
 
 test('nobody else is answered: other origins, other windows, other messages', () => {

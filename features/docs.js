@@ -132,11 +132,20 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     const id = (v) => (/^\d{1,20}$/.test(v) ? String(v) : '');
     const file = id(b.attachment_id) || id(location.pathname.match(/\/files\/(\d+)/)?.[1]) || id(new URLSearchParams(location.search).get('preview'));
     const asked = (Array.isArray(q.words) ? q.words : []).filter((w) => typeof w === 'string' && w.length < 100).slice(0, 40);
+    // Whose marks: the blob's user, else Canvas is asked (your own /users/self/profile), only while annotations are on.
+    // Signed out (401, 403) is the site's "anon"; any other failure is nobody, so no marks rather than someone else's.
+    let user = id(b.user_id) || null, asking = false;
+    const whose = () => {
+      if (user !== null || asking) return;
+      asking = true;
+      ctx.profile().then((p) => id(p?.id), (s) => (s === 401 || s === 403 ? 'anon' : '')).then((u) => { user = u; tell(); });
+    };
     let said = '';
     const tell = () => {
       const s = ctx.settings().enhance;
+      if (s.docInk) whose();
       const msg = { gz: 'docs', on: ctx.on(), dark: ctx.darkTheme(), colors: Object.fromEntries(GZ_COLORS.map(([v]) => [v, html.style.getPropertyValue(v)])),
-        theme: s.docTheme, pages: s.docPages, ink: s.docInk, file, user: id(b.user_id), words: Object.fromEntries(asked.map((w) => [w, t(w)])) };
+        theme: s.docTheme, pages: s.docPages, ink: s.docInk, file, user: user || '', words: Object.fromEntries(asked.map((w) => [w, t(w)])) };
       const j = JSON.stringify(msg);
       if (j === said) return; // sync runs on every pass; the frame hears only changes
       said = j;

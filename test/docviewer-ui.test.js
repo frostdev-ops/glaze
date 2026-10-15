@@ -144,6 +144,22 @@ for (const [what, change] of [
   });
 }
 
+test('marks belong to a known person or the signed-out "anon" partition, never to an unnamed one', async () => {
+  const v = viewer();
+  await v.tell({ user: '' });
+  assert.equal(v.bar(), undefined, 'no one known: no annotations at all');
+  await v.tell({ user: 'anon' });
+  assert.ok(v.bar(), 'signed out: the site\'s anon partition');
+  v.bar().find('Annotate').click();
+  v.pointer('pointerdown', 1, 10, 10);
+  v.pointer('pointerup', 1, 20, 20);
+  await settle();
+  assert.deepEqual(Object.keys(v.sets[0]), [`ink:${CANVAS}/anon/21`]);
+  await v.tell({ user: '' });
+  assert.equal(v.bar(), undefined, 'not shown once the person is unknown again');
+  assert.equal(v.svg(), undefined);
+});
+
 test('an import that finishes on its own file is kept', async () => {
   const v = viewer();
   await v.tell();

@@ -2,10 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const I = require('../lib/ink.js');
 
-test('a key per Canvas site, person and file; anything else has none', () => {
+test('a key per Canvas site, person and file; signed out is the site\'s "anon"; a person not known has none', () => {
   assert.equal(I.storeKey('https://school.instructure.com', '170000000000123', '4567'), 'ink:https://school.instructure.com/170000000000123/4567');
-  assert.equal(I.storeKey('https://canvas.school.edu', '', '9'), 'ink:https://canvas.school.edu/anon/9');
-  assert.equal(I.storeKey('https://canvas.school.edu', 'x"y', '9'), 'ink:https://canvas.school.edu/anon/9');
+  assert.equal(I.storeKey('https://canvas.school.edu', 'anon', '9'), 'ink:https://canvas.school.edu/anon/9');
+  for (const unknown of ['', 'x"y', 'null', 'ANON']) assert.equal(I.storeKey('https://canvas.school.edu', unknown, '9'), null, `"${unknown}" is no one`);
   for (const bad of [['https://a.edu', '1', ''], ['https://a.edu', '1', '9/../1'], ['http://a.edu', '1', '9'], ['https://a.edu/x', '1', '9']]) assert.equal(I.storeKey(...bad), null, bad.join(' '));
   assert.ok(I.STORE_KEY.test('ink:https://a.edu:8443/anon/1'));
 });

@@ -86,7 +86,10 @@ _Last updated: 2026-10-15_
   on this device only, per Canvas site, signed-in user id and file id (which the viewer's address on your Canvas page
   names): each pen or highlighter stroke's points, color and width, page by page. Canvas's document viewer runs on
   Instructure's own host, and Glaze asks your Canvas page for the palette, the file and the user over the browser's
-  messaging between the two, at each one's exact address. Nothing is sent to Canvas, Instructure or anywhere else.
+  messaging between the two, at each one's exact address. When the viewer's address doesn't name the user, Glaze asks
+  your own Canvas who you are (`/api/v1/users/self/profile`, read-only, only while the switch is on). Signed out, marks
+  are kept apart for that site as "anon" and shown only while signed out; if Glaze can't tell who you are, it keeps and
+  shows none, so one person's marks never show for another. Nothing is sent to Canvas, Instructure or anywhere else.
   Export annotations saves them as a file you keep; Clear page and undo remove them.
 - **Canvas sidebar settings**, in `chrome.storage.sync`: background colors, an optional `https://` picture link
   or a local picture identifier, filter/overlay, text color, logo visibility, labels, size and collapsed state.
