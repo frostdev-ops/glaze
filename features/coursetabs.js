@@ -599,7 +599,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // The tab's scroll, put back until it holds; anything the student does first ends it. On the outline with "Your place"
   // on, features/place.js does this (with the open folders).
   const scrollerOf = (el, content = false) => {
-    for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) if (/auto|scroll|overlay/.test(getComputedStyle(p).overflowY) && (content || p.scrollHeight > p.clientHeight)) return p;
+    let n = 0;
+    for (let p = content ? el : el?.parentElement; p && p !== document.body && n++ < 30; p = p.parentElement) if (/^(auto|scroll|overlay)$/.test(getComputedStyle(p).overflowY) && (content || p.scrollHeight > p.clientHeight)) return p;
     return document.scrollingElement;
   };
   const pageScroller = () => {

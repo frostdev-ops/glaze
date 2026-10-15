@@ -123,7 +123,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         if (!globalThis.__b8bNet) {
           globalThis.__b8bNet = [];
           const original = fetch;
-          globalThis.fetch = (...args) => { __b8bNet.push({ url: String(args[0]), method: args[1]?.method || 'GET', active: GZ_CTABS.showing(), page: location.href, at: performance.now() }); return original(...args); };
+          globalThis.fetch = (...args) => { __b8bNet.push({ url: String(args[0]), method: args[1]?.method || 'GET', active: GZ_CTABS.showing(), page: location.href, at: performance.now(), stack: new Error().stack }); return original(...args); };
         }
         const until = performance.now() + 3000;
         while (!GZ_SITE_ULTRA.assignment('_101_1', '_8120_1') && performance.now() < until) await new Promise((r) => setTimeout(r, 25));
@@ -139,7 +139,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       };
       const position = (top) => page.evaluate((n) => {
         const main = document.querySelector('main[class*="contentGridArea"]');
-        let sc = main.parentElement;
+        let sc = main;
         while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
         (sc === document.body ? document.scrollingElement : sc).scrollTop = n;
       }, top);
@@ -164,7 +164,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         ok(requestDetails.length === start, `${label} restoration starts no requests (${JSON.stringify(requestDetails.slice(start))})`);
         await settled('_101_1');
         await page.waitForFunction((n) => {
-          const main = document.querySelector('main[class*="contentGridArea"]'); let sc = main.parentElement;
+          const main = document.querySelector('main[class*="contentGridArea"]'); let sc = main;
           while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
           return Math.abs((sc === document.body ? document.scrollingElement : sc).scrollTop - n) < 2;
         }, top);
@@ -173,6 +173,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       };
       await native('a.b8b-document');
       const doc = '/ultra/courses/_101_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
+      phase = 'B8b:NATIVE:history'; await page.goBack(); await settled('_101_1');
+      ok(await page.evaluate(() => location.pathname.endsWith('/outline')), 'Back from a routed document restores the native outline');
+      await page.goForward(); await settled('_101_1');
+      ok(await page.evaluate(() => location.pathname + location.search) === doc && (await strip())?.at === 'routed', 'Forward restores the routed document with its strip and query');
       for (const at of ['above', 'between', 'below']) {
         await opts.evaluate(async (at) => { const { tabs } = await chrome.storage.sync.get('tabs'); await chrome.storage.sync.set({ tabs: { ...tabs, at } }); }, at);
         await page.waitForFunction((a) => {
@@ -183,6 +187,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       }
       await position(470); await saved(doc, 470); await restore(doc, 470, 'document-nested-scroll');
       phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
+      await native('a.b8b-document-self');
+      const self = '/ultra/courses/_101_1/document/_8112_1?view=content&state=view';
+      await position(430); await saved(self, 430); await restore(self, 430, 'document-main-scroll');
+      phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
       await native('a.b8b-document-fallback');
       const fallback = '/ultra/courses/_101_1/document/_8111_1?view=content&state=view';
       await position(520); await saved(fallback, 520); await restore(fallback, 520, 'document-page-scroll');
@@ -190,8 +198,12 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       await native('a.b8b-assignment');
       const overview = '/ultra/courses/_101_1/assessment/_8120_1/overview?courseId=_101_1';
       await position(390); await saved(overview, 390); await restore(overview, 390, 'cached-assignment-overview');
+      await isolated(() => { globalThis.__b8bClassifier = GZ_SITE_ULTRA.assignment; GZ_SITE_ULTRA.assignment = () => false; return true; });
+      await switchTab('_102_1'); await switchTab('_101_1');
+      ok(await page.evaluate(() => location.pathname.endsWith('/outline')), 'a stored overview cannot authorize a target after its positive cache check is lost');
+      await isolated(() => { GZ_SITE_ULTRA.assignment = __b8bClassifier; return true; });
       for (const cls of ['a.b8b-test', 'a.b8b-unknown']) {
-        phase = 'B8b:NATIVE:overview-close'; await page.click('.routed-page a'); await settled('_101_1');
+        if (await page.locator('.routed-page a').count()) { phase = 'B8b:NATIVE:overview-close'; await page.click('.routed-page a'); await settled('_101_1'); }
         await native(cls); await switchTab('_102_1'); await switchTab('_101_1');
         ok(await page.evaluate(() => location.pathname.endsWith('/outline')), `${cls} returns quietly to the outline`);
       }

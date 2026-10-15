@@ -22,6 +22,7 @@
     /ultra/courses/<cid>/outline/discussion/_9003_1                                   second panel
     /ultra/courses/<cid>/document/_8110_1?view=content&state=view   full routed document, nested scroller
     /ultra/courses/<cid>/document/_8111_1?view=content&state=view   full routed document, document scroller
+    /ultra/courses/<cid>/document/_8112_1?view=content&state=view   full routed document, main itself scrolls
     /ultra/courses/<cid>/assessment/_8120_1/overview?courseId=<cid> full routed cached Assignment
     /ultra/courses/<cid>/assessment/_8121_1/overview?courseId=<cid> full routed Test (never restored)
 
@@ -99,6 +100,8 @@
   .routed-document-scroll.routed-page { position: relative; }
   .routed-document-scroll .makeStylesbaseBody-b8b { display: block; height: auto; }
   .routed-document-scroll .routed-scroll { overflow: visible; }
+  .routed-main-scroll .routed-scroll { display: contents; }
+  .routed-main-scroll main { overflow-y: auto; min-height: 0; flex: 1; }
 
   @media (max-width: 767.98px) {
     .MuiDrawer-paper { transform: translateX(-100%); }
@@ -195,7 +198,7 @@
   function pageHtml(c, tool) {
     if (tool === 'outline') {
       return `<section class="course-outline-content"><main class="course-main-content"><div role="region" aria-label="Course Content" class="outline-column">`
-        + `<header class="outline-header"><h2>Course Content</h2></header><p><a class="b8b-document" href="/ultra/courses/${c.id}/document/_8110_1?view=content&amp;state=view&amp;parentId=_8130_1">Routed reading</a> · <a class="b8b-document-fallback" href="/ultra/courses/${c.id}/document/_8111_1?view=content&amp;state=view">Long reading</a> · <a class="b8b-assignment" href="/ultra/courses/${c.id}/assessment/_8120_1/overview?courseId=${c.id}">Writing overview</a> · <a class="b8b-test" href="/ultra/courses/${c.id}/assessment/_8121_1/overview?courseId=${c.id}">Test overview</a> · <a class="b8b-unknown" href="/ultra/courses/${c.id}/assessment/_8122_1/overview?courseId=${c.id}">Unknown overview</a></p><div class="makeStylescontentList-0-2-14">${outlineItems(c)}</div></div></main></section>`;
+        + `<header class="outline-header"><h2>Course Content</h2></header><p><a class="b8b-document" href="/ultra/courses/${c.id}/document/_8110_1?view=content&amp;state=view&amp;parentId=_8130_1">Routed reading</a> · <a class="b8b-document-self" href="/ultra/courses/${c.id}/document/_8112_1?view=content&amp;state=view">Main reading</a> · <a class="b8b-document-fallback" href="/ultra/courses/${c.id}/document/_8111_1?view=content&amp;state=view">Long reading</a> · <a class="b8b-assignment" href="/ultra/courses/${c.id}/assessment/_8120_1/overview?courseId=${c.id}">Writing overview</a> · <a class="b8b-test" href="/ultra/courses/${c.id}/assessment/_8121_1/overview?courseId=${c.id}">Test overview</a> · <a class="b8b-unknown" href="/ultra/courses/${c.id}/assessment/_8122_1/overview?courseId=${c.id}">Unknown overview</a></p><div class="makeStylescontentList-0-2-14">${outlineItems(c)}</div></div></main></section>`;
     }
     const t = TOOLS.find((x) => x[0] === tool);
     if (!t) return '<h2>Page not found</h2>';
@@ -262,7 +265,7 @@
     site.hidden = true; baseMain.removeAttribute('id'); inner.removeAttribute('id');
     const fallback = r.full.id === '_8111_1';
     const page = document.createElement('section');
-    page.className = `routed-page route-view-container bb-offcanvas-container${r.full.kind === 'assessment' ? ' assessment-overview-modern-panel' : ''}${fallback ? ' routed-document-scroll' : ''}`;
+    page.className = `routed-page route-view-container bb-offcanvas-container${r.full.kind === 'assessment' ? ' assessment-overview-modern-panel' : ''}${fallback ? ' routed-document-scroll' : ''}${r.full.id === '_8112_1' ? ' routed-main-scroll' : ''}`;
     page.innerHTML = `<section class="makeStylespanelRoot-b8b js-skip-link-target route-view-container"><div class="makeStylesbaseBody-b8b"><div class="makeStylesheaderRoot-b8b"><div class="makeStylespanelHeaderContainerRoot-b8b"><a href="/ultra/courses/${r.course.id}/outline">Course Content</a><h1>${r.full.kind === 'document' ? 'Routed reading' : r.full.id === '_8120_1' ? 'Writing overview' : 'Unclassified overview'} — ${r.course.name}</h1></div></div><div class="routed-scroll">${SPINNER}</div></div></section>`;
     S.box = page; document.body.append(page); S.loading = true;
     const my = ++S.tok;

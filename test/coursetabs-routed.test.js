@@ -71,6 +71,9 @@ test('routed scrollers use the nearest content overflow ancestor, then the docum
   const doc = { scrollingElement: {}, body: {} }, outer = { parentElement: doc.body, overflowY: 'auto' }, main = { parentElement: outer };
   const scrollerOf = vm.runInNewContext(block + '\nscrollerOf;', { document: doc, getComputedStyle: (e) => e });
   assert.equal(scrollerOf(main, true), outer, 'the ancestor owns scroll even before its content overflows');
+  main.overflowY = 'scroll'; assert.equal(scrollerOf(main, true), main, 'the content main can own scrolling itself');
+  main.overflowY = 'hidden'; assert.equal(scrollerOf(main, true), outer, 'hidden is not a scroll owner');
+  main.overflowY = 'clip';
   outer.overflowY = 'visible'; assert.equal(scrollerOf(main, true), doc.scrollingElement);
 });
 
