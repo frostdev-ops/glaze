@@ -32,10 +32,15 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   };
 
   // What the file may hold, read afresh from storage: Glaze on, the Gradescope switch and this Canvas account's answer
-  // for the Gradescope account kept (sig), the Gradescope items that answer allows, and the student's own data.
-  const sync = () => new Promise((res) => { try { chrome.storage.sync.get(null, (r) => res(r || {})); } catch { res({}); } });
+  // for the Gradescope account kept (sig), the Gradescope items that answer allows, and the student's own data. null when
+  // a read fails (an error, a throw, no answer): only a read that worked counts, even an empty one (a fresh install,
+  // whose defaults then apply).
+  const strict = (area, keys) => new Promise((res) => {
+    try { chrome.storage[area].get(keys, (r) => res(chrome.runtime?.lastError || !r || typeof r !== 'object' ? null : r)); } catch { res(null); }
+  });
   const state = async (key, uid) => {
-    const [raw, kept] = await Promise.all([sync(), local([key, 'gradescope'])]);
+    const [raw, kept] = await Promise.all([strict('sync', null), strict('local', [key, 'gradescope'])]);
+    if (!raw || !kept) return null;
     const s = GZ_SANITIZE(raw);
     const G = globalThis.GZ_GRADESCOPE;
     const d = G ? G.clean(kept.gradescope) : null;
@@ -45,7 +50,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
   };
 
   // Makes the file for these choices and hands it to save(text) → its name: { n, name, guessed }, or null when it
-  // stopped because something changed while Canvas answered (alive() false: the dialog closed; Glaze turned off; the
+  // stopped because something changed while Canvas answered, or couldn't be read back (alive() false: the dialog closed; Glaze turned off; the
   // Gradescope switch or this account's answer changed since the export began). Checked right before the file is made
   // and again right before it's saved, with nothing awaited between that check and the save.
   const run = async (o, alive, save) => {
@@ -61,6 +66,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     const r = X.range(o.icsRange, now, tz, live);
     const key = L.storeKey(location.origin, uid);
     const before = await state(key, uid);
+    if (!before?.on) return null;
     // Planner items through eight weeks past the range, so a plan in the range for work due later has its title; and,
     // for plans whose work isn't among them (overdue work planned for later), half a year back, as far as Better To Do
     // looks. Past deadlines themselves stay out of the file; any plan still without its item goes in untitled.
@@ -74,14 +80,14 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     }
     if (!alive()) return null;
     const a = await state(key, uid);
-    if (!alive() || !a.on || a.sig !== before.sig) return null;
+    if (!alive() || !a?.on || a.sig !== before.sig) return null;
     const events = X.events({
       items, gs: a.gs, data: a.data, o, ...r, site: location.origin, host: location.host, cids: live.length ? new Set(Object.keys(names)) : null, names,
       words: { plan: (title) => t('Do: {title}', { title }), focus: (title) => t('Focus: {title}', { title }), untitled: t('Planned work') },
     });
     const text = GZ_ICS.write({ name: 'Glaze', events }, { now });
     const b = await state(key, uid);
-    if (!alive() || !b.on || b.sig !== a.sig) return null;
+    if (!alive() || !b?.on || b.sig !== a.sig) return null;
     return { n: events.length, name: events.length ? save(text) : '', guessed: r.guessed };
   };
 
