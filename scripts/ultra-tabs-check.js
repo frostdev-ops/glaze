@@ -250,6 +250,35 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         }, at);
         ok(true, `routed header placement ${at}`);
       }
+      if (!process.env.GZ_B8B_FOCUSED || process.env.GZ_B8B_GEOMETRY) {
+        const layouts = [];
+        await opts.evaluate(() => chrome.storage.local.set({ widgetLayout: { boards: { pages: [{ id: 'timer', on: true, size: 's', x: 0, y: 0 }] } } }));
+        for (const preset of ['Frost', 'Paper']) for (const [at, size] of [['above', 'small'], ['between', 'medium'], ['below', 'large']]) for (const width of [1280, 375]) {
+          phase = `B8b:NATIVE:geometry:${preset}:${at}:${size}:${width}`;
+          await settings({ preset, enhance: { widgets: true }, tabs: { at }, nav: { size } });
+          await page.setViewportSize({ width, height: 860 });
+          await page.waitForSelector('#gz-float section.gz-w[data-tile="timer"]');
+          await page.waitForTimeout(200);
+          const g = await page.evaluate(() => {
+            const st = document.getElementById('gz-ctabs'), hd = document.querySelector('[class*="panelHeaderContainerRoot"]');
+            const timer = document.querySelector('#gz-float section.gz-w[data-tile="timer"]');
+            const a = st.getBoundingClientRect(), b = hd.getBoundingClientRect(), c = timer.getBoundingClientRect();
+            const hit = document.elementFromPoint(a.left + Math.min(40, a.width / 2), a.top + a.height / 2);
+            return { strip: a.toJSON(), header: b.toJSON(), timer: c.toJSON(), at: st.dataset.at, hit: !!hit?.closest('#gz-ctabs'),
+              marker: st.hasAttribute('data-gz-keep-clear'), count: document.querySelectorAll('#gz-ctabs').length, wide: document.documentElement.scrollWidth - innerWidth };
+          });
+          const placed = at === 'above' ? g.strip.bottom <= g.header.top + 1 : g.header.bottom <= g.strip.top + 1;
+          const overlap = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+          const clear = !overlap(g.timer, g.strip) && !overlap(g.timer, g.header);
+          const valid = g.at === 'routed' && placed && clear && g.hit && g.marker && g.count === 1 && g.wide <= 0 && g.timer.right <= width + 1;
+          layouts.push({ preset, at, size, width, placed, clear, ...g });
+          await page.screenshot({ path: path.join(out, `B8b-routed-${preset}-${at}-${width}.png`) });
+          fs.writeFileSync(path.join(out, 'B8b-routed-layouts.json'), JSON.stringify(layouts, null, 2));
+          ok(valid, `routed ${at}/${preset}/${width}px/${size}: native header and strip stay reachable and clear of the global timer (${JSON.stringify(g)})`);
+          if (!valid) throw new Error('routed native-header/strip geometry failed');
+        }
+        await settings(); await page.setViewportSize({ width: 1280, height: 860 });
+      }
       await position(470); await saved(doc, 470); await restore(doc, 470, 'document-nested-scroll');
       await switchTab('_102_1');
       phase = 'B8b:NATIVE:second-document'; await page.click('a.b8b-document'); await settled('_102_1');
@@ -309,7 +338,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       return true;
     });
     let s = await strip();
-    ok(s.tabs.length === 1 && s.tabs[0].sel && s.tabs[0].label === 'Computer Science I', `a course opened gets a tab, named and selected (${JSON.stringify(s.tabs)})`);
+    ok(s.tabs.length === 1 && s.tabs[0].sel && s.tabs[0].label === 'Computer Science I · FA26-CS101-01', `a course opened gets a tab, named and selected (${JSON.stringify(s.tabs)})`);
     ok(s.at === 'above', `above the course's bar by default (${s.at})`);
     phase = 'native-navigation';
     // Gradebook, scrolled: the place the tab keeps.
@@ -439,8 +468,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
 
     // ---- never back into an assessment ----
     await page.click('a.js-course-outline-tool');
-    await page.waitForFunction(() => location.pathname.endsWith('/outline') && document.querySelector('a[href*="/assessment/"]'));
-    await page.click('a[href*="/assessment/"]');
+    await page.waitForFunction(() => location.pathname.endsWith('/outline') && document.querySelector('a[href*="/outline/assessment/"]'));
+    await page.click('a[href*="/outline/assessment/"]');
     await page.waitForFunction(() => location.pathname.includes('/assessment/'));
     const views = await page.evaluate(() => window.__assessmentViews);
     await switchTab('_102_1');
@@ -449,7 +478,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     ok(await page.evaluate(() => [window.__assessmentViews, window.__attempts]).then(([v, a]) => v === views && a === 0), 'the assessment wasn\'t opened again, nor an attempt started');
 
     // ---- an item opened over the course: the strip at its panel ----
-    await page.click('a[href*="/document/"]');
+    await page.click('a[href*="/outline/edit/document/"]');
     await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
     const nested = await page.evaluate(() => { const r = document.getElementById('gz-ctabs').getBoundingClientRect(); const e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e?.closest('#gz-ctabs'); });
     ok(nested, 'on a document opened over the course, the strip is on top, at its panel');
@@ -541,8 +570,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       await settings({ preset });
       await page.setViewportSize({ width: 1280, height: 860 });
       await page.click('a.js-course-outline-tool').catch(() => {});
-      await page.waitForSelector('a[href*="/document/"]');
-      await page.click('a[href*="/document/"]');
+      await page.waitForSelector('a[href*="/outline/edit/document/"]');
+      await page.click('a[href*="/outline/edit/document/"]');
       await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
       for (const at of ['above', 'between', 'below']) {
         for (const width of [1280, 375]) {
