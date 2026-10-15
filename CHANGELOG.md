@@ -8,6 +8,20 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Search in your courses on Blackboard Ultra:** the same Ctrl/⌘K search and switch as Canvas, now finding available
+  content titles and released public document, announcement and discussion topic text, with native type labels. Current course and term first, up to
+  24 results; open current-term courses only, nothing stored, five-minute cache reuse, cancellation on typing, closing or disabling. Unknown release conditions are omitted and transient errors retry after backoff. Read-only public
+  lists only, bounded to 30 requests per query and two pages per list. No addition to any site's first content script.
+- **Notes and widgets on Blackboard Ultra** (the same Notes and Widgets switches, off by default): Ultra has no
+  Dashboard, so they sit in Glaze's panel at the top of the Courses page's right column, above Ultra's own To Do. Its
+  heading folds it away (kept on this device); on a narrow window Ultra puts that column under the courses, and the
+  panel with it. The notes box, the agenda (that day's Ultra To Do and calendar items, with your submissions), the
+  focus timer, quote, music, breathing and study buddy work as on Canvas, and any of them can float over every Ultra
+  page. **What Glaze can do** lists the extras that work on Ultra, and the panel opens the reminders when they're on.
+  - The notes app on Ultra: Ctrl+K (Notes, New note, Course notes), the notes box, and **Course notes** at the end of
+    a course outline's right column. **Blackboard link** picks from the course's content items (link and title only).
+    Kept per Ultra site and account, with every safeguard Notes has on Canvas.
+  - Other files can add a tile the same way on both sites (`features/widgets.js`, `MORE` and `register`).
 - **PDFs and photos in the imports** (class schedule, syllabus, transcript), read on your device: a PDF's own text
   (tables kept as rows, two-column pages in order), and the text of a scanned PDF, a photo or a screenshot (PNG, JPEG,
   WebP, HEIC where your browser opens it; or paste one into the import's text box) recognized by the Tesseract OCR engine,
@@ -317,6 +331,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
+- **Notes:** a new, unsaved note's details line no longer shows the word "null".
 - **Dark palettes:** a page with a form holding a field named "id" no longer stops Glaze's pass that darkens
   what the stylesheet can't reach.
 - **Canvas, dark palettes:** text that was too faint is now readable:

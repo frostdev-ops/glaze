@@ -9,6 +9,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
   const record = () => {
+    // This site is Ultra (Glaze started here): the worker lets its pages keep their own data (lib/background.js fromUltra).
+    try { chrome.runtime.sendMessage({ type: 'glaze:ultra' }).catch(() => {}); } catch { /* reloaded */ }
     try {
       chrome.storage.local.get('seenCoursesAt', (r) => {
         if (Date.now() - (r?.seenCoursesAt || 0) < 600000) return;
@@ -373,6 +375,16 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncSyl = () => loadIf(sylHere(), 'features/syllabus.js', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
   const syncInsights = () => loadIf(I.settings.enhance.insights && location.pathname === '/ultra/course', 'features/insights.js', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
+  // ---- code on demand ------------------------------------------------------------------------------
+  // Dashboard notes and widgets (features/widgets.js): Glaze's panel on the Courses page, floating tiles anywhere. The
+  // notes app's Course notes on a course outline (features/notes.js): Ultra changes pages without loading them, so this
+  // pass places it, where Canvas has a hook the worker registers.
+  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || (I.settings.enhance.notes && /^\/ultra\/course\/?$/.test(location.pathname)));
+  const syncWidgets = () => {
+    if (widgetsHere()) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
+  };
+
   // ---- page changes ---------------------------------------------------------------------------
   // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
   // stall it for half a second). A click on the main menu or a course's tabs instead holds the old
@@ -547,7 +559,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
-    ctx: { myCourses, courseItems, bookFor, courseColor },
+    syncWidgets, ctx: { myCourses, courseItems, bookFor, courseColor },
   };
 });
 

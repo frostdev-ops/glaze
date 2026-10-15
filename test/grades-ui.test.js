@@ -647,6 +647,7 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     : path.includes('/courses/') ? el(doc, 'div', { className: 'grades-list' }, el(doc, 'aside', { className: 'student-grade-overview' }), el(doc, 'div', { className: 'student-tabs' }))
     : el(doc, 'div', { id: 'body-content' }, el(doc, 'div', { className: 'base-grades' }, el(doc, 'div', { className: 'carousel' }, el(doc, 'div', { id: 'container-term-current' })))));
   const state = { settings: { enabled: true, enhance: { gpaPlus: true, ...enhance } }, asked: [] };
+  store.data.ultra ||= [UO]; // a site Glaze has found to be Ultra (lib/background.js fromUltra)
   store.send ||= serviceWorker(store);
   const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${UO}${path}` };
   let ctx;
@@ -788,6 +789,8 @@ test('an Ultra page may change only its own site’s grade records, by its own i
   const from = (url) => ({ id: WORKER_ID, tab: { id: 3 }, frameId: 0, url });
   const at = Date.now();
   const op = (key, cid = '_101_1') => ({ type: 'glaze:whatif', op: 'grade', key, cid, c: 90, at });
+  assert.deepEqual(await send(op(UKEY), from(`${UO}/ultra/courses/_101_1/grades`)), { ok: false, error: 'sender' }, 'not a site Glaze has found to be Ultra');
+  store.data.ultra = [UO];
   assert.deepEqual(await send(op(UKEY), from(`${UO}/ultra/courses/_101_1/grades`)), { ok: true });
   assert.deepEqual(await send(op(UKEY), from(`${UO}/webapps/portal`)), { ok: false, error: 'sender' }, 'not an Ultra page');
   assert.deepEqual(await send(op(UKEY), from('http://lms.example.edu/ultra/grades')), { ok: false, error: 'sender' }, 'not https');
@@ -800,5 +803,5 @@ test('an Ultra page may change only its own site’s grade records, by its own i
   assert.equal((await send({ type: 'glaze:syllabus', key: sylKey, rec: { prof: { name: 'Dr. Ada' } }, at }, from(`${UO}/ultra/courses/_101_1/outline`))).ok, true);
   assert.equal((await send({ type: 'glaze:gpaterms', key: `gpaTerms:${UO}:_900_1`, op: 'goal', goal: { k: 'cum', v: 3.5 }, at, base: 0 }, from(`${UO}/ultra/grades`))).ok, true);
   assert.equal((await send({ type: 'glaze:insights', key: `insights:${UO}/_900_1`, op: 'clear', at }, from(`${UO}/ultra/course`))).ok, true);
-  assert.deepEqual(Object.keys(store.data).sort(), [`gpaTerms:${UO}:_900_1`, `insights:${UO}/_900_1`, sylKey, UKEY].sort());
+  assert.deepEqual(Object.keys(store.data).sort(), [`gpaTerms:${UO}:_900_1`, `insights:${UO}/_900_1`, sylKey, UKEY, "ultra"].sort());
 });
