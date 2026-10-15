@@ -110,6 +110,9 @@ All notable changes to Glaze are documented here. The format follows
 - **Lighter on every page:** Glaze loads about 38% less code on Canvas and Blackboard pages. Its words in your
   language, Download all and draft backup now load only on the pages that use them.
 - **Blackboard's what-if calculator** now loads only on a gradebook, like Canvas's.
+- **Pages load less code until you use a feature:** the command palette, keyboard shortcuts, the course menu's
+  popover, folder previews and Download all's buttons now load the first time you use them (or, for Download all, on
+  a course page with folders), so every other page starts with about 46 KB less. They work as before.
 
 ### Fixed
 
