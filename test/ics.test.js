@@ -280,6 +280,25 @@ test('review: RDATE adds occurrences; what is not followed is reported', () => {
   assert.deepEqual(cal.events[0].unsupported, []);
 });
 
+test('review: RDATE and EXDATE instants in the fall-back hour keep their identity', () => {
+  // New York repeats 01:00–02:00 on Nov 1, 2026: 01:30 is 05:30Z (EDT) and again 06:30Z (EST).
+  const occ = (...extra) => I.expand(I.parse(cal1(ev('UID:f', NY('20261101T000000'), 'DURATION:PT30M', ...extra))), at('2026-10-01'), at('2026-12-01'))
+    .map((o) => `${iso(o.start).slice(11, 16)}-${iso(o.end).slice(11, 16)}`);
+  assert.deepEqual(occ('RDATE:20261101T063000Z'), ['04:00-04:30', '06:30-07:00'], 'a UTC RDATE stays the second 01:30');
+  assert.deepEqual(occ('RDATE;TZID=America/New_York:20261101T013000'), ['04:00-04:30', '05:30-06:00'], 'a local RDATE is the first 01:30');
+  assert.deepEqual(occ('RDATE:20261101T063000Z', 'EXDATE:20261101T063000Z'), ['04:00-04:30']);
+  assert.deepEqual(occ('RDATE:20261101T063000Z', 'EXDATE:20261101T053000Z'), ['04:00-04:30', '06:30-07:00'], 'the other 01:30 is not excluded');
+  assert.deepEqual(occ('RDATE:20261101T063000Z', 'EXDATE;TZID=America/New_York:20261101T013000'), ['04:00-04:30', '06:30-07:00']);
+  // A day-long RDATE in the fold ends at the same local time next day.
+  const day = I.expand(I.parse(cal1(ev('UID:d', NY('20261031T013000'), 'DURATION:P1D', 'RDATE:20261101T063000Z'))), at('2026-10-01'), at('2026-12-01'));
+  assert.deepEqual(day.map((o) => [iso(o.start), iso(o.end)]).at(-1), ['2026-11-01T06:30:00Z', '2026-11-02T06:30:00Z']);
+  // A rule-generated 01:30 in the fold is the first one; EXDATE removes it only by that instant.
+  const weekly = (...extra) => I.expand(I.parse(cal1(ev('UID:w', NY('20261025T013000'), 'RRULE:FREQ=WEEKLY;COUNT=3', ...extra))), at('2026-10-01'), at('2026-12-01')).map((o) => iso(o.start));
+  assert.ok(weekly().includes('2026-11-01T05:30:00Z'));
+  assert.ok(!weekly('EXDATE;TZID=America/New_York:20261101T013000').includes('2026-11-01T05:30:00Z'));
+  assert.ok(weekly('EXDATE:20261101T063000Z').includes('2026-11-01T05:30:00Z'));
+});
+
 test('review: generated UIDs keep different items apart; supplied UIDs are TEXT-escaped both ways', () => {
   assert.notEqual(I.uid('class', 'BIO 1100', 'MWF'), I.uid('class', 'BIO_1100', 'MWF'));
   assert.notEqual(I.uid('a-b', 'c'), I.uid('a', 'b-c'));
