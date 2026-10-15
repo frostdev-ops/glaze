@@ -123,10 +123,11 @@ class El {
 // change events arriving later, as in a browser. env.activation: navigator.userActivation.isActive; env.hold(m): a
 // promise the worker waits for before it runs m; env.zipHold: a promise loading lib/zip.js waits for. on: the page's own
 // copy of the Notes switch; stored: the switch in storage.sync (the two differ just after it is turned on elsewhere);
-// live: whether Glaze has finished starting on the page (GZ_CTX.on()). env.syncHold: a promise a storage.sync read
-// answers after (with what was stored when it was asked); env.changeSync(enhance): that change, as storage reports it.
+// live: whether Glaze has finished starting on the page (GZ_CTX.on()); enabled: the page's own copy of the master switch.
+// env.syncHold: a promise a storage.sync read answers after (with what was stored when it was asked);
+// env.changeSync(patch): those items changed in storage.sync, reported as storage reports them (only what changed).
 const D = require('../defaults.js');
-const page = ({ on = true, stored = on, live = true } = {}) => {
+const page = ({ on = true, stored = on, live = true, enabled = true } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => new El(t, doc);
   doc.root = make('html');
@@ -160,8 +161,11 @@ const page = ({ on = true, stored = on, live = true } = {}) => {
   const idb = { get: async (s, k) => db[s].get(k), put: async (s, k, v) => { db[s].set(k, v); }, del: async (s, ks) => { for (const k of ks) db[s].delete(k); },
     scan: async (s, p) => [...db[s]].filter(([k]) => k.startsWith(p)), keys: async (s, p) => [...db[s].keys()].filter((k) => k.startsWith(p)), estimate: async () => ({ usage: 1, quota: 1e9 }) };
   const sent = [], blobs = [];
-  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null, live, stored, syncHold: null };
-  env.changeSync = (enhance) => { env.stored = enhance.notes; for (const f of changed) f({ enhance: { newValue: enhance } }, 'sync'); };
+  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null, live, syncHold: null, sync: { enabled: true, enhance: { notes: stored } } };
+  env.changeSync = (patch) => {
+    Object.assign(env.sync, structuredClone(patch));
+    for (const f of changed) f(Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, { newValue: structuredClone(v) }])), 'sync');
+  };
   const URLs = Object.assign(function () {}, { createObjectURL: (b) => { blobs.push(b); return `blob:x/${blobs.length}`; }, revokeObjectURL() {} });
   const context = vm.createContext({
     document: doc, window: {}, location: { origin: 'https://school.instructure.com', pathname: '/courses/7', href: 'https://school.instructure.com/courses/7' },
@@ -173,7 +177,7 @@ const page = ({ on = true, stored = on, live = true } = {}) => {
     GZ_NOTES: N, GZ_DOCTEXT: require('../lib/doctext.js'), GZ_ZIP: require('../lib/zip.js'), GZ_I18N: require('../lib/i18n.js'), GZ_PAGE: require('../lib/page.js'),
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_LOOKS: D.GZ_LOOKS, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY,
     GZ_CTX: {
-      t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => env.live, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
+      t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => env.live, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enabled, enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
       profile: async () => ({ id: 5 }), canvasCourses: async () => [{ id: 7, name: 'Biology' }, { id: 9, name: 'History' }],
       need: (file) => (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
       // What the command palette (features/palette.js) asks of the page.
@@ -181,7 +185,7 @@ const page = ({ on = true, stored = on, live = true } = {}) => {
     },
     chrome: {
       runtime: { sendMessage: (m, cb) => { sent.push(m); Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => cb(JSON.parse(JSON.stringify(r)))); } },
-      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { const r = { enhance: { notes: env.stored } }; Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
+      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
     },
   });
   context.window.top = context.window;
@@ -514,8 +518,7 @@ test('an older read of the switch, answered after Notes was turned off, does not
   const late = later();
   P.syncHold = late;
   const asked = P.ui.home(); // reads Notes on, held
-  P.changeSync({ notes: false }); // turned off meanwhile
-  assert.equal(P.doc.getElementById('gz-nt-course'), null, 'gone at the change');
+  P.changeSync({ enhance: { notes: false } }); // turned off meanwhile
   late.resolve();
   await asked;
   await settle();
@@ -523,8 +526,34 @@ test('an older read of the switch, answered after Notes was turned off, does not
   P.syncHold = null;
   await P.ui.home();
   assert.equal(P.doc.getElementById('gz-nt-course'), null);
-  P.changeSync({ notes: true });
+  P.changeSync({ enhance: { notes: true } });
+  await settle();
   assert.ok(P.doc.getElementById('gz-nt-course'), 'and back when it is turned on');
+});
+
+test("Glaze turned off and then another setting change: the button follows both stored switches, not the page's stale copy", async () => {
+  const P = page();
+  await P.ui.home();
+  assert.ok(P.doc.getElementById('gz-nt-course'));
+  P.changeSync({ enabled: false });
+  await settle();
+  assert.equal(P.doc.getElementById('gz-nt-course'), null, 'Glaze off');
+  P.changeSync({ enhance: { notes: true, todo: true } });
+  await settle();
+  assert.equal(P.doc.getElementById('gz-nt-course'), null, 'still off after another setting changed');
+});
+
+test("Glaze turned on and then another setting change, while the page's copy still says off: the button stays", async () => {
+  const Q = page({ enabled: false });
+  Q.sync.enabled = false;
+  await Q.ui.home();
+  assert.equal(Q.doc.getElementById('gz-nt-course'), null);
+  Q.changeSync({ enabled: true });
+  await settle();
+  assert.ok(Q.doc.getElementById('gz-nt-course'), 'Glaze on');
+  Q.changeSync({ enhance: { notes: true, todo: true } });
+  await settle();
+  assert.ok(Q.doc.getElementById('gz-nt-course'), 'still there after another setting changed');
 });
 
 test("restoring a deleted note whose deletion's clean-up failed keeps the file staged for it", async () => {

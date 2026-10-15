@@ -82,15 +82,10 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     return new Promise((res) => { try { chrome.storage.sync.get(['enabled', 'enhance'], (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } })
       .then((r) => { if (r && my === seen) sync(shows(GZ_SANITIZE(r))); });
   };
-  // Switched off (or on) in another tab or the editor: read from the change itself, as the page's own copy of the
-  // settings may not have caught up yet.
+  // Switched off (or on) in another tab or the editor: both switches read afresh from storage, never one of them from the
+  // page's own copy of the settings, which may not have caught up (a change names only the item that changed).
   try {
-    chrome.storage.onChanged.addListener((ch, area) => {
-      if (area !== 'sync' || !(ch.enhance || ch.enabled)) return;
-      seen++;
-      const s = ctx.settings();
-      sync(shows(GZ_SANITIZE({ enabled: ch.enabled ? ch.enabled.newValue : s.enabled, enhance: ch.enhance ? ch.enhance.newValue : s.enhance })));
-    });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'sync' && (ch.enhance || ch.enabled)) home(); });
   } catch { /* extension reloaded */ }
   const canvasId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1] || '';
 
