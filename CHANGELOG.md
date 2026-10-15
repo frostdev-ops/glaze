@@ -360,6 +360,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
+- **Blackboard Ultra, course cards:** the tasks on a card stay inside it. The card grows to fit them (and the courses
+  below move down), instead of the list spilling over the next term's heading and cards. A card shows its first tasks
+  (4 by default, up to 10) and then "and N more" (on Canvas too); never a scrolling box. Glaze's banner height now
+  sets the least height of the card, so a short banner no longer leaves a tall, empty card, and the list no longer
+  runs past the card's right edge. Glaze's card gap also reaches Ultra's newer Courses page.
 - **Notes:** a new, unsaved note's details line no longer shows the word "null".
 - **Dark palettes:** a page with a form holding a field named "id" no longer stops Glaze's pass that darkens
   what the stylesheet can't reach.

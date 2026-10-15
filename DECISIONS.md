@@ -628,3 +628,15 @@ Native icon restyling is omitted because the brief made it optional and native i
 Custom links and Dashboard use Glaze's own inline SVGs. Custom device logos load on demand with the bundled logo as
 fallback; they are not a promise of custom pixels on a cold first paint. Actual school/browser/Safari-runtime checks
 remain the orchestrator's release pass; B7c evidence uses local synthetic pages only.
+## Ultra course cards fit their tasks (B7a, Oct 2026)
+
+Evidence: `parity/spikes/B7.md` (Ultra's card is a fixed-height flex column, 284px, with `overflow: visible`) and the
+owner's screenshot. Checked by `scripts/ultra-cards-check.js` on `test/fixtures/ultra-courses.html`.
+
+| Decision | Considered | Why |
+|---|---|---|
+| A card with Glaze's list (`:has(> .gz-ct)`) gets `height: auto` and Ultra's 284px as a least height; the list stretches to the card's width (Ultra's `align-items: start` let it grow as wide as its longest title) | A scrolling list inside Ultra's height; JS that measures | The grid row is sized by content, so the card growing moves the next term down; CSS only, no first-script growth. |
+| A card shows `todo.cardN` rows, then "and N more" (the catalogues' existing string) | A fixed cap of 3; a scrolling box | The student's own setting stays the cap; the count says what's left without a box inside a card. |
+| Glaze's banner height sets the card's least height (banner + Ultra's 156px of details), not a fixed one | Ultra's fixed 284px | A short banner left a tall, empty card; a tall one clipped the details. |
+| Card groups on the Courses page are exempt from the `data-gz-vh` clamp | Changing content.js's sweep | A group that was exactly one window high when swept was clamped and stopped growing; the clamp is meant for Ultra's 100vh route containers. CSS keeps it Ultra-only and out of the shared first script. |
+| The card gap also applies to `.course-org-list > div` (this school's card groups); the width rule's `.course-columns` flex is left as is | Rewriting the width mode for the new DOM | `.multi-column-view .course-columns` no longer matches (it's the same element). The groups' own display isn't known (cross-origin stylesheet), so only the gap, harmless on a block, is added; the width mode still sizes the cards. |

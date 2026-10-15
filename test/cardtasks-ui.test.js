@@ -166,6 +166,17 @@ test('a fresh shared answer, or the To Do list on the page, means no request of 
 const fresh = (items, at = Date.now()) => ({ key: KEY, at, ...T.fetchRange(D.GZ_SANITIZE({}).todo, at, 'America/New_York'), items: items.map(T.slim) });
 const titles = (card) => box(card).children.map((li) => li.children[0].children[0].textContent);
 
+test('a card shows its first cardN rows, then "and N more" (it grows to fit; it never scrolls)', async () => {
+  const f = feature({ stored: { todoCache: fresh([1, 2, 3, 4, 5, 6].map((i) => item(i, NOW + i * 36e5))) } });
+  f.m.sync(true);
+  await settle();
+  const ul = box(f.cards[0]);
+  assert.equal(ul.children.length, 5);
+  assert.deepEqual(ul.children.slice(0, 4).map((li) => li.children[0].children[0].textContent), ['A1', 'A2', 'A3', 'A4']);
+  assert.equal(ul.children[4].className, 'gz-ct-part');
+  assert.match(ul.children[4].textContent, /\b2\b/);
+});
+
 test("an answer asked for before a newer one arrived (the list's, another tab's) neither replaces it nor is kept", async () => {
   const f = feature({ hold: true });
   f.m.sync(true);
