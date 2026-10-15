@@ -42,8 +42,9 @@ _Last updated: 2026-10-15_
   tab can't bring them back. Nothing of this
   is sent to Canvas, Blackboard or anywhere else. Scores typed in Glaze 2.2's Blackboard calculator (kept by course id
   alone) move into this record the first time you open that course's grades, in one step that deletes exactly those
-  entries from the old store; after a Clear all courses on that site they are deleted instead, and a read or write that
-  fails changes neither store. The old store names no site or account, so taking a course's scores into the account
+  entries from the old store; after a Clear all courses on that site they are deleted instead. A read that fails, or a
+  failed write of the record, changes neither store; if the record is written but the old entries can't then be
+  deleted, they stay in both until the next visit deletes them, so nothing is lost. The old store names no site or account, so taking a course's scores into the account
   whose course has the same ids is Glaze's inference.
 - **Past terms and a GPA goal** (Canvas and Blackboard, the GPA Extra), in `chrome.storage.local`, on this device only,
   per site and signed-in user id: up to 40 terms you typed in or imported, each with its name, plus/minus or whole-letter
