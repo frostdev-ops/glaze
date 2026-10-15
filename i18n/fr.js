@@ -586,7 +586,6 @@
   // Course cards (W4).
   "Cards": "Cartes",
   "Course cards": "Cartes de cours",
-  "Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.": "Les cartes du tableau de bord de Canvas. Donnez à une carte sa propre couleur, son dégradé ou son image, et des signets, depuis son menu de cours sur le tableau de bord.",
   "Card width": "Largeur des cartes",
   "Space between cards": "Espace entre les cartes",
   "Card corners": "Coins des cartes",
@@ -694,8 +693,6 @@
   "Tasks for {course}": "Tâches de {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Tâches sur les cartes de cours : chaque carte de cours Canvas indique ce qui est à rendre bientôt, si vous l’activez.",
   "Not cleared. Try again in a moment.": "Rien n'a été effacé. Réessayez dans un instant.",
-  "Canvas sidebar": "Barre latérale Canvas",
-  "Style Canvas's own global navigation. Links and the site's navigation still work as usual.": "Personnalisez la navigation globale de Canvas. Les liens et la navigation du site fonctionnent comme d’habitude.",
   "Sidebar background": "Fond de la barre latérale",
   "Palette default": "Valeur par défaut de la palette",
   "First color": "Première couleur",
@@ -1456,7 +1453,13 @@
   "Couldn't read that from Blackboard.": "Impossible de lire cela depuis Blackboard.",
   "Your notes and widgets. Edit widgets adds, orders and sizes them; any of them can float over every Blackboard page.": "Vos notes et widgets. Modifier les widgets permet de les ajouter, les ordonner et les redimensionner ; chacun peut flotter sur toutes les pages de Blackboard.",
   "Press Ctrl+K (⌘K on a Mac) anywhere in Blackboard to jump to a course, a page or a Glaze setting.": "Appuyez sur Ctrl+K (⌘K sur Mac) n’importe où dans Blackboard pour aller à un cours, une page ou un réglage de Glaze.",  "Stop reading": "Arrêter la lecture",
-  "Stopped.": "Arrêté.",
+  // Blackboard appearance (B6).
+  "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Utilisez une adresse https:// ou un chemin sur ce site Blackboard. Les icônes des favoris sont dessinées par Glaze.",
+  "Canvas and Blackboard navigation": "Navigation Canvas et Blackboard",
+  "Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.": "Personnalisez la navigation globale de Canvas et Blackboard Ultra. Les liens et la navigation fonctionnent comme auparavant.",
+  "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Personnalisez les cartes Canvas et Blackboard Ultra depuis leur menu de cours. Les lignes Ultra gardent leur disposition ; les styles de bannière et les arrondis restent appliqués.",
+  "Use course color for overlay": "Utiliser la couleur du cours pour la superposition",
+  "Back to the course color": "Revenir à la couleur du cours",  "Stopped.": "Arrêté.",
   "A file: .ics calendar, PDF, picture or screenshot, saved web page (.html), Word (.docx) or text": "Un fichier : calendrier .ics, PDF, image ou capture d'écran, page web enregistrée (.html), Word (.docx) ou texte",
   "Or paste it, or paste a screenshot": "Ou collez-le, ou collez une capture d'écran",
   "A transcript file: a PDF, a picture or screenshot, text, a web page or Word": "Un fichier de relevé : PDF, image ou capture d'écran, texte, page web ou Word",
@@ -1510,4 +1513,5 @@
   "Disconnected.": "Déconnecté.",
   "Test": "Évaluation",
   "Not saved: this page now shows another course.": "Non enregistré : cette page affiche maintenant un autre cours.",
+  "Some of this course's content couldn't be listed.": "Une partie du contenu de ce cours n’a pas pu être listée.",
 };

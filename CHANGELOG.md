@@ -22,6 +22,8 @@ All notable changes to Glaze are documented here. The format follows
     a course outline's right column. **Blackboard link** picks from the course's content items (link and title only).
     Kept per Ultra site and account, with every safeguard Notes has on Canvas.
   - Other files can add a tile the same way on both sites (`features/widgets.js`, `MORE` and `register`).
+- **Blackboard Ultra appearance:** shared course-card editor (solid, gradient, picture, overlay, crop and filters), grid layout and motion-aware effects/pets, bookmarks, and base-navigation backgrounds, labels and sizes. Ultra list rows keep their native layout. No new viewer host access.
+
 - **PDFs and photos in the imports** (class schedule, syllabus, transcript), read on your device: a PDF's own text
   (tables kept as rows, two-column pages in order), and the text of a scanned PDF, a photo or a screenshot (PNG, JPEG,
   WebP, HEIC where your browser opens it; or paste one into the import's text box) recognized by the Tesseract OCR engine,

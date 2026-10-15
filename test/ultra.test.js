@@ -434,21 +434,68 @@ test("PRIVACY doesn't promise folder previews leave memory after a minute: the m
 test("a course's content for links: the public API through the reader, kept to id, parent, title and links", async () => {
   const asked = [];
   const extra = { id: '_9_1', parentId: '_720_1', title: 'Synthetic LTI', links: [{ rel: 'alternate', href: '/ultra/redirect?x=9', type: 'text/html', title: 'UI' }],
-    contentDetail: { 'resource/x-bb-blti-link': { secret: 'synthetic-lti-secret', key: 'synthetic-lti-key' } }, body: '<p>x</p>', availability: { available: 'Yes' } };
+    contentDetail: { 'resource/x-bb-blti-link': { secret: 'synthetic-lti-secret', key: 'synthetic-lti-key' } }, body: '<p>x</p>', availability: { available: 'Yes', adaptiveRelease: {} } };
   const hidden = { id: '_8_1', title: 'Hidden', links: [{ rel: 'alternate', href: '/ultra/redirect?x=8' }], availability: { available: 'No' } };
   const f = async (url, init) => {
     asked.push([url, init.method, init.redirect, init.signal]);
     return { ok: true, status: 200, text: async () => JSON.stringify({ results: [...load('contents').results, extra, hidden] }) };
   };
   const ctl = new AbortController();
-  const items = await U.read({ origin: o, f, signal: ctl.signal }).contents('_101_1');
+  const { items, complete } = await U.read({ origin: o, f, signal: ctl.signal }).contents('_101_1');
   assert.deepEqual(asked.map(([u, m, r, s]) => [u, m, r, s === ctl.signal]),
-    [[`${o}/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,availability,links`, 'GET', 'error', true]]);
-  assert.equal(items.length, load('contents').results.length + 1, 'what students can open');
-  assert.deepEqual(items.at(-1), { id: '_9_1', parentId: '_720_1', title: 'Synthetic LTI', links: [{ rel: 'alternate', href: '/ultra/redirect?x=9' }] });
+    [[`${o}/learn/api/public/v1/courses/_101_1/contents?limit=200&fields=id%2CparentId%2Ctitle%2Cavailability%2Clinks&recursive=true`, 'GET', 'error', true]]);
+  assert.equal(complete, true);
+  assert.ok(items.some((x) => x.id === '_9_1') && !items.some((x) => x.id === '_8_1'), 'what students can open');
+  assert.deepEqual(items.find((x) => x.id === '_9_1'), { id: '_9_1', parentId: '_720_1', title: 'Synthetic LTI', links: [{ rel: 'alternate', href: '/ultra/redirect?x=9' }] });
   assert.doesNotMatch(JSON.stringify(items), LTI, 'nothing else kept, whatever came back');
-  assert.deepEqual(await U.read({ origin: o, f }).contents('7'), [], 'an Ultra course id only');
+  assert.deepEqual(await U.read({ origin: o, f }).contents('7'), { items: [], complete: true }, 'an Ultra course id only');
   // Aborted (the picker closed): the read stops.
   ctl.abort();
   await assert.rejects(U.read({ origin: o, f, signal: ctl.signal }).contents('_101_1'), /stale/);
+});
+
+// Codex B5 fix verification #7: the picker shows what search may show, by one rule: released now, known availability,
+// and every ancestor too.
+test("a course's content for links: only what is released now, with known availability, under released folders", async () => {
+  const shapes = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'ultra-search.json'), 'utf8')).contents
+    .map((x) => ({ ...x, links: [{ rel: 'alternate', href: `/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=${x.id}` }] }));
+  const f = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ results: shapes }) });
+  const { items } = await U.read({ origin: o, f }).contents('_101_1');
+  assert.deepEqual(items.map((x) => x.title), ['Laboratory', 'Reading: Cell membrane', 'Lab report']);
+  for (const t of ['Hidden unit', 'Lab hidden child', 'Lab unknown availability', 'Lab cycle', 'Final exam answer key', 'Expired answers', 'Restricted answers', 'Unknown release', 'Malformed release', 'Lab in future folder']) {
+    assert.ok(!items.some((x) => x.title === t), t);
+  }
+  // The same rule as search's documents.
+  const search = U.searchItems(U.SEARCH_KINDS[0], shapes, { id: '_101_1', name: 'BIO' }, (h) => h);
+  assert.deepEqual(items.map((x) => x.id), search.map((x) => x.key.split(':')[1]));
+});
+
+// Codex B5 fix verification, finding 2: a nextPage may page this public list only, with its own fields.
+test("a course's content for links pages only the public list, asking each page with its own fields", async () => {
+  const run = async (nextPage) => {
+    const asked = [];
+    const f = async (url) => {
+      asked.push(url);
+      const page2 = asked.length > 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ results: [{ id: page2 ? '_2_1' : '_1_1', title: page2 ? 'Two' : 'One', availability: { available: 'Yes', adaptiveRelease: {} } }], paging: page2 ? {} : { nextPage } }) };
+    };
+    const { items, complete } = await U.read({ origin: o, f }).contents('_101_1');
+    return { asked, titles: items.map((x) => x.title), complete };
+  };
+  const first = `${o}/learn/api/public/v1/courses/_101_1/contents?limit=200&fields=id%2CparentId%2Ctitle%2Cavailability%2Clinks&recursive=true`;
+  // The ordinary second page: its offset, with this list's own fields and limit.
+  const ok = await run('/learn/api/public/v1/courses/_101_1/contents?offset=200&limit=200');
+  assert.deepEqual(ok.asked, [first, `${o}/learn/api/public/v1/courses/_101_1/contents?limit=200&fields=id%2CparentId%2Ctitle%2Cavailability%2Clinks&offset=200&recursive=true`]);
+  assert.deepEqual(ok.titles, ['One', 'Two']);
+  assert.equal(ok.complete, true);
+  // A next page that drops the fields, or asks for more: still this list's fields only.
+  const wider = await run('/learn/api/public/v1/courses/_101_1/contents?offset=200&fields=id,contentDetail,body&limit=999');
+  assert.equal(wider.asked[1], ok.asked[1]);
+  // The private contents, another course, another resource, another site: never asked.
+  for (const next of ['/learn/api/v1/courses/_101_1/contents', '/learn/api/public/v1/courses/_102_1/contents?offset=200', '/learn/api/public/v1/courses/_101_1/contents/_1_1/children', 'https://evil.example/learn/api/public/v1/courses/_101_1/contents?offset=200']) {
+    const r = await run(next);
+    assert.deepEqual(r.asked, [first], next);
+    assert.deepEqual(r.titles, ['One']);
+    assert.equal(r.complete, false, 'and the list says it is incomplete');
+  }
 });

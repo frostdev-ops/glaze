@@ -52,7 +52,7 @@ class El {
   getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
   removeAttribute(k) { delete this.attrs[k]; }
   addEventListener(type, f) { (this.on[type] ||= []).push(f); }
-  fire(type) { for (const f of this.on[type] || []) f({ type, target: this, preventDefault() {} }); }
+  fire(type, isTrusted = true) { for (const f of this.on[type] || []) f({ type, isTrusted, target: this, preventDefault() {} }); }
   focus() { this.doc.activeElement = this; }
   all(pred, out = []) { for (const c of this.children) { if (c.tagName !== '#TEXT' && pred(c)) out.push(c); c.all(pred, out); } return out; }
   querySelectorAll(sel) { return this.all((e) => matches(e, sel)); }
@@ -355,10 +355,11 @@ const histPage = (store, held = {}, list = CALC, groups = [], sync = {}, extra =
   store.send ||= serviceWorker(store);
   const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` };
   let ctx;
+  const loc = { pathname: '/', search: '', hash: '', origin: ORIGIN };
   const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
   const chrome = { runtime: { sendMessage: (m) => store.send(m, sender) }, storage: { local: store.tab(held), sync: shared(sync).tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
   ctx = vm.createContext({
-    document: doc, location: { pathname: '/', search: '', hash: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, AbortController, GZ_I18N: I, chrome,
+    document: doc, location: loc, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, AbortController, GZ_I18N: I, chrome,
     TextEncoder, fetch: () => Promise.resolve({ ok: true, text: async () => JSON.stringify(groups), headers: { get: () => '' } }),
     GZ_CTX: {
       t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', capi: () => Promise.resolve(null), canvasCourses: () => Promise.resolve(list), canvasCourseId: () => undefined,
@@ -370,7 +371,7 @@ const histPage = (store, held = {}, list = CALC, groups = [], sync = {}, extra =
   vm.runInContext(read('features/grades.js'), ctx);
   const box = () => doc.getElementById('gz-gpa');
   const f = (key) => find(box(), (e) => e.dataset.f === key);
-  return { doc, UI: ctx.GZ_GRADES_UI, box, f, hist: () => find(box(), (e) => /gz-gpa-hist\b/.test(e.className)) };
+  return { doc, UI: ctx.GZ_GRADES_UI, box, f, state, loc, hist: () => find(box(), (e) => /gz-gpa-hist\b/.test(e.className)) };
 };
 
 test('GPA: past terms count in the overall GPA, show as a trend table, set a goal and come in from a transcript', async () => {
@@ -593,6 +594,63 @@ test('GPA: a PDF or photo being read is called off by the next read and by closi
   p.hist().fire('toggle');
   await settle(10);
   assert.doesNotMatch(p.hist().textContent, /Check what Glaze found/, 'what a read stopped by closing found is never shown');
+});
+
+test('GPA: a transcript file is read only when the student chose it, and Read it only on their own click', async () => {
+  const reads = [];
+  const GZ_IMPORT = { read: (file, opts) => { reads.push(opts); return new Promise(() => {}); }, note: () => '', doubt: () => false };
+  const p = histPage(shared(), {}, CALC, [], {}, { GZ_IMPORT });
+  p.UI.render();
+  await settle(10);
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  // A page's script puts a file of its own in the field and fires change itself.
+  p.f('imp:file').files = [{ name: 'made-by-the-page.pdf', type: 'application/pdf', size: 9 }];
+  p.f('imp:file').fire('change', false);
+  await settle(10);
+  assert.equal(reads.length, 0, 'a script\'s change reads nothing');
+  p.f('imp:text').value = 'Fall 2025\nCIS301 Software Quality Assurance 3 A';
+  p.f('imp:text').fire('input');
+  byText(p.hist(), 'Read it').fire('click', false);
+  await settle(10);
+  assert.doesNotMatch(p.hist().textContent, /Check what Glaze found/, 'nor does a script\'s click of Read it');
+  p.f('imp:file').fire('change');
+  await settle(10);
+  assert.equal(reads.length, 1, 'the student\'s own choice is read');
+});
+
+test('GPA: a transcript being read stops the moment the panel goes (Glaze off, the GPA off, another page), not at its next word', async () => {
+  for (const [what, go] of [['Glaze off', (p) => { p.state.settings = { ...p.state.settings, enabled: false }; }],
+    ['the GPA off', (p) => { p.state.settings = { ...p.state.settings, enhance: { ...p.state.settings.enhance, gpa: false } }; }],
+    ['another page', (p) => { p.loc.pathname = '/courses/27'; }]]) {
+    const reads = [];
+    const GZ_IMPORT = { read: (file, opts) => new Promise((resolve) => reads.push({ opts, resolve })), note: () => '', doubt: () => false };
+    const p = histPage(shared(), {}, CALC, [], {}, { GZ_IMPORT });
+    const was = { settings: p.state.settings, path: p.loc.pathname };
+    p.UI.render();
+    await settle(10);
+    p.hist().open = true;
+    p.hist().fire('toggle');
+    await settle(10);
+    p.f('imp:file').files = [{ name: 'transcript.pdf', type: 'application/pdf', size: 9 }];
+    p.f('imp:file').fire('change');
+    await settle(10);
+    assert.equal(reads.length, 1, what);
+    go(p);
+    p.UI.render();
+    assert.equal(p.box(), null, `${what}: the panel is gone`);
+    assert.equal(reads[0].opts.signal.aborted, true, `${what}: the read stops with it`);
+    // Back again, the panel redrawn and Past terms open: what the stopped read found is never shown.
+    Object.assign(p.state, { settings: was.settings });
+    p.loc.pathname = was.path;
+    reads[0].resolve({ text: 'Spring 2025\nENG 101 Writing 3 B', ocr: null });
+    p.UI.render();
+    await settle(10);
+    if (!p.hist().open) { p.hist().open = true; p.hist().fire('toggle'); }
+    await settle(10);
+    assert.doesNotMatch(p.hist().textContent, /Check what Glaze found/, `${what}: nothing from the stopped read`);
+  }
 });
 
 // ---- content-canvas.js: the Dashboard cards' grade, as a link of its own ----

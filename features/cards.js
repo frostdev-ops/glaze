@@ -4,6 +4,9 @@
 // Classic script in content.js's isolated world, through GZ_CTX; a second injection keeps the first.
 var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   const { need, t, capi } = globalThis.GZ_CTX;
+  const ultra = GZ_CTX.site === 'ultra';
+  const CARD = ultra ? 'article.course-element-card[data-course-id]' : '.ic-DashboardCard';
+  const cardsKey = ultra ? 'ucards' : 'cards', linksKey = ultra ? 'ulinks' : 'links', imageKey = ultra ? 'ultraCardImg:' : 'cardImg:';
   const html = document.documentElement;
   const NS = 'http://www.w3.org/2000/svg';
   const C = GZ_COLOR;
@@ -20,14 +23,15 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   let reading = null;
   const read = () => (reading ||= need('lib/cards.js', () => globalThis.GZ_CARDS).then(async () => {
     K = globalThis.GZ_CARDS;
-    const r = await get('sync', ['card', 'cards', 'links']);
-    const cards = K.styles(r.cards);
+    const r = await get('sync', ['card', cardsKey, linksKey, 'cards']);
+    const cards = K.styles(r[cardsKey]);
+    if (ultra && r.cards?.['*']) cards['*'] = K.styles({ '*': r.cards['*'] })['*'];
     const ids = Object.values(cards).flat().map((s) => s?.i).filter(Boolean);
-    const imgs = ids.length ? await get('local', ids.map((i) => `cardImg:${i}`)) : {};
-    return (data = { card: K.settings(r.card), cards, links: K.links(r.links), imgs });
+    const imgs = ids.length ? await get('local', ids.map((i) => `${imageKey}${i}`)) : {};
+    return (data = { card: K.settings(r.card), cards, links: K.links(r[linksKey]), imgs });
   }).catch((e) => { reading = null; throw e; }));
   chrome.storage.onChanged.addListener((ch, area) => {
-    if (area === 'sync' ? !(ch.card || ch.cards || ch.links) : !Object.keys(ch).some((k) => k.startsWith('cardImg:'))) return;
+    if (area === 'sync' ? !(ch.card || ch[cardsKey] || ch[linksKey] || (ultra && ch.cards)) : !Object.keys(ch).some((k) => k.startsWith(imageKey))) return;
     reading = null;
     paint();
   });
@@ -45,12 +49,13 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     for (const v of VARS) prop(el, v, p?.vars[v] || '');
   };
   const keyOf = (el) => {
+    if (ultra) return /^_\d+_\d+$/.test(el.dataset.courseId) ? `ultra:${location.origin}/${el.dataset.courseId}` : null;
     const id = el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
     return id ? `canvas:${location.origin}/${id}` : null;
   };
-  const nameOf = (el) => el?.getAttribute('aria-label') || el?.querySelector('.ic-DashboardCard__header-title')?.title || '';
-  const cardOf = (key) => [...document.querySelectorAll('.ic-DashboardCard')].find((c) => keyOf(c) === key);
-  const src = (d, s) => s.u || (K.DATA.test(d.imgs[`cardImg:${s.i}`] || '') ? d.imgs[`cardImg:${s.i}`] : '');
+  const nameOf = (el) => el?.getAttribute('aria-label') || el?.querySelector(ultra ? '.course-title' : '.ic-DashboardCard__header-title')?.title || el?.querySelector('.course-title')?.textContent || '';
+  const cardOf = (key) => [...document.querySelectorAll(CARD)].find((c) => keyOf(c) === key);
+  const src = (d, s) => s.u || (K.DATA.test(d.imgs[`${imageKey}${s.i}`] || '') ? d.imgs[`${imageKey}${s.i}`] : '');
   const svg = (d) => {
     const s = document.createElementNS(NS, 'svg');
     s.setAttribute('viewBox', '0 0 24 24');
@@ -63,25 +68,28 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
 
   let editing = null; // the course in the editor: { key, style, links }, shown while it saves
   const paint = async () => {
-    if (window.top !== window) return;
+    if (window.top !== window && !globalThis.location?.pathname.endsWith('/preview.html')) return;
     let d;
     try { d = await read(); } catch { return; }
     const on = html.hasAttribute('data-gz-motion');
-    const p = on ? K.page(d.card) : { vars: {}, attrs: {} };
+    const card = location.pathname.endsWith('/preview.html') ? K.settings(GZ_CTX.settings().card) : d.card;
+    const p = on ? K.page(card) : { vars: {}, attrs: {} };
     for (const v of ['--gz-card-w', '--gz-card-gap', '--gz-card-r', '--gz-card-h']) prop(html, v, p.vars[v] || '');
     for (const a of ['hover', 'particles', 'pet', 'condensed', 'icons', 'plain']) attr(html, `data-gz-card-${a}`, p.attrs[a]);
+    if (ultra) for (const k of ['width', 'gap', 'height']) attr(html, `data-gz-card-${k}`, on && card[k] !== K.SPEC[k][0] ? '' : false);
     // A theme's set goes round the courses in the order they first show.
     const order = new Map();
-    for (const el of document.querySelectorAll('.ic-DashboardCard, .planner-grouping')) {
+    for (const el of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard, .planner-grouping')) {
       const key = on && keyOf(el);
       if (key && !order.has(key)) order.set(key, order.size);
       const own = editing?.key === key ? editing : null;
       const style = key ? K.pick(own ? { ...d.cards, [key]: own.style } : d.cards, key, order.get(key)) : null;
       dress(el, style && K.paint(style, src(d, style)));
-      if (!el.classList.contains('ic-DashboardCard')) continue;
+      if (ultra) prop(el, '--gz-card-banner-h', on && card.condensed ? `${el.querySelector('.course-banner')?.offsetHeight || card.height}px` : '');
+      if (!ultra && !el.classList.contains('ic-DashboardCard')) continue;
       bookmarks(el, key && d.card.icons ? (own ? own.links.map(K.link).filter(Boolean) : d.links[key]) : null);
-      pet(el, key && order.get(key) === 0 && d.card.pet !== 'none' && d.card.pet);
-      create(el, key && d.card.create && key);
+      pet(el, key && order.get(key) === 0 && card.pet !== 'none' && card.pet);
+      if (!ultra) create(el, key && d.card.create && key);
     }
   };
 
@@ -219,7 +227,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     });
   };
 
-  const KINDS = [['', 'Canvas color'], ['solid', 'Color'], ['gradient', 'Gradient'], ['image', 'Picture']];
+  const KINDS = [['', ultra ? 'Course color' : 'Canvas color'], ['solid', 'Color'], ['gradient', 'Gradient'], ['image', 'Picture']];
   const FILTER_NAMES = { none: 'None', vivid: 'Vivid', mono: 'Mono', noir: 'Noir', warm: 'Warm', cool: 'Cool', faded: 'Faded', dreamy: 'Dreamy' };
   const ICON_NAMES = { link: 'Link', book: 'Book', video: 'Video', chat: 'Chat', doc: 'Document', calendar: 'Calendar', folder: 'Folder', code: 'Code', star: 'Star', globe: 'Globe' };
 
@@ -240,17 +248,18 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (dlg.open) dlg.close();
     dlg.remove();
     paint();
-    document.getElementById(`gz-cm-${key}`)?.focus({ preventScroll: true });
+    document.getElementById(`gz-cm-${ultra ? key.split('/').pop() : key}`)?.focus({ preventScroll: true });
     return true;
   };
 
   const open = async (key) => {
+    if (ultra && /^_\d+_\d+$/.test(key)) key = `ultra:${location.origin}/${key}`;
     if (!await close()) return;
     let d;
     try { d = await read(); } catch { return; }
     const card = cardOf(key);
     const name = nameOf(card);
-    const courseColor = () => C.hex(C.parse(cardOf(key)?.style.getPropertyValue('--gz-course-raw') || '') || { r: 128, g: 128, b: 128 });
+    const courseColor = () => C.hex(C.parse(cardOf(key)?.style.getPropertyValue('--gz-course-raw') || (ultra && GZ_CTX.courseColor?.(cardOf(key)?.className.match(/course-color-(\d+)/)?.[1])) || '') || { r: 128, g: 128, b: 128 });
     const dlg = make('dialog', { id: 'gz-ce' });
     dlg.setAttribute('aria-labelledby', 'gz-ce-title');
     const note = make('p', { className: 'gz-ce-note', hidden: true });
@@ -290,7 +299,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     const [fy, fyRow, fyOut] = range(t('Focus up and down'), 0, 100, 1, pct);
     const [zoom, zoomRow, zoomOut] = range(t('Zoom'), 100, 300, 5, pct);
     const [ov, ovRow] = color(t('Overlay color'));
-    const ovReset = make('button', { type: 'button', textContent: t('Course color') });
+    const ovReset = make('button', { type: 'button', textContent: t(ultra ? 'Use course color for overlay' : 'Course color') });
     const [ova, ovaRow, ovaOut] = range(t('Overlay'), 0, 100, 5, pct);
     const contrast = make('p', { className: 'gz-ce-contrast' });
     contrast.setAttribute('role', 'status');
@@ -399,7 +408,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     });
     const linksTab = make('div', { className: 'gz-ce-panel', id: 'gz-ce-links', hidden: true }, list, add,
       make('label', { className: 'gz-ce-check' }, iconsOn, t('Show bookmark icons on cards')),
-      make('p', { className: 'gz-ce-desc', textContent: t('An https:// address, or a path on this Canvas site like /courses/12/files. Icons are Glaze’s own: nothing is asked of the linked site.') }));
+      make('p', { className: 'gz-ce-desc', textContent: t(ultra ? 'Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.' : 'An https:// address, or a path on this Canvas site like /courses/12/files. Icons are Glaze’s own: nothing is asked of the linked site.') }));
     // Rows are drafts until they have an address: only the good ones are shown and kept.
     const saveLinks = () => { ed.leave = false; paint(); save(); };
     const renderLinks = (focus) => {
@@ -486,7 +495,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     const x = make('button', { type: 'button', className: 'gz-ce-x', textContent: '×', title: t('Close') });
     x.setAttribute('aria-label', t('Close'));
     x.addEventListener('click', close);
-    const reset = make('button', { type: 'button', textContent: t('Back to Canvas’s color') });
+    const reset = make('button', { type: 'button', textContent: t(ultra ? 'Back to the course color' : 'Back to Canvas’s color') });
     reset.addEventListener('click', () => { change(null, false); fill(); radios[0].focus(); });
     const done = make('button', { type: 'button', className: 'gz-ce-done', textContent: t('Done') });
     done.addEventListener('click', close);
@@ -522,7 +531,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
       delete s.i;
       const r = await send({ key: mine.key, style: s, links: mine.links.map(K.link).filter(Boolean), image: url });
       if (!r.ok) { if (ed === mine) say(t(SAID[r.error] || SAID.write)); return; }
-      if (data) data.imgs[`cardImg:${r.id}`] = url;
+      if (data) data.imgs[`${imageKey}${r.id}`] = url;
       // The draft takes the saved picture, unless a newer pick has started since.
       if (mine.pick !== rev) return;
       mine.leave = false;

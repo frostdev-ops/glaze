@@ -222,7 +222,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-file', textContent: t('A file') }), file,
         make('small', { textContent: t('A PDF, a picture or screenshot, Word, PowerPoint, a web page or text.') })),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-paste', textContent: t('Or paste the text, or a screenshot') }), paste),
-      make('div', { className: 'gz-syl-actions' }, button(t('Read it'), 'go', () => go(), 'gz-syl-main'), stop, button(t('Cancel'), 'cancel', () => dlg.close())),
+      // Only the student's own click reads (a page's script could put a file of its own in the field and click).
+      make('div', { className: 'gz-syl-actions' }, button(t('Read it'), 'go', (e) => { if (e.isTrusted) go(); }, 'gz-syl-main'), stop, button(t('Cancel'), 'cancel', () => dlg.close())),
       say);
     first(file);
   };

@@ -236,7 +236,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       await X.need('features/import.js', () => globalThis.GZ_IMPORT);
       const r = await GZ_IMPORT.read(file, { signal: ctl.signal, progress: prog });
       if (V.reading?.ctl === ctl) V.reading = null;
-      show(r.text, r.ocr);
+      if (!ctl.signal.aborted) show(r.text, r.ocr); // a read called off shows nothing, whenever its answer comes
     } catch (e) {
       if (V.reading?.ctl === ctl) V.reading = null;
       if (gen === V.gen) { V.note = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); V.focus = 'imp:file'; redraw(); }
@@ -258,8 +258,10 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       docIn().then(() => GZ_DOCTEXT.html(html), () => plain).catch(() => plain).then((text) => { area.setRangeText(text, a, b, 'end'); V.text = area.value; });
     });
     const file = f(label(make('input', { type: 'file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.txt,.htm,.html,.docx,application/pdf,image/*,text/plain,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), t('A transcript file: a PDF, a picture or screenshot, text, a web page or Word')), 'imp:file');
-    file.addEventListener('change', () => { if (file.files?.[0]) readFile(file.files[0]); });
-    const go = btn(t('Read it'), 'imp:go', () => { V.gen++; V.reading?.ctl.abort(); review(V.text); });
+    // Only the student's own choice and click read: a page's script could put a file of its own in the field and fire
+    // change (or click Read it) itself.
+    file.addEventListener('change', (e) => { if (e.isTrusted && file.files?.[0]) readFile(file.files[0]); });
+    const go = btn(t('Read it'), 'imp:go', (e) => { if (!e.isTrusted) return; V.gen++; V.reading?.ctl.abort(); review(V.text); });
     const busy = V.reading?.say && make('div', { className: 'gz-gpa-actions' }, f(make('span', { className: 'gz-gpa-note', role: 'status', textContent: V.reading.say }), 'imp:prog'),
       btn(t('Stop reading'), 'imp:stop', () => V.reading?.ctl.abort()));
     const box = make('details', { className: 'gz-gpa-more', open: !!V.text || !!V.importOpen || !!V.reading?.say }, make('summary', { textContent: t('Import from a transcript') }),
@@ -346,7 +348,8 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     if (focus) (el.querySelector(`[data-f="${CSS.escape(focus)}"]`) || (focus === 'hist' ? el.closest('details')?.querySelector('summary') : null))?.focus();
   };
 
-  return { draw };
+  // stop(): the GPA panel is going (features/grades.js, Glaze or the GPA turned off, another page): a read stops now.
+  return { draw, stop: () => V.reading?.ctl.abort() };
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
