@@ -427,3 +427,15 @@ test('Canvas due-date chips: where the work stands, without repeating the Assign
   assert.equal(P.canvasStatus(undefined), null);
   assert.equal(P.canvasStatus(a(past, { excused: true }), now, 'de').label, 'Entschuldigt');
 });
+
+test('a title InstUI cut short, whole again from its link\'s label', () => {
+  assert.equal(P.uncut('Lab report 3: Photosy…', 'Assignment, Lab report 3: Photosynthesis'), 'Lab report 3: Photosynthesis');
+  assert.equal(P.uncut('Unit 1 grades are post…', 'Announcment, Unit 1 grades are posted'), 'Unit 1 grades are posted');
+  // A title that starts with its type's word is read after the type.
+  assert.equal(P.uncut('Assignm…', 'Assignment, Assignment 12 and more'), 'Assignment 12 and more');
+  assert.equal(P.uncut('Aufgabe 3: Photo…', 'Aufgabe, Aufgabe 3: Photosynthese'), 'Aufgabe 3: Photosynthese');
+  // No label prefix at all.
+  assert.equal(P.uncut('Lab rep...', 'Lab report 3'), 'Lab report 3');
+  // Not cut, not in the label, or nothing to read: no hint.
+  for (const [s, l] of [['Unit 2 quiz', 'Quiz, Unit 2 quiz'], ['Other…', 'Quiz, Unit 2 quiz'], ['…', 'Quiz, x'], ['Unit…', undefined], [undefined, 'Quiz, x']]) assert.equal(P.uncut(s, l), null, s);
+});
