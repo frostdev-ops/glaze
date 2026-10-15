@@ -161,7 +161,10 @@ test('each site\'s part returns only what content.js calls, and content.js calls
   const src = read('content.js');
   const X = vm.runInNewContext(`${src.match(/^ {2}const no = .*\n {2}const X = \{[\s\S]*?\};$/m)[0]} X`, {});
   for (const k of Object.keys(X).filter((x) => x !== 'ctx')) assert.match(src, new RegExp(`\\bX\\.${k}\\b`), `content.js never calls X.${k}`);
-  assert.match(src, /\.\.\.X\.ctx \}\);/, 'the part\'s own helpers go into GZ_CTX');
+  // The part's own helpers are in GZ_CTX on every site, asked of the part when called (it may come late).
+  const forwarded = src.match(/\.\.\.Object\.fromEntries\((\[[^\]]*\])\.map\(\(k\) => \[k, \(\.\.\.a\) => X\.ctx\[k\]\(\.\.\.a\)\]\)\) \}\);/);
+  assert.ok(forwarded, 'GZ_CTX forwards the part\'s helpers');
+  const keys = JSON.parse(forwarded[1].replace(/'/g, '"'));
   for (const [file, name] of [['content-ultra.js', 'GZ_SITE_ULTRA'], ['content-canvas.js', 'GZ_SITE_CANVAS']]) {
     const context = vm.createContext({ document: { addEventListener() {} }, addEventListener() {}, IntersectionObserver: class { observe() {} }, window: {}, location: { origin: 'https://school.test' } });
     context.globalThis = context;
@@ -171,6 +174,7 @@ test('each site\'s part returns only what content.js calls, and content.js calls
     const I = new Proxy({}, { get: (_, k) => (k === 'settings' ? { enhance: {}, courses: { names: {} } } : () => {}) });
     const part = make(I);
     for (const k of Object.keys(part)) assert.ok(k in X, `${file} returns ${k}, which content.js has no default for`);
+    for (const k of Object.keys(part.ctx)) assert.ok(keys.includes(k), `${file}'s ${k} isn't in GZ_CTX`);
   }
 });
 

@@ -19,7 +19,7 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // and 4 took the one script every site loaded to 228,144; B0b split it into the shared content.js and each site's own
 // part (content-ultra.js, content-canvas.js; Moodle has none), so each site has its own first script and its own
 // baseline. New features load on demand too. When a cut lands, lower that site's baseline to its new total.
-const FIRST_SCRIPT_BASELINE = { ultra: 206385, canvas: 200879, moodle: 170940 };
+const FIRST_SCRIPT_BASELINE = { ultra: 206952, canvas: 201446, moodle: 171507 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;

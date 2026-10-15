@@ -31,6 +31,8 @@ app="$stage/DerivedData/Build/Products/Release/Glaze.app"
 export SAFARI_UPDATE_PUBLIC_KEY="${SAFARI_UPDATE_PUBLIC_KEY:-0lbeC9MO1QDsjSGjs6iyxSBwXKMpEiKVoB+5wZwQEqY=}"
 # Only the DMG project contains Sparkle. Stage-only usage never reaches signing/notarization.
 python3 scripts/stage-safari-dmg.py "$stage"
+# The app bundles only what the Xcode project lists: stop before building if the package has something it doesn't.
+node scripts/safari-resources.js "$stage/Glaze/Glaze Extension/Resources"
 case "${SAFARI_UPDATE_PUBLIC_KEY:-}" in
   ''|REPLACE_*) echo "build-safari: set SAFARI_UPDATE_PUBLIC_KEY from Sparkle generate_keys before releasing." >&2; exit 1 ;;
 esac

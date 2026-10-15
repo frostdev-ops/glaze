@@ -258,7 +258,7 @@ All notable changes to Glaze are documented here. The format follows
   reading time, dark file previews) and remembering your place in a course now load only on the pages where they
   appear. They work as before.
 - **Each LMS loads only its own code:** Blackboard, Canvas and Moodle pages no longer start with each other's
-  extras. A page now starts with about 22 KB less code on Blackboard, 27 KB less on Canvas and 57 KB less on Moodle.
+  extras. A page now starts with about 21 KB less code on Blackboard, 27 KB less on Canvas and 57 KB less on Moodle.
   Everything looks and works as before.
 
 ### Fixed

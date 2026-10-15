@@ -1313,6 +1313,8 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
       if (!ultra) await ready;
+      // The site's part still on its way: the theme is on already; the sweep and the extras wait for it.
+      if (partIn) await partIn;
       if (!links.length) return;
       if (!on(settings)) return disable();
       syncFooter();
@@ -1354,25 +1356,29 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
 
   // ---- the site's own part -------------------------------------------------------------------------
   // content-ultra.js or content-canvas.js is given what it needs from here (I; live state through getters), and puts
-  // its own over X. A page that hasn't it (its host was registered for Moodle) asks for it; without it, the theme still goes on.
+  // its own over X. A page that hasn't it (its host was registered for Moodle) asks for it, and the theme doesn't wait:
+  // only the sweep and the extras do (enable). Without it, the theme stays on.
   const I = { C, html, isPreview, need, t, locale, api, capi, canvasCourseKey, canvasCourseId, courseId, celebrate, markDue, drawProgress, cardBadge, KIND,
     cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled, setVar, setAttr,
     setCourseList: (all) => { courseList = all; X.paintCourses(); syncCourseMenu(); reapply(); },
     get settings() { return settings; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
     get courseList() { return courseList; }, get worn() { return worn; } };
   const part = { ultra: 'GZ_SITE_ULTRA', canvas: 'GZ_SITE_CANVAS' }[site];
-  if (part && !globalThis[part]) await need(`content-${site}.js`, () => globalThis[part]).catch(() => {});
-  if (part && globalThis[part]) Object.assign(X, globalThis[part](I));
+  const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
+  const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
+  if (!partIn) takePart();
 
-  // The helpers a file loaded by need() may use (features/*.js): this frame's, read through one name, with its part's.
+  // The helpers a file loaded by need() may use (features/*.js): this frame's, read through one name. The part's are
+  // asked of it when called, so a part that comes late still answers.
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer,
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf,
-    nickOf: X.nickOf, courseList: () => courseList, courseColors, varText, cardUI,
+    nickOf: (cid) => X.nickOf(cid), courseList: () => courseList, courseColors, varText, cardUI,
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    canvasCourseKey, ROWS, holding: X.holding, tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, ...X.ctx });
+    canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked,
+    ...Object.fromEntries(['canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.
