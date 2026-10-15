@@ -359,7 +359,7 @@
   const todoHere = () => !ultra && !moodle && links.length && settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
   const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
-  const cardsHere = () => !ultra && links.length && settings.enhance.cardTasks && location.pathname === '/';
+  const cardsHere = () => !ultra && !moodle && links.length && settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
   // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
   const remindHere = () => !ultra && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'streak'].some((k) => settings.enhance[k]);
