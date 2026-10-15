@@ -160,11 +160,17 @@ test('what\'s kept: one Gradescope account; placings and rows only for it; anoth
   assert.equal(r.data.map[42].name, 'MATH 241');
   r = await G.change({ op: 'hide', hide: true }, area);
   assert.equal(r.data.hide, true);
-  r = await G.change({ op: 'bind', key: 'https://c.test/111', show: true }, area);
+  // An answer counts only for the account it was asked about, and only while that account is the one kept.
+  assert.equal((await G.change({ op: 'bind', key: 'https://c.test/111', show: true }, area)).ok, false, 'no account named');
+  assert.equal((await G.change({ op: 'bind', key: 'https://c.test/111', acct: A2, show: true }, area)).ok, false, 'another account');
+  r = await G.change({ op: 'bind', key: 'https://c.test/111', acct: A1, show: true }, area);
   assert.deepEqual(r.data.bind, { 'https://c.test/111': { id: A1, show: true } });
   // Another account signs in on Gradescope: placings, rows and the dismissal go; the answers stay, for the account they named.
   r = await G.change({ op: 'acct', acct: { id: A2, name: 'Alex' } }, area);
   assert.deepEqual([r.data.map, r.data.courses, r.data.hide, r.data.bind], [{}, {}, false, { 'https://c.test/111': { id: A1, show: true } }]);
+  // A yes to A's question that arrives after B signed in grants B nothing.
+  assert.equal((await G.change({ op: 'bind', key: 'https://c.test/222', acct: A1, show: true }, area)).ok, false);
+  assert.equal(r.data.bind['https://c.test/222'], undefined);
   r = await G.change({ op: 'bind', key: null }, area);
   assert.deepEqual(r.data.bind, {});
   assert.equal((await G.change({ op: 'bind', key: 'not a key', show: true }, area)).ok, false);
@@ -253,11 +259,13 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   const listeners = [], changed = [], fetched = [];
   let registered = [];
   let answer = null;
+  let hold = null; // a promise the next requests wait on, as a slow network would
   const pages = { '/courses/42': '<table id="assignments-student-table"></table>', '/account/edit': `<input name="user[email]" value="${EMAIL}">` };
   const context = vm.createContext({
     URL, console, TextEncoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
     fetch: async (url, init) => {
       fetched.push([url, init.credentials, init.redirect]);
+      if (hold) await hold;
       if (answer === 'redirect' && init.redirect === 'error') throw new TypeError('Failed to fetch'); // as the browser does, before any second request
       if (answer === 'redirect') { fetched.push(['https://www.gradescope.com/login', init.credentials, 'followed']); return { ok: true, url: 'https://www.gradescope.com/login', text: async () => 'Log In' }; }
       const p = new URL(url).pathname;
@@ -303,17 +311,17 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   assert.equal((await send(map, gs)).ok, true);
   assert.deepEqual(await send(map, { ...gs, frameId: 3 }), nope, 'not a frame inside it');
   assert.deepEqual(await send(map, { ...gs, url: 'https://www.gradescope.com.evil.test/' }), nope);
-  assert.deepEqual(await send({ type: 'glaze:gradescope', op: 'bind', key: me, show: true }, gs), nope, "Gradescope can't answer for Canvas");
+  assert.deepEqual(await send({ type: 'glaze:gradescope', op: 'bind', key: me, acct: A1, show: true }, gs), nope, "Gradescope can't answer for Canvas");
   // A Canvas page may keep rows for a course placed with its own site, and answer for its own site's accounts only.
   assert.deepEqual(await send(map, canvas), nope);
   assert.equal((await send(rows, canvas)).ok, true);
   assert.deepEqual(await send(rows, other), nope);
-  assert.deepEqual(await send({ type: 'glaze:gradescope', op: 'bind', key: 'https://other.instructure.com/111', show: true }, canvas), nope);
+  assert.deepEqual(await send({ type: 'glaze:gradescope', op: 'bind', key: 'https://other.instructure.com/111', acct: A1, show: true }, canvas), nope);
   // The daily read: only with its switch, for a Canvas account of this site that said yes, once a day.
   const page = { type: 'glaze:gradescope-page', gid: '42', key: me };
   store.sync.todo = { gsDaily: true };
   assert.deepEqual(await send(page, canvas), nope, 'this Canvas account never said yes');
-  assert.equal((await send({ type: 'glaze:gradescope', op: 'bind', key: me, show: true }, canvas)).ok, true);
+  assert.equal((await send({ type: 'glaze:gradescope', op: 'bind', key: me, acct: A1, show: true }, canvas)).ok, true);
   assert.deepEqual(await send({ ...page, key: 'https://school.instructure.com/222' }, canvas), nope, 'another Canvas user of the site');
   assert.deepEqual(await send(page, other), nope);
   store.sync.todo = { gsDaily: false };
@@ -332,6 +340,27 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   const r = await send(page, canvas);
   assert.deepEqual([r.ok, r.to, r.html, r.account], [true, to, pages['/courses/42'], pages['/account/edit']]);
   assert.deepEqual(fetched.map(([u, , how]) => [u, how]), [['https://www.gradescope.com/courses/42', 'error'], ['https://www.gradescope.com/account/edit', 'error']]);
+  // What the read rests on changing while its course GET is held: on release no account page is asked for, and the
+  // read is no answer. The yes taken back; another Gradescope account kept; the course placed elsewhere.
+  for (const [why, undo, redo] of [
+    ['the yes taken back', () => { store.local.gradescope.bind[me].show = false; }, () => { store.local.gradescope.bind[me].show = true; }],
+    ['another account kept', () => { store.local.gradescope.acct = { id: A2, name: 'Alex' }; }, () => { store.local.gradescope.acct = { id: A1, name: 'Sam' }; }],
+    ['placed elsewhere', () => { store.local.gradescope.map[42].to = 'canvas:https://school.instructure.com/8'; }, () => { store.local.gradescope.map[42].to = to; }],
+  ]) {
+    store.local.gsTried = {};
+    fetched.length = 0;
+    let release;
+    hold = new Promise((y) => { release = y; });
+    const pending = send(page, canvas);
+    await settle();
+    assert.equal(fetched.length, 1, `${why}: the course GET is out`);
+    undo();
+    release();
+    assert.deepEqual(await pending, { ok: false, error: 'off' }, why);
+    assert.deepEqual(fetched.map(([u]) => u), ['https://www.gradescope.com/courses/42'], `${why}: no account page asked for`);
+    hold = null;
+    redo();
+  }
   // Turned off while the read is under way (here, as its try is noted): not one request more.
   store.local.gsTried = {};
   fetched.length = 0;
@@ -402,4 +431,75 @@ test('on Gradescope: only with Glaze and its switch on; whose account first; red
   assert.deepEqual((await run({ ...on }, { offAfter: '/courses/42' })).fetched, ['/account/edit', '/courses/42']);
   assert.deepEqual(await run({ enabled: false, enhance: { gradescope: true } }), { fetched: [], drawn: [], sent: [] }, 'Glaze off: nothing');
   assert.deepEqual(await run({ enhance: { gradescope: false } }), { fetched: [], drawn: [], sent: [] }, 'its switch off: nothing');
+});
+
+test('on Gradescope: the bar is drawn only if both switches still hold after every wait, and goes when either is turned off', async () => {
+  // Just enough of an element for the bar.
+  class E {
+    constructor(tag = 'div') { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.attrs = {}; this.on = {}; this.parent = null; }
+    append(...xs) { for (const x of xs) { if (x && typeof x === 'object') x.parent = this; this.children.push(x); } }
+    prepend(x) { x.parent = this; this.children.unshift(x); }
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; }
+    attachShadow() { return new E('shadow'); }
+    addEventListener(t, f) { this.on[t] = f; }
+    setAttribute(k, v) { this.attrs[k] = v; }
+    getAttribute(k) { return this.attrs[k] ?? null; }
+    querySelector() { return null; }
+    querySelectorAll() { return []; }
+    closest() { return this; }
+  }
+  const run = async ({ lang = 'en', offWhileLoading = false } = {}) => {
+    const sync = { enhance: { gradescope: true } };
+    const local = {
+      seenCourses: { 'canvas:https://c.test/7': { name: 'Calculus I', code: 'MATH 1350', canvas: true } },
+      gradescope: { acct: { id: A1, name: 'Sam' } },
+    };
+    const changed = [];
+    const main = new E('main');
+    const box = new E('a');
+    box.attrs.href = '/courses/900001';
+    box.querySelector = (q) => (q === '.courseBox--shortname' ? { textContent: 'MATH 1350' } : null);
+    const get = (s) => ({ get: (k, cb) => cb(Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))) });
+    const context = vm.createContext({
+      URL, console, Promise, Date, setTimeout, TextEncoder, crypto: globalThis.crypto, navigator: { language: lang }, location: { pathname: '/' },
+      DOMParser: class { parseFromString() { return { querySelector: (q) => (q === 'input[name="user[email]"]' ? { getAttribute: () => EMAIL } : null) }; } },
+      fetch: async (u) => ({ ok: true, url: `https://www.gradescope.com${u}`, text: async () => 'account' }),
+      document: { querySelector: (q) => (q === 'main' ? main : null), querySelectorAll: (q) => (q.includes('courseBox') ? [box] : []), body: new E('body'), createElement: (t) => new E(t) },
+      chrome: {
+        i18n: { getUILanguage: () => lang },
+        runtime: {
+          sendMessage: (m, cb) => {
+            if (m.type === 'glaze:load') { if (offWhileLoading) sync.enabled = false; return setTimeout(() => cb({ ok: true }), 5); }
+            context.GZ_GRADESCOPE.change(m, memory(local).area).then(cb);
+          },
+        },
+        storage: { sync: get(sync), local: get(local), onChanged: { addListener: (f) => changed.push(f) } },
+      },
+    });
+    context.window = context;
+    context.window.top = context;
+    for (const f of ['lib/i18n.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
+    await new Promise((r) => setTimeout(r, 40));
+    const off = async (patch) => {
+      Object.assign(sync, patch);
+      for (const f of changed) f(Object.fromEntries(Object.keys(patch).map((k) => [k, { newValue: patch[k] }])), 'sync');
+      await new Promise((r) => setTimeout(r, 10));
+    };
+    return { main, off };
+  };
+  // Glaze turned off while the page's words load: the old wait draws nothing.
+  assert.equal((await run({ lang: 'de', offWhileLoading: true })).main.children.length, 0);
+  // Drawn, then Glaze turned off: it goes. Drawn, then the Gradescope switch turned off: it goes too.
+  const a = await run();
+  assert.equal(a.main.children.length, 1, 'the bar');
+  await a.off({ enabled: false });
+  assert.equal(a.main.children.length, 0, 'gone with Glaze off');
+  const b = await run();
+  assert.equal(b.main.children.length, 1);
+  await b.off({ enhance: { gradescope: false } });
+  assert.equal(b.main.children.length, 0, 'gone with its switch off');
+  // Another setting changing leaves it.
+  const c = await run();
+  await c.off({ enhance: { gradescope: true, todo: true } });
+  assert.equal(c.main.children.length, 1);
 });

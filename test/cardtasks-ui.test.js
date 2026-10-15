@@ -247,7 +247,7 @@ test('Gradescope: the one-time question sits above the first card\'s tasks; the 
   const ask = askLine(card);
   assert.ok(ask, 'asked');
   assert.equal(card.children.indexOf(ask) + 1, card.children.indexOf(box(card)), 'right above the tasks');
-  assert.equal(ask.dataset.ask, 'Sam');
+  assert.equal(ask.dataset.ask, `${GS_ID} Sam`);
   assert.equal(ask.children[0].textContent, 'Show Gradescope work from Sam here?');
   assert.deepEqual(titles(card), ['A1', 'A2'], 'nothing from Gradescope before the answer');
   // A pass over the same page leaves the line as it is (focus stays on it).
@@ -264,6 +264,20 @@ test('Gradescope: the one-time question sits above the first card\'s tasks; the 
   assert.deepEqual(f.store.gradescope.bind['https://canvas.test/3'], { id: GS_ID, show: true });
   assert.equal(askLine(card), undefined);
   assert.deepEqual(titles(card), ['A1', 'G1', 'A2']);
+});
+
+test('Gradescope: a yes to the question about one account, clicked after another account signed in, grants nothing', async () => {
+  const f = feature({ gs: gsRecord() });
+  f.m.sync(true);
+  await settle();
+  f.m.sync(true);
+  await settle();
+  const ask = askLine(f.cards[0]);
+  // Gradescope's account changes (another student signed in on Gradescope) before this page has redrawn.
+  f.store.gradescope = { acct: { id: 'f'.repeat(24), name: 'Alex' }, map: {}, courses: {}, hide: false, bind: {} };
+  click(ask.children[1]);
+  await settle();
+  assert.deepEqual(f.store.gradescope.bind, {}, "Sam's question answers nothing about Alex");
 });
 
 test('Gradescope: answered anywhere (here, Better To Do, the reminders hub) is answered everywhere; "Not here" hides it', async () => {
