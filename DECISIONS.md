@@ -346,3 +346,15 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Compact labels stay in the native accessible name; titles use the existing tooltip | Draw another tooltip inside the narrow rail | The hint stays readable outside the scrollable rail and works with focus as well as hover. Turning Glaze's tooltips off retains native titles and accessible names. |
 
 Canvas's experimental `#instui-sidenav` layout is not covered by W8; revisit the selectors when that navigation feature ships. Long, scrollable rails may reveal the solid fill below a scrolled image layer; no institution navigation plugins were runtime tested.
+
+## Syllabus import (W15, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Parsed on the device by heuristics (`lib/syllabus.js`), every field with how sure it is and the line it came from, then a review screen; nothing kept until Save | Uploading for server parsing behind a consent box (another extension); an on-device model | No server, so no consent box. S4 found heuristics miss fields on real syllabi, so the review is required; the model waits on the owner (decision #1), and `extract()` is the shape a model or a PDF text layer can feed later. |
+| Dates worked out by code: month names in six languages, ISO, day-first dotted dates, slashed dates month-first only where the page's language writes them so; no year → the year that puts the date no earlier than 45 days before the term starts | Parsing with `Date` | `Date` reads "10/4" as US everywhere and has no term. Only lines with an exam or due word count: a schedule's lecture topics are noise. |
+| Canvas's Syllabus page is read from the page on screen (`#course_syllabus`), not asked for | `GET /courses/:id?include[]=syllabus_body` | It is already there when the student asks; no request. |
+| Kept per site, user and course in `storage.local` through the worker ('glaze:syllabus'); the syllabus text itself isn't kept | Keeping the raw syllabus (another extension) | What the student checked is what is useful; the rest is data with no use on the device. |
+| The scale goes to the GPA's own synced choices (`gpaCourses`), dates to Better To Do as the student's tasks (ids from date and title, so saving again updates), weights only as a note beside the what-if | Overriding Canvas's group weights | Canvas's weights are what Canvas grades by; a syllabus can be out of date. |
+| Its own meeting-time reader, the shape W14's shares (`{ label, days, start, end, location }`) | Waiting for W14 | W14 runs in parallel; swap `meetings()` for its parser once merged. |
+| PDF out | pdf.js | Owner decision #11 pending; the file field says to paste a PDF's text. |

@@ -8,6 +8,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Syllabus import** (Canvas, off by default): read a course's syllabus on your device, from its Syllabus page, a
+  Word, PowerPoint, web page or text file, or pasted text, in six languages. Every field (professor, office hours,
+  class times, exam and due dates, grading scale, weights) is shown with the line it came from for you to correct
+  before anything is kept. Saved, it shows on the course home, can set the course's scale in your GPA, adds the dates
+  you pick to Better To Do and lists the weights beside the what-if calculator. Nothing is uploaded. PDF not yet.
 - **Canvas sidebar:** style Canvas's native global navigation with a solid color, two-color gradient or picture
   (an https link or local file), filters and an overlay. Choose text and icon colors, normal/small/icon-only labels,
   three sizes, logo visibility and a collapsed rail. Native links keep their labels and keyboard access. The

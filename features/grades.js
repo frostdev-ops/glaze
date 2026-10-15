@@ -82,7 +82,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const me = studentIn(row);
     if (!me) { Object.assign(st, { status: 'none', at: Date.now(), tries: (st.tries || 0) + 1 }); return; }
     Object.assign(st, { row, me, key: whatIfKey(me), status: 'idle' });
-    st.saved = (await getArea('local', st.key))?.[st.cid];
+    // With the weights the student's syllabus lists, if one was imported (features/syllabus.js): shown, never used.
+    const [saved, syl] = await Promise.all([getArea('local', st.key), getArea('local', `syllabus:${location.origin}/${me.user_id}/${st.cid}`)]);
+    st.saved = saved?.[st.cid];
+    st.syl = Array.isArray(syl?.weights) ? syl.weights : [];
     if (st.saved) load(st); else whatIf();
   };
   const load = (st) => {
@@ -176,6 +179,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       make('div', {}, make('dt', { textContent: t('With work not graded yet as zero') }), make('dd', {}, outFinal)));
     totals.setAttribute('aria-live', 'polite');
     box.append(totals);
+    if (st.syl.length) box.append(make('p', { className: 'gz-calc-note', textContent: t('Your syllabus lists {list}. Glaze counts the weights Canvas has.', { list: st.syl.map((w) => `${w.name} ${GZ_I18N.pct(w.weight, locale())}`).join(', ') }) }));
 
     const updates = [];
     const update = () => {

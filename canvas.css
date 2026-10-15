@@ -1642,6 +1642,69 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-rm .gz-rm-pick { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: 1.5rem; color: var(--gz-ink-muted); }
 #gz-rm select { width: auto; max-width: 100%; margin: 0; padding: 0.2rem 0.4rem; height: auto; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); }
 #gz-rm .gz-rm-set > button { justify-self: start; margin-top: 0.3rem; }
+/* ---- syllabus import (features/syllabus.js): a card on the course home, a line above Canvas's Syllabus, and the review dialog ---- */
+#gz-syl { margin: 0 0 1rem; padding: 0.75rem 0.9rem; font-size: 0.875rem; line-height: 1.45; color: var(--gz-ink); background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); }
+#gz-syl.gz-syl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
+#gz-syl.gz-syl-bar p { flex: 1 1 18rem; margin: 0; color: var(--gz-ink-muted); }
+#gz-syl h2 { margin: 0 0 0.5rem; font: 600 1rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-syl dl { display: grid; gap: 0.1rem; margin: 0; }
+#gz-syl dt { margin-top: 0.4rem; font-size: 0.75rem; font-weight: 600; color: var(--gz-ink-muted); }
+#gz-syl dd { margin: 0; overflow-wrap: anywhere; }
+#gz-syl a { color: var(--gz-accent); }
+:is(#gz-syl, #gz-syl-dlg) .gz-syl-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
+#gz-syl.gz-syl-bar .gz-syl-actions { margin: 0; }
+:is(#gz-syl, #gz-syl-dlg) :is(button, input, select, textarea) { font: inherit; }
+:is(#gz-syl, #gz-syl-dlg) button {
+  margin: 0; padding: 0.3rem 0.75rem; font-size: 0.8125rem; color: var(--gz-ink); background: var(--gz-surface-2);
+  border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; box-shadow: none;
+}
+:is(#gz-syl, #gz-syl-dlg) button:hover { border-color: var(--gz-accent); }
+:is(#gz-syl, #gz-syl-dlg) .gz-syl-main { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+:is(#gz-syl, #gz-syl-dlg) :is(button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-syl h2:focus { outline: none !important; box-shadow: none !important; } /* focused only to move the reader there after a save */
+#gz-syl-dlg {
+  box-sizing: border-box; width: min(720px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-syl-dlg::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-syl-dlg * { box-sizing: border-box; }
+#gz-syl-dlg .gz-syl-in { display: grid; gap: 0.8rem; padding: 1rem 1.1rem 1.1rem; }
+#gz-syl-dlg .gz-syl-top { display: flex; align-items: center; gap: 0.75rem; }
+#gz-syl-dlg h2 { flex: 1; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-syl-dlg .gz-syl-x { flex: none; width: 1.75rem; height: 1.75rem; padding: 0; font-size: 16px; line-height: 1; }
+#gz-syl-dlg :is(.gz-syl-desc, small, .gz-syl-status) { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-syl-dlg .gz-syl-status:empty { display: none; }
+#gz-syl-dlg .gz-syl-f { display: grid; gap: 0.2rem; }
+#gz-syl-dlg .gz-syl-lab { display: flex; align-items: center; gap: 0.5rem; }
+#gz-syl-dlg label { font-weight: 600; color: var(--gz-ink); }
+#gz-syl-dlg :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%; min-height: 2rem; height: auto; margin: 0; padding: 0.3rem 0.5rem; color: var(--gz-ink); background: var(--gz-surface-2);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); box-shadow: none; color-scheme: inherit;
+}
+#gz-syl-dlg textarea { resize: vertical; }
+#gz-syl-dlg [aria-invalid="true"] { border-color: var(--gz-err); outline: 1px solid var(--gz-err); }
+#gz-syl-dlg input[type="checkbox"] { margin: 0; accent-color: var(--gz-accent); }
+#gz-syl-dlg .gz-syl-conf { padding: 0 0.45rem; font-size: 11px; font-weight: 600; border-radius: 999px; color: var(--gz-ink-muted); background: var(--gz-surface-2); }
+#gz-syl-dlg .gz-syl-check { color: var(--gz-ink); background: color-mix(in srgb, var(--gz-warn) 30%, transparent); }
+#gz-syl-dlg .gz-syl-src { font-style: italic; overflow-wrap: anywhere; }
+#gz-syl-dlg .gz-syl-set { display: grid; gap: 0.5rem; min-width: 0; margin: 0; padding: 0.6rem 0.75rem 0.75rem; border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); }
+#gz-syl-dlg legend { width: auto; margin: 0; padding: 0 0.3rem; font: 600 13px/1.4 var(--gz-font); color: var(--gz-ink); border: 0; }
+#gz-syl-dlg :is(.gz-syl-set, .gz-syl-in) > button { justify-self: start; }
+#gz-syl-dlg .gz-syl-rows { display: grid; gap: 0.5rem; }
+#gz-syl-dlg .gz-syl-rows:empty { display: none; }
+#gz-syl-dlg .gz-syl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--gz-line); }
+#gz-syl-dlg .gz-syl-row:last-child { padding-bottom: 0; border-bottom: 0; }
+#gz-syl-dlg .gz-syl-row > :is(.gz-syl-conf, .gz-syl-src) { flex-basis: 100%; }
+#gz-syl-dlg .gz-syl-row > .gz-syl-conf { flex-basis: auto; }
+#gz-syl-dlg .gz-syl-row .gz-syl-label { flex: 1 1 10rem; width: auto; }
+#gz-syl-dlg .gz-syl-row :is(input[type="time"], input[type="date"], select) { width: auto; }
+#gz-syl-dlg .gz-syl-row .gz-syl-loc { flex: 1 1 8rem; width: auto; }
+#gz-syl-dlg .gz-syl-days { display: inline-flex; gap: 0.15rem; }
+#gz-syl-dlg .gz-syl-days label { display: grid; justify-items: center; gap: 0.1rem; min-width: 1.6rem; font-size: 11px; font-weight: 500; color: var(--gz-ink-muted); cursor: pointer; }
+#gz-syl-dlg :is(.gz-syl-todo, .gz-syl-check-row) { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; cursor: pointer; }
+#gz-syl-dlg .gz-syl-read pre { max-height: 14rem; overflow: auto; margin: 0.4rem 0 0; padding: 0.5rem; font-size: 12px; white-space: pre-wrap; background: var(--gz-surface-2); border-radius: var(--gz-radius-sm); }
+#gz-syl-dlg .gz-syl-read summary { cursor: pointer; color: var(--gz-ink-muted); }
 /* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
 #gz-cm .gz-cm-more {
   margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);

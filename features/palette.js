@@ -18,7 +18,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', gradescope: 'Gradescope in To Do', search: 'Search in your courses',
     remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', streak: 'Streak',
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
-    notes: 'Dashboard notes', widgets: 'Widgets' };
+    notes: 'Dashboard notes', widgets: 'Widgets', syllabus: 'Syllabus import' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -67,6 +67,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...glazeCmds(),
       // Every Canvas extra with its switch (features/widgets.js), whether or not the widgets are on.
       { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },
+      ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
     ];
   };
   // Everything the palette can do, built when it opens.
