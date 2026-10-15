@@ -141,3 +141,11 @@ test('a floating widget is never wider or taller than the window, whatever its s
   }
   assert.match(css.slice(css.indexOf('#gz-float .gz-w {')), /^[^}]*max-height: calc\(100vh - 24px\)/);
 });
+
+test('the grid shows tiles in their saved order, which is also the keyboard and screen-reader order', () => {
+  // grid-auto-flow: dense would fill gaps with later tiles, so what you see would not be the order you set or tab through.
+  const css = read('canvas.css');
+  const rules = [...css.matchAll(/([^{}]*\.gz-dash-grid[^{}]*)\{([^}]*)\}/g)];
+  assert.ok(rules.length);
+  for (const [, sel, body] of rules) assert.doesNotMatch(body, /grid-auto-flow:\s*[^;]*dense/, sel.trim());
+});
