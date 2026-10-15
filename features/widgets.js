@@ -18,6 +18,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Tiles other files add, the same on both sites: { id: { file, name (an English key for t()), size } }. This file
   // loads the file (need) while its tile is on, and the file calls register(id, fill). Off until the student adds it.
   const MORE = { pet: { file: 'features/pet.js', name: 'Pet habitat', size: 'm' } };
+  const loadingMore = new Map(); // id -> retry time, Infinity while loading
   const added = new Map(); // id -> fill(body, api), from register()
   const nameOf = (id) => NAMES[id] || MORE[id]?.name || id;
   const ultra = ctx.site === 'ultra';
@@ -43,6 +44,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Ultra's: what works there.
   const HUB_ULTRA = [
     ['Courses page', ['notes', 'widgets', 'newgrades', 'newcontent', 'coursemenu']],
+    ['Reminders and streak', ['pet']],
     ['Course pages', ['progress', 'place', 'download', 'calc', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'reading', 'clamp']],
     ['Everywhere', ['palette', 'keys', 'drafts']],
   ];
@@ -634,11 +636,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const wanted = (hasGrid) => lay.tiles.filter((x) => {
     if (!x.on || !allowed(x.id) || !(x.float || hasGrid)) return false;
     if (WIDGETS[x.id] || added.has(x.id)) return true;
-    if (MORE[x.id]) ctx.need(MORE[x.id].file, () => added.has(x.id)).then(draw, () => {});
+    if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
+      loadingMore.set(x.id, Infinity);
+      ctx.need(MORE[x.id].file, () => added.has(x.id)).then(() => { loadingMore.delete(x.id); if (on) draw(); }, () => { loadingMore.set(x.id, Date.now() + 60000); });
+    }
     return false;
   });
   // What a tile from another file is given besides its body.
-  const api = (id) => ({ who: () => who().then(() => ({ ...me })), site: ctx.site, size: () => lay.tiles.find((x) => x.id === id)?.size || 's' });
+  const account = () => who().then(() => ({ ...me }));
+  const api = (id) => ({ who: account, site: ctx.site, size: () => lay.tiles.find((x) => x.id === id)?.size || 's' });
   const placeFloats = () => {
     for (const tile of lay.tiles) {
       const el = tile.float && tiles.get(tile.id)?.el;
@@ -786,7 +792,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // grid draws it once its file is in (wanted).
   const register = (id, fill) => { if (MORE[id] && !added.has(id) && typeof fill === 'function') added.set(id, fill); };
 
-  return { sync, hub: open, register };
+  return { sync, hub: open, register, who: account };
 })();
 
 GZ_WIDGETS_UI;

@@ -15,7 +15,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
 
 // site: 'ultra' or 'canvas'; todo: whether the Courses page has Ultra's To Do column.
-const page = ({ site = 'ultra', todo = true, local = {} } = {}) => {
+const page = ({ site = 'ultra', todo = true, local = {}, failLoad = false } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => new El(t, doc);
   doc.root = make('html');
@@ -33,18 +33,21 @@ const page = ({ site = 'ultra', todo = true, local = {} } = {}) => {
   doc.fire = (target, type, { trusted = true } = {}) => { for (let p = target; p; p = p.parentNode) for (const l of p.listeners.filter((x) => x.type === type)) l.f({ type, target, isTrusted: trusted, preventDefault() {}, stopPropagation() {} }); };
   Object.assign(doc, { createElement: make, createTextNode: (data) => ({ data, textContent: data }), getElementById: (x) => doc.root.all().find((e) => e.id === x) || null,
     querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), addEventListener: (type, f) => (docOn[type] ||= []).push(f), removeEventListener() {}, visibilityState: 'visible' });
-  const filled = [], stopped = [], wrote = [], woke = [], docOn = {};
+  const filled = [], stopped = [], wrote = [], woke = [], docOn = {}, loads = [];
+  const settings = D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, pet: true } });
+  const clock = { at: Date.now() };
+  const FakeDate = class extends Date {}; FakeDate.now = () => clock.at;
   let ui;
   const c = {
-    console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, setTimeout, clearTimeout,
+    console, URL, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, setTimeout, clearTimeout,
     document: doc, location: site === 'ultra' ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     innerWidth: 1280, innerHeight: 900, addEventListener() {}, removeEventListener() {},
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W,
     GZ_CTX: {
-      site, t: (k) => k, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true } }),
+      site, t: (k) => k, locale: () => 'en', settings: () => settings,
       profile: async () => ({ id: site === 'ultra' ? '_5_1' : '5' }),
       // The declared tile's file, when asked for, registers it.
-      need: async (f) => { if (f === 'features/pet.js') ui.register('pet', (body, api) => { filled.push([body, api.site]); body.append(make('p')); return { stop: () => stopped.push(body), wake: () => woke.push(doc.visibilityState) }; }); },
+      need: async (f) => { if (f === 'features/pet.js') { loads.push(f); if (failLoad) throw new Error('load failed'); ui.register('pet', (body, api) => { filled.push([body, api.site]); body.append(make('p')); return { stop: () => stopped.push(body), wake: () => woke.push(doc.visibilityState) }; }); } },
     },
     chrome: {
       runtime: { lastError: undefined, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => cb?.({ ok: true }) },
@@ -58,12 +61,11 @@ const page = ({ site = 'ultra', todo = true, local = {} } = {}) => {
   c.globalThis = c;
   c.window = c;
   vm.createContext(c);
-  const src = read('features/widgets.js').replace('const MORE = {};', "const MORE = { pet: { file: 'features/pet.js', name: 'Study buddy', size: 'm' } };");
-  assert.notEqual(src, read('features/widgets.js'));
+  const src = read('features/widgets.js');
   ui = vm.runInContext(src, c);
   // The page hidden or shown again, as the browser reports it.
   const visible = (v) => { doc.visibilityState = v ? 'visible' : 'hidden'; for (const f of docOn.visibilitychange || []) f(); };
-  return { ui, doc, c, filled, stopped, wrote, woke, visible, local, bbTodo, panel: () => doc.getElementById('gz-panel') };
+  return { ui, doc, c, settings, loads, clock, filled, stopped, wrote, woke, visible, local, bbTodo, panel: () => doc.getElementById('gz-panel') };
 };
 // Only the declared tile is on: the built-in ones have tests of their own.
 const ONLY_PET = { widgetLayout: { tiles: [...W.TILES.map((id) => ({ id, on: false })), { id: 'pet', on: true }] } };
@@ -179,4 +181,28 @@ test('a registered tile wakes only when the page is shown again', async () => {
   assert.deepEqual(p.woke, [], 'not when hidden');
   p.visible(true);
   assert.deepEqual(p.woke, ['visible']);
+});
+
+
+test('W24: disabling only Pet habitat stops the registered tile exactly once on Canvas and Ultra', async () => {
+  for (const site of ['canvas', 'ultra']) {
+    const p = page({ site, local: structuredClone(ONLY_PET) });
+    p.ui.sync(true); await settle();
+    assert.equal(p.filled.length, 1);
+    p.settings.enhance.pet = false;
+    p.ui.sync(true); await settle();
+    assert.equal(p.stopped.length, 1);
+    assert.equal(p.doc.querySelectorAll('.gz-w').length, 0);
+    p.ui.sync(false); assert.equal(p.stopped.length, 1);
+  }
+});
+test('W24: a failed declared-widget load is quiet until its bounded retry', async () => {
+  const p = page({ site: 'canvas', local: structuredClone(ONLY_PET), failLoad: true });
+  p.ui.sync(true); await settle();
+  for (let i = 0; i < 12; i++) { p.ui.sync(true); await settle(); }
+  assert.equal(p.loads.length, 1);
+  assert.equal(p.doc.querySelectorAll('.gz-w').length, 0);
+  p.clock.at += 60001; p.ui.sync(true); await settle();
+  assert.equal(p.loads.length, 2);
+  p.ui.sync(false);
 });

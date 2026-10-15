@@ -144,8 +144,7 @@
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
         "features/lookx.css",
-        "features/apps.css",
-        "features/pet.css"
+        "features/apps.css"
       ],
       "matches": [
         "https://*/*"

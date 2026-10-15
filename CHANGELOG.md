@@ -8,6 +8,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Pet reward corrections:** W11's saved streak supplies closed-day rewards without a planner-window requirement; synced/manual unticks revoke work and plan XP. Clearing Insights and deleting finished history preserve settled XP. Bounded records fail closed without resetting progress. The widget now uses B5's real shared Canvas/Ultra panel, account helper and app stylesheet; failed module loads back off quietly.
+
 - **Search in your courses on Blackboard Ultra:** the same Ctrl/⌘K search and switch as Canvas, now finding available
   content titles and released public document, announcement and discussion topic text, with native type labels. Current course and term first, up to
   24 results; open current-term courses only, nothing stored, five-minute cache reuse, cancellation on typing, closing or disabling. Unknown release conditions are omitted and transient errors retry after backoff. Read-only public
@@ -31,7 +33,7 @@ All notable changes to Glaze are documented here. The format follows
   protected and broken PDFs get a plain message. The extension grows by about 10 MB (the OCR models), and its pages may
   now compile WebAssembly ('wasm-unsafe-eval' in its content security policy); no new permission.
 
-- **Pet habitat**, opt-in and local: the study buddy earns XP from already-stored handed-in work, verified W11 streak days and W17 kept do-on plans, with five levels, unlockable looks and a keyboard-friendly habitat editor. The Canvas widget and palette share one renderer and the shared widget registration supports the Ultra panel. No XP from focus sessions; no notifications or missed-day losses. Rewards reconcile idempotently through the background broker per site and account, including untick and submission-state corrections. Added original matching bandana artwork (9,760-byte transparent WebP), all six languages and table tests for the XP rules.
+- **Pet habitat**, opt-in and local: the study buddy earns XP from already-stored handed-in work, saved W11 streak days and W17 kept do-on plans, with five levels, unlockable looks and a keyboard-friendly habitat editor. The Canvas widget and palette share one renderer and the shared widget registration supports the Ultra panel. No XP from focus sessions; no notifications or missed-day losses. Rewards reconcile idempotently through the background broker per site and account, including untick and submission-state corrections. Added original matching bandana artwork (9,760-byte transparent WebP), all six languages and table tests for the XP rules.
 
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course

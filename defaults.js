@@ -72,7 +72,7 @@ const GZ_SPEC = {
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
     notes: [false, 'bool'], widgets: [false, 'bool'], pet: [false, 'bool'],
-    // place: reopen a course where you left it (folders, scroll).
+    // place: reopen course content at its saved folders and scroll.
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
     coursemenu: [true, 'bool'],

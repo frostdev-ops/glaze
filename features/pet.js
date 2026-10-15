@@ -5,9 +5,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const button = (text, run) => { const b = make('button', { type: 'button', textContent: text }); b.addEventListener('click', run); return b; };
   const NAMES = { books: 'Books', plant: 'Mushroom', moon: 'Moon', stars: 'Stars', plain: 'Classic buddy', bandana: 'Mint bandana', happy: 'Happy buddy' };
   let ready;
-  const start = () => (ready ||= Promise.all([ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO)]).then(() => {
-    if (!document.getElementById('gz-pet-css')) document.head.append(make('link', { id: 'gz-pet-css', rel: 'stylesheet', href: chrome.runtime.getURL('features/pet.css') }));
-  }).catch((e) => { ready = null; throw e; }));
+  const start = () => (ready ||= Promise.all([ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO)]).catch((e) => { ready = null; throw e; }));
   const send = (m) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'glaze:pet', ...m }, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const mount = (body, api) => {
     let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0;
@@ -48,7 +46,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         select.addEventListener('change', () => update({ op: 'decor', item: id, cell: select.value === '' ? null : Number(select.value) }));
         decor.append(make('label', {}, make('span', { textContent: `${t(NAMES[id])} · ${t('Level {level}', { level: item.level })}` }), select));
       }
-      const rules = make('details', {}, make('summary', { textContent: t('How XP works') }), make('p', { textContent: t('Handed in: 20 XP on time, 10 XP late, 15 XP when timing is unknown. A kept do-on plan: 8 XP. Each verified streak day: 5 XP. Focus sessions give no XP.') }), make('p', { textContent: t('Only work already saved on this device counts. Missing days never take progress away. Unticking work removes its XP. New looks and decorations unlock as you level up.') }));
+      const rules = make('details', {}, make('summary', { textContent: t('How XP works') }), make('p', { textContent: t('Handed in: 20 XP on time, 10 XP late, 15 XP when timing is unknown. A kept do-on plan: 8 XP. Each verified streak day: 5 XP. Focus sessions give no XP.') }), make('p', { textContent: t('Only work already saved on this device counts. Missing days never take progress away. Unticking work removes its XP. New looks and decorations unlock as you level up.') }), make('p', { textContent: t('Streak XP uses saved streak days through yesterday, while Streak is on. Restores add days once; switching it off keeps earned XP.') }));
       decor.querySelector('summary').dataset.control = 'decor';
       rules.querySelector('summary').dataset.control = 'rules';
       decor.open = !!wasOpen[0]; rules.open = !!wasOpen[1];
@@ -65,8 +63,8 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       const r = await send({ key, tz, ...patch });
       busy = false;
       if (!alive) return;
-      status.textContent = r?.ok ? '' : t('Couldn’t save your buddy. Try again.');
-      if (r?.ok) { data = r.data; paint(); }
+      status.textContent = r?.ok ? '' : r?.error === 'history' ? t('Pet history couldn’t be updated. Existing progress was kept.') : t('Couldn’t save your buddy. Try again.');
+      if (r?.data) { data = r.data; paint(); }
       if (waiting.length) update(waiting.shift());
       else if (pending) { pending = false; update(); }
       else {
@@ -75,7 +73,9 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       }
     };
     const changed = (ch, area) => {
-      if (!alive || !key || area !== 'local') return;
+      if (!alive || !key) return;
+      if (area === 'sync' && (ch.todo || ch.enhance)) { update(); return; }
+      if (area !== 'local') return;
       const suffix = key.slice(4);
       if (ch[`todo:${suffix}`] || ch[`insights:${suffix}`] || ch[`remind:${suffix}`] || ch.todoCache) update();
       if (ch[key]?.newValue) { data = GZ_PET.view(ch[key].newValue); paint(); }
@@ -83,7 +83,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     const show = () => { clearTimeout(timer); if (document.visibilityState === 'visible') update(); };
     document.addEventListener('visibilitychange', show);
     body.append(pet, status);
-    start().then(() => api?.who ? api.who().then((p) => ({ id: p.uid, time_zone: p.tz })) : ctx.profile()).then((p) => {
+    start().then(() => { const who = api?.who || globalThis.GZ_WIDGETS_UI?.who; return who ? who().then((p) => ({ id: p.uid, time_zone: p.tz })) : ctx.profile(); }).then((p) => {
       if (!alive || !ctx.settings().enabled || !ctx.settings().enhance.pet) return;
       if (!/^(?:\d+|_\d+_\d+)$/.test(String(p?.id))) throw new Error('unknown account');
       if (tile) tile.hidden = false;
