@@ -54,7 +54,7 @@ const computer = () => {
       env.peak = Math.max(env.peak, Object.entries(env.store.local).filter(([k]) => k.startsWith('cardImg:')).reduce((n, [, v]) => n + v.length, 0));
       return true;
     }),
-    remove: (keys) => later(() => { for (const k of [].concat(keys)) delete env.store[name][k]; }),
+    remove: (keys) => later(() => { if (name === 'sync' && env.failSync) return false; for (const k of [].concat(keys)) delete env.store[name][k]; return true; }),
   });
   env.worker = (m) => env.turn(() => K.change(m, { sync: area('sync'), local: area('local') }));
   return env;
@@ -221,24 +221,54 @@ test('the background worker takes card writes from this extension only, one at a
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
       runtime: {
-        id: 'glaze', getURL: () => 'chrome-extension://x/', getManifest: () => m,
+        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
         onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
     },
   });
   vm.runInContext(read('lib/background.js'), context);
-  const send = (msg, id = 'glaze') => new Promise((res) => {
+  // Replies come out of the worker's VM: compared as plain JSON.
+  const send = (msg, sender = { id: 'glaze', tab: {}, url: 'https://school.instructure.com/' }) => new Promise((res) => {
     let kept = false;
-    for (const f of listeners) if (f(msg, { id, tab: {} }, res) === true) kept = true;
+    const back = (r) => res(JSON.parse(JSON.stringify(r)));
+    for (const f of listeners) if (f(msg, sender, back) === true) kept = true;
     if (!kept) res('ignored');
   });
+  // Who may ask: a Canvas page for its own site's courses, and the editor page for anything; no one else.
+  const editor = { id: 'glaze', tab: {}, url: 'chrome-extension://x/options.html#cards' };
+  const nope = { ok: false, error: 'sender' };
+  const solid = { type: 'glaze:cards', key: A, style: { k: 'solid', c: '#123456' } };
+  for (const [sender, why] of [
+    [{ id: 'other', tab: {}, url: 'https://school.instructure.com/' }, 'another extension'],
+    [{ id: 'glaze', url: 'chrome-extension://x/popup.html' }, "another of Glaze's pages"],
+    [{ id: 'glaze', tab: {}, url: 'chrome-extension://x/preview.html' }, 'the preview frame'],
+    [{ id: 'glaze', url: 'https://school.instructure.com/' }, 'not in a tab'],
+    [{ id: 'glaze', tab: {}, url: 'https://other.instructure.com/' }, "another site's course"],
+    [{ id: 'glaze', tab: {}, url: 'https://evil.example/' }, 'a site Glaze does not run on'],
+  ]) assert.deepEqual(await send(solid, sender), nope, why);
+  assert.deepEqual(await send({ type: 'glaze:cards', reset: true }), nope, 'a Canvas page cannot reset');
+  assert.deepEqual(await send({ type: 'glaze:cards', set: [] }), nope, "or change a theme's set");
+  assert.equal(await send({ type: 'glaze:toString', key: A }), 'ignored', 'only the kinds of write it names');
+  assert.equal(store.sync.cards[A], undefined);
+  assert.deepEqual(await send({ type: 'glaze:cards', key: B, style: null }, editor), { ok: true, id: null }, 'the editor page');
   const image = `data:image/webp;base64,${'N'.repeat(300000)}`;
-  assert.equal(await send({ type: 'glaze:cards', key: A, style: { k: 'solid', c: '#123456' } }, 'other'), 'ignored');
   const [a, b] = await Promise.all([send({ type: 'glaze:cards', key: A, style: {}, image }), send({ type: 'glaze:cards', key: B, style: {}, image })]);
   assert.deepEqual([a.ok, b.ok, b.error], [true, false, 'cap']);
   assert.equal(store.sync.cards[A].i, a.id);
   assert.equal(pics(store.local).length, 2);
+});
+
+test('a reset whose styles could not be removed keeps the pictures they use, and says it failed', async () => {
+  const env = computer();
+  env.store.sync.cards = { [A]: { k: 'image', i: 'aaaaaaaaaaaa' } };
+  env.store.local['cardImg:aaaaaaaaaaaa'] = 'data:image/webp;base64,AAAA';
+  env.failSync = true;
+  assert.deepEqual(await env.worker({ reset: true }), { ok: false, error: 'write' });
+  assert.ok('cardImg:aaaaaaaaaaaa' in env.store.local, 'the saved style still has its picture');
+  env.failSync = false;
+  assert.deepEqual(await env.worker({ reset: true }), { ok: true });
+  assert.deepEqual([env.store.sync, pics(env.store.local)], [{}, []]);
 });
 
 test('two tabs saving different courses at the same moment keep both', async () => {

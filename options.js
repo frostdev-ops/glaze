@@ -734,7 +734,7 @@ GZ_UI.load().then((s) => {
     Object.assign(s, GZ_SANITIZE({ presets: s.presets }), { card: GZ_CARDS.settings() });
     save(Object.keys(s));
     // Card styles and bookmarks too, and the pictures kept for them on this computer.
-    cardsOp({ reset: true });
+    cardsOp({ reset: true }).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });
     fill();
     hint(t('Everything is back to the defaults. Your presets are kept.'));
 
