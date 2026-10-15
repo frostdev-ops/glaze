@@ -132,6 +132,12 @@ test("a card's tasks: that course's open items with a date, soonest first, up to
   const own = T.build({ items: ITEMS, data: { tasks: [{ id: 'a', title: 'Read', cid: '25' }, { id: 'b', title: 'Lab', cid: '25', due: { day: '2026-10-15' } }] }, o: O, now: NOW, tz: NY, course: '25' });
   assert.deepEqual(keys(T.card(own, 4, false)), ['assignment:1', 'assignment:3', 'quiz:4', 'task:b']);
   assert.deepEqual(T.card(T.build({ items: ITEMS, o: O, now: NOW, tz: NY, course: '99' }), 4, true), []);
+  // Undated work planned for a day ("do on") or a focus session counts from the start of that day, as on the list.
+  const planned = T.build({ items: ITEMS, o: O, now: NOW, tz: NY, course: '25', data: {
+    tasks: [{ id: 'p', title: 'Plan', cid: '25' }, { id: 's', title: 'Focus', cid: '25' }],
+    items: { 'task:p': { on: '2026-10-16' }, 'task:s': { sessions: [{ at: at('2026-10-15T20:00:00Z'), min: 30 }] } },
+  } });
+  assert.deepEqual(keys(T.card(planned, 6, false, NY)), ['assignment:1', 'task:s', 'assignment:3', 'quiz:4', 'assignment:5', 'task:p']);
 });
 
 test('settings: past-due window, timeframe, week start, manual completion, grouping off', () => {

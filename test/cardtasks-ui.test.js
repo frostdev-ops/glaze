@@ -44,7 +44,9 @@ const cardFor = (cid) => {
 };
 const item = (id, at) => ({ plannable_type: 'assignment', plannable_id: id, course_id: 25, plannable_date: new Date(at).toISOString(), html_url: `/courses/25/assignments/${id}`, plannable: { title: `A${id}` }, submissions: { submitted: false } });
 
-const feature = ({ stored = {}, list = false } = {}) => {
+const feature = ({ stored = {}, list = false, hold = false } = {}) => {
+  const state = { list };
+  const held = [];
   const calls = [];
   const store = JSON.parse(JSON.stringify(stored));
   const listeners = [];
@@ -56,10 +58,15 @@ const feature = ({ stored = {}, list = false } = {}) => {
       t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', need: async () => {},
       canvasCourses: async () => [{ id: '25', name: 'Biology', enrollments: [{ type: 'StudentEnrollment' }] }],
       capi: async (u) => { calls.push(u); return { id: '3', time_zone: 'America/New_York' }; },
+      profile() { return this.capi('/users/self/profile'); },
     },
     GZ_TODO: T,
     location: { origin: 'https://canvas.test', pathname: '/' },
-    fetch: async (u) => { calls.push(u); return { ok: true, text: async () => JSON.stringify([item(1, NOW + 864e5), item(2, NOW + 2 * 864e5)]), headers: { get: () => null } }; },
+    fetch: async (u) => {
+      calls.push(u);
+      const r = { ok: true, text: async () => JSON.stringify([item(1, NOW + 864e5), item(2, NOW + 2 * 864e5)]), headers: { get: () => null } };
+      return hold ? new Promise((res) => held.push(() => res(r))) : r;
+    },
     chrome: {
       runtime: {},
       storage: {
@@ -70,7 +77,7 @@ const feature = ({ stored = {}, list = false } = {}) => {
     },
     document: {
       visibilityState: 'visible', addEventListener() {},
-      getElementById: (id) => (id === 'gz-todo' && list ? {} : null),
+      getElementById: (id) => (id === 'gz-todo' && state.list ? {} : null),
       querySelectorAll: (sel) => (sel === '.ic-DashboardCard' ? cards : cards.flatMap((x) => x.children.filter((y) => y.className === 'gz-ct'))),
       createElement: (tag) => new E(tag),
     },
@@ -79,7 +86,7 @@ const feature = ({ stored = {}, list = false } = {}) => {
   c.globalThis = c;
   vm.createContext(c);
   vm.runInContext(read('features/cardtasks.js'), c);
-  return { m: c.GZ_CARD_TASKS, calls, store, cards, listeners };
+  return { m: c.GZ_CARD_TASKS, calls, store, cards, listeners, state, held };
 };
 const planner = (calls) => calls.filter((u) => u.includes('/planner/items')).length;
 const box = (card) => card.children.find((x) => x.className === 'gz-ct');
@@ -124,4 +131,44 @@ test('a fresh shared answer, or the To Do list on the page, means no request of 
   assert.equal(box(listed.cards[0]), undefined); // nothing yet: the list's answer arrives through storage
   for (const l of listed.listeners) l({ todoCache: { newValue: { key: KEY, at: NOW, ...range, items: [T.slim(item(1, NOW + 864e5))] } } }, 'local');
   assert.equal(box(listed.cards[0]).children.length, 1);
+});
+
+const fresh = (items, at = Date.now()) => ({ key: KEY, at, ...T.fetchRange(D.GZ_SANITIZE({}).todo, at, 'America/New_York'), items: items.map(T.slim) });
+const titles = (card) => box(card).children.map((li) => li.children[0].children[0].textContent);
+
+test("an answer asked for before a newer one arrived (the list's, another tab's) neither replaces it nor is kept", async () => {
+  const f = feature({ hold: true });
+  f.m.sync(true);
+  await settle();
+  assert.equal(f.held.length, 1);
+  const newer = fresh([item(99, NOW + 864e5)], Date.now() + 1000);
+  f.store.todoCache = newer;
+  for (const l of f.listeners) l({ todoCache: { newValue: newer } }, 'local');
+  f.held[0]();
+  await settle();
+  assert.equal(f.store.todoCache.items[0].id, '99');
+  assert.deepEqual(titles(f.cards[0]), ['A99']);
+});
+
+test("a list that goes without an answer (it failed) leaves the cards to ask for themselves, once", async () => {
+  const f = feature({ list: true });
+  f.m.sync(true);
+  await settle();
+  assert.equal(planner(f.calls), 0);
+  f.state.list = false; // the list failed and took itself off the page
+  f.m.sync(true); // content.js's next pass
+  f.m.sync(true);
+  await settle();
+  assert.equal(planner(f.calls), 1);
+  assert.deepEqual(titles(f.cards[0]), ['A1', 'A2']);
+});
+
+test('one profile request a page, whoever asks (Better To Do and the cards)', async () => {
+  const decl = read('content.js').match(/ {2}let mine = null;\n {2}const profile = .*\n/)[0];
+  const asked = [];
+  const ctx = { capi: (u) => { asked.push(u); return Promise.resolve({ id: '3' }); } };
+  vm.createContext(ctx);
+  vm.runInContext(`${decl}\nglobalThis.profile = profile;`, ctx);
+  await Promise.all([ctx.profile(), ctx.profile()]);
+  assert.deepEqual(asked, ['/users/self/profile']);
 });

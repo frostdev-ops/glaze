@@ -13,7 +13,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const TONE = { Missing: 'err', 'Submitted late': 'warn', Submitted: 'ok', Graded: 'ok', Excused: 'ok', Done: 'ok' };
   let L = null; // lib/todo.js
   let tz, key = '', o = null, data = null, cache = null;
-  let on = false, starting = null, asking = null;
+  let on = false, starting = null, asking = null, failed = 0, listed = false;
 
   const get = (keys) => new Promise((res) => { try { chrome.storage.local.get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
   const put = (v) => new Promise((res) => { try { chrome.storage.local.set(v, () => res(!chrome.runtime.lastError)); } catch { res(false); } });
@@ -42,22 +42,27 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     const need = L.fetchRange(o, now, tz);
     return Date.parse(c.start) <= Date.parse(need.start) && Date.parse(c.end) >= Date.parse(need.end) - L.DAY;
   };
-  // Kept in the list's shape, so the list takes it as its own. A teacher's list also wants the grading it asks for
-  // itself: for a teacher, teach is null, which the list never takes.
+  // Kept in the list's shape, so the list takes it as its own. A teacher's list also wants the grading: for a teacher,
+  // teach is null, and the list keeps these planner items and asks for the grading alone (features/todo.js load).
+  // An answer asked for before the one already kept (the list's, another tab's, arriving first) is dropped.
   const load = async () => {
     const now = Date.now();
     const { start, end } = L.fetchRange(o, now, tz);
     const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
+    const kept = (await get([CACHE]))[CACHE];
+    if (kept?.key === key && kept.at >= now) cache = kept;
+    if (cache?.key === key && cache.at >= now) return paint();
     const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
     cache = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), grading: [], sums: {} };
     put({ [CACHE]: cache, dueWeek: GZ_CANVAS_DUE_WEEK(raw, now), dueWeekAt: now, dueWeekFrom: location.origin });
     paint();
   };
-  // When the cards start, the page is shown again and the list's settings change; never from content.js's passes.
-  // A failed ask waits for the next of those.
+  // When the cards start, the page is shown again and the list's settings change, and from content.js's passes while
+  // the cards have nothing or the list that was to ask has gone (it failed). Not while the list is on the page, and not
+  // within a minute of a failed ask.
   const refresh = () => {
-    if (!on || !L || asking || fresh(cache, Date.now()) || document.getElementById('gz-todo')) return;
-    asking = load().catch(() => {}).finally(() => { asking = null; });
+    if (!on || !L || asking || Date.now() - failed < 60000 || fresh(cache, Date.now()) || document.getElementById('gz-todo')) return;
+    asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; });
   };
 
   // ---- the cards ----
@@ -71,10 +76,11 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       const cid = el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
       const was = el.querySelector(':scope > .gz-ct');
       if (!head || !cid || !cache) { was?.remove(); continue; }
-      const rows = L.card(L.build({ items: cache.items || [], data, o, now, tz, course: cid, sync: o.sync }), o.cardN, o.cardCross).map((r) => {
-        const w = L.label(r, now, tz, lang);
+      const rows = L.card(L.build({ items: cache.items || [], data, o, now, tz, course: cid, sync: o.sync }), o.cardN, o.cardCross, tz).map((r) => {
+        // Undated work planned for a day (a "do on" day or a focus session) reads as planned for that day.
+        const w = L.label(r.at === null ? { allDay: true, day: r.plan } : r, now, tz, lang);
         const text = o.rel ? w.rel : w.abs;
-        return { ...r, when: r.type === 'planner_note' ? text : t(r.past ? 'Was due {when}' : 'Due {when}', { when: text }), other: o.rel ? w.abs : w.rel };
+        return { ...r, when: r.at === null ? t('Planned for {when}', { when: text }) : r.type === 'planner_note' ? text : t(r.past ? 'Was due {when}' : 'Due {when}', { when: text }), other: o.rel ? w.abs : w.rel };
       });
       const sig = JSON.stringify([o.cardStatus, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
       if (was?.dataset.sig === sig) continue;
@@ -100,7 +106,8 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const onStore = (ch, area) => {
     if (area === 'sync' && ch.todo) return void readPrefs().then(() => { paint(); refresh(); });
     if (area !== 'local' || !(ch[CACHE] || ch[key])) return;
-    if (ch[CACHE]?.newValue?.key === key) cache = ch[CACHE].newValue;
+    const c = ch[CACHE]?.newValue;
+    if (c?.key === key && !(cache?.key === key && cache.at > c.at)) cache = c;
     if (ch[key]) data = L.clean(ch[key].newValue);
     paint();
   };
@@ -109,7 +116,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const start = async () => {
     await ctx.need('lib/todo.js', () => globalThis.GZ_TODO);
     L = globalThis.GZ_TODO;
-    const [p] = await Promise.all([ctx.capi('/users/self/profile'), readPrefs()]);
+    const [p] = await Promise.all([ctx.profile(), readPrefs()]);
     if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
     tz = L.zone(p.time_zone);
     key = L.storeKey(location.origin, String(p.id));
@@ -120,12 +127,17 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     document.addEventListener('visibilitychange', onShow);
     addEventListener('focus', onShow);
   };
-  // If it can't start (no profile), the cards stay as Canvas has them for this page.
+  // If it can't start (no profile), the cards stay as Canvas has them, and it tries again after a minute.
   const sync = (want) => {
     on = !!want;
     if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); return; }
-    if (!starting) starting = start().then(() => { paint(); refresh(); }, () => {});
-    else paint();
+    if (!starting) starting = start().then(() => { paint(); refresh(); }, () => { setTimeout(() => { starting = null; }, 60000); });
+    else {
+      paint();
+      const list = !!document.getElementById('gz-todo');
+      if (!cache || (listed && !list)) refresh();
+      listed = list;
+    }
   };
 
   return { sync };

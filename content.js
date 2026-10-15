@@ -461,6 +461,9 @@
   let canvasList = null;
   const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
     .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
+  // Your profile (id, time zone), asked once a page for whoever needs it; again after a failure.
+  let mine = null;
+  const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
   // The chip is drawn after the course code (canvas.css), inside the card's link: a click on it opens the grades.
   if (!ultra) addEventListener('click', (e) => {
     const el = settings.enhance.overall && e.target.closest?.('.ic-DashboardCard [data-gz-grade]');
@@ -1941,7 +1944,7 @@
     if (!globalThis.GZ_DRAFTS) { if (ed) draftsIn(); return; }
     if (ed && !inboxAccount && !inboxLoading && Date.now() >= inboxRetry) {
       inboxLoading = true;
-      Promise.all([capi('/users/self/profile'), canvasCourses()]).then(([user, courses]) => {
+      Promise.all([profile(), canvasCourses()]).then(([user, courses]) => {
         inboxAccount = { user: String(user.id), courses };
       }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
     }
@@ -3450,7 +3453,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   };
 
   // The helpers a file loaded by need() may use (Wave 1's features/*.js): this frame's, read through one name.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, on: () => !!observer });
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, profile, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, on: () => !!observer });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.
