@@ -668,6 +668,7 @@
     watchDrafts();
     recordCourses();
     syncCourseMenu();
+    if (!ultra) { paintCourses(); renderProgress(); }
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -1028,7 +1029,7 @@
   const canvasProgress = () => {
     const old = document.getElementById('gz-progress');
     const cid = canvasCourseId();
-    const list = settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
+    const list = observer && settings.enabled && settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
     if (!list) return old?.remove();
     if (reqs?.cid !== cid) {
       const r = (reqs = { cid });
@@ -2428,6 +2429,7 @@
       // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
       if (cmd) { e.preventDefault(); e.stopPropagation(); closeCmd(); return; }
       if (typing(e.target)) return;
+      if (!ultra && e.target.closest?.('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       e.preventDefault();
       e.stopPropagation();
       openCmd();
@@ -2584,6 +2586,7 @@
   };
   const paintCourses = () => {
     if (!ultra) {
+      if (!observer || !settings.enabled) return;
       const changed = {};
       // A native color edit repaints the hero before a new API request would see it.
       for (const card of document.querySelectorAll('.ic-DashboardCard')) {
