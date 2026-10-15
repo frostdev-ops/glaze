@@ -187,7 +187,7 @@
     let html = '';
     for (let n = 1; n <= 40; n++) {
       if (n === 1) {
-        html += `<div class="root content-list-item" data-content-id="_8130_1"><div class="itemContainer"><div>${icon('module')}<div><h3><button class="b8b-folder" id="folder-title-_8130_1" aria-expanded="false">Practice folder</button></h3><div class="b8b-folder-body" hidden>Invented folder contents.</div></div></div></div></div>`;
+        html += `<div class="root content-list-item" data-content-id="_8130_1"><div class="itemContainer"><div>${icon('module')}<div><h3><button class="b8b-folder" id="folder-title-_8130_1" aria-expanded="false">Practice folder</button></h3><div class="b8b-folder-body" hidden></div></div></div></div></div>`;
         continue;
       }
       const open = OPENS[n], kind = open ? open[0] : kinds[n % 4];
@@ -348,7 +348,12 @@
     const t = e.target;
     if (e.defaultPrevented || !(t instanceof Element)) return;
     const folder = t.closest('.b8b-folder');
-    if (folder) { const open = folder.getAttribute('aria-expanded') !== 'true'; folder.setAttribute('aria-expanded', String(open)); $('.b8b-folder-body', folder.closest('.content-list-item')).hidden = !open; return; }
+    if (folder) {
+      const open = folder.getAttribute('aria-expanded') !== 'true', body = $('.b8b-folder-body', folder.closest('.content-list-item'));
+      folder.setAttribute('aria-expanded', String(open));
+      body.innerHTML = open ? '<p>Invented folder contents.</p>' : ''; body.hidden = !open;
+      return;
+    }
     if (t.closest('.js-start-attempt')) { window.__attempts++; return; }
     const a = t.closest('a[href]');
     if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

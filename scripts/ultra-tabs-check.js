@@ -123,6 +123,29 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       if (process.env.GZ_B8B_FOCUSED) {
         const label = await page.locator('#gz-ctabs [data-course-id="_101_1"]').evaluate((e) => ({ text: e.querySelector('.gz-ctab-name').textContent, title: e.title, aria: e.getAttribute('aria-label') }));
         ok(label.text === 'ZZ 3456' && label.title.includes('209940-ZZ3456-007') && label.aria.includes('209940-ZZ3456-007') && label.aria.includes('FA26-CS101-01'), `auto short label retains original metadata (${JSON.stringify(label)})`);
+        const choice = async (label, nick = '') => {
+          await opts.evaluate(async ({ label, nick }) => {
+            const { tabs, courses } = await chrome.storage.sync.get(['tabs', 'courses']);
+            await chrome.storage.sync.set({ tabs: { ...tabs, label }, courses: { ...courses, names: { ...courses.names, _101_1: nick } } });
+          }, { label, nick });
+        };
+        for (const mode of ['short', 'name', 'code']) {
+          await choice(mode, 'My reading');
+          await page.waitForFunction(() => document.querySelector('#gz-ctabs [data-course-id="_101_1"] .gz-ctab-name')?.textContent === 'My reading');
+          const metadata = await page.locator('#gz-ctabs [data-course-id="_101_1"]').getAttribute('aria-label');
+          ok(metadata.includes('209940-ZZ3456-007') && metadata.includes('FA26-CS101-01'), `nickname wins in ${mode} while full metadata remains accessible`);
+        }
+        for (const [mode, expected] of [['name', '209940-ZZ3456-007'], ['code', 'FA26-CS101-01'], ['short', 'ZZ 3456']]) {
+          await choice(mode);
+          await page.waitForFunction((text) => document.querySelector('#gz-ctabs [data-course-id="_101_1"] .gz-ctab-name')?.textContent === text, expected);
+          ok(true, `explicit ${mode} choice displays ${expected}`);
+        }
+        await open('_102_1');
+        await opts.evaluate(async () => { const { tabs } = await chrome.storage.sync.get('tabs'); await chrome.storage.sync.set({ tabs: { ...tabs, cap: 2 } }); });
+        await open('_103_1');
+        ok((await strip()).note.includes('Closed ZZ 3456'), 'the tab-cap note uses the automatic short display label');
+        await opts.evaluate(async () => { const { tabs } = await chrome.storage.sync.get('tabs'); await chrome.storage.sync.set({ tabs: { ...tabs, cap: 8 } }); });
+        await open('_101_1');
       }
       await isolated(async () => {
         if (!globalThis.__b8bNet) {
@@ -148,9 +171,14 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
         (sc === document.body ? document.scrollingElement : sc).scrollTop = n;
       }, top);
-      const saved = (route, top, cid = '_101_1') => opts.waitForFunction(async ({ route, top, cid }) => {
-        const all = await chrome.storage.local.get(null);
-        return Object.values(all).some((v) => v?.tabs?.some((t) => t.cid === cid && t.path === route && t.top === top));
+      const saved = (route, top, cid = '_101_1') => opts.evaluate(async ({ route, top, cid }) => {
+        const until = performance.now() + 4000;
+        while (performance.now() < until) {
+          const all = await chrome.storage.local.get(null);
+          if (Object.values(all).some((v) => v?.tabs?.some((t) => t.cid === cid && t.path === route && t.top === top))) return true;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        throw new Error(`tab place was not saved: ${cid} ${route} ${top}`);
       }, { route, top, cid });
       const restore = async (route, top, label, cid = '_101_1', delayed = '') => {
         await switchTab(cid === '_101_1' ? '_102_1' : '_101_1');
@@ -187,7 +215,14 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         ok((await strip())?.at === 'routed', `${label} keeps the strip after settlement`);
       };
       await page.click('.b8b-folder');
-      await opts.waitForFunction(async () => (await chrome.storage.local.get('coursePlace')).coursePlace?._101_1?.open?.includes('_8130_1'));
+      await opts.evaluate(async () => {
+        const until = performance.now() + 4000;
+        while (performance.now() < until) {
+          if ((await chrome.storage.local.get('coursePlace')).coursePlace?._101_1?.open?.includes('_8130_1')) return true;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        throw new Error('the native folder expansion was not saved');
+      });
       await native('a.b8b-document');
       const doc = '/ultra/courses/_101_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
       phase = 'B8b:NATIVE:history'; await page.goBack(); await settled('_101_1');

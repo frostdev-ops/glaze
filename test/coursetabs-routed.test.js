@@ -92,21 +92,24 @@ test('a full routed switch waits for native content replacement, then settles wi
 
 test('header-only and reused-header transitions cannot certify or capture the old main under the destination', () => {
   const helper = part('  const sameView = ', '  let liveView = ');
-  assert.ok(helper.includes('readyView'), 'a routed main needs readiness proof');
   const oldMain = { childElementCount: 1, textContent: 'Old reading' }, newMain = { childElementCount: 1, textContent: 'New reading' };
-  let current = [{}, oldMain, {}], pathname = `${C}/document/_81_1`;
-  const api = vm.runInNewContext(helper + part('  let liveView = ', '  // A panel over the bar') + '\n({observeView, sameView, readyView, live:()=>liveView});', {
-    view: () => current, location: { get pathname() { return pathname; }, search: '' }, shown: () => true, loading: () => false,
+  let current = [{}, oldMain, {}, 'Old header'], pathname = `${C}/document/_81_1`, ended = 0;
+  const go = { cid: '_71_1', at: 0, before: current };
+  const api = vm.runInNewContext(helper + part('  let liveView = ', '  // A panel over the bar') + part('  const check = ', '  const end = ') + '\n({observeView, check, live:()=>liveView});', {
+    view: () => current, location: { get pathname() { return pathname; }, search: '' }, shown: (e) => !!e, loading: () => false,
+    go, courseBar: () => null, ctx: { courseId: () => '_71_1', holding: () => false }, performance: { now: () => 500 }, document: {}, end: () => ended++,
   });
   api.observeView(); const previous = api.live();
   pathname = `${C}/document/_86_1`;
-  current = [{}, oldMain, current[2]];
+  current = [current[0], oldMain, current[2], 'New header'];
+  api.check(); assert.equal(ended, 0, 'a changed header cannot release outgoing native content');
   api.observeView(); assert.equal(api.live(), previous, 'a new root/header around old content cannot relabel capture provenance');
-  assert.equal(api.sameView(current, previous.nodes), true);
-  current = [{}, null, null]; api.observeView(); assert.equal(api.live(), previous);
-  assert.equal(api.readyView(current), false, 'a header appearing before main is not ready');
-  current = [{}, { childElementCount: 0, textContent: '' }, null]; api.observeView(); assert.equal(api.live(), previous);
+  current = [{}, null, null]; api.check(); assert.equal(ended, 0, 'a header appearing before main is not ready');
+  api.observeView(); assert.equal(api.live(), previous);
+  current = [{}, { childElementCount: 0, textContent: '' }, null]; api.check(); assert.equal(ended, 0);
+  api.observeView(); assert.equal(api.live(), previous);
   current = [{}, newMain, {}]; api.observeView(); assert.equal(api.live().path, pathname);
+  api.check(); assert.equal(ended, 1);
 });
 
 test('disabled tabs never scan native routes or place a strip from the mutation hook', () => {
