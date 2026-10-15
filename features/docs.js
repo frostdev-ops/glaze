@@ -141,7 +141,10 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
       ctx.profile().then((p) => id(p?.id), (s) => (s === 401 || s === 403 ? 'anon' : '')).then((u) => { user = u; tell(); });
     };
     let said = '';
+    // Only the frame's latest question is answered: a profile or the words arriving for an earlier one (another file in
+    // the same frame) say nothing.
     const tell = () => {
+      if (docFrames.get(e.source) !== tell) return;
       const s = ctx.settings().enhance;
       if (s.docInk) whose();
       const msg = { gz: 'docs', on: ctx.on(), dark: ctx.darkTheme(), colors: Object.fromEntries(GZ_COLORS.map(([v]) => [v, html.style.getPropertyValue(v)])),
@@ -151,6 +154,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
       said = j;
       try { e.source.postMessage(msg, e.origin); } catch { docFrames.delete(e.source); }
     };
+    ctx.wordsIn.delete(docFrames.get(e.source));
     docFrames.set(e.source, tell);
     tell();
     ctx.wordsIn.add(tell);

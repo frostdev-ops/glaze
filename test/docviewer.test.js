@@ -47,7 +47,7 @@ const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', 
     profile: () => { ctx.profiles = (ctx.profiles || 0) + 1; return profile(); } };
   vm.runInContext(fs.readFileSync(path.join(root, 'features/docs.js'), 'utf8'), ctx);
   const ask = (data, origin = 'https://canvadocs.instructure.com', source = frame) => ctx.GZ_DOCS.ask({ data, origin, source });
-  return { sent, ask, frame, docs: ctx.GZ_DOCS, later, settings, ctx };
+  return { sent, ask, frame, iframe, docs: ctx.GZ_DOCS, later, settings, ctx };
 };
 
 test('content.js loads features/docs.js for a canvadocs frame\'s question only, and hands it the message', async () => {
@@ -98,6 +98,24 @@ test('with no user in the blob, Canvas names you; signed out is "anon"; any othe
     await new Promise(setImmediate);
     assert.equal(sent.at(-1).msg.user, want, String(want));
   }
+});
+
+test('an answer still on its way for the frame\'s earlier file (its profile, its words) is dropped once the frame asks again', async () => {
+  let held;
+  const profile = () => new Promise((y) => { held = y; });
+  const { sent, ask, iframe, later } = page({ src: 'https://canvadocs.instructure.com/1/sessions/x/view', href: 'https://school.instructure.com/courses/1/files/21', profile });
+  ask({ gz: 'docs?' });
+  assert.equal(sent.at(-1).msg.file, '21');
+  // The same frame moves on to file 22, whose address names user 42.
+  iframe.src = `/api/v1/canvadoc_session?blob=${encodeURIComponent(JSON.stringify({ user_id: 42, attachment_id: 22 }))}`;
+  ask({ gz: 'docs?' });
+  const now = sent.length;
+  assert.deepEqual([sent.at(-1).msg.file, sent.at(-1).msg.user], ['22', '42']);
+  held({ id: '42' }); // file 21's profile comes back
+  await new Promise(setImmediate);
+  for (const f of later) f(); // and the words arrive
+  assert.equal(sent.length, now, 'nothing said for file 21');
+  assert.equal(later.size, 1, 'only the latest question waits for the words');
 });
 
 test('Canvas is asked who you are only while annotations are on, and once', async () => {
