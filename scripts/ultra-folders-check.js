@@ -13,7 +13,8 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-b9-'));
   let context;
   try {
-    context = await chromium.launchPersistentContext(path.join(temp, 'profile'), { executablePath: chromePath, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', hasTouch: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1'] });
+    context = await chromium.launchPersistentContext(path.join(temp, 'profile'), { executablePath: chromePath, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', hasTouch: true, isMobile: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1'] });
+    context.setDefaultTimeout(8000);
     let requests = 0;
     await context.route('**/*', (r) => {
       const u = new URL(r.request().url());
@@ -32,6 +33,7 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
     await page.goto('https://bb.school.test/ultra/courses/_800_1/outline');
     await page.waitForFunction(() => document.querySelectorAll('.gz-folder-eye:not(:disabled)').length === 3);
     assert.equal(await page.locator('.gz-folder-eye').count(), 3);
+    assert.deepEqual(await page.locator('.gz-folder-eye').evaluateAll((es) => es.map((e) => getComputedStyle(e).opacity)), ['1', '1', '1'], 'all touch controls are always visible');
     await page.waitForTimeout(400);
     const requestBefore = requests;
     const eye = (title) => page.getByRole('button', { name: title, exact: true });
@@ -61,6 +63,8 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
       const entry = D.GZ_PRESETS.find(([n]) => n === preset) || D.GZ_PRESETS[width === 1280 ? 0 : 1];
       await opts.evaluate(async ({ colors, preset }) => chrome.storage.sync.set({ colors, preset }), { colors: entry[1], preset: entry[0] });
       await page.setViewportSize({ width, height: 900 }); await page.waitForTimeout(250);
+      await page.locator('.gz-folder-eye').first().focus();
+      assert.equal(await page.locator('.gz-folder-eye').first().evaluate((e) => getComputedStyle(e).opacity), '1');
       await page.screenshot({ path: path.join(out, `${preset.toLowerCase()}-${width}.png`), fullPage: true });
     }
     // Shared worker operations merge with another tab's edits; storage events update both tabs.
