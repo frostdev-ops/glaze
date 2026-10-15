@@ -258,6 +258,36 @@ html:not([data-gz-motion="off"]) #gz-panel .gz-panel-toggle::after { transition:
 #gz-nt-block .gz-nt-course:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #gz-nt-block .gz-nt-course i { display: none; }
 
+/* W24: shared pet tile and palette habitat. */
+/* The pet's palette comes from the page. Static art: no timer, autoplay or motion to quiet. */
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game,.gz-game-dialog{color:var(--gz-ink,#253449);font:inherit}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game{display:grid;gap:10px;min-width:0}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game p{margin:0;line-height:1.5}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-level{font-weight:700;font-size:1.1em}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-habitat{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,54px);isolation:isolate;border-radius:18px;background:linear-gradient(165deg,color-mix(in srgb,var(--gz-accent,#16837b) 16%,var(--gz-surface,#fff)),var(--gz-surface,#fff));border:1px solid var(--gz-line,#bbc6cc);overflow:hidden}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-cell{position:relative;display:grid;place-items:center;min-width:0}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-cell img{grid-area:1/1;object-fit:contain;max-width:none;pointer-events:none}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-decor{width:54px;height:54px}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-buddy{position:absolute;width:118px;height:118px;z-index:2}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game progress{appearance:none;accent-color:var(--gz-accent,#16837b);width:100%;height:10px;border:0;border-radius:999px;overflow:hidden;background:var(--gz-line,#bbc6cc)}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game progress::-webkit-progress-bar{background:var(--gz-line,#bbc6cc)}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game progress::-webkit-progress-value{background:var(--gz-accent,#16837b);border-radius:999px}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game progress::-moz-progress-bar{background:var(--gz-accent,#16837b);border-radius:999px}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game label{display:grid;grid-template-columns:1fr minmax(110px,1fr);align-items:center;gap:8px;margin:8px 0;font-size:.9em}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game select,.gz-game-dialog button{font:inherit;color:inherit;background:var(--gz-surface,#fff);border:1px solid var(--gz-line,#bbc6cc);border-radius:8px;padding:7px;min-width:0}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game select:disabled{opacity:.65}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game details{border-top:1px solid var(--gz-line,#bbc6cc);padding-top:8px}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game summary{cursor:pointer;font-weight:600;padding:4px 0}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game details p,:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-breakdown,:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-status{font-size:.85em;color:var(--gz-ink-muted,#526273)}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game details p{margin-top:8px}
+:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game :focus-visible,.gz-game-dialog button:focus-visible{outline:2px solid var(--gz-accent,#16837b);outline-offset:3px}
+.gz-game-dialog{background:var(--gz-surface,#fff);border:1px solid var(--gz-line,#bbc6cc);border-radius:20px;padding:22px;width:min(440px,calc(100vw - 40px));max-height:85vh;overflow:auto}
+.gz-game-dialog::backdrop{background:#17233370}
+.gz-game-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
+.gz-game-dialog h2{font:inherit;font-size:1.25em;font-weight:700;margin:0}
+
+.gz-w[data-tile="pet"][hidden],:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-status:empty{display:none!important}
+
 /* ---- Planning (B2): Better To Do, the Gradescope line, tasks on course cards, reminders and the calendar file's dialog,
    on Canvas and Ultra. Colors and sizes are the palette's --gz-* tokens; a token only canvas.css derives has its
    fallback here. */

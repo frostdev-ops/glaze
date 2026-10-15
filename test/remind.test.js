@@ -213,7 +213,7 @@ test('the worker: a reminder is leased to one tab, seen only once that tab showe
 
 test('the worker: a streak is kept only over the one it was reckoned from; restores are a few a month', async () => {
   const a = area();
-  const s = { start: 100, best: 3, was: null, keys: [], ok: [], broke: null };
+  const s = { start: 100, asOf: 106, best: 3, was: null, keys: [], ok: [], broke: null };
   assert.equal((await R.change({ key: KEY, op: 'streak', from: null, streak: s }, a, NOW)).ok, true);
   // Another tab broke it meanwhile (start 105): a page still reckoning from 100 changes nothing.
   await R.change({ key: KEY, op: 'streak', from: 100, streak: { ...s, start: 105, was: 100, keys: ['assignment:1'], broke: 104 } }, a, NOW);
@@ -221,6 +221,7 @@ test('the worker: a streak is kept only over the one it was reckoned from; resto
   // A restore: the run from before the miss, the miss forgiven.
   const r = await R.change({ key: KEY, op: 'restore', month: '2026-10' }, a, NOW);
   assert.deepEqual([r.ok, r.data.streak.start, r.data.streak.ok, r.data.streak.was, r.data.restores], [true, 100, ['assignment:1'], null, { month: '2026-10', n: 1 }]);
+  assert.equal(r.data.streak.asOf, 106, 'restore retains the calculated-day bound');
   // Nothing to restore now; another break, another restore; then none left until November.
   assert.equal((await R.change({ key: KEY, op: 'restore', month: '2026-10' }, a, NOW)).error, 'none');
   const broke = { ...a.box[KEY].streak, start: 110, was: 100, keys: ['assignment:2'], broke: 109 };
@@ -244,7 +245,7 @@ test('clean: what storage or a page hands over is checked, and old entries go', 
   }, NOW);
   assert.deepEqual(c, {
     seen: { [`assignment:1@${NOW}`]: NOW }, snooze: { [`task:a@${NOW}`]: NOW + 1 }, held: {}, mute: { 'assignment:1': NOW },
-    streak: { start: 100, best: 0, was: null, keys: ['assignment:1'], ok: [], broke: null }, restores: null,
+    streak: { start: 100, asOf: null, best: 0, was: null, keys: ['assignment:1'], ok: [], broke: null }, restores: null,
   });
   assert.deepEqual(R.clean(null, NOW), { seen: {}, snooze: {}, held: {}, mute: {}, streak: null, restores: null });
 });

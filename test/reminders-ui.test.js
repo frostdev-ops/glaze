@@ -495,3 +495,21 @@ test('class start (W14): a class in the class schedule reminds its lead time bef
   assert.deepEqual(on.fetched, []);
   assert.ok(off.fetched.length > 0, 'due-date reminders do ask, with the copy that old');
 });
+
+
+test('NEW-1: W11 persists calculated day even when start and best do not change', async () => {
+  const w = world(5 * 864e5);
+  const today = T.dayOf(w.now(), 'America/New_York');
+  w.box[KEY] = { streak: { start: today - 20, best: 100, asOf: today - 1 } };
+  const a = w.tab({ enhance: { remind: false, streak: true } });
+  a.ui.sync(true); await settle();
+  assert.equal(a.ops('streak').length, 1);
+  assert.equal(w.box[KEY].streak.asOf, today);
+  a.ui.sync(true); await settle();
+  assert.equal(a.ops('streak').length, 1, 'same day does not rewrite');
+  w.skew += 864e5;
+  a.live().at(-1).f(); await settle();
+  assert.equal(a.ops('streak').length, 2);
+  assert.equal(w.box[KEY].streak.asOf, today + 1);
+  a.ui.sync(false);
+});

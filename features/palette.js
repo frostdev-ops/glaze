@@ -17,11 +17,11 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
     gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', gradescope: 'Gradescope in To Do', search: 'Search in your courses',
-    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak',
+    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', pet: 'Pet habitat',
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
     notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
   // Ultra's: its own, and the planning switches, which work on both sites.
-  const ULTRA_EXTRAS = { ...EXTRAS, ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
+  const ULTRA_EXTRAS = { ...EXTRAS, pet: 'Pet habitat', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -81,6 +81,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   // Canvas and Ultra alike: the notes app (features/notes.js: the library, a new note, and this course's notes), Glaze's
   // own commands, and every extra with its switch (features/widgets.js), whether or not the widgets are on.
   const apps = (cid) => [
+    ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('features/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
     ...(ctx.settings().enhance.notes ? [
       { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: (e) => notes({ event: e }) },
       { label: t('New note'), hint: cid ? t('This course') : 'Glaze', group: 'Glaze', run: (e) => notes({ create: true, course: cid, event: e }) },
