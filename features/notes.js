@@ -1,6 +1,10 @@
-// Notes (Canvas, enhance.notesApp, off by default), loaded on demand: a notes app over the page, like Insights. Opened from
-// the command palette (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, a Course
-// notes button on a course's home (sync, from content.js) and a class reminder. Folders (per course or free-standing),
+// Notes (Canvas, enhance.notes, off by default; the same switch as the Dashboard notes tile), loaded on demand: a notes
+// app over the page, like Insights. Opened from the command palette (Notes, New note, Course notes), the Dashboard notes
+// tile, a course card's create menu, a Course notes button on a course's home (features/notes-home.js, which the worker
+// registers only while Notes is on, calls sync) and a class reminder. It opens, and its controls act, only on the
+// student's own clicks and keys: a click or key the page's scripts fake is ignored (isTrusted), and opening, typing and
+// submitting also need the user activation a real click or key gives. While it is open, what it shows is part of the
+// page, as anything on screen is. Folders (per course or free-standing),
 // rich text, pictures and attachments, links to the course's Canvas files, pages and module items, search, sort and
 // filter, a trash kept 30 days, and export (one note as Markdown or HTML; everything as a zip) and import of that zip.
 // What it keeps is written by the service worker's queue ('glaze:notesapp', lib/notes.js run): the library's index in
@@ -13,7 +17,8 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const t = (k, v) => ctx.t(k, v);
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false && k !== '')); return e; };
   const attr = (e, o) => { for (const [k, v] of Object.entries(o)) e.setAttribute(k, v); return e; };
-  const alive = () => { const s = ctx.settings(); return ctx.on() && s.enabled !== false && !!s.enhance.notesApp; };
+  const alive = (s = ctx.settings()) => ctx.on() && s.enabled !== false && !!s.enhance.notes;
+  const activated = () => navigator.userActivation?.isActive ?? true;
   const libs = () => ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT).then(() => ctx.need('lib/notes.js', () => globalThis.GZ_NOTES));
   const zipLib = () => ctx.need('lib/zip.js', () => globalThis.GZ_ZIP);
   const uuid = () => crypto.randomUUID();
@@ -43,19 +48,29 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const fail = (r) => t(ERR[r?.error] || "Couldn't save. Try again in a moment.");
 
   // ---- the Course notes button on a course's home -----------------------------------------------------------------
-  const sync = () => {
-    const m = alive() && window.top === window && location.pathname.match(/^\/courses\/(\d+)\/?$/);
+  const sync = (on = alive()) => {
+    const m = on && window.top === window && location.pathname.match(/^\/courses\/(\d+)\/?$/);
     const side = m && document.getElementById('course_show_secondary');
     let b = document.getElementById('gz-nt-course');
     if (!side) b?.remove();
     else {
-      if (!b) { b = make('button', { type: 'button', id: 'gz-nt-course', className: 'btn button-sidebar-wide' }); b.addEventListener('click', () => open({ course: canvasId() })); }
+      if (!b) { b = make('button', { type: 'button', id: 'gz-nt-course', className: 'btn button-sidebar-wide' }); b.addEventListener('click', (e) => { if (e.isTrusted) open({ course: canvasId() }); }); }
       if (b.lastChild?.textContent !== t('Course notes')) b.replaceChildren(attr(make('i', { className: 'icon-document' }), { 'aria-hidden': 'true' }), ' ', t('Course notes'));
       const last = [...side.querySelectorAll('a.button-sidebar-wide')].pop();
       if (last ? b.previousElementSibling !== last : b.parentNode !== side) { if (last) last.after(b); else side.prepend(b); }
     }
-    if (!alive()) box?.close();
+    if (!on) box?.close();
   };
+  ctx.wordsIn?.add(() => sync());
+  // Switched off (or on) in another tab or the editor: read from the change itself, as the page's own copy of the
+  // settings may not have caught up yet.
+  try {
+    chrome.storage.onChanged.addListener((ch, area) => {
+      if (area !== 'sync' || !(ch.enhance || ch.enabled)) return;
+      const s = ctx.settings();
+      sync(alive(GZ_SANITIZE({ enabled: ch.enabled ? ch.enabled.newValue : s.enabled, enhance: ch.enhance ? ch.enhance.newValue : s.enhance })));
+    });
+  } catch { /* extension reloaded */ }
   const canvasId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1] || '';
 
   // ---- the view ----------------------------------------------------------------------------------------------------
@@ -69,6 +84,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const say = (s) => { if (el.say) el.say.textContent = s || ''; };
 
   const open = async ({ course = '', create = false } = {}) => {
+    if (!activated()) return;
     if (box) { if (create) newNote(course); else if (course) { view.course = course; view.trash = false; drawLib(); } return el.title?.focus(); }
     if (!alive()) return;
     const my = ++gen;
@@ -96,6 +112,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   };
 
   const close = () => box?.close();
+  // Glaze's own click on its hidden file fields (to open the browser's file picker), let through the filter below.
+  let ours = null;
+  const own = (input) => { ours = input; try { input.click(); } finally { ours = null; } };
   const button = (text, run, props = {}) => { const b = make('button', { type: 'button', textContent: text, ...props }); b.addEventListener('click', run); return b; };
   const select = (label, opts, value, onChange, cls = '') => {
     const s = make('select', {}, ...opts.map(([v, text]) => make('option', { value: v, textContent: text, selected: v === value })));
@@ -139,7 +158,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
           button(t('New note'), () => newNote(view.course !== '-' ? view.course : '')),
           button(t('New folder'), newFolder),
           button(t('Export all'), exportAll),
-          button(t('Import'), () => el.zip.click()),
+          button(t('Import'), () => own(el.zip)),
           button(t('Close'), close))),
       el.say, el.ask, make('div', { className: 'gz-nt-main' }, lib, el.ed), el.file, el.zip);
     attr(box, { role: 'dialog', 'aria-labelledby': 'gz-nt-title' });
@@ -147,6 +166,16 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     // Keys typed here are the view's: Canvas's own page shortcuts (n, e, d, r… on the document) would swallow letters
     // typed in a note. Glaze's own (Ctrl/⌘+K, g then a letter) listen before this and stand down in a dialog.
     for (const ev of ['keydown', 'keypress', 'keyup']) box.addEventListener(ev, (e) => e.stopPropagation());
+    // A click, key, change, paste or drop the page's scripts fake is stopped here, before anything of Glaze's acts on it;
+    // so are typing and a submit the browser makes for a script (execCommand, requestSubmit) without the student's own
+    // recent click or key. Glaze's own edits mark the note changed themselves (exec).
+    for (const ev of ['click', 'keydown', 'keypress', 'change', 'paste', 'drop', 'dragstart', 'input', 'beforeinput', 'submit']) {
+      box.addEventListener(ev, (e) => {
+        if (e.target === ours || (e.isTrusted && (!['input', 'beforeinput', 'submit'].includes(e.type) || activated()))) return;
+        e.stopImmediatePropagation();
+        e.preventDefault();
+      }, true);
+    }
     // Esc closes a question first, then the view.
     box.addEventListener('cancel', (e) => { if (!el.ask.hidden) { e.preventDefault(); el.ask.dispatchEvent(new Event('gz-cancel')); } });
     box.addEventListener('close', () => {
@@ -366,7 +395,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       b.addEventListener('mousedown', (e) => e.preventDefault()); // the selection stays in the note
       return b;
     }), button(t('Link'), () => link(), { title: `${t('Link')} (${/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'}+K)` }),
-    button(t('Canvas link'), () => canvasPicker()), button(t('Picture or file'), () => { keepRange(); el.file.click(); }));
+    button(t('Canvas link'), () => canvasPicker()), button(t('Picture or file'), () => { keepRange(); own(el.file); }));
     attr(bar, { role: 'toolbar', 'aria-label': t('Formatting') });
     for (const b of bar.querySelectorAll('button')) b.addEventListener('mousedown', (e) => e.preventDefault());
     el.linkbar = make('div', { className: 'gz-nt-linkbar', hidden: true });
@@ -394,10 +423,13 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     if (had >= 0) el.meta.querySelectorAll('select')[had]?.focus();
   };
   // A new note keeps its folder and course until its first save makes it.
-  const metaChange = (patch, c = cur) => {
-    if (!c) return;
+  const metaChange = async (patch, c = cur) => {
+    if (!c) return true;
     Object.assign(c, patch);
-    if (c.rev) send({ op: 'meta', id: c.id, at: Date.now(), ...patch }).then((r) => { if (!r?.ok) say(fail(r)); });
+    if (!c.rev) return true;
+    const r = await send({ op: 'meta', id: c.id, at: Date.now(), ...patch });
+    if (!r?.ok) say(fail(r));
+    return !!r?.ok;
   };
   let titleWait = 0;
   const titleChanged = () => {
@@ -466,24 +498,28 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     cur.wait = setTimeout(() => save(), 700);
   };
   const save = async (c = cur) => {
-    if (!c || c.ro || c.saved == null) return;
+    if (!c || c.ro || c.saved == null) return true;
     clearTimeout(c.wait);
     const html = snapshot(c);
-    if (html == null) return;
+    if (html == null) return true;
     c.pending = html;
-    if (c.busy || (c.rev ? html === c.saved : !html && !c.title.trim())) return;
-    if (html.length > N.LIMIT.body) return say(t("This note is too long to save. Split it into two notes."));
+    if (c.busy) return c.inflight;
+    if (c.rev ? html === c.saved : !html && !c.title.trim()) return true;
+    if (html.length > N.LIMIT.body) { say(t("This note is too long to save. Split it into two notes.")); return false; }
     c.busy = true;
     c.sid ||= uuid();
     c.copy ||= uuid();
+    let landed;
+    c.inflight = new Promise((res) => { landed = res; });
     const r = await send({ op: 'save', id: c.id, base: c.rev, sid: c.sid, copy: c.copy, html, title: c.title, folder: c.folder, course: c.course, cn: c.cn,
       copyTitle: t('{title} (conflict copy)', { title: c.title.trim() || t('Untitled') }) });
     c.busy = false;
+    landed(!!r?.ok);
     if (!r?.ok) {
       say(r?.error === 'big' ? t(ERR.big) : r?.error === 'many' ? t(ERR.many) : t("Couldn't save this note. It's still here, and Glaze will try again."));
       c.tries = (c.tries || 0) + 1;
       if (r?.error !== 'big' && r?.error !== 'many' && c.tries < 3) c.wait = setTimeout(() => save(c), 3000);
-      return;
+      return false;
     }
     c.sid = c.copy = null;
     c.tries = 0;
@@ -497,7 +533,22 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     // Again: what's stored is an earlier attempt, not this text, so it goes once more.
     c.saved = r.again ? false : html;
     const next = snapshot(c);
-    if (next != null && next !== c.saved) save(c);
+    if (next != null && next !== c.saved) return save(c);
+    return true;
+  };
+  // Until the open note's text and title are all stored (each save that lands may find more to send), or a save fails.
+  const settle = async () => {
+    const c = cur;
+    if (!c || c.ro || c.saved == null) return true;
+    clearTimeout(titleWait);
+    if (c.rev && c.title !== idx.notes[c.id]?.title && !(await metaChange({ title: c.title }, c))) return false;
+    if (el.body?.isConnected && cur === c) c.pending = serialize();
+    for (let i = 0; i < 5; i++) {
+      if (c.busy) await c.inflight;
+      else if (snapshot(c) === c.saved || (!c.rev && !c.pending && !c.title.trim())) return true;
+      else if (!(await save(c))) return false;
+    }
+    return snapshot(c) === c.saved;
   };
   addEventListener('pagehide', () => flush());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
@@ -519,12 +570,16 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const title = t('{title} (copy)', { title: c.title.trim() || t('Untitled') });
     const r = await send({ op: 'save', id, base: 0, sid: uuid(), copy: uuid(), html, title, folder: c.folder, course: c.course, cn: c.cn });
     if (!r?.ok) return say(fail(r));
-    say(t('Duplicated as “{title}”.', { title }));
+    // The index as it is now (its change event may not have come yet), so the copy opens.
+    const got = await get(me.key);
+    if (!box) return;
+    if (got) { idx = N.clean(got[me.key]); drawLib(); }
     openNote(r.id);
+    say(t('Duplicated as “{title}”.', { title }));
   };
 
   // ---- formatting ----------------------------------------------------------------------------------------------------
-  const exec = (cmd, value) => { if (!cur || cur.ro) return; el.body.focus(); document.execCommand(cmd, false, value); };
+  const exec = (cmd, value) => { if (!cur || cur.ro) return; el.body.focus(); document.execCommand(cmd, false, value); changed(); };
   const here = () => { const s = getSelection(); const n = s?.anchorNode; return n && el.body?.contains(n) ? (n.nodeType === 1 ? n : n.parentElement) : null; };
   const closest = (sel) => here()?.closest(sel);
   const inBody = (e) => e && el.body.contains(e) && e !== el.body;
@@ -626,11 +681,17 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const addFiles = async (files) => {
     const c = cur, g = noteGen;
     if (!c || c.ro) return;
+    const tooBig = (kind) => say(t(kind === 'image' ? 'Pictures can be up to {size}.' : 'Attachments can be up to {size}.', { size: mb(N.LIMIT[kind]) }));
     for (const file of files) {
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      // Checked before anything is read: a picture over its limit, anything over the attachments' limit.
+      const pic = /^image\/(png|jpeg|gif|webp)$/.test(file.type);
+      if (file.size > N.LIMIT.file || (pic && file.size > N.LIMIT.image)) { tooBig(pic ? 'image' : 'file'); continue; }
+      let bytes;
+      try { bytes = new Uint8Array(await file.arrayBuffer()); } catch { say(t("Couldn't read {name}.", { name: file.name })); continue; }
+      if (g !== noteGen || cur !== c || !box) return;
       const type = file.type.startsWith('image/') ? N.imageType(bytes) : null;
       const kind = type ? 'image' : 'file';
-      if (bytes.length > N.LIMIT[kind]) { say(t(kind === 'image' ? 'Pictures can be up to {size}.' : 'Attachments can be up to {size}.', { size: mb(N.LIMIT[kind]) })); continue; }
+      if (bytes.length > N.LIMIT[kind]) { tooBig(kind); continue; }
       say(t('Adding {name}…', { name: file.name }));
       const id = uuid();
       const r = await send({ op: 'file', id, kind, name: file.name, data: N.b64(bytes), note: c.id });
@@ -725,14 +786,12 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   // ---- export and import ---------------------------------------------------------------------------------------------
   const dataUrl = (f) => `data:${f.type};base64,${f.data}`;
   const exportOne = async (as) => {
-    const c = cur;
-    if (!c) return;
-    await zipLib();
-    const html = serialize();
+    if (!cur || !el.body?.isConnected) return;
+    // A snapshot first: the note can be switched or the view closed while its pictures are read.
+    const html = serialize(), title = cur.title.trim() || t('Untitled');
     const imgs = new Map();
     for (const id of N.refs(html)) { const f = await send({ op: 'getFile', id }); if (f?.ok && f.kind === 'image') imgs.set(id, dataUrl(f)); }
-    const title = c.title.trim() || t('Untitled');
-    const name = GZ_ZIP.safeName(title);
+    const name = title.replace(/[\u0000-\u001f\\/:*?"<>|]+/g, '_').replace(/[. ]+$/, '').slice(0, 120).trim() || 'note';
     if (as === 'md') download(new Blob([`# ${title}\n\n${N.markdown(html, { path: (id) => imgs.get(id) || null })}\n`], { type: 'text/markdown' }), `${name}.md`);
     else {
       const page = `<!doctype html>\n<html lang="${esc(ctx.locale())}"><meta charset="utf-8"><title>${esc(title)}</title>\n<style>body{font:16px/1.55 system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem}img{max-width:100%}pre{overflow:auto;background:#f4f4f5;padding:.75rem}ul[data-check]{list-style:none;padding-inline-start:1.2rem}ul[data-check] li::before{content:"☐ "}ul[data-check] li[data-done]::before{content:"☑ "}</style>\n<h1>${esc(title)}</h1>\n${N.sanitize(html, { src: (id) => imgs.get(id) })}\n</html>\n`;
@@ -741,9 +800,13 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   };
   const exportAll = async () => {
     const my = gen;
-    flush();
+    if (!(await settle())) return say(t("Couldn't save the open note, so nothing was exported. Try again in a moment."));
     await zipLib();
-    const live = N.list(idx);
+    const got = await get(me.key);
+    if (stop(my)) return;
+    if (!got) return say(t("Couldn't read your notes. Nothing was saved."));
+    const snap = N.clean(got[me.key]);
+    const live = N.list(snap);
     const notes = [], files = [], seen = new Set();
     try {
       for (const [i, [id, n]] of live.entries()) {
@@ -756,17 +819,21 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
           if (seen.has(fid)) continue;
           seen.add(fid);
           const f = await send({ op: 'getFile', id: fid });
-          if (f?.ok) files.push({ id: fid, kind: f.kind, name: f.name, type: f.type, bytes: N.unb64(f.data) });
+          if (stop(my)) return;
+          // A picture or attachment that can't be read fails the export: a backup that leaves it out isn't one.
+          if (!f?.ok) throw new Error(n.title);
+          files.push({ id: fid, kind: f.kind, name: f.name, type: f.type, bytes: N.unb64(f.data) });
         }
       }
     } catch (e) { return say(t("Couldn't export “{title}”. Nothing was saved.", { title: e.message || t('Untitled') })); }
     if (stop(my)) return;
-    const folders = N.folderList(idx).map(([id, f]) => ({ id, ...f }));
+    const folders = N.folderList(snap).map(([id, f]) => ({ id, ...f }));
     download(new Blob(GZ_ZIP.zip(N.exportZip({ site: location.origin, folders, notes, files })), { type: 'application/zip' }), `glaze-notes-${new Date().toISOString().slice(0, 10)}.zip`);
     say(t('Notes exported: {n}', { n: notes.length }));
   };
   // A zip Glaze exported: read here (nothing in it runs: JSON, sanitized HTML, pictures checked by their bytes), each
-  // file sent to the worker, then the notes in batches. Everything gets new ids, so nothing already here changes.
+  // file a note to be imported uses sent to the worker, then the notes in batches. Notes keep their ids: one already
+  // here stays unless the export's is newer (the worker decides), so importing the same export twice adds nothing.
   const importZip = async (file) => {
     const my = gen;
     const D = globalThis.GZ_DOCTEXT;
@@ -778,37 +845,42 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       z = D.unzip(new Uint8Array(await file.arrayBuffer()), { limits: { input: cap, entry: 64 << 20, total: cap, entries: 20000 } });
       const json = await z.text('notes.json');
       if (!json) throw new Error('none');
-      back = N.parseExport(json, { site: location.origin, id: uuid });
+      back = N.parseExport(json, { site: location.origin });
     } catch { return say(t("That isn't a notes export from Glaze, or it's damaged.")); }
     if (stop(my)) return;
-    // A folder already here with the same name and course takes its notes, rather than a second one of that name.
+    // A folder already here with the same name and course (and another id) takes its notes, rather than a second one.
     const have = N.folderList(idx);
     back.folders = back.folders.filter((f) => {
+      if (idx.folders[f.id]) return true;
       const same = have.find(([, x]) => x.name === f.name && x.course === f.course)?.[0];
       if (same) for (const n of back.notes) if (n.folder === f.id) n.folder = same;
       return !same;
     });
     const skipped = [];
+    // Only the files of notes that will be written: one here already, as new or newer, keeps its own.
+    const coming = back.notes.filter((n) => !(idx.notes[n.id]?.at >= n.at));
+    back.files = back.files.filter((f) => coming.some((n) => n.html.includes(`data-gz-file="${f.id}"`)));
     for (const [i, f] of back.files.entries()) {
       say(t('Importing… {n} of {all}', { n: i + 1, all: back.files.length + back.notes.length }));
       let bytes = null;
       try { bytes = await z.bytes(f.path); } catch { /* damaged entry */ }
       if (stop(my)) return;
       if (!bytes || bytes.length !== f.size || (f.kind === 'image' && !N.imageType(bytes))) { skipped.push(f.name); continue; }
-      const owner = back.notes.find((n) => n.html.includes(`data-gz-file="${f.id}"`))?.id;
+      const owner = coming.find((n) => n.html.includes(`data-gz-file="${f.id}"`))?.id;
       const r = owner && await send({ op: 'file', id: f.id, kind: f.kind, name: f.name, data: N.b64(bytes), note: owner });
       if (stop(my)) return;
       if (r?.error === 'full') return say(t('Not enough room: notes keep up to {size} of pictures and files on this device.', { size: mb(N.LIMIT.total) })); if (!r?.ok) skipped.push(f.name);
     }
-    let done = 0;
+    let done = 0, same = 0;
     for (let i = 0; i < back.notes.length; i += 20) {
       say(t('Importing… {n} of {all}', { n: back.files.length + i + 1, all: back.files.length + back.notes.length }));
       const r = await send({ op: 'import', folders: i ? [] : back.folders, notes: back.notes.slice(i, i + 20) });
       if (stop(my)) return;
       done += r?.done || 0;
+      same += r?.skipped || 0;
       if (!r?.ok) { say([t('Notes imported: {n}', { n: done }), fail(r)].join(' ')); return; }
     }
-    say([t('Notes imported: {n}', { n: done }), skipped.length && t('Left out: {names}', { names: skipped.join(', ') })].filter(Boolean).join(' '));
+    say([t('Notes imported: {n}', { n: done }), same && t('Skipped, already here and not older: {n}', { n: same }), skipped.length && t('Left out: {names}', { names: skipped.join(', ') })].filter(Boolean).join(' '));
     usage();
   };
 

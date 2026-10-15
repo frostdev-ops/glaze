@@ -1,5 +1,6 @@
-// The notes app around lib/notes.js: who the service worker takes notes changes from, and the rules the page keeps when
-// it asks Canvas for links (features/notes.js).
+// The notes app around lib/notes.js: who the service worker takes notes changes from, the rules the page keeps when it
+// asks Canvas for links, and the whole view (features/notes.js) on a small stand-in page with the real lib/notes.js as
+// its worker: faked events, export snapshots and settling, uploads, duplicate, and the course-home registration.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -25,7 +26,7 @@ test("the worker takes a page's notes changes for its own site's index only", as
   vm.runInContext(read('lib/background.js'), context);
   const send = (msg, sender) => new Promise((res) => { for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) return; res('ignored'); });
   const page = (url) => ({ id: 'glaze', tab: {}, url });
-  const m = { type: 'glaze:notesapp', key: 'notesIdx:https://school.instructure.com/5', op: 'tidy' };
+  const m = { type: 'glaze:notesapp', key: 'notesIdx:https://school.instructure.com/5', op: 'search', q: 'x' };
   for (const [sender, why] of [
     [page('https://other.instructure.com/courses/1'), "another site's page"],
     [{ id: 'other', tab: {}, url: 'https://school.instructure.com/' }, 'another extension'],
@@ -49,4 +50,307 @@ test('the Canvas link picker: read-only GETs on this site, redirects refused, st
   assert.match(src, /const done = \(\) => \{ ctl\.abort\(\);/, 'closing the picker stops it');
   // Nothing else leaves the page: no other request, no beacon, no remote picture.
   for (const word of ['XMLHttpRequest', 'sendBeacon', 'WebSocket', 'EventSource']) assert.ok(!src.includes(word), word);
+});
+
+// ---- the whole view on a stand-in page -----------------------------------------------------------------------------
+const N = require('../lib/notes.js');
+const SOURCE = read('features/notes.js');
+const settle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const later = () => { let resolve; const p = new Promise((r) => { resolve = r; }); return Object.assign(p, { resolve }); };
+const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+// Simple selectors only: tag, #id, .class and [attr] or [attr="v"] compounds, joined by spaces or > (both as descendant).
+const one = (el, part) => {
+  const m = part.match(/^([a-z0-9]+|\*)?((?:[#.][\w-]+|\[[^\]]+\])*)$/i);
+  if (!m || !el.tagName || (m[1] && m[1] !== '*' && el.tagName !== m[1].toUpperCase())) return false;
+  return (m[2].match(/[#.][\w-]+|\[[^\]]+\]/g) || []).every((x) => {
+    if (x[0] === '#') return el.id === x.slice(1);
+    if (x[0] === '.') return String(el.className).split(/\s+/).includes(x.slice(1));
+    const [, k, v] = x.match(/^\[([\w-]+)(?:="([^"]*)")?\]$/);
+    const a = el.getAttribute(k);
+    return a != null && (v == null || a === v);
+  });
+};
+const matches = (el, sel) => sel.split(',').some((alt) => {
+  const parts = alt.trim().split(/\s*>\s*|\s+/);
+  if (!one(el, parts.at(-1))) return false;
+  let i = parts.length - 2;
+  for (let p = el.parentNode; i >= 0 && p; p = p.parentNode) if (one(p, parts[i])) i--;
+  return i < 0;
+});
+const camel = (k) => k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+class El {
+  constructor(tag, doc) { Object.assign(this, { tagName: tag.toUpperCase(), doc, children: [], parentNode: null, attrs: {}, dataset: {}, listeners: [], className: '', id: '', hidden: false, _html: '', style: { setProperty() {} } }); }
+  get isConnected() { let p = this; while (p.parentNode) p = p.parentNode; return p === this.doc.root; }
+  kids(list) { return list.filter((k) => k != null && k !== false).map((k) => (k instanceof El ? k : { nodeType: 3, textContent: String(k) })); }
+  adopt(k) { if (k instanceof El && k.parentNode) k.parentNode.children.splice(k.parentNode.children.indexOf(k), 1); k.parentNode = this; return k; }
+  append(...k) { for (const x of this.kids(k)) this.children.push(this.adopt(x)); }
+  prepend(...k) { this.children.unshift(...this.kids(k).map((x) => this.adopt(x))); }
+  replaceChildren(...k) { for (const c of this.children) c.parentNode = null; this.children = []; this._html = ''; this.append(...k); }
+  after(x) { const p = this.parentNode, k = this.kids([x])[0]; p.adopt(k); p.children.splice(p.children.indexOf(this) + 1, 0, k); }
+  remove() { if (this.parentNode) { this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); this.parentNode = null; } }
+  replaceWith(...k) { const p = this.parentNode, at = p.children.indexOf(this); this.remove(); p.children.splice(at, 0, ...this.kids(k).map((x) => p.adopt(x))); }
+  get previousElementSibling() { const s = this.parentNode?.children || []; return s.slice(0, s.indexOf(this)).filter((x) => x instanceof El).at(-1) || null; }
+  get lastChild() { return this.children.at(-1) || null; }
+  setAttribute(k, v) { if (k === 'id') this.id = String(v); else if (k === 'class') this.className = String(v); else if (k.startsWith('data-')) this.dataset[camel(k)] = String(v); else this.attrs[k] = String(v); }
+  getAttribute(k) { if (k === 'id') return this.id || null; if (k === 'class') return this.className || null; if (k === 'hidden') return this.hidden ? '' : null; if (k.startsWith('data-')) return this.dataset[camel(k)] ?? null; return this.attrs[k] ?? null; }
+  hasAttribute(k) { return this.getAttribute(k) != null; }
+  removeAttribute(k) { if (k.startsWith('data-')) delete this.dataset[camel(k)]; else delete this.attrs[k]; }
+  get textContent() { return this._html ? this._html.replace(/<[^>]*>/g, '') : this.children.map((c) => c.textContent).join(''); }
+  set textContent(v) { this.replaceChildren(...(String(v) ? [String(v)] : [])); }
+  get innerHTML() { return this._html || this.children.map((c) => (c instanceof El ? `<${c.tagName.toLowerCase()}>${c.innerHTML}</${c.tagName.toLowerCase()}>` : c.textContent)).join(''); }
+  set innerHTML(v) { this.replaceChildren(); this._html = String(v); }
+  get value() { return this.tagName === 'SELECT' ? (this._value ?? (this.children.find((o) => o.selected) || this.children[0])?.value ?? '') : this._value ?? ''; }
+  set value(v) { this._value = v; }
+  cloneNode() { const c = new El(this.tagName, this.doc); c._html = this.innerHTML; return c; }
+  all() { return this.children.filter((c) => c instanceof El).flatMap((c) => [c, ...c.all()]); }
+  querySelectorAll(sel) { return this.all().filter((e) => matches(e, sel)); }
+  querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+  closest(sel) { for (let p = this; p && p.tagName; p = p.parentNode) if (matches(p, sel)) return p; return null; }
+  contains(e) { for (let p = e; p; p = p.parentNode) if (p === this) return true; return false; }
+  addEventListener(type, f, capture) { this.listeners.push({ type, f, capture: !!capture }); }
+  removeEventListener(type, f) { this.listeners = this.listeners.filter((l) => l.type !== type || l.f !== f); }
+  dispatchEvent(ev) { for (const l of this.listeners.filter((x) => x.type === ev.type)) l.f(ev); return true; }
+  focus() { this.doc.activeElement = this; }
+  click() { this.doc.fire(this, 'click', { trusted: false }); }
+  showModal() { this.open = true; }
+  close() { if (!this.open) return; this.open = false; this.dispatchEvent({ type: 'close' }); }
+  getBoundingClientRect() { return { left: 0, right: 100, top: 0, bottom: 20 }; }
+}
+// A Canvas course home with Glaze and Notes on; the worker is lib/notes.js run over memory, its answers and storage's
+// change events arriving later, as in a browser. env.activation: navigator.userActivation.isActive; env.hold(m): a
+// promise the worker waits for before it runs m; env.zipHold: a promise loading lib/zip.js waits for.
+const page = () => {
+  const doc = { activeElement: null, root: null };
+  const make = (t) => new El(t, doc);
+  doc.root = make('html');
+  doc.body = make('body');
+  doc.root.append(doc.body);
+  const side = make('div');
+  side.id = 'course_show_secondary';
+  doc.body.append(side);
+  doc.activeElement = doc.body;
+  // Events: capture from the top down to the target, then bubbling back up, as the DOM does.
+  doc.fire = (target, type, { trusted = true, ...extra } = {}) => {
+    const route = [];
+    for (let p = target; p; p = p.parentNode) route.push(p);
+    let stopped = false, now = false;
+    const ev = { type, target, isTrusted: trusted, defaultPrevented: false, ...extra, preventDefault() { this.defaultPrevented = true; }, stopPropagation() { stopped = true; }, stopImmediatePropagation() { stopped = now = true; } };
+    const call = (el, capture) => { for (const l of el.listeners.filter((x) => x.type === type && x.capture === capture)) { if (now) return; l.f(ev); } };
+    for (const el of [...route].reverse()) { call(el, true); if (stopped) return ev; }
+    for (const el of route) { call(el, false); if (stopped) return ev; }
+    return ev;
+  };
+  Object.assign(doc, {
+    createElement: make, getElementById: (x) => doc.root.all().find((e) => e.id === x) || null, querySelector: (s) => doc.root.querySelector(s),
+    addEventListener() {}, removeEventListener() {}, execCommand: () => true,
+  });
+  const store = {}, db = { bodies: new Map(), files: new Map(), blobs: new Map() };
+  const changed = [];
+  const local = {
+    get: async (k) => (k in store ? { [k]: structuredClone(store[k]) } : {}),
+    set: async (o) => { Object.assign(store, structuredClone(o)); setTimeout(() => { for (const f of changed) f(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { newValue: structuredClone(v) }])), 'local'); }, 5); return true; },
+  };
+  const idb = { get: async (s, k) => db[s].get(k), put: async (s, k, v) => { db[s].set(k, v); }, del: async (s, ks) => { for (const k of ks) db[s].delete(k); },
+    scan: async (s, p) => [...db[s]].filter(([k]) => k.startsWith(p)), keys: async (s, p) => [...db[s].keys()].filter((k) => k.startsWith(p)), estimate: async () => ({ usage: 1, quota: 1e9 }) };
+  const sent = [], blobs = [];
+  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null };
+  const URLs = Object.assign(function () {}, { createObjectURL: (b) => { blobs.push(b); return `blob:x/${blobs.length}`; }, revokeObjectURL() {} });
+  const context = vm.createContext({
+    document: doc, window: {}, location: { origin: 'https://school.instructure.com', pathname: '/courses/7', href: 'https://school.instructure.com/courses/7' },
+    navigator: { platform: 'MacIntel', get userActivation() { return { isActive: env.activation }; } },
+    getSelection: () => ({ rangeCount: 0, anchorNode: null, isCollapsed: true, removeAllRanges() {}, addRange() {} }),
+    addEventListener() {}, URL: URLs, Blob, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, Promise, JSON, structuredClone,
+    GZ_NOTES: N, GZ_DOCTEXT: require('../lib/doctext.js'), GZ_ZIP: require('../lib/zip.js'), GZ_I18N: require('../lib/i18n.js'), GZ_SANITIZE: require('../defaults.js').GZ_SANITIZE,
+    GZ_CTX: {
+      t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => true, locale: () => 'en', settings: () => ({ enabled: true, enhance: { notes: true } }), wordsIn: new Set(),
+      profile: async () => ({ id: 5 }), canvasCourses: async () => [{ id: 7, name: 'Biology' }, { id: 9, name: 'History' }],
+      need: (file) => (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
+    },
+    chrome: {
+      runtime: { sendMessage: (m, cb) => { sent.push(m); Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => cb(JSON.parse(JSON.stringify(r)))); } },
+      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, onChanged: { addListener: (f) => changed.push(f) } },
+    },
+  });
+  context.window.top = context.window;
+  env.ui = vm.runInContext(SOURCE, context);
+  env.ops = () => sent.map((m) => m.op);
+  env.box = () => doc.getElementById('gz-nt');
+  env.button = (text) => env.box().querySelectorAll('button').find((b) => b.textContent === text);
+  env.items = () => env.box().querySelectorAll('.gz-nt-item');
+  env.say = () => env.box().querySelector('.gz-nt-say').textContent;
+  env.fire = doc.fire;
+  env.seed = async (list) => { for (const n of list) await N.run({ key: 'notesIdx:https://school.instructure.com/5', op: 'save', base: 0, sid: `s${n.id}`, copy: id(999), ...n }, { local }, idb); await wait(10); };
+  env.openView = async () => { env.ui.sync(); env.fire(doc.getElementById('gz-nt-course'), 'click'); await settle(); };
+  return env;
+};
+const zipNotes = async (blob) => JSON.parse(await require('../lib/doctext.js').unzip(new Uint8Array(await blob.arrayBuffer())).text('notes.json')).notes;
+
+test("the page's scripts can't open Notes or pick a note: a faked click, change or typing is ignored", async () => {
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Biology notes', course: '7', html: '<p>bio</p>' }, { id: id(2), title: 'Secret history', course: '9', html: '<p>Previously closed private text</p>' }]);
+  P.ui.sync();
+  const button = P.doc.getElementById('gz-nt-course');
+  assert.ok(button, 'the Course notes button is on the course home');
+  P.fire(button, 'click', { trusted: false });
+  await settle();
+  assert.equal(P.box(), null, 'a faked click opens nothing');
+  assert.deepEqual(P.ops(), []);
+  P.activation = false;
+  P.fire(button, 'click');
+  await settle();
+  assert.equal(P.box(), null, 'nor does a click without the user activation a real one has');
+  P.activation = true;
+  P.fire(button, 'click');
+  await settle();
+  assert.ok(P.box()?.open, "the student's own click opens it");
+  const titles = () => P.items().map((b) => b.querySelector('strong').textContent);
+  assert.deepEqual(titles(), ['Biology notes'], "this course's notes");
+  // Faked: picking a note, the course filter, the trash.
+  P.fire(P.items()[0], 'click', { trusted: false });
+  const course = P.box().querySelector('.gz-nt-filters select');
+  course.value = '';
+  P.fire(course, 'change', { trusted: false });
+  P.fire(P.box().querySelector('.gz-nt-lib button[aria-pressed]'), 'click', { trusted: false });
+  await settle();
+  assert.ok(!P.ops().includes('load'), 'no note was read');
+  assert.deepEqual(titles(), ['Biology notes'], "no other course's notes listed");
+  assert.ok(!P.box().innerHTML.includes('Previously closed private text'));
+  // Typing a script makes the browser do (execCommand), without the student's own recent click or key: dropped too.
+  P.activation = false;
+  const search = P.box().querySelector('input');
+  search.value = 'secret';
+  P.fire(search, 'input');
+  await wait(300);
+  assert.ok(!P.ops().includes('search'));
+  P.activation = true;
+  P.fire(P.items()[0], 'click');
+  await settle();
+  assert.ok(P.ops().includes('load'), 'a real click on a note opens it');
+});
+
+test('Export all stores the open note first and exports the index as stored then; a file that can\'t be read fails it', async () => {
+  const P = page();
+  await P.openView();
+  P.fire(P.button('New note'), 'click');
+  await settle();
+  const body = P.box().querySelector('.gz-nt-body');
+  body.innerHTML = '<p>Typed just now</p>';
+  P.fire(body, 'input');
+  let release = null;
+  P.hold = (m) => (m.op === 'save' && !release ? (release = later()) : null);
+  P.fire(P.button('Export all'), 'click');
+  await settle();
+  assert.equal(P.blobs.length, 0, 'nothing downloaded while the save is on its way');
+  release.resolve();
+  await settle(60);
+  assert.equal(P.blobs.length, 1);
+  assert.deepEqual((await zipNotes(P.blobs[0])).map((n) => n.html), ['<p>Typed just now</p>']);
+  // A note whose picture can't be read: no archive, and the student is told.
+  const Q = page();
+  await Q.seed([{ id: id(3), title: 'With a picture', html: `<p>x<img data-gz-file="${id(30)}"></p>` }]);
+  await Q.openView();
+  Q.fire(Q.button('Export all'), 'click');
+  await settle(60);
+  assert.equal(Q.blobs.length, 0);
+  assert.match(Q.say(), /Couldn't export “With a picture”/);
+});
+
+test('Export as HTML exports the note it was pressed in, whatever is opened meanwhile', async () => {
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Note A', course: '7', html: `<p>A text<img data-gz-file="${id(30)}"></p>` }, { id: id(2), title: 'Note B', course: '7', html: '<p>B text</p>' }]);
+  await P.openView();
+  const item = (t) => P.items().find((b) => b.textContent.startsWith(t));
+  P.fire(item('Note A'), 'click');
+  await settle();
+  P.zipHold = later();
+  let pictures = null;
+  P.hold = (m) => (m.op === 'getFile' && !pictures ? (pictures = later()) : null);
+  P.fire(P.button('Export as HTML'), 'click');
+  await settle();
+  P.fire(item('Note B'), 'click');
+  await settle();
+  P.zipHold.resolve();
+  pictures?.resolve();
+  await settle(40);
+  const html = await P.blobs.at(-1).text();
+  assert.match(html, /<title>Note A<\/title>/);
+  assert.match(html, /A text/);
+  assert.doesNotMatch(html, /B text/);
+});
+
+test('uploads: a file over the limit is refused before it is read, and nothing is sent once the view has closed', async () => {
+  const P = page();
+  await P.openView();
+  P.fire(P.button('New note'), 'click');
+  await settle();
+  const input = P.box().querySelectorAll('input').find((i) => i.type === 'file' && !i.accept);
+  let read = false;
+  input.files = [{ name: 'huge.bin', size: 20 * 2 ** 30, type: 'application/octet-stream', arrayBuffer: async () => { read = true; throw new Error('read'); } }];
+  P.fire(input, 'change');
+  await settle();
+  assert.equal(read, false, 'not read');
+  assert.match(P.say(), /Attachments can be up to 20 MB/);
+  // Closed while a file is read: it never reaches the worker.
+  const bytes = later();
+  input.files = [{ name: 'lab.csv', size: 10, type: 'text/csv', arrayBuffer: () => bytes }];
+  P.fire(input, 'change');
+  await settle();
+  P.fire(P.button('Close'), 'click');
+  bytes.resolve(new ArrayBuffer(10));
+  await settle();
+  assert.ok(!P.ops().includes('file'));
+});
+
+test('Duplicate makes "<title> (copy)" and opens it', async () => {
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Week 3', course: '7', html: '<p>cells</p>' }]);
+  await P.openView();
+  P.fire(P.items()[0], 'click');
+  await settle();
+  P.fire(P.button('Duplicate'), 'click');
+  await settle(40);
+  const copy = P.sent.find((m) => m.op === 'save' && m.base === 0);
+  assert.equal(copy.title, 'Week 3 (copy)');
+  assert.equal(P.box().querySelector('.gz-nt-title').value, 'Week 3 (copy)', 'the copy is what opens');
+});
+
+test('the Course notes button costs the first script nothing: the worker registers it only while Notes is on', async () => {
+  const changed = [];
+  let registered = [];
+  const store = { local: { canvas: ['https://canvas.school.edu/*'] }, sync: { enhance: { notes: false } } };
+  const area = (s) => ({ get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, structuredClone(s[x])])), set: async (v) => { Object.assign(s, structuredClone(v)); } });
+  const context = vm.createContext({
+    URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    chrome: {
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener() {} },
+        onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener: (f) => changed.push(f) } },
+      scripting: {
+        getRegisteredContentScripts: async () => registered,
+        registerContentScripts: async (l) => { registered.push(...l); },
+        unregisterContentScripts: async ({ ids }) => { registered = registered.filter((s) => !ids.includes(s.id)); },
+      },
+    },
+  });
+  vm.runInContext(read('lib/background.js'), context);
+  const toggle = async (on) => { store.sync.enhance = { notes: on }; for (const f of changed) f({ enhance: {} }, 'sync'); await wait(10); };
+  await toggle(true);
+  const s = registered.find((x) => x.id === 'gz-notes-home');
+  assert.deepEqual([...s.js], ['features/notes-home.js']);
+  assert.deepEqual([...s.matches].sort(), ['https://*.instructure.com/courses/*', 'https://canvas.school.edu/courses/*']);
+  assert.deepEqual([...s.excludeMatches], ['https://canvadocs.instructure.com/*']);
+  await toggle(false);
+  assert.equal(registered.find((x) => x.id === 'gz-notes-home'), undefined);
+  // The script loads the notes code on a course's home only.
+  for (const [pathname, want] of [['/courses/7', true], ['/courses/7/', true], ['/courses/7/modules', false], ['/', false]]) {
+    const asked = [];
+    const ctx = vm.createContext({ window: {}, location: { pathname }, GZ_CTX: { need: (f) => { asked.push(f); return Promise.resolve(); } }, GZ_NOTES_UI: { sync() {} } });
+    ctx.window.top = ctx.window;
+    vm.runInContext(read('features/notes-home.js'), ctx);
+    assert.deepEqual(asked, want ? ['features/notes.js'] : [], pathname);
+  }
+  assert.ok(!read('content.js').includes('notes.js'), 'content.js has no notes hook');
 });

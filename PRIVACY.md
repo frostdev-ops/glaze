@@ -102,17 +102,19 @@ _Last updated: 2026-10-15_
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
   it ends, so it keeps running from page to page. The widgets' settings (timer
   lengths, chime, quote choices, breathing lengths) are in `chrome.storage.sync` with your other settings (`widgets`).
-- **Notes** (Canvas, the notes app, off by default), on this device only, per Canvas site and signed-in user id. The
+- **Notes** (Canvas, the notes app; the Notes switch, off by default), on this device only, per Canvas site and signed-in user id. The
   library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name Canvas showed),
   when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'
   names, courses and order. Each note's text and the pictures and attachments you add are in the extension's own
   IndexedDB, which only Glaze's background worker opens. Neither is in the school page's own storage (its
-  `localStorage` or IndexedDB), so your school's Canvas pages can't read them; while the Notes view is open, the note on
-  screen is part of the page, like anything shown there. Pictures are kept as PNG, JPEG, GIF or WebP, up to 5 MB each;
+  `localStorage` or IndexedDB), so your school's Canvas pages can't read them. Notes opens, and its buttons act, only on
+  your own clicks and keys: ones the page's scripts fake are ignored. While the Notes view is open, what it shows (the
+  list and the note on screen) is part of the page, like anything shown there, and the page's scripts can read it. Pictures are kept as PNG, JPEG, GIF or WebP, up to 5 MB each;
   attachments up to 20 MB each, kept as bytes and only ever offered as a download; 200 MB in all on this device. Links to
   Canvas files, pages and module items are kept as their address and title only; the file itself is never copied. A note
   or folder in the trash is deleted for good after 30 days, or when you empty the trash; its id and the time are kept
-  30 days more, so a change still on its way from another tab can't bring it back. Glaze doesn't ask for unlimited
+  30 days more, so a change still on its way from another tab can't bring it back. A step that fails (a deletion
+  interrupted, say) is finished the next time Notes opens, so nothing deleted stays behind. Glaze doesn't ask for unlimited
   storage, so the browser may clear this storage if the device runs very short of space: **Export all** saves a copy
   (a zip of Markdown files, the pictures and attachments, and the notes as HTML for importing back) through your
   browser's own download, and **Import** reads such a zip on your device.

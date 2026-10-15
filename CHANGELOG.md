@@ -8,8 +8,9 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- **Notes** (Canvas, off by default): a notes app over the page, from Ctrl+K (Notes, New note, Course notes), the
-  Dashboard notes tile, a course card's create menu, Course notes on a course's home, or a class reminder.
+- **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
+  the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
+  notes on a course's home, or a class reminder. It opens and acts only on your own clicks and keys.
   - Folders for a course or free-standing; rich text with headings, bold, italic, underline, strikethrough, lists,
     checklists (Ctrl/⌘+Enter ticks), quotes, code and links (Ctrl/⌘+K); pictures pasted, dropped or added (PNG, JPEG,
     GIF, WebP up to 5 MB) and attachments (up to 20 MB, downloaded, never opened in the page); links to a course's
@@ -18,13 +19,17 @@ All notable changes to Glaze are documented here. The format follows
     move and duplicate notes; rename, reorder and delete folders, choosing whether their notes stay (with no folder) or
     go to the trash with them. A trash keeps notes and folders 30 days, with restore and Empty trash.
   - Export a note as Markdown or HTML, or everything as a zip of Markdown, pictures and attachments (with a
-    `notes.json` that imports back exactly); importing never touches the notes already there.
+    `notes.json` that imports back exactly). Export all first stores what you just typed, and makes no file if any
+    note or picture can't be read. Importing keeps each note's identity: one already here is replaced only by a newer
+    copy, so the same export twice adds nothing, and Notes says how many it skipped.
   - Every paste, drop, save and load goes through an allowlist sanitizer: no scripts, event handlers, styles, frames,
     forms, or `javascript:`/`data:` links; links open with `rel="noopener noreferrer"`; a picture from another site
     becomes a link instead of loading. The same note changed in two tabs keeps both: the later save becomes a copy.
   - Kept on this device per Canvas site and account: the index in `storage.local`, text and files in the extension's
-    own IndexedDB through the background worker, never the school page's storage; storage used is shown, with limits
-    and a clear message. No new permission. The Dashboard notes stay as they are and get an Open Notes button.
+    own IndexedDB through the background worker, never the school page's storage; a save that fails leaves the note as
+    it was, and anything a failed step leaves behind is cleaned up the next time Notes opens. Storage used is shown,
+    with limits and a clear message. No new permission, and nothing added to the first content script. The Dashboard
+    notes stay as they are and get an Open Notes button.
 
 - **Insights** (Canvas, off by default): an Insights button on the Dashboard, or Insights in Ctrl+K, shows your term
   in numbers, worked out on this device: how much you handed in on time per course and overall (late, missing and

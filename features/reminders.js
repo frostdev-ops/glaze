@@ -218,7 +218,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     if (had) document.querySelector('#gz-todo .gz-rm-bell, #gz-todo .gz-rm-streak')?.focus({ preventScroll: true });
   };
   // A class about to start, with the notes app on: its course's notes, a new note ready (features/notes.js).
-  const notesFor = (e) => (e.cat === 'class' && en().notesApp && e.url?.match(/^\/courses\/(\d+)$/)?.[1]) || '';
+  const notesFor = (e) => (e.cat === 'class' && en().notes && e.url?.match(/^\/courses\/(\d+)$/)?.[1]) || '';
   const toast = (e, more) => {
     const now = Date.now();
     const title = e.url ? make('a', { href: e.url, className: 'gz-rm-title', textContent: e.title }) : make('strong', { className: 'gz-rm-title', textContent: e.title });
@@ -237,7 +237,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const id = ev.target.closest('[data-id]')?.dataset.id;
     if (act === 'hide') hide();
     else if (act === 'hub') { hide(); openHub(); }
-    else if (act === 'notes') { const course = ev.target.closest('[data-course]')?.dataset.course; hide(); ctx.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course, create: true }), () => {}); }
+    else if (act === 'notes' && human(ev)) { const course = ev.target.closest('[data-course]')?.dataset.course; hide(); ctx.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course, create: true }), () => {}); }
     else if (act === 'snooze' && id && human(ev)) {
       hide();
       send({ op: 'snooze', id, until: Date.now() + H }).then((r) => {
