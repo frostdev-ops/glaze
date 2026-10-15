@@ -189,9 +189,9 @@ const page = () => {
     },
   });
   vm.runInContext('globalThis.globalThis = this; Date.UTC = Object.getPrototypeOf(Date).UTC; Date.parse = Object.getPrototypeOf(Date).parse;', c);
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'features/calexport.js']) vm.runInContext(read(f), c);
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'lib/classes.js', 'features/calexport.js']) vm.runInContext(read(f), c);
   const saved = [];
-  const go = (alive = () => true) => c.GZ_CAL_UI.run({ icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsRange: '2w' }, alive, (text) => { saved.push(text); return 'f.ics'; });
+  const go = (alive = () => true, more = {}) => c.GZ_CAL_UI.run({ icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsRange: '2w', ...more }, alive, (text) => { saved.push(text); return 'f.ics'; });
   // The dialog's Download, as the page would send it: trusted either way (a real press, or a script's requestSubmit()).
   const submit = async () => {
     await c.GZ_CAL_UI.open();
@@ -290,4 +290,16 @@ test('review: a read that works but finds no settings (a fresh install) uses the
   assert.equal(r.name, 'f.ics');
   assert.match(p.saved[0], /SUMMARY:Do: Lab 1/);
   assert.ok(!/gradescope/.test(p.saved[0]), 'Gradescope in To Do is off by default');
+});
+
+test('the class schedule (W14) goes in as one event per meeting in the range, with its own choice', async () => {
+  const p = page();
+  p.store.local['classes:https://canvas.test/3'] = { courses: [{ id: '7', code: 'BIO 1100', name: 'Biology', periods: [{ days: [2, 4], start: 810, end: 885, loc: 'Life Sciences 120', from: '', to: '', skip: ['2026-10-22'] }] }] };
+  await p.go(undefined, { icsClasses: true });
+  const meetings = p.saved[0].match(/UID:canvas\.test\/class\/7\/[^\r]+/g) || [];
+  assert.deepEqual(meetings.map((u) => u.split('/')[3]), ['2026-10-15', '2026-10-20', '2026-10-27'], 'the next two weeks, the day off left out');
+  assert.match(p.saved[0], /DTSTART:20261015T133000\r\nDTEND:20261015T144500/);
+  assert.match(p.saved[0], /LOCATION:Life Sciences 120/);
+  await p.go(undefined, { icsClasses: false });
+  assert.ok(!/class\/7/.test(p.saved[1]));
 });

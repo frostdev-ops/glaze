@@ -21,8 +21,8 @@ const fires = (evs) => evs.map((e) => `${e.cat} ${iso(e.at)}`);
 
 test('its settings join the schema: every category off, three hours before by default', () => {
   const s = D.GZ_SANITIZE({});
-  for (const k of ['remind', 'remindExam', 'remindPlan', 'streak']) assert.equal(s.enhance[k], false, k);
-  assert.deepEqual(s.remind, { m15: false, h1: false, h3: true, d1: false, d2: false, exam: '2d', plan: '15' });
+  for (const k of ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak']) assert.equal(s.enhance[k], false, k);
+  assert.deepEqual(s.remind, { m15: false, h1: false, h3: true, d1: false, d2: false, exam: '2d', plan: '15', cls: '10' });
   assert.deepEqual(D.GZ_SANITIZE({ remind: { m15: 'yes', exam: '9d', plan: 15 } }).remind, s.remind);
 });
 

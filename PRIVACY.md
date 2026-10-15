@@ -101,6 +101,14 @@ _Last updated: 2026-10-15_
   streak on, the day your run started, your best, what a restore forgave and how many restores you used this month.
   It's kept apart from Canvas's own read and done state, which Glaze never changes. Nothing sends it anywhere, and
   Export settings leaves it out; your reminder choices (which kinds, how long before) are settings and sync with them.
+- **Your class schedule** (Canvas), in `chrome.storage.local`, on this device only, per Canvas site and signed-in user
+  id: for each course you saved, its Canvas course id (or a name of your own), code and name, and each meeting's days,
+  start and end time, place, first and last day and days off, with when each course was last saved, when you last
+  pressed Delete all, and which courses you deleted when (so a save from another tab made before a deletion can't bring
+  a course back). Only what you choose to save on the review screen is kept; the file, page or text you import is read
+  on your device and not kept. Delete removes a course, Delete all the lot. Nothing sends it anywhere other than into a
+  calendar file you export yourself (Export calendar (.ics), "Your class schedule"), and Export settings leaves it out; whether class reminders are on, and how long
+  before, are settings and sync with them.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
@@ -260,6 +268,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
   same read-only requests Better To Do makes. It reads the Syllabus page from the page already open, with no request
   of its own, and reads files you pick on this device. Nothing about the syllabus is sent anywhere: there is no server
   to parse it and no consent box to tick, because nothing leaves your computer. It never writes to Canvas.
+- **Class schedule** (Canvas). Opening it asks your own Canvas site for your profile and course list (as Better To
+  Do does), to match classes to your courses. A file you choose or text you paste is read on your device and never
+  uploaded. A calendar link is read only when it is an address on the Canvas site you're on (your own calendar feed,
+  say), with your existing session; a link anywhere else is refused before any request, and Glaze asks you to download
+  the file instead. Showing your classes in the agenda uses what you saved and asks nothing more. With only class
+  reminders on, the reminders ask your Canvas site for your profile (for your time zone) and course list, as above, and
+  never for your planner items.
 - **Gradescope in To Do** (off by default). Gradescope has no API for students, so Glaze reads your Gradescope course
   pages, signed in as you, and nothing else of Gradescope's. While the switch is on and Glaze itself is on, and only then, Glaze runs on
   `https://www.gradescope.com` pages. When there's something to read or ask, it first reads your account page
@@ -360,7 +375,7 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 
 ## Permissions
 
-- `storage` — to save the settings, GPA choices, past terms and goal, course names, places, what-if scores, due list, Better To Do's tasks and plans, reminder and streak state, marks on documents,
+- `storage` — to save the settings, GPA choices, past terms and goal, course names, places, what-if scores, due list, Better To Do's tasks and plans, your class schedule, reminder and streak state, marks on documents,
   typed-text backups, Looks history and favorites, Dashboard notes and widgets, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.

@@ -10,6 +10,7 @@ const vm = require('node:vm');
 const D = require('../defaults.js');
 const T = require('../lib/todo.js');
 const R = require('../lib/remind.js');
+const C = require('../lib/classes.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
@@ -72,7 +73,7 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
       fetch: async (u) => { fetched.push(u); throw new Error('offline'); },
       setTimeout: (f, ms) => { timers.push({ f, ms }); return timers.length; }, clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; },
       setInterval: () => { throw new Error('no intervals'); },
-      GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_TODO: T, GZ_REMIND: R,
+      GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_TODO: T, GZ_REMIND: R, GZ_CLASSES: C,
       GZ_CTX: {
         t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', need: async () => {},
         profile: async () => ({ id: 3, time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '25', name: 'Biology' }],
@@ -472,4 +473,25 @@ test('Gradescope: "Not here" in the hub hides it everywhere, and nothing from it
   assert.deepEqual(w.box.gradescope.bind[`${ORIGIN}/3`], { id: GS_ID, show: false });
   assert.equal(askIn(hubOf(a)), undefined);
   assert.deepEqual(a.ops('claim').flatMap((m) => m.ids).filter((id) => id.startsWith('gradescope:')), [], 'never reminded of');
+});
+
+test('class start (W14): a class in the class schedule reminds its lead time before, only with its own switch on', async () => {
+  const w = world(30 * 864e5, { cacheAge: 36e5 }); // nothing due soon, and Better To Do's copy is an hour old
+  const tz = 'America/New_York';
+  const at = Date.now() + 8 * 6e4;
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', weekday: 'short', hour: 'numeric', minute: 'numeric' }).formatToParts(at).map((x) => [x.type, x.value]));
+  const start = +p.hour * 60 + +p.minute;
+  w.box[C.storeKey(ORIGIN, '3')] = { courses: [{ id: '25', code: 'BIO 1100', name: 'Biology', periods: [{ days: [['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday)], start, end: Math.min(start + 50, 1439), loc: 'Room 9', from: '', to: '', skip: [] }] }] };
+  const off = w.tab({ enhance: { remind: true } });
+  off.ui.sync(true);
+  await settle();
+  assert.equal(off.toast(), null, 'class reminders are off');
+  const on = w.tab({ enhance: { remind: false, remindClass: true } });
+  on.ui.sync(true);
+  await settle();
+  assert.match(on.toast()?.text || '', /Class in .*Biology/);
+  assert.equal(on.ops('confirm').length, 1);
+  // Class reminders alone ask Canvas for nothing (Codex W14 review): not the planner, however old its copy.
+  assert.deepEqual(on.fetched, []);
+  assert.ok(off.fetched.length > 0, 'due-date reminders do ask, with the copy that old');
 });

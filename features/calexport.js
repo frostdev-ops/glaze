@@ -78,12 +78,19 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
       const want = X.planned((await local([key]))[key], r).filter((k) => !/^(task|gradescope):/.test(k) && !read.has(k));
       if (want.length) items = [...items, ...await ask(r.from - 180 * DAY, r.from)];
     }
+    // The class schedule (lib/classes.js), when there is one: each meeting in the range, in floating local time.
+    let classes = [];
+    const ck = `classes:${location.origin}/${uid}`;
+    const sched = o.icsClasses ? (await local([ck]))[ck] : null;
+    if (sched?.courses?.length && await ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES).then(() => true, () => false)) {
+      classes = GZ_CLASSES.icsEvents(sched, { site: location.host, from: L.dayKey(r.first), to: L.dayKey(r.last - 1) });
+    }
     if (!alive()) return null;
     const a = await state(key, uid);
     if (!alive() || !a?.on || a.sig !== before.sig) return null;
     const events = X.events({
       items, gs: a.gs, data: a.data, o, ...r, site: location.origin, host: location.host, cids: live.length ? new Set(Object.keys(names)) : null, names,
-      words: { plan: (title) => t('Do: {title}', { title }), focus: (title) => t('Focus: {title}', { title }), untitled: t('Planned work') },
+      words: { plan: (title) => t('Do: {title}', { title }), focus: (title) => t('Focus: {title}', { title }), untitled: t('Planned work') }, classes,
     });
     const text = GZ_ICS.write({ name: 'Glaze', events }, { now });
     const b = await state(key, uid);
@@ -105,7 +112,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     // userActivation API is held to the trusted event alone.
     if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true) || busy) return;
     const f = new FormData(e.target);
-    const o = { icsDue: f.has('icsDue'), icsTasks: f.has('icsTasks'), icsPlan: f.has('icsPlan'), icsRange: String(f.get('icsRange')) };
+    const o = { icsDue: f.has('icsDue'), icsTasks: f.has('icsTasks'), icsPlan: f.has('icsPlan'), icsClasses: f.has('icsClasses'), icsRange: String(f.get('icsRange')) };
     // Gradescope's box is there only with Gradescope in To Do on; otherwise its choice stays as it was.
     if (e.target.elements.icsGs) o.icsGs = f.has('icsGs');
     // Remembered for next time (and shown in the options page).
@@ -137,7 +144,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     const form = make('form', {},
       make('h2', { id: 'gz-ics-title', textContent: t('Export calendar (.ics)') }),
       make('p', { className: 'gz-ics-desc', textContent: t('Made on this device. The file holds your course and assignment names: import it into Google Calendar, Outlook or Apple Calendar yourself. Importing a newer file updates the same events where your calendar supports it.') }),
-      make('fieldset', {}, check('icsDue', t('Canvas due dates')), check('icsTasks', t('Your tasks with a due date')), check('icsPlan', t('Do-on days and focus sessions')),
+      make('fieldset', {}, check('icsDue', t('Canvas due dates')), check('icsTasks', t('Your tasks with a due date')), check('icsPlan', t('Do-on days and focus sessions')), check('icsClasses', t('Your class schedule')),
         ctx.settings().enhance.gradescope && check('icsGs', t('Gradescope work'))),
       make('label', { className: 'gz-ics-range' }, make('span', { textContent: t('Range') }), range),
       say,

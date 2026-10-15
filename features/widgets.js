@@ -26,8 +26,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // The feature hub: Canvas's extras by where they show, with the names the editor gives them.
   const HUB = [
     ['Dashboard', ['notes', 'widgets', 'todo', 'cardTasks', 'overall', 'gradeHover', 'gpa', 'newgrades', 'newcontent', 'coursemenu']],
-    ['Course pages', ['progress', 'place', 'download', 'calc', 'syllabus', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
-    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'streak']],
+    ['Course pages', ['progress', 'place', 'download', 'calc', 'syllabus', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp'], ['progress', 'place', 'download', 'calc', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
+    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'streak'], ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak']],
     ['Everywhere', ['palette', 'search', 'keys', 'drafts', 'quizLight']],
   ];
   const EXTRA = {
@@ -36,7 +36,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     progress: 'Course progress', place: 'Remember your place', download: 'Download all', calc: 'What-if calculator', syllabus: 'Syllabus import', inline: 'Due-date status and percentages',
     scores: 'Score bars', urgency: 'Due-date urgency', previews: 'Folder previews', toggles: 'Document buttons', darkDocs: 'Dark documents',
     reading: 'Reading width', clamp: 'Shorter descriptions', palette: 'Command palette', search: 'Search in your courses',
-    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', streak: 'Streak', keys: 'Keyboard shortcuts', drafts: 'Back up what you type', quizLight: 'Keep quizzes light',
+    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', keys: 'Keyboard shortcuts', drafts: 'Back up what you type', quizLight: 'Keep quizzes light',
   };
 
   let W = null; // lib/widgets.js
@@ -136,6 +136,16 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
 
     agenda(body) {
       let L = null, day = null, data = null, cache = null, alive = true;
+      // The class schedule (lib/classes.js, features/classes.js), when the student has one: the day's classes too.
+      let C = null, classes = null, ckey = '';
+      const withClasses = (raw) => {
+        classes = raw?.courses?.length ? raw : null;
+        return classes && !C ? ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES).then(() => { C = globalThis.GZ_CLASSES; }, () => {}) : Promise.resolve();
+      };
+      const classRows = (d) => (C && classes ? C.onDay(classes, d).map((x) => ({
+        key: `class:${x.id}.${x.p}`, kind: 'class', title: x.name, course: [x.code && !x.name.includes(x.code) && x.code, x.loc].filter(Boolean).join(' · '),
+        url: /^\d+$/.test(x.id) ? `/courses/${x.id}` : '', at: L.typed(C.keyOf(d), C.hhmm(x.start), me.tz), end: L.typed(C.keyOf(d), C.hhmm(x.end), me.tz), done: false,
+      })) : []);
       const memo = new Map(); // day -> { at, items } for days the shared copy doesn't cover
       const title = make('h4', { className: 'gz-w-day' });
       const list = make('ul', { className: 'gz-w-agenda' });
@@ -169,12 +179,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         title.textContent = dayName(day);
         home.hidden = day === today();
         let rows;
-        try { rows = W.agenda(L, { items: await items(day), data, day, tz: me.tz }); } catch { rows = null; }
+        try { rows = W.agenda(L, { items: await items(day), data, day, tz: me.tz, extra: classRows(day) }); } catch { rows = null; }
         if (n !== asked) return;
         list.replaceChildren(...(rows === null ? [make('li', { className: 'gz-w-faint', textContent: t("Couldn't load this day. Try again in a moment.") })]
           : rows.length ? rows.map((r) => {
+            const clock = new Intl.DateTimeFormat(lang(), { timeZone: me.tz, hour: 'numeric', minute: '2-digit' });
             const when = r.kind === 'session' ? t('Focus · {min} min', { min: r.min }) : r.kind === 'plan' ? t('Planned') : r.at === null ? t('All day')
-              : new Date(r.at).toLocaleTimeString(lang(), { timeZone: me.tz, hour: 'numeric', minute: '2-digit' });
+              : r.kind === 'class' ? clock.formatRange(r.at, r.end) : clock.format(r.at);
             const at = r.kind === 'session' ? `${new Date(r.at).toLocaleTimeString(lang(), { timeZone: me.tz, hour: 'numeric', minute: '2-digit' })} · ${when}` : when;
             const li = make('li', {}, make('span', { className: 'gz-w-when', textContent: at }),
               make(r.url ? 'a' : 'span', { className: 'gz-w-what', textContent: r.title, ...(r.url && { href: r.url }) }),
@@ -188,15 +199,19 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         const k = L.storeKey(location.origin, me.uid);
         if (ch.todoCache) cache = ch.todoCache.newValue;
         if (ch[k]) data = L.clean(ch[k].newValue);
-        if (ch.todoCache || ch[k]) paint();
+        if (ch[ckey]) withClasses(ch[ckey].newValue).then(paint);
+        else if (ch.todoCache || ch[k]) paint();
       };
-      body.append(make('div', { className: 'gz-w-row' }, back, title, next, home), list);
+      const schedule = button(t('Class schedule'), () => ctx.need('features/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}), { className: 'gz-w-small gz-w-classes' });
+      body.append(make('div', { className: 'gz-w-row' }, back, title, next, home), list, schedule);
       Promise.all([ctx.need('lib/todo.js', () => globalThis.GZ_TODO), who()]).then(async () => {
         if (!alive) return;
         L = globalThis.GZ_TODO;
         const k = L.storeKey(location.origin, me.uid);
-        const r = await get('local', [k, 'todoCache']);
+        ckey = `classes:${location.origin}/${me.uid}`;
+        const r = await get('local', [k, 'todoCache', ckey]);
         data = L.clean(r[k]);
+        await withClasses(r[ckey]);
         if (!alive) return;
         cache = r.todoCache;
         day = today();
