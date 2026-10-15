@@ -1,7 +1,9 @@
-// Notes (Canvas, enhance.notes, off by default; the same switch as the Dashboard notes tile), loaded on demand: a notes
+// Notes (Canvas and Blackboard Ultra, enhance.notes, off by default; the same switch as the Dashboard notes tile), loaded on demand: a notes
 // app over the page, like Insights. Opened from the command palette (Notes, New note, Course notes), the Dashboard notes
 // tile, a course card's create menu, a Course notes button on a course's home (features/notes-home.js, which the worker
-// registers only while Notes is on, calls home) and a class reminder. It opens only for the student's own click or key
+// registers only while Notes is on, calls home; on Ultra, content-ultra.js's pass calls sync on a course outline) and a
+// class reminder. On Ultra, links come from the course's content (the public contents API: titles and links only). It
+// opens only for the student's own click or key
 // (the event that chose Notes is handed to open, through any loading on the way), and each of its controls acts only on
 // one: every listener checks its own event (isTrusted), so a control a page script moves out of the view and clicks does
 // nothing; typing and submitting also need the user activation a real click or key gives. While it is open, what it
@@ -58,17 +60,27 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   // finish starting on the page. Opening still needs both (alive). want: the last answer, for a redraw in new words.
   let want = false;
   const shows = (s) => s.enabled !== false && !!s.enhance.notes;
+  // Ultra: a course outline's right column (aside.outline-actions) gets a block of its own at its end, below Ultra's
+  // details and Glaze's Better To Do (B0's anchors; parity notes B2-B5-mount.md).
+  const ultra = ctx.site === 'ultra';
   const sync = (on = want) => {
     want = on;
-    const m = on && window.top === window && location.pathname.match(/^\/courses\/(\d+)\/?$/);
-    const side = m && document.getElementById('course_show_secondary');
+    const here = on && window.top === window && (ultra ? /^\/ultra\/courses\/_\d+_\d+\/outline/ : /^\/courses\/\d+\/?$/).test(location.pathname);
+    const side = here && document.querySelector(ultra ? 'aside.outline-actions' : '#course_show_secondary');
     let b = document.getElementById('gz-nt-course');
-    if (!side) b?.remove();
+    if (!side) (ultra ? document.getElementById('gz-nt-block') : b)?.remove();
     else {
-      if (!b) { b = make('button', { type: 'button', id: 'gz-nt-course', className: 'btn button-sidebar-wide' }); b.addEventListener('click', (e) => open({ course: canvasId(), event: e })); }
+      if (!b) { b = make('button', { type: 'button', id: 'gz-nt-course', className: ultra ? 'gz-nt-course' : 'btn button-sidebar-wide' }); b.addEventListener('click', (e) => open({ course: courseHere(), event: e })); }
       if (b.lastChild?.textContent !== t('Course notes')) b.replaceChildren(attr(make('i', { className: 'icon-document' }), { 'aria-hidden': 'true' }), ' ', t('Course notes'));
-      const last = [...side.querySelectorAll('a.button-sidebar-wide')].pop();
-      if (last ? b.previousElementSibling !== last : b.parentNode !== side) { if (last) last.after(b); else side.prepend(b); }
+      if (ultra) {
+        let block = document.getElementById('gz-nt-block');
+        if (!block) block = make('div', { id: 'gz-nt-block', className: 'outline-action-block' });
+        if (b.parentNode !== block) block.append(b);
+        if (side.lastElementChild !== block) side.append(block);
+      } else {
+        const last = [...side.querySelectorAll('a.button-sidebar-wide')].pop();
+        if (last ? b.previousElementSibling !== last : b.parentNode !== side) { if (last) last.after(b); else side.prepend(b); }
+      }
     }
     if (!on) box?.close();
   };
@@ -87,7 +99,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   try {
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'sync' && (ch.enhance || ch.enabled)) home(); });
   } catch { /* extension reloaded */ }
-  const canvasId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1] || '';
+  // Ultra's reader (lib/ultra.js): what the notes app asks of Blackboard goes only through it.
+  const reader = (o = {}) => ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, ...o }));
+  const courseHere = () => location.pathname.match(ultra ? /^\/ultra\/courses\/(_\d+_\d+)/ : /^\/courses\/(\d+)/)?.[1] || '';
 
   // ---- the view ----------------------------------------------------------------------------------------------------
   // gen: the view's current opening; anything that finishes for an older one draws nothing. noteGen: the note shown.
@@ -108,8 +122,11 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     try {
       await libs();
       N = globalThis.GZ_NOTES;
-      const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses().catch(() => [])]);
-      if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
+      // Ultra: the student's id (/users/me) and their courses (memberships), through lib/ultra.js's reader.
+      const [p, list] = ultra ? await reader().then(async (r) => { const id = await r.me(); return [{ id }, await r.memberships(id).catch(() => [])]; })
+        .then(([p, ms]) => [p, ms.filter((m) => m?.course).map((m) => ({ id: m.courseId, name: ctx.nickOf(m.courseId) || m.course.name }))])
+        : await Promise.all([ctx.profile(), ctx.canvasCourses().catch(() => [])]);
+      if (!(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no profile');
       me = { uid: String(p.id), key: N.storeKey(location.origin, String(p.id)) };
       courses = list.filter((c) => c?.id && c.name).map((c) => ({ id: String(c.id), name: c.friendly_name || c.name }));
       const got = await get(me.key);
@@ -415,7 +432,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       b.addEventListener('mousedown', (e) => e.preventDefault()); // the selection stays in the note
       return b;
     }), button(t('Link'), () => link(), { title: `${t('Link')} (${/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'}+K)` }),
-    button(t('Canvas link'), () => canvasPicker()), button(t('Picture or file'), () => { keepRange(); pickFile(el.file); }));
+    button(t(ultra ? 'Blackboard link' : 'Canvas link'), () => canvasPicker()), button(t('Picture or file'), () => { keepRange(); pickFile(el.file); }));
     attr(bar, { role: 'toolbar', 'aria-label': t('Formatting') });
     for (const b of bar.querySelectorAll('button')) b.addEventListener('mousedown', (e) => e.preventDefault());
     el.linkbar = make('div', { className: 'gz-nt-linkbar', hidden: true });
@@ -439,7 +456,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       select(t('Folder'), [['', t('No folder')], ...live.map(([id, f]) => [id, f.name])], cur.folder, (v) => metaChange({ folder: v })),
       select(t('Course'), [['', t('No course')], ...courseOpts()], cur.course, (v) => metaChange({ course: v, cn: v && courseName(v) })),
       n.at ? make('span', { className: 'gz-nt-when', textContent: t('Edited {when}', { when: when(n.at) }) }) : null,
-    ]));
+    ].filter(Boolean)));
     if (had >= 0) el.meta.querySelectorAll('select')[had]?.focus();
   };
   // A new note keeps its folder and course until its first save makes it.
@@ -756,7 +773,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     el.ed.querySelector('.gz-nt-pick')?.remove();
     const ctl = (pick = new AbortController());
     let items = [];
-    const course = make('select', {}, ...courseOpts().map(([id, name]) => make('option', { value: id, textContent: name, selected: id === (cur.course || canvasId()) })));
+    const course = make('select', {}, ...courseOpts().map(([id, name]) => make('option', { value: id, textContent: name, selected: id === (cur.course || courseHere()) })));
     const kind = make('select', {}, ...[['file', t('Files')], ['page', t('Pages')], ['module', t('Modules')]].map(([v, text]) => make('option', { value: v, textContent: text })));
     const filter = make('input', { type: 'search', placeholder: t('Filter'), autocomplete: 'off' });
     filter.setAttribute('aria-label', t('Filter'));
@@ -765,9 +782,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const done = () => { ctl.abort(); if (pick === ctl) pick = null; panel.remove(); el.body?.focus(); };
     const panel = make('div', { className: 'gz-nt-pick' },
       make('div', { className: 'gz-nt-row' }, make('label', { className: 'gz-nt-field' }, make('span', { textContent: t('Course') }), course),
-        make('label', { className: 'gz-nt-field' }, make('span', { textContent: t('Kind') }), kind), filter, button(t('Cancel'), done)),
+        !ultra && make('label', { className: 'gz-nt-field' }, make('span', { textContent: t('Kind') }), kind), filter, button(t('Cancel'), done)),
       status, list);
-    attr(panel, { role: 'group', 'aria-label': t('Link to something in Canvas') });
+    attr(panel, { role: 'group', 'aria-label': t(ultra ? 'Link to something in Blackboard' : 'Link to something in Canvas') });
     panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(); } });
     const show = () => {
       const want = N.terms(filter.value);
@@ -783,18 +800,20 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       const cid = course.value, k = kind.value, my = gen;
       items = [];
       list.replaceChildren();
-      if (!/^\d+$/.test(cid)) return;
+      if (!(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(cid)) return;
       status.textContent = t('Loading…');
       try {
         const path = k === 'file' ? `/courses/${cid}/files?per_page=100&sort=updated_at&order=desc` : k === 'page' ? `/courses/${cid}/pages?per_page=100&sort=title`
           : `/courses/${cid}/modules?include[]=items&per_page=50`;
-        const got = N.canvasLinks(k, await getAll(path, ctl.signal), location.origin, cid);
+        // Ultra: the course's content items, whatever the Kind, through lib/ultra.js's reader (the public contents API, kept to
+        // titles, parents and links; GET on this site, redirects refused, stopped with the picker).
+        const got = ultra ? N.ultraLinks(await (await reader({ signal: ctl.signal })).contents(cid), location.origin) : N.canvasLinks(k, await getAll(path, ctl.signal), location.origin, cid);
         if (ctl.signal.aborted || my !== gen || course.value !== cid || kind.value !== k) return;
         items = got;
         status.textContent = items.length ? '' : t('Nothing here you can open.');
         show();
       } catch {
-        if (!ctl.signal.aborted && course.value === cid && kind.value === k) status.textContent = t("Couldn't read that from Canvas.");
+        if (!ctl.signal.aborted && course.value === cid && kind.value === k) status.textContent = t(ultra ? "Couldn't read that from Blackboard." : "Couldn't read that from Canvas.");
       }
     };
     course.addEventListener('change', (e) => { if (real(e)) load(); });
