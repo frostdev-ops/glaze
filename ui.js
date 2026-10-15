@@ -79,5 +79,8 @@ const GZ_UI = (() => {
     return ['colors', 'preset', 'auto', 'look', 'bg'];
   };
 
-  return { load, save, paint, swatches, pickPreset, looks, pickLook };
+  // A theme's name in the history and favorites: the Look it is, else its palette's name.
+  const themeName = (th) => GZ_LOOKS.find((L) => GZ_LOOK_ON(th, L))?.name || th.preset || GZ_I18N.t('Custom theme', {}, GZ_I18N.ui());
+
+  return { load, save, paint, swatches, pickPreset, looks, pickLook, themeName };
 })();

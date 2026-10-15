@@ -26,13 +26,14 @@ function worker({ protocol = 'safari-web-extension:', stored = {}, get, set, sen
     chrome: {
       runtime: {
         getURL: () => `${protocol}//extension/`,
+        getManifest: () => require('../manifest.json'),
         onMessage: listener, onInstalled: listener, onStartup: listener, onConnect: listener,
         sendNativeMessage(app, message) {
           calls.push(['send', app, message]);
           return send ? send(app, message) : Promise.resolve({});
         },
       },
-      storage: { local },
+      storage: { local, onChanged: listener },
     },
   });
   vm.runInContext(source, context, { filename: 'lib/background.js' });

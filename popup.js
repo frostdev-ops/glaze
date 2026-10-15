@@ -41,6 +41,15 @@ GZ_UI.load().then((s) => {
   // All eight looks on a sheet over the tiles; picking one closes it.
   $('#look').addEventListener('click', () => {
     GZ_UI.looks($('#looks'), s, (L) => { save(GZ_UI.pickLook(s, L)); render(); $('#sheet').close(); });
+    // The theme worn before this one, from the history the background keeps (lib/history.js).
+    chrome.storage.local.get('lookHistory', (r) => {
+      const back = GZ_HISTORY.previous(GZ_HISTORY.entries(r?.lookHistory), s);
+      const b = $('#previous');
+      b.hidden = !back;
+      if (!back) return;
+      b.title = t('Back to {name}', { name: GZ_UI.themeName(GZ_HISTORY.theme(back.theme)) });
+      b.onclick = () => { Object.assign(s, GZ_HISTORY.wear(s, back)); save(GZ_HISTORY.KEYS); render(); $('#sheet').close(); };
+    });
     $('#sheet').showModal();
   });
   $('#back').addEventListener('click', () => $('#sheet').close());

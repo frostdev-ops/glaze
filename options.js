@@ -227,6 +227,7 @@ GZ_UI.load().then((s) => {
     GZ_UI.swatches($('#presets'), s, (name, colors) => { save(GZ_UI.pickPreset(s, name, colors)); fill(); });
     renderContrast();
     renderMine();
+    renderHistory();
     renderBg();
     presetOptions();
     outputs();
@@ -499,44 +500,153 @@ GZ_UI.load().then((s) => {
     const code = await GZ_SHARE.encode(s);
     try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
-  const endOffer = () => { offer = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
-  const tryCode = async () => {
+  // from: the gallery Look the code came with ({ name, author }), or null for a pasted code.
+  let from = null;
+  const endOffer = () => { offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s); preview(); };
+  const tryCode = async (gallery = null) => {
     const code = $('#share-code').value.trim();
     if (!code) return endOffer();
     let got;
     try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
+    from = gallery;
     offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg } });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
     offer.auto = { ...s.auto, on: false };
-    // What it is, and anything it would fetch from elsewhere.
-    const fonts = [...new Set(['font', 'head', 'mono'].map((k) => offer.look[k]).filter((v) => v !== 'auto'))].map((v) => GZ_FONTS.resolve(v));
-    const web = fonts.filter((f) => f.google || f.files).map((f) => f.name);
-    // Style and scene values are the editor's own labels, lowercased: 'radial' is 'Radial'.
-    const word = (v) => t(v[0].toUpperCase() + v.slice(1));
-    const kind = { solid: t('a solid background'), gradient: t('a {style|lower} gradient background', { style: word(offer.bg.style) }), aurora: t('an aurora background'), scene: t('the {scene|lower} animated background', { scene: word(offer.bg.scene) }), image: t('an image background') }[offer.bg.kind];
-    const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
+    offer.code = code;
+    const palette = offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette');
     const what = $('#share-what');
-    what.textContent = t("{palette}, {fonts}, and {background}. It's showing in the preview.", { palette: offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette'), fonts: and(fonts.map(fontName)), background: kind });
-    const notes = [];
-    if (web.length) notes.push(t('Downloads {fonts} (web fonts).', { n: web.length, fonts: and(web) }));
-    if (offer.bg.kind === 'image' && offer.bg.image) notes.push(t('Loads its background image from {host}.', { host: new URL(offer.bg.image).hostname }));
-    if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
+    what.replaceChildren();
+    if (from) what.append(Object.assign(document.createElement('b'), { textContent: from.author ? t('{name} by @{author}.', from) : `${from.name}.`, translate: false }), ' ');
+    if (!Object.keys(got.look).length && !Object.keys(got.bg).length) {
+      // A palette alone (the gallery has those) leaves the rest as it is.
+      what.append(t("{palette}. Your fonts and background stay as they are. It's showing in the preview.", { palette }));
+    } else {
+      // What it is, and anything it would fetch from elsewhere.
+      const fonts = [...new Set(['font', 'head', 'mono'].map((k) => offer.look[k]).filter((v) => v !== 'auto'))].map((v) => GZ_FONTS.resolve(v));
+      const web = fonts.filter((f) => f.google || f.files).map((f) => f.name);
+      // Style and scene values are the editor's own labels, lowercased: 'radial' is 'Radial'.
+      const word = (v) => t(v[0].toUpperCase() + v.slice(1));
+      const kind = { solid: t('a solid background'), gradient: t('a {style|lower} gradient background', { style: word(offer.bg.style) }), aurora: t('an aurora background'), scene: t('the {scene|lower} animated background', { scene: word(offer.bg.scene) }), image: t('an image background') }[offer.bg.kind];
+      const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
+      what.append(t("{palette}, {fonts}, and {background}. It's showing in the preview.", { palette, fonts: and(fonts.map(fontName)), background: kind }));
+      const notes = [];
+      if (web.length) notes.push(t('Downloads {fonts} (web fonts).', { n: web.length, fonts: and(web) }));
+      if (offer.bg.kind === 'image' && offer.bg.image) notes.push(t('Loads its background image from {host}.', { host: new URL(offer.bg.image).hostname }));
+      if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
+    }
     $('#share-offer').hidden = false;
     GZ_UI.paint(offer);
     preview();
   };
-  $('#share-try').addEventListener('click', tryCode);
+  $('#share-try').addEventListener('click', () => tryCode());
   $('#share-code').addEventListener('paste', () => setTimeout(tryCode));
   $('#share-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryCode(); });
   $('#share-cancel').addEventListener('click', () => { $('#share-code').value = ''; endOffer(); });
   $('#share-apply').addEventListener('click', () => {
-    for (const k of ['colors', 'look', 'bg', 'preset', 'auto']) s[k] = offer[k];
+    for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
     $('#share-code').value = '';
     endOffer();
     fill();
-    save(['colors', 'look', 'bg', 'preset', 'auto']);
+    save(GZ_HISTORY.KEYS);
     hint(t('Theme applied.'));
   });
+
+  // ---- gallery, favorites and history: kept on this device (storage.local), lib/history.js ----
+  const local = chrome.storage.local;
+  const chips = (colors) => {
+    const box = Object.assign(document.createElement('span'), { className: 'chips' });
+    box.setAttribute('aria-hidden', 'true');
+    for (const v of ['--gz-surface-2', '--gz-surface', '--gz-accent', '--gz-accent-hi', '--gz-ink']) {
+      const i = document.createElement('i');
+      i.style.background = colors[v];
+      box.append(i);
+    }
+    return box;
+  };
+  const when = (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at);
+  const button = (text, label, onClick, cls = '') => {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: text, className: cls });
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', onClick);
+    return b;
+  };
+  // Look and gallery names are names: not translated.
+  const row = (colors, name, sub, ...buttons) => {
+    const li = document.createElement('li');
+    const n = Object.assign(document.createElement('span'), { className: 'name', textContent: name, title: name, translate: false });
+    if (sub) n.append(Object.assign(document.createElement('small'), { textContent: sub }));
+    li.append(chips(colors), n, ...buttons);
+    return li;
+  };
+  let favorites = [];
+  let history = [];
+  const renderFavorites = async () => {
+    // Each code is checked again: storage is only as good as what put it there.
+    const rows = await Promise.all(favorites.map(async (f) => {
+      let got;
+      try { got = await GZ_SHARE.decode(f.code); } catch { return null; }
+      return row(got.colors, f.name, f.author ? `@${f.author}` : '',
+        button(t('Preview'), t('Preview {name}', { name: f.name }), async () => {
+          $('#share-code').value = f.code;
+          await tryCode(f);
+          $('#share-offer').scrollIntoView({ block: 'nearest' });
+        }),
+        button(t('Remove'), t('Remove {name} from favorites', { name: f.name }), () => local.set({ lookFavorites: favorites.filter((x) => x !== f) }), 'danger'));
+    }));
+    $('#favorites').replaceChildren(...rows.filter(Boolean));
+  };
+  const wearEntry = (e) => {
+    endOffer();
+    Object.assign(s, GZ_HISTORY.wear(s, e));
+    fill();
+    save(GZ_HISTORY.KEYS);
+    hint(t('Theme applied.'));
+  };
+  const renderHistory = () => {
+    const back = GZ_HISTORY.previous(history, s);
+    $('#history-back').disabled = !back;
+    $('#history-back').title = back ? t('Back to {name}', { name: GZ_UI.themeName(GZ_HISTORY.theme(back.theme)) }) : '';
+    $('#history-clear').hidden = !history.length;
+    $('#history').replaceChildren(...history.map((e) => {
+      const th = GZ_HISTORY.theme(e.theme);
+      const name = GZ_UI.themeName(th);
+      if (GZ_HISTORY.wearing(s, e)) return row(th.colors, name, t('Wearing now'));
+      return row(th.colors, name, typeof e.at === 'number' ? when(e.at) : '', button(t('Wear'), t('Wear {name}', { name }), () => wearEntry(e)));
+    }));
+  };
+  $('#history-back').addEventListener('click', () => { const e = GZ_HISTORY.previous(history, s); if (e) wearEntry(e); });
+  // Through the background, which also drops a recording still waiting to be written.
+  $('#history-clear').addEventListener('click', () => chrome.runtime.sendMessage('clear-history', () => void chrome.runtime.lastError));
+  $('#share-fav').addEventListener('click', () => {
+    const f = { code: offer.code, name: from?.name || offer.preset || t('Custom theme'), author: from?.author || '', at: Date.now() };
+    local.set({ lookFavorites: GZ_HISTORY.favor(favorites, f) }, () => {
+      const err = chrome.runtime.lastError;
+      hint(err ? t('Not saved: {error}', { error: err.message }) : t('Saved to your favorites.'), !!err);
+    });
+  });
+  // A Look picked on the gallery (lib/gallery.js, then the background): previewed here; the student decides.
+  const takeOffer = async () => {
+    const { galleryOffer: g } = await local.get('galleryOffer');
+    if (!g?.code) return;
+    await local.remove('galleryOffer');
+    $('#share-code').value = g.code;
+    await tryCode({ name: g.name || t('Custom theme'), author: g.author || '' });
+    $('#data').scrollIntoView();
+    if (offer) $('#share-apply').focus({ preventScroll: true });
+  };
+  local.get(['lookFavorites', 'lookHistory'], (r) => {
+    favorites = GZ_HISTORY.favorites(r?.lookFavorites);
+    history = GZ_HISTORY.entries(r?.lookHistory);
+    renderFavorites();
+    renderHistory();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.lookFavorites) { favorites = GZ_HISTORY.favorites(changes.lookFavorites.newValue); renderFavorites(); }
+    if (changes.lookHistory) { history = GZ_HISTORY.entries(changes.lookHistory.newValue); renderHistory(); }
+    if (changes.galleryOffer?.newValue) takeOffer();
+  });
+  takeOffer();
 
   // ---- backup ----
   $('#export').addEventListener('click', () => {

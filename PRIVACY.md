@@ -1,6 +1,6 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-14_
+_Last updated: 2026-10-15_
 
 ## What Glaze stores
 
@@ -43,6 +43,10 @@ _Last updated: 2026-10-14_
   replies and group recipients are not backed up. Copies are kept until a matching sent message is
   confirmed, the body is cleared or the offer dismissed, or 14 days pass. Switching the Extra off deletes
   them. Canvas's own editor recovery and what-if scores stay with Canvas.
+- **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
+  you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
+  you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
+  Clear history in the editor deletes the history; Remove deletes a favorite.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -132,14 +136,25 @@ animated backgrounds) are bundled. It makes requests in these cases:
 
 The only link in the extension is the footer link to the project's GitHub page, which you click yourself.
 
+## The Looks gallery
+
+The Looks gallery at `https://frostdev.io/glaze/looks` is an ordinary website. Glaze makes no request
+to it; you visit it yourself, from the editor's Open the gallery button or any other link, and
+frostdev.io sees that visit like any other (see its [privacy page](https://frostdev.io/privacy)). On
+the gallery's pages only, Glaze runs a small script that waits for you to click **Use this Look in
+Glaze**. That click passes the Look's code, name and author from the page to Glaze's editor on your
+device; nothing is sent anywhere, and the editor applies nothing until you choose **Use this theme**.
+If a Look's code names a background image on another site, the editor's preview loads it from that
+site, as for any pasted theme code, and says which site it is.
+
 ## Recognizing Canvas
 
 To recognize Canvas on any school's domain, Glaze checks the head of each https page for Canvas's own stylesheet link and stops at the page body; nothing is read beyond that, and nothing leaves the browser. When it finds Canvas, it remembers that site so it can style it from the start next time.
 
 ## Permissions
 
-- `storage` — to save the settings, course names, places, what-if scores, due list, typed-text backups
-  and Safari update-check timestamp described above.
+- `storage` — to save the settings, course names, places, what-if scores, due list, typed-text backups,
+  Looks history and favorites, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is
@@ -150,6 +165,8 @@ To recognize Canvas on any school's domain, Glaze checks the head of each https 
 - Host access to `https://*/*` and `scripting` — Canvas also runs on schools' own domains. The Canvas check
   described above runs on https pages for that reason; when it finds Canvas, Glaze styles that site, and
   only that site, the same way. The hostname is kept in the extension's local storage on your device.
+  The same host access lets the gallery script above run on `https://frostdev.io/glaze/looks`; it adds no
+  permission.
 
 ## Hosting
 

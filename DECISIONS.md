@@ -244,3 +244,15 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | A look with its own palette (Synthwave) leaves no preset name, like an unsaved palette | Adding Synthwave to the palette presets | The palette list stays the six palettes; save it as a preset to keep it on its own. |
 | Look names aren't translated | Translating them | Same as palette names: they're names. |
 
+## Looks gallery, favorites and history (G1, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| The gallery is static pages on frostdev.io built from a public repository; submissions are GitHub issues or pull requests | A Glaze server with accounts, likes and comments (another extension's `/themes*`) | No server to run, nothing to sign in to, nothing to count. Review happens in the open. |
+| "Use this Look in Glaze": a content script that runs only on `https://frostdev.io/glaze/looks` and the pages under it (`lib/gallery.js`; the background checks the same exact paths), hands the code to the background on a trusted click, and the editor previews it | `externally_connectable`; copy and paste only | `https://*/*` host access already covers the page, so no new permission or warning, and it works the same in Chrome, Safari and Firefox (`externally_connectable` needs the extension id on the page and isn't in Firefox). The page can't trigger it with a scripted click and learns nothing back. Copy and paste still works for older Glaze. |
+| The code waits in `storage.local` (`galleryOffer`) and the editor takes it, previews it and removes it | Passing it in the editor's URL | Survives the editor not being open yet; nothing personal in a URL. Nothing applies without Use this theme. |
+| History is recorded by the background from `storage.onChanged` (sync), once a burst of changes has rested 4 seconds, with the theme from before the burst; Clear history goes through the same writer | Hooks in each place that applies a theme; clearing storage from the editor | One place sees every route: the popup, the editor, Ctrl+K on a course page, another device. Recording the theme left as well means Previous Look works from the first change. A dragged color counts once. Clearing there cancels a recording still waiting, which would otherwise write the cleared themes back. |
+| History keeps 20 themes, favorites 100 codes, both in `storage.local` | Sync storage | Device bookkeeping, like seen grades; sync's 8 KB items and write quota are for settings. |
+| A theme for history is colors, preset, auto, look and background; tooltips and hints stay the student's | Every setting | The same line theme codes and Looks draw. Auto light/dark comes back with the theme it belonged to. |
+| Gallery palettes are codes with colors only (`{c}`), which the 2.1+ decoder already accepts | A palette flag in the code | Applying one keeps the student's fonts and background; no format change. |
+
