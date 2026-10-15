@@ -506,6 +506,24 @@ test('the export hook: one event per meeting, at its instant in the schedule\'s 
   assert.equal(a.box[KEY].tz, 'America/Phoenix');
 });
 
+// Codex W14 review: a day of the student's Canvas zone isn't a day of the schedule's zone. A Thursday 23:00 class kept in
+// Phoenix is Friday 02:00 in New York: it belongs to Friday's agenda and to an export of Friday, not Thursday's.
+test('classes in a window are chosen by instant across zones; the export range is the student\'s days', () => {
+  const T = require('../lib/todo.js');
+  const NY = 'America/New_York';
+  const night = (tz) => ({ tz, courses: [{ id: 'o-lab', name: 'Night lab', periods: [{ days: [4], start: 1380, end: 1430, loc: '', from: '', to: '', skip: [] }] }] });
+  const day = (k) => [T.midnight(C.dayNum(k), NY), T.midnight(C.dayNum(k) + 1, NY)];
+  const iso = (x) => new Date(x.at).toISOString();
+  assert.deepEqual(C.between(night('America/Phoenix'), ...day('2026-10-15'), NY), []);
+  assert.deepEqual(C.between(night('America/Phoenix'), ...day('2026-10-16'), NY).map(iso), ['2026-10-16T06:00:00.000Z']);
+  assert.deepEqual(C.between(night(NY), ...day('2026-10-15'), NY).map(iso), ['2026-10-16T03:00:00.000Z']); // same zone: Thursday 23:00
+  assert.deepEqual(C.between(night(NY), ...day('2026-10-16'), NY), []);
+  const exp = (tz, k) => C.icsEvents(night(tz), { site: 'x', from: k, to: k, tz: NY }).map((e) => new Date(e.start).toISOString());
+  assert.deepEqual(exp('America/Phoenix', '2026-10-15'), []);
+  assert.deepEqual(exp('America/Phoenix', '2026-10-16'), ['2026-10-16T06:00:00.000Z']);
+  assert.deepEqual(exp(NY, '2026-10-15'), ['2026-10-16T03:00:00.000Z']);
+});
+
 test('the export hook keeps its UIDs between exports', () => {
   const evs = C.icsEvents(STORE, { site: 'canvas.test', from: '2026-10-12', to: '2026-10-18', tz: 'America/New_York' });
   assert.equal(new Set(evs.map((e) => e.uid)).size, 3);

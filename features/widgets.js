@@ -142,10 +142,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         classes = raw?.courses?.length ? raw : null;
         return classes && !C ? ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES).then(() => { C = globalThis.GZ_CLASSES; }, () => {}) : Promise.resolve();
       };
-      const classRows = (d) => (C && classes ? C.onDay(classes, d).map((x) => ({
+      // The classes that start within day d of the student's Canvas zone, by instant: a schedule kept in another zone
+      // (lib/classes.js between) can put a class on the day before or after its own date.
+      const classRows = (d) => (C && classes ? C.between(classes, L.midnight(d, me.tz), L.midnight(d + 1, me.tz), me.tz).map((x) => ({
         key: `class:${x.id}.${x.p}`, kind: 'class', title: x.name, course: [x.code && !x.name.includes(x.code) && x.code, x.loc].filter(Boolean).join(' · '),
-        // In the schedule's own zone (kept with it), else the student's Canvas zone.
-        url: /^\d+$/.test(x.id) ? `/courses/${x.id}` : '', at: L.typed(C.keyOf(d), C.hhmm(x.start), L.zone(classes.tz) || me.tz), end: L.typed(C.keyOf(d), C.hhmm(Math.min(x.end, 1439)), L.zone(classes.tz) || me.tz), done: false,
+        url: /^\d+$/.test(x.id) ? `/courses/${x.id}` : '', at: x.at, end: x.until, done: false,
       })) : []);
       const memo = new Map(); // day -> { at, items } for days the shared copy doesn't cover
       const title = make('h4', { className: 'gz-w-day' });
