@@ -144,7 +144,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       };
       const classRows = (d) => (C && classes ? C.onDay(classes, d).map((x) => ({
         key: `class:${x.id}.${x.p}`, kind: 'class', title: x.name, course: [x.code && !x.name.includes(x.code) && x.code, x.loc].filter(Boolean).join(' · '),
-        url: /^\d+$/.test(x.id) ? `/courses/${x.id}` : '', at: L.typed(C.keyOf(d), C.hhmm(x.start), me.tz), end: L.typed(C.keyOf(d), C.hhmm(x.end), me.tz), done: false,
+        // In the schedule's own zone (kept with it), else the student's Canvas zone.
+        url: /^\d+$/.test(x.id) ? `/courses/${x.id}` : '', at: L.typed(C.keyOf(d), C.hhmm(x.start), L.zone(classes.tz) || me.tz), end: L.typed(C.keyOf(d), C.hhmm(Math.min(x.end, 1439)), L.zone(classes.tz) || me.tz), done: false,
       })) : []);
       const memo = new Map(); // day -> { at, items } for days the shared copy doesn't cover
       const title = make('h4', { className: 'gz-w-day' });

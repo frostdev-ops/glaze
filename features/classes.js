@@ -32,11 +32,14 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:classes', key, ...m }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   // A write through the worker, stamped with when the student asked for it (lib/classes.js change weighs it by that), then
   // the list, if the dialog is still where it was asked from.
+  // An answer for a view that's gone changes nothing here, not even what's kept in memory: the dialog drawn since read
+  // storage afresh, and storage's change events keep it current. tz: the zone the times are in (the Canvas profile's),
+  // kept with the schedule so an export can place them.
   const write = async (m, said) => {
     const g = gen;
-    const r = await send({ ...m, at: Date.now() });
-    if (r?.ok) store = C.clean(r.data);
+    const r = await send({ ...m, at: Date.now(), ...(tz && { tz }) });
     if (g !== gen) return;
+    if (r?.ok) store = C.clean(r.data);
     if (!r?.ok) return say(t("Couldn't save. Try again in a moment."), true);
     list('.gz-cl-import');
     say(r.stale ? t('Some of this changed in another tab first. This is what is kept now.') : said);

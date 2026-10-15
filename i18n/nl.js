@@ -1275,4 +1275,5 @@
   "Some of this changed in another tab first. This is what is kept now.": "Een deel hiervan is eerder in een ander tabblad gewijzigd. Dit is wat nu bewaard is.",
   "Choose a date first.": "Kies eerst een datum.",
   "Not saved: too many course settings are stored. Clear a course you no longer need.": "Niet opgeslagen: er zijn te veel cursusinstellingen bewaard. Wis die van een cursus die je niet meer nodig hebt.",
+  "Couldn't read your class schedule. Nothing was saved.": "Je lesrooster kon niet worden gelezen. Er is niets opgeslagen.",
 };

@@ -53,8 +53,8 @@ const page = () => {
   document.body = new E('body');
   const box = {};
   const area = { local: { get: async (ks) => Object.fromEntries(ks.filter((k) => k in box).map((k) => [k, structuredClone(box[k])])), set: async (p) => { Object.assign(box, structuredClone(p)); return true; } } };
-  const sent = [], held = [];
-  let hold = false;
+  const sent = [], held = [], replies = [];
+  let hold = false, holdReplies = false;
   const c = {
     console, URL, Intl, document, location: { origin: ORIGIN, host: 'canvas.test' },
     fetch: async (u) => { if (hold) await new Promise((res) => held.push(res)); return { ok: String(u).startsWith(ORIGIN), text: async () => ICS }; },
@@ -64,7 +64,8 @@ const page = () => {
       profile: async () => ({ id: 3, time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '25', name: 'Biology', course_code: 'BIO 1100' }],
     },
     chrome: {
-      runtime: { lastError: null, sendMessage: (m, cb) => { sent.push(m); C.change(structuredClone(m), area).then(cb); } },
+      // The worker runs each write at once; with replies held, its answer reaches the page only on release.
+      runtime: { lastError: null, sendMessage: (m, cb) => { sent.push(m); C.change(structuredClone(m), area).then((r) => (holdReplies ? replies.push(() => cb(r)) : cb(r))); } },
       storage: { local: { get: (k, cb) => area.local.get([k]).then(cb) }, onChanged: { addListener() {}, removeListener() {} } },
     },
   };
@@ -73,7 +74,8 @@ const page = () => {
   const ui = vm.runInContext(read('features/classes.js'), c);
   const dialog = () => document.body.children.find((x) => x.tagName === 'DIALOG' && x.open) || null;
   const find = (text, tag = 'BUTTON') => dialog()?.all.find((n) => n.tagName === tag && n.textContent === text);
-  return { ui, box, sent, document, dialog, find, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
+  return { ui, box, sent, document, dialog, find, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); },
+    holdReplies: () => { holdReplies = true; }, stopHolding: () => { holdReplies = false; }, releaseReplies: () => { holdReplies = false; replies.splice(0).forEach((r) => r()); } };
 };
 
 test('a calendar link still being read when the dialog is closed and opened again leaves the new one alone', async () => {
@@ -126,6 +128,7 @@ test('writes say when they were asked for; a script\'s click does nothing', asyn
   assert.equal(p.sent.length, 1);
   assert.equal(p.sent[0].op, 'clear');
   assert.ok(Number.isFinite(p.sent[0].at) && p.sent[0].at > 1);
+  assert.equal(p.sent[0].tz, 'America/New_York', 'the zone the times are in goes with every write');
   assert.deepEqual(p.box[KEY].courses, []);
 });
 
@@ -174,6 +177,34 @@ test('the worker: a Save held before the queue, then Delete all, then the Save: 
   // Another site's page may not write this one's schedule.
   const other = await new Promise((res) => { for (const f of listeners) f({ type: 'glaze:classes', key: K, op: 'clear', at: 300 }, { ...sender, url: 'https://other.instructure.com/' }, (r) => res(JSON.parse(JSON.stringify(r)))); });
   assert.deepEqual(other, { ok: false, error: 'sender' });
+});
+
+// Codex W14 review: an old Save's answer, released after the dialog was closed and opened again and a newer Save made,
+// must not put the older copy back into what the dialog shows next.
+test('a late answer to a Save from a closed dialog leaves the newer one shown', async () => {
+  const p = page();
+  p.box[KEY] = { courses: [{ id: 'o-choir', code: '', name: 'Choir', at: 1, periods: [{ days: [3], start: 1080, end: 1170 }] }] };
+  const rename = async (name) => {
+    p.find('Edit').fire('click');
+    p.dialog().all.find((n) => n.type === 'text' && n.maxLength === 200).value = name;
+    p.find('Save changes').fire('click');
+    await settle();
+  };
+  await p.ui.open();
+  p.holdReplies();
+  await rename('Choir (old)'); // the worker keeps it; its answer is held
+  p.dialog().close();
+  await p.ui.open();
+  p.stopHolding(); // the new dialog's Save is answered at once; the old answer still waits
+  await new Promise((res) => setTimeout(res, 2)); // a later press
+  await rename('Choir (new)');
+  assert.equal(p.box[KEY].courses[0].name, 'Choir (new)');
+  p.releaseReplies(); // now the old Save's answer arrives
+  await settle();
+  p.find('Import a schedule').fire('click');
+  p.find('Back').fire('click');
+  assert.match(p.dialog().text, /Choir \(new\)/);
+  assert.doesNotMatch(p.dialog().text, /Choir \(old\)/);
 });
 
 // Codex W14 review (P3): Add with no date chosen threw a RangeError.

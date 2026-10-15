@@ -1275,4 +1275,5 @@
   "Some of this changed in another tab first. This is what is kept now.": "Einiges davon wurde vorher in einem anderen Tab geändert. Das ist jetzt gespeichert.",
   "Choose a date first.": "Wähle zuerst ein Datum.",
   "Not saved: too many course settings are stored. Clear a course you no longer need.": "Nicht gespeichert: Es sind zu viele Kurseinstellungen gespeichert. Entferne die eines Kurses, den du nicht mehr brauchst.",
+  "Couldn't read your class schedule. Nothing was saved.": "Dein Stundenplan konnte nicht gelesen werden. Es wurde nichts gespeichert.",
 };

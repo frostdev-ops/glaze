@@ -1275,4 +1275,5 @@
   "Some of this changed in another tab first. This is what is kept now.": "Parte disso mudou antes em outra aba. Isto é o que está guardado agora.",
   "Choose a date first.": "Escolha uma data primeiro.",
   "Not saved: too many course settings are stored. Clear a course you no longer need.": "Não salvo: há configurações de disciplinas demais guardadas. Apague as de uma disciplina de que não precisa mais.",
+  "Couldn't read your class schedule. Nothing was saved.": "Não foi possível ler sua grade de aulas. Nada foi salvo.",
 };

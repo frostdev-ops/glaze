@@ -103,12 +103,13 @@ _Last updated: 2026-10-15_
   Export settings leaves it out; your reminder choices (which kinds, how long before) are settings and sync with them.
 - **Your class schedule** (Canvas), in `chrome.storage.local`, on this device only, per Canvas site and signed-in user
   id: for each course you saved, its Canvas course id (or a name of your own), code and name, and each meeting's days,
-  start and end time, place, first and last day and days off, with when each course was last saved, when you last
-  pressed Delete all, and which courses you deleted when (so a save from another tab made before a deletion can't bring
-  a course back). Only what you choose to save on the review screen is kept; the file, page or text you import is read
-  on your device and not kept. Delete removes a course, Delete all the lot. Nothing sends it anywhere other than into a
-  calendar file you export yourself (Export calendar (.ics), "Your class schedule"), and Export settings leaves it out; whether class reminders are on, and how long
-  before, are settings and sync with them.
+  start and end time, place, first and last day and days off; the time zone those times are in (your Canvas
+  profile's); and when each course was last saved, when you last pressed Delete all and which courses you deleted when,
+  so a save from another tab made before a deletion can't bring a course back. Only what you choose to save on the
+  review screen is kept; the file, page or text you import is read on your device and not kept. Delete removes a
+  course, Delete all the lot. Nothing sends it anywhere other than into a calendar file you export yourself (Export
+  calendar (.ics), "Your class schedule"), and Export settings leaves it out; whether class reminders are on, and how
+  long before, are settings and sync with them.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
