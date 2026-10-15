@@ -138,7 +138,7 @@
     </div>
     <nav aria-label="Sections">
       <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
-      <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#extras">Extras</a><a href="#data">Share</a>
+      <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
     </nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
@@ -188,11 +188,12 @@
             </div>
             <details id="font-browse">
               <summary>Browse fonts</summary>
-              <div id="font-grid"></div>
               <div class="row">
-                <input type="text" id="font-custom" maxlength="40" placeholder="Any Google Font, or one on this computer" aria-label="Font name" aria-describedby="font-note">
+                <input type="search" id="font-custom" maxlength="40" placeholder="Search, or any Google Font" aria-label="Font name" aria-describedby="font-found font-note" autocomplete="off" spellcheck="false">
                 <button type="button" id="font-use">Use</button>
+                <span class="desc" id="font-found" role="status"></span>
               </div>
+              <div id="font-grid"></div>
               <p class="desc" id="font-note">Web fonts download when you choose them: from Google Fonts, or jsDelivr for OpenDyslexic and the Nerd Fonts (about 5 MB each). Opening this list loads small previews from Google Fonts.</p>
             </details>
           </div></div>
@@ -298,6 +299,47 @@
         <p class="desc" id="course-empty">Open Blackboard or Canvas once and your courses show up here. Change Canvas colours in its own card menu.</p>
       </section>
 
+      <section id="cards">
+        <h2>Course cards</h2>
+        <p class="desc" id="cards-note">Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.</p>
+        <label class="field"><span>Card width</span><input type="range" data-key="card.width" min="200" max="420" step="2"><output data-for="card.width" data-format="px"></output></label>
+        <label class="field"><span>Space between cards</span><input type="range" data-key="card.gap" min="-1" max="72" step="1"><output data-for="card.gap" data-format="themepx"></output></label>
+        <label class="field"><span>Card corners</span><input type="range" data-key="card.radius" min="-1" max="32" step="1"><output data-for="card.radius" data-format="themepx"></output></label>
+        <label class="field"><span>Picture height</span><input type="range" data-key="card.height" min="64" max="260" step="2"><output data-for="card.height" data-format="px"></output></label>
+        <label class="check"><input type="checkbox" data-key="card.condensed"><span>Condensed cards</span>
+          <span class="desc">The course name sits on the card's picture, so each card is shorter. A card's editor warns when the name would be hard to read there.</span></label>
+        <label class="check"><input type="checkbox" data-key="card.overlay"><span>Course color over pictures</span>
+          <span class="desc">Canvas tints each card's picture in the course color. Off shows pictures as they are.</span></label>
+        <div class="field wide"><span>Hover</span>
+          <div class="seg wrap" role="radiogroup" aria-label="Card hover" aria-describedby="card-motion-note">
+            <label><input type="radio" name="card.hover" value="none">None</label>
+            <label><input type="radio" name="card.hover" value="lift">Lift</label>
+            <label><input type="radio" name="card.hover" value="glow">Glow</label>
+            <label><input type="radio" name="card.hover" value="tilt">Tilt</label>
+            <label><input type="radio" name="card.hover" value="grow">Grow</label>
+            <label><input type="radio" name="card.hover" value="shine">Shine</label>
+          </div></div>
+        <div class="field wide"><span>Particles</span>
+          <div class="seg wrap" role="radiogroup" aria-label="Card particles" aria-describedby="card-motion-note">
+            <label><input type="radio" name="card.particles" value="none">None</label>
+            <label><input type="radio" name="card.particles" value="sparkles">Sparkles</label>
+            <label><input type="radio" name="card.particles" value="snow">Snow</label>
+            <label><input type="radio" name="card.particles" value="bubbles">Bubbles</label>
+            <label><input type="radio" name="card.particles" value="confetti">Confetti</label>
+          </div></div>
+        <div class="field wide"><span>Pet</span>
+          <div class="seg" role="radiogroup" aria-label="Card pet" aria-describedby="card-motion-note">
+            <label><input type="radio" name="card.pet" value="none">None</label>
+            <label><input type="radio" name="card.pet" value="cat">Cat</label>
+            <label><input type="radio" name="card.pet" value="bunny">Bunny</label>
+          </div></div>
+        <p class="desc" id="card-motion-note">The pet sits on your first card. Hover effects, particles and the pet move only while motion is on (Motion, above); with it off the pet sits still.</p>
+        <label class="check"><input type="checkbox" data-key="card.icons"><span>Bookmark icons on cards</span>
+          <span class="desc">A card's bookmarks show as small icons on its picture.</span></label>
+        <label class="check"><input type="checkbox" data-key="card.create"><span>Create button on cards</span>
+          <span class="desc">A + on each card to message the class, or start a discussion where the course allows it.</span></label>
+        <div class="row" id="card-set" hidden><span class="desc" id="card-set-note"></span><button type="button" id="card-set-clear" aria-describedby="card-set-note">Remove</button></div>
+      </section>
       <section id="extras">
         <h2>Extras</h2>
         <p class="desc">Extras work on Blackboard and Canvas. On Canvas they sit where Canvas keeps the same things: Modules for course content, the Assignments list and To Do for due dates, the Dashboard for course cards.</p>
@@ -395,6 +437,7 @@
           <button type="button" id="reset-all" class="danger">Reset everything</button>
         </div>
         <p class="desc">Exports are a JSON file with your palette, presets, options and any course nicknames you set. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
+        <p class="desc">Card styles and bookmarks go in the export too. Pictures kept for cards stay on this computer.</p>
       </section>
     </main>
 
@@ -406,6 +449,7 @@
   <script src="lib/color.js"></script>
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
+  <script src="lib/cards.js"></script>
   <script src="lib/share.js"></script>
   <script src="lib/history.js"></script>
   <script src="lib/news.js"></script>

@@ -15,6 +15,7 @@ const FORMAT = {
   depth: (v) => t(DEPTH[v]),
   deg: (v) => `${v}°`,
   presence: (v) => t(['Faint', 'Soft', 'Clear', 'Bold'][Math.min(3, Math.floor(v / 25))]),
+  themepx: (v) => (v < 0 ? t('Theme') : `${v}px`),
 };
 
 let hintTimer = 0;
@@ -299,7 +300,25 @@ GZ_UI.load().then((s) => {
       box.append(...cards);
       return g ? [Object.assign(document.createElement('h3'), { textContent: t(g) }), box] : [box];
     }));
+    findFont();
   };
+  // Typing a name searches the list (no request); Use takes a name the list doesn't have.
+  const findFont = () => {
+    const q = $('#font-custom').value.trim().toLowerCase();
+    let n = 0;
+    for (const box of $$('#font-grid .cards')) {
+      let any = false;
+      for (const c of box.children) {
+        const hit = !q || c.querySelector('.face').textContent.toLowerCase().includes(q);
+        c.classList.toggle('miss', !hit);
+        if (hit) { any = true; n++; }
+      }
+      box.classList.toggle('miss', !any);
+      if (box.previousElementSibling?.tagName === 'H3') box.previousElementSibling.classList.toggle('miss', !any);
+    }
+    $('#font-found').textContent = !q ? '' : n ? t('{n} fonts', { n }) : t('None in the list. Use tries Google Fonts, then this computer.');
+  };
+  $('#font-custom').addEventListener('input', findFont);
   // Previews: every Google family's name, and only those letters, in one small request.
   const previewLink = (names) => {
     const text = [...new Set([...GZ_FONTS.LIST.map((f) => f.name).join(''), ...names.join(''), ...'Aa'])].join('');
@@ -483,10 +502,24 @@ GZ_UI.load().then((s) => {
   };
   chrome.storage.local.get('seenCourses', (r) => renderCourses(r?.seenCourses));
 
+  // ---- course cards: a theme's set of card styles (lib/cards.js), worn by cards without their own ----
+  const renderCardSet = (raw) => {
+    const n = GZ_CARDS.styles(raw)['*']?.length || 0;
+    $('#card-set').hidden = !n;
+    $('#card-set-note').textContent = n ? t('{n} card styles from a theme take turns on the cards that have no style of their own.', { n }) : '';
+  };
+  chrome.storage.sync.get('cards', (r) => renderCardSet(r?.cards));
+  $('#card-set-clear').addEventListener('click', () => chrome.storage.sync.get('cards', (r) => {
+    const cards = GZ_CARDS.styles(r?.cards);
+    delete cards['*'];
+    chrome.storage.sync.set({ cards }, () => hint(chrome.runtime.lastError ? t('Not saved: {error}', { error: chrome.runtime.lastError.message }) : t('Saved')));
+  }));
+
   // Another surface (the popup, another options tab) changed something: take it, unless it is
   // only our own save coming back.
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.seenCourses) renderCourses(changes.seenCourses.newValue);
+    if (area === 'sync' && changes.cards) renderCardSet(changes.cards.newValue);
     if (area !== 'sync' || pending.size) return;
     GZ_UI.load().then((next) => {
       if (JSON.stringify(next) === JSON.stringify(s)) return;
@@ -497,7 +530,8 @@ GZ_UI.load().then((s) => {
 
   // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
   $('#share-copy').addEventListener('click', async () => {
-    const code = await GZ_SHARE.encode(s);
+    const { cards } = await new Promise((res) => chrome.storage.sync.get('cards', (r) => res(r || {})));
+    const code = await GZ_SHARE.encode(s, cards);
     try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
   // from: the gallery Look the code came with ({ name, author }), or null for a pasted code.
@@ -512,6 +546,8 @@ GZ_UI.load().then((s) => {
     offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg } });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
     offer.auto = { ...s.auto, on: false };
+    offer.card = GZ_CARDS.settings({ ...s.card, ...got.card });
+    offer.cardSet = got.cards;
     offer.code = code;
     const palette = offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette');
     const what = $('#share-what');
@@ -532,6 +568,9 @@ GZ_UI.load().then((s) => {
       const notes = [];
       if (web.length) notes.push(t('Downloads {fonts} (web fonts).', { n: web.length, fonts: and(web) }));
       if (offer.bg.kind === 'image' && offer.bg.image) notes.push(t('Loads its background image from {host}.', { host: new URL(offer.bg.image).hostname }));
+      const cardHosts = [...new Set(got.cards.filter((c) => c.u).map((c) => new URL(c.u).hostname))];
+      if (got.cards.length) notes.push(t('Brings {n} course card styles for your Canvas Dashboard.', { n: got.cards.length }));
+      if (cardHosts.length) notes.push(t('Its card pictures load from {hosts}.', { hosts: and(cardHosts) }));
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
@@ -544,10 +583,14 @@ GZ_UI.load().then((s) => {
   $('#share-cancel').addEventListener('click', () => { $('#share-code').value = ''; endOffer(); });
   $('#share-apply').addEventListener('click', () => {
     for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
+    s.card = offer.card;
+    // A theme's card styles take turns on the cards without their own (lib/cards.js).
+    const set = offer.cardSet;
+    if (set.length) chrome.storage.sync.get('cards', (r) => chrome.storage.sync.set({ cards: GZ_CARDS.styles({ ...r?.cards, '*': set }) }));
     $('#share-code').value = '';
     endOffer();
     fill();
-    save(GZ_HISTORY.KEYS);
+    save([...GZ_HISTORY.KEYS, 'card']);
     hint(t('Theme applied.'));
   });
 
@@ -649,12 +692,13 @@ GZ_UI.load().then((s) => {
   takeOffer();
 
   // ---- backup ----
-  $('#export').addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+  $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links'], (r) => {
+    // Card styles and bookmarks go too; a picture kept on this computer stays here.
+    const blob = new Blob([JSON.stringify({ ...s, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links) }, null, 2)], { type: 'application/json' });
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
+  }));
   $('#import-btn').addEventListener('click', () => $('#import').click());
   $('#import').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -665,8 +709,9 @@ GZ_UI.load().then((s) => {
     if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {
       return hint(t('No Glaze settings found in {file}.', { file: file.name }), true);
     }
-    Object.assign(s, GZ_SANITIZE(raw));
+    Object.assign(s, GZ_SANITIZE(raw), { card: GZ_CARDS.settings(raw.card) });
     save(Object.keys(s));
+    if (raw.cards || raw.links) chrome.storage.sync.set({ cards: GZ_CARDS.styles(raw.cards), links: GZ_CARDS.links(raw.links) });
     fill();
     hint(t('Imported {file}.', { file: file.name }));
   });
@@ -682,8 +727,11 @@ GZ_UI.load().then((s) => {
     clearTimeout(armed);
     armed = 0;
     b.textContent = t('Reset everything');
-    Object.assign(s, GZ_SANITIZE({ presets: s.presets }));
+    Object.assign(s, GZ_SANITIZE({ presets: s.presets }), { card: GZ_CARDS.settings() });
     save(Object.keys(s));
+    // Card styles and bookmarks too, and the pictures kept for them on this computer.
+    chrome.storage.sync.remove(['cards', 'links']);
+    chrome.storage.local.get('cardImgs', (r) => chrome.storage.local.remove(['cardImgs', ...Object.keys(r?.cardImgs || {}).map((id) => `cardImg:${id}`)]));
     fill();
     hint(t('Everything is back to the defaults. Your presets are kept.'));
 
