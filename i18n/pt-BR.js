@@ -1334,4 +1334,8 @@
   "Cleared. Refresh works it out again.": "Apagado. Atualizar calcula de novo.",
   "Glaze · worked out on this device": "Glaze · calculado neste dispositivo",
   "Insights: your term in numbers": "Estatísticas: seu período em números",
+  "In a course with grading periods, each period starts afresh: First, Now and Change are this period's, as Canvas's current grade is.": "Em um curso com períodos de avaliação, cada período começa do zero: Primeira, Agora e Variação são deste período, como a nota atual do Canvas.",
+  "a new grading period": "um novo período de avaliação",
+  "Some work couldn't be counted, so these figures leave it out: {names}.": "Parte do trabalho não pôde ser contada, então estes números a deixam de fora: {names}.",
+  "Courses not counted: {n}": "Cursos não contados: {n}",
 };

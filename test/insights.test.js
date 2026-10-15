@@ -128,6 +128,23 @@ test('a grade trend ends on Canvas\'s own current score, for every course of the
   }
 });
 
+test("with grading periods, the trend's last point is the current period's score, as Canvas's current score is", () => {
+  const a = (id, due, score) => ({ id, points_possible: 10, published: true, submission_types: ['online_upload'], due_at: due, submission: { score, workflow_state: 'graded' } });
+  const groups = [{ id: 1, assignments: [a(1, '2026-09-10T20:00:00Z', 10), a(2, '2026-10-05T20:00:00Z', 5), a(3, '2026-10-06T20:00:00Z', null)] }];
+  const periods = [{ id: '1', start_date: '2026-08-24T04:00:00Z', end_date: '2026-10-01T04:00:00Z', weight: 50 }, { id: '2', start_date: '2026-10-01T04:00:00Z', end_date: '2026-12-19T05:00:00Z', weight: 50 }];
+  const info = { weighted: false, periods, weightedPeriods: false };
+  const tr = I.trend(groups, info, TZ, 2);
+  assert.deepEqual(tr, [[at('2026-09-10T20:00:00Z'), 100, '1'], [at('2026-10-05T20:00:00Z'), 50, '2']]);
+  const C = require('../lib/gradecalc.js');
+  assert.equal(tr.at(-1)[1], C.round2(C.calc(C.fromApi(groups, info), {}, { period: '2' }).current), "W2's engine for that period");
+  // Without a current period (between periods, or none), the course as Canvas totals it.
+  assert.deepEqual(I.trend(groups, info, TZ, null).map((p) => p[1]), [100, 75]);
+  assert.deepEqual(I.trend(groups, info, TZ, 9).map((p) => p[1]), [100, 75], 'a period the course doesn\'t have');
+  // The view: First, Now and Change are the current period's.
+  const rec = I.clean({ courses: [{ id: '1', name: 'BIO', gp: '2', trend: tr, items: [] }] });
+  assert.deepEqual(['first', 'last', 'change', 'gp'].map((k) => I.view(rec, { now: NOW, tz: TZ }).courses[0][k]), [50, 50, null, '2']);
+});
+
 test('a grade trend: weights apply from the first point, same-day work is one point, excused work none', () => {
   const g = (id, weight, ...assignments) => ({ id, group_weight: weight, assignments });
   const a = (id, due, score, possible = 10, sub = {}) => ({ id, points_possible: possible, published: true, submission_types: ['online_upload'], due_at: due, submission: { score, workflow_state: 'graded', ...sub } });
@@ -166,10 +183,28 @@ test('the cache keeps only what it should, and stays small', () => {
     courses: [{ id: '1', name: 'BIO', q: 1, secret: 'x', items: [{ k: 'assignment:1', n: 'A', d: 1, p: 'no', a: 'x', s: 'on', html: '<b>' }, { k: 'javascript:1', s: 'on' }, { k: 'quiz:2', s: 'weird' }],
       trend: [[1, 50], [2, Infinity], 'x', [0, 3]] }, { id: 'x' }],
   });
-  assert.deepEqual(r, { term: '5', name: '', from: 0, to: 0, at: 5, cl: 0, courses: [{ id: '1', name: 'BIO', q: false, items: [{ k: 'assignment:1', n: 'A', d: 1, p: 0, a: 0, s: 'on' }], trend: [[1, 50]] }] });
-  const big = I.clean({ courses: Array.from({ length: 40 }, (_, i) => ({ id: String(i), items: Array.from({ length: 400 }, () => ({ k: 'assignment:1', s: 'on' })) })) });
-  assert.equal(big.courses.length, 30);
-  assert.equal(big.courses[0].items.length, 300);
+  assert.deepEqual(r, { term: '5', name: '', from: 0, to: 0, at: 5, cl: 0, cut: 0,
+    courses: [{ id: '1', name: 'BIO', q: false, more: false, gp: '', cut: 2, items: [{ k: 'assignment:1', n: 'A', d: 1, p: 0, a: 0, s: 'on' }], trend: [[1, 50]] }] }, 'what it drops, it counts');
+  assert.deepEqual(I.clean(r), r, 'and cleaning again keeps the count');
+});
+
+test('nothing is left out quietly: 301 items all count, and whatever a cap or paging leaves out is named', () => {
+  const D = at('2026-10-01T20:00:00Z');
+  const items = (n, s) => Array.from({ length: n }, (_, i) => ({ k: `assignment:${i + 2}`, n: 'x', d: D, p: 1, a: 0, s }));
+  const rec = I.clean({ term: '5', courses: [{ id: '1', name: 'BIO', items: [{ k: 'assignment:1', d: D, p: 1, a: D - 1, s: 'on' }, ...items(300, 'missing')], trend: [] }] });
+  const v = I.view(rec, { now: NOW, tz: TZ });
+  assert.deepEqual([v.total.on, v.total.missing, v.total.share, v.courses[0].cut], [1, 300, 1 / 301, 0]);
+  assert.deepEqual(v.left, { names: [], courses: 0 });
+  // Past the cap (far above a real course): counted as left out, and the view names the course.
+  const big = I.clean({ courses: [{ id: '1', name: 'BIO', items: items(I.MAX.items + 1, 'on') }, { id: '2', name: 'ENG', more: true, items: [] },
+    ...Array.from({ length: I.MAX.courses }, (_, i) => ({ id: String(i + 3), name: 'X', items: [] }))] });
+  assert.equal(big.courses[0].items.length, I.MAX.items);
+  assert.equal(big.courses[0].cut, 1);
+  assert.equal(big.cut, 2, 'two courses past the cap');
+  assert.deepEqual(I.view(big, { now: NOW, tz: TZ }).left, { names: ['BIO', 'ENG'], courses: 2 });
+  // A trend past its cap keeps its first point.
+  const long = I.clean({ courses: [{ id: '1', trend: Array.from({ length: 500 }, (_, i) => [i + 1, i]) }] }).courses[0].trend;
+  assert.deepEqual([long.length, long[0], long.at(-1)], [I.MAX.points, [1, 0], [500, 499]]);
 });
 
 test('writes: a put after a clear, from before it, or older than what is stored is not kept', async () => {
@@ -182,7 +217,9 @@ test('writes: a put after a clear, from before it, or older than what is stored 
   assert.deepEqual(await I.change({ key, op: 'put', at: 100, base: 0, rec: rec() }, local), { ok: true });
   assert.equal(store[key].at, 100);
   assert.deepEqual(await I.change({ key, op: 'put', at: 90, base: 0, rec: { ...rec(), name: 'old' } }, local), { ok: true, kept: false }, 'an older answer for the same term');
-  assert.deepEqual(await I.change({ key, op: 'put', at: 95, base: 0, rec: rec('6') }, local), { ok: true }, 'another term replaces it');
+  assert.deepEqual(await I.change({ key, op: 'put', at: 95, base: 0, rec: rec('6') }, local), { ok: true, kept: false }, 'nor an older one for another term');
+  assert.deepEqual(await I.change({ key, op: 'put', at: 110, base: 0, rec: rec('6') }, local), { ok: true }, 'a newer one for another term replaces it');
+  assert.equal(store[key].term, '6');
   assert.deepEqual(await I.change({ key, op: 'clear', at: 200 }, local), { ok: true });
   assert.deepEqual(store[key], { cl: 200 });
   assert.deepEqual(await I.change({ key, op: 'put', at: 300, base: 0, rec: rec() }, local), { ok: false, error: 'cleared' }, 'made on a view read before the clear');

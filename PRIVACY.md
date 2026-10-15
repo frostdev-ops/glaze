@@ -49,8 +49,8 @@ _Last updated: 2026-10-15_
 - **Insights** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site and signed-in
   user id: one small summary of this term, so the view opens at once next time: each current course's id and name, its
   published work's name, due date, points, when you handed it in and whether Canvas marks it on time, late, missing or
-  excused, and the course's grade after each graded piece of work (up to 40 points). It is replaced when the term
-  changes. "Clear saved insights" deletes it, and the time of that clear is kept so an answer still on its way from
+  excused, and the course's grade after each graded piece of work (each grading period's own, where the course has
+  them). It keeps one term at a time, the one most recently worked out. "Clear saved insights" deletes it, and the time of that clear is kept so an answer still on its way from
   another tab can't bring it back. Nothing is timed or tracked; the view also reads Better To Do's plans and the streak
   (if you use them) already on this device. The summary card you save as a picture is made in the page and saved by
   your browser; nothing is uploaded.
@@ -230,7 +230,8 @@ animated backgrounds) are bundled. It makes requests in these cases:
   whose letter grade Canvas gives asks once for its grading scheme (the lowest percent for each letter), and
   **What it takes** asks for that course's assignment groups with your submissions, as the what-if calculator does.
   When you open **Insights** (and at most every six hours after, or when you press Refresh), Glaze asks for each current
-  course's assignment groups with your submissions, and its grading periods where it has them.
+  course's assignment groups with your submissions, and its grading periods where it has them. These never follow a
+  redirect, and the next page is asked for only on your own Canvas site.
   Glaze never writes grades or what-if scores to Canvas.
   These requests are read-only GETs to your own Canvas site with your existing session (Better To Do's opt-in tick, below, is the one write). Only the due
   list, course details and badge records described above are stored; other answers stay in memory.

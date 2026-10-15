@@ -22,18 +22,29 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
   const get = (keys) => new Promise((res) => {
     try { chrome.storage.local.get(keys, (r) => res(chrome.runtime?.lastError || !r || typeof r !== 'object' ? null : r)); } catch { res(null); }
   });
-  // Every page of a list Canvas pages with Link headers, on this site only. ponytail: 20 pages (2,000 items).
-  const getAll = async (path) => {
+  // One GET to this Canvas site, as JSON: never followed elsewhere (a redirect fails it), and only while go() still
+  // says yes (Insights on, its view's load current), checked right before the request. → { j, next } (the Link
+  // header's next page, only when it's on this site).
+  const ask = async (url, go) => {
+    if (!go()) throw new Error('stopped');
+    const r = await fetch(url, { credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json+canvas-string-ids, application/json' } });
+    if (!r.ok) throw new Error(String(r.status));
+    const j = JSON.parse((await r.text()).replace(/^while\(1\);/, ''));
+    const link = r.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+    let next = null;
+    try { next = link && new URL(link, location.origin).origin === location.origin ? new URL(link, location.origin).href : null; } catch { /* not an address */ }
+    return { j, next };
+  };
+  // Every page of a list Canvas pages with Link headers. ponytail: 20 pages (2,000 items); more says some were left.
+  const getAll = async (path, go) => {
     const out = [];
     let url = `${location.origin}/api/v1${path}`;
     for (let i = 0; url && i < 20; i++) {
-      const r = await fetch(url, { credentials: 'same-origin', headers: { accept: 'application/json+canvas-string-ids, application/json' } });
-      if (!r.ok) throw new Error(String(r.status));
-      const j = JSON.parse((await r.text()).replace(/^while\(1\);/, ''));
+      const { j, next } = await ask(url, go);
       if (Array.isArray(j)) out.push(...j);
-      const next = r.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
-      url = next && new URL(next, location.origin).origin === location.origin ? next : null;
+      url = next;
     }
+    out.more = !!url;
     return out;
   };
 
@@ -109,15 +120,18 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
       if (!term.courses.length) { me.rec = null; await draw(my); return say(''); }
       const at = Date.now();
       const failed = [];
+      const go = () => !stop(my);
       const one = async (c) => {
         const [groups, periods] = await Promise.all([
-          getAll(`/courses/${c.id}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`),
-          c.has_grading_periods ? ctx.capi(`/courses/${c.id}/grading_periods`).then((j) => j.grading_periods) : null,
+          getAll(`/courses/${c.id}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`, go),
+          c.has_grading_periods ? ask(`${location.origin}/api/v1/courses/${c.id}/grading_periods`, go).then(({ j }) => j.grading_periods) : null,
         ]);
         const q = !!c.restrict_quantitative_data;
         const work = groups.flatMap((g) => g.assignments || []).filter((a) => a.published !== false && a.workflow_state !== 'unpublished');
-        return { id: String(c.id), name: c.name, q, items: work.map((a) => I.item(a, at)),
-          trend: q ? [] : I.trend(groups, { weighted: c.apply_assignment_group_weights, periods, weightedPeriods: c.has_weighted_grading_periods }, tz) };
+        // Canvas's current score is the current grading period's, where the course has one (as features/grades.js reads it).
+        const gp = c.enrollments?.find((e) => e?.type === 'student')?.current_grading_period_id;
+        const trend = q ? [] : I.trend(groups, { weighted: c.apply_assignment_group_weights, periods, weightedPeriods: c.has_weighted_grading_periods }, tz, gp);
+        return { id: String(c.id), name: c.name, q, more: groups.more, items: work.map((a) => I.item(a, at)), trend, gp: trend.some((x) => x[2]) ? String(gp) : '' };
       };
       // Three courses at a time.
       const out = [];
@@ -133,11 +147,14 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
       const courses = out.filter(Boolean).sort((a, b) => order.get(a.id) - order.get(b.id));
       if (!courses.length) throw new Error('nothing read');
       const fresh = I.clean({ term: term.key, name: term.name, from: term.from, to: term.to, at, courses });
+      const couldnt = failed.length && t("Couldn't read: {names}", { names: failed.join(', ') });
+      // A course that couldn't be read (an error, a redirect) leaves the saved summary as it is, shown and kept.
+      if (couldnt && me.rec) return say(couldnt);
       me.rec = fresh;
       await draw(my);
       if (stop(my)) return;
-      say([t('Updated {when}', { when: when(at) }), failed.length && t("Couldn't read: {names}", { names: failed.join(', ') })].filter(Boolean).join(' '));
-      send({ op: 'put', key, at, base: me.base, rec: fresh });
+      say([t('Updated {when}', { when: when(at) }), couldnt].filter(Boolean).join(' '));
+      if (!couldnt) send({ op: 'put', key, at, base: me.base, rec: fresh });
     } catch {
       if (!stop(my)) say(t("Couldn't read your courses. Try again in a moment."));
     }
@@ -176,13 +193,16 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
   };
 
   // A sparkline of one course's grade over the term (its table is beside it).
+  // A grading period starts afresh, so each period is its own line.
   const spark = (tr) => {
     const W = 120, H = 28, ys = tr.map(([, y]) => y), lo = Math.min(...ys) - 1, hi = Math.max(...ys) + 1;
     const t0 = tr[0][0], span = tr.at(-1)[0] - t0 || 1;
-    const pts = tr.map(([x, y]) => [((x - t0) / span) * (W - 4) + 2, H - 2 - ((y - lo) / (hi - lo)) * (H - 4)]);
+    const pts = tr.map(([x, y, gp]) => [((x - t0) / span) * (W - 4) + 2, H - 2 - ((y - lo) / (hi - lo)) * (H - 4), gp]);
+    const lines = [];
+    for (const p of pts) { if (!lines.length || lines.at(-1).at(-1)[2] !== p[2]) lines.push([]); lines.at(-1).push(p); }
     const [ex, ey] = pts.at(-1);
     return svg('svg', { class: 'gz-ins-spark', viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true', focusable: 'false' },
-      svg('polyline', { points: pts.map((p) => p.map((n) => n.toFixed(1)).join(',')).join(' ') }), svg('circle', { cx: ex.toFixed(1), cy: ey.toFixed(1), r: 2.5 }));
+      ...lines.map((l) => svg('polyline', { points: l.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ') })), svg('circle', { cx: ex.toFixed(1), cy: ey.toFixed(1), r: 2.5 }));
   };
   // On time, late and missing as one bar (the table beside it has the counts).
   const bar = (c) => {
@@ -242,20 +262,22 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     const graded = v.courses.filter((c) => c.trend.length);
     const trend = section(t('Grades over the term'),
       note(t("Each course's current grade after each piece of graded work, by Canvas's rules, in date order.")),
+      v.courses.some((c) => c.gp) && note(t("In a course with grading periods, each period starts afresh: First, Now and Change are this period's, as Canvas's current grade is.")),
       table(t('Grade trend by course'), [t('Course'), t('First'), t('Now'), t('Change'), t('Trend')], v.courses.map((c) => {
         if (c.q) return [c.name, t('Letter grades only'), '', '', ''];
-        if (c.trend.length < 2) return [c.name, c.last == null ? t('Not enough graded work yet') : score(c.first), c.last == null ? '' : score(c.last), '', ''];
-        return [c.name, score(c.first), score(c.last), signed(c.change), spark(c.trend)];
+        if (c.last == null) return [c.name, t('Not enough graded work yet'), '', '', c.trend.length > 1 ? spark(c.trend) : ''];
+        return [c.name, score(c.first), score(c.last), c.change == null ? '' : signed(c.change), c.trend.length > 1 ? spark(c.trend) : ''];
       })),
       graded.length ? make('details', { className: 'gz-ins-more' }, make('summary', { textContent: t('Every point as a table') }),
-        ...graded.map((c) => table(c.name, [t('Date'), t('Grade')], c.trend.map(([ms, x]) => [msText(ms), score(x)])))) : null);
+        ...graded.map((c) => table(c.name, [t('Date'), t('Grade')], c.trend.map(([ms, x, gp], i) => [
+          `${msText(ms)}${gp && i && c.trend[i - 1][2] !== gp ? ` (${t('a new grading period')})` : ''}`, score(x)])))) : null);
 
     const ahead = v.weeks.filter((w) => w.heavy).sort((a, b) => a.w - b.w);
     const load = section(t('Workload by week'),
       ...(v.weeks.length ? [columns(v.weeks), make('div', { className: 'gz-ins-axis', ariaHidden: 'true' },
         make('span', { textContent: dayText(v.weeks[0].w) }), make('span', { textContent: dayText(v.weeks.at(-1).w) }))] : [note(t('Nothing with a due date yet.'))]),
       ahead.length ? table(t('Busiest weeks ahead'), [t('Week of'), t('Due'), t('Points'), t("What's due")],
-        ahead.map((w) => [dayText(w.w), num(w.n), num(w.p), w.names.join(', ')])) : null,
+        ahead.map((w) => [dayText(w.w), num(w.n), num(w.p), `${w.names.join(', ')}${w.n > w.names.length ? ', …' : ''}`])) : null,
       v.weeks.length ? make('details', { className: 'gz-ins-more' }, make('summary', { textContent: t('Every week as a table') }),
         table(t('Work due each week'), [t('Week of'), t('Due'), t('Points')], v.weeks.map((w) => [`${dayText(w.w)}${w.now ? ` (${t('this week')})` : ''}`, num(w.n), num(w.p)]))) : null);
 
@@ -268,7 +290,10 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
 
     const clear = make('button', { type: 'button', textContent: t('Clear saved insights') });
     clear.addEventListener('click', forget);
-    body.replaceChildren(summary, onTime, trend, load, ...(plans ? [plans] : []),
+    // Whatever couldn't be counted is said, never left out quietly.
+    const left = [v.left.names.length && t("Some work couldn't be counted, so these figures leave it out: {names}.", { names: v.left.names.join(', ') }),
+      v.left.courses && t('Courses not counted: {n}', { n: v.left.courses })].filter(Boolean).map(note);
+    body.replaceChildren(...left, summary, onTime, trend, load, ...(plans ? [plans] : []),
       make('footer', { className: 'gz-ins-foot' }, note(t('Worked out on this device from your own Canvas. Only this summary is kept, on this device, until you clear it. Nothing is sent anywhere.')), clear));
   };
 
