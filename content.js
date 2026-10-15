@@ -36,7 +36,7 @@
   const C = GZ_COLOR;
   const html = document.documentElement;
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -103,10 +103,10 @@
   };
   // A field's own text is its value, not a text node; on Canvas an InstUI field in a modal (a portal, outside #application) keeps Canvas's dark ink.
   const FIELD = /^(input|textarea|select)$/i;
-  const SWEEP_TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-brand-bg', 'data-gz-brand-fg'];
+  const SWEEP_TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
   const sweepEls = (els) => {
     // Read the site's current state, without our previous pass's overrides.
-    for (const e of els) for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a);
+    for (const e of els) { liftable.delete(e); for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a); }
     const pending = [];
     const canvasInk = !ultra && new Map();
     for (const e of els) {
@@ -170,6 +170,11 @@
         const onFill = fill || (bg && bg.a >= 0.5 && C.saturated(bg)) || C.same(fg, accentInk);
         if (fg && fg.a >= 0.5 && !C.saturated(fg) && C.brightness(fg) < 0.35 && !onFill && (hasText(e) || (!ultra && FIELD.test(e.tagName)))) tags.push('data-gz-dark');
         if (!ultra && canvasInk.has(e)) tags.push('data-gz-dark');
+        // Instructor's dark colour (navy), links too: canvas.css lifts it.
+        if (!ultra && fg?.a >= 0.5 && C.saturated(fg) && !onFill && hasText(e) && e.closest('.user_content')) {
+          liftable.set(e, C.hex(fg));
+          if (C.contrast(C.hex(fg), palette['--gz-surface']) < 3) tags.push('data-gz-lift');
+        }
         if (!ultra && tags.includes('data-gz-dark') && !canvasInk.has(e)) canvasInk.set(e, '');
       }
       const r = e.getBoundingClientRect();
@@ -182,6 +187,9 @@
     }
     for (const [e, tags] of pending) for (const a of tags) e.setAttribute(a, (!ultra && a === 'data-gz-dark' && canvasInk.get(e)) || '');
   };
+  // Instructor colours met by the sweep: a new dark palette re-checks only these.
+  const liftable = new Map();
+  const relift = () => { for (const [e, c] of liftable) if (!e.isConnected) liftable.delete(e); else e.toggleAttribute('data-gz-lift', C.contrast(c, palette['--gz-surface']) < 3); };
   const sweepAll = () => {
     const all = document.body.querySelectorAll('*');
     if (all.length <= MAX_FULL) sweepEls(all);
@@ -750,6 +758,7 @@
     cardsIO.disconnect();
     onScreen.clear();
     clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
+    liftable.clear();
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
   };
 
@@ -2366,7 +2375,7 @@
     previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu' };
   // Canvas's global navigation, and the same switches plus the card grades; not the calculator, as Canvas has its own what-if.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
-  const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', todo: 'Better To Do' };
+  const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', todo: 'Better To Do' };
   delete CANVAS_EXTRAS.calc;
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
@@ -2394,6 +2403,7 @@
     return [
       ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L)) })),
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
+      ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
       ...Object.entries(ultra ? EXTRAS : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
       { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
@@ -3221,6 +3231,7 @@
       }
       paintCourses();
     }
+    const surface = palette['--gz-surface'];
     palette = colors;
     const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
     accentInk = C.parse(colors['--gz-accent-ink']);
@@ -3286,11 +3297,17 @@
       hoverSeen = new WeakSet();
       focusSeen = new WeakSet();
       if (observer) { clearTags(['data-gz-light', 'data-gz-dark', 'data-gz-hover']); sweepAll(); }
-    }
+    } else if (dark && surface !== colors['--gz-surface']) relift();
     if (!s.look.tooltips) hideTip();
     if (said) syncDocTools();
     syncScene();
     themeEditors();
+    armFlip();
+  };
+  // Scheduled dark's clock loads while a schedule is worn.
+  const onSchedule = () => (links.length && worn.auto.on && worn.auto.mode === 'schedule' ? worn.auto : null);
+  const armFlip = () => {
+    if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
@@ -3364,7 +3381,8 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
       if (!ultra) await ready;
-      if (!settings.enabled || !links.length) return;
+      if (!links.length) return;
+      if (!on(settings)) return disable();
       syncFooter();
       startSweep();
       syncScene();
@@ -3383,6 +3401,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    armFlip();
     syncTodo();
     themeEditors();
     syncPageFade();
@@ -3412,15 +3431,18 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   // flashed the default dark palette first.
   const KEPT = 'gz-settings';
   if (!ultra) try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
+  // Keep quizzes light: no Glaze on a quiz being taken or a tool's page (New Quizzes; seen once the body is in).
+  const on = (s) => s.enabled && (ultra || !s.enhance.quizLight || !(/\/quizzes\/\d+\/(take|history)(\/|$)|\/external_tools\//.test(location.pathname) || document.getElementById('tool_content')));
   // Theme on before storage answers: most people leave it on, and this way the first paint is
   // already themed. If it turns out to be off, it comes straight back off.
   const ready = load().then((s) => {
     settings = s;
     tidyDrafts();
-    if (!s.enabled) disable();
+    if (!on(s)) disable();
     else if (links.length) applySettings();
+    else enable();
   });
-  enable();
+  if (on(settings)) enable();
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
   // save landing late can't undo an edit that is further along.
   if (isPreview) {
@@ -3442,9 +3464,9 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     load().then((s) => {
       const was = settings.enabled && links.length > 0;
       settings = s;
-      if (s.enabled && !was) enable();
-      else if (!s.enabled && was) disable();
-      else if (s.enabled) applySettings();
+      if (on(s) && !was) enable();
+      else if (!on(s) && was) disable();
+      else if (on(s)) applySettings();
     });
   });
   const reapply = () => { if (settings.enabled && links.length) applySettings(); };

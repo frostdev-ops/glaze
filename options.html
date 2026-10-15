@@ -168,12 +168,22 @@
         </div>
         <ul class="mine" id="mine" aria-label="Your presets"></ul>
         <div class="group">
-          <label class="check"><input type="checkbox" data-key="auto.on"><span>Follow the system's light and dark mode</span>
-            <span class="desc">Switches between two palettes when your computer changes mode.</span></label>
+          <label class="check"><input type="checkbox" data-key="auto.on"><span>Auto light and dark</span>
+            <span class="desc">Switches between two palettes: with your computer's mode, or at set times.</span></label>
+          <div class="row">
+            <select data-key="auto.mode" aria-label="Auto light and dark">
+              <option value="device">Follow the system's light and dark mode</option>
+              <option value="schedule">On a schedule</option>
+            </select>
+            <span class="row" id="auto-times"><label>Dark from <input type="time" data-key="auto.from" required></label>
+              <label>until <input type="time" data-key="auto.to" required></label></span>
+          </div>
           <div class="row">
             <label>Light <select id="auto-light" data-key="auto.light"></select></label>
             <label>Dark <select id="auto-dark" data-key="auto.dark"></select></label>
           </div>
+          <label class="check"><input type="checkbox" data-key="enhance.quizLight"><span>Keep quizzes light</span>
+            <span class="desc">On Canvas, a quiz you are taking and external tools such as New Quizzes are shown without Glaze.</span></label>
         </div>
       </section>
 

@@ -232,6 +232,7 @@ GZ_UI.load().then((s) => {
     presetOptions();
     outputs();
     $('[data-key="auto.on"]').checked = s.auto.on;
+    $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
     document.body.classList.toggle('off', !s.enabled);
     // Redrawn lists and shown/hidden controls: match again.
@@ -382,7 +383,11 @@ GZ_UI.load().then((s) => {
     else if (el.type === 'range') {
       el.addEventListener('input', () => { set(key, +el.value); refresh(); save([group(key)], true); });
       el.addEventListener('change', () => save([group(key)]));
-    } else el.addEventListener('change', () => { set(key, el.value); refresh(); save([group(key)]); });
+    } else el.addEventListener('change', () => {
+      // A cleared time keeps the last one: the schedule never holds an empty end.
+      if (el.type === 'time' && !el.value) { el.value = get(key); return; }
+      set(key, el.value); refresh(); save([group(key)]);
+    });
   }
   for (const r of $$('.seg input[type="radio"]:not([data-local])')) {
     r.addEventListener('change', () => { set(r.name, r.value); refresh(); save([group(r.name)]); });
