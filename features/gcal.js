@@ -12,6 +12,7 @@
   let timer = 0, busy = false, off = false, waited = 0;
   const soon = (ms, force) => { clearTimeout(timer); if (!off) timer = setTimeout(() => go(force), ms); };
   const go = async (force) => {
+    if (!chrome.runtime?.id) { off = true; clearTimeout(timer); return; }
     const ctx = globalThis.GZ_CTX;
     // Glaze's own content script sets up this frame first; give it half a minute.
     if (!ctx) return waited++ < 30 && soon(1000, force);
@@ -36,6 +37,7 @@
       if (r?.more) { next = 6e4; again = true; }
     } catch { /* the site or the worker didn't answer: the next turn tries again */ } finally {
       busy = false;
+      if (!chrome.runtime?.id) off = true;
       soon(next, again);
     }
   };

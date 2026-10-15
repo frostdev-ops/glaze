@@ -16,6 +16,11 @@ Invite keys live in the link fragment, which browsers do not send in HTTP reques
 
 Sessions remain until creator deletion unless the creator opts into deletion after a year unused. Relay deletion does not erase device copies or older operator/infrastructure backups. Removing a note/file from a session is narrower: old encrypted log data may remain until compaction and files remain until session deletion/expiry; recipients keep copies. Removing one recipient requires a fresh session and link. Re-upload retained files is an explicit recovery action after a relay restore; it republishes encrypted references from bytes this device still has. No analytics, accounts, remote configuration or server credentials are introduced.
 
+Ultra performance changes reuse the page's existing gradebook reads and ignore internal Glaze UI mutations. They add
+no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
+The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep
+their separate, existing URL handling.
+
 ## What Glaze stores
 
 - **Blackboard navigation:** precise size/spacing, label overflow, item style/background, active indicator, logo size/alignment, footer visibility and hover-expansion choices sync in `nav`; up to eight custom link names,

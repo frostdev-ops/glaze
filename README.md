@@ -19,6 +19,11 @@ control, reshapes the pages around it, and adds small helpers you can see at a g
 institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/` on its own
 domain, and on Canvas and Moodle, which Glaze recognizes on any school's domain.
 
+Ultra's in-page route changes remain visible while Blackboard builds them. Only the initial document paint can wait
+for Glaze's local stylesheets, with the existing one-second limit.
+If Glaze is reloaded while an LMS tab stays open, its old extension API work stops until that tab reloads too.
+Its animated scene also stops and releases its rendering resources.
+
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
   <a href="https://github.com/frostdev-ops/glaze/releases/download/v2.2.0/glaze-2.2.0-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
