@@ -367,6 +367,9 @@
   // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
   const remindHere = () => !ultra && !moodle && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'streak'].some((k) => settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
+  // Syllabus import (features/syllabus.js): a course's home and Syllabus page, top frame.
+  const sylHere = () => !ultra && !moodle && links.length && window.top === window && settings.enhance.syllabus && /^\/courses\/\d+(\/assignments\/syllabus)?\/?$/.test(location.pathname);
+  const syncSyl = () => (sylHere() ? need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.sync(sylHere()), () => {}) : globalThis.GZ_SYL_UI?.sync(false));
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
   // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
@@ -711,6 +714,7 @@
     syncCardTasks();
     syncWidgets();
     syncRemind();
+    syncSyl();
   };
   // ---- page loads ------------------------------------------------------------------------------
   // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
@@ -2079,7 +2083,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncWidgets(); syncNav(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncSyl(); syncWidgets(); syncNav(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -2207,6 +2211,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     syncCardTasks();
     syncWidgets();
     syncRemind();
+    syncSyl();
     themeEditors();
     syncPageFade();
     stopScene();

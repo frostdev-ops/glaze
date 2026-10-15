@@ -240,6 +240,36 @@ test('a page may change only its own Canvas site’s what-if records', async () 
   assert.deepEqual(Object.keys(store.data), [`whatIf:${ORIGIN}:3`]);
 });
 
+// Syllabus import (features/syllabus.js) keeps what a syllabus said through the same worker ('glaze:syllabus').
+test('a page keeps or deletes only its own Canvas site’s syllabus records, and only what lib/syllabus.js allows', async () => {
+  const store = shared();
+  const send = serviceWorker(store);
+  const from = (url) => ({ id: WORKER_ID, tab: { id: 3 }, frameId: 0, url });
+  const key = `syllabus:${ORIGIN}/3/25`;
+  const rec = { prof: { name: 'Dr. Okafor', email: 'a@b.edu' }, weights: [{ name: 'Labs', weight: 40 }], html: '<b>', scale: [['A', 93]] };
+  const kept = await send({ type: 'glaze:syllabus', key, rec, at: 10 }, from(`${ORIGIN}/courses/25`));
+  assert.equal(kept.ok, true);
+  assert.deepEqual(store.data[key], kept.rec);
+  assert.equal(store.data[key].html, undefined, 'tidied');
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key: 'syllabus:https://other.instructure.com/3/25', rec, at: 11 }, from(`${ORIGIN}/`)), { ok: false, error: 'sender' });
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec, at: 12 }, from('https://example.com/')), { ok: false, error: 'sender' });
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec: { prof: {} }, at: 13 }, from(`${ORIGIN}/`)), { ok: false, error: 'bad' });
+  assert.equal((await send({ type: 'glaze:syllabus', key, rec: null, at: 14 }, from(`${ORIGIN}/`))).ok, true);
+  assert.deepEqual(store.data, { [key]: { deleted: 14 } }, 'only the time of the delete is left');
+});
+
+test('the what-if calculator shows the syllabus\'s weights as a note, and still counts Canvas\'s', async () => {
+  const sylKey = `syllabus:${ORIGIN}/3/${BIO.course.id}`;
+  const plain = gradesPage();
+  await ready(plain);
+  const p = gradesPage({ store: shared({ [sylKey]: { weights: [{ name: 'Labs', weight: 50 }, { name: 'Exams', weight: 50 }] } }) });
+  await ready(p);
+  const note = find(p.box(), (e) => e.tagName === 'P' && e.textContent.startsWith('Your syllabus lists'));
+  assert.equal(note?.textContent, 'Your syllabus lists Labs 50%, Exams 50%. Glaze counts the weights Canvas has.');
+  assert.deepEqual(totals(p), totals(plain), 'the figures are Canvas\'s');
+  assert.equal(find(plain.box(), (e) => e.tagName === 'P' && e.textContent.startsWith('Your syllabus')), undefined);
+});
+
 test('a course that failed to load can be asked for again', async () => {
   const p = gradesPage();
   p.UI.render();

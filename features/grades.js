@@ -84,7 +84,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const me = studentIn(row);
     if (!me) { Object.assign(st, { status: 'none', at: Date.now(), tries: (st.tries || 0) + 1 }); return; }
     Object.assign(st, { row, me, key: whatIfKey(me), status: 'idle' });
-    st.saved = (await getArea('local', st.key))?.[st.cid];
+    // With the weights the student's syllabus lists, if one was imported (features/syllabus.js): shown, never used.
+    const [saved, syl] = await Promise.all([getArea('local', st.key), getArea('local', `syllabus:${location.origin}/${me.user_id}/${st.cid}`)]);
+    st.saved = saved?.[st.cid];
+    st.syl = Array.isArray(syl?.weights) ? syl.weights : [];
     if (st.saved) load(st); else whatIf();
   };
   const load = (st) => {
@@ -178,6 +181,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       make('div', {}, make('dt', { textContent: t('With work not graded yet as zero') }), make('dd', {}, outFinal)));
     totals.setAttribute('aria-live', 'polite');
     box.append(totals);
+    if (st.syl.length) box.append(make('p', { className: 'gz-calc-note', textContent: t('Your syllabus lists {list}. Glaze counts the weights Canvas has.', { list: st.syl.map((w) => `${w.name} ${GZ_I18N.pct(w.weight, locale())}`).join(', ') }) }));
 
     const updates = [];
     const update = () => {
@@ -439,9 +443,13 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       drawHist();
     };
     D.refresh = () => { if (box.isConnected) figures(); };
-    const savePrefs = () => {
+    // One course's changed choice goes to the worker ('glaze:gpa'), which applies it to what is stored then: another tab's
+    // or syllabus import's change to another course (or another choice) stays.
+    const savePrefs = (key, f) => {
       D.prefs = C.cleanGpa(D.prefs);
-      try { chrome.storage.sync.set({ gpaCourses: D.prefs }, () => { note.textContent = chrome.runtime.lastError ? t('Not saved. Try again in a moment.') : ''; }); } catch { /* reloaded */ }
+      try {
+        Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:gpa', key, patch: { [f]: D.prefs[key]?.[f] ?? null } })).then((r) => { note.textContent = r?.ok ? '' : t('Not saved. Try again in a moment.'); }, () => { note.textContent = t('Not saved. Try again in a moment.'); });
+      } catch { /* reloaded */ }
       figures();
     };
     const saveWhatIf = (id, c) => {
@@ -470,10 +478,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const pref = () => (D.prefs[r.key] ||= {});
       const credits = label(make('input', { type: 'number', min: 0, max: 30, step: 0.5, value: r.credits }), t('Credits for {name}', { name }));
       credits.dataset.f = `cr:${id}`;
-      credits.addEventListener('change', () => { const v = parseFloat(credits.value); if (Number.isFinite(v) && v >= 0 && v <= 30) { pref().c = v; savePrefs(); } });
+      credits.addEventListener('change', () => { const v = parseFloat(credits.value); if (Number.isFinite(v) && v >= 0 && v <= 30) { pref().c = v; savePrefs(r.key, 'c'); } });
       const level = label(make('select', {}, ...[[0, 'Regular'], [0.5, 'Honors (+0.5)'], [1, 'AP or IB (+1)']].map(([v, n]) => make('option', { value: v, textContent: t(n), selected: (r.p.l || 0) === v }))), t('Level of {name}', { name }));
       level.dataset.f = `l:${id}`;
-      level.addEventListener('change', () => { pref().l = Number(level.value); savePrefs(); });
+      level.addEventListener('change', () => { pref().l = Number(level.value); savePrefs(r.key, 'l'); });
       const whatIf = label(make('input', { type: 'number', min: 0, max: 200, step: 'any', value: r.whatIf ?? '', placeholder: r.score == null || r.rqd ? '–' : String(C.round2(r.score)) }), t('What-if grade for {name}, in percent', { name }));
       whatIf.dataset.f = `w:${id}`;
       whatIf.addEventListener('change', () => { const v = parseFloat(whatIf.value); saveWhatIf(id, Number.isFinite(v) && v >= 0 && v <= 200 ? v : null); });
@@ -485,11 +493,11 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         if (!ok) { note.textContent = t('Write a scale as letters and their lowest percent: A 93, A- 90, B+ 87.'); return; }
         if (scale.value.trim()) pref().s = C.schemeText(ok); else delete pref().s;
         scale.value = pref().s || '';
-        savePrefs();
+        savePrefs(r.key, 's');
       });
       const counts = label(make('input', { type: 'checkbox', checked: !r.out }), t('Count {name} in your GPA', { name }));
       counts.dataset.f = `x:${id}`;
-      counts.addEventListener('change', () => { if (counts.checked) delete pref().x; else pref().x = 1; savePrefs(); });
+      counts.addEventListener('change', () => { if (counts.checked) delete pref().x; else pref().x = 1; savePrefs(r.key, 'x'); });
       body.append(make('tr', {}, make('th', { scope: 'row' }, make('span', { textContent: name }), r.termName ? make('small', { textContent: r.termName }) : ''),
         grade, make('td', {}, credits), ...(e.gpaWeighted ? [make('td', {}, level)] : []), make('td', {}, whatIf), make('td', {}, scale), make('td', {}, counts)));
     }

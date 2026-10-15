@@ -133,6 +133,15 @@ _Last updated: 2026-10-15_
   settings. Remove deletes a sticker, Delete your picture deletes a picture; Reset everything deletes all of it.
   Your own pictures are shown on a page through temporary blob addresses, not written into it, though the LMS page's
   own code can still read a picture shown on it.
+- **What you keep from a syllabus** (Canvas, the Syllabus import Extra, off by default), in `chrome.storage.local`, on
+  this device only, per Canvas site, user and course, and only after you check it and choose Save: the professor's
+  name, e-mail, office and office hours, class times, the dates you kept, the grading scale and the weights. The
+  syllabus itself (the Syllabus page's text, a file you pick, text you paste) is read on this device, shown to you
+  while you review it, and not kept. If you choose so when saving, the scale also goes to your GPA choices above
+  (synced like them) and the dates you tick become your own Better To Do tasks. Delete on the course home removes the
+  record, keeping only when it was deleted (so a late save from another tab can't bring it back); the GPA scale and
+  tasks stay until you change them there. Only the first 200,000 characters of a syllabus are read, and the review says
+  so when there were more.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -246,6 +255,11 @@ animated backgrounds) are bundled. It makes requests in these cases:
   that same copy. It asks again when you come back to the page after that, not within a minute of a failed ask, and
   never on a timer. Reminders are drawn inside the Canvas page only: Glaze has no notifications permission and sends
   nothing to any other place. It never writes to Canvas.
+- **Syllabus import** (Canvas, off by default). On a course's home and Syllabus page, Glaze asks your own Canvas site
+  for your profile (your user id) and course list (the course's term start, for dates written without a year), the
+  same read-only requests Better To Do makes. It reads the Syllabus page from the page already open, with no request
+  of its own, and reads files you pick on this device. Nothing about the syllabus is sent anywhere: there is no server
+  to parse it and no consent box to tick, because nothing leaves your computer. It never writes to Canvas.
 - **Gradescope in To Do** (off by default). Gradescope has no API for students, so Glaze reads your Gradescope course
   pages, signed in as you, and nothing else of Gradescope's. While the switch is on and Glaze itself is on, and only then, Glaze runs on
   `https://www.gradescope.com` pages. When there's something to read or ask, it first reads your account page

@@ -108,8 +108,10 @@ const page = () => ({ document: { addEventListener() {}, documentElement: {} }, 
 const W0C = [['features/palette.js', 'GZ_CMD'], ['features/keys.js', 'GZ_KEYS'], ['features/coursemenu.js', 'GZ_COURSE_MENU'], ['features/previews.js', 'GZ_PEEK'], ['features/download.js', 'GZ_DOWNLOAD'],
   ['features/drafts.js', 'GZ_DRAFT_UI'], ['features/whatif.js', 'GZ_WHATIF'], ['features/docs.js', 'GZ_DOCS'], ['features/place.js', 'GZ_PLACE'],
   ['lib/gpa.js', 'GZ_GPA'], ['features/gpaterms.js', 'GZ_GPA_TERMS'], ['lib/doctext.js', 'GZ_DOCTEXT']];
+// Syllabus import (W15): its extractors and the page's part (lib/doctext.js is listed above).
+const W15 = [['lib/syllabus.js', 'GZ_SYLLABUS'], ['features/syllabus.js', 'GZ_SYL_UI']];
 test('every loadable file ends on a value, which is how the worker knows it ran', () => {
-  for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'i18n/de.js', 'lib/cards.js', 'lib/seek.js', 'features/search.js', 'lib/widgets.js', 'features/widgets.js', ...W0C.map(([f]) => f)]) {
+  for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'i18n/de.js', 'lib/cards.js', 'lib/seek.js', 'features/search.js', 'lib/widgets.js', 'features/widgets.js', ...W0C.map(([f]) => f), ...W15.map(([f]) => f)]) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX, GZ_SPEC: {}, ...page() });
     assert.ok(vm.runInContext(read(f), context), `${f}: no last value`);
   }
@@ -139,7 +141,7 @@ test('no loadable file declares a name the first content script already declares
 });
 
 test('a file loaded twice into one frame keeps the first', () => {
-  for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS'], ['lib/gradecalc.js', 'GZ_GRADECALC'], ['features/grades.js', 'GZ_GRADES_UI'], ['lib/cards.js', 'GZ_CARDS'], ['lib/seek.js', 'GZ_SEEK'], ['features/search.js', 'GZ_SEARCH'], ['lib/widgets.js', 'GZ_WIDGETS'], ['features/widgets.js', 'GZ_WIDGETS_UI'], ...W0C]) {
+  for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS'], ['lib/gradecalc.js', 'GZ_GRADECALC'], ['features/grades.js', 'GZ_GRADES_UI'], ['lib/cards.js', 'GZ_CARDS'], ['lib/seek.js', 'GZ_SEEK'], ['features/search.js', 'GZ_SEARCH'], ['lib/widgets.js', 'GZ_WIDGETS'], ['features/widgets.js', 'GZ_WIDGETS_UI'], ...W0C, ...W15]) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX, GZ_SPEC: {}, ...page() });
     vm.runInContext('globalThis.globalThis = this;', context);
     vm.runInContext(read(file), context);
