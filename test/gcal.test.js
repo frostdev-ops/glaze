@@ -265,10 +265,23 @@ const switched = (src, on) => (on ? src.replace('  const ON = false;\n', '  cons
 // failSet(patch): a storage write that fails, as a full disk or a quota does. identity.hold: what getAuthToken waits on.
 const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet = () => false } = {}) => {
   const store = { local, sync };
-  const area = (s) => ({
-    get: async (k) => structuredClone(k == null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))),
-    set: async (v) => { if (failSet(v)) throw new Error('QUOTA_BYTES quota exceeded'); Object.assign(s, structuredClone(v)); },
-    remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
+  // As chrome.storage: a read is served when it's asked (hooks.read runs after that, while the answer is on its way, as a
+  // change landing then would), and every change is heard through onChanged.
+  const heard = [], hooks = {};
+  const fire = (name, c) => { for (const f of heard) f(c, name); };
+  const area = (name, s) => ({
+    get: async (k) => {
+      const v = structuredClone(k == null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])));
+      await hooks.read?.(name, [].concat(k ?? []));
+      return v;
+    },
+    set: async (v) => {
+      if (failSet(v)) throw new Error('QUOTA_BYTES quota exceeded');
+      const c = Object.fromEntries(Object.keys(v).map((k) => [k, { oldValue: s[k], newValue: structuredClone(v[k]) }]));
+      Object.assign(s, structuredClone(v));
+      fire(name, c);
+    },
+    remove: async (k) => { const c = {}; for (const x of [].concat(k)) { c[x] = { oldValue: s[x] }; delete s[x]; } fire(name, c); },
   });
   const listeners = [], asked = [];
   let registered = [];
@@ -296,7 +309,7 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
         onInstalled: { addListener: (f) => listeners.installed = f }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
-      storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
+      storage: { local: area('local', store.local), sync: area('sync', store.sync), onChanged: { addListener: (f) => heard.push(f) } },
       identity,
       tabs: { query: async () => [] },
       scripting: {
@@ -308,7 +321,9 @@ const worker = (mock, { on = true, local = {}, sync = { enabled: true }, failSet
   });
   vm.runInContext(read('lib/background.js'), context);
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(structuredClone(m), sender, (r) => res(structuredClone(r))); });
-  return { store, identity, asked, send, registered: () => registered, install: () => listeners.installed() };
+  // change(): a change made elsewhere (the popup, the editor), heard as Chrome tells it.
+  const change = (name, patch) => { const c = Object.fromEntries(Object.keys(patch).map((k) => [k, { oldValue: store[name][k], newValue: patch[k] }])); Object.assign(store[name], patch); fire(name, c); };
+  return { store, identity, asked, send, hooks, change, registered: () => registered, install: () => listeners.installed() };
 };
 // What the page sends with its batch (lib/calexport.js consent), worked out from the worker's storage as it is now.
 const D = require('../defaults.js');
@@ -557,4 +572,46 @@ withMock('review (P1): the Gradescope answer taken back while the token is await
   assert.ok(!next.events.some((e) => e.summary === 'HW 3'));
   assert.equal((await send(next)).ok, true);
   assert.deepEqual(mock.live(cal).map((e) => e.summary), ['Lab 1']);
+});
+
+// ---- Codex's fix verification (W13): a change while a guard's own read is on its way. Each failed before its fix. ----
+withMock('review (P1, late await): Glaze turned off while the last read before an event POST is on its way: nothing is posted', async (mock) => {
+  // The read right before the first POST: counted on a run with nothing changed, then the change lands during it.
+  const lastRead = async (flip) => {
+    const w = worker(mock);
+    await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+    const cal = w.store.local.gcal.cal;
+    const from = mock.log.length;
+    const posted = () => mock.log.slice(from).some(([m, p]) => m === 'POST' && p.includes('/events'));
+    const listed = () => mock.log.slice(from).some(([m, p]) => m === 'GET' && p.includes('/events'));
+    let n = 0;
+    w.hooks.read = async (name, keys) => {
+      if (name !== 'local' || !keys.includes('gcal') || !listed() || posted()) return;
+      if (++n === flip) w.change('sync', { enabled: false });
+    };
+    const r = await w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS.slice(0, 1), from: FROM, first: FIRST, consent: consentOf(w) }, PAGE);
+    return { r, n, live: mock.live(cal).map((e) => e.summary), enabled: w.store.sync.enabled };
+  };
+  const dry = await lastRead(0);
+  assert.deepEqual([dry.r.ok, dry.live], [true, ['Lab 1']], 'nothing changed: Lab 1 goes');
+  assert.ok(dry.n >= 1);
+  const got = await lastRead(dry.n);
+  assert.deepEqual(got, { r: { ok: false, error: 'stopped' }, n: dry.n, live: [], enabled: false });
+});
+
+withMock('review (P1, late await): Glaze turned off while the broker reads Better To Do: the plan moved in Google is not applied', async (mock) => {
+  const key = `todo:${SITE_SRC}`;
+  const w = worker(mock, { local: { [key]: { tasks: [], items: { 'assignment:1': { on: '2026-10-17' } } } } });
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const cal = w.store.local.gcal.cal;
+  const sync = () => w.send({ type: 'glaze:gcal', op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST, consent: consentOf(w) }, PAGE);
+  assert.equal((await sync()).ok, true);
+  const on = mock.live(cal).find((x) => x.summary === 'Do: Lab 1').id;
+  mock.edit(cal, on, { start: { date: '2026-10-21' }, end: { date: '2026-10-22' } });
+  let armed = true;
+  w.hooks.read = async (name, keys) => { if (armed && name === 'local' && keys.includes(key)) { armed = false; w.change('sync', { enabled: false }); } };
+  const r = await sync();
+  assert.equal(armed, false, 'the change landed during that read');
+  assert.deepEqual({ r, enabled: w.store.sync.enabled, localOn: w.store.local[key].items['assignment:1'].on }, { r: { ok: false, error: 'stopped' }, enabled: false, localOn: '2026-10-17' });
+  assert.equal(mock.calendars.get(cal).events.get(on).start.date, '2026-10-21', 'and Google keeps the move for when Glaze is back on');
 });
