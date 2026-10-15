@@ -174,7 +174,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await page.mouse.move(500, 300, { steps: 6 });
     await page.mouse.up();
     ok(JSON.stringify(await rect(tile('notes'))) === JSON.stringify(before), 'not editing: a drag moves nothing');
-    await page.click('#gz-panel .gz-dash-edit');
+    await page.click('#gz-toolbar .gz-dash-edit');
     ok(await page.evaluate(() => document.querySelector('#gz-dash .gz-sr[role="status"]')?.textContent.startsWith('Editing the layout')), 'Edit layout: said');
     // Notes to the empty middle, by its heading: snapped to the grid (from the page's left, 200px).
     const grab = (id) => rect(`${tile(id)} .gz-w-head h3`);
@@ -221,12 +221,32 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await page.keyboard.press('Shift+ArrowDown');
     ok(Math.abs((await rect(tile('timer'))).top - (tk.top + 64)) < 1, 'Shift+ArrowDown: four steps');
     await shot('courses-overlap-edit-light-1280');
-    await page.click('#gz-panel .gz-dash-edit'); // Done
+    await page.click('#gz-toolbar .gz-dash-edit'); // Done
     const kept = await rect(tile('quotes'));
     await page.reload();
     await page.waitForSelector(tile('quotes'));
     await page.waitForTimeout(500);
     ok(JSON.stringify(await rect(tile('quotes'))) === JSON.stringify(kept), 'after a reload, where it was');
+    // The toolbar is in the page's header. Folding the panel takes only its column's widgets (the moved ones stay);
+    // Hide widgets takes them all, and Show widgets brings them back.
+    ok(await page.evaluate(() => !!document.querySelector('div.base-courses-header-container div.base-header-tools > #gz-toolbar')), 'the toolbar is in the page header');
+    const vis = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#gz-room section.gz-w')].map((e) => [e.dataset.tile, e.getClientRects().length > 0])));
+    // In the column: overlapping the panel's width (where its widgets keep Ultra's To Do clear).
+    const inCol = await page.evaluate(() => { const c = document.querySelector('#gz-panel .gz-dash-grid').getBoundingClientRect(); return Object.fromEntries([...document.querySelectorAll('#gz-room section.gz-w')].map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.tile, r.right > c.left && r.left < c.right]; })); });
+    await page.click('#gz-panel .gz-panel-toggle');
+    await page.waitForTimeout(200);
+    let v = await vis();
+    ok(Object.keys(inCol).every((k) => v[k] === !inCol[k]) && Object.values(inCol).some(Boolean) && Object.values(inCol).some((x) => !x), `folded: the column's widgets go, the others stay (in the column ${JSON.stringify(inCol)}; shown ${JSON.stringify(v)})`);
+    await shot('courses-folded-light-1280');
+    await page.click('#gz-panel .gz-panel-toggle');
+    await page.click('#gz-toolbar .gz-dash-hide');
+    await page.waitForTimeout(200);
+    v = await vis();
+    ok(Object.values(v).every((on) => !on) && await page.evaluate(() => document.querySelector('#gz-toolbar .gz-dash-hide').textContent === 'Show widgets'), `Hide widgets: every widget away (${JSON.stringify(v)})`);
+    await shot('courses-hidden-light-1280');
+    await page.click('#gz-toolbar .gz-dash-hide');
+    await page.waitForTimeout(200);
+    ok(Object.values(await vis()).every(Boolean), 'Show widgets: all back');
     // Narrow: stacked, the layout kept; wide again: back where they were.
     const saved = JSON.stringify(await layout());
     await page.setViewportSize({ width: 375, height: 860 });
@@ -265,11 +285,11 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     // ---- floating over every page ----------------------------------------------------------------------------
     const arranged = await layout();
     await open('/ultra/course', 1280, 1400);
-    await page.click('#gz-panel .gz-dash-edit');
+    await page.click('#gz-toolbar .gz-dash-edit');
     await page.click(`${tile('timer')} button[aria-label="Float Focus timer on every Blackboard page"]`);
     await page.waitForTimeout(400);
     ok(await page.evaluate(() => document.querySelectorAll('section.gz-w[data-tile="timer"]').length === 1 && !!document.querySelector('#gz-float section.gz-w[data-tile="timer"]')), 'Float on every page: the timer floats, once');
-    await page.click('#gz-panel .gz-dash-edit');
+    await page.click('#gz-toolbar .gz-dash-edit');
     for (const width of [1280, 375]) {
       await page.setViewportSize({ width, height: width < 768 ? 860 : 860 });
       await page.goto(`${O}/ultra/courses/_101_1/outline`);

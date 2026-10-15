@@ -99,16 +99,42 @@ test('Ultra: the panel folds away from its heading, by keyboard or pointer, and 
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   assert.equal(toggle.getAttribute('aria-controls'), 'gz-panel-body');
   assert.equal(toggle.textContent, 'Notes and widgets', 'its name');
+  const tile = () => p.panel().querySelector('section[data-tile="pet"]');
   p.doc.fire(toggle, 'click');
   assert.equal(toggle.getAttribute('aria-expanded'), 'false');
-  assert.equal(p.doc.getElementById('gz-panel-body').hidden, true);
+  assert.equal(tile().hidden, true, 'the column\'s widget folds with it');
+  assert.equal(p.doc.getElementById('gz-room').hidden, false, 'the layer stays: widgets placed elsewhere stay');
   assert.equal(JSON.stringify(p.wrote.at(-1)), '{"panelShut":true}', 'storage.local, never the page');
   // A new page load: still folded.
   const q = page({ local: { ...structuredClone(ONLY_PET), panelShut: true } });
   q.ui.sync(true);
   await settle();
   assert.equal(q.panel().querySelector('.gz-panel-toggle').getAttribute('aria-expanded'), 'false');
-  assert.equal(q.doc.getElementById('gz-panel-body').hidden, true);
+  assert.equal(q.panel().querySelector('section[data-tile="pet"]').hidden, true);
+  p.doc.fire(toggle, 'click');
+  assert.equal(tile().hidden, false, 'unfolded, it is back');
+});
+
+test('Ultra: Hide widgets takes every widget on the Courses page away, and stays on this device', async () => {
+  const p = page({ local: structuredClone(ONLY_PET) });
+  p.ui.sync(true);
+  await settle();
+  const hide = p.doc.querySelector('.gz-dash-hide');
+  assert.equal(hide.textContent, 'Hide widgets');
+  assert.equal(hide.getAttribute('aria-pressed'), 'false');
+  p.doc.fire(hide, 'click');
+  assert.equal(JSON.stringify(p.wrote.at(-1)), '{"widgetsHidden":true}');
+  assert.equal(p.panel().hidden, true);
+  assert.equal(p.doc.getElementById('gz-room').hidden, true);
+  assert.equal(hide.textContent, 'Show widgets');
+  assert.equal(hide.getAttribute('aria-pressed'), 'true');
+  const q = page({ local: { ...structuredClone(ONLY_PET), widgetsHidden: true } });
+  q.ui.sync(true);
+  await settle();
+  assert.equal(q.panel().hidden, true, 'still hidden on the next visit');
+  p.doc.fire(hide, 'click');
+  assert.equal(p.panel().hidden, false);
+  assert.equal(hide.textContent, 'Hide widgets');
 });
 
 test('Ultra: leaving the Courses page takes the panel and its tiles away (stopped); switching off leaves nothing', async () => {

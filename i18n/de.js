@@ -1676,6 +1676,8 @@
   "Custom navigation links sync with Chrome. Images stay on this device.": "Eigene Navigationslinks werden mit Chrome synchronisiert. Bilder bleiben auf diesem Gerät.",
   "The rail uses the same focus timer and pet progress as your widgets. No extra activity is recorded.": "Die Navigationsleiste nutzt denselben Fokus-Timer und Lernbegleiter-Fortschritt wie deine Widgets. Es wird keine zusätzliche Aktivität aufgezeichnet.",
   "Edit layout": "Layout bearbeiten",
+  "Hide widgets": "Widgets ausblenden",
+  "Show widgets": "Widgets einblenden",
   "Reset layout": "Layout zurücksetzen",
   "Layout reset.": "Layout zurückgesetzt.",
   "Layout saved.": "Layout gespeichert.",
