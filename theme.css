@@ -919,7 +919,7 @@ html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-
 html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content :is(span, svg) { color: inherit !important; }
 html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content:is(:hover, :focus-visible) { text-decoration: underline; outline: 2px solid var(--gz-nav-ink); outline-offset: -2px; }
 html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content.Mui-selected::before { background: var(--gz-nav-ink) !important; }
-html[data-gz-nav-no-logo] #base_tools :is(.institution-logo, .institution-logo-container) { display: none; }
+html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools) header.themed-logo-background-primary-fill :is(img, [analytics-id="baseLayout.logo.link"]) { display: none; }
 html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content { min-height: 40px; padding-block: 6px !important; font-size: 12px; }
 html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content { min-height: 58px; padding-block: 14px !important; font-size: 17px; }
 html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content { font-size: 11px; }
@@ -1001,3 +1001,5 @@ html[data-gz-card-condensed] #site-wrap .gz-pet { top: 2px; right: calc(50% - 32
 
 
 #site-wrap article.course-element-card:not(.multi-column-view *) > .gz-pet { display: none; }
+
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools) header.themed-logo-background-primary-fill { background: transparent !important; }

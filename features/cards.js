@@ -491,7 +491,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     const x = make('button', { type: 'button', className: 'gz-ce-x', textContent: '×', title: t('Close') });
     x.setAttribute('aria-label', t('Close'));
     x.addEventListener('click', close);
-    const reset = make('button', { type: 'button', textContent: t('Back to Canvas’s color') });
+    const reset = make('button', { type: 'button', textContent: t(ultra ? 'Course color' : 'Back to Canvas’s color') });
     reset.addEventListener('click', () => { change(null, false); fill(); radios[0].focus(); });
     const done = make('button', { type: 'button', className: 'gz-ce-done', textContent: t('Done') });
     done.addEventListener('click', close);
