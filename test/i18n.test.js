@@ -85,11 +85,18 @@ test('translations keep their placeholders, and counts have an other form', () =
 });
 
 test('every catalogue is loaded wherever Glaze speaks', () => {
+  // On the LMS, only the page's own, on demand (content.js words(), lib/background.js LOADABLE); the extension's
+  // pages have them all.
   const content = require('../manifest.json').content_scripts[0].js;
+  assert.deepEqual(I.CODES, files.map((f) => f.replace(/\.js$/, '')), 'GZ_I18N.CODES lists i18n/');
   for (const f of files) {
-    assert.ok(content.indexOf(`i18n/${f}`) >= 0 && content.indexOf(`i18n/${f}`) < content.indexOf('lib/page.js'), `manifest: i18n/${f}`);
+    assert.ok(!content.includes(`i18n/${f}`), `manifest: i18n/${f} loads on demand, not with every page`);
+    assert.ok(read('lib/background.js').includes(`'i18n/${f}'`), `lib/background.js LOADABLE: i18n/${f}`);
     for (const page of ['options.html', 'popup.html']) assert.ok(read(page).includes(`<script src="i18n/${f}"></script>`), `${page}: i18n/${f}`);
   }
+  assert.equal(I.file('de-AT'), 'i18n/de.js');
+  assert.equal(I.file('pt-PT'), 'i18n/pt-BR.js');
+  for (const tag of ['en', 'en-GB', 'ja', '', undefined, 'not a locale!']) assert.equal(I.file(tag), null, String(tag));
   assert.ok(content.indexOf('lib/i18n.js') < content.indexOf('lib/page.js'));
   assert.ok(read('preview.html').includes('<script src="lib/i18n.js"></script>'));
 });

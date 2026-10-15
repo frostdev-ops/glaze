@@ -134,7 +134,8 @@ animated backgrounds) are bundled. It makes requests in these cases:
   connection information such as your IP address. The Mac App Store and iPhone/iPad apps include no
   Sparkle updater; their updates come through the App Store.
 
-The only link in the extension is the footer link to the project's GitHub page, which you click yourself.
+The extension has two links, and you click each yourself: the footer link to the project's GitHub page, and "Open the
+gallery" in the editor (see below).
 
 ## The Looks gallery
 

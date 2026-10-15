@@ -102,6 +102,10 @@ html[data-gz-focus] #content { max-width: 54rem; margin-inline: auto; }
   --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
   --gz-tip-bg: color-mix(in srgb, var(--gz-surface) 78%, var(--gz-line-strong));
 }
+/* Accent text on an accent-soft fill (a pill, the chosen segment): the accent reads on a dark palette; on a light one it falls
+   under 4.5:1 (Paper 4.2, Rose 3.9), and the deeper accent-hi does not. */
+html { --gz-on-soft: var(--gz-accent); }
+html:not([data-gz-dark-theme]) { --gz-on-soft: var(--gz-accent-hi); }
 /* Depth: --gz-shadow is for lifted things (hover, menus, dialogs); --gz-rest-shadow sits under every
    card at rest, and only from depth 2. */
 html { --gz-rest-shadow: none; }
@@ -247,6 +251,10 @@ html[data-gz-font-mono] :is(code, pre, kbd, samp, .keycode) { font-family: var(-
 /* Where Canvas writes its own muted greys as literals rather than through the variable above. */
 #application :is(.ic-DashboardCard__header-term, .ic-DashboardCard__header-subtitle, .ToDoSidebarItem__Info, .event-details__context,
   .ig-details, .ig-details__item, .subtitle, .ic-item-row__meta-content, .submitted, .ToDoSidebarItem__Info [class*="css-"][class*="-text"]) { color: var(--gz-ink-muted); }
+/* The same greys as InstUI text (secondary, 3.4:1 on a dark ground) and as Canvas literals: the list view's item kind, due
+   time and points, an announcement's date, the inbox's preview line, a locked module's unlock date. */
+#application :is(.ic-item-row__meta-content, [class*="PlannerItem-styles__type"], [class*="PlannerItem-styles__due"], [class*="PlannerItem-styles__score"]) [class*="css-"][class*="-text"],
+#application :is([data-testid="last-message-content"], .unlock_details, .displayed_unlock_at) { color: var(--gz-ink-muted); }
 :is(code, pre, kbd) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); border-color: var(--gz-line); }
 
 /* ---- global nav ----
@@ -417,7 +425,7 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 #application .ic-item-row a:hover { color: var(--gz-accent); }
 /* The "Complete All Items" pill. */
 #application ul.pill { border-color: var(--gz-line-strong); background: var(--gz-accent-soft); }
-#application ul.pill li { color: var(--gz-accent); }
+#application ul.pill li { color: var(--gz-on-soft); }
 /* Course progress (content.js): the course's completion requirements added up, above the Modules list.
    As Ultra's in extras.css, which Canvas doesn't load. */
 #application #gz-progress {
@@ -566,6 +574,9 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 :is(#application, #flash_message_holder) :is(.ic-notification--danger, .ic-flash-error) { --gz-status: var(--gz-err); }
 :is(#application, #flash_message_holder) :is(.ic-notification__icon, .ic-flash__icon) { background: var(--gz-status); color: var(--gz-accent-ink); }
 :is(#application, #flash_message_holder) :is(.ic-notification__content, .ic-flash-info, .ic-flash-success, .ic-flash-warning, .ic-flash-error) :where(h2, h3, a, span) { color: inherit; }
+/* The older Bootstrap notice (a quiz preview, a locked quiz): Canvas's orange on pink is 3.8:1. The palette's ink on a surface,
+   with the warning colour as its edge. */
+#application .alert { background: var(--gz-surface); color: var(--gz-ink); border: 1px solid var(--gz-line); border-left: 4px solid var(--gz-warn); }
 
 /* ---- InstUI: its links and avatars are literal Canvas blues; the part after the hash is all that is stable ---- */
 :is(a, button)[class*="css-"][class*="-link"]:not([class*="baseButton"]) { color: var(--gz-accent); }
@@ -573,11 +584,11 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 #application [class*="avatar__initials"], #application [class*="view--inlineBlock-avatar"] { color: var(--gz-accent); }
 /* Segmented controls and toggles (calendar Week/Month/Agenda, Show by date): the chosen one is marked. */
 #application :is(.btn, .Button).active:not(.btn-primary, .Button--primary), #application :is(.btn, .Button)[aria-pressed="true"], #application .calendar_view_buttons .ui-state-active {
-  background: var(--gz-accent-soft); color: var(--gz-accent); border-color: var(--gz-accent);
+  background: var(--gz-accent-soft); color: var(--gz-on-soft); border-color: var(--gz-accent);
 }
 /* An InstUI dropdown's highlighted row is filled Canvas blue with white text. */
 li[class*="optionItem"]:has(> [role="option"][aria-selected="true"]) { background: var(--gz-accent-soft); }
-li[class*="optionItem"] > [role="option"][aria-selected="true"] { color: var(--gz-accent); }
+li[class*="optionItem"] > [role="option"][aria-selected="true"] { color: var(--gz-on-soft); }
 /* InstUI writes Canvas's brand blue into its own buttons, links and icons as a literal; content.js tags those it finds
    (cool blues on css-hash elements) and they take the accent. A disabled one is the accent at half strength. */
 [data-gz-brand-fg]:not([aria-disabled="true"] *, [disabled] *, [aria-disabled="true"], [disabled]) { color: var(--gz-accent) !important; }
@@ -631,6 +642,8 @@ html :is([data-cid~="IconButton"], [data-cid~="Button"]):is([disabled], [aria-di
 #application #minical .fc-button { background: transparent; border: 0; color: var(--gz-ink-muted); }
 #application #minical .fc-button:hover { color: var(--gz-accent); }
 #application .context-list-toggle-box { border-radius: 3px; }
+/* An unchecked calendar's box is Canvas's light grey square: an empty box with an edge. */
+#application .context_list_context:not(.checked) .context-list-toggle-box { background-color: transparent !important; box-shadow: inset 0 0 0 1px var(--gz-line-strong); }
 
 /* ---- Course colors ----
    Canvas draws each course in the color its student chose. Here it is toned as theme.css tones Ultra's
@@ -671,6 +684,14 @@ html[data-gz-dark-theme] #application .ic-DashboardCard[style*="--gz-course-raw"
 #application .planner-grouping[style*="--gz-course-raw"] > ol { border-color: var(--gz-course) !important; }
 #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__overlay"] { background-color: var(--gz-course) !important; }
 #application .planner-grouping[style*="--gz-course-raw"] :is([class*="PlannerItem-styles__icon"], [class*="PlannerItem-styles__avatar"]) { color: var(--gz-course) !important; }
+/* The group's title is Canvas's brand blue whatever the course (3.8:1 on a dark band): the course's hue, at a lightness that reads, as on a card. */
+#application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) min(l, 0.48) c h); }
+html[data-gz-dark-theme] #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) max(l, 0.72) c h); }
+/* Its long titles fade out under a white gradient, a bright line along the band on a dark palette. */
+html[data-gz-dark-theme] #application [class*="Grouping-styles__title"]::after { display: none; }
+/* InstUI's pills (Missing, Late, Excused) print their state in its mid tone, 3.8:1 on a dark panel. The pill carries the colour
+   too, so its text, which inherits it as currentColor, takes the same hue lifted to a lightness that reads. */
+html[data-gz-dark-theme] [class*="css-"][class*="-pill__text"] { color: oklch(from currentColor max(l, 0.72) c h); }
 
 /* ---- portals: the trays, popovers, menus, dialogs and tooltips mount on <body>, outside #application,
    so everything scoped to it misses them. The sweep has already made them dark; what is left is their edges,
@@ -760,6 +781,11 @@ html[data-gz-dark-theme] .user_content hr[data-gz-dark="rule"] { border-color: v
 /* Pictures in it are made for a white page: on a dark palette a little dimmer until pointed at. */
 .user_content :where(img) { transition: filter var(--gz-t) var(--gz-ease); }
 html[data-gz-dark-theme] .user_content img:not([data-gz-rule], :hover) { filter: brightness(0.88); }
+/* Diagrams and equations drawn in black on a transparent background vanish on a dark palette (quiz questions are full of them).
+   An equation image (Canvas's editor makes them) is glyphs alone: inverted, they read as ink. Any other picture gets a white
+   backing, which shows only through its transparent parts; a photo looks the same. */
+html[data-gz-dark-theme] .user_content img.equation_image { filter: invert(1) hue-rotate(180deg); }
+html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) { background-color: #fff; }
 .user_content :where(pre, code) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); color: var(--gz-ink); border-color: var(--gz-line); border-radius: var(--gz-radius-sm); }
 
 /* ---- Editor: the rich content editor (TinyMCE, wrapped in Canvas's RCE) ----
@@ -850,8 +876,10 @@ html[data-gz-dark-theme] .user_content img:not([data-gz-rule], :hover) { filter:
 #application #questions .answer_arrow.incorrect { background: var(--gz-err); color: var(--gz-accent-ink); }
 #application #questions .answer_arrow.info { color: var(--gz-ok); }
 #application #questions .quiz_comment { background: var(--gz-band); border-color: var(--gz-line); }
-/* "Submitted … late" on a submission's details is Canvas's literal red. */
-#application .submission-details-header__time.late { color: var(--gz-err); }
+/* "Submitted … late" on a submission's details, and in an assignment's sidebar, is Canvas's literal red. */
+#application :is(.submission-details-header__time.late, #sidebar_content .late) { color: var(--gz-err); }
+/* "Saved at 12:51" while taking a quiz is Canvas's literal #666. */
+#application #last_saved_indicator { color: var(--gz-ink-muted); }
 /* The Submit bar under the questions. */
 #application #submit_quiz_form .form-actions { background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); }
 

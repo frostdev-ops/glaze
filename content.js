@@ -319,6 +319,51 @@
   // Glaze's own words on the page are in that language too (lib/i18n.js), English where it has none.
   const t = (key, vars) => GZ_I18N.t(key, vars, locale());
 
+  // ---- code on demand ------------------------------------------------------------------------------
+  // What only some pages need isn't in the first content script: it runs in this frame the first time it's needed,
+  // put there by lib/background.js ('glaze:load', its LOADABLE list). The options preview has it as <script> tags.
+  // `ready` says whether what the file defines is here: before asking (the preview), and after the worker says it ran.
+  // One request per file at a time; a failed one may be asked again after a minute (flush asks often).
+  // docId names this document to the worker where the browser can't (no sender.documentId): it checks the frame still
+  // holds this document before injecting.
+  const docId = crypto.randomUUID();
+  globalThis.__gzDoc = docId;
+  const loading = new Map(); // file -> promise
+  const need = (file, ready) => {
+    if (!loading.has(file)) {
+      const p = ready() ? Promise.resolve() : isPreview ? Promise.reject(new Error('not in the preview'))
+        : chrome.runtime.sendMessage({ type: 'glaze:load', files: [file], doc: docId }).then((r) => {
+          if (!r?.ok) throw new Error(r?.error || 'not loaded');
+          if (!ready()) throw new Error('ran, but not ready');
+        });
+      p.catch(() => setTimeout(() => { if (loading.get(file) === p) loading.delete(file); }, 60000));
+      loading.set(file, p);
+    }
+    return loading.get(file);
+  };
+  // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
+  // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
+  // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
+  // English for good, since switching language under the student later would be worse than not switching.
+  let wordsFor = null; // the catalogue the words are ready for ('' for none)
+  let wordsLate = false; // a pass skipped its extras while waiting: the next one covers the whole page
+  const wordsIn = new Set(); // what was drawn outside the extras' wait (the keyboard help) redraws itself in the words
+  const words = () => {
+    const file = isPreview ? '' : GZ_I18N.file(locale()) || '';
+    if (file === wordsFor) return true;
+    if (!file) { wordsFor = file; return true; }
+    if (!loading.has(file)) {
+      need(file, () => globalThis.GZ_LANGS?.[file.slice(5, -3)]).then(() => true, () => false).then((ok) => {
+        if (GZ_I18N.file(locale()) !== file) return;
+        wordsFor = file;
+        if (ok) for (const f of wordsIn) f();
+        if (observer && wordsLate && !timer) timer = setTimeout(flush, 0);
+      });
+    }
+    return false;
+  };
+  words();
+
   // ---- the gradebook --------------------------------------------------------------------------
   // Due-date status, new grades and the what-if calculator read the student's own gradebook records,
   // asked of their own Blackboard (same origin, their session) the way Ultra's Grades page asks: at
@@ -592,13 +637,17 @@
     timer = 0;
     const roots = outermost(dirty);
     dirty.clear();
-    if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
+    const said = words();
+    const all = full || (said && wordsLate);
+    if (full) { full = false; sweepAll(); } else sweepRoots(roots);
+    if (said) { tagExtras(all ? [document.body] : roots); wordsLate = false; } else wordsLate = true;
     // Both sites run the same list; a helper that isn't on Canvas yet returns at its top (`if (!ultra) return`).
     themeEditors();
     if (tip && ultraTipShown()) hideTip();
     paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
     placeScene();
+    if (!said) return;
     renderProgress();
     renderNew();
     keepPlace();
@@ -678,11 +727,13 @@
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
     if (window.top === window) dueWeek();
     if (!ultra) liftCourses();
+    recordCourses();
+    if (!ultra) paintCourses();
+    if (!words()) { wordsLate = true; return; }
     tagExtras([document.body]);
     watchDrafts();
-    recordCourses();
     syncCourseMenu();
-    if (!ultra) { paintCourses(); renderProgress(); }
+    if (!ultra) renderProgress();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -1698,9 +1749,23 @@
     local((s) => s.set({ [key]: d }));
   };
   // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
+  // lib/drafts.js comes once an editor it backs up is on the page (watchDrafts asks). An editor written in before it
+  // arrives (one paste can be all there is) is taken up when it does, as if just written in.
+  const draftsWaiting = new Set();
+  const draftsIn = () => {
+    if (globalThis.GZ_DRAFTS) return true;
+    need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => {
+      const eds = [...draftsWaiting];
+      draftsWaiting.clear();
+      for (const ed of eds) if (ed.isConnected) onWrite({ type: 'input', target: ed });
+      if (observer) watchDrafts();
+    }, () => draftsWaiting.clear());
+    return false;
+  };
   const onWrite = (e) => {
     if (!ultra && e.type !== 'input') return;
     const ed = settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(ultra ? EDITOR : CANVAS_DRAFT);
+    if (ed && !draftsIn()) { draftsWaiting.add(ed); return; }
     if (!ed) {
       // Controlled inputs can change value without a DOM mutation, so destination edits also run the pass.
       if (!ultra && settings.enhance.drafts && observer && e.target.closest?.('#compose-message-modal')) watchInboxDrafts();
@@ -1803,6 +1868,7 @@
     // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
     if (!ultra) { watchInboxDrafts(); return; }
     if (!settings.enhance.drafts) return;
+    if (!globalThis.GZ_DRAFTS) { if (document.querySelector(EDITOR)) draftsIn(); return; }
     const now = Date.now();
     let page = null;
     for (const [key, d] of typed) {
@@ -1827,6 +1893,7 @@
   const watchInboxDrafts = () => {
     if (!settings.enhance.drafts || !/^\/conversations\/?$/.test(location.pathname)) return;
     const ed = document.querySelector(CANVAS_DRAFT);
+    if (!globalThis.GZ_DRAFTS) { if (ed) draftsIn(); return; }
     if (ed && !inboxAccount && !inboxLoading && Date.now() >= inboxRetry) {
       inboxLoading = true;
       Promise.all([capi('/users/self/profile'), canvasCourses()]).then(([user, courses]) => {
@@ -1850,7 +1917,7 @@
     }
   };
   document.addEventListener('click', (e) => {
-    if (ultra || !settings.enhance.drafts || !observer || !e.target.closest?.('#send-message-button')) return;
+    if (ultra || !settings.enhance.drafts || !observer || !globalThis.GZ_DRAFTS || !e.target.closest?.('#send-message-button')) return;
     const ed = document.querySelector(CANVAS_DRAFT);
     const key = ed && draftKey(ed);
     if (key) { inboxWrites.set(ed, key); captureInboxDraft(ed); saveDraft(ed); inboxSending.add(key); }
@@ -1858,7 +1925,11 @@
   // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
   const tidyDrafts = () => {
     if (window.top !== window) return;
-    local((s) => s.get(null, (all) => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }));
+    // lib/drafts.js only when there are copies to look at.
+    local((s) => s.get(null, (all) => {
+      if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
+      need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
+    }));
   };
 
   // ---- download all (Extras) -------------------------------------------------------------------
@@ -1942,6 +2013,7 @@
     const mb = (n) => new Intl.NumberFormat(GZ_I18N.locale(locale()), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(n / 2 ** 20);
     const tooBig = (label) => Object.assign(new Error(label), { said: true });
     try {
+      await need('lib/zip.js', () => globalThis.GZ_ZIP);
       if (ultra) await walk(fid, '');
       else {
         const items = await moduleItems(cid, fid, true); // Refresh requirements at the click; a preview can be a minute old.
@@ -2235,6 +2307,15 @@
     document.body.append(keysBox);
     if (!ultra) keysBox.querySelector('button').focus();
   };
+  // Opened before the page's words arrived: drawn again in them, keeping where focus goes back to.
+  wordsIn.add(() => {
+    if (!keysBox) return;
+    const back = keysBack;
+    keysBox.remove();
+    keysBox = null;
+    openKeys();
+    keysBack = back;
+  });
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
   if (window.top === window) {
     document.addEventListener('keydown', (e) => {
@@ -3181,11 +3262,13 @@
     const was = enhanced;
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
-    if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (observer) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
+    // Waiting for the page's words: the pass that brings them in draws all of this.
+    const said = observer && words();
+    if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
-    if (observer) renderNew();
+    if (said) renderNew();
     if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
@@ -3200,7 +3283,7 @@
       if (observer) { clearTags(['data-gz-light', 'data-gz-dark', 'data-gz-hover']); sweepAll(); }
     }
     if (!s.look.tooltips) hideTip();
-    if (observer) syncDocTools();
+    if (said) syncDocTools();
     syncScene();
     themeEditors();
   };
@@ -3303,6 +3386,9 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     syncDocTools();
     syncFooter();
   };
+
+  // The helpers a file loaded by need() may use (Wave 1's features/*.js): this frame's, read through one name.
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, settings: () => settings });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.

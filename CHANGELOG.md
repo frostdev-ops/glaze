@@ -17,6 +17,24 @@ All notable changes to Glaze are documented here. The format follows
   with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
   kept on this device.
 
+### Changed
+
+- **Lighter on every page:** Glaze loads about 38% less code on Canvas and Blackboard pages. Its words in your
+  language, Download all and draft backup now load only on the pages that use them.
+
+### Fixed
+
+- **Canvas, dark palettes:** text that was too faint is now readable:
+  - the list view's item labels, due times, points and status pills;
+  - its course titles, which now show in each course's color;
+  - announcement dates, the inbox's preview line, a locked module's unlock date, and "late" on an assignment.
+- **Canvas, dark palettes:** the white line under the list view's course titles is gone, and unchecked calendars
+  show as empty boxes.
+- **Canvas, dark palettes:** diagrams and equations in quizzes and pages that are drawn in black on a see-through
+  background show again.
+- **Canvas, light palettes:** "Complete All Items" and the chosen calendar view use a deeper accent that reads.
+- **Canvas:** quiz preview notices use the palette.
+
 ## [2.2.0] — 2026-10-15
 
 ### Added

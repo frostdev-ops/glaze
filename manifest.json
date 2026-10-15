@@ -50,17 +50,10 @@
       ],
       "js": [
         "lib/color.js",
-        "i18n/de.js",
-        "i18n/es.js",
-        "i18n/fr.js",
-        "i18n/nl.js",
-        "i18n/pt-BR.js",
         "lib/i18n.js",
         "lib/page.js",
         "lib/grades.js",
         "lib/fonts.js",
-        "lib/drafts.js",
-        "lib/zip.js",
         "defaults.js",
         "content.js"
       ],
