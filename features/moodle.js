@@ -22,10 +22,8 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
   };
 
   // The Timeline's own call, for the week ahead. ponytail: Moodle's cap of 50 events; a week with more shows the soonest 50.
-  // content.js asks for it once a page load and at most every ten minutes (dueWeek): the course list is kept fresh with it.
   const due = (now) => {
     const from = Math.floor(now / 1000);
-    record().catch(() => {});
     return service('core_calendar_get_action_events_by_timesort', { timesortfrom: from, timesortto: from + 7 * 86400, limitnum: 50, limittononsuspendedevents: true })
       .then((d) => M.due(d, now, location.origin));
   };
@@ -48,13 +46,49 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
     ];
   };
 
-  // Every course the student is in, for the editor's list, the course menu and the tint (with due, above), kept beside
-  // other sites' courses (storage.local seenCourses, content.js's course keys).
-  const record = () => service('core_course_get_enrolled_courses_by_timeline_classification', { classification: 'all', limit: 0, offset: 0, sort: 'fullname' })
-    .then((d) => {
-      const seen = M.seen(d, GZ_CTX.canvasCourseKey);
-      if (Object.keys(seen).length) GZ_CTX.local((l) => l.get('seenCourses', (r) => l.set({ seenCourses: { ...r?.seenCourses, ...seen } })));
-    });
+  // Every course the student is in, for the editor's list, the course menu, the tint and the cards (below), kept beside
+  // other sites' courses (storage.local seenCourses, content.js's course keys). content.js asks once a page load (top
+  // frame); Moodle is asked when this root (the courses' keys' own: one host can hold two Moodles, in folders) has no
+  // course kept, or its list is ten minutes old (`seenCoursesAt <key prefix>`). A failed read is asked again next page.
+  let recording = null;
+  const record = () => {
+    paint();
+    const pre = GZ_CTX.canvasCourseKey('x')?.slice(0, -1); // moodle:<root>/
+    if (!/^moodle:https?:\/\//.test(pre)) return Promise.resolve();
+    const at = `seenCoursesAt ${pre}`;
+    const get = (keys) => new Promise((res) => GZ_CTX.local((l) => l.get(keys, (r) => res(r || {}))));
+    return (recording ||= get(['seenCourses', at]).then((r) => {
+      if (Date.now() - (r[at] || 0) < 600000 && Object.keys(r.seenCourses || {}).some((k) => k.startsWith(pre) && /^\d+$/.test(k.slice(pre.length)))) return;
+      return service('core_course_get_enrolled_courses_by_timeline_classification', { classification: 'all', limit: 0, offset: 0, sort: 'fullname' })
+        .then((d) => {
+          const seen = M.seen(d, GZ_CTX.canvasCourseKey);
+          return get('seenCourses').then((now) => GZ_CTX.local((l) => l.set({ seenCourses: { ...now.seenCourses, ...seen }, [at]: Date.now() })));
+        });
+    }));
+  };
+
+  // Each card (Dashboard and My courses) in its course's own Look and tint, as the course's pages wear them (content.js
+  // applySettings): the palette as --gz-* on the card, from which moodle.css derives the rest there. Only on change; with
+  // the course menu's edits, the cards' redraws and a switch to dark, content.js's syncCards calls this again.
+  const painted = new WeakMap();
+  const paint = () => {
+    const s = GZ_CTX.settings();
+    const list = GZ_CTX.courseList();
+    const on = s.enabled && GZ_CTX.on();
+    for (const card of document.querySelectorAll('[data-region="course-content"][data-course-id]')) {
+      const key = GZ_CTX.canvasCourseKey(card.dataset.courseId);
+      const color = on && s.courses.tint && s.courses.tinted.includes(key) && list[key]?.color;
+      const look = on && s.courses.looks[key];
+      let colors = (look || color) && GZ_ACTIVE_COLORS(GZ_COURSE_LOOK(s, key), matchMedia('(prefers-color-scheme: dark)').matches);
+      if (color) colors = GZ_TINT(colors, color, s.courses.strength / 100);
+      const text = colors ? GZ_COLORS.map(([v]) => `${v}:${colors[v]}`).join(';') : '';
+      if ((painted.get(card) || '') === text) continue;
+      painted.set(card, text);
+      for (const [v] of GZ_COLORS) if (colors) card.style.setProperty(v, colors[v]); else card.style.removeProperty(v);
+      if (colors) card.dataset.gzCourseLook = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < 0.5 ? 'dark' : 'light';
+      else delete card.dataset.gzCourseLook;
+    }
+  };
 
   // Grades on course cards (Dashboard and My courses): the totals from the grades overview, asked once a page load when a
   // card is on the page. Each card's name is tagged; moodle.css draws the chip. Only on change: the cards are redrawn
@@ -81,7 +115,7 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
     });
   };
 
-  return { session, due, commands, cards, record };
+  return { session, due, commands, cards, record, paint };
 })();
 
 GZ_MOODLE_PAGE;

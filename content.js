@@ -261,12 +261,13 @@
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
   let canvasRecorded = false;
-  // Moodle's: <body>'s course (not 1, the site) at the root its theme's sheet is under.
+  // Moodle's: <body>'s course (1 is the site) under its theme sheet's root.
   const canvasCourseKey = (id = moodle ? document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1] : canvasCourseId()) => id ? `${site}:${moodle ? document.querySelector('link[href*="/theme/styles"]')?.href.split('/theme/')[0] : location.origin}/${id}` : null;
   const recordCourses = () => {
     if (!ultra) {
-      if (moodle || canvasRecorded || window.top !== window) return;
+      if (canvasRecorded || window.top !== window) return;
       canvasRecorded = true;
+      if (moodle) return moodleIn().then((m) => m.record(), () => {});
       Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
         const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
           name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
@@ -1534,7 +1535,7 @@
   // starts one while the switch is on, then handed every key. Top frame only.
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
   // Whether a key is one for the shortcuts: switched on, no modifier, not typing, and on Canvas and Moodle not repeated, not
-  // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too; Moodle's pages, too).
+  // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too, and Moodle's pages).
   const keyOn = (e) => !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)
     && (ultra || !(e.defaultPrevented || e.repeat || !(moodle || GZ_PAGE.canvasKeys(location.pathname)) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')));
   let keysWaiting = null; // the keys pressed while keys.js loads, as they were: handed over in order when it's in
@@ -1924,7 +1925,7 @@
   };
   // Canvas's dashboard cards: features/cards.js.
   const cardUI = (f) => need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => f(GZ_CARD_UI), () => {});
-  const syncCards = () => { if (!isPreview && !moodle && location.pathname === '/') cardUI((m) => m.paint()); };
+  const syncCards = () => { if (moodle) globalThis.GZ_MOODLE_PAGE?.paint(); else if (!isPreview && location.pathname === '/') cardUI((m) => m.paint()); };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
     globalThis.GZ_COURSE_MENU?.close(false, true);

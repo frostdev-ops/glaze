@@ -326,9 +326,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
 - **On Moodle.** At most every ten minutes, Glaze asks your own Moodle site for the activities due in the
   next seven days, with the same request Moodle's own Timeline block makes (`core_calendar_get_action_events_by_timesort`
   through Moodle's `/lib/ajax/service.php`, with your existing session and the page's own session key), and keeps
-  them as the due list above. With it, it asks for your courses, the same request as Moodle's Course overview block
+  them as the due list above. At most every ten minutes for each Moodle site (at once for one whose courses it
+  doesn't know yet), it asks for your courses, the same request as Moodle's Course overview block
   (`core_course_get_enrolled_courses_by_timeline_classification`), and keeps each one's name and colour as your
-  courses above, so the editor, the course menu and the tint know them. When you open the command palette, it asks
+  courses above, so the editor, the course menu, the tint and the course cards know them. When you open the command palette, it asks
   for your courses in progress with the same request. On
   the Dashboard and My courses, with Grades on course cards on, it loads your grades overview page
   (`/grade/report/overview/index.php`), as you would see it, once per page, to read each course's total. These are

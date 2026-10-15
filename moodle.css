@@ -805,3 +805,18 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 }
 #gz-cm .gz-cm-look:hover { transform: var(--gz-lift); }
 #gz-cm .gz-cm-look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
+/* A card in its course's own Look or tint: features/moodle.js puts that palette on the card (--gz-*), and what the page
+   derives from the palette is derived again here, from the card's. */
+html [data-region="course-content"][data-gz-course-look] {
+  --gz-panel: var(--gz-surface);
+  --gz-band: color-mix(in srgb, var(--gz-ink) 6%, var(--gz-surface));
+  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface));
+  --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
+  --gz-on-soft: var(--gz-accent);
+  --bs-white: var(--gz-panel); --bs-body-bg: var(--gz-surface); --bs-body-color: var(--gz-ink); --bs-emphasis-color: var(--gz-ink);
+  --bs-secondary-color: var(--gz-ink-muted); --bs-tertiary-color: var(--gz-ink-faint); --bs-primary: var(--gz-accent);
+  --bs-link-color: var(--gz-on-soft); --bs-link-hover-color: var(--gz-on-soft); --bs-border-color: var(--gz-line);
+  --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-line); --bs-card-color: var(--gz-ink);
+  color: var(--gz-ink); background-color: var(--gz-panel); border-color: var(--gz-line) !important;
+}
+html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft: var(--gz-accent-hi); }
