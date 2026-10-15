@@ -1565,6 +1565,7 @@
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Los XP de racha requieren activar Racha; los XP ganados se conservan al desactivarla.",
   "Close or unpin a tab to open another course tab.": "Cierra o desfija una pestaña para abrir otra pestaña de curso.",
   "Course tabs": "Pestañas de cursos",
+  "This overview is not a cached Assignment. The tab returns to Course Content.": "Este resumen no corresponde a una tarea en caché. La pestaña vuelve al contenido del curso.",
   "On Blackboard Ultra, each course you open gets a tab, as pages do in your browser. A tab takes you back to where you were in its course; one left in a test or an assignment opens at the course's tool instead, never in the test.": "En Blackboard Ultra, cada curso que abres tiene una pestaña, como las páginas en tu navegador. Una pestaña te lleva a donde estabas en su curso; una que dejaste en un examen o una tarea se abre en la herramienta del curso, nunca en el examen.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Fija una pestaña para conservarla, arrastra las pestañas para ordenarlas y cierra una con su × o con el botón central del ratón. Con el teclado: las flechas pasan de una pestaña a otra, Suprimir cierra una, P la fija y Mayús con una flecha la mueve.",
   "Above the course's bar": "Sobre la barra del curso",

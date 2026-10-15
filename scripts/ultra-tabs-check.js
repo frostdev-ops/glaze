@@ -18,11 +18,12 @@ require('../lib/coursetabs.js');
 const ext = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-ultra-tabs-'));
 const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
-const PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-course.html'), 'utf8');
+let PAGE = fs.readFileSync(path.join(__dirname, '..', 'test/fixtures/ultra-course.html'), 'utf8');
 const SITE = 'https://bb.school.test';
 const CSS_URL = 'https://cdn.school.test/ultra/uiv4001.0.0-rel.37_abc/app.css';
 const COURSES = [['_101_1', 'Computer Science I', 'FA26-CS101-01', 1], ['_102_1', 'Spanish 110', 'FA26-SPAN110-02', 2], ['_103_1', 'Calculus II', 'FA26-MATH201-01', 4],
   ['_104_1', 'World History', 'FA26-HIST150-01', 6], ['_105_1', 'Biology Lab', 'FA26-BIO120-01', 8]];
+if (process.env.GZ_B8B_FOCUSED) { PAGE = PAGE.replace("name: 'Computer Science I'", "name: '209940-ZZ3456-007'"); COURSES[0][1] = '209940-ZZ3456-007'; }
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails++; };
@@ -51,6 +52,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       if (u.origin === SITE && /^\/learn\/api\/v1\/users\/_\d+_1\/memberships/.test(u.pathname)) {
         return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ results: COURSES.map(([id, name, code, i]) => ({ courseId: id, courseCardColorIndex: i, userHasHidden: false, role: 'S', course: { id, courseId: code, displayId: code, name, isOrganization: false } })) }) });
       }
+      if (u.origin === SITE && /^\/learn\/api\/v1\/courses\/_\d+_1\/gradebook\/grades$/.test(u.pathname)) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ results: [
+        { columnId: '_8140_1', status: 'NotAttempted', column: { id: '_8140_1', contentId: '_8120_1', assessmentSubtype: 'Assignment', name: 'Writing overview' } },
+        { columnId: '_8141_1', status: 'NotAttempted', column: { id: '_8141_1', contentId: '_8121_1', assessmentSubtype: 'Test', name: 'Test overview' } },
+      ] }) });
       if (u.origin === SITE && u.pathname.startsWith('/learn/api/')) return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
       return route.abort();
     });
@@ -88,9 +93,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       return s && { at: s.dataset.at, tabs: [...s.querySelectorAll('[role="tab"]')].map((e) => ({ cid: e.dataset.courseId, sel: e.getAttribute('aria-selected') === 'true', pin: e.hasAttribute('data-pin'), label: e.getAttribute('aria-label') })), note: s.querySelector('.gz-ctabs-note')?.textContent || '' };
     });
     const order = async () => (await strip())?.tabs.map((x) => x.cid).join(' ');
-    const settled = (cid) => page.waitForFunction((c) => !document.getElementById('gz-ctabs-snap') && !document.querySelector('.spinner, [data-gz-loading]')
-      && document.querySelector(`#gz-ctabs [role="tab"][data-course-id="${c}"][aria-selected="true"]`)
-      && [...document.querySelectorAll('div.bb-course-navigation a[href]')].some((a) => a.getAttribute('href').startsWith(`/ultra/courses/${c}/`)), cid, { timeout: 10000 });
+    const settled = (cid) => page.waitForFunction(({ cid, name }) => !document.getElementById('gz-ctabs-snap') && !document.querySelector('.spinner, [data-gz-loading]')
+      && document.querySelector(`#gz-ctabs [role="tab"][data-course-id="${cid}"][aria-selected="true"]`)
+      && ([...document.querySelectorAll('div.bb-course-navigation a[href]')].some((a) => a.getAttribute('href').startsWith(`/ultra/courses/${cid}/`))
+        || document.querySelector('.routed-page.bb-offcanvas-container h1')?.textContent.includes(name)), { cid, name: COURSES.find((c) => c[0] === cid)?.[1] }, { timeout: 10000 });
     const open = async (cid) => {
       const previous = phase; phase = `native-open:${cid}`;
       try {
@@ -111,6 +117,221 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
     await page.click('a[href="/ultra/courses/_101_1/outline"]');
     await settled('_101_1');
+    const routedChecks = async () => {
+      // All reads below are native feature reads or fixture navigation; RESTORE labels only the active inert copy.
+      const quietTimer = async () => {
+        await opts.evaluate(async () => {
+          const { widgetLayout } = await chrome.storage.local.get('widgetLayout');
+          if (widgetLayout?.boards?.pages) await chrome.storage.local.set({ widgetLayout: { ...widgetLayout, boards: { ...widgetLayout.boards, pages: widgetLayout.boards.pages.map((x) => x.id === 'timer' ? { ...x, on: false } : x) } } });
+        });
+        await page.waitForFunction(() => !document.querySelector('#gz-float section.gz-w[data-tile="timer"]'));
+      };
+      await quietTimer();
+      await open('_101_1');
+      if (process.env.GZ_B8B_FOCUSED) {
+        const label = await page.locator('#gz-ctabs [data-course-id="_101_1"]').evaluate((e) => ({ text: e.querySelector('.gz-ctab-name').textContent, title: e.title, aria: e.getAttribute('aria-label') }));
+        ok(label.text === 'ZZ 3456' && label.title.includes('209940-ZZ3456-007') && label.aria.includes('209940-ZZ3456-007') && label.aria.includes('FA26-CS101-01'), `auto short label retains original metadata (${JSON.stringify(label)})`);
+        const choice = async (label, nick = '') => {
+          await opts.evaluate(async ({ label, nick }) => {
+            const { tabs, courses } = await chrome.storage.sync.get(['tabs', 'courses']);
+            await chrome.storage.sync.set({ tabs: { ...tabs, label }, courses: { ...courses, names: { ...courses.names, _101_1: nick } } });
+          }, { label, nick });
+        };
+        for (const mode of ['short', 'name', 'code']) {
+          await choice(mode, 'My reading');
+          await page.waitForFunction(() => document.querySelector('#gz-ctabs [data-course-id="_101_1"] .gz-ctab-name')?.textContent === 'My reading');
+          const metadata = await page.locator('#gz-ctabs [data-course-id="_101_1"]').getAttribute('aria-label');
+          ok(metadata.includes('209940-ZZ3456-007') && metadata.includes('FA26-CS101-01'), `nickname wins in ${mode} while full metadata remains accessible`);
+        }
+        for (const [mode, expected] of [['name', '209940-ZZ3456-007'], ['code', 'FA26-CS101-01'], ['short', 'ZZ 3456']]) {
+          await choice(mode);
+          await page.waitForFunction((text) => document.querySelector('#gz-ctabs [data-course-id="_101_1"] .gz-ctab-name')?.textContent === text, expected);
+          ok(true, `explicit ${mode} choice displays ${expected}`);
+        }
+        await open('_102_1');
+        await opts.evaluate(async () => { const { tabs } = await chrome.storage.sync.get('tabs'); await chrome.storage.sync.set({ tabs: { ...tabs, cap: 2 } }); });
+        await open('_103_1');
+        ok((await strip()).note.includes('Closed ZZ 3456'), 'the tab-cap note uses the automatic short display label');
+        await opts.evaluate(async () => { const { tabs } = await chrome.storage.sync.get('tabs'); await chrome.storage.sync.set({ tabs: { ...tabs, cap: 8 } }); });
+        await open('_101_1');
+      }
+      await isolated(async () => {
+        if (!globalThis.__b8bNet) {
+          globalThis.__b8bNet = [];
+          const original = fetch;
+          globalThis.fetch = (...args) => { __b8bNet.push({ url: String(args[0]), method: args[1]?.method || 'GET', active: GZ_CTABS.showing(), page: location.href, at: performance.now(), stack: new Error().stack }); return original(...args); };
+        }
+        const until = performance.now() + 3000;
+        while (!GZ_SITE_ULTRA.assignment('_101_1', '_8120_1') && performance.now() < until) await new Promise((r) => setTimeout(r, 25));
+        if (!GZ_SITE_ULTRA.assignment('_101_1', '_8120_1')) throw new Error('native gradebook did not establish the cached Assignment');
+        return true;
+      });
+      await open('_102_1'); await switchTab('_101_1');
+      const native = async (cls) => {
+        phase = `B8b:NATIVE:${cls}`;
+        await page.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
+        await page.click(cls); await settled('_101_1');
+        ok((await strip())?.at === 'routed', `strip remains on ${cls}`);
+        ok(await page.evaluate(() => !document.querySelector('div.bb-course-navigation, .panel-wrap, #main-content, #main-content-inner')), `${cls} uses the full routed structure`);
+      };
+      const position = async (top) => {
+        const measured = await page.evaluate((n) => {
+        const main = document.querySelector('main[class*="contentGridArea"]');
+        let sc = main;
+        while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
+        sc = sc === document.body ? document.scrollingElement : sc;
+        const range = sc.scrollHeight - sc.clientHeight;
+        sc.scrollTop = n;
+        return { tag: sc.localName, cls: sc.className, client: sc.clientHeight, height: sc.scrollHeight, range, requested: n, actual: sc.scrollTop };
+        }, top);
+        ok(measured.range > top && measured.actual === top, `native routed scroller accepts its saved position (${JSON.stringify(measured)})`);
+      };
+      const saved = (route, top, cid = '_101_1') => opts.evaluate(async ({ route, top, cid }) => {
+        const until = performance.now() + 4000;
+        while (performance.now() < until) {
+          const all = await chrome.storage.local.get(null);
+          if (Object.values(all).some((v) => v?.tabs?.some((t) => t.cid === cid && t.path === route && t.top === top))) return true;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        throw new Error(`tab place was not saved: ${cid} ${route} ${top}`);
+      }, { route, top, cid });
+      const restore = async (route, top, label, cid = '_101_1', delayed = '') => {
+        await switchTab(cid === '_101_1' ? '_102_1' : '_101_1');
+        phase = `B8b:RESTORE:${label}`;
+        const start = requestDetails.length;
+        await page.click(`#gz-ctabs [data-course-id="${cid}"]`);
+        await page.waitForSelector('#gz-ctabs-snap', { timeout: 500 });
+        ok(await isolated(() => GZ_CTABS.showing()), `${label} displays its inert copy immediately`);
+        if (delayed) {
+          await page.waitForFunction((stage) => window.__b8bStage === stage, delayed);
+          const held = { active: await isolated(() => GZ_CTABS.showing()), native: await page.evaluate(() => ({ page: location.href, stage: window.__b8bStage, main: document.querySelector('main[class*="contentGridArea"]')?.textContent.slice(0, 100), timeOrigin: performance.timeOrigin })) };
+          ok(held.active && (delayed !== 'header-held' || !held.native.main), `${label} waits for native main replacement (${JSON.stringify(held)})`);
+          await page.waitForFunction(() => window.__b8bStage === 'empty');
+          ok(await isolated(() => GZ_CTABS.showing()), `${label} stays held while the native main is absent`);
+          await saved(route, top, cid);
+          ok(true, `${label} does not overwrite the target's saved scroll before content arrives`);
+          fs.writeFileSync(path.join(out, `B8b-${label}.json`), JSON.stringify(held, null, 2));
+        }
+        await isolated(async () => {
+          const until = performance.now() + 10000;
+          while (GZ_CTABS.showing() && performance.now() < until) await new Promise((r) => setTimeout(r, 5));
+          if (GZ_CTABS.showing()) throw new Error('cached view did not release');
+          return true;
+        });
+        phase = `B8b:LIVE:${label}`;
+        ok(requestDetails.length === start, `${label} restoration starts no requests (${JSON.stringify(requestDetails.slice(start))})`);
+        await settled(cid);
+        await page.waitForFunction((n) => {
+          const main = document.querySelector('main[class*="contentGridArea"]'); let sc = main;
+          while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
+          return Math.abs((sc === document.body ? document.scrollingElement : sc).scrollTop - n) < 2;
+        }, top);
+        ok(await page.evaluate(() => location.pathname + location.search) === route, `${label} keeps its exact route/query`);
+        ok((await strip())?.at === 'routed', `${label} keeps the strip after settlement`);
+      };
+      await page.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
+      await page.click('.b8b-folder');
+      await opts.evaluate(async () => {
+        const until = performance.now() + 4000;
+        while (performance.now() < until) {
+          if ((await chrome.storage.local.get('coursePlace')).coursePlace?._101_1?.open?.includes('_8130_1')) return true;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        throw new Error('the native folder expansion was not saved');
+      });
+      await native('a.b8b-document');
+      const doc = '/ultra/courses/_101_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
+      phase = 'B8b:NATIVE:history'; await page.goBack(); await settled('_101_1');
+      ok(await page.evaluate(() => location.pathname.endsWith('/outline')), 'Back from a routed document restores the native outline');
+      try { await page.waitForSelector('.b8b-folder[aria-expanded="true"]', { timeout: 5000 }); }
+      catch (error) {
+        const receipt = { native: await page.evaluate(() => ({ page: location.href, folder: document.querySelector('.b8b-folder')?.outerHTML, pagePlace: sessionStorage.getItem('gz-place:_101_1') })),
+          settings: await isolated(() => ({ enabled: GZ_CTX.on(), place: GZ_CTX.settings().enhance.place, loaded: typeof GZ_PLACE, acted: GZ_CTX.acted(), asked: GZ_CTX.placeAsked() })), local: await opts.evaluate(() => chrome.storage.local.get('coursePlace')) };
+        fs.writeFileSync(path.join(out, 'B8b-folder-failure.json'), JSON.stringify(receipt, null, 2)); throw error;
+      }
+      ok(true, 'the existing Your place path restores the open folder after the routed document');
+      await page.goForward(); await settled('_101_1');
+      ok(await page.evaluate(() => location.pathname + location.search) === doc && (await strip())?.at === 'routed', 'Forward restores the routed document with its strip and query');
+      for (const at of ['above', 'between', 'below']) {
+        await opts.evaluate(async (at) => { const { tabs } = await chrome.storage.sync.get('tabs'); await chrome.storage.sync.set({ tabs: { ...tabs, at } }); }, at);
+        await page.waitForFunction((a) => {
+          const strip = document.getElementById('gz-ctabs'), hd = document.querySelector('[class*="panelHeaderContainerRoot"]');
+          return strip?.dataset.at === 'routed' && (a === 'above' ? strip.nextElementSibling === hd : strip.previousElementSibling === hd);
+        }, at);
+        ok(true, `routed header placement ${at}`);
+      }
+      if (!process.env.GZ_B8B_FOCUSED || process.env.GZ_B8B_GEOMETRY) {
+        const layouts = [];
+        await opts.evaluate(() => chrome.storage.local.set({ widgetLayout: { boards: { pages: [{ id: 'timer', on: true, size: 's', x: 0, y: 0 }] } } }));
+        for (const preset of ['Frost', 'Paper']) for (const [at, size] of [['above', 'small'], ['between', 'medium'], ['below', 'large']]) for (const width of [1280, 375]) {
+          phase = `B8b:NATIVE:geometry:${preset}:${at}:${size}:${width}`;
+          await settings({ preset, enhance: { widgets: true }, tabs: { at }, nav: { size } });
+          await page.setViewportSize({ width, height: 860 });
+          await page.waitForSelector('#gz-float section.gz-w[data-tile="timer"]');
+          await page.waitForTimeout(200);
+          const g = await page.evaluate(() => {
+            const st = document.getElementById('gz-ctabs'), hd = document.querySelector('[class*="panelHeaderContainerRoot"]');
+            const timer = document.querySelector('#gz-float section.gz-w[data-tile="timer"]');
+            const a = st.getBoundingClientRect(), b = hd.getBoundingClientRect(), c = timer.getBoundingClientRect();
+            const hit = document.elementFromPoint(a.left + Math.min(40, a.width / 2), a.top + a.height / 2);
+            return { strip: a.toJSON(), header: b.toJSON(), timer: c.toJSON(), at: st.dataset.at, hit: !!hit?.closest('#gz-ctabs'),
+              marker: st.hasAttribute('data-gz-keep-clear'), count: document.querySelectorAll('#gz-ctabs').length, wide: document.documentElement.scrollWidth - innerWidth };
+          });
+          const placed = at === 'above' ? g.strip.bottom <= g.header.top + 1 : g.header.bottom <= g.strip.top + 1;
+          const overlap = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+          const clear = !overlap(g.timer, g.strip) && !overlap(g.timer, g.header);
+          const valid = g.at === 'routed' && placed && clear && g.hit && g.marker && g.count === 1 && g.wide <= 0 && g.timer.right <= width + 1;
+          layouts.push({ preset, at, size, width, placed, clear, ...g });
+          await page.screenshot({ path: path.join(out, `B8b-routed-${preset}-${at}-${width}.png`) });
+          fs.writeFileSync(path.join(out, 'B8b-routed-layouts.json'), JSON.stringify(layouts, null, 2));
+          ok(valid, `routed ${at}/${preset}/${width}px/${size}: native header and strip stay reachable and clear of the global timer (${JSON.stringify(g)})`);
+          if (!valid) throw new Error('routed native-header/strip geometry failed');
+        }
+        await quietTimer(); await settings(); await page.setViewportSize({ width: 1280, height: 860 });
+      }
+      await position(470); await saved(doc, 470); await restore(doc, 470, 'document-nested-scroll');
+      await switchTab('_102_1');
+      phase = 'B8b:NATIVE:second-document'; await page.click('a.b8b-document'); await settled('_102_1');
+      const second = '/ultra/courses/_102_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
+      await position(380); await saved(second, 380, '_102_1');
+      await page.evaluate(() => { window.__b8bHeaderOnly = true; });
+      await restore(doc, 470, 'header-before-main', '_101_1', 'header-held');
+      await page.evaluate(() => { window.__b8bHeaderOnly = false; window.__b8bReuse = true; });
+      await restore(second, 380, 'reused-header-old-main', '_102_1', 'old-held');
+      await page.evaluate(() => { window.__b8bReuse = false; });
+      await switchTab('_101_1');
+      phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
+      await native('a.b8b-document-self');
+      const self = '/ultra/courses/_101_1/document/_8112_1?view=content&state=view';
+      await position(430); await saved(self, 430); await restore(self, 430, 'document-main-scroll');
+      phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
+      await native('a.b8b-document-fallback');
+      const fallback = '/ultra/courses/_101_1/document/_8111_1?view=content&state=view';
+      await position(520); await saved(fallback, 520); await restore(fallback, 520, 'document-page-scroll');
+      phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
+      await native('a.b8b-assignment');
+      const overview = '/ultra/courses/_101_1/assessment/_8120_1/overview?courseId=_101_1';
+      await position(390); await saved(overview, 390); await restore(overview, 390, 'cached-assignment-overview');
+      await isolated(() => { globalThis.__b8bClassifier = GZ_SITE_ULTRA.assignment; GZ_SITE_ULTRA.assignment = () => false; return true; });
+      await switchTab('_102_1'); await switchTab('_101_1');
+      ok(await page.evaluate(() => location.pathname.endsWith('/outline')), 'a stored overview cannot authorize a target after its positive cache check is lost');
+      await isolated(() => { GZ_SITE_ULTRA.assignment = __b8bClassifier; return true; });
+      for (const cls of ['a.b8b-test', 'a.b8b-unknown']) {
+        if (await page.locator('.routed-page a').count()) { phase = 'B8b:NATIVE:overview-close'; await page.click('.routed-page a'); await settled('_101_1'); }
+        await native(cls); await switchTab('_102_1'); await switchTab('_101_1');
+        ok(await page.evaluate(() => location.pathname.endsWith('/outline')), `${cls} returns quietly to the outline`);
+      }
+      ok(await page.evaluate(() => window.__attempts === 0), 'no routed overview starts or resumes an attempt');
+      const nativeNet = await isolated(() => __b8bNet);
+      ok(!nativeNet.some((r) => r.active), `routed snapshot callbacks initiate no fetch (${JSON.stringify(nativeNet.filter((r) => r.active))})`);
+      const report = requestDetails.filter((r) => r.phase.startsWith('B8b:'));
+      fs.writeFileSync(path.join(out, 'B8b-requests.json'), JSON.stringify(report, null, 2));
+      fs.writeFileSync(path.join(out, 'B8b-fetch-starts.json'), JSON.stringify(nativeNet, null, 2));
+      phase = 'B8b:complete';
+    };
+    if (process.env.GZ_B8B_FOCUSED) {
+      await routedChecks(); console.log(`${fails ? 'FAILED' : 'passed'} routed document/Assignment controls`); process.exitCode = fails ? 1 : 0; return;
+    }
     if (process.env.GZ_B8_REQUEST_PROBE) await isolated(() => {
       globalThis.__b8Net = []; globalThis.__b8SeenWrites = [];
       const stored = chrome.storage.local.set;
@@ -127,7 +348,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       return true;
     });
     let s = await strip();
-    ok(s.tabs.length === 1 && s.tabs[0].sel && s.tabs[0].label === 'Computer Science I', `a course opened gets a tab, named and selected (${JSON.stringify(s.tabs)})`);
+    ok(s.tabs.length === 1 && s.tabs[0].sel && s.tabs[0].label === 'Computer Science I · FA26-CS101-01', `a course opened gets a tab, named and selected (${JSON.stringify(s.tabs)})`);
     ok(s.at === 'above', `above the course's bar by default (${s.at})`);
     phase = 'native-navigation';
     // Gradebook, scrolled: the place the tab keeps.
@@ -257,8 +478,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
 
     // ---- never back into an assessment ----
     await page.click('a.js-course-outline-tool');
-    await page.waitForFunction(() => location.pathname.endsWith('/outline') && document.querySelector('a[href*="/assessment/"]'));
-    await page.click('a[href*="/assessment/"]');
+    await page.waitForFunction(() => location.pathname.endsWith('/outline') && document.querySelector('a[href*="/outline/assessment/"]'));
+    await page.click('a[href*="/outline/assessment/"]');
     await page.waitForFunction(() => location.pathname.includes('/assessment/'));
     const views = await page.evaluate(() => window.__assessmentViews);
     await switchTab('_102_1');
@@ -267,7 +488,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     ok(await page.evaluate(() => [window.__assessmentViews, window.__attempts]).then(([v, a]) => v === views && a === 0), 'the assessment wasn\'t opened again, nor an attempt started');
 
     // ---- an item opened over the course: the strip at its panel ----
-    await page.click('a[href*="/document/"]');
+    await page.click('a[href*="/outline/edit/document/"]');
     await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
     const nested = await page.evaluate(() => { const r = document.getElementById('gz-ctabs').getBoundingClientRect(); const e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e?.closest('#gz-ctabs'); });
     ok(nested, 'on a document opened over the course, the strip is on top, at its panel');
@@ -359,8 +580,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       await settings({ preset });
       await page.setViewportSize({ width: 1280, height: 860 });
       await page.click('a.js-course-outline-tool').catch(() => {});
-      await page.waitForSelector('a[href*="/document/"]');
-      await page.click('a[href*="/document/"]');
+      await page.waitForSelector('a[href*="/outline/edit/document/"]');
+      await page.click('a[href*="/outline/edit/document/"]');
       await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
       for (const at of ['above', 'between', 'below']) {
         for (const width of [1280, 375]) {
@@ -412,6 +633,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.setViewportSize({ width: 1280, height: 860 });
     await page.waitForTimeout(250);
     phase = 'interactions';
+    await routedChecks();
 
     // ---- the copies: in the worker's memory only, dropped on switch-off and on another account ----
     let kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));

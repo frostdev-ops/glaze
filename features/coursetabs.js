@@ -4,7 +4,7 @@
 // Each course the student opens gets a tab, as a browser's pages do: closed, pinned and reordered with the mouse or the
 // keyboard, at most `cap` of them. The strip sits above the course's sticky top bar, between its two rows or below it; on
 // an item opened over the course (a document, a discussion), at that panel's header; outside a course, above the page.
-// A tab goes back to where it was in its course (lib/coursetabs.js target: never into a test, attempt or assessment).
+// A tab goes back to where it was in its course; an Assignment overview needs a positive already-cached column.
 // Leaving a course keeps an inert copy of what was on screen (snapshot), in memory only: this page's, and the worker's
 // storage.session across reloads, never on disk. A tab's click shows its copy at once while Ultra opens the course, then
 // fades to the live page. Nothing is fetched or opened in the background: a copy is only what the student already saw.
@@ -40,20 +40,29 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const DEMO = [['_1_1', 'Computer Science I', 'FA26-CS101-01', 2], ['_2_1', 'Spanish 110', 'FA26-SPAN110-02', 3], ['_3_1', 'Calculus II', 'FA26-MATH201-01', 5]]
     .map(([cid, name, code, slot], i) => ({ cid, name, code, slot, pin: i === 2, at: 0, path: '', top: 0 }));
 
-  const local = (fn) => { try { fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
+  const local = (fn) => { try { if (chrome.runtime?.id) fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
   const key = () => L.storeKey(location.origin, who);
   // The worker keeps snapshots across reloads (lib/background.js 'glaze:snap'), for this site and account only.
   const send = (m) => {
-    if (preview || !who) return Promise.resolve(null);
+    if (preview || !who || !chrome.runtime?.id) return Promise.resolve(null);
     try { const sent = epoch; return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:snap', uid: who, born: performance.timeOrigin, epoch, ...m })).then((r) => m.op === 'hello' || sent === epoch ? r : null, () => null); } catch { return Promise.resolve(null); }
   };
-  const readPrefs = () => new Promise((res) => { try { chrome.storage.sync.get('tabs', (r) => res(r?.tabs)); } catch { res(); } })
+  const readPrefs = () => new Promise((res) => { try { if (chrome.runtime?.id) chrome.storage.sync.get('tabs', (r) => res(r?.tabs)); else res(); } catch { res(); } })
     .then((raw) => { prefs = GZ_SANITIZE({ tabs: raw }).tabs; });
   let saveTimer = 0;
   const saveNow = () => { clearTimeout(saveTimer); if (who && loaded && !preview) local((s) => s.set({ [key()]: { tabs } })); };
   const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); };
   const here = () => (preview ? demo : ctx.courseId());
   const shown = (e) => !!e && e.getClientRects().length > 0;
+  const assignment = (path) => {
+    const m = L.OVERVIEW.exec(path);
+    return !!m && globalThis.GZ_SITE_ULTRA?.assignment?.(m[1], m[2]) === true;
+  };
+  const safePath = (path, search) => {
+    if (path === undefined) { path = location.pathname; search = location.search; }
+    return L.safe(path, search, assignment(path));
+  };
+  let refused = '';
 
   // ---- where the strip goes -------------------------------------------------------------------------------------
   // The course's top bar (parity/spikes/B8.md): div.bb-course-navigation, sticky, two rows (the header, then the tools in
@@ -62,6 +71,32 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const bars = document.getElementsByClassName('bb-course-navigation');
   const courseBar = () => { for (let i = bars.length - 1; i >= 0; i--) if (bars[i].localName === 'div') return bars[i]; return null; };
   const topLayer = () => [...document.querySelectorAll(LAYER)].filter(shown).pop() || null;
+  // Full routed documents/overviews have neither the course bar nor the old panel wrappers. Peek stays excluded.
+  const routed = () => [...document.querySelectorAll('.routed-page.bb-offcanvas-container:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)')]
+    .filter((e) => shown(e) && !e.querySelector('.bb-course-navigation')).pop() || null;
+  const routedHeader = (page) => page.querySelector('[class*="panelHeaderContainerRoot"], .panel-header, header') || page.querySelector('h1');
+  const routedMain = (page) => page?.querySelector('main[class*="contentGridArea"], main, [role="main"]');
+  // A URL or header change cannot prove that Ultra replaced the outgoing content. Require a populated main and a
+  // changed main/content node; otherwise the existing bounded full-load fallback keeps the old copy safe.
+  const view = () => {
+    const page = routed(), main = routedMain(page);
+    let child = main?.lastElementChild;
+    while (child?.id?.startsWith('gz-')) child = child.previousElementSibling;
+    return page && [page, main, child];
+  };
+  const sameView = (a, b) => !!a && !!b && a[1] === b[1] && a[2] === b[2];
+  const readyView = (v) => !!v?.[1] && shown(v[1]) && (!!v[2] || [...v[1].childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) && !loading(v[0]);
+  let liveView = null;
+  const observeView = () => {
+    const v = view();
+    if (!v) { liveView = null; return; }
+    if (readyView(v) && (!liveView || !sameView(v, liveView.nodes))) liveView = { nodes: v, path: location.pathname + location.search };
+  };
+  const atView = (path = location.pathname + location.search) => {
+    const v = view();
+    return v ? readyView(v) && liveView && sameView(v, liveView.nodes) && (liveView.path === path || safePath(...liveView.path.split('?')) === path)
+      : !/^\/ultra\/courses\/_\d+_\d+\/(?:document|assessment)\//.test(path);
+  };
   // A panel over the bar: one holding the bar's middle (Glaze may inset panels a little from the window's edges).
   const covers = (a, b) => { const r = a.getBoundingClientRect(), s = b.getBoundingClientRect(), x = s.left + s.width / 2, y = s.top + s.height / 2; return r.left <= x && x <= r.right && r.top <= y && y <= r.bottom; };
   const prev = (e) => { const p = e.previousElementSibling; return p === strip ? p.previousElementSibling : p; };
@@ -72,7 +107,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     return r && r.parentElement && prev(r) ? r : null;
   };
   // { at, ok (already there), put } or null (nowhere: hidden).
-  const spot = (at, ok, put) => ({ at, ok: !!ok, put });
+  const spot = (at, ok, put, clear = null) => ({ at, ok: !!ok, put, clear });
   const home = () => {
     if (go?.over) return spot('snap', strip.parentElement === go.over, () => go.over.append(strip));
     const a = P().at;
@@ -90,13 +125,28 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (!hd) return spot('nested', top.firstElementChild === strip, () => top.prepend(strip));
       return a === 'above' ? spot('nested', strip.nextElementSibling === hd, () => hd.before(strip)) : spot('nested', strip.previousElementSibling === hd, () => hd.after(strip));
     }
+    const page = here() && routed();
+    if (page) {
+      const hd = routedHeader(page);
+      if (!hd) return spot('routed', page.firstElementChild === strip, () => page.prepend(strip));
+      return a === 'above' ? spot('routed', strip.nextElementSibling === hd, () => hd.before(strip), hd) : spot('routed', strip.previousElementSibling === hd, () => hd.after(strip), hd);
+    }
     // Outside a course (the Courses page, the calendar…): above the page, once there is a tab to go back to.
-    const page = !here() && loaded && tabs.length && (document.getElementById('main-content-inner') || document.getElementById('main-content'));
-    return page ? spot('page', page.firstElementChild === strip, () => page.prepend(strip)) : null;
+    const outside = !here() && loaded && tabs.length && (document.getElementById('main-content-inner') || document.getElementById('main-content'));
+    return outside ? spot('page', outside.firstElementChild === strip, () => outside.prepend(strip)) : null;
+  };
+  let clearHeader = null, hadClear = false;
+  const keepClear = (header) => {
+    if (header === clearHeader) return;
+    if (clearHeader && !hadClear) clearHeader.removeAttribute('data-gz-keep-clear');
+    clearHeader = header;
+    hadClear = !!header?.hasAttribute('data-gz-keep-clear');
+    if (header && !hadClear) header.setAttribute('data-gz-keep-clear', '');
   };
   const place = () => {
     if (!on || !strip) return;
     const w = home();
+    keepClear(w?.clear || null);
     if (!w) { strip.remove(); return; }
     if (!w.ok) {
       // A node moved loses focus: given back to the tab that had it.
@@ -109,9 +159,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // From content-ultra.js's mutation callback: only when Ultra replaced the bar or took the strip away with the old one.
   let seenBar = null;
   const held = () => {
-    if (!on || !strip || go?.over || (strip.isConnected && bars[0] === seenBar)) return;
-    seenBar = bars[0];
+    if (!on || !strip || go?.over) return;
+    const bar = courseBar();
+    if (strip.isConnected && (shown(bar) ? bar === seenBar : shown(seenBar) && seenBar.contains(strip))) return;
+    seenBar = shown(bar) ? bar : routed();
     place();
+    seenBar ||= strip.parentElement;
   };
   // The first paint's reservation (extras.css, set by content-ultra.js from this tab's sessionStorage before this file is in):
   // the strip's place and size, and whether pages outside a course show it.
@@ -153,6 +206,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     e.innerHTML = `<span class="gz-ctab-mark" aria-hidden="true"></span><span class="gz-ctab-name"></span><span class="gz-ctab-pin" aria-hidden="true">${ICON.pin}</span><span class="gz-ctab-x" aria-hidden="true">${ICON.x}</span>`;
     return e;
   };
+  const labelFor = (cid, name, code) => ctx.nickOf(cid) || (P().label === 'code' && code) || (P().label === 'short' ? L.shortName(name) : name);
   const draw = () => {
     if (!strip) return;
     const p = P();
@@ -163,7 +217,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const nick = ctx.nickOf(x.cid);
       const name = c.name || x.name || c.code || x.code || t('Course');
       const code = c.code || x.code || '';
-      return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: nick || (p.label === 'code' && code) || name, full: [nick || name, code !== name && code].filter(Boolean).join(' · '), slot: c.slot || x.slot || '' };
+      return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: labelFor(x.cid, name, code), full: [...new Set([nick, name, code].filter(Boolean))].join(' · '), slot: c.slot || x.slot || '' };
     });
     const k = JSON.stringify([rows, p, ctx.locale(), drag?.on && drag.cid]);
     if (k === drawn) return;
@@ -184,7 +238,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       set(e, 'tabindex', r.cid === roving ? '0' : '-1');
       set(e, 'data-pin', r.pin ? '' : null);
       set(e, 'data-drag', drag?.on && drag.cid === r.cid ? '' : null);
-      set(e, 'aria-label', r.pin ? t('{name}, pinned', { name: r.label }) : r.label);
+      set(e, 'aria-label', r.pin ? t('{name}, pinned', { name: r.full }) : r.full);
       set(e, 'title', r.full);
       const n = e.querySelector('.gz-ctab-name');
       if (n.textContent !== r.label) n.textContent = r.label;
@@ -218,21 +272,30 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (r.full) say(t('Close or unpin a tab to open another course tab.'));
     if (r.gone.length) {
       const g = r.gone[0];
-      say(t('Closed {name} to make room. Pin a tab to keep it open.', { name: ctx.nickOf(g.cid) || ctx.courseList()[g.cid]?.name || g.name || t('Course') }));
+      const c = ctx.courseList()[g.cid] || {};
+      say(t('Closed {name} to make room. Pin a tab to keep it open.', { name: labelFor(g.cid, c.name || g.name || c.code || g.code || t('Course'), c.code || g.code) }));
       for (const x of r.gone) { snaps.delete(x.cid); send({ op: 'forget', cid: x.cid }); }
     }
     save();
   };
   const notePlace = (cid) => {
+    if (!atView()) return;
     const x = tabs.find((y) => y.cid === cid);
-    const p = x && L.placeOf(location.pathname, location.search);
+    const p = x && L.placeOf(location.pathname, location.search, assignment(location.pathname));
+    if (L.OVERVIEW.test(location.pathname) && !p?.exact && refused !== location.pathname) {
+      refused = location.pathname;
+      say(t('This overview is not a cached Assignment. The tab returns to Course Content.'));
+    }
     if (p?.path && x.path !== p.path) { x.path = p.path; x.top = 0; save(); }
   };
   const onScroll = (e) => {
     const cid = !go && ctx.courseId();
     const sc = e.target === document ? document.scrollingElement : e.target;
-    const x = cid && sc instanceof Element && sc.contains(strip) && tabs.find((y) => y.cid === cid);
-    if (!x || !L.safe(location.pathname, location.search)) return;
+    const x = cid && sc === pageScroller() && tabs.find((y) => y.cid === cid);
+    if (!x || !safePath()) return;
+    observeView();
+    if (!atView()) return;
+    notePlace(cid);
     x.top = Math.round(sc.scrollTop);
     save();
   };
@@ -242,7 +305,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // with the ancestors CSS matches it by. Only a page a tab may go back to, and only once Ultra has finished building it.
   const loading = (el) => [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root')].some(shown);
   const layers = () => {
-    const base = courseBar()?.closest('.panel-wrap, .bb-offcanvas-panel');
+    const bar = courseBar();
+    const base = (shown(bar) && bar.closest('.panel-wrap, .bb-offcanvas-panel')) || routed();
     if (!base) return [];
     const all = [...document.querySelectorAll(LAYER)].filter(shown);
     const over = all.filter((l) => !base.contains(l) && base.compareDocumentPosition(l) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -325,10 +389,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     for (const y of defined) if (y !== c && c.contains(y)) asPlain(y);
     return sanitize(c).outerHTML;
   };
-  const capture = (cid = ctx.courseId(), path = L.safe(location.pathname, location.search)) => {
+  const capture = (cid = ctx.courseId(), path = safePath()) => {
     if (!on || signedOut || go || !path || ctx.holding()) return;
-    const bar = courseBar();
-    if (!bar || otherCourse(bar, cid)) return;
+    const [p, q] = path.split('?');
+    if (safePath(p, q) !== path || !atView(path)) return;
+    const bar = shown(courseBar()) ? courseBar() : null;
+    if (bar ? otherCourse(bar, cid) : !routed()) return;
     const ls = layers();
     if (!ls.length || ls.some(loading)) return;
     const r = strip?.isConnected && strip.getBoundingClientRect();
@@ -350,7 +416,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // To the worker, for after a reload: when the student leaves the course, or the page.
   const pushed = new WeakSet();
-  const push = (cid) => { const s = snaps.get(cid); if (s && !pushed.has(s)) { pushed.add(s); send({ op: 'put', cid, snap: s }); } };
+  const push = (cid) => { const s = snaps.get(cid); if (s && !pushed.has(s) && safePath(...s.path.split('?')) === s.path) { pushed.add(s); send({ op: 'put', cid, snap: s }); } };
   // A fresh copy for leaving some way Glaze doesn't see coming: a moment after each new page of the course, and every
   // 15 s while one stays open (Ultra never stops changing the page, so not after every change).
   let capTimer = 0;
@@ -379,7 +445,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (go) return;
     const cid = ctx.courseId();
     if (!cid) return;
-    if (e.type === 'popstate') return last && capture(last, L.safe(...lastPath.split('?')));
+    if (e.type === 'popstate') return last && capture(last, safePath(...lastPath.split('?')));
     if (!el || el.closest('#gz-ctabs')) return;
     const href = el.getAttribute('href') || '';
     if (el.closest('course-page-header') || (href.startsWith('/') && !href.includes(`/courses/${cid}/`))) capture();
@@ -482,7 +548,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const hit = [...root.querySelectorAll('a[href]')].reverse().find((a) => { const r = a.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; });
     const href = hit?.getAttribute('href') || '';
     let url;
-    try { const u = new URL(href, location.origin); if (u.origin === location.origin) url = L.safe(u.pathname, u.search); } catch { /* malformed native link */ }
+    try { const u = new URL(href, location.origin); if (u.origin === location.origin) url = safePath(u.pathname, u.search); } catch { /* malformed native link */ }
     if (hit && url) go.click = { href, url, text: hit.textContent.trim() };
   };
   const fade = (over) => {
@@ -509,13 +575,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (go) end(true);
     x.at = Date.now();
     save();
-    const url = L.target(x, P().place);
-    go = { cid, url, at: performance.now(), top: P().place && url === x.path ? x.top : 0 };
+    const url = L.target(x, P().place, assignment(String(x.path).split('?')[0]));
+    go = { cid, url, before: view(), at: performance.now(), top: P().place && url === x.path ? x.top : 0 };
     const s = snaps.get(cid);
-    if (s?.path === url) cover(s);
+    if (s?.path === url && safePath(...url.split('?')) === url) cover(s);
     else if (!s) {
       send({ op: 'get', cid }).then((r) => {
-        if (go?.cid !== cid || go.over || r?.snap?.path !== url || performance.now() - go.at > 500) return;
+        if (go?.cid !== cid || go.over || r?.snap?.path !== url || safePath(...url.split('?')) !== url || performance.now() - go.at > 500) return;
         keep(r.snap);
         cover(r.snap);
       });
@@ -529,10 +595,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const check = () => {
     const g = go;
     if (!g) return;
+    if (!ctx.on()) return sync(false);
     const dt = performance.now() - g.at;
-    const bar = courseBar();
-    const there = ctx.courseId() === g.cid && shown(bar) && !otherCourse(bar, g.cid);
-    if (there && dt > 120 && !ctx.holding() && !loading(bar.closest('.panel-wrap, .bb-offcanvas-panel') || document.body)) return end();
+    const bar = shown(courseBar()) ? courseBar() : null;
+    const v = view();
+    const there = ctx.courseId() === g.cid && (bar ? shown(bar) && !otherCourse(bar, g.cid) : readyView(v) && !sameView(v, g.before));
+    if (there && dt > 120 && !ctx.holding() && !loading(bar?.closest('.panel-wrap, .bb-offcanvas-panel') || v?.[0] || document.body)) return end();
     // Ultra (or the student) went somewhere else: nothing to wait for.
     if (!location.pathname.startsWith(`/ultra/courses/${g.cid}/`)) return end(true);
     if (dt > 2500 && !g.hard && !there) {
@@ -547,26 +615,32 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const g = go;
     go = null;
     clearTimeout(g.timer);
+    observeView();
     place();
     if (g.over) { if (cut) g.over.remove(); else fade(g.over); }
     draw();
     if (cut) return;
     if (g.top) scrollBack(g.top);
-    if (g.click && [...document.querySelectorAll('a[href]')].some((a) => a.getAttribute('href') === g.click.href && a.textContent.trim() === g.click.text && shown(a))) route(g.click.url);
+    if (g.click && safePath(...g.click.url.split('?')) === g.click.url && [...document.querySelectorAll('a[href]')].some((a) => a.getAttribute('href') === g.click.href && a.textContent.trim() === g.click.text && shown(a))) route(g.click.url);
   };
   // The tab's scroll, put back until it holds; anything the student does first ends it. On the outline with "Your place"
   // on, features/place.js does this (with the open folders).
-  const scrollerOf = (el) => {
-    for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) if (/auto|scroll|overlay/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) return p;
+  const scrollerOf = (el, content = false) => {
+    let n = 0;
+    for (let p = content ? el : el?.parentElement; p && p !== document.body && n++ < 30; p = p.parentElement) if (/^(auto|scroll|overlay)$/.test(getComputedStyle(p).overflowY) && (content || p.scrollHeight > p.clientHeight)) return p;
     return document.scrollingElement;
+  };
+  const pageScroller = () => {
+    const main = routedMain(routed());
+    return main ? scrollerOf(main, true) : scrollerOf(strip);
   };
   const scrollBack = (top) => {
     if (/\/outline\/?$/.test(location.pathname) && ctx.settings().enhance.place) return;
     const t0 = Date.now();
     let steady = 0;
     const step = () => {
-      const sc = scrollerOf(strip);
-      if (!sc || ctx.acted() > t0 || Date.now() - t0 > 2500 || steady >= 3) return;
+      const sc = pageScroller();
+      if (!ctx.on() || !sc || ctx.acted() > t0 || Date.now() - t0 > 2500 || steady >= 3) return;
       if (Math.abs(sc.scrollTop - top) < 2) steady++;
       else { steady = 0; sc.scrollTop = top; }
       setTimeout(step, 100);
@@ -680,7 +754,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     document[f]('click', onLeave, true);
     globalThis[f]('popstate', onLeave, true);
     globalThis[f]('pagehide', onHide);
-    try { chrome.storage.onChanged[yes ? 'addListener' : 'removeListener'](onStore); } catch { /* reloaded */ }
+    try { if (chrome.runtime?.id) chrome.storage.onChanged[yes ? 'addListener' : 'removeListener'](onStore); } catch { /* reloaded */ }
   };
   const start = () => {
     readPrefs().then(() => { drawn = ''; pass(); });
@@ -703,8 +777,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
           if (pending?.[1] === who && pending[0] === ctx.courseId() && !go) {
             const url = location.pathname + location.search;
             const tab = tabs.find((x) => x.cid === pending[0]);
-            go = { cid: pending[0], url, at: performance.now(), top: P().place && tab?.path === url ? tab.top : 0 };
-            send({ op: 'get', cid: go.cid }).then((x) => { if (go?.cid === pending[0] && !go.over && x?.snap?.path === go.url) cover(x.snap); });
+            go = { cid: pending[0], url, before: null, at: performance.now(), top: P().place && tab?.path === url ? tab.top : 0 };
+            send({ op: 'get', cid: go.cid }).then((x) => { if (go?.cid === pending[0] && !go.over && x?.snap?.path === go.url && safePath(...go.url.split('?')) === go.url) cover(x.snap); });
             tick();
           }
         }));
@@ -713,6 +787,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const pass = () => {
     if (!on) return;
+    if (!go) observeView();
     const cid = here();
     if (cid && !preview && loaded) {
       if (cid !== last || !tabs.some((x) => x.cid === cid)) visitTab(cid);
@@ -732,6 +807,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (signedOut) want = false;
     if (!want) {
       html.removeAttribute('data-gz-ctabs');
+      keepClear(null);
       if (!on) return;
       on = false;
       listen(false);
