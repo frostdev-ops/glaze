@@ -171,7 +171,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
 
   // Keep the course strip attached when Ultra replaces its header; no route paint hold.
-  const gate = () => globalThis.GZ_CTABS?.held();
+  const gate = (scope) => { discoverNav(scope); return globalThis.GZ_CTABS?.held(); };
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
@@ -557,24 +557,119 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const p of document.querySelectorAll('[data-gz-real]')) if (!nickOf(p.dataset.gzCid)) unname(p);
   };
 
+  html.removeAttribute?.('data-gz-nav-expanded');
+  const navRoots = new Set(), renamed = new Map();
+  const navSelector = 'nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
+  let navDirty = false, navQueued = false;
+  const syncDashboard = () => {
+    if (!chrome.runtime?.id) return;
+    const enabled = I.links.length && I.settings.enabled, on = enabled && I.settings.enhance.dashboard;
+    if (navDirty) {
+      navDirty = false;
+      for (const root of navRoots) {
+        if (!root.isConnected) { navRoots.delete(root); continue; }
+        const footer = root.closest?.('.MuiDrawer-paper')?.querySelectorAll('footer a[href], [class*="makeStylesfooter"] a[href]') || [];
+        for (const a of [...root.querySelectorAll('a[href]'), ...footer]) {
+          const id = GZ_NAV.native(a.getAttribute('href'));
+          if (!id && !a.closest('footer, [class*="makeStylesfooter"]')) continue;
+          const label = a.querySelector('.MuiTypography-root, .MuiListItemText-root, span:not(:has(svg))') || a;
+          const text = label && document.createTreeWalker(label, NodeFilter.SHOW_TEXT).nextNode();
+          const prior = renamed.get(a);
+          if (text && prior?.node !== text) {
+            let original;
+            if (!prior && id === 'institution-page' && a.classList.contains('gz-nav-dashboard')) {
+              try { const raw = a.getAttribute('data-gz-nav-original'); if (raw?.length <= 2048) { const v = JSON.parse(raw); if (typeof v?.text === 'string' && v.text.length <= 512 && ['aria', 'title'].every((k) => v[k] === null || typeof v[k] === 'string' && v[k].length <= 512)) original = v; } } catch { /* malformed own mark: keep native text */ }
+            }
+            renamed.set(a, { ...prior, node: text, text: original?.text ?? text.data, dashboard: id === 'institution-page', aria: original ? original.aria : prior ? prior.aria : a.getAttribute('aria-label'), title: original ? original.title : prior ? prior.title : a.getAttribute('title'), icon: prior?.icon || a.querySelector(':scope > svg.gz-nav-dashboard-icon') });
+          }
+        }
+      }
+    }
+    for (const [a, r] of renamed) {
+      if (!a.isConnected) { renamed.delete(a); continue; }
+      const dash = on && r.dashboard, name = dash ? t('Dashboard') : r.text;
+      r.painted = name;
+      if (r.node.data !== name) r.node.data = name;
+      if (dash && !a.hasAttribute('data-gz-nav-original')) a.setAttribute('data-gz-nav-original', JSON.stringify({ text: r.text, aria: r.aria, title: r.title }));
+      else if (!dash && r.dashboard) a.removeAttribute('data-gz-nav-original');
+      a.classList.toggle('gz-nav-dashboard', !!dash);
+      if (dash && !r.icon) {
+        r.icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        r.icon.classList.add('gz-nav-dashboard-icon'); r.icon.setAttribute('viewBox', '0 0 24 24'); r.icon.setAttribute('aria-hidden', 'true');
+        const path = document.createElementNS(r.icon.namespaceURI, 'path'); path.setAttribute('d', 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z'); r.icon.append(path);
+      }
+      if (dash && !r.icon.isConnected) a.prepend(r.icon); else if (!dash) r.icon?.remove();
+      for (const [key, value] of [['aria-label', r.aria], ['title', r.title]]) {
+        const next = dash ? name : key === 'title' && enabled && !r.dashboard ? value || name.trim() : value;
+        if (next === null) a.removeAttribute(key); else if (a.getAttribute(key) !== next) a.setAttribute(key, next);
+      }
+    }
+  };
+  const queueNav = () => { if (!navQueued) { navQueued = true; queueMicrotask(() => { navQueued = false; syncDashboard(); }); } };
+  const navObserver = new MutationObserver((changes) => {
+    if (!chrome.runtime?.id) { navObserver.disconnect(); return; }
+    for (const m of changes) {
+      const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
+      if (nodes.length && nodes.every((n) => n.nodeType === 1 && n.classList?.contains('gz-nav-dashboard-icon'))) continue;
+      const a = (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest('a[href]');
+      if (a && GZ_NAV.native(a.getAttribute('href'))) {
+        const r = renamed.get(a);
+        if (m.type === 'characterData' && r?.node === m.target) { if (m.target.data === r.painted) continue; r.text = m.target.data; }
+        navDirty = true; queueNav(); return;
+      }
+      if (m.type === 'childList' && [...m.addedNodes].some((n) => n.nodeType === 1 && (n.matches('a[href]') && GZ_NAV.native(n.getAttribute('href')) || [...n.querySelectorAll('a[href]')].some((a) => GZ_NAV.native(a.getAttribute('href')))))) { navDirty = true; queueNav(); return; }
+    }
+  });
+  // The existing core gate already sees added subtrees before paint; no second document-wide observer.
+  const discoverNav = (scope) => {
+    if (scope.closest?.('footer, [class*="makeStylesfooter"]')) navDirty = true;
+    if ([...navRoots].some((root) => !root.isConnected)) {
+      navObserver.disconnect();
+      for (const root of navRoots) if (!root.isConnected) navRoots.delete(root); else navObserver.observe(root, { childList: true, subtree: true, characterData: true });
+      navDirty = true;
+    }
+    if (![...navRoots].some((root) => root.contains(scope))) {
+      const found = scope.matches?.(navSelector) ? [scope] : scope.querySelectorAll(navSelector);
+      for (const root of found) if (!navRoots.has(root)) { navRoots.add(root); navObserver.observe(root, { childList: true, subtree: true, characterData: true }); navDirty = true; }
+    }
+    if (navDirty) queueNav();
+  };
+  discoverNav(document);
+  addEventListener('pagehide', () => navObserver.disconnect(), { once: true });
   const paintNav = (n, picture) => {
     if (!isPreview && window.top !== window) return;
     I.setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
+    for (const [key, value] of [['overflow', n.labelOverflow], ['style', n.itemStyle], ['background', n.itemBackground], ['indicator', n.activeIndicator], ['logo-align', n.logoAlign], ['footer-hidden', !n.footer]]) I.setAttr(`data-gz-nav-${key}`, value);
+    I.setVar('--gz-nav-logo-size', `${n.logoSize}px`);
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
     I.setAttr('data-gz-nav-brand', n.brand);
+    I.setAttr('data-gz-nav-detailed', n.detailed);
     for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;
     I.setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
     for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) I.setVar(`--gz-nav-${k}`, v);
+    syncDashboard();
   };
+  let navRead = false, navItems = null;
   const syncNav = () => {
     globalThis.GZ_FOLDER_UI?.sync(!!top()?.hideFolders, meId);
     if (!isPreview && window.top !== window) return;
+    syncDashboard();
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
-    else if (I.links.length) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
+    else if (I.links.length && navItems) {
+      const n = I.worn.nav;
+      if (n.i || n.li || n.labelOverflow === 'shrink' || n.collapsed || n.labels === 'icons' || ['links', 'order', 'hidden'].some((k) => Array.isArray(navItems[k]) && navItems[k].length) || (Array.isArray(navItems.widgets) && navItems.widgets.some((w) => w?.on === true))) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
+    } else if (I.links.length && !navRead) {
+      navRead = true;
+      try { chrome.storage.sync.get('navItems', (r) => {
+        navRead = false;
+        navItems ||= r?.navItems || {}; syncNav();
+      }); } catch { navRead = false; }
+    }
     if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
   };
+  chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && c.navItems) { navItems = c.navItems.newValue || {}; syncNav(); } });
   // A host registered for another LMS may answer settings before Ultra's schema arrives.
   if (!('brand' in I.settings.nav)) {
     const nav = I.settings.nav;
@@ -587,7 +682,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   }
 
   return {
-    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { syncDashboard(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
     syncTodo, syncCardTasks, syncRemind, syncWidgets,
@@ -595,4 +690,13 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
 });
 
+// Known Ultra entry: arm before asynchronous head detection lets the parser reach <body>.
+if (/html/.test(document.contentType) && !document.body && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
+  GZ_SITE_ULTRA.sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => {
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
+    l.setAttribute('blocking', 'render');
+    l.onload = l.onerror = () => l.removeAttribute('blocking'); setTimeout(l.onload, 1000);
+    (document.head || document.documentElement).appendChild(l); return l;
+  });
+}
 GZ_SITE_ULTRA;
