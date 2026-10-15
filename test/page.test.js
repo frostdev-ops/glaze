@@ -330,6 +330,26 @@ test('folder completion in every language Ultra writes it', () => {
   }
 });
 
+test('Canvas progress counts Complete One Item alternatives as one requirement', () => {
+  const item = (completed) => ({ completion_requirement: { type: 'must_mark_done', completed } });
+  assert.deepEqual(P.canvasProgress([{ requirement_type: 'one', items: [item(true), item(false)] }]), { done: 1, total: 1 });
+  assert.deepEqual(P.canvasProgress([
+    { requirement_type: 'all', items: [item(true), item(false), {}] },
+    { requirement_type: 'one', items: [item(false), item(false)] },
+    { requirement_type: 'one', items: [item(true), item(true)] },
+    { requirement_type: 'one', items: [{}] },
+    { items: [] },
+  ]), { done: 2, total: 4 });
+});
+
+test('Canvas progress is unknown for omitted item lists or a full modules page', () => {
+  const mod = { items: [{ completion_requirement: { completed: true } }] };
+  assert.equal(P.canvasProgress([mod, { items_count: 101 }]), null);
+  assert.equal(P.canvasProgress(Array(100).fill(mod)), null);
+  assert.deepEqual(P.canvasProgress(Array(99).fill(mod)), { done: 99, total: 99 });
+  assert.deepEqual(P.canvasProgress([{ items: [] }]), { done: 0, total: 0 });
+});
+
 test('your place in a course: the latest 30 courses, the last 100 open folders each', () => {
   const all = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`_${i}_1`, { open: [], top: 0, at: 1000 + i }]));
   all.junk = null;
@@ -342,4 +362,6 @@ test('your place in a course: the latest 30 courses, the last 100 open folders e
   assert.equal(out._5_1.top, 813);
   assert.equal(out._5_1.at, 9999);
   assert.deepEqual(P.place(undefined, '_1_1', { open: ['_2_1'], top: -5 }, 1), { _1_1: { open: ['_2_1'], top: 0, at: 1 } });
+  assert.deepEqual(P.place(undefined, '25', { open: [], top: 40, item: '271' }, 1), { 25: { open: [], top: 40, item: '271', at: 1 } });
+  assert.equal(P.place(undefined, '25', { open: [], top: 0, item: '1"><b>' }, 1)['25'].item, undefined);
 });
