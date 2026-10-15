@@ -88,7 +88,7 @@ const keys = (words = { de: false }, site = 'canvas') => {
   const wordsIn = new Set();
   const ctx = vm.createContext({
     document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../lib/page.js'),
-    GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing: () => false, wordsIn,
+    GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing: () => false, keyOn: () => true, wordsIn,
       t: (k) => (words.de && k === 'Keyboard shortcuts' ? 'Tastenkürzel' : k) },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../features/keys.js'), 'utf8'), ctx);
@@ -155,4 +155,101 @@ test('a first and only input while lib/drafts.js loads is still backed up once i
   t.run();
   assert.equal(saved.length, 1, 'the paste is kept once the module arrives, without another input');
   assert.match(Object.keys(saved[0])[0], /^draft:\/ultra\/courses\/_1_1\/outline#\/ed1$/);
+});
+
+// ---- the hooks that load a feature on first use (W0c), while its file is on its way ----
+// The first-use hooks of content.js, with document listeners kept, the loader answering when the test says, and
+// what Glaze's settings and observer say set by the test.
+const hooks = (from, to, extra = {}) => {
+  const listeners = {};
+  const loads = [];
+  class Element {}
+  const ctx = vm.createContext({
+    Element, Date, Promise, GZ_PAGE: require('../lib/page.js'), isPreview: false, ultra: false, moodle: false, observer: {},
+    settings: { enhance: { keys: true, palette: true, coursemenu: true, download: true, previews: true } },
+    document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => ({}) },
+    location: { pathname: '/', origin: 'https://school.test', assign(u) { ctx.went.push(u); } }, went: [],
+    need: (file) => { const p = later(); loads.push({ file, p }); return p; },
+    ...extra,
+  });
+  ctx.window = { top: null };
+  ctx.window.top = ctx.window;
+  vm.runInContext(`${block(from, to)}; globalThis.api = { ${extra.api || ''} };`, ctx);
+  const fire = (type, e) => { for (const f of listeners[type] || []) f(e); };
+  return { ctx, loads, fire, Element };
+};
+const key = (k, more = {}) => ({ key: k, target: {}, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, repeat: false, defaultPrevented: false,
+  prevented: 0, stopped: 0, preventDefault() { this.prevented++; }, stopPropagation() { this.stopped++; }, stopImmediatePropagation() { this.stopped++; }, ...more });
+
+for (const [site, ultra, to] of [['canvas', false, '/courses'], ['ultra', true, '/ultra/course']]) {
+  test(`keys pressed while features/keys.js loads are handed over in order: g then c still goes to Courses (${site})`, async () => {
+    const h = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- command palette', { ultra, api: 'keyOn, typing' });
+    h.fire('keydown', key('g'));
+    h.fire('keydown', key('c'));
+    assert.deepEqual(h.loads.map((l) => l.file), ['features/keys.js'], 'asked for once');
+    h.ctx.GZ_CTX = { site, t: (k) => k, settings: () => h.ctx.settings, on: () => true, wordsIn: new Set(), typing: h.ctx.api.typing, keyOn: h.ctx.api.keyOn };
+    vm.runInContext(fs.readFileSync(require.resolve('../features/keys.js'), 'utf8'), h.ctx);
+    h.loads[0].p.resolve();
+    await settle();
+    assert.deepEqual(h.ctx.went, [`https://school.test${to}`]);
+  });
+}
+
+test('on Canvas, g then ? while features/keys.js loads keeps Canvas\'s own help shut, and opens Glaze\'s', async () => {
+  const h = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- command palette', { api: 'keyOn' });
+  h.fire('keydown', key('g'));
+  h.fire('keydown', key('Shift'));
+  const q = key('?');
+  h.fire('keydown', q);
+  assert.deepEqual([q.prevented, q.stopped], [1, 1], 'taken from Canvas at once');
+  // Not after another key: then the "?" is Canvas's.
+  const x = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- command palette', { api: 'keyOn' });
+  x.fire('keydown', key('g'));
+  x.fire('keydown', key('x'));
+  const q2 = key('?');
+  x.fire('keydown', q2);
+  assert.deepEqual([q2.prevented, q2.stopped], [0, 0]);
+});
+
+test('Ctrl+K twice while features/palette.js loads leaves it closed; once opens it, once', async () => {
+  for (const [presses, opened] of [[2, 0], [1, 1], [3, 1]]) {
+    const h = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- page changes');
+    for (let i = 0; i < presses; i++) h.fire('keydown', key('k', { ctrlKey: true }));
+    assert.equal(h.loads.filter((l) => l.file === 'features/palette.js').length, 1, 'asked for once');
+    let n = 0;
+    h.ctx.GZ_CMD = { open: () => n++, isOpen: () => false, close() {} };
+    h.loads[0].p.resolve();
+    await settle();
+    assert.equal(n, opened, `${presses} press(es)`);
+  }
+});
+
+test('a course menu pressed while its file loads opens only if the menu and its button are still there when it arrives', async () => {
+  for (const [why, change, opens] of [['nothing changed', () => {}, true], ['Glaze turned off', (h) => { h.ctx.observer = null; }, false],
+    ['the extra turned off', (h) => { h.ctx.settings.enhance.coursemenu = false; }, false], ['the card redrawn', (h, b) => { b.isConnected = false; }, false]]) {
+    const h = hooks('  const menuOn = () =>', '  // ---- settings → <html>');
+    const b = Object.assign(new h.Element(), { isConnected: true, getClientRects: () => [{}] });
+    b.closest = () => b;
+    h.fire('click', key('', { type: 'click', target: b }));
+    let toggled = 0;
+    h.ctx.GZ_COURSE_MENU = { toggle: () => toggled++ };
+    change(h, b);
+    h.loads.find((l) => l.file === 'features/coursemenu.js').p.resolve();
+    await settle();
+    assert.equal(toggled, opens ? 1 : 0, why);
+  }
+});
+
+test('Download all\'s buttons aren\'t drawn by a file that arrives after Glaze, the switch or the page changed', async () => {
+  for (const [why, change, syncs] of [['nothing changed', () => {}, 1], ['Glaze turned off', (h) => { h.ctx.observer = null; }, 0],
+    ['the switch turned off', (h) => { h.ctx.settings.enhance.download = false; }, 0], ['another page', (h) => { h.ctx.courseId = () => undefined; }, 0]]) {
+    const h = hooks('  // ---- download all (Extras)', '  // ---- document buttons', { ultra: true, courseId: () => '_1_1', api: 'syncDownloads' });
+    h.ctx.api.syncDownloads();
+    let n = 0;
+    h.ctx.GZ_DOWNLOAD = { sync: () => n++ };
+    change(h);
+    h.loads[0].p.resolve();
+    await settle();
+    assert.equal(n, syncs, why);
+  }
 });
