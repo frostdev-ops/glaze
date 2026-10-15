@@ -2056,12 +2056,12 @@
     document.addEventListener('keydown', (e) => {
       if (e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
       // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
-      if (globalThis.GZ_PALETTE?.isOpen()) { e.preventDefault(); e.stopPropagation(); GZ_PALETTE.close(); return; }
+      if (globalThis.GZ_CMD?.isOpen()) { e.preventDefault(); e.stopPropagation(); GZ_CMD.close(); return; }
       if (typing(e.target)) return;
       if (!ultra && e.target.closest?.('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       e.preventDefault();
       e.stopPropagation();
-      need('features/palette.js', () => globalThis.GZ_PALETTE).then(() => { if (observer) GZ_PALETTE.open(); }, () => {});
+      need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (observer) GZ_CMD.open(); }, () => {});
     }, true);
   }
 
@@ -2670,7 +2670,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     globalThis.GZ_PEEK?.hide();
     if (!ultra) globalThis.GZ_DOWNLOAD?.stop();
     globalThis.GZ_KEYS?.off();
-    globalThis.GZ_PALETTE?.close();
+    globalThis.GZ_CMD?.close();
     for (const id of ['gz-progress', 'gz-calc', 'gz-gpa']) document.getElementById(id)?.remove();
     for (const p of document.querySelectorAll('.gz-new, .gz-card-grade')) p.remove();
     dropBars();

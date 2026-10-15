@@ -14,9 +14,9 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // A ratchet: the measured size plus about 2%. W0 measured 457,988 bytes in 14 files; W0b moved the five translation files,
 // lib/zip.js and lib/drafts.js to on-demand loading (lib/background.js 'glaze:load'): 290,457 bytes in 7, under the
 // plan's 300 KB. Wave 1 and 2 hooks took it to 295,451; W0c moved the palette, the keys, the course menu's popover, the
-// folder previews and Download all to features/*.js: 248,556. New features load on demand too. When a cut lands, lower
+// folder previews and Download all to features/*.js: 248,536. New features load on demand too. When a cut lands, lower
 // the baseline to the new total.
-const FIRST_SCRIPT_BASELINE = 248556;
+const FIRST_SCRIPT_BASELINE = 248536;
 
 test('the first content script on Canvas and Ultra stays within its budget', () => {
   const files = m.content_scripts[0].js;

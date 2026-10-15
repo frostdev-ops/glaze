@@ -83,12 +83,12 @@ const dom = () => {
 };
 
 // features/keys.js on Canvas, as content.js hands it keys, with the stand-in DOM.
-const keys = (words = { de: false }) => {
+const keys = (words = { de: false }, site = 'canvas') => {
   const document = dom();
   const wordsIn = new Set();
   const ctx = vm.createContext({
     document, location: { pathname: '/' }, navigator: { platform: 'MacIntel' }, Date, GZ_PAGE: require('../lib/page.js'),
-    GZ_CTX: { site: 'canvas', settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing: () => false, wordsIn,
+    GZ_CTX: { site, settings: () => ({ enhance: { keys: true, palette: true } }), on: () => true, typing: () => false, wordsIn,
       t: (k) => (words.de && k === 'Keyboard shortcuts' ? 'Tastenkürzel' : k) },
   });
   vm.runInContext(fs.readFileSync(require.resolve('../features/keys.js'), 'utf8'), ctx);
@@ -110,6 +110,15 @@ test('the keyboard help, opened before the page\'s words arrived, is redrawn in 
   for (const f of k.wordsIn) f();
   assert.equal(k.shown()[0].attrs['aria-label'], 'Tastenkürzel');
   assert.equal(k.shown().length, 1, 'one dialog, the old one gone');
+});
+
+test('on Ultra, "?" alone shows and hides the keyboard help, which has no Dismiss button', () => {
+  const k = keys(undefined, 'ultra');
+  k.press('?');
+  assert.equal(k.shown().length, 1);
+  assert.equal(k.shown()[0].querySelector('button'), null);
+  k.press('?');
+  assert.equal(k.shown().length, 0);
 });
 
 test('a closed keyboard help stays closed when the words arrive', () => {

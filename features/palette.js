@@ -3,7 +3,7 @@
 // own switches. Courses and items are asked of Ultra's own APIs once per page, when it first opens. On Canvas it searches
 // Canvas's pages, your courses, this course's tabs, what is due and Glaze's switches; with search on, your courses' content
 // too (features/search.js). Classic script, through GZ_CTX; a second injection keeps the first.
-var GZ_PALETTE = globalThis.GZ_PALETTE || (() => {
+var GZ_CMD = globalThis.GZ_CMD || (() => {
   const ctx = globalThis.GZ_CTX;
   const ultra = ctx.site === 'ultra';
   const moodle = ctx.site === 'moodle';
@@ -196,4 +196,4 @@ var GZ_PALETTE = globalThis.GZ_PALETTE || (() => {
   return { open: () => { if (!cmd) openCmd(); }, close: closeCmd, isOpen: () => !!cmd };
 })();
 
-GZ_PALETTE;
+GZ_CMD;
