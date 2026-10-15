@@ -206,8 +206,8 @@ test('Ultra course cards peek at existing promises and books without starting a 
 test('an existing Ultra grade request refreshes mounted course cards when it finishes without native DOM', async () => {
   const p = page({ site: 'ultra', preload: true, raw: { enabled: false }, pathname: '/ultra/institution-page' });
   await p.done;
-  let updates = 0, requests = 0, finish;
-  p.c.GZ_COURSE_CARDS = { sync: () => { updates++; assert.equal(p.c.GZ_CTX.canvasPeek().books.get('_101_1').overall.label, '87%'); } };
+  let updates = 0, requests = 0, finish, observed;
+  p.c.GZ_COURSE_CARDS = { sync: () => { updates++; observed = p.c.GZ_CTX.canvasPeek().books.get('_101_1').overall?.label; } };
   p.c.fetch = async (u) => {
     requests++;
     const profile = u.endsWith('/users/me');
@@ -220,5 +220,6 @@ test('an existing Ultra grade request refreshes mounted course cards when it fin
   finish(); await settle();
   assert.equal(book.pending, false);
   assert.equal(updates, 1, 'the existing grade reader wakes cached board cards');
+  assert.equal(observed, '87%', 'the cache is ready before the callback');
   assert.equal(requests, 2, 'only the existing profile and grade requests');
 });
