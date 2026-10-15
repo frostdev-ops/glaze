@@ -593,7 +593,7 @@
     full = false;
     cardsIO.disconnect();
     onScreen.clear();
-    clearTags(TAGS);
+    clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
   };
 
@@ -1990,8 +1990,9 @@
       }
       if (location.pathname === '/conversations') {
         const list = Object.entries(courseList).filter(([id, c]) => id.startsWith(`canvas:${location.origin}/`) && c.color);
-        // Canvas renders only the context name, no id. Ambiguous names keep Canvas’s own styling.
-        for (const el of document.querySelectorAll('#content span')) {
+        // MessageDetailItem’s second header field is the native context label, not the message body.
+        // Canvas supplies only its name; ambiguous names keep Canvas’s own styling.
+        for (const el of document.querySelectorAll('[data-testid^="message-detail-item-"] > :nth-child(2) > :first-child > :nth-child(2) > span')) {
           if (el.children.length) continue;
           const matches = list.filter(([, c]) => [c.name, c.code].includes(el.textContent.trim()));
           if (matches.length === 1) targets.set(el, matches[0][0]);
