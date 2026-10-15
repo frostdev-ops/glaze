@@ -1,6 +1,7 @@
 #!/bin/sh
 # Rewrites a copy of manifest.json for Safari, in place. Safari rejects options_ui.open_in_tab and
-# doesn't support use_dynamic_url; the App Store caps the description at 112 characters.
+# doesn't support use_dynamic_url; the App Store caps the description at 112 characters. Safari has no
+# identity API, so Google Calendar sync's oauth2 key and optional identity permission go (S3 §4).
 set -eu
 python3 - "$1" <<'PY'
 import json, sys
@@ -9,6 +10,12 @@ manifest = json.load(open(path))
 if 'nativeMessaging' not in manifest.setdefault('permissions', []):
     manifest['permissions'].append('nativeMessaging')
 manifest.get('options_ui', {}).pop('open_in_tab', None)
+manifest.pop('oauth2', None)
+optional = [p for p in manifest.get('optional_permissions', []) if p != 'identity']
+if optional:
+    manifest['optional_permissions'] = optional
+else:
+    manifest.pop('optional_permissions', None)
 manifest['description'] = 'Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras.'
 for entry in manifest.get('web_accessible_resources', []):
     entry.pop('use_dynamic_url', None)
