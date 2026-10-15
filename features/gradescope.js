@@ -101,15 +101,15 @@
       const sel = make('select', { name: c.gid },
         make('option', { value: '?', textContent: t('Choose a course') }),
         ...list.map((x) => make('option', { value: x.key, textContent: x.label, selected: x.key === want })),
-        make('option', { value: '', textContent: t('Not a Canvas course') }));
+        make('option', { value: '', textContent: t('None of these courses') }));
       return make('li', {}, make('label', {}, make('span', { textContent: c.short || c.name || c.gid }), sel));
     };
     const save = make('button', { type: 'submit', className: 'main', textContent: t('Save') });
     const never = make('button', { type: 'button', textContent: t("Don't ask again") });
-    const form = make('form', {}, list.length ? make('ul', {}, ...open.map(pick)) : make('p', { textContent: t("Glaze doesn't know your Canvas courses yet. Open your Canvas Dashboard once with Glaze on, then come back here.") }),
+    const form = make('form', {}, list.length ? make('ul', {}, ...open.map(pick)) : make('p', { textContent: t("Glaze doesn't know your courses yet. Open your Canvas Dashboard or Blackboard's Courses page once with Glaze on, then come back here.") }),
       make('div', { className: 'row' }, list.length > 0 && save, never));
     const box = make('section', {}, make('h2', { id: 'h', textContent: t('Gradescope in your To Do') }),
-      make('p', { textContent: t("Pick the Canvas course each Gradescope course belongs to. Its assignments then show in Glaze's To Do, on your course cards and in reminders. Glaze reads them when you visit Gradescope, and they stay on this device.") }),
+      make('p', { textContent: t("Pick the Canvas or Blackboard course each Gradescope course belongs to. Its assignments then show in Glaze's To Do, on your course cards and in reminders. Glaze reads them when you visit Gradescope, and they stay on this device.") }),
       form, say);
     box.setAttribute('aria-labelledby', 'h');
     root.append(make('style', { textContent: CSS }), box);
@@ -123,7 +123,7 @@
       if (!human(e)) return;
       const names = new Map(open.map((c) => [c.gid, c.short || c.name]));
       const chosen = [...form.querySelectorAll('select')].filter((s) => s.value !== '?').map((s) => ({ gid: s.name, to: s.value, name: names.get(s.name) || '' }));
-      if (!chosen.length) { say.textContent = t('Choose a Canvas course first.'); return; }
+      if (!chosen.length) { say.textContent = t('Choose a course first.'); return; }
       save.disabled = true;
       const r = await send({ type: 'glaze:gradescope', op: 'map', acct: d.acct.id, list: chosen });
       if (!r?.ok) { save.disabled = false; say.textContent = t("Couldn't save that on this device, so nothing changed."); return; }

@@ -331,7 +331,7 @@ withMock('worker: only the editor connects; a page syncs only its own site\'s ac
   assert.ok(mock.calendars.has(cal));
   assert.equal(w.store.local.gcal.owner, 'student@example.edu');
   const reg = structuredClone(w.registered().find((s) => s.id === 'gz-gcal'));
-  assert.deepEqual([reg.js, reg.matches, reg.excludeMatches], [['features/gcal.js'], ['https://*.instructure.com/*'], ['https://canvadocs.instructure.com/*']]);
+  assert.deepEqual([reg.js, reg.matches, reg.excludeMatches], [['features/gcal.js'], ['https://*.instructure.com/*', 'https://*/ultra', 'https://*/ultra/*'], ['https://canvadocs.instructure.com/*']]);
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR), { ok: false, error: 'connected' }, 'one calendar per connection');
   assert.deepEqual(await sync({ src: 'https://other.instructure.com/3' }), { ok: false, error: 'sender' });
   assert.deepEqual(await sync({ src: SITE_SRC, from: 'soon' }), { ok: false, error: 'sender' });
