@@ -362,7 +362,7 @@
   const cardsHere = () => !ultra && !moodle && links.length && settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
   // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
-  const remindHere = () => !ultra && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'streak'].some((k) => settings.enhance[k]);
+  const remindHere = () => !ultra && !moodle && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'streak'].some((k) => settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in

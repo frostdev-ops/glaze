@@ -9,9 +9,11 @@ const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
 const hook = (name) => source.match(new RegExp(`^  const ${name} = \\(\\) => [^\\n]*;$`, 'm'))[0];
 
 test('Canvas-only hooks on `/` stay off on a Moodle site', () => {
-  for (const name of ['todoHere', 'cardsHere']) {
+  for (const name of ['todoHere', 'cardsHere', 'remindHere']) {
+    const window = {};
+    window.top = window;
     const on = (moodle) => vm.runInNewContext(`${hook(name)} ${name}()`, {
-      ultra: false, moodle, links: [{}], settings: { enhance: { todo: true, cardTasks: true } }, location: { pathname: '/' },
+      ultra: false, moodle, links: [{}], settings: { enhance: { todo: true, cardTasks: true, remind: true } }, location: { pathname: '/' }, window,
     });
     assert.ok(on(false), `${name} runs on Canvas's Dashboard`);
     assert.ok(!on(true), `${name} stays off on Moodle's front page`);

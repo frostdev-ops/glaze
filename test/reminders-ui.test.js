@@ -91,6 +91,7 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
     return { ui, timers, sent, ops, fetched, toast, document, location, docOn, live: () => timers.filter((x) => !x.cleared) };
   };
   w.box = box;
+  w.area = area;
   return w;
 };
 
@@ -222,4 +223,50 @@ test('no planner request where To Do or the card tasks will make it, drawn yet o
   await settle();
   assert.equal(own.fetched.length, 1);
   assert.match(own.fetched[0], /\/api\/v1\/planner\/items\?/);
+});
+
+// The Dashboard in its planner (list) view still holds Canvas's course-card skeletons, hidden: content.js's gate
+// (syncCardTasks: cardsHere and a .ic-DashboardCard on the page) starts the card tasks there, and they ask the planner.
+// So reminders leave it to them, and the planner is asked once, not twice.
+test("the Dashboard's planner view: card tasks run and ask, reminders don't: one planner request", async () => {
+  const html = read('test/fixtures/canvas-dashboard-planner.html');
+  assert.match(html, /id="DashboardCard_Container" style="display: none;?"/, 'the fixture is the planner view');
+  const has = (sel) => (sel === '.ic-DashboardCard' && /class="ic-DashboardCard"/.test(html) ? {} : null);
+  // content.js's own gate, run over that page.
+  const src = read('content.js');
+  const line = (name) => src.match(new RegExp(`^  const ${name} = \\(\\) => [^\\n]*;$`, 'm'))[0];
+  const started = [];
+  const CT = { sync: (on) => started.push(on) };
+  vm.runInNewContext(`${line('cardsHere')} ${line('syncCardTasks')} syncCardTasks()`, {
+    ultra: false, moodle: false, links: [{}], settings: { enhance: { cardTasks: true } }, location: { pathname: '/' },
+    document: { querySelector: has }, need: async () => {}, globalThis: { GZ_CARD_TASKS: CT }, GZ_CARD_TASKS: CT,
+  });
+  await settle();
+  assert.deepEqual(started, [true], 'card tasks start in planner view');
+  // Both on that page, the shared planner copy stale: reminders first (the worse order), then the card tasks.
+  const w = world(2 * 36e5, { cacheAge: 20 * 6e4 });
+  const r = w.tab({ pathname: '/', enhance: { cardTasks: true }, cards: !!has('.ic-DashboardCard') });
+  r.ui.sync(true);
+  await settle();
+  const fetched = [];
+  const c = {
+    console, URL, Intl, Date, Set, Map, JSON, Promise, Error,
+    GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_CANVAS_DUE_WEEK: () => [], GZ_TODO: T,
+    GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, canvasCourses: async () => [{ id: '25', name: 'Biology' }], profile: async () => ({ id: 3, time_zone: 'America/New_York' }) },
+    location: { origin: ORIGIN, pathname: '/' },
+    fetch: async (u) => { fetched.push(u); return { ok: true, text: async () => '[]', headers: { get: () => null } }; },
+    chrome: {
+      runtime: { sendMessage: (m, cb) => { T.change(structuredClone(m), w.area).then(cb); } },
+      storage: { local: { get: (k, cb) => w.area.local.get(k).then(cb) }, sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {} } },
+    },
+    document: { visibilityState: 'visible', addEventListener() {}, getElementById: () => null, querySelectorAll: () => [], createElement: (t) => new E(t) },
+    addEventListener() {}, setTimeout,
+  };
+  c.globalThis = c;
+  vm.createContext(c);
+  vm.runInContext(read('features/cardtasks.js'), c).sync(true);
+  await settle();
+  const planner = (l) => l.filter((u) => u.includes('/api/v1/planner/items')).length;
+  assert.equal(planner(fetched), 1, 'the card tasks asked');
+  assert.equal(planner(r.fetched) + planner(fetched), 1);
 });
