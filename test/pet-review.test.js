@@ -167,3 +167,59 @@ test('R2-1: a first-read visible synced untick stores zero without growing histo
   const open = run({ todoO, planner: [{ ...row, sub: { submitted: false } }], cache: { at: now + 1 } });
   assert.deepEqual(open.earned, {}); assert.deepEqual(open.seen, {});
 });
+
+
+const syncAuto = { sync: true, done: 'auto' };
+for (const [name, state] of [['new work', undefined], ['settled work', { earned: { 'work:assignment:1': 20 }, seen: { 'assignment:1': now } }]]) {
+  test(`R3-1: historical kept plan gets its first reward with ${name} and no native row`, () => {
+    const old = { at: now, courses: [{ id: '1', items: [{ k: 'assignment:1', n: 'Old', a: now - 21 * T.DAY, d: now - 20 * T.DAY, s: 'on' }] }] };
+    const data = { items: { 'assignment:1': { on: T.dayKey(today - 21) } } };
+    const sources = { insights: old, todo: data, todoO: syncAuto };
+    const first = run(sources, state);
+    assert.equal(view(first).plans, 8);
+    assert.equal(view(run({ ...sources, todoO: { ...syncAuto, sync: false } }, state)).plans, 8);
+    assert.deepEqual(run(sources, first), first);
+  });
+}
+test('R3-1: missing native row preserves settled plan values including explicit zero', () => {
+  for (const points of [0, 8]) {
+    const state = { earned: { 'work:assignment:1': 20, 'plan:assignment:1': points }, seen: { 'assignment:1': now } };
+    const after = run({ insights: { ...insights, at: now + 1000 }, todo, todoO: syncAuto }, state);
+    assert.equal(view(after).plans, points);
+  }
+});
+test('R3-1: a first visible native plan untick is settled zero, then row return resumes plan corrections', () => {
+  const sources = { insights, todo, todoO: syncAuto };
+  const first = run({ ...sources, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 1 } });
+  assert.equal(first.earned['plan:assignment:1'], 0);
+  assert.equal(view(run(sources, first)).plans, 0);
+  const ticked = run({ ...sources, planner: [{ ...row, ov: { done: true } }], cache: { at: now + 2 } }, first);
+  assert.equal(view(ticked).plans, 8);
+  const undone = run({ ...sources, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 3 } }, ticked);
+  assert.equal(view(undone).plans, 0);
+  const moved = run({ ...sources, todo: { items: { 'assignment:1': { on: T.dayKey(today + 1) } } }, planner: [{ ...row, ov: { done: true } }], cache: { at: now + 4 } }, undone);
+  assert.equal(view(moved).plans, 0, 'a known future plan remains a correction');
+  assert.equal(view(run({ ...sources, planner: [{ ...row, ov: { done: true } }], cache: { at: now + 5 } }, moved)).plans, 8);
+});
+test('R3-2: new late hand-in after visible redo can replace settled zero outside native window', () => {
+  const sources = { insights, todoO: syncAuto };
+  const first = run({ ...sources, planner: [row], cache: { at: now } });
+  const redo = run({ ...sources, planner: [{ ...row, sub: { submitted: true, redo: true } }], cache: { at: now + 1 } }, first);
+  const newer = { at: now + 900000, courses: [{ id: '1', items: [{ ...insights.courses[0].items[0], a: now + 800000, s: 'late' }] }] };
+  const fresh = { insights: newer, todoO: syncAuto, now: now + 1000000 };
+  const after = run(fresh, redo);
+  assert.deepEqual([view(first).work, view(redo).work, view(after).work], [20, 0, 10]);
+  assert.equal(view(run({ ...fresh, todoO: { ...syncAuto, sync: false } }, redo)).work, 10);
+  assert.deepEqual(run(fresh, after), after);
+});
+test('R3-2: refreshed, same, older or unproven hand-in timestamps preserve a native untick zero', () => {
+  const zero = run({ insights, todoO: syncAuto, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 1 } });
+  for (const [at, a] of [[now + 1000, now - 2 * T.DAY], [now + 1000, now + 1], [now + 1000, 0], [now, now + 500], [now + 1, now + 500]]) {
+    const record = { at, courses: [{ id: '1', items: [{ ...insights.courses[0].items[0], a, s: 'late' }] }] };
+    assert.equal(view(run({ insights: record, todoO: syncAuto, now: now + 2000 }, zero)).work, 0);
+  }
+  const newer = { at: now + 1000, courses: [{ id: '1', items: [{ ...insights.courses[0].items[0], a: now + 500, s: 'late' }] }] };
+  const after = run({ insights: newer, todoO: syncAuto, now: now + 2000 }, zero);
+  assert.equal(view(after).work, 10, 'a genuinely new submitted hand-in can replace native zero');
+  assert.deepEqual(run({ insights: { ...newer, at: now + 3000 }, todoO: syncAuto, now: now + 4000 }, after), after, 'cache refresh alone leaves settled history unchanged');
+});
