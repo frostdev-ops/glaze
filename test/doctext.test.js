@@ -143,6 +143,28 @@ test('review: stored entries obey the per-entry cap, and a whole document has a 
   assert.deepEqual(await D.pptx(deck), [{ text: 'Hello', notes: '' }]);
 });
 
+test('review: reads running at the same time share one document budget, and a failed read gives its share back', async () => {
+  const kib = 'y'.repeat(2048);
+  const z = D.unzip(zipOf({ 'a.xml': kib, 'b.xml': kib }), { limits: { total: 3000 } });
+  const both = await Promise.allSettled([z.text('a.xml'), z.text('b.xml')]);
+  assert.deepEqual(both.map((x) => x.status).sort(), ['fulfilled', 'rejected']);
+  assert.match(both.find((x) => x.status === 'rejected').reason.message, /document too large/);
+  const broken = zipOf({ 'a.xml': kib, 'b.xml': kib });
+  u32(broken, central(broken) + 16, 1); // a's CRC is wrong
+  const zb = D.unzip(broken, { limits: { total: 3000 } });
+  await assert.rejects(zb.text('a.xml'), /damaged/);
+  assert.equal((await zb.text('b.xml')).length, 2048);
+});
+
+test('review: a raw-text element ends only at its own end tag, and case-folding never shifts positions', () => {
+  assert.equal(D.html('<script>hidden</scripture><p>not visible</p></script><p>shown</p>'), 'shown');
+  assert.equal(D.html('<style>a{}</STYLE ><p>shown</p>'), 'shown');
+  assert.equal(D.html('<script>x</script/><p>shown</p>'), 'shown');
+  assert.equal(D.html('<p>İ</p><script>hidden</script><p>shown</p>'), 'İ\nshown');
+  assert.equal(D.html('İ<script>hidden</script><p>shown</p>'), 'İ\nshown');
+  assert.equal(D.html('<script>never closed</scrip'), '');
+});
+
 test('review: malformed markup costs linear time', () => {
   for (const unit of ['<a ', '<script ', '<p title="', '<!--', '<![CDATA[', '<b>x<i y=\'']) {
     const src = unit.repeat(Math.ceil((300 << 10) / unit.length));
