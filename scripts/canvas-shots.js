@@ -62,6 +62,8 @@ const NOT_EXTENSION = new Set(['assets', 'safari', 'scripts', 'store', 'test', '
 const DOCS = /\.(md|sh)$|^LICENSE$/;
 
 const die = (msg) => { console.error(msg); process.exit(1); };
+// Once the browser is up: an error, so the run's finally closes the browser before it is reported.
+const fail = (msg) => { throw new Error(msg); };
 const plain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const slug = (s) => s.replace(/[{}]/g, '').replace(/\W+/g, '-').replace(/^-|-$/g, '').toLowerCase();
 // [name=]/path[@selector to click]
@@ -150,24 +152,29 @@ const login = async (page, user) => {
     await page.fill('input[name="pseudonym_session[unique_id]"]', cred[`${who}_EMAIL`]);
     await page.fill('input[name="pseudonym_session[password]"]', cred[`${who}_PASSWORD`] || cred.PASSWORD);
     await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20000 }), page.press('input[name="pseudonym_session[password]"]', 'Enter')]);
-  } catch { die(`${LMS} login failed (is ${BASE} up, and the ${user} login right in ${CREDS}?)`); }
+  } catch { fail(`${LMS} login failed (is ${BASE} up, and the ${user} login right in ${CREDS}?)`); }
 };
 
 // Moodle's pages are done when the scripts its own Behat runs wait for are (M.util.pending_js, in the page's world).
 const moodleSettled = () => document.readyState === 'complete' && window.M?.util?.pending_js?.length === 0;
 // Moodle: course ids from the service its dashboard calls (the page's sesskey, the session cookie), and BIO 1100's
-// first activity of each kind from its course page.
+// first activity of each kind from its course page. The service's address carries the session key, and a request's
+// own error can quote its address: a failure here says only what failed, as the login does.
 const moodleLookup = async (context) => {
-  const my = await (await context.request.get(`${BASE}/my/`)).text();
-  const sesskey = my.match(/"sesskey":"(\w+)"/)?.[1] || die('Moodle did not show the dashboard; the login did not take.');
-  const res = await context.request.post(`${BASE}/lib/ajax/service.php?sesskey=${sesskey}&info=courses`, { data: [{ index: 0, methodname: 'core_course_get_enrolled_courses_by_timeline_classification', args: { classification: 'all', limit: 0, offset: 0, sort: 'fullname' } }] });
-  const courses = (await res.json())[0]?.data?.courses || [];
+  let courses = null;
+  try {
+    const my = await (await context.request.get(`${BASE}/my/`)).text();
+    const sesskey = my.match(/"sesskey":"(\w+)"/)?.[1];
+    const res = sesskey && await context.request.post(`${BASE}/lib/ajax/service.php?sesskey=${sesskey}&info=courses`, { data: [{ index: 0, methodname: 'core_course_get_enrolled_courses_by_timeline_classification', args: { classification: 'all', limit: 0, offset: 0, sort: 'fullname' } }] });
+    courses = res && (await res.json())[0]?.data?.courses;
+  } catch { /* said below, without the request's own words */ }
+  if (!Array.isArray(courses)) fail(`Moodle did not list the student's courses (is ${BASE} up, and did the login take?)`);
   return { ids: Object.fromEntries(Object.entries(COURSES).map(([k, code]) => [k, courses.find((c) => c.shortname === code)?.id])), context };
 };
 const moodlePages = async ({ ids, context }) => {
-  if (!ids.bio) die(`Moodle has no course ${COURSES.bio}; the default pages need it (~/Projects/moodle-dev/reseed).`);
+  if (!ids.bio) fail(`Moodle has no course ${COURSES.bio}; the default pages need it (~/Projects/moodle-dev/reseed).`);
   const home = await (await context.request.get(`${BASE}/course/view.php?id=${ids.bio}`)).text();
-  const mod = (name) => home.match(new RegExp(`/mod/${name}/view\\.php\\?id=(\\d+)`))?.[1] ?? die(`BIO 1100 has no ${name}.`);
+  const mod = (name) => home.match(new RegExp(`/mod/${name}/view\\.php\\?id=(\\d+)`))?.[1] ?? fail(`BIO 1100 has no ${name}.`);
   return [['dashboard', '/my/'], ['my-courses', '/my/courses.php'], ['calendar', '/calendar/view.php?view=month'], ['upcoming', '/calendar/view.php?view=upcoming'],
     ['messages', '/message/index.php'], ['drawer', '/my/', '[id^="message-drawer-toggle-"]'], ['grades', '/grade/report/overview/index.php'],
     ['bio-home', '/course/view.php?id={bio}'], ['bio-grades', '/grade/report/user/index.php?id={bio}'], ['bio-assign', `/mod/assign/view.php?id=${mod('assign')}`],

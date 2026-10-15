@@ -324,3 +324,34 @@ test('the capture scrubber takes Moodle\'s session key and login token out, wher
   assert.match(fixture('/my/', '<html></html>', 'moodle'), /^<!-- Glaze test fixture: \/my\/ on the local Moodle \(seed: ~\/Projects\/moodle-dev\/seed\.php\)/);
   assert.match(fixture('/', '<html></html>'), /on the local Canvas/, 'Canvas stays the default');
 });
+
+// scripts/canvas-shots.js needs Playwright, so its Moodle lookup is run from its source with a stand-in browser context.
+const shots = read('scripts/canvas-shots.js');
+const sliceFn = (name) => { const a = shots.indexOf(`const ${name} = `); return shots.slice(a, shots.indexOf('\n};\n', a) + 4); };
+const harness = () => vm.runInNewContext(`${shots.match(/^const fail = .*$/m)[0]}\n${sliceFn('moodleLookup')}\n${sliceFn('moodlePages')}\n({ moodleLookup, moodlePages })`, {
+  BASE: ORIGIN, COURSES: { bio: 'BIO 1100', eng: 'ENG 1100' }, Object, Array, Error, RegExp,
+});
+
+test('the capture harness never repeats Moodle\'s session key when its lookup fails, and fails without exiting', async () => {
+  const KEY = 'SeSsKeY123';
+  const page = { text: async () => `M.cfg = {"sesskey":"${KEY}"};` };
+  const urlError = (url) => Object.assign(new Error(`apiRequestContext.post: connect ECONNREFUSED\nCall log:\n  - → POST ${url}`), { url });
+  for (const request of [
+    { get: async () => page, post: async (url) => { throw urlError(url); } },
+    { get: async () => page, post: async (url) => ({ json: async () => { throw urlError(url); } }) },
+    { get: async () => page, post: async () => ({ json: async () => [{ error: true, exception: { errorcode: 'invalidsesskey', message: `bad ${KEY}` } }] }) },
+    { get: async () => { throw new Error(`GET ${ORIGIN}/my/ failed`); }, post: async () => assert.fail('no key, no call') },
+    { get: async () => ({ text: async () => '<html>login</html>' }), post: async () => assert.fail('no key, no call') },
+  ]) {
+    const { moodleLookup } = harness();
+    const err = await moodleLookup({ request }).then(() => assert.fail('resolved'), (e) => e);
+    assert.equal(err.message, `Moodle did not list the student's courses (is ${ORIGIN} up, and did the login take?)`);
+    assert.ok(!`${err.message}\n${err.stack}\n${err.cause}`.includes(KEY), 'the key is nowhere in the error');
+    assert.equal(err.cause, undefined);
+  }
+  const { moodleLookup, moodlePages } = harness();
+  const ok = await moodleLookup({ request: { get: async () => page, post: async () => ({ json: async () => [{ error: false, data: { courses: [{ id: 16, shortname: 'BIO 1100' }] } }] }) } });
+  assert.deepEqual(plain(ok.ids), { bio: 16 });
+  await assert.rejects(moodlePages({ ids: {}, context: {} }), /Moodle has no course BIO 1100/, 'an error the run closes the browser on, not an exit');
+  await assert.rejects(moodlePages({ ids: { bio: 16 }, context: { request: { get: async () => ({ text: async () => '<a href="/mod/assign/view.php?id=4">' }) } } }), /BIO 1100 has no quiz/);
+});
