@@ -43,7 +43,7 @@ class El {
   getClientRects() { return []; }
 }
 
-const page = ({ site, preload, answer }) => {
+const page = ({ site, preload, answer, raw = {} }) => {
   const sent = [], held = [], swept = [];
   const html = new El('html');
   html.lang = 'en';
@@ -89,16 +89,21 @@ const page = ({ site, preload, answer }) => {
           return Promise.resolve({ ok: false, error: 'not in this test' });
         },
       },
-      storage: { sync: { get: (k, cb) => cb({}) }, local: area(), onChanged: { addListener() {} } },
+      storage: { sync: { get: (k, cb) => cb(raw) }, local: area(), onChanged: { addListener() {} } },
     },
   });
   c.window = c; c.top = c; c.globalThis = c;
   for (const f of FIRST) vm.runInContext(read(f), c, { filename: f });
-  if (preload) vm.runInContext(read(`content-${site}.js`), c);
+  const loadPart = () => {
+    // Ultra's initial list and the worker fallback both put its schema before its part.
+    if (site === 'ultra') vm.runInContext(read('lib/nav.js'), c, { filename: 'lib/nav.js' });
+    vm.runInContext(read(`content-${site}.js`), c);
+  };
+  if (preload) loadPart();
   const done = vm.runInContext(read('content.js'), c, { filename: 'content.js' });
   const sheets = () => head.kids.map((l) => String(l.href || '').split('/').pop()).filter((f) => f.endsWith('.css'));
   // The part's file arriving, as lib/background.js would put it in, then the worker's answer.
-  const arrive = () => { vm.runInContext(read(`content-${site}.js`), c); held.shift()({ ok: true }); };
+  const arrive = () => { loadPart(); held.shift()({ ok: true }); };
   return { c, html, sent, held, swept, sheets, done, arrive, asked: () => sent.filter((m) => m?.files?.includes(`content-${site}.js`)).length };
 };
 
@@ -114,6 +119,17 @@ const SHEETS = { canvas: ['canvas.css', 'motion.css', 'apps.css'], ultra: ['them
 // Canvas's part draws its sidebar's attributes (paintNav); Ultra's has nothing on <html> of its own, so its
 // gradebook helper, asked through GZ_CTX, is what shows it is in.
 const partOn = (p, site) => (site === 'canvas' ? p.html.hasAttribute('data-gz-nav-labels') : typeof p.c.GZ_CTX.bookFor('_1_1') === 'object');
+
+test('Ultra arriving after the initial settings answer recovers saved nav appearance with its schema', () => noUnhandled(async () => {
+  const p = page({ site: 'ultra', preload: false, answer: 'held', raw: { nav: { brand: 'school', detailed: true, width: 280, gap: 7 } } });
+  await settle();
+  p.arrive();
+  await settle();
+  assert.equal(p.html.getAttribute('data-gz-nav-brand'), 'school');
+  assert.equal(p.html.style.getPropertyValue('--gz-nav-width'), '280px');
+  assert.equal(p.html.style.getPropertyValue('--gz-nav-gap'), '7px');
+  assert.equal(p.c.GZ_CTX.settings().nav.width, 280);
+}));
 
 for (const site of ['canvas', 'ultra']) {
   test(`${site}: its part preloaded, as on its own pages: the theme, the context and the sweep, nothing asked`, () => noUnhandled(async () => {

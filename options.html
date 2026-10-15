@@ -72,6 +72,9 @@
   button:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
   body.off .editor > section:not(#data) { opacity: 0.5; }
   [hidden] { display: none !important; }
+  .nav-editor-list { display: grid; gap: 8px; padding: 0; list-style: none; }
+  .nav-editor-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--gz-line); border-radius: 8px; }
+  .nav-editor-list li > span { flex: 1; min-width: 5rem; overflow-wrap: anywhere; }
   .swatch.bg-set::after { display: none; }
   .seg.wrap { flex-wrap: wrap; border-radius: 14px; }
   /* Fonts: one picker for three slots; each card is drawn in its own face. */
@@ -359,6 +362,31 @@
         <label class="field"><span>Sidebar labels</span><select data-key="nav.labels"><option value="normal">Normal labels</option><option value="small">Small labels</option><option value="icons">Icons only</option></select></label>
         <label class="field"><span>Sidebar size</span><select data-key="nav.size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
         <label class="check"><input type="checkbox" data-key="nav.collapsed"><span>Collapse the sidebar</span><span class="desc">Every link stays in the rail. Point at it or focus it to read its label.</span></label>
+        <div class="group" id="ultra-nav-editor">
+          <h3>Blackboard navigation</h3>
+          <label class="field"><span>Rail width</span><input type="range" data-key="nav.width" min="160" max="320" step="1"><output data-for="nav.width" data-format="px"></output></label>
+          <label class="field"><span>Navigation icon size</span><input type="range" data-key="nav.icon" min="16" max="36" step="1"><output data-for="nav.icon" data-format="px"></output></label>
+          <label class="field"><span>Navigation label size</span><input type="range" data-key="nav.text" min="10" max="20" step="1"><output data-for="nav.text" data-format="px"></output></label>
+          <label class="field"><span>Navigation item height</span><input type="range" data-key="nav.height" min="36" max="72" step="1"><output data-for="nav.height" data-format="px"></output></label>
+          <label class="field"><span>Navigation item gap</span><input type="range" data-key="nav.gap" min="0" max="16" step="1"><output data-for="nav.gap" data-format="px"></output></label>
+          <label class="field"><span>Navigation padding</span><input type="range" data-key="nav.padding" min="0" max="24" step="1"><output data-for="nav.padding" data-format="px"></output></label>
+          <label class="field"><span>Navigation logo</span><select data-key="nav.brand"><option value="glaze">Glaze logo</option><option value="school">School logo</option><option value="custom">Custom logo</option></select></label>
+          <div class="row"><button type="button" id="nav-logo-pick">Choose a logo</button><input id="nav-logo-file" type="file" accept="image/*" hidden><span id="nav-logo-note" class="desc"></span></div>
+          <h3>Custom links and item order</h3>
+          <p class="desc">Custom navigation links sync with Chrome. Images stay on this device.</p>
+          <ol id="nav-items" class="nav-editor-list"></ol>
+          <div id="nav-link-editor" class="group">
+            <label class="field"><span>Name</span><input id="nav-link-name" type="text" maxlength="80"></label>
+            <label class="field"><span>URL</span><input id="nav-link-url" type="url" maxlength="512" placeholder="https://…" translate="no" spellcheck="false"></label>
+            <label class="field"><span>Icon</span><select id="nav-link-icon"></select></label>
+            <label class="check"><input id="nav-link-tab" type="checkbox"><span>Open in a new tab</span></label>
+            <div class="row"><button type="button" id="nav-link-save">Add link</button><button type="button" id="nav-link-cancel">Cancel</button></div>
+          </div>
+          <h3>Navigation widgets</h3>
+          <p class="desc">The rail uses the same focus timer and pet progress as your widgets. No extra activity is recorded.</p>
+          <ol id="nav-widgets" class="nav-editor-list"></ol>
+          <button type="button" id="nav-reset">Reset navigation</button>
+        </div>
       </section>
 
       <section id="courses">
@@ -597,7 +625,11 @@
           <label class="check"><input type="checkbox" data-key="enhance.notes"><span>Notes</span>
             <span class="desc">On Canvas and Blackboard Ultra: a box for your own notes on Canvas's Dashboard or Ultra's Courses page (small, medium or large; web addresses in them become links) and a notes app with folders, formatting, checklists, pictures, attachments and links to your courses' content. Open the app from Ctrl+K, the notes box, a Canvas course card's + menu, or Course notes on a Canvas course's home or an Ultra course's outline. Kept on this device only, for each site and account, in Glaze's own storage, which the school's site can't read. Deleted notes stay in the trash for 30 days; export everything as a zip at any time.</span></label>
           <label class="check"><input type="checkbox" data-key="enhance.widgets"><span>Widgets</span>
-            <span class="desc">On Canvas's Dashboard, and in Glaze's panel on Blackboard Ultra's Courses page: an agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. Edit widgets to add, order and size them; any of them can float over every page of the site, where you drag it or move it with the arrow keys.</span></label>
+            <span class="desc">An agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. On Canvas's Dashboard, Edit widgets adds, orders and sizes them, and any of them can float over every Canvas page. On Blackboard Ultra they float on the Courses page and on Glaze's Dashboard (the Institution page, with Better To Do), each with a layout of its own, and any of them can float over every Blackboard page: Edit layout lets you drag them anywhere or move them with the arrow keys; they snap to a grid, the edges and each other, and Alt places them freely.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.dashboard"><span>Glaze Dashboard</span>
+            <span class="desc">On by default. Blackboard Ultra's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Ultra's own page, one click away.</span></label>
+          <label class="check"><input type="checkbox" data-key="widgets.land"><span>Open Blackboard on the dashboard</span>
+            <span class="desc">Off by default. When Blackboard Ultra opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></label>
           <div class="row">
             <label class="field"><span>Focus minutes</span><input type="range" data-key="widgets.work" min="1" max="120" step="1"><output data-for="widgets.work"></output></label>
             <label class="field"><span>Break minutes</span><input type="range" data-key="widgets.rest" min="1" max="60" step="1"><output data-for="widgets.rest"></output></label>
@@ -727,6 +759,7 @@
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
   <script src="lib/cards.js"></script>
+  <script src="lib/nav.js"></script>
   <script src="lib/share.js"></script>
   <script src="lib/history.js"></script>
   <script src="lib/lookx.js"></script>
