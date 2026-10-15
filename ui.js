@@ -2,8 +2,10 @@
 const GZ_UI = (() => {
   const store = chrome.storage.sync;
 
+  // Settings, and the dashboard cards' (lib/cards.js keeps those apart, out of the content script's first load).
+  const clean = (raw) => ({ ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw?.card) });
   const load = () => new Promise((res) => {
-    try { store.get(null, (raw) => res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw))); } catch { res(GZ_SANITIZE()); }
+    try { store.get(null, (raw) => res(clean(chrome.runtime.lastError ? {} : raw))); } catch { res(clean()); }
   });
 
   // Writes only the given top-level keys: sync storage counts every write against a per-minute
@@ -76,7 +78,9 @@ const GZ_UI = (() => {
   // A look is an explicit choice too: palette, fonts, shape and background at once.
   const pickLook = (s, L) => {
     Object.assign(s, GZ_LOOK_APPLY(s, L));
-    return ['colors', 'preset', 'auto', 'look', 'bg'];
+    // Course cards only as far as the look names them.
+    if (L.card) s.card = GZ_CARDS.settings({ ...s.card, ...L.card });
+    return ['colors', 'preset', 'auto', 'look', 'bg', ...(L.card ? ['card'] : [])];
   };
 
   // A theme's name in the history and favorites: the Look it is, else its palette's name.

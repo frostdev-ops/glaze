@@ -5,9 +5,13 @@ _Last updated: 2026-10-15_
 ## What Glaze stores
 
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
-  background, motion, course colour and extras choices, and what you set for a course in its course menu:
+  background, motion, light/dark schedule, course colour and extras choices, and what you set for a course in its course menu:
   its colour, look, tint and the **nickname you type for it**. When Chrome sync is on, these follow
   your own account between devices. Safari keeps them on this device only.
+- **Your GPA choices** (Canvas, the GPA Extra), in `chrome.storage.sync` as their own small item: for each
+  course you change, its Canvas site's address and course id with the credits, honors/AP level, grading
+  scale you typed and whether it counts. Nothing is stored for a course you leave as it is. It follows
+  your account like your settings; Safari keeps it on this device only.
 - **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
   lists it and which of Ultra's ten colour slots it is in, so the editor can list them for you to
   recolour or tint. On Canvas this includes the site's address, course id, name, code and native color.
@@ -27,6 +31,14 @@ _Last updated: 2026-10-15_
 - **Scores you try in the what-if calculator**, in `chrome.storage.local`, on this device only: for up
   to 20 courses, the hypothetical scores you typed for work not graded yet. A score is removed once the
   item has a real grade or is gone, and "Clear scores" removes a course's.
+- **What-if on Canvas**, in `chrome.storage.local`, on this device only, per Canvas site and signed-in user id:
+  for up to 100 courses, the course id with the assignment ids and scores you typed (and the real grade each
+  was typed against), the ids of work you left out, your pretend assignments (the name you gave, points and
+  score) and a what-if grade per course for the GPA. A score goes once its real grade arrives or changes,
+  and the calculator says so. "Clear this course" deletes a course's scores and pretend assignments, "Clear all
+  courses" everything, and the time of the last Clear all is kept per site and user so a change from another open
+  tab can't bring them back. Nothing of this
+  is sent to Canvas or anywhere else.
 - **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
   time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner, or Moodle's Timeline),
   and the address of the site it came from, so the popup can list them. It is replaced each time it's
@@ -42,11 +54,25 @@ _Last updated: 2026-10-15_
   messages to individual users in uniquely named courses, with a subject and selected recipients;
   replies and group recipients are not backed up. Copies are kept until a matching sent message is
   confirmed, the body is cleared or the offer dismissed, or 14 days pass. Switching the Extra off deletes
-  them. Canvas's own editor recovery and what-if scores stay with Canvas.
+  them. Canvas's own editor recovery and its own what-if scores stay with Canvas.
+- **Better To Do** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site and
+  signed-in user id: the tasks you add (title, course, due date, notes), the steps, "do on" days and focus sessions
+  you plan, and what you tick off while "Tick off in Canvas too" is off. Export settings includes them, so you can
+  move them; nothing else sends them anywhere. It also keeps one copy of your planner items (title, course, dates,
+  submission status, your planner marks) and, for teachers, the work waiting to be graded with its counts. Two
+  minutes is how long that copy counts as fresh, not how long it is kept: it stays until the next fetch replaces it,
+  or until Glaze is removed.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
   Clear history in the editor deletes the history; Remove deletes a favorite.
+- **Canvas course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
+  card style (`cards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
+  (`links`: their names, addresses and icons), by your Canvas site's address and course number.
+- **Pictures you choose for course cards from your computer**, in `chrome.storage.local`, on this device only:
+  scaled down to at most 960 pixels and kept as WebP (JPEG in Safari), at most about 400 KB each and 4 MB in all.
+  They are never synced, exported or put in a theme code. Choosing another picture, or removing the card's style,
+  deletes the old one; Reset everything deletes them all.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -103,7 +129,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
   asks for your active courses with their current scores and, inside a course, that course's navigation
   tabs. Extras also read native course colors, assignments and submission status, module completion
   requirements and items, folder and file metadata, and the server-rendered Grades page's unread dots.
-  These requests are read-only GETs to your own Canvas site with your existing session. Only the due
+  The course list includes each course's term (for the GPA). When you open the what-if calculator on a
+  course's Grades page (or when you have something saved for that course), Glaze asks for that course's
+  assignment groups with your submissions, and its grading periods or grading scheme where the course has
+  them; the answers stay in memory. With the GPA on, a what-if grade for a course whose letter grade Canvas gives
+  asks once for that course's grading scheme, to read the what-if on the same scale. Glaze never writes grades or
+  what-if scores to Canvas.
+  These requests are read-only GETs to your own Canvas site with your existing session (Better To Do's opt-in tick, below, is the one write). Only the due
   list, course details and badge records described above are stored; other answers stay in memory.
   For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking
   a send, your sent conversations and matching conversation details without marking mail read. It
@@ -111,6 +143,31 @@ animated backgrounds) are bundled. It makes requests in these cases:
   files. The extension's background worker fetches them from your school's file host without cookies.
   Links and file bytes stay in memory while Glaze makes the zip; they are not saved in extension storage.
   The resulting zip is saved to your device.
+- **Better To Do** (Canvas, off by default). On the Dashboard and a course's home page, Glaze asks your own Canvas
+  site for your profile (for your user id and time zone), your planner items from a week back (longer if you choose
+  to keep past-due work longer) to the end of your timeframe, and your active courses. If you teach or assist a
+  course, it also asks for your To Do list's grading items and, with grading progress on, each listed assignment's
+  submission counts. It asks when such a page opens and its copy is more than two minutes old, when you come back to
+  the page (shown or focused) after that, and when you change the list's settings; a grading count that didn't
+  come is asked for again when you come back. These are read-only GETs with your existing session. The answer also
+  replaces the due list above, and on these pages the due list's start-of-page fetch is skipped. Opening the command
+  palette before the list has its first answer can still ask for the due list once more (at most every ten minutes).
+  Other pages keep fetching the due list on their own schedule; the two aren't merged because the due list covers the
+  next seven days from Blackboard, Canvas or Moodle on every page, while To Do's window follows your settings and only runs
+  where the list is.
+- **Tasks on course cards** (Canvas, off by default). On the Dashboard's card view, Glaze asks your own Canvas site
+  for your profile (user id and time zone; one request a page, shared with Better To Do) and uses Better To Do's copy
+  of your planner items. Only when that copy is missing or more than two minutes old and the To Do list isn't on the
+  page (or it left without an answer) does it ask for your planner items itself, the same read-only request with the
+  same window, and keeps the answer in that same copy (and the due list above), unless a newer one arrived meanwhile;
+  the list then uses it too (a teacher's list asks only for its grading items). It asks again when you come back to
+  the page after that, or change the To Do settings, and not within a minute of a failed ask. It never writes to Canvas.
+- **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). This is the only change Glaze
+  makes to any site. When you tick or untick an item, Glaze writes Canvas's own planner mark for it, as Canvas's List
+  View checkbox does: one request to your own Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark
+  that already exists) with the item's type and id, your user id and done or not done, and the page's own CSRF token.
+  Nothing is written at any other time, and nothing else is written. If Canvas refuses, the tick goes back and the
+  list says so. Off, ticks stay on this device.
 - **On Moodle.** At most every ten minutes, Glaze asks your own Moodle site for the activities due in the
   next seven days, with the same request Moodle's own Timeline block makes (`core_calendar_get_action_events_by_timesort`
   through Moodle's `/lib/ajax/service.php`, with your existing session and the page's own session key), and keeps
@@ -137,6 +194,12 @@ animated backgrounds) are bundled. It makes requests in these cases:
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
+- **Course card pictures and bookmarks.** A card picture you give as an `https://` link is loaded by your browser
+  like the background image. With condensed cards, the card editor reads that picture once more to measure how
+  well text reads on it; a site that doesn't allow that gets an ordinary request and is just not measured. A
+  theme code's card pictures are named in its preview before you use it. Bookmark icons are drawn by Glaze: the
+  linked sites are asked for nothing (no favicons) until you click a bookmark. The create button asks your own
+  Canvas site, once per course, whether you may start a discussion there.
 - **Mac app updates.** The downloaded Mac DMG app checks
   `https://frostdev.io/projects/glaze/appcast.xml` about once a day while Glaze is in use and downloads
   updates from GitHub. Sparkle system profiling is disabled: no system profile, coursework, settings,
@@ -164,8 +227,8 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 
 ## Permissions
 
-- `storage` — to save the settings, course names, places, what-if scores, due list, typed-text backups,
-  Looks history and favorites, and Safari update-check timestamp described above.
+- `storage` — to save the settings, GPA choices, course names, places, what-if scores, due list, Better To Do's tasks and plans,
+  typed-text backups, Looks history and favorites, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is

@@ -99,9 +99,11 @@ test('success means the file ran to its end: an injection that fails, throws or 
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3 }]), 'safari-web-extension:'), { ok: true });
 });
 
+// What a feature file reads from content.js when it loads (features/*.js).
+const CTX = { t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}) };
 test('every loadable file ends on a value, which is how the worker knows it ran', () => {
-  for (const f of ['lib/zip.js', 'lib/drafts.js', 'i18n/de.js']) {
-    const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob });
+  for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'i18n/de.js', 'lib/cards.js']) {
+    const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX });
     assert.ok(vm.runInContext(read(f), context), `${f}: no last value`);
   }
 });
@@ -121,8 +123,8 @@ test('every loadable file exists, is left out of the first content script, and i
 });
 
 test('a file loaded twice into one frame keeps the first', () => {
-  for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS']]) {
-    const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob });
+  for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS'], ['lib/gradecalc.js', 'GZ_GRADECALC'], ['features/grades.js', 'GZ_GRADES_UI'], ['lib/cards.js', 'GZ_CARDS']]) {
+    const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX });
     vm.runInContext('globalThis.globalThis = this;', context);
     vm.runInContext(read(file), context);
     const first = vm.runInContext(name, context);

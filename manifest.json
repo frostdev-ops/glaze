@@ -92,7 +92,8 @@
         "extras.css",
         "canvas.css",
         "moodle.css",
-        "fonts/*.woff2"
+        "fonts/*.woff2",
+        "assets/art/pets/*/sprites.webp"
       ],
       "matches": [
         "https://*/*"

@@ -138,7 +138,7 @@
     </div>
     <nav aria-label="Sections">
       <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
-      <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#extras">Extras</a><a href="#data">Share</a>
+      <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
     </nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
@@ -168,12 +168,22 @@
         </div>
         <ul class="mine" id="mine" aria-label="Your presets"></ul>
         <div class="group">
-          <label class="check"><input type="checkbox" data-key="auto.on"><span>Follow the system's light and dark mode</span>
-            <span class="desc">Switches between two palettes when your computer changes mode.</span></label>
+          <label class="check"><input type="checkbox" data-key="auto.on"><span>Auto light and dark</span>
+            <span class="desc">Switches between two palettes: with your computer's mode, or at set times.</span></label>
+          <div class="row">
+            <select data-key="auto.mode" aria-label="Auto light and dark">
+              <option value="device">Follow the system's light and dark mode</option>
+              <option value="schedule">On a schedule</option>
+            </select>
+            <span class="row" id="auto-times"><label>Dark from <input type="time" data-key="auto.from" required></label>
+              <label>until <input type="time" data-key="auto.to" required></label></span>
+          </div>
           <div class="row">
             <label>Light <select id="auto-light" data-key="auto.light"></select></label>
             <label>Dark <select id="auto-dark" data-key="auto.dark"></select></label>
           </div>
+          <label class="check"><input type="checkbox" data-key="enhance.quizLight"><span>Keep quizzes light</span>
+            <span class="desc">On Canvas, a quiz you are taking and external tools such as New Quizzes are shown without Glaze.</span></label>
         </div>
       </section>
 
@@ -188,11 +198,12 @@
             </div>
             <details id="font-browse">
               <summary>Browse fonts</summary>
-              <div id="font-grid"></div>
               <div class="row">
-                <input type="text" id="font-custom" maxlength="40" placeholder="Any Google Font, or one on this computer" aria-label="Font name" aria-describedby="font-note">
+                <input type="search" id="font-custom" maxlength="40" placeholder="Search, or any Google Font" aria-label="Font name" aria-describedby="font-found font-note" autocomplete="off" spellcheck="false">
                 <button type="button" id="font-use">Use</button>
+                <span class="desc" id="font-found" role="status"></span>
               </div>
+              <div id="font-grid"></div>
               <p class="desc" id="font-note">Web fonts download when you choose them: from Google Fonts, or jsDelivr for OpenDyslexic and the Nerd Fonts (about 5 MB each). Opening this list loads small previews from Google Fonts.</p>
             </details>
           </div></div>
@@ -298,6 +309,47 @@
         <p class="desc" id="course-empty">Open Blackboard or Canvas once and your courses show up here. Change Canvas colours in its own card menu.</p>
       </section>
 
+      <section id="cards">
+        <h2>Course cards</h2>
+        <p class="desc" id="cards-note">Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.</p>
+        <label class="field"><span>Card width</span><input type="range" data-key="card.width" min="200" max="420" step="2"><output data-for="card.width" data-format="px"></output></label>
+        <label class="field"><span>Space between cards</span><input type="range" data-key="card.gap" min="-1" max="72" step="1"><output data-for="card.gap" data-format="themepx"></output></label>
+        <label class="field"><span>Card corners</span><input type="range" data-key="card.radius" min="-1" max="32" step="1"><output data-for="card.radius" data-format="themepx"></output></label>
+        <label class="field"><span>Picture height</span><input type="range" data-key="card.height" min="64" max="260" step="2"><output data-for="card.height" data-format="px"></output></label>
+        <label class="check"><input type="checkbox" data-key="card.condensed"><span>Condensed cards</span>
+          <span class="desc">The course name sits on the card's picture, so each card is shorter. A card's editor warns when the name would be hard to read there.</span></label>
+        <label class="check"><input type="checkbox" data-key="card.overlay"><span>Course color over pictures</span>
+          <span class="desc">Canvas tints each card's picture in the course color. Off shows pictures as they are.</span></label>
+        <div class="field wide"><span>Hover</span>
+          <div class="seg wrap" role="radiogroup" aria-label="Card hover" aria-describedby="card-motion-note">
+            <label><input type="radio" name="card.hover" value="none">None</label>
+            <label><input type="radio" name="card.hover" value="lift">Lift</label>
+            <label><input type="radio" name="card.hover" value="glow">Glow</label>
+            <label><input type="radio" name="card.hover" value="tilt">Tilt</label>
+            <label><input type="radio" name="card.hover" value="grow">Grow</label>
+            <label><input type="radio" name="card.hover" value="shine">Shine</label>
+          </div></div>
+        <div class="field wide"><span>Particles</span>
+          <div class="seg wrap" role="radiogroup" aria-label="Card particles" aria-describedby="card-motion-note">
+            <label><input type="radio" name="card.particles" value="none">None</label>
+            <label><input type="radio" name="card.particles" value="sparkles">Sparkles</label>
+            <label><input type="radio" name="card.particles" value="snow">Snow</label>
+            <label><input type="radio" name="card.particles" value="bubbles">Bubbles</label>
+            <label><input type="radio" name="card.particles" value="confetti">Confetti</label>
+          </div></div>
+        <div class="field wide"><span>Pet</span>
+          <div class="seg" role="radiogroup" aria-label="Card pet" aria-describedby="card-motion-note">
+            <label><input type="radio" name="card.pet" value="none">None</label>
+            <label><input type="radio" name="card.pet" value="cat">Cat</label>
+            <label><input type="radio" name="card.pet" value="bunny">Bunny</label>
+          </div></div>
+        <p class="desc" id="card-motion-note">The pet sits on your first card. Hover effects, particles and the pet move only while motion is on (Motion, above); with it off the pet sits still.</p>
+        <label class="check"><input type="checkbox" data-key="card.icons"><span>Bookmark icons on cards</span>
+          <span class="desc">A card's bookmarks show as small icons on its picture.</span></label>
+        <label class="check"><input type="checkbox" data-key="card.create"><span>Create button on cards</span>
+          <span class="desc">A + on each card to message the class, or start a discussion where the course allows it.</span></label>
+        <div class="row" id="card-set" hidden><span class="desc" id="card-set-note"></span><button type="button" id="card-set-clear" aria-describedby="card-set-note">Remove</button></div>
+      </section>
       <section id="extras">
         <h2>Extras</h2>
         <p class="desc">Extras work on Blackboard and Canvas. On Canvas they sit where Canvas keeps the same things: Modules for course content, the Assignments list and To Do for due dates, the Dashboard for course cards.</p>
@@ -313,7 +365,10 @@
         <label class="check"><input type="checkbox" data-key="enhance.inline"><span>Due-date status and percentages</span>
           <span class="desc">Beside each due date in course content, where the work stands: "in 2 days · Unopened", "Submitted", "Graded · 18/20". Elsewhere, how long is left. And the percentage inside every grade.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.overall"><span>Grades on course cards</span>
-          <span class="desc">Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.</span></label>
+          <span class="desc">Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.</span>
+          <span class="desc">On Canvas: on the Dashboard's cards. Click the grade to open the course's grades.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.gradeHover"><span>Card grades only on hover</span>
+          <span class="desc">Grades on course cards, and the GPA, stay hidden until you point at them.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.previews"><span>Folder previews</span>
           <span class="desc">Hover a closed folder in course content to see what is inside, what is done and what is due.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.place"><span>Remember your place</span>
@@ -330,7 +385,16 @@
           <span class="desc">On Canvas: new items in Modules and a count on Dashboard cards.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.calc"><span>What-if calculator</span>
           <span class="desc">On a course's gradebook: try scores for work not graded yet, or set a target and see what you'd need. Uses the course's own weights, and says so when it can't.</span>
-          <span class="desc">On Canvas: Canvas's own what-if scores, which it keeps for you.</span></label>
+          <span class="desc">On Canvas: above a course's grades, by Canvas's own rules (weights, dropped scores, excused work, grading periods). Change real scores, leave work out, add pretend assignments. Kept on this device until the real grade arrives; Canvas never sees them.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.gpa"><span>Grade point average</span>
+          <span class="desc">On Canvas's Dashboard: your GPA for each term and across your current courses, from your current grades. Set each course's credits, level and grading scale under it.</span></label>
+        <div class="group">
+          <label class="check"><input type="checkbox" data-key="enhance.gpaPlus"><span>Plus/minus grade points</span>
+            <span class="desc">A− counts 3.7, B+ 3.3 and so on, instead of 4 for any A.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.gpaWeighted"><span>Weighted grade points</span>
+            <span class="desc">Honors courses add 0.5 and AP or IB courses 1, up to 5.0.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.gpaAfter"><span>Grade point average below the cards</span></label>
+        </div>
         <label class="check"><input type="checkbox" data-key="enhance.palette"><span>Command palette</span>
           <span class="desc">Ctrl+K (⌘K on a Mac) to jump to a course, an item in this course, a page or a Glaze setting.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.coursemenu"><span>Course menu</span>
@@ -350,6 +414,43 @@
         <label class="check"><input type="checkbox" data-key="enhance.toggles"><span>Document buttons</span>
           <span class="desc">Round buttons at the bottom right of course documents: dark documents, and focus mode (the document alone, with a reading-progress line and reading time; Esc leaves it).</span>
           <span class="desc">On Canvas: a bar above pages, assignments and file previews.</span></label>
+        <div class="group" id="todo">
+          <h3>Better To Do</h3>
+          <label class="check"><input type="checkbox" data-key="enhance.todo"><span>Better To Do</span>
+            <span class="desc">On Canvas: Glaze's own To Do list in place of Canvas's, on the Dashboard and on a course's home page (that course only). Grouped by day, with what's past due, what's done and new announcements. Add your own tasks, steps, a day to do something on and timed focus sessions; they're kept on this device, and Export settings includes them.</span></label>
+          <div class="row">
+            <label>Timeframe <select data-key="todo.span"><option value="week">This week</option><option value="custom">Custom</option></select></label>
+            <label>Week starts <select data-key="todo.start"><option value="rolling">Today</option><option value="monday">Monday</option><option value="sunday">Sunday</option><option value="saturday">Saturday</option></select></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Custom timeframe</span><input type="range" data-key="todo.n" min="1" max="60" step="1"><output data-for="todo.n"></output></label>
+            <label><select data-key="todo.unit" aria-label="Custom timeframe unit"><option value="days">Days</option><option value="weeks">Weeks</option></select></label>
+          </div>
+          <div class="row">
+            <label>Past-due work <select data-key="todo.past"><option value="never">Hide</option><option value="3days">3 days</option><option value="week">A week</option><option value="month">A month</option><option value="always">Always</option></select></label>
+            <label>Done means <select data-key="todo.done"><option value="auto">Submitted, graded or ticked</option><option value="manual">Only what I tick</option></select></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="todo.group"><span>Group by day</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.rel"><span>Relative dates</span>
+            <span class="desc">"in 2 days" instead of "Thu 11:59 PM". The other shows when you hover.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.urgent"><span>Highlight what's urgent</span>
+            <span class="desc">Past due, or due within a day.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.teacher"><span>Grading, for teachers</span>
+            <span class="desc">If you teach or assist a course: work waiting for you to grade.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.progress"><span>Grading progress</span>
+            <span class="desc">How many handed-in submissions you've graded so far. Asks Canvas once per assignment.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.sync"><span>Tick off in Canvas too</span>
+            <span class="desc">Ticking an item marks it done in Canvas's own planner, as Canvas's List View does, so it shows done on your phone too. This is the only change Glaze makes in Canvas. Off: ticks stay on this device.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.cardTasks"><span>Tasks on course cards</span>
+            <span class="desc">On Canvas's Dashboard: each course card lists that course's next items, soonest first, each a link. They follow the timeframe, past-due work and "Done means" above, whether or not Better To Do is on.</span></label>
+          <div class="row">
+            <label class="field"><span>Tasks per card</span><input type="range" data-key="todo.cardN" min="1" max="10" step="1"><output data-for="todo.cardN"></output></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="todo.cardStatus"><span>Status on card tasks</span>
+            <span class="desc">Submitted, graded, late, missing or excused, beside each item.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.cardCross"><span>Cross out done tasks</span>
+            <span class="desc">Done items stay on the card, crossed out, until their due date passes. Off: they leave it.</span></label>
+        </div>
         <div class="group">
           <h3>Declutter</h3>
           <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
@@ -395,7 +496,8 @@
           <label class="row"><button type="button" id="import-btn">Import settings…</button><input type="file" id="import" accept="application/json,.json" hidden></label>
           <button type="button" id="reset-all" class="danger">Reset everything</button>
         </div>
-        <p class="desc">Exports are a JSON file with your palette, presets, options and any course nicknames you set. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
+        <p class="desc">Exports are a JSON file with your palette, presets, options, any course nicknames you set, and your Better To Do tasks and plans. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
+        <p class="desc">Card styles and bookmarks go in the export too. Pictures kept for cards stay on this computer.</p>
       </section>
     </main>
 
@@ -407,10 +509,12 @@
   <script src="lib/color.js"></script>
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>
+  <script src="lib/cards.js"></script>
   <script src="lib/share.js"></script>
   <script src="lib/history.js"></script>
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
+  <script src="lib/todo.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>

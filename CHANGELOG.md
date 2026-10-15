@@ -16,6 +16,60 @@ All notable changes to Glaze are documented here. The format follows
 - **Looks history and Previous Look:** the last 20 themes you wore, from the popup, the editor or Ctrl+K,
   with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
   kept on this device.
+- **Canvas course cards:** give each Dashboard card its own color, two-color gradient or picture (a link, or a
+  picture from your computer, scaled down and kept on it), with a picture filter (vivid, mono, noir, warm, cool,
+  faded, dreamy), focus point, zoom, and overlay color and strength. The list view's course banners follow. Free,
+  like everything in Glaze. Opened from the card's course menu (Card style and bookmarks).
+- **Course bookmarks:** up to eight links per course, each with a name and an icon from Glaze's own set, shown as
+  icons on its card. Add, edit, reorder and hide them; turn the icons off. Glaze asks the linked sites for nothing.
+- **Card layout and effects:** card width, space between cards, corners, picture height, condensed cards (the name on
+  the picture), Canvas's color over pictures on or off, hover effects (lift, glow, tilt, grow, shine), particles
+  (sparkles, snow, bubbles, confetti) and a pet (cat or bunny) on your first card. All of it moves only while motion
+  is on.
+- **Create button on cards** (off by default): message the class, or start a discussion where the course allows it.
+- **Contrast warnings for cards:** with condensed cards, the card editor shows how well white text reads on the card
+  (the measured ratio) and warns below 4.5:1. It never changes your colors.
+- **Font search:** typing in the font list filters it; a name that isn't in the list is tried on Google Fonts.
+- **Theme codes and Looks carry course cards:** how cards look, and up to eight card styles that take turns on the
+  cards without their own. Only linked pictures travel; a picture from your computer never leaves it. A code with
+  card settings needs this Glaze or newer; the Looks gallery's checker learns them with the next release. A code that
+  would be too long (many card pictures with long links) is refused when you copy it, with the reason.
+- **Scheduled dark mode:** auto light and dark can follow a schedule instead of the system, dark from one time
+  until another (20:00 to 08:00 by default, past midnight too). It switches on time while a page is open, and a
+  page opened after the switch starts in the right palette. Set it in the editor, the popup or Ctrl+K.
+- **Keep quizzes light** (Canvas, off by default): no Glaze on a quiz you're taking or its history, and on
+  external tool pages such as New Quizzes.
+- **Canvas: a what-if calculator** above a course's grades (the What-if calculator Extra, now on Canvas too). It
+  works out your grade by Canvas's own rules: weighted groups, dropped lowest and highest scores (the set that
+  helps most, not just the lowest percentages), excused and omitted work, grading periods and letters-only
+  courses, and it matches the totals Canvas shows. Try scores for work not graded yet, change real ones, leave
+  work out, add pretend assignments, and see the even score you'd need on what's left for a target. What you
+  change is kept on this device, per course, until the real grade arrives (Glaze tells you when one goes), and
+  is never sent to Canvas.
+- **Canvas: GPA on the Dashboard** (off by default): your GPA for each term and across your current courses, on a
+  4.0 or plus/minus scale, weighted for honors (+0.5) and AP or IB (+1) if you like, above or below the cards.
+  Set credits, a grading scale of your own and a what-if grade for each course.
+- **Card grades:** click a grade on a Canvas Dashboard card to open that course's grades (with the keyboard, Tab to
+  the card's grade link), or show card grades only when you point at the card.
+
+- **Better To Do (Canvas, off by default; turn it on under Extras):** Glaze's own To Do list in place of Canvas's,
+  on the Dashboard and on a course's home page (that course only). Grouped by day in your Canvas time zone (past due,
+  today, tomorrow, this week, later, no date), or one list by date; what's done, what's graded and announcements
+  (unread first) apart. Relative or exact dates, urgent items marked, and how long past-due work stays.
+  - A custom timeframe of any number of days or weeks, from today or from the start of your week. Free.
+  - Your own tasks (with a course, due date and notes), steps, a "do on" day and timed focus sessions on any item
+    (a planned item still shows under its due date until it's done),
+    kept on this device and included in Export settings.
+  - Done follows your submissions, or only what you tick. "Tick off in Canvas too" marks items done in Canvas's own
+    planner, as Canvas's List View does; Glaze's first and only write to Canvas: opt-in, only from your own tick, and a tick Canvas doesn't confirm goes back and is checked with Canvas again.
+  - For teachers: work waiting to be graded, and how much of it you've graded.
+  - Ctrl+K: turn it on or off, and Add task. Ticking off bursts in Expressive motion.
+- **Tasks on course cards (Canvas, off by default; Extras, under Better To Do):** each Dashboard card lists its
+  course's next items, soonest first, each a link, with its date (relative or exact) and status (submitted, graded,
+  late, missing, excused). 1 to 10 per card (4 by default); done items can stay crossed out. It follows Better To Do's
+  timeframe, past-due window and done rules, ticks and Canvas marks included, and shares its planner copy: the
+  planner is asked once, whether or not the list is on. Every card style and the card grade fit
+  beside it. Ctrl+K turns it on or off.
 - **Moodle:** Glaze restyles Moodle (the Boost theme of Moodle 5, and 4.x where its markup is the same) on any
   school's domain, with the same palettes, Looks, fonts, backgrounds and motion: the Dashboard and My courses,
   course and activity pages, grades, the calendar, messages and the login page, in light and dark palettes.
@@ -27,6 +81,7 @@ All notable changes to Glaze are documented here. The format follows
 
 - **Lighter on every page:** Glaze loads about 38% less code on Canvas and Blackboard pages. Its words in your
   language, Download all and draft backup now load only on the pages that use them.
+- **Blackboard's what-if calculator** now loads only on a gradebook, like Canvas's.
 
 ### Fixed
 
@@ -42,6 +97,8 @@ All notable changes to Glaze are documented here. The format follows
   background show again.
 - **Canvas, light palettes:** "Complete All Items" and the chosen calendar view use a deeper accent that reads.
 - **Canvas:** quiz preview notices use the palette.
+- **Canvas, dark palettes:** an instructor's text in a dark colour (navy, dark green, deep red) is lifted to a
+  light shade of the same colour.
 
 ## [2.2.0] — 2026-10-15
 

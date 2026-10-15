@@ -44,7 +44,8 @@ const fromJs = (js) => {
   }
   return out;
 };
-const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js'];
+// And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
+const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 const used = new Set([
   ...['options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
@@ -65,7 +66,7 @@ test('every language has every key, and nothing else', () => {
 });
 
 test('every key is still used', () => {
-  const src = squash([...JS, 'lib/grades.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html'].map(read).join(' '));
+  const src = squash([...JS, 'lib/grades.js', 'lib/gradecalc.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html'].map(read).join(' '));
   for (const k of keys) assert.ok(src.includes(k), `"${k}" is in no source file`);
 });
 
@@ -141,5 +142,13 @@ test('the manifest description is localized and fits the stores', () => {
     const msgs = JSON.parse(read(`_locales/${d}/messages.json`));
     assert.deepEqual(Object.keys(msgs), ['description'], d);
     assert.ok(msgs.description.message.length <= 132, `${d}: Chrome Web Store allows 132 characters`);
+  }
+});
+
+test('no catalogue lists the same English key twice', () => {
+  for (const f of files) {
+    const keys = [...read(`i18n/${f}`).matchAll(/^\s*'((?:[^'\\]|\\.)+)'\s*:/gm)].map((m) => m[1]);
+    const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
+    assert.deepEqual(dup, [], `${f} repeats ${dup.join(', ')}`);
   }
 });

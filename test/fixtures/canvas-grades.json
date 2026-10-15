@@ -1,0 +1,692 @@
+{
+ "fetched": "2026-10-15",
+ "source": "local Canvas (localhost:3000), student login",
+ "courses": [
+  {
+   "course": {
+    "id": 27,
+    "course_code": "MATH 1350",
+    "apply_assignment_group_weights": true,
+    "restrict_quantitative_data": false,
+    "hide_final_grades": false,
+    "has_grading_periods": false,
+    "has_weighted_grading_periods": false,
+    "enrollment": {
+     "computed_current_score": 83.5,
+     "computed_final_score": 69.13,
+     "computed_current_grade": null,
+     "current_grading_period_id": null,
+     "current_period_computed_current_score": null,
+     "current_period_computed_final_score": null
+    }
+   },
+   "periods": null,
+   "groups": [
+    {
+     "id": 73,
+     "name": "Homework",
+     "group_weight": 30,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 183,
+       "name": "Homework 1",
+       "points_possible": 20,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-09-21T03:59:00Z",
+       "submission": {
+        "score": 19,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 184,
+       "name": "Homework 2",
+       "points_possible": 20,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-09-28T03:59:00Z",
+       "submission": {
+        "score": 17,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 186,
+       "name": "Homework 3",
+       "points_possible": 20,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-05T03:59:00Z",
+       "submission": {
+        "score": 15,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 188,
+       "name": "Homework 4",
+       "points_possible": 20,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-12T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": true,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 189,
+       "name": "Homework 5",
+       "points_possible": 20,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-17T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      }
+     ]
+    },
+    {
+     "id": 74,
+     "name": "Quizzes",
+     "group_weight": 20,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 185,
+       "name": "Limits quiz",
+       "points_possible": 10,
+       "submission_types": [
+        "online_quiz"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-09-30T03:59:00Z",
+       "submission": {
+        "score": 8,
+        "excused": null,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 190,
+       "name": "Unit 4 quiz",
+       "points_possible": 10,
+       "submission_types": [
+        "online_quiz"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-19T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      }
+     ]
+    },
+    {
+     "id": 75,
+     "name": "Exams",
+     "group_weight": 50,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 187,
+       "name": "Exam 1",
+       "points_possible": 100,
+       "submission_types": [
+        "on_paper"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-07T03:59:00Z",
+       "submission": {
+        "score": 84,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "course": {
+    "id": 26,
+    "course_code": "ENG 1100",
+    "apply_assignment_group_weights": true,
+    "restrict_quantitative_data": false,
+    "hide_final_grades": false,
+    "has_grading_periods": false,
+    "has_weighted_grading_periods": false,
+    "enrollment": {
+     "computed_current_score": 88,
+     "computed_final_score": 31.87,
+     "computed_current_grade": null,
+     "current_grading_period_id": null,
+     "current_period_computed_current_score": null,
+     "current_period_computed_final_score": null
+    }
+   },
+   "periods": null,
+   "groups": [
+    {
+     "id": 70,
+     "name": "Reading responses",
+     "group_weight": 20,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 176,
+       "name": "Reading response 1",
+       "points_possible": 10,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-09-24T03:59:00Z",
+       "submission": {
+        "score": 10,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 179,
+       "name": "Reading response 4",
+       "points_possible": 10,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-13T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "submitted"
+       }
+      },
+      {
+       "id": 180,
+       "name": "Reading response 5",
+       "points_possible": 10,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-16T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      }
+     ]
+    },
+    {
+     "id": 71,
+     "name": "Essays",
+     "group_weight": 60,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 182,
+       "name": "Annotated bibliography",
+       "points_possible": 30,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-30T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      },
+      {
+       "id": 181,
+       "name": "Argument essay outline",
+       "points_possible": 20,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-21T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      },
+      {
+       "id": 177,
+       "name": "Narrative essay draft",
+       "points_possible": 50,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-03T03:59:00Z",
+       "submission": {
+        "score": 42,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      }
+     ]
+    },
+    {
+     "id": 72,
+     "name": "Participation",
+     "group_weight": 20,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 178,
+       "name": "Peer review",
+       "points_possible": 10,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-06T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "course": {
+    "id": 25,
+    "course_code": "BIO 1100",
+    "apply_assignment_group_weights": true,
+    "restrict_quantitative_data": false,
+    "hide_final_grades": false,
+    "has_grading_periods": false,
+    "has_weighted_grading_periods": false,
+    "enrollment": {
+     "computed_current_score": 83.85,
+     "computed_final_score": 21.92,
+     "computed_current_grade": null,
+     "current_grading_period_id": null,
+     "current_period_computed_current_score": null,
+     "current_period_computed_final_score": null
+    }
+   },
+   "periods": null,
+   "groups": [
+    {
+     "id": 67,
+     "name": "Labs",
+     "group_weight": 40,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 174,
+       "name": "Genetics problem set",
+       "points_possible": 20,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-27T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      },
+      {
+       "id": 169,
+       "name": "Lab report 1: Microscopy",
+       "points_possible": 20,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-09-27T03:59:00Z",
+       "submission": {
+        "score": 18,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 171,
+       "name": "Lab report 2: Enzyme activity",
+       "points_possible": 20,
+       "submission_types": [
+        "online_upload"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-11T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "submitted"
+       }
+      },
+      {
+       "id": 173,
+       "name": "Lab report 3: Photosynthesis",
+       "points_possible": 20,
+       "submission_types": [
+        "online_upload"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-20T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      },
+      {
+       "id": 198,
+       "name": "zz T22 unread and what-if proof",
+       "points_possible": 10,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": null,
+       "submission": {
+        "score": 6,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 197,
+       "name": "zz T24 native text entry recovery",
+       "points_possible": 0,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": null,
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "submitted"
+       }
+      }
+     ]
+    },
+    {
+     "id": 68,
+     "name": "Quizzes",
+     "group_weight": 25,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 170,
+       "name": "Unit 1 quiz",
+       "points_possible": 10,
+       "submission_types": [
+        "online_quiz"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-01T03:59:00Z",
+       "submission": {
+        "score": 9,
+        "excused": null,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 172,
+       "name": "Unit 2 quiz",
+       "points_possible": 10,
+       "submission_types": [
+        "online_quiz"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-17T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      }
+     ]
+    },
+    {
+     "id": 69,
+     "name": "Exams",
+     "group_weight": 35,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 175,
+       "name": "Midterm exam",
+       "points_possible": 100,
+       "submission_types": [
+        "on_paper"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-11-04T04:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "course": {
+    "id": 28,
+    "course_code": "HIST 2010",
+    "apply_assignment_group_weights": true,
+    "restrict_quantitative_data": false,
+    "hide_final_grades": false,
+    "has_grading_periods": false,
+    "has_weighted_grading_periods": false,
+    "enrollment": {
+     "computed_current_score": 85.45,
+     "computed_final_score": 63.84,
+     "computed_current_grade": null,
+     "current_grading_period_id": null,
+     "current_period_computed_current_score": null,
+     "current_period_computed_final_score": null
+    }
+   },
+   "periods": null,
+   "groups": [
+    {
+     "id": 76,
+     "name": "Assignments",
+     "group_weight": 70,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 195,
+       "name": "Museum visit reflection",
+       "points_possible": 50,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-24T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      },
+      {
+       "id": 196,
+       "name": "Optional extra credit",
+       "points_possible": 5,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": null,
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      },
+      {
+       "id": 191,
+       "name": "Primary source analysis 1",
+       "points_possible": 100,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-09-26T03:59:00Z",
+       "submission": {
+        "score": 88,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 193,
+       "name": "Primary source analysis 2",
+       "points_possible": 100,
+       "submission_types": [
+        "online_text_entry"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-10T03:59:00Z",
+       "submission": {
+        "score": 79,
+        "excused": false,
+        "workflow_state": "graded"
+       }
+      }
+     ]
+    },
+    {
+     "id": 77,
+     "name": "Quizzes",
+     "group_weight": 30,
+     "rules": {},
+     "assignments": [
+      {
+       "id": 192,
+       "name": "Map quiz",
+       "points_possible": 10,
+       "submission_types": [
+        "online_quiz"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-04T03:59:00Z",
+       "submission": {
+        "score": 9,
+        "excused": null,
+        "workflow_state": "graded"
+       }
+      },
+      {
+       "id": 194,
+       "name": "Reading quiz 6",
+       "points_possible": 5,
+       "submission_types": [
+        "online_quiz"
+       ],
+       "omit_from_final_grade": false,
+       "anonymize_students": false,
+       "published": true,
+       "due_at": "2026-10-15T03:59:00Z",
+       "submission": {
+        "score": null,
+        "excused": null,
+        "workflow_state": "unsubmitted"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

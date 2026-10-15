@@ -39,7 +39,7 @@
   const C = GZ_COLOR;
   const html = document.documentElement;
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -107,10 +107,10 @@
   };
   // A field's own text is its value, not a text node; on Canvas an InstUI field in a modal (a portal, outside #application) keeps Canvas's dark ink.
   const FIELD = /^(input|textarea|select)$/i;
-  const SWEEP_TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-brand-bg', 'data-gz-brand-fg'];
+  const SWEEP_TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
   const sweepEls = (els) => {
     // Read the site's current state, without our previous pass's overrides.
-    for (const e of els) for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a);
+    for (const e of els) { liftable.delete(e); for (const a of e.getAttributeNames()) if (SWEEP_TAGS.includes(a)) e.removeAttribute(a); }
     const pending = [];
     const canvasInk = !ultra && new Map();
     for (const e of els) {
@@ -174,6 +174,11 @@
         const onFill = fill || (bg && bg.a >= 0.5 && C.saturated(bg)) || C.same(fg, accentInk);
         if (fg && fg.a >= 0.5 && !C.saturated(fg) && C.brightness(fg) < 0.35 && !onFill && (hasText(e) || (!ultra && FIELD.test(e.tagName)))) tags.push('data-gz-dark');
         if (!ultra && canvasInk.has(e)) tags.push('data-gz-dark');
+        // Instructor's dark colour (navy), links too: canvas.css lifts it.
+        if (!ultra && fg?.a >= 0.5 && C.saturated(fg) && !onFill && hasText(e) && e.closest('.user_content')) {
+          liftable.set(e, C.hex(fg));
+          if (C.contrast(C.hex(fg), palette['--gz-surface']) < 3) tags.push('data-gz-lift');
+        }
         if (!ultra && tags.includes('data-gz-dark') && !canvasInk.has(e)) canvasInk.set(e, '');
       }
       const r = e.getBoundingClientRect();
@@ -186,6 +191,9 @@
     }
     for (const [e, tags] of pending) for (const a of tags) e.setAttribute(a, (!ultra && a === 'data-gz-dark' && canvasInk.get(e)) || '');
   };
+  // Instructor colours met by the sweep: a new dark palette re-checks only these.
+  const liftable = new Map();
+  const relift = () => { for (const [e, c] of liftable) if (!e.isConnected) liftable.delete(e); else e.toggleAttribute('data-gz-lift', C.contrast(c, palette['--gz-surface']) < 3); };
   const sweepAll = () => {
     const all = document.body.querySelectorAll('*');
     if (all.length <= MAX_FULL) sweepEls(all);
@@ -347,6 +355,12 @@
   };
   // Moodle's extras, on first use: its data read (lib/moodle.js), then asked of the page's own Moodle.
   const moodleIn = () => need('lib/moodle.js', () => globalThis.GZ_MOODLE).then(() => need('features/moodle.js', () => globalThis.GZ_MOODLE_PAGE)).then(() => GZ_MOODLE_PAGE);
+  // Better To Do (features/todo.js)
+  const todoHere = () => !ultra && !moodle && links.length && settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
+  const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
+  // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
+  const cardsHere = () => !ultra && links.length && settings.enhance.cardTasks && location.pathname === '/';
+  const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
   // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
@@ -452,8 +466,23 @@
   // serves every card, asked once a page load; the command palette's course list is that answer too.
   // ponytail: the first 100 courses, no paging.
   let canvasList = null;
-  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&per_page=100')
+  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
     .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
+  // Your profile (id, time zone), asked once a page for whoever needs it; again after a failure.
+  let mine = null;
+  const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
+  // The chip is drawn after the course code (canvas.css), inside the card's link: a click on it opens the grades.
+  if (!ultra) addEventListener('click', (e) => {
+    const el = settings.enhance.overall && e.target.closest?.('.ic-DashboardCard [data-gz-grade]');
+    const r = el && document.createRange();
+    if (!r) return;
+    r.selectNodeContents(el);
+    const b = r.getBoundingClientRect();
+    if (html.dir === 'rtl' ? e.clientX >= b.left : e.clientX <= b.right) return; // on the code, not the chip
+    e.preventDefault();
+    const url = `${el.closest('a').href}/grades`;
+    if (e.ctrlKey || e.metaKey) open(url); else location.assign(url);
+  }, true);
   const tagCanvasCards = () => {
     if (!document.querySelector('.ic-DashboardCard')) return;
     canvasCourses().then((list) => {
@@ -462,8 +491,16 @@
       for (const card of document.querySelectorAll('.ic-DashboardCard')) {
         const el = card.querySelector('.ic-DashboardCard__header-subtitle, .ic-DashboardCard__header-term');
         if (!el) continue;
-        const g = grades[card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/([^/?#]+)/)?.[1]];
+        const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/([^/?#]+)/)?.[1];
+        const g = grades[id];
         if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); } else { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
+        // The same grade as a link of its own to the course's grades, for the keyboard and screen readers: right after
+        // the card's link (next in Tab order), not in it, and shown when focused (canvas.css). Written only on a change.
+        let a = card.querySelector('.gz-card-grade');
+        if (!g) { a?.remove(); continue; }
+        const name = t('Grades for {course}: {grade}', { course: card.getAttribute('aria-label') || id, grade: g.label });
+        if (!a) el.closest('a')?.after(a = Object.assign(document.createElement('a'), { className: 'gz-card-grade' }));
+        if (a.getAttribute('aria-label') !== name) { a.href = `/courses/${id}/grades`; a.textContent = g.label; a.setAttribute('aria-label', name); }
       }
     });
   };
@@ -663,6 +700,8 @@
     syncDownloads();
     syncDocTools();
     syncCourseMenu();
+    syncTodo();
+    syncCardTasks();
   };
   // ---- page loads ------------------------------------------------------------------------------
   // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
@@ -732,7 +771,7 @@
     sweepAll();
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
-    if (window.top === window) dueWeek();
+    if (window.top === window && !todoHere() && !cardsHere()) dueWeek();
     if (!ultra) liftCourses();
     recordCourses();
     if (!ultra) paintCourses();
@@ -753,6 +792,7 @@
     cardsIO.disconnect();
     onScreen.clear();
     clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
+    liftable.clear();
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
   };
 
@@ -1591,24 +1631,32 @@
   // ---- what-if calculator (Extras) -----------------------------------------------------------
   // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make,
   // and a target gives the even share of the remaining points it needs. The recipe is the course's own
-  // overall grade (lib/grades.js), and it must reproduce Blackboard's figure first; otherwise it says so.
+  // overall grade (lib/gradecalc.js, on demand), and it must reproduce Blackboard's figure first; otherwise it says so.
   // The scores are kept on this device (storage.local, whatIf) until cleared, or the item is graded or gone.
   const whatIf = new Map(); // cid → { overrides: Map columnId → score, target }, or null while loading
   const keepCalc = (cid, overrides) => {
-    try { chrome.storage.local.get('whatIf', (r) => chrome.storage.local.set({ whatIf: GZ_GRADES.storeScores(r?.whatIf, cid, overrides) })); } catch { /* extension reloaded under the tab */ }
+    try { chrome.storage.local.get('whatIf', (r) => chrome.storage.local.set({ whatIf: GZ_GRADECALC.storeScores(r?.whatIf, cid, overrides) })); } catch { /* extension reloaded under the tab */ }
   };
   // Cut, not rounded, to two places: how Ultra writes its own overall grade (82.456 is 82.45%).
   const asPct = (p) => (p == null ? '–' : GZ_I18N.pct(Math.floor(p * 100 + 1e-9) / 100, locale()));
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  // Canvas: the what-if calculator (a course's Grades) and the GPA (Dashboard) are features/grades.js, asked for where on.
+  const canvasGrades = () => {
+    const e = settings.enhance;
+    if (observer && (globalThis.GZ_GRADES_UI || (e.calc && /^\/courses\/\d+\/grades\/?$/.test(location.pathname)) || (e.gpa && location.pathname === '/'))) {
+      need('features/grades.js', () => globalThis.GZ_GRADES_UI).then(() => GZ_GRADES_UI.render(), () => {});
+    }
+  };
   const renderCalc = () => {
-    // Canvas already saves what-if scores and offers Show Saved / Revert. Theme its own controls in canvas.css.
-    if (!ultra) return;
+    if (!ultra) return moodle || canvasGrades();
     const old = document.getElementById('gz-calc');
     const cid = courseId();
     const host = settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview');
     if (!host) return old?.remove();
     const b = bookFor(cid);
     if (!b.results) return;
+    // Its arithmetic is in lib/gradecalc.js, on demand; this runs again once it is in.
+    if (!globalThis.GZ_GRADECALC) return void need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(renderCalc, () => {});
     const key = `${cid} ${b.key} ${locale()}`;
     if (old?.dataset.key === key && old.previousElementSibling === host) return;
     if (!whatIf.has(cid)) {
@@ -1618,9 +1666,9 @@
     }
     const st = whatIf.get(cid);
     if (!st) return;
-    const m = GZ_GRADES.model(b.results);
+    const m = GZ_GRADECALC.model(b.results);
     // Graded, exempted or gone since: its score goes.
-    const kept = GZ_GRADES.keptScores(st.overrides, m.items);
+    const kept = GZ_GRADECALC.keptScores(st.overrides, m.items);
     if (kept.size !== st.overrides.size) { st.overrides = kept; keepCalc(cid, kept); }
     const now = make('b', { textContent: m.kind === 'unsupported' ? '' : asPct(m.percent()) });
     const box = make('details', { id: 'gz-calc', open: !!old?.open },
@@ -1903,7 +1951,7 @@
     if (!globalThis.GZ_DRAFTS) { if (ed) draftsIn(); return; }
     if (ed && !inboxAccount && !inboxLoading && Date.now() >= inboxRetry) {
       inboxLoading = true;
-      Promise.all([capi('/users/self/profile'), canvasCourses()]).then(([user, courses]) => {
+      Promise.all([profile(), canvasCourses()]).then(([user, courses]) => {
         inboxAccount = { user: String(user.id), courses };
       }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
     }
@@ -2367,10 +2415,10 @@
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
     previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu' };
-  // Canvas's global navigation, and the same switches plus the card grades; not the calculator, as Canvas has its own what-if.
+  // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
-  const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards' };
-  delete CANVAS_EXTRAS.calc;
+  const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
+    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -2397,6 +2445,7 @@
     return [
       ...GZ_LOOKS.map((L) => ({ label: t('Look: {name}', { name: L.name }), hint: GZ_LOOK_ON(s, L) ? t('Current') : 'Glaze', group: 'Glaze', run: store(GZ_LOOK_APPLY(s, L)) })),
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
+      ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
       ...Object.entries(ultra ? EXTRAS : moodle ? { overall: CANVAS_EXTRAS.overall } : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
       { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
@@ -2412,6 +2461,7 @@
       ...pages(),
       ...courses.filter((c) => c.name).map((c) => ({ label: c.friendly_name || c.name, hint: c.course_code || t('Course'), group: 'Courses', run: go(`/courses/${c.id}`) })),
       ...dueCmds(due),
+      ...(globalThis.GZ_TODO_UI?.cmds() || []),
       ...glazeCmds(),
     ];
   };
@@ -2945,8 +2995,11 @@
     }
     if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false, true);
     if (menu) paintMenu();
-    if (ultra) syncNames();
+    if (ultra) syncNames(); else syncCards();
   };
+  // Canvas's dashboard cards: features/cards.js.
+  const cardUI = (f) => need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => f(GZ_CARD_UI), () => {});
+  const syncCards = () => { if (!isPreview && !moodle && location.pathname === '/') cardUI((m) => m.paint()); };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
     closeMenu(false, true);
@@ -3091,7 +3144,8 @@
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')),
       cap(t('Look'), 'gz-cm-look'), lookGrid);
     else box.append(note, make('p', { className: 'gz-cm-note', textContent: t('Change the colour and nickname in Canvas’s own card menu.') }),
-      make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid);
+      make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
+      make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));
     document.body.append(box);
     menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
     btn.setAttribute('aria-expanded', 'true');
@@ -3224,6 +3278,7 @@
       }
       paintCourses();
     }
+    const surface = palette['--gz-surface'];
     palette = colors;
     const dark = C.brightness(C.parse(colors['--gz-surface'])) < 0.5;
     accentInk = C.parse(colors['--gz-accent-ink']);
@@ -3273,7 +3328,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -3289,11 +3344,17 @@
       hoverSeen = new WeakSet();
       focusSeen = new WeakSet();
       if (observer) { clearTags(['data-gz-light', 'data-gz-dark', 'data-gz-hover']); sweepAll(); }
-    }
+    } else if (dark && surface !== colors['--gz-surface']) relift();
     if (!s.look.tooltips) hideTip();
     if (said) syncDocTools();
     syncScene();
     themeEditors();
+    armFlip();
+  };
+  // Scheduled dark's clock loads while a schedule is worn.
+  const onSchedule = () => (links.length && worn.auto.on && worn.auto.mode === 'schedule' ? worn.auto : null);
+  const armFlip = () => {
+    if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
@@ -3367,7 +3428,8 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
       if (!ultra) await ready;
-      if (!settings.enabled || !links.length) return;
+      if (!links.length) return;
+      if (!on(settings)) return disable();
       syncFooter();
       startSweep();
       syncScene();
@@ -3379,13 +3441,16 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     if (!ultra) { for (const j of jobs.values()) j.ctl.abort(); canvasDlChecked = new WeakMap(); }
     closeKeys();
     closeCmd();
-    for (const id of ['gz-progress', 'gz-calc']) document.getElementById(id)?.remove();
-    for (const p of document.querySelectorAll('.gz-new')) p.remove();
+    for (const id of ['gz-progress', 'gz-calc', 'gz-gpa']) document.getElementById(id)?.remove();
+    for (const p of document.querySelectorAll('.gz-new, .gz-card-grade')) p.remove();
     dropBars();
     for (const b of document.querySelectorAll('.gz-dl')) b.remove();
     unmenu();
     for (const l of links) l.remove();
     links = [];
+    armFlip();
+    syncTodo();
+    syncCardTasks();
     themeEditors();
     syncPageFade();
     stopScene();
@@ -3396,7 +3461,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   };
 
   // The helpers a file loaded by need() may use (Wave 1's features/*.js): this frame's, read through one name.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, settings: () => settings });
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, profile, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, on: () => !!observer });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.
@@ -3414,15 +3479,18 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   // flashed the default dark palette first.
   const KEPT = 'gz-settings';
   if (!ultra) try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
+  // Keep quizzes light: no Glaze on a quiz being taken or a tool's page (New Quizzes; seen once the body is in).
+  const on = (s) => s.enabled && (ultra || !s.enhance.quizLight || !(/\/quizzes\/\d+\/(take|history)(\/|$)|\/external_tools\//.test(location.pathname) || document.getElementById('tool_content')));
   // Theme on before storage answers: most people leave it on, and this way the first paint is
   // already themed. If it turns out to be off, it comes straight back off.
   const ready = load().then((s) => {
     settings = s;
     tidyDrafts();
-    if (!s.enabled) disable();
+    if (!on(s)) disable();
     else if (links.length) applySettings();
+    else enable();
   });
-  enable();
+  if (on(settings)) enable();
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
   // save landing late can't undo an edit that is further along.
   if (isPreview) {
@@ -3444,9 +3512,9 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     load().then((s) => {
       const was = settings.enabled && links.length > 0;
       settings = s;
-      if (s.enabled && !was) enable();
-      else if (!s.enabled && was) disable();
-      else if (s.enabled) applySettings();
+      if (on(s) && !was) enable();
+      else if (!on(s) && was) disable();
+      else if (on(s)) applySettings();
     });
   });
   const reapply = () => { if (settings.enabled && links.length) applySettings(); };

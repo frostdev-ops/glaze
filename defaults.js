@@ -28,9 +28,9 @@ const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], [
 // Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
-// 'font-auto' (the same, or 'auto'). GZ_SANITIZE walks this.
+// 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM"). GZ_SANITIZE walks this.
 const GZ_SPEC = {
-  auto: { on: [false, 'bool'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
+  auto: { on: [false, 'bool'], mode: ['device', ['device', 'schedule']], from: ['20:00', 'time'], to: ['08:00', 'time'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
     // Text, headings and code. Headings on auto follow the text; code on auto is left as Ultra has it.
     font: ['system', 'font'], head: ['auto', 'font-auto'], mono: ['auto', 'font-auto'],
@@ -65,7 +65,7 @@ const GZ_SPEC = {
     urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
-    download: [true, 'bool'],
+    download: [true, 'bool'], todo: [false, 'bool'], cardTasks: [false, 'bool'],
     // place: a course's content reopens where you left it (open folders, scroll).
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
@@ -73,6 +73,9 @@ const GZ_SPEC = {
     // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
     // document buttons themselves.
     darkDocs: [false, 'bool'], toggles: [true, 'bool'],
+    quizLight: [false, 'bool'],
+    // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
+    gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'],
   },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };
@@ -204,6 +207,7 @@ const cleanNicks = (raw, room) => {
 
 const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
+  if (rule === 'time') return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : d;
   if (rule === 'name') return cleanName(v) || d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];
   if (rule === 'font' || rule === 'font-auto') {
@@ -264,7 +268,7 @@ const GZ_LOOKS = [
     '#fb923c', '#fdba74', '#3d1d0c', '#1f0d03',
     '#1e1426', '#120b18', '#fdf2e9', '#c9b2a6', '#8e7b86', '#2f2236', '#47334f',
     '#a3e635', '#facc15', '#f87171'), { font: 'nunito', head: 'fredoka', radius: 20, glass: 16, depth: 2 }, { kind: 'scene', scene: 'pumpkins', intensity: 60, colors: ['#fb923c', '#a855f7', '#fde047'] }],
-].map(([name, palette, look, bg]) => ({ name, palette: typeof palette === 'string' ? palette : null, colors: typeof palette === 'string' ? GZ_PRESETS.find(([n]) => n === palette)[1] : palette, look, bg }));
+].map(([name, palette, look, bg, card]) => ({ name, palette: typeof palette === 'string' ? palette : null, colors: typeof palette === 'string' ? GZ_PRESETS.find(([n]) => n === palette)[1] : palette, look, bg, card }));
 // The settings a look changes, from settings `s`: { colors, preset, auto, look, bg }. A look with its own
 // colors (Synthwave) has no preset name, like any unsaved palette.
 const GZ_LOOK_APPLY = (s, L) => ({
@@ -321,10 +325,21 @@ const GZ_SANITIZE = (raw) => {
   return out;
 };
 
-// The palette to paint: the user's colors, or with auto on, the light/dark preset for the OS mode.
-const GZ_ACTIVE_COLORS = (s, prefersDark) => {
+// Dark from `from` until `to`, never if equal. Dark-now and the next flip share these windows, as local dates: a time
+// DST skips is the hour after, a repeated one counts once.
+const hhmm = (v) => +v.slice(0, 2) * 60 + +v.slice(3);
+const darkWindows = (from, to, now) => (from === to ? [] : [-1, 0, 1, 2].map((d) => {
+  const at = (v, e) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + d + e, 0, hhmm(v));
+  return [at(from, 0), at(to, +(to < from))];
+}).filter(([s, e]) => e > s));
+const GZ_SCHEDULE_DARK = (from, to, now) => darkWindows(from, to, now).some(([s, e]) => s <= now && now < e);
+const GZ_SCHEDULE_NEXT = (from, to, now) => darkWindows(from, to, now).flat()
+  .filter((t) => t > now && GZ_SCHEDULE_DARK(from, to, t) !== GZ_SCHEDULE_DARK(from, to, new Date(t - 1))).sort((a, b) => a - b)[0] || null;
+// The palette to paint: the user's colors, or with auto on, the light/dark preset for the OS mode or the schedule.
+const GZ_ACTIVE_COLORS = (s, prefersDark, now = new Date()) => {
   if (!s.auto.on) return s.colors;
-  return GZ_PRESET(prefersDark ? s.auto.dark : s.auto.light, s.presets) || s.colors;
+  const dark = s.auto.mode === 'schedule' ? GZ_SCHEDULE_DARK(s.auto.from, s.auto.to, now) : prefersDark;
+  return GZ_PRESET(dark ? s.auto.dark : s.auto.light, s.presets) || s.colors;
 };
 
 // ---- contrast ---------------------------------------------------------------------------------
@@ -504,5 +519,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }
