@@ -327,15 +327,15 @@ test('a backup is imported whole or not at all', async () => {
   const tasks = { 'todo:https://x.test/3': { tasks: [], items: {} }, 'todo:https://x.test/4': { tasks: [], items: {} } };
   // Settings refused: the tasks those keys held come back, and a key that wasn't there goes.
   const local = area({ 'todo:https://x.test/3': old, other: 1 });
-  await assert.rejects(T.restore(tasks, { version: 2 }, local, area({}, true)));
+  assert.deepEqual(await T.restore(tasks, { version: 2 }, local, area({}, true)), { ok: false });
   assert.deepEqual(local.s, { 'todo:https://x.test/3': old, other: 1 });
   // Tasks refused: settings untouched.
   const sync = area({ version: 2, colors: 'mine' });
-  await assert.rejects(T.restore(tasks, { version: 2, colors: 'theirs' }, area({}, true), sync));
+  assert.deepEqual(await T.restore(tasks, { version: 2, colors: 'theirs' }, area({}, true), sync), { ok: false });
   assert.equal(sync.s.colors, 'mine');
   // Both take.
   const l2 = area({}), s2 = area({});
-  await T.restore(tasks, { version: 2, colors: 'theirs' }, l2, s2);
+  assert.deepEqual(await T.restore(tasks, { version: 2, colors: 'theirs' }, l2, s2), { ok: true });
   assert.deepEqual(Object.keys(l2.s), Object.keys(tasks));
   assert.equal(s2.s.colors, 'theirs');
 });
@@ -344,11 +344,8 @@ test("an import whose undo fails too says so, instead of 'nothing changed'", asy
   let sets = 0;
   const local = { get: async () => ({ 'todo:https://x.test/3': { tasks: [], items: {} } }), set: async () => { if (++sets > 1) throw new Error('quota'); }, remove: async () => {} };
   const sync = { set: async () => { throw new Error('sync quota'); } };
-  const err = await T.restore({ 'todo:https://x.test/3': { tasks: [{ id: 'n', title: 'New' }], items: {} } }, { version: 2 }, local, sync).catch((e) => e);
-  assert.equal(err.undone, false);
-  // An undo that works: the plain error, nothing changed.
-  const ok = { get: async () => ({}), set: async () => {}, remove: async () => {} };
-  const plain = await T.restore({ 'todo:https://x.test/3': { tasks: [], items: {} } }, { version: 2 }, ok, sync).catch((e) => e);
-  assert.equal(plain.message, 'sync quota');
-  assert.equal(plain.undone, undefined);
+  assert.deepEqual(await T.restore({ 'todo:https://x.test/3': { tasks: [{ id: 'n', title: 'New' }], items: {} } }, { version: 2 }, local, sync), { ok: false, undone: false });
+  // An undo that works: a plain failure, nothing changed. The worker's areas answer false rather than throw.
+  const ok = { get: async () => ({}), set: async () => true, remove: async () => true };
+  assert.deepEqual(await T.restore({ 'todo:https://x.test/3': { tasks: [], items: {} } }, { version: 2 }, ok, { set: async () => false }), { ok: false });
 });

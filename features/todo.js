@@ -41,8 +41,6 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     .then((raw) => { prefs = GZ_SANITIZE({ todo: raw }).todo; });
   const lang = () => GZ_I18N.locale(ctx.locale());
   const store = () => { try { return chrome.storage.local; } catch { return null; } };
-  // { ok, value } for one storage.local key; ok false if storage couldn't be read (then nothing is written over it).
-  const get = (k) => new Promise((res) => { try { store().get(k, (r) => res({ ok: !chrome.runtime.lastError, value: r?.[k] })); } catch { res({ ok: false }); } });
   // Resolves true once storage has it, false if it didn't take (quota, the extension reloaded under the tab).
   const put = (v) => new Promise((res) => { try { store().set(v, () => res(!chrome.runtime.lastError)); } catch { res(false); } });
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
@@ -136,30 +134,25 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
 
   // ---- the student's own -------------------------------------------------------------------------------------
-  // The student's changes, one at a time. Each belongs to the account and list it was made in (key and generation
-  // taken when it's asked for), is applied to what storage holds for that account when its turn comes (so none undoes
-  // another, here or in a newer list), and is shown as saved only once storage has it. One storage refuses changes
-  // nothing and is said so. A change made in a list that has since gone (off, remounted, another account) is still
-  // stored under its own account, and shown nowhere. change(d) edits d in place; ok: what to say once it's kept.
-  let queue = Promise.resolve();
-  const save = (change, ok = '') => {
+  // The student's changes go to the background worker ('glaze:todo', lib/todo.js change), which takes every tab's and
+  // the editor's in one queue and applies each to what storage holds when its turn comes: no tab's edit undoes
+  // another's. A change is a list of edits (data: it crosses to the worker) for the account and list it was made in
+  // (key and generation taken when it's asked for). It's shown as saved only once storage has it; one storage
+  // refuses changes nothing and is said so. One made in a list that has since gone (off, remounted, another account)
+  // is still stored under its own account, and shown nowhere. ok: what to say once it's kept.
+  const save = (edits, ok = '') => {
     const k0 = key, g0 = gen;
-    return (queue = queue.then(async () => {
-      const was = await get(k0);
-      let next = null;
-      if (was.ok) {
-        try { next = L.clean(was.value); change(next); next = L.clean(next); } catch { next = null; }
-      }
-      const kept = !!next && await put({ [k0]: next });
+    return new Promise((res) => {
+      try { chrome.runtime.sendMessage({ type: 'glaze:todo', key: k0, edits }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); }
+    }).then((r) => {
+      const kept = !!r?.ok;
       if (g0 !== gen) return kept;
-      if (kept) data = next;
+      if (kept) data = L.clean(r.data);
       note(kept ? ok : t("Couldn't save that on this device, so nothing changed."));
       render(true);
       return kept;
-    }));
+    });
   };
-  const local = (d, k) => (d.items[k] ||= {});
-  const tidy = (d, k) => { if (d.items[k] && !Object.keys(d.items[k]).length) delete d.items[k]; };
   const uid = () => crypto.randomUUID().slice(0, 13);
   // A change comes from the student: a trusted event while the page has their transient activation (a click or key
   // just now; Space and Enter count). A script's dispatched event, or its .click() with no person behind it, changes
@@ -393,13 +386,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (r.custom || !o().sync) {
       // The burst where the box is now: the redraw moves a done item into the Done section.
       burst();
-      return save((d) => {
-        if (r.custom) { const x = d.tasks.find((y) => y.id === r.id); if (x) x.done = want ? Date.now() : 0; return; }
-        // A mark that agrees with Canvas is no mark: the item follows Canvas again (handed in later, say).
-        const l = local(d, r.key);
-        if (want === L.isDone(r, o().done)) delete l.done; else l.done = want;
-        tidy(d, r.key);
-      }, said);
+      // A mark that agrees with Canvas is no mark (null): the item follows Canvas again (handed in later, say).
+      return save([r.custom ? ['taskDone', r.id, want ? Date.now() : 0] : ['done', r.key, want === L.isDone(r, o().done) ? null : want]], said);
     }
     // Ticks go to Canvas: nothing of the student's own changes.
     el.disabled = true;
@@ -437,19 +425,13 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (el.dataset.armed !== '1') { el.dataset.armed = '1'; el.textContent = t('Click again to delete'); return; }
       const title = data.tasks.find((x) => `task:${x.id}` === k)?.title || '';
       open.delete(k);
-      save((d) => { d.tasks = d.tasks.filter((x) => `task:${x.id}` !== k); delete d.items[k]; }, t('Deleted {title}.', { title }))
+      save([['dropTask', k.slice(5)]], t('Deleted {title}.', { title }))
         .then(() => box?.querySelector('[data-focus="add"]')?.focus());
       return;
     }
-    const step = el.dataset.step, i = +el.dataset.i;
-    if (!['unon', 'unstep', 'unsession'].includes(act)) return;
-    save((d) => {
-      const l = local(d, k);
-      if (act === 'unon') delete l.on;
-      else if (act === 'unstep') l.subs = (l.subs || []).filter((x) => x.id !== step);
-      else l.sessions = (l.sessions || []).filter((_, j) => j !== i);
-      tidy(d, k);
-    });
+    if (act === 'unon') save([['on', k, null]]);
+    else if (act === 'unstep') save([['dropStep', k, el.dataset.step]]);
+    else if (act === 'unsession') { const x = data.items[k]?.sessions?.[+el.dataset.i]; if (x) save([['dropSession', k, x]]); }
   };
   const onChange = (e) => {
     const el = e.target;
@@ -458,14 +440,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     // A change a script made (not the student's tick or pick) writes nothing, here or to Canvas: the list is redrawn as it was.
     if (!human(e)) { render(true); return; }
     if (el.dataset.act === 'done') { const r = rowOf(el); if (r) mark(r, el); return; }
-    const { act, step } = el.dataset, checked = el.checked, value = el.value;
-    save((d) => {
-      const l = local(d, k);
-      if (act === 'step') { const x = (l.subs || []).find((y) => y.id === step); if (x) x.done = checked; }
-      else if (value && L.keyDay(value) !== null) l.on = value;
-      else delete l.on;
-      tidy(d, k);
-    });
+    save([el.dataset.act === 'step' ? ['step', k, el.dataset.step, el.checked] : ['on', k, el.value || null]]);
   };
   const onSubmit = (e) => {
     const f = e.target;
@@ -476,14 +451,14 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       const title = f.querySelector('input').value.trim();
       if (!title) return;
       const id = uid();
-      save((d) => { const l = local(d, k); l.subs = [...(l.subs || []), { id, title, done: false }]; })
+      save([['addStep', k, { id, title, done: false }]])
         .then(() => box?.querySelector(`[data-focus="${CSS.escape(`${k} stepText`)}"]`)?.focus());
     } else if (f.dataset.act === 'addSession' && k) {
       const [date, time] = (f.querySelector('input[type="datetime-local"]').value || '').split('T');
       const at = L.typed(date, time, who.tz);
       const min = Math.round(+f.querySelector('input[type="number"]').value);
       if (!at || !(min >= 5 && min <= 600)) return note(t('Pick a start and a length from 5 to 600 minutes.'));
-      save((d) => { const l = local(d, k); l.sessions = [...(l.sessions || []), { at, min }]; });
+      save([['addSession', k, { at, min }]]);
     } else if (f.dataset.act === 'saveTask') {
       const v = Object.fromEntries(new FormData(f));
       const title = String(v.title || '').trim();
@@ -494,7 +469,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       // The form stays open with what was typed if it couldn't be kept.
       const was = form;
       form = null;
-      save((d) => { d.tasks = was.id ? d.tasks.map((y) => (y.id === x.id ? x : y)) : [...d.tasks, x]; }, was.id ? t('Saved {title}.', { title }) : t('Added {title}.', { title })).then((kept) => {
+      save([['task', x]], was.id ? t('Saved {title}.', { title }) : t('Added {title}.', { title })).then((kept) => {
         if (!kept) form = { ...was, draft: Object.fromEntries([...new FormData(f)].map(([n, w]) => [n, String(w)])) };
         if (!kept) render(true);
         box?.querySelector(`[data-focus="${kept ? 'add' : 'form title'}"]`)?.focus();

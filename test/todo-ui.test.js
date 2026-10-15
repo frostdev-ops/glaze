@@ -34,11 +34,12 @@ class E {
   focus() {}
 }
 
-const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, defer = false, holdPlanner = false, stored = {}, profile = async () => ({ id: '3', time_zone: 'America/New_York' }) } = {}) => {
+// shared: { store, waiting, turn } for tabs that share one storage.local and one background worker.
+const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, defer = false, holdPlanner = false, stored = {}, shared = null, profile = async () => ({ id: '3', time_zone: 'America/New_York' }) } = {}) => {
   const calls = [];
   const kept = [];
-  const store = JSON.parse(JSON.stringify(stored)); // storage.local
-  const waiting = []; // the student's data writes held back (defer), to answer in order
+  const store = shared?.store || JSON.parse(JSON.stringify(stored)); // storage.local
+  const waiting = shared?.waiting || []; // the student's data writes held back (defer), to answer in order
   const held = []; // planner answers held back (holdPlanner)
   const native = new E();
   const activation = { isActive: true };
@@ -61,7 +62,21 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
     document: { cookie: '_csrf_token=abc%3D', activeElement: null, documentElement: new E('html'), visibilityState: 'visible', createElement: (t) => new E(t), querySelector: () => native, addEventListener() {}, removeEventListener() {} },
     addEventListener() {}, removeEventListener() {},
     chrome: {
-      runtime,
+      runtime: Object.assign(runtime, {
+        // The background worker's 'glaze:todo' (lib/background.js): one queue, lib/todo.js change, over this storage.
+        sendMessage: (m, cb) => {
+          if (m?.type !== 'glaze:todo') return;
+          const area = {
+            get: async (k) => JSON.parse(JSON.stringify(Object.fromEntries([k].flat().filter((x) => x in store).map((x) => [x, store[x]])))),
+            set: (v) => new Promise((res) => c.chrome.storage.local.set(v, () => res(!runtime.lastError))),
+            remove: async (k) => { for (const x of [k].flat()) delete store[x]; return true; },
+          };
+          const turn = shared?.turn || (c.turn ||= { last: Promise.resolve() });
+          const run = turn.last.then(() => T.change(JSON.parse(JSON.stringify(m)), { local: area, sync: area }));
+          turn.last = run.catch(() => {});
+          run.then((r) => cb(JSON.parse(JSON.stringify(r))), () => cb({ ok: false, error: 'write' }));
+        },
+      }),
       storage: {
         local: {
           set: (v, cb) => {
@@ -86,7 +101,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
   };
   c.globalThis = c;
   const src = read('features/todo.js').replace('  return { sync, add, cmds };', `  return { sync, add, cmds, probe: {
-    refresh, onChange, onShow, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
+    refresh, onChange, onShow, onSubmit, form: (x) => { form = x; }, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
       box = new E('section'); head = new E(); line = new E('p'); body = new E(); },
@@ -257,4 +272,73 @@ test("a list mounted again while the old one's planner request is out asks for i
   assert.equal(planner(f.calls), 2, 'the new list asked for itself');
   while (f.held.length) { f.held.shift()(); await settled(); }
   assert.ok(f.p.get().cache, 'and has its answer, not Loading');
+});
+
+test("two tabs adding tasks at once both keep theirs (the worker's one queue)", async () => {
+  const shared = { store: {}, waiting: [], turn: { last: Promise.resolve() } };
+  const one = feature({ defer: true, shared }), two = feature({ defer: true, shared });
+  for (const f of [one, two]) { f.p.seed({ prefs: O }); f.p.render(true); }
+  const add = (f, title) => {
+    const form = { dataset: { act: 'saveTask' }, closest: () => null, querySelector: () => null };
+    f.c.FormData = class { constructor() { return [['title', title], ['cid', ''], ['date', ''], ['time', ''], ['notes', '']]; } };
+    f.p.form({ cid: '' });
+    f.p.onSubmit({ target: form, isTrusted: true, preventDefault() {} });
+  };
+  one.c.crypto.randomUUID = () => 'aaaaaaaa-1111-0000';
+  two.c.crypto.randomUUID = () => 'bbbbbbbb-2222-0000';
+  add(one, 'From tab one');
+  add(two, 'From tab two'); // both asked for before either is stored
+  await settled();
+  while (shared.waiting.length) { shared.waiting.shift()(); await settled(); }
+  assert.deepEqual(shared.store[KEY(3)].tasks.map((x) => x.title).sort(), ['From tab one', 'From tab two']);
+});
+
+test("the worker takes To Do writes from a Canvas page for its own site's accounts, and backups from the editor only, one at a time", async () => {
+  const m = require('../manifest.json');
+  const store = { sync: { version: 2 }, local: { [KEY(3)]: { tasks: [{ id: 'old', title: 'Before' }], items: {} } } };
+  const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
+  // Settings with colors 'refuse' don't take, after a pause long enough for a later import to overtake them.
+  const area = (s, name) => ({
+    get: (k) => later(() => structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])))),
+    set: (v) => new Promise((res, rej) => setTimeout(() => (name === 'sync' && v.colors === 'refuse' ? rej(new Error('quota')) : res(Object.assign(s, structuredClone(v)))), name === 'sync' ? 20 : 0)),
+    remove: (k) => later(() => { for (const x of [].concat(k)) delete s[x]; }),
+  });
+  const listeners = [];
+  const context = vm.createContext({
+    URL, console, TextEncoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto,
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    chrome: {
+      runtime: {
+        id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
+        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
+      },
+      storage: { local: area(store.local, 'local'), sync: area(store.sync, 'sync'), onChanged: { addListener() {} } },
+    },
+  });
+  vm.runInContext(read('lib/background.js'), context);
+  const send = (msg, sender) => new Promise((res) => {
+    let kept = false;
+    for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
+    if (!kept) res('ignored');
+  });
+  const page = { id: 'glaze', tab: {}, url: 'https://school.instructure.com/courses/1' };
+  const editor = { id: 'glaze', tab: {}, url: 'chrome-extension://x/options.html' };
+  const nope = { ok: false, error: 'sender' };
+  const own = 'todo:https://school.instructure.com/3';
+  const add = { type: 'glaze:todo', key: own, edits: [['task', { id: 'n', title: 'New' }]] };
+  // Who may ask.
+  assert.deepEqual(await send({ ...add, key: 'todo:https://other.instructure.com/3' }, page), nope, "another site's account");
+  assert.deepEqual(await send(add, { ...page, id: 'other' }), nope, 'another extension');
+  assert.deepEqual(await send(add, { ...page, url: 'https://evil.example/' }), nope, 'a site Glaze does not run on');
+  assert.deepEqual(await send({ type: 'glaze:todo', restore: { tasks: {}, settings: { version: 2 } } }, page), nope, 'a Canvas page cannot restore a backup');
+  assert.deepEqual(await send(add, editor), nope, 'the editor only restores');
+  const r = await send(add, page);
+  assert.equal(r.ok, true);
+  assert.deepEqual(store.local[own].tasks.map((x) => x.id), ['n']);
+  // Two imports at once: the older one fails and undoes itself before the newer one is stored, so the newer stays.
+  const backup = (title, colors) => ({ type: 'glaze:todo', restore: { tasks: { [KEY(3)]: { tasks: [{ id: title, title }], items: {} } }, settings: { version: 2, colors } } });
+  const [a, b] = await Promise.all([send(backup('A', 'refuse'), editor), send(backup('B', 'fine'), editor)]);
+  assert.deepEqual([a.ok, b.ok], [false, true]);
+  assert.deepEqual(store.local[KEY(3)].tasks.map((x) => x.title), ['B']);
+  assert.equal(store.sync.colors, 'fine');
 });
