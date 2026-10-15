@@ -377,9 +377,10 @@ test('clean: what is kept is checked, whatever is stored', () => {
   assert.deepEqual(C.clean(raw), { courses: [
     { id: '11', code: 'BIO 1100', name: 'Biology', at: 0, periods: [{ days: [2, 4], start: 810, end: 885, loc: 'Room  1', from: '2026-08-24', to: '2026-12-11', skip: ['2026-11-26'] }] },
     { id: 'o-choir', code: '', name: 'Choir', at: 0, periods: [{ days: [3], start: 1080, end: 1170, loc: '', from: '', to: '', skip: [] }] },
-  ], cleared: 0, gone: {} });
-  assert.deepEqual(C.clean(null), { courses: [], cleared: 0, gone: {} });
-  assert.deepEqual(C.clean({ courses: 'x', cleared: -1, gone: { 'bad id': 5, 11: 'x' } }), { courses: [], cleared: 0, gone: {} });
+  ], cleared: 0, gone: {}, tz: '' });
+  assert.deepEqual(C.clean(null), { courses: [], cleared: 0, gone: {}, tz: '' });
+  assert.deepEqual(C.clean({ courses: 'x', cleared: -1, gone: { 'bad id': 5, 11: 'x' }, tz: 'Mars/Olympus' }), { courses: [], cleared: 0, gone: {}, tz: '' });
+  assert.equal(C.clean({ tz: 'America/Phoenix' }).tz, 'America/Phoenix');
   // A deletion older than the last Delete all is covered by it and goes.
   assert.deepEqual(C.clean({ cleared: 50, gone: { 11: 40, 12: 60 } }).gone, { 12: 60 });
   assert.equal(C.otherId('Spanish Conversation Club!'), 'o-spanish-conversation-club');
@@ -482,13 +483,31 @@ test('class-start reminders: lead minutes before, in the student\'s zone, in lib
   assert.ok(R.clean({ seen: { [`class:11.0@${bio.at}`]: now } }, now).seen[`class:11.0@${bio.at}`]);
 });
 
-test('the export hook: one floating-time event per meeting, written by lib/ics.js', () => {
-  const evs = C.icsEvents(STORE, { site: 'canvas.test', from: '2026-10-12', to: '2026-10-18' });
-  assert.deepEqual(evs.map((e) => [e.start, e.end, e.summary]), [
-    ['2026-10-13T13:30', '2026-10-13T14:45', 'BIO 1100 Biology'], ['2026-10-15T13:30', '2026-10-15T14:45', 'BIO 1100 Biology'], ['2026-10-15T18:00', '2026-10-15T19:30', 'Choir'],
+// Codex W14 review: an export holds exact instants (UTC), as every other timed event in W13's file, worked out in the
+// zone the schedule was saved in: floating times would move with the calendar app's zone.
+test('the export hook: one event per meeting, at its instant in the schedule\'s own zone, written by lib/ics.js', async () => {
+  const evs = C.icsEvents(STORE, { site: 'canvas.test', from: '2026-10-12', to: '2026-10-18', tz: 'America/New_York' });
+  const iso = (ms) => new Date(ms).toISOString().slice(0, 16);
+  assert.deepEqual(evs.map((e) => [iso(e.start), iso(e.end), e.summary]), [
+    ['2026-10-13T17:30', '2026-10-13T18:45', 'BIO 1100 Biology'], ['2026-10-15T17:30', '2026-10-15T18:45', 'BIO 1100 Biology'], ['2026-10-15T22:00', '2026-10-15T23:30', 'Choir'],
   ]);
   const text = I.write({ name: 'Classes', events: evs }, { now: NOW });
-  assert.match(text, /DTSTART:20261013T133000\r\n/);
+  assert.match(text, /DTSTART:20261013T173000Z\r\n/);
+  // A 09:00 class saved in Phoenix is 16:00Z, whoever exports it and wherever it's imported.
+  const phx = { ...STORE, tz: 'America/Phoenix', courses: [{ id: '11', code: '', name: 'Lab', periods: [{ days: [4], start: 540, end: 590, loc: '', from: '', to: '', skip: [] }] }] };
+  for (const tz of ['America/New_York', 'Europe/Berlin', undefined]) {
+    assert.match(I.write({ name: 'x', events: C.icsEvents(phx, { from: '2026-10-15', to: '2026-10-15', tz }) }, { now: NOW }), /DTSTART:20261015T160000Z\r\nDTEND:20261015T165000Z/);
+  }
+  // Saving keeps the zone the page read the times in.
+  const a = area();
+  await C.change({ key: KEY, op: 'add', at: 1, tz: 'America/Phoenix', courses: phx.courses }, a);
+  assert.equal(a.box[KEY].tz, 'America/Phoenix');
+  await C.change({ key: KEY, op: 'add', at: 2, tz: 'Not/AZone', courses: phx.courses }, a);
+  assert.equal(a.box[KEY].tz, 'America/Phoenix');
+});
+
+test('the export hook keeps its UIDs between exports', () => {
+  const evs = C.icsEvents(STORE, { site: 'canvas.test', from: '2026-10-12', to: '2026-10-18', tz: 'America/New_York' });
   assert.equal(new Set(evs.map((e) => e.uid)).size, 3);
   assert.deepEqual(C.icsEvents(STORE, { site: 'x', from: '2026-10-12', to: '2026-10-18' }).map((e) => e.uid), C.icsEvents(STORE, { site: 'x', from: '2026-10-12', to: '2026-10-18' }).map((e) => e.uid), 'stable');
 });

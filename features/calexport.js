@@ -89,7 +89,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
       if (!got) throw new Error('classes');
       if (got[ck]?.courses?.length) {
         await ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES).catch(() => { throw new Error('classes'); });
-        classes = GZ_CLASSES.icsEvents(got[ck], { site: location.host, from: L.dayKey(r.first), to: L.dayKey(r.last - 1) });
+        classes = GZ_CLASSES.icsEvents(got[ck], { site: location.host, from: L.dayKey(r.first), to: L.dayKey(r.last - 1), tz });
       }
     }
     if (!alive()) return null;

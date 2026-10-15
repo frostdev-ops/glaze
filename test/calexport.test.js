@@ -302,10 +302,15 @@ test('the class schedule (W14) goes in as one event per meeting in the range, wi
   await p.go(undefined, { icsClasses: true });
   const meetings = p.saved[0].match(/UID:canvas\.test\/class\/7\/[^\r]+/g) || [];
   assert.deepEqual(meetings.map((u) => u.split('/')[3]), ['2026-10-15', '2026-10-20', '2026-10-27'], 'the next two weeks, the day off left out');
-  assert.match(p.saved[0], /DTSTART:20261015T133000\r\nDTEND:20261015T144500/);
+  // In UTC, from the profile's zone (New York) for a schedule saved without one: 13:30 EDT is 17:30Z.
+  assert.match(p.saved[0], /DTSTART:20261015T173000Z\r\nDTEND:20261015T184500Z/);
   assert.match(p.saved[0], /LOCATION:Life Sciences 120/);
   await p.go(undefined, { icsClasses: false });
   assert.ok(!/class\/7/.test(p.saved[1]));
+  // A schedule saved in Phoenix, exported from a profile in New York: its 09:00 class is 16:00Z (Codex W14 review).
+  p.store.local['classes:https://canvas.test/3'] = { tz: 'America/Phoenix', courses: [{ id: '7', code: '', name: 'Lab', periods: [{ days: [4], start: 540, end: 590, loc: '', from: '', to: '', skip: [] }] }] };
+  await p.go(undefined, { icsClasses: true });
+  assert.match(p.saved[2], /DTSTART:20261015T160000Z\r\nDTEND:20261015T165000Z/);
 });
 
 // W14 review (P2): with the class schedule chosen, a schedule that can't be read, or lib/classes.js that can't be loaded,
