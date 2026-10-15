@@ -10,16 +10,20 @@ _Last updated: 2026-10-14_
   your own account between devices. Safari keeps them on this device only.
 - **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
   lists it and which of Ultra's ten colour slots it is in, so the editor can list them for you to
-  recolour or tint.
+  recolour or tint. On Canvas this includes the site's address, course id, name, code and native color.
 - **Which grades you've seen**, in `chrome.storage.local`, on this device only: for each course whose
   gradebook you've opened, each item's id and the score it had, so new-grade badges know what's new.
 - **Which course items you've seen**, in `chrome.storage.local`, on this device only: for each course
   you've opened, the ids of its items, so new-content badges know what's new.
+- **Canvas badge records**, in `chrome.storage.local`, on this device only: the site's address, signed-in
+  user's id and course id, with module-item ids, which ones you've seen, unread-grade counts and fetch
+  times. These let badges share a five-minute cache between pages and keep accounts separate.
 - **Where you were in each course** (the "Remember your place" Extra, on by default), in
   `chrome.storage.local`, on this device only: for up to 30 courses, which folders of its content you
   left open and how far down you had scrolled, so coming back opens and scrolls them again. A copy of
   the same is kept in that browser tab's session storage on your Blackboard site, so a reload finds it
-  even right after Glaze updates; the browser clears it when the tab closes.
+  even right after Glaze updates; the browser clears it when the tab closes. On Canvas this keeps your
+  scroll position in Modules and the last module-item id you opened; Canvas keeps modules open or closed itself.
 - **Scores you try in the what-if calculator**, in `chrome.storage.local`, on this device only: for up
   to 20 courses, the hypothetical scores you typed for work not graded yet. A score is removed once the
   item has a real grade or is gone, and "Clear scores" removes a course's.
@@ -33,6 +37,12 @@ _Last updated: 2026-10-14_
   out before it's posted. Each copy is deleted once the post shows up on the page, when you clear the
   editor or dismiss the offer, and after 14 days at most. Switching the Extra off deletes them all. The
   text is never sent anywhere.
+- **Supported new Canvas Inbox drafts**, in `chrome.storage.local`, on this device only: the message
+  body, subject, site's address, signed-in user's id, course id and recipient ids. Backup covers new
+  messages to individual users in uniquely named courses, with a subject and selected recipients;
+  replies and group recipients are not backed up. Copies are kept until a matching sent message is
+  confirmed, the body is cleared or the offer dismissed, or 14 days pass. Switching the Extra off deletes
+  them. Canvas's own editor recovery and what-if scores stay with Canvas.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -87,8 +97,14 @@ animated backgrounds) are bundled. It makes requests in these cases:
   next seven days, the same list Canvas's own planner and To Do list show, and keeps what's still to do as
   the due list above. On the Dashboard (Grades on course cards) and when you open the command palette, it
   asks for your active courses with their current scores and, inside a course, that course's navigation
-  tabs. These go to the site you are on, with your existing session; apart from the due list, the answers
-  are kept in memory only. Nothing is sent anywhere else.
+  tabs. Extras also read native course colors, assignments and submission status, module completion
+  requirements and items, folder and file metadata, and the server-rendered Grades page's unread dots.
+  These requests are read-only GETs to your own Canvas site with your existing session. Only the due
+  list, course details and badge records described above are stored; other answers stay in memory.
+  For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking
+  a send, your sent conversations and matching conversation details without marking mail read. It
+  sends no messages. Download all also fetches accessible module files to build a zip on your device.
+  Nothing is sent anywhere else.
 - **Web fonts.** Only if you choose one: Glaze downloads that font from Google Fonts
   (`fonts.googleapis.com`, `fonts.gstatic.com`), or from jsDelivr (`cdn.jsdelivr.net`) for OpenDyslexic
   and the Nerd Fonts. The request carries no cookies and no page address; those services see an
