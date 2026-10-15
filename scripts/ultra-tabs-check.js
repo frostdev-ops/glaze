@@ -119,6 +119,14 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await settled('_101_1');
     const routedChecks = async () => {
       // All reads below are native feature reads or fixture navigation; RESTORE labels only the active inert copy.
+      const quietTimer = async () => {
+        await opts.evaluate(async () => {
+          const { widgetLayout } = await chrome.storage.local.get('widgetLayout');
+          if (widgetLayout?.boards?.pages) await chrome.storage.local.set({ widgetLayout: { ...widgetLayout, boards: { ...widgetLayout.boards, pages: widgetLayout.boards.pages.map((x) => x.id === 'timer' ? { ...x, on: false } : x) } } });
+        });
+        await page.waitForFunction(() => !document.querySelector('#gz-float section.gz-w[data-tile="timer"]'));
+      };
+      await quietTimer();
       await open('_101_1');
       if (process.env.GZ_B8B_FOCUSED) {
         const label = await page.locator('#gz-ctabs [data-course-id="_101_1"]').evaluate((e) => ({ text: e.querySelector('.gz-ctab-name').textContent, title: e.title, aria: e.getAttribute('aria-label') }));
@@ -161,6 +169,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       await open('_102_1'); await switchTab('_101_1');
       const native = async (cls) => {
         phase = `B8b:NATIVE:${cls}`;
+        await page.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
         await page.click(cls); await settled('_101_1');
         ok((await strip())?.at === 'routed', `strip remains on ${cls}`);
         ok(await page.evaluate(() => !document.querySelector('div.bb-course-navigation, .panel-wrap, #main-content, #main-content-inner')), `${cls} uses the full routed structure`);
@@ -220,6 +229,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         ok(await page.evaluate(() => location.pathname + location.search) === route, `${label} keeps its exact route/query`);
         ok((await strip())?.at === 'routed', `${label} keeps the strip after settlement`);
       };
+      await page.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
       await page.click('.b8b-folder');
       await opts.evaluate(async () => {
         const until = performance.now() + 4000;
@@ -277,7 +287,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
           ok(valid, `routed ${at}/${preset}/${width}px/${size}: native header and strip stay reachable and clear of the global timer (${JSON.stringify(g)})`);
           if (!valid) throw new Error('routed native-header/strip geometry failed');
         }
-        await settings(); await page.setViewportSize({ width: 1280, height: 860 });
+        await quietTimer(); await settings(); await page.setViewportSize({ width: 1280, height: 860 });
       }
       await position(470); await saved(doc, 470); await restore(doc, 470, 'document-nested-scroll');
       await switchTab('_102_1');
