@@ -11,7 +11,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const TOOLS = [['/ultra/course', 'Courses'], ['/ultra/calendar', 'Calendar'], ['/ultra/grades', 'Grades'], ['/ultra/messages', 'Messages'],
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
-    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu' };
+    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu',
+    gpa: 'Grade point average', syllabus: 'Syllabus import', insights: 'Insights' };
   // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
@@ -110,7 +111,22 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
         })),
       ...dueCmds(due),
       ...items,
+      ...gradeCmds(cid),
       ...glazeCmds(),
+    ];
+  };
+  // Ultra's GPA (on its Grades page, features/grades.js), Insights and, in a course, syllabus import, where each is on.
+  const gradeCmds = (cid) => {
+    const e = ctx.settings().enhance;
+    const open = (file, name) => () => need(file, () => globalThis[name]).then(() => globalThis[name].open(), () => {});
+    return [
+      ...(e.gpa ? [{ label: t('GPA: past terms, trends and goal'), hint: 'Glaze', group: 'Glaze', run: () => {
+        if (/^\/ultra\/grades\/?$/.test(location.pathname) && globalThis.GZ_GRADES_UI) return GZ_GRADES_UI.open();
+        try { sessionStorage.setItem('gz-gpa-open', '1'); } catch { /* blocked */ }
+        go('/ultra/grades')();
+      } }] : []),
+      ...(e.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: open('features/insights.js', 'GZ_INSIGHTS_UI') }] : []),
+      ...(cid && e.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: open('features/syllabus.js', 'GZ_SYL_UI') }] : []),
     ];
   };
   let cmd = null; // { box, input, list, all, shown, active, back }

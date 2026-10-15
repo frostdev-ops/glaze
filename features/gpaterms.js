@@ -1,5 +1,5 @@
-// The GPA's past terms, trends and goal, loaded on demand: features/grades.js draws it in the Dashboard's GPA, under
-// "Past terms, trends and goal", while that is open (and asks for it from the command palette).
+// The GPA's past terms, trends and goal, loaded on demand: features/grades.js draws it in the Dashboard's GPA (Ultra: on its
+// Grades page), under "Past terms, trends and goal", while that is open (and asks for it from the command palette).
 // - Past terms: typed in, or read on this device from a transcript's text, a web page or a Word file (lib/doctext.js),
 //   and always shown for review before they are kept. Pass/fail, withdrawn and transfer rows are listed, not counted.
 //   PDF and photo transcripts wait on the owner's decision (DECISIONS.md), as does any AI reading.
@@ -95,7 +95,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   const trends = (s, now) => {
     if (!s.length) return [note(t('Add a past term below to see your GPA over time.'))];
     const rows = make('tbody', {}, ...s.map((p, i) => make('tr', {},
-      make('th', { scope: 'row' }, make('span', { textContent: p.name }), now && i === s.length - 1 ? make('small', { textContent: t('Now, from Canvas') }) : ''),
+      make('th', { scope: 'row' }, make('span', { textContent: p.name }), now && i === s.length - 1 ? make('small', { textContent: t(X.site === 'ultra' ? 'Now, from Blackboard' : 'Now, from Canvas') }) : ''),
       make('td', { textContent: p.gpa == null ? '–' : api.two(p.gpa) }), make('td', { textContent: GZ_I18N.num(p.credits, locale()) }), make('td', { textContent: p.cum == null ? '–' : api.two(p.cum) }))));
     const table = make('table', {}, make('caption', { textContent: t('Your GPA by term') }),
       make('thead', {}, make('tr', {}, ...['Term', 'Term GPA', 'Credits', 'Cumulative GPA'].map((h) => make('th', { scope: 'col', textContent: t(h) })))), rows);
@@ -304,7 +304,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     V.note = '';
     el.replaceChildren(
       make('h3', { textContent: t('Trends') }), ...trends(s, !!now),
-      twice ? note(t('{name} is also your current term in Canvas, so it counts twice.', { name: twice.n })) : '',
+      twice ? note(t(X.site === 'ultra' ? '{name} is also your current term in Blackboard, so it counts twice.' : '{name} is also your current term in Canvas, so it counts twice.', { name: twice.n })) : '',
       make('h3', { textContent: t('Goal') }), ...goal(past, rows, w, !!e.gpaPlus),
       make('h3', { textContent: t('Past terms') }), ...terms,
       make('div', { className: 'gz-gpa-actions' }, addTerm, clear),

@@ -125,3 +125,55 @@ test('the saved picture of a summary that left work out says so, as the dialog d
     assert.equal(p.drawn.includes("Some work couldn't be counted, so these figures leave it out."), says);
   }
 });
+
+// ---- Blackboard Ultra (B4): the same view, from Ultra through lib/ultra.js ----
+const UO = 'https://lms.example.edu';
+const ufix = (n) => JSON.parse(fs.readFileSync(require.resolve(`./fixtures/ultra-${n}.json`), 'utf8'));
+const U_NOW = Date.parse('2026-10-15T12:00:00Z'); // in the fixtures' Fall 2026 term
+class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_NOW])); } static now() { return U_NOW; } }
+const ultraPage = () => {
+  const S = { enabled: true, enhance: { insights: true, streak: false } };
+  const asked = [], sent = [];
+  const tools = new El('div');
+  const doc = { body: new El('body'), activeElement: null, createElement: (t) => new El(t), createElementNS: (ns, t) => new El(t),
+    querySelector: (sel) => (sel === 'div.base-courses-header-container div.base-header-tools' ? tools : null) };
+  const books = { _101_1: ufix('grades'), _102_1: ufix('grades-status') };
+  const context = vm.createContext({
+    GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => true, settings: () => S, need: () => Promise.resolve(), myCourses: async () => ufix('memberships').results },
+    GZ_TODO: require('../lib/todo.js'), GZ_GRADECALC: require('../lib/gradecalc.js'), GZ_INSIGHTS: require('../lib/insights.js'), GZ_I18N: require('../lib/i18n.js'),
+    GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES,
+    chrome: { runtime: { sendMessage: async (m) => { sent.push(m); return { ok: true }; } }, storage: { local: { get: (k, cb) => cb({}) } } },
+    document: doc, location: { origin: UO, pathname: '/ultra/course' }, window: {}, navigator: {}, URL, Date: FixedDate, Promise, JSON, setTimeout, Intl,
+    getComputedStyle: () => ({ getPropertyValue: () => '', fontFamily: '' }),
+    fetch: async (url, init) => {
+      asked.push({ url: url.replace(UO, ''), init });
+      const cid = url.match(/courses\/(_\d+_\d+)\/gradebook\/grades/)?.[1];
+      const body = cid ? books[cid] || { results: [] } : /\/exceptions\?/.test(url) ? { results: [] } : null;
+      return body ? { ok: true, text: async () => JSON.stringify(body) } : { ok: false, status: 404 };
+    },
+  });
+  context.window.top = context.window;
+  vm.runInContext(fs.readFileSync(require.resolve('../lib/ultra.js'), 'utf8'), context);
+  const ui = vm.runInContext(source, context);
+  return { ui, asked, sent, tools };
+};
+
+test("on Ultra: a button in the Courses page's header, and this term read from Ultra, each course's gradebook", async () => {
+  const p = ultraPage();
+  p.ui.sync();
+  assert.equal(p.tools.children[0]?.textContent, 'Insights');
+  assert.equal(p.tools.children[0].className, 'gz-ins-open');
+  p.ui.open();
+  await settle(30);
+  // Every request a GET to this Ultra's API, redirects refused: the four courses' gradebooks, and one course's due-date
+  // exceptions, asked only because it has late work.
+  assert.ok(p.asked.every((a) => a.init.method === 'GET' && a.init.redirect === 'error' && a.url.startsWith('/learn/api/v1/')));
+  assert.equal(p.asked.filter((a) => /gradebook\/grades\?/.test(a.url)).length, 4);
+  assert.deepEqual(p.asked.filter((a) => /exceptions/.test(a.url)).map((a) => a.url), ['/learn/api/v1/courses/_102_1/gradebook/memberships/_302_1/exceptions?columnId=_612_1']);
+  const put = p.sent.find((m) => m.op === 'put');
+  assert.equal(put.key, `${'insights:'}${UO}/_900_1`);
+  assert.equal(put.rec.name, 'Fall 2026');
+  const by = Object.fromEntries(put.rec.courses.map((c) => [c.id, c]));
+  assert.deepEqual([...by._102_1.items.map((i) => i.s)], ['on', 'late', 'open']);
+  assert.equal(by._101_1.trend.at(-1)[1], 88, "Blackboard's own overall grade is the trend's last point");
+});

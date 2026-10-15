@@ -6,9 +6,14 @@
 // ('glaze:syllabus'). On save the scale can become the course's in the GPA (sync gpaCourses), the dates can become the
 // student's own To Do tasks ('glaze:todo'); the professor, class times and dates show on the course home, the weights
 // beside the what-if calculator (features/grades.js). Nothing is sent anywhere.
+// On Blackboard Ultra (content-ultra.js syncSyl), which has no syllabus tool: on a course's outline, in its right-hand
+// column, with a document of the course's own (its text from the public content API, lib/ultra.js) in place of Canvas's
+// Syllabus page; kept per Ultra site, user and course, the scale for the course's GPA (ultra:<origin>/<id>).
 var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const X = globalThis.GZ_CTX;
   const { t, locale, need } = X;
+  const ultra = X.site === 'ultra';
+  const cidHere = () => (ultra ? X.courseId() : X.canvasCourseId());
   let L = null; // lib/syllabus.js
   let on = false, starting = null, failedAt = 0;
   let who = null; // { uid, cid, key, course }
@@ -41,15 +46,19 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     await need('lib/classes.js', () => globalThis.GZ_CLASSES);
     await need('lib/syllabus.js', () => globalThis.GZ_SYLLABUS);
     L = globalThis.GZ_SYLLABUS;
-    const cid = X.canvasCourseId();
-    const [p, list] = await Promise.all([X.profile(), X.canvasCourses()]);
-    if (!cid || !/^\d+$/.test(String(p?.id))) throw new Error('no course or profile');
+    const cid = cidHere();
+    // Ultra: you are the course list's user; the course's term (its start dates the syllabus's) is lib/ultra.js's reading.
+    if (ultra) await need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+    const mem = ultra && await X.myCourses();
+    const [p, list] = ultra ? [{ id: mem.find((m) => m?.courseId === cid)?.userId }, Object.entries(GZ_ULTRA.courses(mem)).map(([id, c]) => ({ ...c, id }))]
+      : await Promise.all([X.profile(), X.canvasCourses()]);
+    if (!cid || !(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no course or profile');
     const course = list.find((c) => String(c.id) === cid) || null;
     who = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course };
     rec = L.tidy(await get('local', who.key));
   };
   const ready = () => {
-    if (who && who.cid === X.canvasCourseId()) return Promise.resolve();
+    if (who && who.cid === cidHere()) return Promise.resolve();
     if (!starting || (failedAt && Date.now() - failedAt > 60000)) {
       failedAt = 0;
       starting = start().catch((e) => { failedAt = Date.now(); throw e; });
@@ -68,6 +77,10 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // Kept: a card on the course home's sidebar (or above the syllabus). Nothing kept: one quiet line above Canvas's
   // Syllabus, where there is one; nowhere else.
   const where = () => {
+    // Ultra: a block of its own in the outline's right-hand column, under Ultra's details and actions.
+    const aside = ultra && document.querySelector('aside.outline-actions');
+    if (aside) { const d = aside.querySelector('.js-details-and-actions'); return (b) => (d ? d.after(b) : aside.append(b)); }
+    if (ultra) return null;
     const side = document.getElementById('course_show_secondary');
     if (rec && side && side.offsetParent !== null) return (b) => side.prepend(b);
     const syl = page();
@@ -91,11 +104,11 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   };
   const button = (text, f, run, cls = '') => { const b = make('button', { type: 'button', className: `gz-syl-btn ${cls}`.trim(), textContent: text }); b.dataset.f = f; b.addEventListener('click', run); return b; };
   const bar = () => {
-    const box = make('section', { id: 'gz-syl', className: 'gz-syl-bar' },
-      make('p', { textContent: t('Glaze can read this syllabus into your course home, GPA and To Do. It stays on this device.') }),
+    const box = make('section', { id: 'gz-syl', className: `gz-syl-bar${ultra ? ' outline-action-block' : ''}` },
+      make('p', { textContent: ultra ? t('Glaze can read a syllabus into this course, your GPA and To Do. It stays on this device.') : t('Glaze can read this syllabus into your course home, GPA and To Do. It stays on this device.') }),
       make('div', { className: 'gz-syl-actions' },
         page()?.textContent.trim() && button(t('Read this syllabus'), 'read', () => fromPage()),
-        button(t('Use a file or text'), 'file', () => open())));
+        button(ultra ? t('Import a syllabus') : t('Use a file or text'), 'file', () => open())));
     return attr(box, { 'aria-label': t('Syllabus import') });
   };
   const card = () => {
@@ -113,7 +126,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     if (r.weights.length) row(t('Weights'), L.weightsText(r.weights));
     if (r.scale.length) row(t('Grading scale'), r.scale.map(([l, v]) => `${l} ${v}`).join(', '));
     const h = make('h2', { id: 'gz-syl-h', tabIndex: -1, textContent: t('From your syllabus') });
-    const box = make('section', { id: 'gz-syl', className: 'gz-syl-card' }, h, make('dl', {}, ...rows),
+    const box = make('section', { id: 'gz-syl', className: `gz-syl-card${ultra ? ' outline-action-block' : ''}` }, h, make('dl', {}, ...rows),
       make('div', { className: 'gz-syl-actions' }, button(t('Edit'), 'edit', () => open(r)), button(t('Delete'), 'delete', remove)));
     return attr(box, { 'aria-labelledby': 'gz-syl-h' });
   };
@@ -149,9 +162,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // ---- the dialog -------------------------------------------------------------------------------------------------
   // Opens on the source step, on the review of what's kept (saved), or straight on a review of Canvas's own page.
   // Still wanted when the code it waited for arrives: Glaze on, the switch on, still in that course.
-  const allowed = (cid) => X.on() && X.settings().enabled !== false && !!X.settings().enhance.syllabus && !!cid && X.canvasCourseId() === cid;
+  const allowed = (cid) => X.on() && X.settings().enabled !== false && !!X.settings().enhance.syllabus && !!cid && cidHere() === cid;
   const open = async (saved, usePage) => {
-    const cid = X.canvasCourseId();
+    const cid = cidHere();
     if (!allowed(cid)) return;
     try { await ready(); } catch { return; }
     if (usePage) await docIn().catch(() => {});
@@ -189,12 +202,40 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     frame(t('Import a syllabus'),
       make('p', { className: 'gz-syl-desc', textContent: t('Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.') }),
       page()?.textContent.trim() && button(t("Read this course's Syllabus page"), 'page', async () => { await docIn().catch(() => {}); if (globalThis.GZ_DOCTEXT) { const text = pageText(); review(extract(text), text); } }),
+      ultra && docPicker(say),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-file', textContent: t('A file') }), file,
         make('small', { textContent: t('Word, PowerPoint, a web page or text. PDF not yet: copy its text and paste it below.') })),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-paste', textContent: t('Or paste the text') }), paste),
       make('div', { className: 'gz-syl-actions' }, button(t('Read it'), 'go', go, 'gz-syl-main'), button(t('Cancel'), 'cancel', () => dlg.close())),
       say);
     first(file);
+  };
+  // Ultra: a document of the course's, read from the public content API (its text and its blocks'; reading it there marks
+  // nothing as opened), listed once the dialog asks, syllabus-like titles first. Shown only when the course has one.
+  const SYL = /syllab|course (outline|info)|programa|lehrplan|plan de cours|studiewijzer/i;
+  const docPicker = (say) => {
+    const box = make('div', { className: 'gz-syl-f', hidden: true });
+    const cid = who.cid, mine = dlg;
+    need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, live: () => dlg === mine && allowed(cid) })
+      .all(`/learn/api/public/v1/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,availability.available`)).then((all) => {
+      const avail = all.filter((c) => c?.availability?.available === 'Yes'); // not items held back from you (B0)
+      const html = (d) => [d.body, ...avail.filter((c) => c.parentId === d.id).map((c) => c.body)].filter((b) => typeof b === 'string').join('\n');
+      const isDoc = (c) => c?.contentHandler?.id === 'resource/x-bb-document';
+      const pages = new Set(avail.filter(isDoc).map((c) => c.id));
+      // A document's blocks are documents too: they're read as part of it, not listed.
+      const docs = avail.filter((c) => isDoc(c) && !pages.has(c.parentId) && html(c).trim()).sort((a, b) => SYL.test(b.title) - SYL.test(a.title));
+      if (!docs.length || !box.isConnected) return;
+      const sel = make('select', { id: 'gz-syl-doc' }, ...docs.slice(0, 200).map((d, i) => make('option', { value: String(i), textContent: String(d.title || '').slice(0, 200) })));
+      const read = async () => {
+        await docIn().catch(() => {});
+        const text = globalThis.GZ_DOCTEXT?.html(html(docs[+sel.value])) || '';
+        if (!text.trim()) { say.textContent = t("Glaze couldn't read that file."); return; }
+        review(extract(text), text);
+      };
+      box.append(make('label', { htmlFor: 'gz-syl-doc', textContent: t('A document in this course') }), sel, button(t('Read this document'), 'doc', read));
+      box.hidden = false;
+    }, () => {});
+    return box;
   };
   // The step's first control has focus: as the dialog opens (autofocus), or now when it's open already.
   const first = (el) => { el.autofocus = true; if (dlg.open) el.focus(); };
@@ -329,7 +370,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       field(t('Grading scale'), scale, r.scale, saved), scaleIssues,
       make('label', { className: 'gz-syl-check-row' }, useScale, ` ${t('Use it for this course in your GPA')}`),
       field(t('Weights'), weights, r.weights, saved), weightIssues,
-      make('small', { className: 'gz-syl-hint', textContent: t("Shown beside the what-if calculator. Canvas's own weights are the ones that count.") }),
+      make('small', { className: 'gz-syl-hint', textContent: ultra ? t("Shown beside the what-if calculator. Blackboard's own weights are the ones that count.") : t("Shown beside the what-if calculator. Canvas's own weights are the ones that count.") }),
       read && make('details', { className: 'gz-syl-read' }, make('summary', { textContent: t('The text Glaze read') }), make('pre', { textContent: read.slice(0, 20000) })),
       make('div', { className: 'gz-syl-actions' }, button(t('Save'), 'save', save, 'gz-syl-main'), back, button(t('Cancel'), 'cancel', () => dlg.close())),
       say);
@@ -340,7 +381,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // on what is stored then ('glaze:gpa', which the GPA table uses too), so two courses saved at once both keep theirs.
   // → '' when it's in, else the words to show.
   const gpaScale = async (C, sc) => {
-    const r = await send({ type: 'glaze:gpa', key: `canvas:${location.origin}/${who.cid}`, patch: { s: C.schemeText(sc) } });
+    const r = await send({ type: 'glaze:gpa', key: `${ultra ? 'ultra' : 'canvas'}:${location.origin}/${who.cid}`, patch: { s: C.schemeText(sc) } });
     return r?.ok ? '' : r?.error === 'full' ? t('Not saved: too many course settings are stored. Clear a course you no longer need.') : t('The scale could not be given to your GPA.');
   };
   // Dates become the student's own To Do tasks (lib/todo.js importTask), one id per date and title, so saving again updates

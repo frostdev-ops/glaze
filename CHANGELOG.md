@@ -237,8 +237,26 @@ All notable changes to Glaze are documented here. The format follows
   never sent anywhere; they keep their place at any zoom and come back as you scroll. Works with a mouse, a pen or
   touch (once an Apple Pencil draws, fingers scroll). Canvas's own annotations are left alone.
 
+- **Grades on Blackboard Ultra.** The Canvas grade features, on Ultra:
+  - **What-if calculator** under a course's overall grade, the same one as on Canvas: change real scores, leave work
+    out, add pretend items, and see what a target takes. It follows the course's own overall-grade recipe where Ultra
+    gives it to students and Glaze reproduces Blackboard's figure with it (weighted categories, equal or proportional,
+    running total or not); otherwise its figures are an estimate from your share of the points in graded work, shown
+    beside Blackboard's own figure and marked Estimate. Kept on this device until the real grade arrives; Blackboard
+    never sees it.
+  - **GPA** on Ultra's Grades page, for this term's courses, with credits, levels, a what-if grade per course, past
+    terms, trends and a goal. Blackboard doesn't show students a course's letter cut-offs on the account checked, so
+    Glaze uses your scale for a course (typed, or from its syllabus) or a common one, and says so.
+  - **Syllabus import** on a course's outline, from a document in the course, a file or pasted text; the scale can go
+    to the GPA and the dates to To Do.
+  - **Insights** from a button on the Courses page or Ctrl+K: on time, each course's grade over the term, workload
+    and plans, from your own Blackboard.
+  - Ctrl+K gains the GPA, Insights and, in a course, Import a syllabus.
+
 ### Changed
 
+- **Blackboard's what-if calculator is the Canvas one now.** Scores you typed in the old one move over the first time
+  you open that course's grades (those graded since are dropped, and the calculator says so).
 - **Blackboard (for what comes next):** Glaze can now read Ultra's courses and terms, what's due (To Do in two-week
   slices and the calendar), where each piece of work stands (on time, late, missing, excused, or unknown, never
   guessed) and the gradebook, in the same shapes its Canvas planning and grade features use. Courses with no overall

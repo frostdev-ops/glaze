@@ -111,19 +111,50 @@ test('late: the latest attempt after the due date, for work waiting to be graded
   assert.ok(!R.late(null, waiting.column.dueDate));
 });
 
-test('what-if scores: kept while their item waits for a grade, for the last 20 courses', () => {
+test("the old Ultra what-if's saved scores move into the what-if store, and go once graded", () => {
   const m = C.model(spanish());
-  const [open, other] = m.remaining(new Map());
+  const [open] = m.remaining(new Map());
   const graded = m.items.find((i) => i.score != null);
-  const kept = C.keptScores(new Map([[open.id, 40], [graded.id, 10], ['_gone_1', 5], [other.id, 'x']]), m.items);
-  assert.deepEqual([...kept], [[open.id, 40]], 'graded, gone and malformed scores go');
-  let all = C.storeScores(undefined, '_1_1', kept);
-  assert.deepEqual(all, { _1_1: { [open.id]: 40 } });
-  for (let i = 2; i <= 21; i++) all = C.storeScores(all, `_${i}_1`, kept);
-  assert.equal(Object.keys(all).length, 20);
-  assert.ok(!all._1_1, 'the course touched longest ago goes first');
-  all = C.storeScores(all, '_5_1', new Map());
-  assert.ok(!('_5_1' in all), 'cleared: nothing stored for the course');
+  // Glaze 2.2 kept { course: { column: score } } in whatIf, for work not graded yet.
+  const old = { _1_1: { [open.id]: 40, [graded.id]: 10, bad: 'x', '../x': 5 }, _2_1: { [open.id]: 7 } };
+  const s = C.oldScores(old, '_1_1');
+  assert.deepEqual(s, { [open.id]: [40, null], [graded.id]: [10, null] }, 'saved against no grade; malformed ones dropped');
+  assert.deepEqual(C.oldScores(undefined, '_1_1'), {});
+  assert.deepEqual(C.oldScores({ _1_1: 'x' }, '_1_1'), {});
+  // reconcile keeps the one still waiting for a grade; the graded one goes, and says so.
+  const r = C.reconcile({ s, h: [], p: [] }, m.course);
+  assert.deepEqual(r.kept.s, { [open.id]: [40, null] });
+  assert.deepEqual(r.gone.map((x) => x.id), [graded.id]);
+  assert.ok(Math.abs(m.percent(new Map(Object.entries(r.what.scores))) - C.calc(m.course, r.what).current) < 1e-12);
+  // Kept as the worker keeps Canvas's (lib/background.js 'glaze:whatif'), by Ultra's ids.
+  const all = C.applyWhatIf({ op: 'course', cid: '_1_1', at: 5, rec: { ...r.kept, p: [{ id: 'pa1', g: '_6_1', n: 'Final', s: 90, pp: 100 }] } }, {}, 0).all;
+  assert.deepEqual(Object.keys(all), ['_1_1']);
+  assert.deepEqual(all._1_1.s[open.id].slice(0, 2), [40, null]);
+  assert.equal(all._1_1.p[0].g, '_6_1');
+});
+
+test('the same calculator: what-ifs, left-out work and pretend items on an Ultra course, by its own recipe', () => {
+  const m = C.model(spanish());
+  const base = C.calc(m.course, {});
+  assert.ok(Math.abs(base.current - 82.45625) < 1e-9, "current is Blackboard's running total");
+  // A pretend test at full marks in the empty tests category is the same as one real test at full marks there.
+  const pretend = C.calc(m.course, { extra: [{ id: 'pa1', group: '_6_1', name: 'Test', possible: 100, score: 100 }] }).current;
+  const real = m.percent(new Map([[m.items.find((i) => i.cat === '_6_1').id, 100]]));
+  assert.ok(Math.abs(pretend - real) < 1e-9);
+  // Leaving out the one zero in category 3 takes that category out of the running total: 65.965 of 70 weight.
+  const zero = m.items.find((i) => i.cat === '_3_1').id;
+  assert.ok(Math.abs(C.calc(m.course, { hidden: [zero] }).current - (65.965 / 70) * 100) < 1e-9);
+  // Not a running total: work not graded yet counts as zero, and that is the overall grade.
+  const f = weights([['c_1', 50], ['c_2', 50]], { running: false });
+  const z = C.model([g('_1_1', 10, 10), g('_1_1', 10, null), g('_2_1', 10, 5), overall(f, 50)]);
+  assert.equal(z.kind, 'weighted');
+  assert.equal(z.zeros, true);
+  assert.equal(z.percent(), 50); // (10/20 + 5/10) / 2
+  assert.equal(z.percent(new Map([[z.remaining(new Map())[0].id, 10]])), 75);
+  // Weights over 100 are scaled as Blackboard scales them.
+  const over = C.model([g('_1_1', 10, 8), g('_2_1', 10, 6), overall(weights([['c_1', 60], ['c_2', 60]]), 70)]);
+  assert.equal(over.kind, 'weighted');
+  assert.ok(Math.abs(over.percent() - 70) < 1e-9);
 });
 
 test('Canvas new items: only available module content, with stable string ids', () => {

@@ -756,7 +756,7 @@
 
   // ---- what-if calculator (Extras) -----------------------------------------------------------
   // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make, and a target what
-  // it takes: Ultra's features/whatif.js, Canvas's features/grades.js, each asked for by its part (X.renderCalc).
+  // it takes: features/grades.js, asked for by each site's part (X.renderCalc).
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
 
   // ---- draft backup (Extras) ------------------------------------------------------------------

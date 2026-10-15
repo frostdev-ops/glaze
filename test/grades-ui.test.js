@@ -15,7 +15,7 @@ const settle = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(
 // ---- a DOM stand-in: elements, a tree, events, and the few selectors the code uses ----
 const matches = (el, sel) => sel.split(',').some((one) => {
   const s = one.trim();
-  const m = s.match(/^([a-z]+)?((?:\.[\w-]+)*)(?:\[([\w-]+)(\*?=)"([^"]*)"\])?$/i);
+  const m = s.match(/^([a-z]+)?((?:\.[\w-]+)*)(?:\[([\w-]+)(?:(\*?=)"([^"]*)")?\])?$/i);
   if (!m) throw new Error(`selector the stand-in can't read: ${s}`);
   const [, tag, classes, attr, op, value] = m;
   if (tag && el.tagName !== tag.toUpperCase()) return false;
@@ -23,7 +23,7 @@ const matches = (el, sel) => sel.split(',').some((one) => {
   if (classes && !classes.slice(1).split('.').every((c) => own.includes(c))) return false;
   if (attr) {
     const v = attr.startsWith('data-') ? el.dataset[attr.slice(5)] : el.getAttribute(attr);
-    if (v == null || (op === '=' ? v !== value : !v.includes(value))) return false;
+    if (v == null || (op && (op === '=' ? v !== value : !v.includes(value)))) return false;
   }
   return true;
 });
@@ -58,6 +58,8 @@ class El {
   querySelectorAll(sel) { return this.all((e) => matches(e, sel)); }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
   closest(sel) { for (let n = this; n && n !== this.doc.body; n = n.parentNode) if (matches(n, sel)) return n; return null; }
+  showModal() { this.open = true; }
+  close() { this.open = false; this.fire('close'); }
 }
 const page = () => {
   const doc = { activeElement: null };
@@ -102,7 +104,7 @@ const serviceWorker = (store) => {
   const none = { addListener() {} };
   const empty = { get: () => Promise.resolve({}), set: () => Promise.resolve(), remove: () => Promise.resolve() };
   const ctx = vm.createContext({
-    URL, console, setTimeout, clearTimeout,
+    URL, console, setTimeout, clearTimeout, TextEncoder,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(path.join('lib', f)), ctx); },
     chrome: {
       runtime: { id: WORKER_ID, getURL: (p = '') => `chrome-extension://${WORKER_ID}/${p}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: none, onStartup: none, onConnect: none },
@@ -597,4 +599,175 @@ test('a card’s grade is also a link to the course’s grades, for the keyboard
   d.tag();
   await settle();
   assert.equal(d.card.querySelector('.gz-card-grade'), null, 'and gone with the grade');
+});
+
+// ---- Blackboard Ultra (B4): the same what-if and GPA, from Ultra's gradebook through lib/ultra.js ----
+const UO = 'https://lms.example.edu';
+const UKEY = `whatIf:${UO}:_900_1`; // the student of test/fixtures/ultra-memberships.json
+const ufix = (n) => JSON.parse(read(`test/fixtures/ultra-${n}.json`));
+const U_NOW = Date.parse('2026-10-15T12:00:00Z'); // in the fixtures' Fall 2026 term
+class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_NOW])); } static now() { return U_NOW; } }
+// features/grades.js on an Ultra page, with B4's anchors: a course's overall grade header, or the Grades page's terms.
+// books: what content-ultra.js's bookFor has for each course; answers: Ultra's API by a part of the address.
+const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {} } = {}) => {
+  const doc = page();
+  doc.createElementNS = (ns, tag) => new El(tag, doc);
+  doc.body.append(/\/outline/.test(path) ? el(doc, 'aside', { className: 'outline-actions' }, el(doc, 'div', { className: 'js-details-and-actions outline-action-block' }), el(doc, 'div', { className: 'conditional-block' }))
+    : path.includes('/courses/') ? el(doc, 'div', { className: 'grades-list' }, el(doc, 'aside', { className: 'student-grade-overview' }), el(doc, 'div', { className: 'student-tabs' }))
+    : el(doc, 'div', { id: 'body-content' }, el(doc, 'div', { className: 'base-grades' }, el(doc, 'div', { className: 'carousel' }, el(doc, 'div', { id: 'container-term-current' })))));
+  const state = { settings: { enabled: true, enhance: { gpaPlus: true, ...enhance } }, asked: [] };
+  store.send ||= serviceWorker(store);
+  const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${UO}${path}` };
+  let ctx;
+  const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
+  const fetch = (url, o) => {
+    state.asked.push([o?.method, o?.redirect, url.replace(UO, '')]);
+    const body = Object.entries(answers).find(([k]) => url.includes(k))?.[1];
+    return Promise.resolve(body ? { ok: true, text: async () => JSON.stringify(body) } : { ok: false, status: 404 });
+  };
+  // Promise or callback, as Chrome answers either.
+  const sendMessage = (m, cb) => { const r = store.send(m, sender); if (cb) r.then(cb); return r; };
+  const chrome = { runtime: { sendMessage }, storage: { local: store.tab({}), sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
+  ctx = vm.createContext({
+    document: doc, location: { pathname: path, search: '', hash: '', origin: UO }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome, TextEncoder, fetch, Date: FixedDate,
+    GZ_PAGE: require('../lib/page.js'), GZ_COURSES: require('../defaults.js').GZ_COURSES,
+    GZ_CTX: {
+      site: 'ultra', t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', need, settings: () => state.settings, on: () => true,
+      courseId: () => path.match(/_\d+_\d+/)?.[0], myCourses: () => Promise.resolve(ufix('memberships').results),
+      bookFor: (cid) => (books[cid] ? { results: books[cid], key: `k${cid}` } : { key: '' }),
+    },
+  });
+  vm.runInContext(read('lib/gradecalc.js'), ctx);
+  vm.runInContext(read('features/grades.js'), ctx);
+  return { doc, state, store, ctx, UI: ctx.GZ_GRADES_UI, box: () => doc.getElementById('gz-calc'), gpa: () => doc.getElementById('gz-gpa') };
+};
+
+test("Ultra what-if: under the overall grade, by the course's own recipe (Blackboard's 88%), kept by site and user", async () => {
+  const p = ultraPage();
+  p.UI.render();
+  await settle(10);
+  assert.equal(p.doc.querySelector('aside.student-grade-overview').nextElementSibling, p.box(), 'right under the overall grade');
+  await open(p);
+  await settle(10);
+  assert.deepEqual(totals(p), ['88%', '88%', '64%'], 'Blackboard now, with your changes, with work not graded yet as zero');
+  assert.doesNotMatch(p.box().textContent, /Estimate/);
+  // Lab Report 3, not graded yet, at full marks: Assignment (40%) goes from 90% to 95%.
+  const lab3 = find(p.box(), (e) => e.dataset.f === 's:_603_1');
+  lab3.value = '100';
+  lab3.fire('input');
+  await settle(10);
+  assert.equal(totals(p)[1], '90%');
+  assert.deepEqual(p.store.data[UKEY]._101_1.s._603_1.slice(0, 2), [100, null]);
+  // A pretend item in a category, as on Canvas.
+  byText(p.box(), 'Add a pretend assignment').fire('click');
+  await settle(10);
+  assert.equal(p.store.data[UKEY]._101_1.p.length, 1);
+  assert.match(p.box().textContent, /Assignment · 40%/);
+  assert.match(p.box().textContent, /Blackboard never sees these scores/);
+  assert.deepEqual(p.state.asked, [], 'nothing asked of Ultra: the page had the gradebook');
+});
+
+test("Ultra what-if: Glaze 2.2's saved scores move over, the graded one goes with a word, and the old store goes", async () => {
+  const store = shared({ whatIf: { _101_1: { _603_1: 100, _601_1: 50 }, _777_1: { _1_1: 5 } } });
+  const p = ultraPage({ store });
+  p.UI.render();
+  await settle(12);
+  assert.equal(p.box().open, true, 'opened: something to say');
+  assert.match(p.box().textContent, /Your grade for Lab Report 1 is in, so your what-if score for it is gone\./);
+  assert.equal(totals(p)[1], '90%', 'the score still waiting for a grade is in');
+  assert.deepEqual(Object.keys(store.data[UKEY]._101_1.s), ['_603_1']);
+  assert.deepEqual(store.data.whatIf, { _777_1: { _1_1: 5 } }, "only this course's leave the old store");
+});
+
+test('Ultra what-if: a course with no overall grade is an estimate from the share of points, and says so', async () => {
+  const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  const text = p.box().textContent;
+  assert.match(text, /This course has no overall grade in Blackboard\./);
+  assert.match(text, /Estimate now85%/);
+  assert.ok(find(p.box(), (e) => e.className === 'gz-calc-tag' && e.textContent === 'Estimate'), 'marked in its heading');
+  assert.doesNotMatch(text, /Blackboard now/, "no figure of Blackboard's to show");
+});
+
+test("Ultra GPA: on Grades, above the terms, this term's courses with Blackboard's grade or an estimate, schemas asked once", async () => {
+  const p = ultraPage({ path: '/ultra/grades', enhance: { gpa: true }, books: { _101_1: ufix('grades').results, _102_1: ufix('grades-status').results }, answers: { '/gradebook/schemas': { results: [] } } });
+  p.UI.render();
+  await settle(12);
+  p.UI.render();
+  await settle(12);
+  const box = p.gpa();
+  assert.equal(box.nextElementSibling, p.doc.querySelector('div.base-grades'), 'above the term carousel, not in it');
+  // 88% is a B+ (3.3) and the estimate's 85% a B (3.0) on the common scale: 3.15. The other two have no grade yet.
+  assert.match(box.textContent, /3\.15Fall 2026/);
+  const cells = box.all((e) => e.className === 'gz-gpa-grade').map((e) => e.textContent);
+  assert.deepEqual(cells, ['B+ · 88% · 3.30', 'B · 85% · 3.00 · Estimate', 'No grade yet', 'No grade yet']);
+  assert.match(box.textContent, /From your current grades in Blackboard/);
+  const schemas = p.state.asked.filter(([, , u]) => /schemas/.test(u));
+  assert.deepEqual(schemas, [['GET', 'error', '/learn/api/public/v1/courses/_101_1/gradebook/schemas?limit=200'], ['GET', 'error', '/learn/api/public/v1/courses/_102_1/gradebook/schemas?limit=200']]);
+});
+
+// The public content API's answer for a course, as B4 measured it: id, parentId, title, body, contentHandler.id and
+// availability.available only. An Ultra document is a page whose text can sit in its blocks (its children).
+const CONTENTS = { results: [
+  { id: '_720_1', parentId: '_700_1', title: 'Week 1', contentHandler: { id: 'resource/x-bb-folder' }, availability: { available: 'Yes' } },
+  { id: '_721_1', parentId: '_720_1', title: 'Reading: cells', body: '<p>The cell membrane.</p>', contentHandler: { id: 'resource/x-bb-document' }, availability: { available: 'Yes' } },
+  { id: '_722_1', parentId: '_700_1', title: 'Course Syllabus', contentHandler: { id: 'resource/x-bb-document' }, availability: { available: 'Yes' } },
+  { id: '_723_1', parentId: '_722_1', title: 'Block', body: '<p>Instructor: Dr. Ada Lovelace</p><p>Email: ada@example.edu</p><p>Grading scale: A 93, B 83, C 73, D 63, F 0</p>', contentHandler: { id: 'resource/x-bb-document' }, availability: { available: 'Yes' } },
+  { id: '_724_1', parentId: '_700_1', title: 'Syllabus (next term)', body: '<p>Not yet.</p>', contentHandler: { id: 'resource/x-bb-document' }, availability: { available: 'No' } },
+] };
+
+test('Ultra syllabus import: on the outline under Ultra\'s details, from a document of the course, kept by site, user and course', async () => {
+  const p = ultraPage({ path: '/ultra/courses/_101_1/outline', enhance: { syllabus: true }, books: {}, answers: { '/contents?': CONTENTS } });
+  vm.runInContext(read('features/syllabus.js'), p.ctx);
+  const S = p.ctx.GZ_SYL_UI;
+  S.sync(true);
+  await settle(12);
+  const bar = p.doc.getElementById('gz-syl');
+  assert.equal(p.doc.querySelector('div.js-details-and-actions').nextElementSibling, bar, "a block of its own under Ultra's details and actions");
+  assert.match(bar.className, /outline-action-block/);
+  byText(bar, 'Import a syllabus').fire('click');
+  await settle(12);
+  const dlg = p.doc.getElementById('gz-syl-dlg');
+  assert.equal(dlg.open, true);
+  const sel = p.doc.getElementById('gz-syl-doc');
+  // Documents only, available ones only, a syllabus first; a page's text is its blocks'.
+  assert.deepEqual(sel.children.map((o) => o.textContent), ['Course Syllabus', 'Reading: cells']);
+  assert.deepEqual(p.state.asked.map(([m, r, u]) => [m, r, u]), [['GET', 'error', '/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,body,contentHandler.id,availability.available']]);
+  sel.value = '0';
+  byText(dlg, 'Read this document').fire('click');
+  await settle(12);
+  assert.match(dlg.textContent, /Check what Glaze found/);
+  assert.match(dlg.textContent, /Dr\. Ada Lovelace/);
+  assert.doesNotMatch(dlg.textContent, /Not yet/);
+  byText(dlg, 'Save').fire('click');
+  await settle(20);
+  const kept = p.store.data[`syllabus:${UO}/_900_1/_101_1`];
+  assert.ok(kept, 'kept under this site, user and course');
+  assert.deepEqual(kept.scale, [['A', 93], ['B', 83], ['C', 73], ['D', 63], ['F', 0]]);
+  assert.match(dlg.textContent, /Blackboard's own weights are the ones that count/);
+});
+
+test('an Ultra page may change only its own site’s grade records, by its own ids', async () => {
+  const store = shared();
+  const send = serviceWorker(store);
+  const from = (url) => ({ id: WORKER_ID, tab: { id: 3 }, frameId: 0, url });
+  const at = Date.now();
+  const op = (key, cid = '_101_1') => ({ type: 'glaze:whatif', op: 'grade', key, cid, c: 90, at });
+  assert.deepEqual(await send(op(UKEY), from(`${UO}/ultra/courses/_101_1/grades`)), { ok: true });
+  assert.deepEqual(await send(op(UKEY), from(`${UO}/webapps/portal`)), { ok: false, error: 'sender' }, 'not an Ultra page');
+  assert.deepEqual(await send(op(UKEY), from('http://lms.example.edu/ultra/grades')), { ok: false, error: 'sender' }, 'not https');
+  assert.deepEqual(await send(op('whatIf:https://other.example.edu:_900_1'), from(`${UO}/ultra/grades`)), { ok: false, error: 'sender' });
+  assert.deepEqual(await send(op(UKEY, '../1'), from(`${UO}/ultra/grades`)), { ok: false, error: 'sender' });
+  const gpa = (key) => send({ type: 'glaze:gpa', key, patch: { c: 4 } }, from(`${UO}/ultra/grades`));
+  assert.equal((await gpa(`ultra:${UO}/_101_1`)).ok, true);
+  assert.deepEqual(await gpa(`canvas:${UO}/101`), { ok: false, error: 'sender' }, "Canvas's keys aren't an Ultra page's");
+  const sylKey = `syllabus:${UO}/_900_1/_101_1`;
+  assert.equal((await send({ type: 'glaze:syllabus', key: sylKey, rec: { prof: { name: 'Dr. Ada' } }, at }, from(`${UO}/ultra/courses/_101_1/outline`))).ok, true);
+  assert.equal((await send({ type: 'glaze:gpaterms', key: `gpaTerms:${UO}:_900_1`, op: 'goal', goal: { k: 'cum', v: 3.5 }, at, base: 0 }, from(`${UO}/ultra/grades`))).ok, true);
+  assert.equal((await send({ type: 'glaze:insights', key: `insights:${UO}/_900_1`, op: 'clear', at }, from(`${UO}/ultra/course`))).ok, true);
+  assert.deepEqual(Object.keys(store.data).sort(), [`gpaTerms:${UO}:_900_1`, `insights:${UO}/_900_1`, sylKey, UKEY].sort());
 });

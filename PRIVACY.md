@@ -8,8 +8,8 @@ _Last updated: 2026-10-15_
   background, motion, light/dark schedule, course colour and extras choices, and what you set for a course in its course menu:
   its colour, look, tint and the **nickname you type for it**. When Chrome sync is on, these follow
   your own account between devices. Safari keeps them on this device only.
-- **Your GPA choices** (Canvas, the GPA Extra), in `chrome.storage.sync` as their own small item: for each
-  course you change, its Canvas site's address and course id with the credits, honors/AP level, grading
+- **Your GPA choices** (Canvas and Blackboard, the GPA Extra), in `chrome.storage.sync` as their own small item: for each
+  course you change, its site's address and course id with the credits, honors/AP level, grading
   scale you typed and whether it counts. Nothing is stored for a course you leave as it is. It follows
   your account like your settings; Safari keeps it on this device only.
 - **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
@@ -30,28 +30,26 @@ _Last updated: 2026-10-15_
   the same is kept in that browser tab's session storage on your Blackboard site, so a reload finds it
   even right after Glaze updates; the browser clears it when the tab closes. On Canvas this keeps your
   scroll position in Modules and the last module-item id you opened; Canvas keeps modules open or closed itself.
-- **Scores you try in the what-if calculator**, in `chrome.storage.local`, on this device only: for up
-  to 20 courses, the hypothetical scores you typed for work not graded yet. A score is removed once the
-  item has a real grade or is gone, and "Clear scores" removes a course's.
-- **What-if on Canvas**, in `chrome.storage.local`, on this device only, per Canvas site and signed-in user id:
+- **What-if** (Canvas and Blackboard), in `chrome.storage.local`, on this device only, per site and signed-in user id:
   for up to 100 courses, the course id with the assignment ids and scores you typed (and the real grade each
   was typed against), the ids of work you left out, your pretend assignments (the name you gave, points and
   score) and a what-if grade per course for the GPA. A score goes once its real grade arrives or changes,
   and the calculator says so. "Clear this course" deletes a course's scores and pretend assignments, "Clear all
   courses" everything, and the time of the last Clear all is kept per site and user so a change from another open
   tab can't bring them back. Nothing of this
-  is sent to Canvas or anywhere else.
-- **Past terms and a GPA goal** (Canvas, the GPA Extra), in `chrome.storage.local`, on this device only, per Canvas
-  site and signed-in user id: up to 40 terms you typed in or imported, each with its name, plus/minus or whole-letter
+  is sent to Canvas, Blackboard or anywhere else. Scores typed in Glaze 2.2's Blackboard calculator (kept by course id
+  alone) move into this record the first time you open that course's grades, and their old entry is deleted.
+- **Past terms and a GPA goal** (Canvas and Blackboard, the GPA Extra), in `chrome.storage.local`, on this device only,
+  per site and signed-in user id: up to 40 terms you typed in or imported, each with its name, plus/minus or whole-letter
   scale and up to 40 courses (the name, credits, grade as written, honors/AP level, left out or not), and your goal
   (cumulative or this term's GPA). A transcript you paste or pick (text, a web page or a Word file) is read in the page
   on this device; only the terms you review and add are kept, never the transcript itself. Glaze sends none of it
   anywhere: no upload, no AI service. "Remove this term" and "Remove all past terms" delete it, and the time of the
   last Remove all is kept so a change from another open tab can't bring terms back.
-- **Insights** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site and signed-in
-  user id: one small summary of this term, so the view opens at once next time: each current course's id and name, its
-  published work's name, due date, points, when you handed it in and whether Canvas marks it on time, late, missing or
-  excused, and the course's grade after each graded piece of work (each grading period's own, where the course has
+- **Insights** (Canvas and Blackboard, off by default), in `chrome.storage.local`, on this device only, per site and
+  signed-in user id: one small summary of this term, so the view opens at once next time: each current course's id and
+  name, its published work's name, due date, points, when you handed it in and whether it was on time, late, missing or
+  excused (as Canvas marks it; on Blackboard, as Glaze reads the submission time against the due date), and the course's grade after each graded piece of work (each grading period's own, where the course has
   them). It keeps one term at a time, the one most recently worked out. "Clear saved insights" deletes it, and the time of that clear is kept so an answer still on its way from
   another tab can't bring it back. Nothing is timed or tracked; the view also reads Better To Do's plans and the streak
   (if you use them) already on this device. The summary card you save as a picture is made in the page and saved by
@@ -169,10 +167,10 @@ _Last updated: 2026-10-15_
   settings. Remove deletes a sticker, Delete your picture deletes a picture; Reset everything deletes all of it.
   Your own pictures are shown on a page through temporary blob addresses, not written into it, though the LMS page's
   own code can still read a picture shown on it.
-- **What you keep from a syllabus** (Canvas, the Syllabus import Extra, off by default), in `chrome.storage.local`, on
-  this device only, per Canvas site, user and course, and only after you check it and choose Save: the professor's
+- **What you keep from a syllabus** (Canvas and Blackboard, the Syllabus import Extra, off by default), in
+  `chrome.storage.local`, on this device only, per site, user and course, and only after you check it and choose Save: the professor's
   name, e-mail, office and office hours, class times, the dates you kept, the grading scale and the weights. The
-  syllabus itself (the Syllabus page's text, a file you pick, text you paste) is read on this device, shown to you
+  syllabus itself (the Syllabus page's text, a Blackboard course's document, a file you pick, text you paste) is read on this device, shown to you
   while you review it, and not kept. If you choose so when saving, the scale also goes to your GPA choices above
   (synced like them) and the dates you tick become your own Better To Do tasks. Delete on the course home removes the
   record, keeping only when it was deleted (so a late save from another tab can't bring it back); the GPA scale and
@@ -221,7 +219,20 @@ animated backgrounds) are bundled. It makes requests in these cases:
 - **New-grade badges** (an Extra, on by default). To count new grades on your course cards, Glaze asks
   your own Blackboard site's gradebook for your grades in the courses on the Courses and Grades pages
   (the first twelve), the same way as for due-date status: at most once a minute per course, kept in
-  memory. The what-if calculator uses the same answer and asks for nothing more.
+  memory. The what-if calculator uses the same answer; it asks for the course's grade categories (their names) only
+  when the course's overall grade weighs one that no item names, and for the gradebook itself only when the page
+  hasn't asked yet. Glaze never writes grades or what-if scores to Blackboard.
+- **GPA on Blackboard** (the GPA Extra, off by default). On Blackboard's Grades page, Glaze reads your course list (as
+  above) for this term's courses and asks for each one's gradebook the same way, and once a page for each course's
+  grading schemas, to find its letter cut-offs where Blackboard shows them. The answers stay in memory.
+- **Insights on Blackboard** (off by default). When you open it (and at most every six hours after, or when you press
+  Refresh), Glaze asks your own Blackboard site for each of this term's courses' gradebook with your submission status,
+  the address Blackboard's own course Grades page uses, and, only for a course with work it would call late or missing,
+  whether you have due-date exceptions there. These never follow a redirect. Only the summary above is kept.
+- **Syllabus import on Blackboard** (off by default). On a course's outline Glaze uses your course list (as above) for
+  your user id and the course's term. When you open Import a syllabus, it asks your own Blackboard site's public
+  content API for the course's items with their titles and text, to list its documents; the answer stays in memory
+  while the dialog is open. Reading a document there marks nothing as opened. Files you pick are read on this device.
 - **Command palette** (an Extra, on by default). When you open it, Glaze asks your own Blackboard site
   for your list of courses and, inside a course, that course's items, using Blackboard's own addresses
   with your existing session. The answers are kept in memory only.

@@ -361,15 +361,17 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
-  // ---- what-if calculator (Extras) -----------------------------------------------------------
-  // features/whatif.js (with lib/gradecalc.js), loaded on a course's Grades once its grades are in.
+  // ---- grades (Extras) -------------------------------------------------------------------------
+  // features/grades.js, as on Canvas: the what-if calculator on a course's Grades, the GPA on the Grades page. Syllabus
+  // import on a course's outline (features/syllabus.js); Insights' button on the Courses page (features/insights.js).
+  const loadIf = (want, file, name, run) => (globalThis[name] || (I.observer && want)) && need(file, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
   const renderCalc = () => {
-    if (globalThis.GZ_WHATIF) return GZ_WHATIF.render();
-    const cid = courseId();
-    if (I.settings.enhance.calc && I.observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview') && bookFor(cid).results) {
-      need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(() => need('features/whatif.js', () => globalThis.GZ_WHATIF)).then(() => GZ_WHATIF.render(), () => {});
-    }
+    const e = I.settings.enhance;
+    loadIf((e.calc && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname)) || (e.gpa && /^\/ultra\/grades\/?$/.test(location.pathname)), 'features/grades.js', 'GZ_GRADES_UI', (g) => g.render());
   };
+  const sylHere = () => window.top === window && I.settings.enhance.syllabus && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname);
+  const syncSyl = () => loadIf(sylHere(), 'features/syllabus.js', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
+  const syncInsights = () => loadIf(I.settings.enhance.insights && location.pathname === '/ultra/course', 'features/insights.js', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
   // ---- page changes ---------------------------------------------------------------------------
   // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
@@ -543,7 +545,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 
   return {
     record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
-    renderProgress, renderNew, renderCalc, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
+    renderProgress, renderNew, renderCalc, syncSyl, syncInsights, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
     ctx: { myCourses, courseItems, bookFor, courseColor },
   };

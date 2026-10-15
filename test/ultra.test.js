@@ -238,10 +238,21 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   const g = U.grade(rows, load('schemas').results);
   assert.deepEqual([g.kind, g.estimate, g.overall], ['weighted', false, 88]);
   assert.equal(g.percent() - g.overall, 0);
+  // The what-if reads the same course through the calculator Canvas uses: still no discrepancy.
+  assert.equal(require('../lib/gradecalc.js').calc(g.course, {}).current - g.overall, 0);
+  assert.deepEqual(g.course.groups.map((x) => [x.id, x.name, x.weight]), [['_201_1', 'Assignment', 40], ['_202_1', 'Test', 40], ['_203_1', 'Discussion', 20]]);
   assert.equal(g.scale, null); // the overall column's schema is a percent scale
-  // A letter scale: [[letter, min]], highest first.
+  // A letter scale as a student gets it (B4, measured): letters and the value an entered letter stands for, no bounds.
+  // That value is no cut-off, so there's no scale.
   rows.find((r) => r.column.externalGrade).column.gradingSchemaId = '_403_1';
-  assert.deepEqual(U.grade(rows, load('schemas').results).scale, [['A', 95], ['B', 85], ['C', 75], ['D', 65], ['F', 0]]);
+  const schemas = load('schemas').results;
+  assert.equal(U.grade(rows, schemas).scale, null);
+  // Where Ultra sends each symbol's lowerBound: [[letter, min]], highest first.
+  const bounded = clone(schemas);
+  bounded[2].symbols.forEach((s, i) => { s.lowerBound = [94, 84, 74, 64, 0][i]; });
+  assert.deepEqual(U.grade(rows, bounded).scale, [['A', 94], ['B', 84], ['C', 74], ['D', 64], ['F', 0]]);
+  delete bounded[2].symbols[1].lowerBound;
+  assert.equal(U.grade(rows, bounded).scale, null, 'all or nothing: a gap is no scale');
   // No overall column returned: the share of points, flagged as an estimate.
   const e = U.grade(status());
   assert.deepEqual([e.kind, e.estimate, e.overall], ['points', true, null]);
@@ -251,11 +262,48 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   odd.find((r) => r.column.externalGrade).column.calculatedFormula.formula = '@X@BBCalColElem(avg:{"items":[]})@X@';
   const u = U.grade(odd);
   assert.deepEqual([u.kind, u.estimate, u.overall], ['points', true, 88]);
-  assert.match(u.why, /can't work out/);
+  assert.equal(u.why, "its overall grade uses rules Glaze can't read");
   // One that doesn't reproduce Blackboard's figure: the same.
   const off = book();
   off.find((r) => r.column.externalGrade).displayGrade.score = 87;
   assert.deepEqual([U.grade(off).estimate, U.grade(off).overall], [true, 87]);
+  assert.equal(U.grade(off).why, "its recipe doesn't come out at Blackboard's own figure");
+  // The letter Blackboard writes for the overall grade, where it writes one.
+  const lettered = book();
+  lettered.find((r) => r.column.externalGrade).displayGrade.text = 'B+';
+  assert.equal(U.grade(lettered).letter, 'B+');
+  assert.equal(U.grade(book()).letter, null);
+});
+
+test("this term's courses: a student's, open, within their term's dates; organizations, closed and other roles left out", () => {
+  const mem = clone(load('memberships').results);
+  const all = U.current(mem, NOW);
+  assert.deepEqual(all.courses.map((c) => c.id), ['_101_1', '_102_1', '_103_1', '_104_1']);
+  assert.deepEqual([all.key, all.name, all.from, all.to], ['_51_1', 'Fall 2026', Date.parse('2026-08-31T04:00:00.000Z'), Date.parse('2026-12-22T04:59:00.000Z')]);
+  assert.equal(all.courses[0].m, mem[0]);
+  mem[0].course.isClosed = true;
+  mem[1].role = 'P';
+  mem[2].course.isOrganization = true;
+  mem[3].course.term = { ...mem[3].course.term, id: '_52_1', name: 'Spring 2027', startDate: '2027-01-19T05:00:00.000Z', endDate: '2027-05-20T03:59:00.000Z' };
+  assert.deepEqual(U.current(mem, NOW).courses, []);
+  assert.deepEqual(U.current(mem, Date.parse('2027-02-01T00:00:00Z')).courses.map((c) => c.id), ['_104_1']);
+  // A term with no dates counts as on.
+  delete mem[3].course.term.startDate;
+  mem[3].course.term.durationType = 'CONTINUOUS';
+  assert.deepEqual(U.current(mem, NOW).courses.map((c) => c.id), ['_104_1']);
+  assert.equal(U.current(mem, NOW).name, '');
+});
+
+test("a course's grade over the term, for Insights: Blackboard's own figure after each graded item, by due date", () => {
+  const rows = book();
+  const tr = U.trend(rows, 'UTC');
+  // Discussion (Sep 14), Lab Report 1 (Sep 21), Quiz 1 (Sep 28); the last point is Blackboard's own 88.
+  assert.deepEqual(tr.map(([at]) => new Date(at).toISOString().slice(0, 10)), ['2026-09-14', '2026-09-21', '2026-09-28']);
+  assert.equal(tr.at(-1)[1], 88);
+  assert.equal(tr[0][1], 100); // the discussion alone, 10 of 10
+  // No overall grade: the estimate's points, the same way.
+  const st = U.trend(status(), 'UTC');
+  assert.deepEqual(st.map(([, pct]) => pct), [85]);
 });
 
 test('To Do is read in 14-day slices, the calendar in 56-day ones; a range that is not one is refused', () => {
