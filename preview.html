@@ -27,6 +27,8 @@
   .course-banner { min-height: 80px; background: var(--gz-course); }
   .course-title, .course-status { padding: 8px 12px; }
   .panel-wrap { position: relative; min-height: 100vh; }
+  div.bb-course-navigation { position: sticky; top: 0; z-index: 10; }
+  bb-course-navigation { display: block; }
   course-page-header > header { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; }
   [data-analytics-id="course.header.home"] { display: grid; place-items: center; width: 30px; height: 30px; }
   .pv-course { flex: 1; font-size: 0.875rem; }
@@ -82,20 +84,22 @@
   <section class="multi-column-view"><div class="course-columns"><article class="element-card course-element-card course-color-2" data-course-id="_1_1"><div class="course-banner"></div><h2 class="course-title">Computer Science</h2><div class="course-status">Open</div></article><article class="element-card course-element-card course-color-3" data-course-id="_2_1"><div class="course-banner"></div><h2 class="course-title">Spanish</h2><div class="course-status">Open</div></article></div></section>
   <section class="course course-color-2">
   <div class="panel-wrap">
-    <course-page-header><header>
-      <a class="MuiButtonBase-root" data-analytics-id="course.header.home" aria-label="Home" href="#">
-        <svg class="MuiSvgIcon-root" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>
-      </a>
-      <span class="pv-course">FA26-CS101-01</span>
-      <span class="MuiBadge-badge" title="Students can see this course">OPEN</span>
-    </header></course-page-header>
-    <div class="bb-course-navigation"><div class="makeStylestoolbar-0">
-      <ul class="MuiList-root bb-ui-navigation-list-horizontal">
-        <li><a class="MuiListItemButton-root" aria-current="page" href="#">Content</a></li>
-        <li><a class="MuiListItemButton-root" href="#">Calendar</a></li>
-        <li><a class="MuiListItemButton-root" href="#">Gradebook</a></li>
-      </ul>
-    </div></div>
+    <div class="bb-course-navigation"><bb-course-navigation>
+      <course-page-header><header>
+        <a class="MuiButtonBase-root" data-analytics-id="course.header.home" aria-label="Home" href="#">
+          <svg class="MuiSvgIcon-root" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>
+        </a>
+        <span class="pv-course">FA26-CS101-01</span>
+        <span class="MuiBadge-badge" title="Students can see this course">OPEN</span>
+      </header></course-page-header>
+      <div class="makeStylestoolbar-0"><div class="js-course-navigation"><nav>
+        <ul class="MuiList-root bb-ui-navigation-list-horizontal">
+          <li><a class="MuiListItemButton-root" aria-current="page" href="#">Content</a></li>
+          <li><a class="MuiListItemButton-root" href="#">Calendar</a></li>
+          <li><a class="MuiListItemButton-root" href="#">Gradebook</a></li>
+        </ul>
+      </nav></div></div>
+    </bb-course-navigation></div>
 
     <main class="pv route-view-container">
       <h2 class="pv-h">Course Content</h2>
@@ -163,10 +167,12 @@
 <script src="lib/zip.js"></script>
 <script src="features/schedule.js"></script>
 <script src="defaults.js"></script>
+<script src="lib/coursetabs.js"></script>
 <script src="lib/nav.js"></script>
 <script src="lib/nav-items.js"></script>
 <script src="content-ultra.js"></script>
 <script src="content.js"></script>
+<script src="features/coursetabs.js"></script>
 <script src="lib/cards.js"></script>
 <script src="features/cards.js"></script>
 <script src="lib/widgets.js"></script>

@@ -168,6 +168,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
+  // Keep the course strip attached when Ultra replaces its header; no route paint hold.
+  const gate = (scope) => { discoverNav(scope); return globalThis.GZ_CTABS?.held(); };
+
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
   // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
@@ -233,6 +236,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
   const renderNew = () => {
+    if (globalThis.GZ_CTABS?.showing?.()) return;
     const { newgrades, newcontent } = I.settings.enhance;
     if (!(newgrades || newcontent) || window.top !== window || !I.observer) return;
     if (!seen) return loadSeen();
@@ -370,6 +374,13 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { floatEpoch++; floatsIn(ch.widgetLayout.newValue); } });
   } catch { /* extension reloaded */ }
 
+  // ---- course tabs: features/coursetabs.js (after lib/coursetabs.js), in the top frame and the preview -------------
+  // Until it's in, extras.css holds the strip's place from data-gz-ctabs (paintCourses): the place and size it last had in
+  // this browser tab, else the defaults; gate hands it Ultra's new top bar before that is painted.
+  const tabsOn = () => !!I.links.length && (isPreview || window.top === window) && I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.();
+  const syncTabs = () => (tabsOn() ? need('lib/coursetabs.js', () => globalThis.GZ_CTABS_LIB).then(() => need('features/coursetabs.js', () => globalThis.GZ_CTABS))
+    .then(() => GZ_CTABS.sync(tabsOn()), () => {}) : globalThis.GZ_CTABS?.sync(false));
+
   // ---- page changes ---------------------------------------------------------------------------
   // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
   // stall it for half a second). A click on the main menu or a course's tabs instead holds the old
@@ -436,6 +447,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     return GZ_CAL_COURSE(el.textContent, el.className.match?.(/course-color-(\d+)/)?.[1], calItems, I.courseList);
   };
   const paintCourses = () => {
+    let at = null;
+    try { at = sessionStorage.getItem('gz-ctabs'); } catch { /* blocked */ }
+    I.setAttr('data-gz-ctabs', tabsOn() && (at ?? 'above medium'));
     if (isPreview) return;
     const colors = courseColors();
     for (const el of document.querySelectorAll('[class*="course-color-"]')) {
@@ -666,11 +680,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   }
 
   return {
-    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate: discoverNav, stop: () => { syncDashboard(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
-    renderProgress, renderNew, renderCalc, syncSyl, syncInsights, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { syncDashboard(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
+    renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
     syncTodo, syncCardTasks, syncRemind, syncWidgets,
-    ctx: { myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
+    ctx: { me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
   };
 });
 
