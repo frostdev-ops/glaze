@@ -83,7 +83,8 @@
     },
     {
       "matches": [
-        "https://frostdev.io/glaze/looks*"
+        "https://frostdev.io/glaze/looks",
+        "https://frostdev.io/glaze/looks/*"
       ],
       "js": [
         "lib/gallery.js"

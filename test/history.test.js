@@ -82,12 +82,12 @@ const worker = () => {
 
 test('the gallery content script runs only on the gallery, and the background takes codes only from there', async () => {
   const entry = m.content_scripts.find((c) => c.js.includes('lib/gallery.js'));
-  assert.deepEqual(entry.matches, ['https://frostdev.io/glaze/looks*']);
+  assert.deepEqual(entry.matches, ['https://frostdev.io/glaze/looks', 'https://frostdev.io/glaze/looks/*']);
   assert.ok(!entry.all_frames);
   assert.deepEqual(m.permissions, ['storage', 'scripting'], 'no new permission');
   const w = worker();
   const code = 'glaze1:abc';
-  for (const [url, frameId] of [['https://evil.example/glaze/looks/', 0], ['https://frostdev.io/glaze', 0], ['https://frostdev.io/glaze/looks/', 3], [undefined, 0]]) {
+  for (const [url, frameId] of [['https://evil.example/glaze/looks/', 0], ['https://frostdev.io/glaze', 0], ['https://frostdev.io/glaze/looksevil', 0], ['https://frostdev.io/glaze/looksevil/', 0], ['http://frostdev.io/glaze/looks/', 0], ['https://frostdev.io.evil.example/glaze/looks/', 0], ['https://frostdev.io/glaze/looks/', 3], [undefined, 0]]) {
     w.send({ gallery: { code, name: 'X', author: 'y' } }, { url, frameId });
   }
   w.send({ gallery: { code: 'x'.repeat(4001), name: 'X' } }, { url: 'https://frostdev.io/glaze/looks/', frameId: 0 });
@@ -98,6 +98,13 @@ test('the gallery content script runs only on the gallery, and the background ta
   await w.tick();
   assert.deepEqual(w.local.galleryOffer, { code, name: 'Aurora Night', author: 'frostdev-ops' });
   assert.deepEqual(w.opened, ['options']);
+  // The page itself, without the slash, with a query or a fragment.
+  for (const url of ['https://frostdev.io/glaze/looks', 'https://frostdev.io/glaze/looks?q=x#clear']) {
+    delete w.local.galleryOffer;
+    w.send({ gallery: { code, name: 'A' } }, { url, frameId: 0 });
+    await w.tick();
+    assert.equal(w.local.galleryOffer?.code, code, url);
+  }
 });
 
 test('the background records the theme left and the theme worn once a burst of changes rests', async () => {
@@ -116,4 +123,44 @@ test('the background records the theme left and the theme worn once a burst of c
   assert.ok(H.wearing(after, list[0]));
   assert.ok(H.wearing(before, list[1]));
   assert.ok(H.wearing(before, H.previous(list, after)));
+});
+
+test('Clear history wins over a recording that is waiting or already queued', async () => {
+  const editor = { url: 'chrome-extension://x/options.html' };
+  const burst = async (w, name) => {
+    const was = G.GZ_SANITIZE(w.sync);
+    const now = wearing(name, was);
+    Object.assign(w.sync, now);
+    w.change({ colors: { oldValue: was.colors, newValue: now.colors } });
+    await w.tick();
+  };
+  const settle = async () => { for (let i = 0; i < 6; i++) await new Promise(setImmediate); };
+
+  // Waiting: the timer hasn't fired when the student clears.
+  let w = worker();
+  w.local.lookHistory = [{ theme: H.theme(G.GZ_DEFAULTS), at: 1 }];
+  await burst(w, 'Terminal');
+  w.send('clear-history', editor);
+  await settle();
+  assert.deepEqual(w.local.lookHistory, []);
+  assert.equal(w.timers.length, 0, 'the waiting recording is cancelled');
+
+  // Queued: the timer fired and its write is in flight when the student clears.
+  w = worker();
+  await burst(w, 'Terminal');
+  w.timers.shift()();
+  w.send('clear-history', editor);
+  await settle();
+  assert.deepEqual(w.local.lookHistory, []);
+
+  // Only the extension's own pages can clear; the next change records afresh.
+  w.local.lookHistory = [{ theme: H.theme(G.GZ_DEFAULTS), at: 1 }];
+  w.send('clear-history', { url: 'https://frostdev.io/glaze/looks/', frameId: 0 });
+  await settle();
+  assert.equal(w.local.lookHistory.length, 1);
+  w.local.lookHistory = [];
+  await burst(w, 'Library');
+  w.timers.shift()();
+  await settle();
+  assert.equal(w.local.lookHistory.length, 2);
 });

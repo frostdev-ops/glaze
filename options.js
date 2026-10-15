@@ -615,7 +615,8 @@ GZ_UI.load().then((s) => {
     }));
   };
   $('#history-back').addEventListener('click', () => { const e = GZ_HISTORY.previous(history, s); if (e) wearEntry(e); });
-  $('#history-clear').addEventListener('click', () => local.set({ lookHistory: [] }));
+  // Through the background, which also drops a recording still waiting to be written.
+  $('#history-clear').addEventListener('click', () => chrome.runtime.sendMessage('clear-history', () => void chrome.runtime.lastError));
   $('#share-fav').addEventListener('click', () => {
     const f = { code: offer.code, name: from?.name || offer.preset || t('Custom theme'), author: from?.author || '', at: Date.now() };
     local.set({ lookFavorites: GZ_HISTORY.favor(favorites, f) }, () => {

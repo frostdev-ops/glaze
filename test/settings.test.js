@@ -175,6 +175,10 @@ test('theme codes are untrusted: anything off refuses the whole code', async () 
     ['unknown setting', { c, l: { tooltips: false } }],
     ['unknown group', { c, enhance: { keys: true } }],
     ['short palette', { c: c.slice(6) }],
+    ['look not an object', { c, l: [{ scale: 99 }] }],
+    ['look a string', { c, l: 'drop-me' }],
+    ['background an array', { c, b: [{ image: 'http://invalid.example/a' }] }],
+    ['background null', { c, b: null }],
   ]) await assert.rejects(S.decode(await make(obj)), Error, why);
   for (const bad of ['', 'hello', 'glaze1:!!!', 'glaze1:AAAA', `glaze1:${'A'.repeat(5000)}`]) await assert.rejects(S.decode(bad), Error, bad.slice(0, 20));
   // A tiny code that inflates past the cap.
