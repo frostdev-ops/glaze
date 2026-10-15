@@ -2,6 +2,9 @@
 
 _Last updated: 2026-10-15_
 
+Ultra performance changes reuse the page's existing gradebook reads and ignore internal Glaze UI mutations. They add
+no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
+
 ## What Glaze stores
 
 - **Blackboard navigation:** precise size/spacing and logo choices sync in `nav`; up to eight custom link names,

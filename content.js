@@ -38,7 +38,7 @@
   const C = GZ_COLOR;
   const html = document.documentElement;
   const SKIP = /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i;
-  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-loading', 'data-gz-reveal', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
+  const TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-rule', 'data-gz-score', 'data-gz-due', 'data-gz-hover', 'data-gz-pct', 'data-gz-countdown', 'data-gz-chip', 'data-gz-grade', 'data-gz-held', 'data-gz-new', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   // Gradients mixed in OKLab keep their midpoints bright instead of going grey (Chrome 111, Firefox 127).
   const OKLAB = CSS.supports('background-image', 'linear-gradient(in oklab, red, blue)') ? 'oklab' : '';
@@ -56,7 +56,7 @@
   const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css']];
   // What only one site does: its part puts its own over these ("the site's own part", below). They're Moodle's: nothing.
   const no = () => {};
-  const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, still: no, stop: no, renderProgress: no,
+  const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, stop: no, renderProgress: no,
     renderNew: no, renderCalc: no, openNew: no, paintCourses: no, tintOf: no, courseColor: no, paintNav: no, syncNav: no, nickOf: () => '', syncNames: no,
     unname: no, holding: () => false, syncTodo: no, syncCardTasks: no, syncWidgets: no, syncRemind: no, syncSyl: no, syncInsights: no, ctx: {} };
 
@@ -407,13 +407,12 @@
     X.syncSyl();
     X.syncInsights();
   };
-  // ---- page loads ------------------------------------------------------------------------------
-  // Ultra holds a page's container hidden while it is built (X.gate, X.still: content-ultra.js), from here, so
-  // it's held before it's first painted.
-
   // Throttle, not debounce: Ultra never stops mutating (ripples, popper repositioning), and a
   // debounce that restarts on every record would put the sweep off indefinitely.
   const schedule = (records) => {
+    // Native-parent removals still need remount/teardown; only changes inside our UI are irrelevant.
+    if (ultra) records = records.filter((r) => !r.target.closest?.('[id^="gz-"]'));
+    if (!records.length) return;
     X.lift();
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {
@@ -425,13 +424,10 @@
         continue;
       }
       if (r.type === 'attributes') { dirty.add(r.target); continue; }
-      // Here, not in the throttled pass: a page must be held before it's first painted.
       for (const n of r.addedNodes) {
         if (n.nodeType !== 1) continue;
         dirty.add(n);
-        if (ultra) X.gate(n); // holding a page while it loads is Ultra's
       }
-      if (ultra) X.still(r.target);
     }
     // Too many separate subtrees to be worth tracking: one full pass is cheaper.
     if (dirty.size > 500) { dirty.clear(); full = true; }

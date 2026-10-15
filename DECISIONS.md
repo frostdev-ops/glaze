@@ -675,3 +675,12 @@ becomes the Dashboard; landing there is opt-in. Evidence: `parity/spikes/B7.md`.
 | Known cached identity only; no controls before it exists | Fetch a profile or share an anonymous key | B9 adds no requests and never mixes accounts. Existing course refresh/inline grade reads normally supply identity; fresh pages without those reads wait. Profile/sign-out navigation revokes the binding until a new identity read or reload. |
 | Single-ID operations through the existing worker queue; capped device records in Export all | Whole snapshots from tabs | Concurrent tabs retain each other’s edits; import validates account/course keys and shares settings rollback. |
 | Accept the exact 29-byte shared schema increase on Canvas/Moodle (owner-approved B9 exception) | A site-conditional schema or unrelated byte offsets | One sanitizer must preserve the setting in every editor/site. Heavy B9 code stays Ultra-only and on demand; the existing performance ratchets remain unchanged. |
+
+## Ultra route performance
+
+| Decision | Alternative | Reason |
+|---|---|---|
+| Native SPA content stays visible; retain only the initial document-start stylesheet gate | Hide every new route container for up to 2.5 seconds | Synthetic actual-extension measurements found a 256–474 ms visibility delay even with local fixture responses. The owner requested no SPA paint hold. |
+| Ignore mutation records inside an owned `gz-` root; retain native-parent removals and mixed batches | Run native selectors for every widget text update | Thirty owned updates caused four native course-color scans. The shared sweep already excludes these owned subtrees; native removal still needs feature remount/teardown. |
+| Record a successful empty late-status set before comparing gradebook content | Treat an unchanged gradebook as if lateness was never read | The next due-chip pass otherwise repeats the gradebook request. Failed reads retain their retry behavior; the one-minute freshness limit stays. |
+| Keep identity sharing unchanged | Add a second account cache interface | The measured sequence read `/users/me` only once, so the evidence does not justify an invasive cache refactor. |
