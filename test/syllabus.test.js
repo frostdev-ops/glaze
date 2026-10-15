@@ -334,3 +334,99 @@ test('keys and task ids', () => {
   assert.notEqual(a, S.taskId('25', { day: '2026-10-15', title: 'Midterm exam' }));
   assert.match(S.taskId('12345678901234567890', { day: '2026-10-14', title: 'x' }), /^[\w-]{1,40}$/, 'fits lib/todo.js task ids');
 });
+
+test('a scale keeps its ranges; overlaps, gaps and letters out of order make it a guess, never sure', () => {
+  const sc = (text) => S.extract(`Grading scale\n${text}`).scale;
+  const fine = sc('A 90-100\nB 80-89.99\nC 70-79.99\nF below 70');
+  assert.equal(fine.conf, 'sure');
+  assert.deepEqual(fine.issues, []);
+  assert.deepEqual(fine.ranges, [['A', 90, 100], ['B', 80, 89.99], ['C', 70, 79.99], ['F', 0, 69.99]]);
+  const overlap = sc('A 90-100\nB 80-95\nC 70-79');
+  assert.equal(overlap.conf, 'check');
+  assert.deepEqual(overlap.issues, [{ kind: 'overlap', a: 'A 90–100', b: 'B 80–95' }]);
+  const gap = sc('A 90-100\nB 80-85\nC 70-79');
+  assert.equal(gap.conf, 'check');
+  assert.deepEqual(gap.issues, [{ kind: 'gap', a: 'A 90–100', b: 'B 80–85' }]);
+  const order = sc('A 90-100\nB 70-79\nC 80-89\nD 60-69');
+  assert.equal(order.conf, 'check');
+  assert.equal(order.issues[0].kind, 'order', 'C 80-89 below B breaks the order (and B to A leaves a gap)');
+});
+
+test('a syllabus record only moves forward: an older save never replaces a newer one, nor brings back a deleted one', () => {
+  const rec = (name, at) => ({ prof: { name }, at });
+  let stored = S.change(undefined, { rec: rec('New', 0), at: 200 });
+  assert.equal(stored.prof.name, 'New');
+  assert.equal(stored.at, 200);
+  assert.equal(S.change(stored, { rec: rec('Old', 0), at: 100 }), null, 'older: dropped');
+  stored = S.change(stored, { rec: null, at: 300 });
+  assert.deepEqual(stored, { deleted: 300 });
+  assert.equal(S.tidy(stored), null, 'a deleted record reads as none');
+  assert.equal(S.change(stored, { rec: rec('Late', 0), at: 250 }), null, 'a save made before the delete stays deleted');
+  assert.equal(S.change(stored, { rec: rec('Again', 0), at: 400 }).prof.name, 'Again', 'a save after it is kept');
+  assert.equal(S.change(undefined, { rec: rec('x', 0) }), null, 'no time, no write');
+});
+
+test('a large or hostile text is read in one pass, and a text over the cap is cut and says so', () => {
+  const time = (text) => { const t0 = performance.now(); const r = S.extract(text); return { r, ms: performance.now() - t0 }; };
+  // Codex's witness: rows of zero weights made the old search quadratic (48 KB took 0.6 s).
+  const zeros = time('Category 0%\n'.repeat(Math.floor(S.MAX / 12)));
+  assert.ok(zeros.ms < 1500, `${Math.round(zeros.ms)} ms for ${S.MAX} characters of zero weights`);
+  assert.equal(zeros.r.weights.value, '');
+  const mixed = time(Array.from({ length: 4000 }, (_, i) => `Quiz ${i}: Oct ${(i % 28) + 1} 9:00-9:50 AM Room ${i} A ${90 - (i % 50)} Homework ${i % 7}% b@c.de`).join('\n'));
+  assert.ok(mixed.ms < 1500, `${Math.round(mixed.ms)} ms for a long text of dates, times, letters and weights`);
+  const big = time('x'.repeat(S.MAX + 10) + '\nInstructor: Dr. Late Name');
+  assert.equal(big.r.truncated, true);
+  assert.equal(big.r.prof.name.value, '', 'what is past the cap is not read');
+  assert.equal(S.extract('Instructor: Dr. Amara Okafor').truncated, false);
+});
+
+test('a weight block that does not add up to 100 is shown whole, marked to check, with its total', () => {
+  const w = S.extract('Grading weights\nHomework 60%\nFinal exam 40%\nLabs 20%').weights;
+  assert.deepEqual(w.value, [{ name: 'Homework', weight: 60 }, { name: 'Final exam', weight: 40 }, { name: 'Labs', weight: 20 }]);
+  assert.equal(w.conf, 'check');
+  assert.deepEqual(w.issues, [{ kind: 'sum', total: 120 }]);
+  assert.match(w.src, /Labs 20%/);
+  assert.equal(S.extract('Grading\nHomework 40%\nExams 60%').weights.conf, 'sure');
+  assert.deepEqual(S.extract('Grading\nHomework 40%\nExams 60%').weights.issues, []);
+});
+
+test('date ranges and numeric dates that read either way are guesses', () => {
+  const d = (text, md) => S.extract(text, { start: FALL, md }).dates.map((x) => [x.title, x.day, x.end, x.conf]);
+  assert.deepEqual(d('Final exam: December 15-17'), [['Final exam', '2026-12-15', '2026-12-17', 'check']]);
+  assert.deepEqual(d('Partiel : 15–17 décembre 2026'), [['Partiel', '2026-12-15', '2026-12-17', 'check']]);
+  assert.deepEqual(d('Midterm exam: Oct 3–5, 2026'), [['Midterm exam', '2026-10-03', '2026-10-05', 'check']]);
+  assert.deepEqual(d('Quiz 10/04/2026', true), [['Quiz', '2026-10-04', undefined, 'check']], 'October 4 or 10 April');
+  assert.deepEqual(d('Quiz 10/24/2026', true), [['Quiz', '2026-10-24', undefined, 'sure']], 'only one reading');
+});
+
+test('a TA\'s e-mail is not the professor\'s', () => {
+  const p = (text) => S.extract(text).prof.email;
+  const both = p('Instructor: Alice Smith\nTA: Bob Jones\nEmail: bob@example.edu\nInstructor email: alice@example.edu');
+  assert.deepEqual([both.value, both.conf], ['alice@example.edu', 'sure']);
+  const onlyTa = p('Instructor: Alice Smith\nTA: Bob Jones\nEmail: bob@example.edu');
+  assert.deepEqual([onlyTa.value, onlyTa.conf], ['bob@example.edu', 'check'], 'past the TA, only a guess');
+  const own = p('Instructor: Alice Smith\nEmail: alice@example.edu\nTA: Bob Jones, bob@example.edu');
+  assert.deepEqual([own.value, own.conf], ['alice@example.edu', 'sure']);
+});
+
+test('a damaged stored date is dropped, not thrown on', () => {
+  assert.deepEqual(S.tidy({ prof: { name: 'x' }, dates: [{ title: 'Bad', day: '2026-99-99' }, { title: 'Good', day: '2026-11-20' }] }).dates, [{ title: 'Good', day: '2026-11-20', kind: 'other' }]);
+});
+
+test('a date saved again to Better To Do keeps whether it was done, and its steps', () => {
+  const T = require('../lib/todo.js');
+  const task = { id: 'syl-25-abc', title: 'Midterm exam', cid: '25', due: { day: '2026-11-04' }, notes: 'From your syllabus', at: 1 };
+  const d = T.clean({});
+  T.edit(d, ['importTask', task]);
+  T.edit(d, ['taskDone', 'syl-25-abc', 5000]);
+  T.edit(d, ['addStep', 'task:syl-25-abc', { id: 's1', title: 'Review chapter 3' }]);
+  T.edit(d, ['importTask', { ...task, title: 'Midterm exam 1', due: { day: '2026-11-05' } }]);
+  const out = T.clean(d);
+  assert.equal(out.tasks.length, 1);
+  assert.equal(out.tasks[0].done, 5000, 'still done');
+  assert.equal(out.tasks[0].title, 'Midterm exam 1');
+  assert.deepEqual(out.tasks[0].due, { day: '2026-11-05' });
+  assert.equal(out.items['task:syl-25-abc'].subs[0].title, 'Review chapter 3');
+  T.edit(d, ['importTask', { ...task, id: 'syl-25-new', done: 9 }]);
+  assert.equal(T.clean(d).tasks.find((x) => x.id === 'syl-25-new').done, 0, 'a new one starts not done');
+});

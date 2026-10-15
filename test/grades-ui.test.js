@@ -247,15 +247,15 @@ test('a page keeps or deletes only its own Canvas site’s syllabus records, and
   const from = (url) => ({ id: WORKER_ID, tab: { id: 3 }, frameId: 0, url });
   const key = `syllabus:${ORIGIN}/3/25`;
   const rec = { prof: { name: 'Dr. Okafor', email: 'a@b.edu' }, weights: [{ name: 'Labs', weight: 40 }], html: '<b>', scale: [['A', 93]] };
-  const kept = await send({ type: 'glaze:syllabus', key, rec }, from(`${ORIGIN}/courses/25`));
+  const kept = await send({ type: 'glaze:syllabus', key, rec, at: 10 }, from(`${ORIGIN}/courses/25`));
   assert.equal(kept.ok, true);
   assert.deepEqual(store.data[key], kept.rec);
   assert.equal(store.data[key].html, undefined, 'tidied');
-  assert.deepEqual(await send({ type: 'glaze:syllabus', key: 'syllabus:https://other.instructure.com/3/25', rec }, from(`${ORIGIN}/`)), { ok: false, error: 'sender' });
-  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec }, from('https://example.com/')), { ok: false, error: 'sender' });
-  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec: { prof: {} } }, from(`${ORIGIN}/`)), { ok: false, error: 'bad' });
-  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec: null }, from(`${ORIGIN}/`)), { ok: true });
-  assert.deepEqual(store.data, {});
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key: 'syllabus:https://other.instructure.com/3/25', rec, at: 11 }, from(`${ORIGIN}/`)), { ok: false, error: 'sender' });
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec, at: 12 }, from('https://example.com/')), { ok: false, error: 'sender' });
+  assert.deepEqual(await send({ type: 'glaze:syllabus', key, rec: { prof: {} }, at: 13 }, from(`${ORIGIN}/`)), { ok: false, error: 'bad' });
+  assert.equal((await send({ type: 'glaze:syllabus', key, rec: null, at: 14 }, from(`${ORIGIN}/`))).ok, true);
+  assert.deepEqual(store.data, { [key]: { deleted: 14 } }, 'only the time of the delete is left');
 });
 
 test('the what-if calculator shows the syllabus\'s weights as a note, and still counts Canvas\'s', async () => {

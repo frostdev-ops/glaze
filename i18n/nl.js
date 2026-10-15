@@ -1203,4 +1203,10 @@
   "Your syllabus lists {list}. Glaze counts the weights Canvas has.": "Je syllabus noemt {list}. Glaze rekent met de wegingen uit Canvas.",
   "Due": "Inleveren",
   "Other": "Overig",
+  "The letters aren't in order.": "De letters staan niet op volgorde.",
+  "Nothing covers the scores between {a} and {b}.": "Niets dekt de scores tussen {a} en {b}.",
+  "{a} and {b} overlap.": "{a} en {b} overlappen.",
+  "Check the ranges:": "Controleer de bereiken:",
+  "These add up to {total}%, not 100%.": "Samen is dit {total}%, niet 100%.",
+  "Only the first {n} characters were read. If something is missing, paste the part with the course details.": "Alleen de eerste {n} tekens zijn gelezen. Als er iets ontbreekt, plak dan het deel met de cursusgegevens.",
 };

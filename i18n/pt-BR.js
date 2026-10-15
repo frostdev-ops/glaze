@@ -1203,4 +1203,10 @@
   "Your syllabus lists {list}. Glaze counts the weights Canvas has.": "Seu plano de ensino lista {list}. O Glaze usa os pesos do Canvas.",
   "Due": "Entrega",
   "Other": "Outro",
+  "The letters aren't in order.": "As letras não estão em ordem.",
+  "Nothing covers the scores between {a} and {b}.": "Nada cobre as notas entre {a} e {b}.",
+  "{a} and {b} overlap.": "{a} e {b} se sobrepõem.",
+  "Check the ranges:": "Confira as faixas:",
+  "These add up to {total}%, not 100%.": "Somam {total}%, não 100%.",
+  "Only the first {n} characters were read. If something is missing, paste the part with the course details.": "Só os primeiros {n} caracteres foram lidos. Se faltar algo, cole a parte com os dados da disciplina.",
 };

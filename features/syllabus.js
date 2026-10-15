@@ -117,7 +117,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   };
   const remove = async () => {
     if (!confirm(t('Delete what Glaze kept from this syllabus? Your GPA scale and To Do tasks stay.'))) return;
-    const r = await send({ type: 'glaze:syllabus', key: who.key, rec: null });
+    const r = await send({ type: 'glaze:syllabus', key: who.key, rec: null, at: Date.now() });
     if (r?.ok) { rec = null; draw(true); document.querySelector('#gz-syl button')?.focus(); }
   };
 
@@ -146,9 +146,14 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   // ---- the dialog -------------------------------------------------------------------------------------------------
   // Opens on the source step, on the review of what's kept (saved), or straight on a review of Canvas's own page.
+  // Still wanted when the code it waited for arrives: Glaze on, the switch on, still in that course.
+  const allowed = (cid) => X.on() && X.settings().enabled !== false && !!X.settings().enhance.syllabus && !!cid && X.canvasCourseId() === cid;
   const open = async (saved, usePage) => {
+    const cid = X.canvasCourseId();
+    if (!allowed(cid)) return;
     try { await ready(); } catch { return; }
     if (usePage) await docIn().catch(() => {});
+    if (!allowed(cid)) return;
     opener = document.activeElement;
     dlg?.close();
     dlg = attr(make('dialog', { id: 'gz-syl-dlg' }), { 'aria-labelledby': 'gz-syl-title' });
@@ -264,7 +269,15 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const meets = rows(t('Class times'), r.meetings, (l, m, n) => timeRow(l, m, n, saved), blank);
     const dates = rows(t('Important dates'), r.dates, (l, d, n) => dateRow(l, d, n, saved, todo), { title: '', day: '', kind: 'exam' });
     const scale = text(r.scale.value ? r.scale.value.map(([l, v]) => `${l} ${v}`).join(', ') : '', { maxLength: 300, placeholder: 'A 93, A- 90, B+ 87, …' });
-    const useScale = make('input', { type: 'checkbox', checked: !!r.scale.value?.length });
+    // Used for the GPA without asking only when it's sure: a guess, or ranges that overlap or leave gaps, wait for a tick.
+    const issues = r.scale.issues || [];
+    const useScale = make('input', { type: 'checkbox', checked: !!r.scale.value?.length && (saved || (r.scale.conf === 'sure' && !issues.length)) });
+    const said = (i) => (i.kind === 'order' ? t("The letters aren't in order.") : t(i.kind === 'gap' ? 'Nothing covers the scores between {a} and {b}.' : '{a} and {b} overlap.', i));
+    const scaleIssues = issues.length > 0 && make('p', { className: 'gz-syl-issues', textContent: `${t('Check the ranges:')} ${issues.map(said).join(' ')}` });
+    // Weights that don't add up to 100 are shown as found, with what they add up to.
+    const sum = r.weights.issues?.find((i) => i.kind === 'sum');
+    const weightIssues = sum && make('p', { className: 'gz-syl-issues', textContent: t('These add up to {total}%, not 100%.', { total: sum.total }) });
+    const cut = r.truncated && make('p', { className: 'gz-syl-issues', textContent: t('Only the first {n} characters were read. If something is missing, paste the part with the course details.', { n: L.MAX }) });
     const weights = text(L.weightsText(r.weights.value || []), { maxLength: 600, placeholder: t('Homework 20%, Exams 50%, …') });
     const save = async () => {
       say.textContent = '';
@@ -290,7 +303,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       const out = L.tidy({ prof: { name: name.value, email: email.value, office: office.value, note: hoursNote.value },
         hours: times(hours).map(strip), meetings: times(meets).map(strip), dates: ds.map(({ row, task, ...d }) => d), scale: sc, weights: ws, at: Date.now() });
       if (!out) { say.textContent = t('There is nothing to save.'); return; }
-      const res = await send({ type: 'glaze:syllabus', key: who.key, rec: out });
+      const res = await send({ type: 'glaze:syllabus', key: who.key, rec: out, at: out.at });
       if (!res?.ok) { say.textContent = t('Not saved. Try again in a moment.'); return; }
       rec = L.tidy(res.rec);
       const notes = [];
@@ -305,14 +318,14 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     const back = !saved && button(t('Back'), 'back', () => source());
     frame(t(saved ? 'Edit your syllabus' : 'Check what Glaze found'),
       make('p', { className: 'gz-syl-desc', textContent: saved ? t('Change anything, then save. It stays on this device.')
-        : t('Every field can be changed. "Check this" marks a guess, and the line each value came from is shown under it. Nothing is kept until you save.') }),
+        : t('Every field can be changed. "Check this" marks a guess, and the line each value came from is shown under it. Nothing is kept until you save.') }), cut,
       make('fieldset', { className: 'gz-syl-set' }, make('legend', { textContent: t('Professor') }),
         field(t('Name'), name, p.name, saved), field(t('E-mail'), email, p.email, saved), field(t('Office'), office, p.office, saved),
         field(t('Office hours, in words'), hoursNote, p.note, saved || !p.note.value)),
       hours, meets, dates,
-      field(t('Grading scale'), scale, r.scale, saved),
+      field(t('Grading scale'), scale, r.scale, saved), scaleIssues,
       make('label', { className: 'gz-syl-check-row' }, useScale, ` ${t('Use it for this course in your GPA')}`),
-      field(t('Weights'), weights, r.weights, saved),
+      field(t('Weights'), weights, r.weights, saved), weightIssues,
       make('small', { className: 'gz-syl-hint', textContent: t("Shown beside the what-if calculator. Canvas's own weights are the ones that count.") }),
       read && make('details', { className: 'gz-syl-read' }, make('summary', { textContent: t('The text Glaze read') }), make('pre', { textContent: read.slice(0, 20000) })),
       make('div', { className: 'gz-syl-actions' }, button(t('Save'), 'save', save, 'gz-syl-main'), back, button(t('Cancel'), 'cancel', () => dlg.close())),
@@ -320,19 +333,14 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     first(name);
   };
 
-  // The scale becomes the course's own in the GPA: the same synced item the GPA's table writes (features/grades.js).
-  const gpaScale = async (C, sc) => {
-    const prefs = C.cleanGpa(await get('sync', 'gpaCourses'));
-    const k = `canvas:${location.origin}/${who.cid}`;
-    prefs[k] = { ...prefs[k], s: C.schemeText(sc) };
-    const next = C.cleanGpa(prefs);
-    if (next[k]?.s !== prefs[k].s) return false; // no room left in the synced item
-    return new Promise((res) => { try { store('sync').set({ gpaCourses: next }, () => res(!chrome.runtime.lastError)); } catch { res(false); } });
-  };
-  // Dates become the student's own To Do tasks (lib/todo.js), one id per date and title, so saving again updates them.
+  // The scale becomes the course's own in the GPA's synced choices (gpaCourses), set by the worker for this course alone
+  // on what is stored then ('glaze:gpa', which the GPA table uses too), so two courses saved at once both keep theirs.
+  const gpaScale = async (C, sc) => !!(await send({ type: 'glaze:gpa', key: `canvas:${location.origin}/${who.cid}`, patch: { s: C.schemeText(sc) } }))?.ok;
+  // Dates become the student's own To Do tasks (lib/todo.js importTask), one id per date and title, so saving again updates
+  // them and keeps whether they're done and their steps.
   const addTasks = async (list) => {
     const key = `todo:${location.origin}/${who.uid}`;
-    const edits = list.map((d) => ['task', { id: L.taskId(who.cid, d), title: d.title, cid: who.cid, due: { day: d.day }, notes: t('From your syllabus'), done: 0, at: Date.now() }]);
+    const edits = list.map((d) => ['importTask', { id: L.taskId(who.cid, d), title: d.title, cid: who.cid, due: { day: d.day }, notes: t('From your syllabus'), done: 0, at: Date.now() }]);
     for (let i = 0; i < edits.length; i += 20) if (!(await send({ type: 'glaze:todo', key, edits: edits.slice(i, i + 20) }))?.ok) return false;
     return true;
   };

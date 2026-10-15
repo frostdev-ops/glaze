@@ -139,7 +139,9 @@ _Last updated: 2026-10-15_
   syllabus itself (the Syllabus page's text, a file you pick, text you paste) is read on this device, shown to you
   while you review it, and not kept. If you choose so when saving, the scale also goes to your GPA choices above
   (synced like them) and the dates you tick become your own Better To Do tasks. Delete on the course home removes the
-  record; the GPA scale and tasks stay until you change them there.
+  record, keeping only when it was deleted (so a late save from another tab can't bring it back); the GPA scale and
+  tasks stay until you change them there. Only the first 200,000 characters of a syllabus are read, and the review says
+  so when there were more.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 

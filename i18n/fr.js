@@ -1203,4 +1203,10 @@
   "Your syllabus lists {list}. Glaze counts the weights Canvas has.": "Votre plan de cours indique {list}. Glaze compte avec les pondérations de Canvas.",
   "Due": "À rendre",
   "Other": "Autre",
+  "The letters aren't in order.": "Les lettres ne sont pas dans l'ordre.",
+  "Nothing covers the scores between {a} and {b}.": "Rien ne couvre les notes entre {a} et {b}.",
+  "{a} and {b} overlap.": "{a} et {b} se chevauchent.",
+  "Check the ranges:": "Vérifiez les plages :",
+  "These add up to {total}%, not 100%.": "Le total fait {total} %, pas 100 %.",
+  "Only the first {n} characters were read. If something is missing, paste the part with the course details.": "Seuls les {n} premiers caractères ont été lus. S'il manque quelque chose, collez la partie avec les informations du cours.",
 };
