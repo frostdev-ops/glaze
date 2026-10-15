@@ -543,8 +543,12 @@ test('a failed upload frees its room; one left by a relay that stopped mid-uploa
   r.db.prepare('INSERT INTO blobs (sid, id, size, at, owner) VALUES (?, ?, ?, ?, ?)').run(a.st.sid, 'P'.repeat(22), 100, Date.now(), 'a-relay-that-died');
   store.m.set(`${a.st.sid}/${'P'.repeat(22)}`, Buffer.alloc(100));
   await r.close();
-  r = await up({ db, store, maxBlobBytes: 5000 }, port);
+  r = await up({ db, store, maxBlobBytes: 5000, grace: 150 }, port);
   t.after(() => r.close());
+  // At start its object goes, but its row (and room) stays until no write of its can still land; then it goes too.
+  await r.expire();
+  assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [1, 2]);
+  await new Promise((resolve) => setTimeout(resolve, 200));
   await r.expire();
   assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [1, 1]);
 });
@@ -635,11 +639,72 @@ test('one serving relay per database: a second waits out the lease and refuses; 
   d0.close();
   store.m.set(`${a.sid}/${'D'.repeat(22)}`, Buffer.alloc(100));
   const t1 = Date.now();
-  const fourth = await up({ db, store, lease: 300 });
+  const fourth = await up({ db, store, lease: 300, grace: 150 });
   t.after(() => fourth.close());
   assert.ok(Date.now() - t1 >= 250, `took over after ${Date.now() - t1} ms`);
+  // A late write from the dead relay (a bucket finishing a request it already had) lands after the first reclaim step;
+  // the second step, after the grace, deletes it with the row.
+  assert.deepEqual([store.m.size, blobRows(fourth, a.sid)], [0, 1]);
+  store.m.set(`${a.sid}/${'D'.repeat(22)}`, Buffer.alloc(100));
+  await new Promise((resolve) => setTimeout(resolve, 200));
   await fourth.expire();
   assert.deepEqual([store.m.size, blobRows(fourth, a.sid)], [0, 0]);
+});
+
+test('a relay whose lease was taken over commits nothing after its wait: no row, no room, and the object it wrote goes', async (t) => {
+  // Codex's witness: an old relay's upload waits in the store while its renewals stall past the lease (the test ages
+  // the lease, a controlled clock rather than a real 60-second stall), and a replacement takes over.
+  for (const fail of [false, true]) {
+    const dir = tmp(t);
+    const db = path.join(dir, 'share.db');
+    const shared = memory();
+    const store = slow(shared);
+    const old = await up({ db, store, maxBlobBytes: 5000 });
+    t.after(() => old.close());
+    const a = make(old);
+    a.local = { n1: { title: 'x', html: '' } };
+    await a.pump();
+    const upload = a.s.put(new Uint8Array(4000)).then(() => 'stored', (e) => e.status ?? e.message); // 4,124 B sealed
+    await store.started;
+    old.db.prepare('UPDATE lease SET seen = seen - 61000').run();
+    const next = await up({ db, store: shared, maxBlobBytes: 5000, grace: 150 });
+    t.after(() => next.close());
+    // The old upload's room stays on the books until none of its writes can land: never spent twice.
+    const b = make(next);
+    await assert.rejects(b.s.put(new Uint8Array(4000)), (e) => e.status === 507, `fail ${fail}`);
+    store.release(fail);
+    assert.equal(await upload, 503, `fail ${fail}: the old relay acknowledges nothing`);
+    assert.equal(shared.m.size, 0, `fail ${fail}: the object the old relay wrote is gone`);
+    assert.notEqual((await fetch(`${old.url}/health`).catch(() => ({ status: 'closed' }))).status, 200, 'the old relay stopped');
+    // After the grace the reclaimed row and its room go, and the replacement can use the room once.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await next.expire();
+    assert.deepEqual([shared.m.size, blobRows(next, a.st.sid), next.db.prepare('SELECT blob FROM totals').get().blob], [0, 0, 0]);
+    const ref = await b.s.put(new Uint8Array(4000));
+    assert.deepEqual([shared.m.size, next.db.prepare('SELECT blob FROM totals').get().blob], [1, 4124]);
+    assert.equal((await b.s.get(ref)).length, 4000);
+    await assert.rejects(make(next).s.put(new Uint8Array(4000)), (e) => e.status === 507);
+  }
+});
+
+test('a live holder\'s upload completes however long it takes; a relay that loses its lease stops taking work at once', async (t) => {
+  const store = slow();
+  const r = await up({ store, lease: 300 });
+  t.after(() => r.close());
+  const a = make(r);
+  a.local = { n1: { title: 'x', html: '' } };
+  await a.pump();
+  const upload = a.s.put(new Uint8Array(3000)).then((ref) => ref, (e) => e.status ?? e.message);
+  await store.started;
+  await new Promise((resolve) => setTimeout(resolve, 700)); // more than two leases: renewals keep it
+  store.release();
+  const ref = await upload;
+  assert.equal(typeof ref, 'object', `upload: ${ref}`);
+  assert.equal((await a.s.get(ref)).length, 3000);
+  // Another relay takes the lease (written directly): within a quarter lease this one answers nothing but 503.
+  r.db.prepare("UPDATE lease SET boot = 'someone-else', seen = ?").run(Date.now());
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.notEqual((await fetch(`${r.url}/health`).catch(() => ({ status: 'closed' }))).status, 200);
 });
 
 test('--delete in its own process beside a serving relay: an upload to that share ends 410 and leaves nothing; others are untouched', async (t) => {
