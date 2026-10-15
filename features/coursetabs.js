@@ -457,21 +457,31 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (r.cssRules) return `${r.cssText.slice(0, r.cssText.indexOf('{'))}{${nested}}`;
     return L.cssSafe(r.cssText) ? r.cssText : '';
   };
+  // The page's styles, for the copy: its rules where they can be read, and a link to each sheet that can't (Ultra's
+  // own CSS, from its CDN), the same file the page already has, so the browser's cache serves it. `ready` settles once
+  // those have loaded (or after 400 ms).
   const mirror = (tags) => {
-    const fragment = document.createDocumentFragment();
+    const fragment = document.createDocumentFragment(), loads = [];
     for (const sheet of document.styleSheets) {
       if (sheet.disabled) continue;
       let text;
-      try { text = [...sheet.cssRules].map((r) => ruleText(r, tags)).join('\n'); } catch { continue; }
+      try { text = [...sheet.cssRules].map((r) => ruleText(r, tags)).join('\n'); } catch {
+        if (!/^https:\/\//.test(sheet.href || '')) continue;
+        const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: sheet.href });
+        if (sheet.media?.mediaText) l.media = sheet.media.mediaText;
+        loads.push(new Promise((r) => { l.onload = l.onerror = r; }));
+        fragment.append(l);
+        continue;
+      }
       const e = Object.assign(document.createElement('style'), { textContent: text });
       if (sheet.media?.mediaText) e.media = sheet.media.mediaText;
       fragment.append(e);
     }
-    return fragment;
+    return { fragment, ready: Promise.race([Promise.all(loads), new Promise((r) => setTimeout(r, 400))]) };
   };
   const OWN = `[data-gz-layer] { position: absolute !important; inset: 0 !important; width: auto !important; height: auto !important; margin: 0 !important; transform: none !important; }
 .gz-at { position: fixed; overflow: hidden; background: var(--gz-ground, var(--gz-surface-2, Canvas)); }
-.gz-at * { animation: none !important; transition: none !important; font-family: system-ui, sans-serif !important; }
+.gz-at * { animation: none !important; transition: none !important; }
 .gz-catch { position: fixed; pointer-events: auto; cursor: progress; }`;
   const cover = (s) => {
     const over = document.createElement('div');
@@ -524,10 +534,17 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       catcher.addEventListener('click', (e) => remember(root, e));
       root.append(at, catcher);
     }
-    root.prepend(mirror(tags), Object.assign(document.createElement('style'), { textContent: OWN }));
+    const css = mirror(tags);
+    root.prepend(css.fragment, Object.assign(document.createElement('style'), { textContent: OWN }));
     if (s.strip) for (const [k, v] of [['t', s.strip[0]], ['l', s.strip[1]], ['w', s.strip[2]]]) over.style.setProperty(`--gz-snap-${k}`, `${v}px`);
+    // Shown once styled, never as bare markup; scrolled where it was once its boxes can scroll.
+    over.style.visibility = 'hidden';
     html.append(over);
-    for (const e of root.querySelectorAll('[data-gz-top], [data-gz-left]')) { e.scrollTop = +e.getAttribute('data-gz-top') || 0; e.scrollLeft = +e.getAttribute('data-gz-left') || 0; }
+    css.ready.then(() => {
+      if (!over.isConnected) return;
+      for (const e of root.querySelectorAll('[data-gz-top], [data-gz-left]')) { e.scrollTop = +e.getAttribute('data-gz-top') || 0; e.scrollLeft = +e.getAttribute('data-gz-left') || 0; }
+      over.style.visibility = '';
+    });
     go.over = over;
     place();
   };
