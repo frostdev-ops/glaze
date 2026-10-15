@@ -1292,11 +1292,11 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
         const l = document.createElement('link');
         l.rel = 'stylesheet';
         l.href = chrome.runtime.getURL(f);
-        // Canvas: hold the first paint until the sheets are in. A script-inserted sheet doesn't block rendering
+        // Hold the first paint until the sheets are in. A script-inserted sheet does not block rendering
         // on its own, so a page's first paint was Canvas's own, white. Chrome 105+, Safari 18.2+; ignored
         // elsewhere, and only counts while the document has no body (as here, at document_start). A sheet that
         // fails lets go at once; one that never answers would hold the page forever, so it lets go after 1 s.
-        if (!ultra && !document.body) {
+        if (!document.body) {
           l.setAttribute('blocking', 'render');
           setTimeout(() => l.removeAttribute('blocking'), 1000);
         }

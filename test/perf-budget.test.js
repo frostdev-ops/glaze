@@ -39,7 +39,7 @@ test('each site loads the shared core and its own part, and no other site\'s', (
   const core = FIRST_SCRIPT.moodle;
   assert.equal(core.at(-1), 'content.js');
   assert.ok(!core.some((f) => /^content-/.test(f)), 'Moodle has no part');
-  assert.deepEqual(FIRST_SCRIPT.ultra, [...core.slice(0, -1), 'content-ultra.js', 'content.js']);
+  assert.deepEqual(FIRST_SCRIPT.ultra, [...core.slice(0, -1), 'lib/nav.js', 'content-ultra.js', 'content.js']);
   assert.deepEqual(FIRST_SCRIPT.canvas, [...core.slice(0, -1), 'content-canvas.js', 'content.js']);
 });
 
@@ -51,8 +51,8 @@ test('the detector that runs on every other https page stays under 2 KB', () => 
 // ---- runtime work, read from the source -------------------------------------------------------------------------
 // Every first-party script Glaze ships, at any depth (features/, lib/, i18n/ and the root), whether it is in the
 // first content script, loaded on demand or in the extension's pages. Not the vendored three.js or OCR engine, nor the tools,
-// tests and app wrappers around the extension.
-const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'parity']);
+// tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
+const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'parity', 'server']);
 const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js']); // pdf.js is .mjs, not scanned
 const shipped = (dir = '') => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
   const rel = dir ? `${dir}/${e.name}` : e.name;

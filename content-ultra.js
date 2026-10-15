@@ -40,7 +40,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
   const top = () => I.links.length && window.top === window && I.settings.enhance;
-  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
+  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
   const syncRemind = () => load(() => ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
 
@@ -214,12 +214,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
   // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
   const renderProgress = () => {
+    if (top()?.hideFolders && /^\/ultra\/courses\/_\d+_\d+\/outline(?:\/|$)/.test(location.pathname)) need('lib/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('features/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(!!top()?.hideFolders, meId), () => {});
+    else globalThis.GZ_FOLDER_UI?.sync(false, meId);
     const old = document.getElementById('gz-progress');
     if (!I.settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
-    const top = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
+    const rows = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
     let done = 0;
     let total = 0;
-    for (const it of top) {
+    for (const it of rows) {
       // Some are done where Ultra puts its check in the line (all done) or a completed part in its chart.
       const msg = it.querySelector('.js-completion-status-message');
       const m = msg && GZ_PAGE.completion(msg.textContent, !!msg.querySelector('svg') || !!msg.parentElement.querySelector('.js-completion-chart [class*="chartLineCompleted"]'));
@@ -228,7 +230,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       if (rs) { total += 1; if (rs.getAttribute('aria-checked') === 'true') done += 1; }
     }
     if (!total) return old?.remove();
-    drawProgress(old, done, total, top[0].parentElement);
+    drawProgress(old, done, total, rows[0].parentElement);
   };
 
   // ---- new grades (Extras) --------------------------------------------------------------------
@@ -382,11 +384,19 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
   // ---- code on demand ------------------------------------------------------------------------------
-  // Notes, widgets and the pet: Courses page panel and floating tiles.
-  // Ultra routes without reloading; this pass also places Course notes on the outline.
-  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || ((I.settings.enhance.notes || I.settings.enhance.pet) && /^\/ultra\/course\/?$/.test(location.pathname)));
+  // Notes, widgets and the pet: the Courses page's board, the tiles floating over every page, and the Dashboard (the
+  // Institution page, B7b; its own switch, enhance.dashboard, on by default). Ultra routes without reloading; this pass
+  // also places Course notes on the outline. Until the Dashboard is drawn, Ultra's own Institution page waits hidden
+  // (html[data-gz-dash], apps.css), so it doesn't show for a moment first. A page loaded at Ultra's start may go on to the
+  // Dashboard (opt-in, once: features/dashboard.js); from is its first address, kept until a pass has the settings.
+  let from = location.pathname;
+  const dash = () => top()?.dashboard && /^\/ultra\/institution-page\/?$/.test(location.pathname);
+  const widgetsHere = () => { const e = top(); return !!e && (dash() || e.widgets || e.notes || e.pet); };
   const syncWidgets = () => {
-    if (widgetsHere()) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    const on = widgetsHere();
+    if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
+    if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => html.setAttribute('data-gz-dash', 'ip')); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    if (from && top()?.dashboard) { const f = from; from = ''; if (/^\/ultra(\/(stream|course))?\/?$/.test(f)) need('features/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => GZ_DASH_UI.land(f), () => {}); }
     if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
   };
 
@@ -576,19 +586,32 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     I.setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
+    I.setAttr('data-gz-nav-brand', n.brand);
+    for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;
     I.setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
     for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) I.setVar(`--gz-nav-${k}`, v);
   };
   const syncNav = () => {
+    globalThis.GZ_FOLDER_UI?.sync(!!top()?.hideFolders, meId);
     if (!isPreview && window.top !== window) return;
-    if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
-    else globalThis.GZ_NAV_UI?.sync();
+    if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
+    else if (I.links.length) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
     if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
   };
+  // A host registered for another LMS may answer settings before Ultra's schema arrives.
+  if (!('brand' in I.settings.nav)) {
+    const nav = I.settings.nav;
+    Object.assign(nav, { ...GZ_DEFAULTS.nav, ...nav });
+    try { chrome.storage.sync.get('nav', (raw) => {
+      if (I.settings.nav !== nav || chrome.runtime.lastError) return;
+      Object.assign(nav, GZ_SANITIZE(raw).nav);
+      if (I.links.length) { paintNav(I.worn.nav); syncNav(); }
+    }); } catch { /* reloaded; keep defaults */ }
+  }
 
   return {
-    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
     syncTodo, syncCardTasks, syncRemind, syncWidgets,
