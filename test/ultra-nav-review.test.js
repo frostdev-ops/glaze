@@ -94,6 +94,15 @@ test('a new extension context restores the native Dashboard name and icon metada
   assert.equal(f.text.data, 'Institution page'); assert.equal(f.attrs.has('aria-label'), false); assert.equal(f.attrs.has('title'), false); assert.equal(f.attrs.has('data-gz-nav-original'), false);
 });
 
+test('the merged synchronous gate discovers native navigation and preserves the course-tab callback return', () => {
+  const line = source('content-ultra.js').split('\n').find((s) => s.includes('const gate = ')), calls = [], scope = {};
+  assert.ok(line, 'the merged gate is explicit');
+  const c = vm.createContext({ discoverNav: (n) => { assert.equal(n, scope); calls.push('nav'); }, GZ_CTABS: { held: () => { calls.push('tabs'); return true; } } });
+  const gate = vm.runInContext(line + '\ngate;', c);
+  assert.equal(gate(scope), true); assert.deepEqual(calls, ['nav', 'tabs']);
+  c.GZ_CTABS = undefined; assert.equal(gate(scope), undefined); assert.deepEqual(calls, ['nav', 'tabs', 'nav']);
+});
+
 test('thirty unrelated widget text updates cause no navigation scans and own writes become idle', () => {
   const f = dashboardFixture(); f.syncDashboard(); const before = f.counts();
   const target = { nodeType: 3, parentElement: { closest: () => null }, inRail: true };
