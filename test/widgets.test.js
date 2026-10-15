@@ -410,3 +410,13 @@ test("change: the worker's side reads what is stored, applies the change, and st
 test('global floats taller than the available room use the bounded scrolling stack', () => {
   assert.equal(W.floating([{ id: 'notes', x: 0, y: 0 }], { notes: { w: 288, h: 240 } }, 900, 200).stack, true);
 });
+
+test('Better To Do\'s tile keeps the height the student dragged it to, within bounds, on its own board', () => {
+  const l = W.layout({ todo: true, boards: { courses: [{ id: 'todo', on: true, h: 512 }, { id: 'notes', on: true, h: 512 }], dash: [{ id: 'todo', on: true, h: 40 }] } });
+  assert.equal(l.boards.courses.find((x) => x.id === 'todo').h, 512);
+  assert.equal(l.boards.courses.find((x) => x.id === 'notes').h, undefined, 'only the To Do has a height');
+  assert.equal(l.boards.dash.find((x) => x.id === 'todo').h, undefined, 'too short: its default');
+  const after = W.apply(l, { ops: [{ s: 'dash', id: 'todo', set: { h: 300 } }] });
+  assert.equal(after.boards.dash.find((x) => x.id === 'todo').h, 300);
+  assert.equal(after.boards.courses.find((x) => x.id === 'todo').h, 512, 'each board its own');
+});

@@ -283,6 +283,10 @@ html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
    heading stays for screen readers only, its counts and buttons under the tile's. */
 .gz-w[data-tile="todo"] #gz-todo .gz-todo-head h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .gz-w[data-tile="todo"] #gz-todo { margin: 0; }
+/* Its list scrolls inside, under its counts and buttons; dragged taller or shorter by the corner (kept per board). */
+.gz-w[data-tile="todo"] > .gz-w-body { min-height: 8rem; max-height: 28rem; overflow: auto; resize: vertical; overscroll-behavior: contain; }
+.gz-w[data-tile="todo"] > .gz-w-body[style*="height"] { max-height: none; }
+.gz-w[data-tile="todo"] #gz-todo .gz-todo-head { position: sticky; top: 0; z-index: 1; background: var(--gz-panel, var(--gz-surface)); }
 /* The line a dragged tile met. */
 .gz-guide { position: absolute; z-index: 1000; pointer-events: none; background: var(--gz-accent); }
 #gz-float .gz-guide { position: fixed; }
