@@ -16,7 +16,6 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   let on = false, starting = null, asking = null, failed = 0, listed = false;
 
   const get = (keys) => new Promise((res) => { try { chrome.storage.local.get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
-  const put = (v) => new Promise((res) => { try { chrome.storage.local.set(v, () => res(!chrome.runtime.lastError)); } catch { res(false); } });
   const readPrefs = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } })
     .then((raw) => { o = GZ_SANITIZE({ todo: raw }).todo; });
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
@@ -44,17 +43,17 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   };
   // Kept in the list's shape, so the list takes it as its own. A teacher's list also wants the grading: for a teacher,
   // teach is null, and the list keeps these planner items and asks for the grading alone (features/todo.js load).
-  // An answer asked for before the one already kept (the list's, another tab's, arriving first) is dropped.
+  // It's kept through the worker, only if no newer one is stored (lib/todo.js publishIn): an answer asked for before the
+  // one already kept (the list's, another tab's) is dropped, and the newer one shown.
   const load = async () => {
     const now = Date.now();
     const { start, end } = L.fetchRange(o, now, tz);
     const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
-    const kept = (await get([CACHE]))[CACHE];
-    if (kept?.key === key && kept.at >= now) cache = kept;
-    if (cache?.key === key && cache.at >= now) return paint();
     const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
-    cache = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), grading: [], sums: {} };
-    put({ [CACHE]: cache, dueWeek: GZ_CANVAS_DUE_WEEK(raw, now), dueWeekAt: now, dueWeekFrom: location.origin });
+    const c = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), grading: [], sums: {} };
+    const due = GZ_CANVAS_DUE_WEEK(raw, now);
+    const best = (await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key, cache: c, due }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }))?.cache || c;
+    if (!(cache?.key === key && cache.at > best.at)) cache = best;
     paint();
   };
   // When the cards start, the page is shown again and the list's settings change, and from content.js's passes while
@@ -131,13 +130,14 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const sync = (want) => {
     on = !!want;
     if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); return; }
-    if (!starting) starting = start().then(() => { paint(); refresh(); }, () => { setTimeout(() => { starting = null; }, 60000); });
+    const list = !!document.getElementById('gz-todo');
+    // Started: whether the list is here now counts as seen, so its going later is noticed whenever it goes.
+    if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); refresh(); }, () => { setTimeout(() => { starting = null; }, 60000); });
     else {
       paint();
-      const list = !!document.getElementById('gz-todo');
       if (!cache || (listed && !list)) refresh();
-      listed = list;
     }
+    if (L) listed = list;
   };
 
   return { sync };

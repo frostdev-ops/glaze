@@ -76,6 +76,9 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!/^\d+$/.test(String(j?.id))) throw new Error('no override');
     return { id: String(j.id), done: !!j.marked_complete, dismissed: !!j.dismissed };
   };
+  // The planner answer is kept through the worker, only if no newer one is stored (lib/todo.js publishIn); if one is,
+  // the list takes that one.
+  const keep = (c, due) => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key, cache: c, due }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }).then((r) => { if (r?.cache && cache === c) cache = r.cache; });
   const covers = (c, now) => {
     if (!c || c.key !== key || now - c.at >= FRESH || c.teach !== o().teacher || c.progress !== o().progress) return false;
     const need = L.fetchRange(o(), now, who.tz);
@@ -88,13 +91,13 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const own = reuse && cache?.teach === null && covers({ ...cache, teach: o().teacher, progress: o().progress }, now) ? cache : null;
     const { start, end } = own || L.fetchRange(o(), now, who.tz);
     const [raw, list] = await Promise.all([own ? null : pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
-    // The popup and the command palette's due list comes from this same answer (content.js dueWeek).
-    if (raw) put({ dueWeek: GZ_CANVAS_DUE_WEEK(raw, now), dueWeekAt: now, dueWeekFrom: location.origin });
+    // The popup and the command palette's due list comes from this same answer (content.js dueWeek), kept with it.
+    const due = raw ? GZ_CANVAS_DUE_WEEK(raw, now) : undefined;
     const teach = o().teacher && list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
     const grading = !teach ? [] : (await ctx.capi('/users/self/todo?per_page=100').catch(() => [])).filter((x) => x?.type === 'grading').map(L.slimGrading).filter((g) => g.aid && g.n > 0);
     const c = { key, at: own ? own.at : now, start, end, teach: o().teacher, progress: o().progress, items: own ? own.items : raw.map(L.slim), grading, sums: {} };
     if (teach && o().progress) await summaries(c);
-    return c;
+    return [c, due];
   };
   // Teachers' grading progress: each listed assignment's submission counts. One that doesn't come (refused, or the page
   // left mid-way) leaves the cache partial; the planner answer still counts, and only the missing counts are asked for
@@ -115,13 +118,13 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const done = (p) => { fetching = p; fetchGen = g; p.finally(() => { if (fetching === p) fetching = null; }); return p; };
     if (!force && covers(cache, Date.now())) {
       if (!cache.partial || !o().progress) return null;
-      return done(summaries(cache).then(() => put({ [CACHE]: cache })).finally(() => { if (g !== gen) return; if (typing()) drawn = ''; else render(true); }));
+      return done(summaries(cache).then(() => keep(cache)).finally(() => { if (g !== gen) return; if (typing()) drawn = ''; else render(true); }));
     }
     if (!cache) setBusy(true);
-    return done(load(!force).then((c) => {
+    return done(load(!force).then(([c, due]) => {
       if (g !== gen) return;
       cache = c;
-      put({ [CACHE]: c });
+      return keep(c, due);
     }, () => {
       if (g !== gen) return;
       if (!cache) return fail();
@@ -397,7 +400,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     try {
       const ov = await write(r, want);
       const it = cache?.items.find((i) => `${i.type}:${i.id}` === r.key);
-      if (it) { it.ov = ov; put({ [CACHE]: cache }); }
+      if (it) { it.ov = ov; keep(cache); }
     } catch {
       // Refused, or no answer to read: Canvas may or may not have it, so the list asks Canvas again.
       el.checked = !want;

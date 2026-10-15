@@ -10,7 +10,7 @@ const D = require('../defaults.js');
 const T = require('../lib/todo.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(setImmediate); };
+const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
 const KEY = 'todo:https://canvas.test/3';
 const NOW = Date.now();
 
@@ -45,8 +45,9 @@ const cardFor = (cid) => {
 const item = (id, at) => ({ plannable_type: 'assignment', plannable_id: id, course_id: 25, plannable_date: new Date(at).toISOString(), html_url: `/courses/25/assignments/${id}`, plannable: { title: `A${id}` }, submissions: { submitted: false } });
 
 const feature = ({ stored = {}, list = false, hold = false } = {}) => {
-  const state = { list };
+  const state = { list, race: null }; // race: another context's newer answer, committed just before the cards' write
   const held = [];
+  const f0 = { fetched: false };
   const calls = [];
   const store = JSON.parse(JSON.stringify(stored));
   const listeners = [];
@@ -64,13 +65,21 @@ const feature = ({ stored = {}, list = false, hold = false } = {}) => {
     location: { origin: 'https://canvas.test', pathname: '/' },
     fetch: async (u) => {
       calls.push(u);
+      f0.fetched = true;
       const r = { ok: true, text: async () => JSON.stringify([item(1, NOW + 864e5), item(2, NOW + 2 * 864e5)]), headers: { get: () => null } };
       return hold ? new Promise((res) => held.push(() => res(r))) : r;
     },
     chrome: {
-      runtime: {},
+      runtime: {
+        // The worker's 'glaze:todo' (lib/background.js BROKER): lib/todo.js change over this storage.
+        sendMessage: (m, cb) => {
+          if (m.cache && state.race) { store.todoCache = state.race; state.race = null; }
+          const local = { get: async (k) => Object.fromEntries(k.filter((x) => x in store).map((x) => [x, store[x]])), set: async (v) => { Object.assign(store, JSON.parse(JSON.stringify(v))); return true; } };
+          T.change(JSON.parse(JSON.stringify(m)), { local }).then((r) => cb(JSON.parse(JSON.stringify(r))));
+        },
+      },
       storage: {
-        local: { get: (k, cb) => cb(Object.fromEntries(k.filter((x) => x in store).map((x) => [x, store[x]]))), set: (v, cb) => { Object.assign(store, v); cb?.(); } },
+        local: { get: (k, cb) => { cb(Object.fromEntries(k.filter((x) => x in store).map((x) => [x, store[x]]))); if (state.race && f0.fetched) { store.todoCache = state.race; state.race = null; } }, set: (v, cb) => { Object.assign(store, v); cb?.(); } },
         sync: { get: (k, cb) => cb({}) },
         onChanged: { addListener: (f) => listeners.push(f) },
       },
@@ -171,4 +180,28 @@ test('one profile request a page, whoever asks (Better To Do and the cards)', as
   vm.runInContext(`${decl}\nglobalThis.profile = profile;`, ctx);
   await Promise.all([ctx.profile(), ctx.profile()]);
   assert.deepEqual(asked, ['/users/self/profile']);
+});
+
+test("another context's newer answer, committed between the cards' fetch and their write, is never replaced (one queue turn)", async () => {
+  const f = feature({ hold: true });
+  f.m.sync(true);
+  await settle();
+  f.state.race = fresh([item(99, NOW + 864e5)], Date.now() + 1000); // its storage event not delivered yet
+  f.held[0]();
+  await settle();
+  assert.equal(f.store.todoCache.items[0].id, '99');
+  assert.deepEqual(titles(f.cards[0]), ['A99']);
+});
+
+test('a stale answer at startup with the list on the page: when the list goes, the cards ask', async () => {
+  const f = feature({ list: true, stored: { todoCache: fresh([item(88, NOW + 864e5)], Date.now() - 180000) } });
+  f.m.sync(true);
+  await settle();
+  assert.equal(planner(f.calls), 0);
+  assert.deepEqual(titles(f.cards[0]), ['A88']);
+  f.state.list = false; // gone before the next pass
+  f.m.sync(true);
+  await settle();
+  assert.equal(planner(f.calls), 1);
+  assert.deepEqual(titles(f.cards[0]), ['A1', 'A2']);
 });

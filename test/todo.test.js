@@ -140,6 +140,21 @@ test("a card's tasks: that course's open items with a date, soonest first, up to
   assert.deepEqual(keys(T.card(planned, 6, false, NY)), ['assignment:1', 'task:s', 'assignment:3', 'quiz:4', 'assignment:5', 'task:p']);
 });
 
+test('the planner answer is kept in the worker only if the one stored is not newer; the due list goes with it', async () => {
+  const key = 'todo:https://school.instructure.com/3';
+  const store = {};
+  const local = { get: async (k) => Object.fromEntries(k.filter((x) => x in store).map((x) => [x, store[x]])), set: async (v) => (Object.assign(store, v), true) };
+  const put = (at, due) => T.change({ key, cache: { key, at, items: [] }, due }, { local });
+  assert.deepEqual(await put(200, [{ title: 'x' }]), { ok: true, kept: true });
+  assert.deepEqual([store.dueWeekAt, store.dueWeekFrom], [200, 'https://school.instructure.com']);
+  const older = await put(100, []);
+  assert.equal(older.kept, false);
+  assert.equal(older.cache.at, 200);
+  assert.equal(store.todoCache.at, 200);
+  assert.equal((await put(200)).kept, true); // the same answer again (grading counts, a mark)
+  assert.equal((await T.change({ key, cache: { key: 'todo:https://school.instructure.com/4', at: 300, items: [] } }, { local })).ok, false); // another account's
+});
+
 test('settings: past-due window, timeframe, week start, manual completion, grouping off', () => {
   const g = (o) => groups(T.build({ items: ITEMS, o: { ...O, ...o }, now: NOW, tz: NY, cids: new Set(['25']) }));
   assert.equal(g({ past: 'never' }).past, undefined);

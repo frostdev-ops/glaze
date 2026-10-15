@@ -292,6 +292,19 @@ test("a list mounted again while the old one's planner request is out asks for i
   assert.ok(f.p.get().cache, 'and has its answer, not Loading');
 });
 
+test("the list's slow planner answer never replaces a newer one another tab or the cards kept meanwhile", async () => {
+  const f = feature({ holdPlanner: true });
+  f.p.seed({ prefs: O });
+  const p = f.p.refresh();
+  await settled();
+  const newer = { key: 'todo:https://canvas.test/3', at: Date.now() + 1000, ...T.fetchRange(O, Date.now(), 'America/New_York'), teach: true, progress: true, items: [], grading: [], sums: {}, mark: 'newer' };
+  f.store.todoCache = newer;
+  while (f.held.length) { f.held.shift()(); await settled(); }
+  await p;
+  assert.equal(f.store.todoCache.mark, 'newer');
+  assert.equal(f.p.get().cache.mark, 'newer');
+});
+
 test("two tabs adding tasks at once both keep theirs (the worker's one queue)", async () => {
   const shared = { store: {}, waiting: [], turn: { last: Promise.resolve() } };
   const one = feature({ defer: true, shared }), two = feature({ defer: true, shared });
