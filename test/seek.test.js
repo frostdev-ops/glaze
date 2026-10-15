@@ -183,7 +183,7 @@ test('an abort stops it: nothing more is asked, nothing more is given, and nothi
 
 // features/search.js in the palette, with a stand-in page: typing, the pause, cancelling, the order things arrive in.
 // `stored` is storage.sync as the attach reads it; `loading` holds lib/seek.js back; `cmd` and `show` can be content.js's own.
-const palette = ({ stored = {}, loading = null, cmd = { input: { value: '' }, list: {}, shown: [] }, show = null } = {}) => {
+const palette = ({ stored = {}, readFails = false, search = true, loading = null, cmd = { input: { value: '' }, list: {}, shown: [] }, show = null } = {}) => {
   const timers = [];
   const listeners = {};
   const live = { className: '', textContent: '', attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };
@@ -192,10 +192,17 @@ const palette = ({ stored = {}, loading = null, cmd = { input: { value: '' }, li
   cmd.list.after = (x) => { cmd.live = x; };
   const shows = [];
   const requests = [];
-  const settings = { enhance: { search: true } };
+  const settings = { enhance: { search } };
   const changed = [];
   const ctx = vm.createContext({
-    chrome: { runtime: {}, storage: { onChanged: { addListener: (f) => changed.push(f) }, sync: { get: (keys, f) => setImmediate(() => f(stored)) } } },
+    chrome: {
+      runtime: {},
+      storage: {
+        onChanged: { addListener: (f) => changed.push(f) },
+        // A failed read: Chrome calls back with nothing and runtime.lastError set for the length of the call.
+        sync: { get: (keys, f) => setImmediate(() => { if (!readFails) return f(stored); ctx.chrome.runtime.lastError = { message: 'IO error' }; f(); delete ctx.chrome.runtime.lastError; }) },
+      },
+    },
     GZ_CTX: {
       on: () => true, settings: () => settings,
       t: (k, v) => k.replace('{n}', v?.n), need: () => loading || Promise.resolve(), canvasCourseId: () => '2',
@@ -215,7 +222,7 @@ const palette = ({ stored = {}, loading = null, cmd = { input: { value: '' }, li
   vm.runInContext('globalThis.globalThis = this;', ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../lib/seek.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../features/search.js'), 'utf8'), ctx);
-  const type = (v) => { cmd.input.value = v; listeners.input(); };
+  const type = (v) => { cmd.input.value = v; listeners.input?.(); };
   const tick = () => { const due = timers.splice(0); for (const x of due) x.f?.(); };
   const answer = (pred, body) => { for (const q of requests.filter((x) => !x.done && pred(x.url))) { q.done = true; q.r.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(body)) }); } };
   const answerAll = (body = []) => answer(() => true, body);
@@ -360,11 +367,13 @@ const rows = () => {
     querySelector(sel) { return sel === '[aria-selected="true"]' ? this.children.find((c) => c.attrs['aria-selected'] === 'true') || null : null; },
   });
   const ctx = vm.createContext({ document: { createElement: el }, GZ_PAGE: require('../lib/page.js'), t: (k) => k });
-  vm.runInContext(`${src.slice(a, b)}; globalThis.api = { showCmd, set: (c) => { cmd = c; } };`, ctx);
+  // The palette's own callback for its late list, as written in openCmd, with that list handed over at once.
+  const late = src.match(/^ {4}commands\(\)\.then\(.*\);$/m)[0];
+  vm.runInContext(`${src.slice(a, b)}; globalThis.api = { showCmd, set: (c) => { cmd = c; }, late: (all) => { const mine = cmd; const commands = () => ({ then: (f) => f(all) }); ${late} } };`, ctx);
   const cmd = { input: el(), list: el(), all: [], shown: [], active: 0 };
   ctx.api.set(cmd);
   const text = () => cmd.list.children.map((li) => li.children[0]?.textContent ?? `(${li.textContent})`);
-  return { cmd, show: ctx.api.showCmd, text };
+  return { cmd, show: ctx.api.showCmd, text, late: ctx.api.late };
 };
 const cmdOf = (label, group = 'Glaze', hint = 'Glaze') => ({ label, hint, group, run() {} });
 
@@ -420,4 +429,65 @@ test('palette: when search starts on a query typed while it loaded, the rows on 
   p.answer((u) => u.includes('/courses/2/pages?'), [{ page_id: '9', url: 'x', title: 'Lab report' }]);
   await pump(p, 20);
   assert.deepEqual(r.text().slice(0, 3), [...before, 'Lab report'], 'arrivals below, nothing above moved');
+});
+
+test('palette: a storage read that fails counts as off, and content.js\'s copy saying off is off', async () => {
+  // Turned off before this file came in (no change seen here), content.js's copy says so, and the read fails.
+  const p = palette({ readFails: true, search: false });
+  p.cmd.input.value = 'lab';
+  await p.attach();
+  p.type('labs');
+  p.tick();
+  for (let i = 0; i < 4; i++) await settle();
+  assert.equal(p.requests.length, 0);
+  assert.ok(!p.cmd.found);
+  // A failed read alone: not known to be on, so not on.
+  const q = palette({ readFails: true });
+  q.cmd.input.value = 'lab';
+  await q.attach();
+  q.tick();
+  for (let i = 0; i < 4; i++) await settle();
+  assert.equal(q.requests.length, 0);
+  // A read that works and says nothing (the defaults): on.
+  const r = palette();
+  r.cmd.input.value = 'lab';
+  await r.attach();
+  r.tick();
+  for (let i = 0; i < 4; i++) await settle();
+  assert.ok(r.requests.length > 0);
+});
+
+test('palette: its own list arriving late keeps every row on screen in place while your courses are searched', () => {
+  const r = rows();
+  // What the palette has at once (its pages), then its full list later: the same pages rebuilt, and more.
+  const pages = () => [cmdOf('Dashboard', 'Go to', 'Canvas'), cmdOf('Courses', 'Go to', 'Canvas'), cmdOf('Calendar', 'Go to', 'Canvas'), cmdOf('Inbox', 'Go to', 'Canvas'), cmdOf('Grades', 'Go to', 'Canvas')];
+  r.cmd.all = pages();
+  r.cmd.input.value = 'co';
+  r.show();
+  const before = r.text();
+  assert.ok(before.length >= 2 && before.includes('Courses'), before.join());
+  // Search attaches to what was typed (features/search.js input(true)) and a result arrives.
+  r.cmd.found = [];
+  r.cmd.seeking = true;
+  r.cmd.head = r.cmd.shown.slice();
+  r.show(true);
+  r.cmd.found.push(cmdOf('Course remote', 'Page', 'BIO 1100'));
+  r.show(true);
+  const searching = r.text();
+  assert.deepEqual(searching, [...before, 'Course remote', '(Searching your courses…)']);
+  r.cmd.active = 1;
+  const chosen = r.cmd.shown[1];
+  // The palette's full list comes in.
+  r.late([...pages(), cmdOf('Biology', 'Courses', 'BIO 1100'), cmdOf('Turn on course progress', 'Glaze', 'Glaze extra')]);
+  assert.deepEqual(r.text(), searching, 'nothing moved, nothing new above the results');
+  assert.equal(r.cmd.shown[r.cmd.active], chosen, 'the keyboard choice stays');
+  // Done: what's new joins the end, and the rebuilt pages aren't shown twice.
+  r.cmd.seeking = false;
+  r.show(true);
+  const done = r.text();
+  assert.deepEqual(done.slice(0, before.length + 1), [...before, 'Course remote']);
+  assert.equal(new Set(done).size, done.length, `no row twice: ${done.join(', ')}`);
+  // One more late redraw after it's done changes nothing that's shown.
+  r.late([...pages(), cmdOf('Biology', 'Courses', 'BIO 1100'), cmdOf('Turn on course progress', 'Glaze', 'Glaze extra')]);
+  assert.deepEqual(r.text().slice(0, done.length), done);
 });

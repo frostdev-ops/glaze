@@ -11,14 +11,14 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
   let quit = null; // stops the open palette's search
   // Whether Glaze and this search are on, as storage has it: content.js's own copy of the settings can lag behind a
   // change. Read from storage when the palette attaches, then followed through every change, even one that comes while
-  // lib/seek.js is still loading (a change seen while that read is out wins over the read). Switched off in the popup or
-  // the editor while the palette is open, what is running stops at once.
-  let stored = { enabled: true, search: true }, changes = 0;
-  const allowed = () => ctx.on() && stored.enabled && stored.search;
+  // lib/seek.js is still loading (a change seen wins over the read, which only fills in what no change has said).
+  // Unknown is off: a read that fails leaves it off. content.js's copy saying off is off too. Switched off in the popup
+  // or the editor while the palette is open, what is running stops at once.
+  const stored = { enabled: undefined, search: undefined };
+  const allowed = () => ctx.on() && stored.enabled === true && stored.search === true && ctx.settings().enhance.search !== false;
   try {
     chrome.storage.onChanged.addListener((ch, area) => {
       if (area !== 'sync' || !(ch.enabled || ch.enhance)) return;
-      changes++;
       if (ch.enabled) stored.enabled = ch.enabled.newValue !== false;
       if (ch.enhance) stored.search = ch.enhance.newValue?.search !== false;
       if (!allowed()) quit?.();
@@ -32,9 +32,11 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
 
   // cmd is the open palette ({ input, list, found, seeking, stop }); show(true) redraws it keeping the choice where it is.
   const attach = async (cmd, show) => {
-    const seen = changes;
     const [, r] = await Promise.all([ctx.need('lib/seek.js', () => globalThis.GZ_SEEK), fromStorage()]);
-    if (r && seen === changes) stored = { enabled: r.enabled !== false, search: r.enhance?.search !== false };
+    if (r) {
+      stored.enabled ??= r.enabled !== false;
+      stored.search ??= r.enhance?.search !== false;
+    }
     if (!cmd.box.isConnected || cmd.stop || !allowed()) return;
     const S = globalThis.GZ_SEEK;
     kept ||= S.cache();

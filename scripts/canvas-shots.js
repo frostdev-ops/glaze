@@ -130,8 +130,8 @@ const devCopy = (dest) => {
   for (const f of fs.readdirSync(root)) {
     if (f !== 'manifest.json' && !f.startsWith('.') && !NOT_EXTENSION.has(f) && !DOCS.test(f)) fs.cpSync(path.join(root, f), path.join(dest, f), { recursive: true });
   }
-  // The one part of assets/ the extension ships (package.sh): the card pets.
-  fs.cpSync(path.join(root, 'assets/art/pets'), path.join(dest, 'assets/art/pets'), { recursive: true });
+  // The parts of assets/ the extension ships (package.sh): the card pets and the study buddy.
+  for (const d of ['assets/art/pets', ...['', '-happy', '-sleepy'].map((m) => `assets/art/stickers/critters/study-buddy${m}.webp`)]) fs.cpSync(path.join(root, d), path.join(dest, d), { recursive: true });
   const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   for (const e of [...(m.content_scripts || []), ...(m.web_accessible_resources || [])]) e.matches.push('http://localhost/*');
   // And to inject there: Glaze's on-demand files (lib/background.js 'glaze:load') need host access.

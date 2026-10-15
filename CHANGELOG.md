@@ -70,6 +70,26 @@ All notable changes to Glaze are documented here. The format follows
   timeframe, past-due window and done rules, ticks and Canvas marks included, and shares its planner copy: the
   planner is asked once, whether or not the list is on. Every card style and the card grade fit
   beside it. Ctrl+K turns it on or off.
+- **Dashboard notes (Canvas, off by default; Extras, Notes and widgets):** a notes box on the Dashboard, small, medium
+  or large, saved as you type on this device for each Canvas site and account. Web addresses become links; click the
+  text to edit it. A note typed later in another tab wins.
+- **Widgets (Canvas, off by default):** a grid under the Dashboard's heading. Edit widgets adds, removes, orders (arrows,
+  arrow keys or drag) and sizes them; any widget can float over every Canvas page instead, dragged by its heading or
+  moved with the arrow keys, snapping to the window's edges, and stays where you put it.
+  - Agenda: one day's due work, "do on" plans and focus sessions, with previous and next day and back to today.
+  - Focus timer: work and break lengths, start, pause, resume, reset; the break starts by itself and the timer keeps
+    running across pages and tabs. An optional soft chime made by the browser, no sound file.
+  - Quote: original lines written for Glaze in all six languages (focus, calm, courage), every few seconds or once a
+    day, with previous, next and pause.
+  - Music: a Spotify, YouTube, Apple Music or YouTube Music link. Nothing is asked of the player until you press Load
+    player; YouTube plays from youtube-nocookie.com. The link stays on this device.
+  - Breathe: in, hold and out for the lengths you set, for a number of breaths; with motion off, words and a count.
+  - Study buddy: a Shiba who dozes while nothing's going on, wakes for the timer or a pat, and is happy for a while
+    after a finished focus block or an item ticked off. Click it for a word of encouragement.
+- **What Glaze can do:** every Canvas extra in one panel with its switch, from Ctrl+K or the Dashboard, with an
+  optional tour of the page and **Report a problem**. Nothing opens by itself.
+- **Report a problem:** opens a new GitHub issue with your Glaze version, browser and system filled in, and nothing
+  else, for you to finish and send. In the editor under Share and back up, and in What Glaze can do.
 - **Reminders and streak (Canvas, every part off by default; Extras, Reminders and streak):** each its own opt-in:
   - Due-date reminders at any of 15 minutes, 1 hour, 3 hours, 1 day and 2 days before (several at once, free); a day
     before means the same time the day before, in your Canvas time zone, across daylight-saving changes.
