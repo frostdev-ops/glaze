@@ -51,6 +51,7 @@ fi
 # Check package integration and URL registration before final re-signing and packaging.
 test -d "$app/Contents/Frameworks/Sparkle.framework" || { echo "build-safari: Sparkle framework is missing" >&2; exit 1; }
 /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$app/Contents/Info.plist" | grep -qx 'io.frostdev.glaze-update'
+/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$app/Contents/Info.plist" | grep -qxF "$SAFARI_UPDATE_PUBLIC_KEY" || { echo "build-safari: the app doesn't carry the Sparkle public key" >&2; exit 1; }
 
 extension="$app/Contents/PlugIns/Glaze Extension.appex"
 # Re-sign Sparkle's nested helpers inside out; never use --deep for signing.
