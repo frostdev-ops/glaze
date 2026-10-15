@@ -27,6 +27,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     try { return URL.createObjectURL(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: head.slice(5, head.indexOf(';')) })); } catch { return ''; }
   };
   const sheet = () => {
+    if (!ctx.on()) return;
     if (!document.getElementById('gz-lookx-css')) (document.head || html).append(make('link', { id: 'gz-lookx-css', rel: 'stylesheet', href: url('features/lookx.css') }));
   };
 
@@ -131,6 +132,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     el.style.rotate = `${p.r}deg`;
   };
   const draw = () => {
+    if (!ctx.on()) { layer?.remove(); layer = null; return; }
     if (!list.length && !editing) { layer?.remove(); layer = null; return; }
     sheet();
     if (!layer?.isConnected) {
@@ -206,7 +208,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   };
   // A new sticker, in the middle of what's on screen (a little lower for each one placed in a row).
   const place = (s) => {
-    if (!editing) return;
+    if (!editing || !ctx.on()) return;
     if (!layer) draw();
     const r = layer.getBoundingClientRect();
     const p = GZ_LX.placement({ id: crypto.randomUUID(), s, x: ((innerWidth / 2 - r.left) / (r.width || 1)) * 100, y: innerHeight / 2 - r.top - 60 + (list.length % 5) * 16, w: 120, r: 0 });
@@ -222,11 +224,12 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   let status = null, grid = null, onPage = null;
   const say = (text) => { if (status) status.textContent = text; };
   const showPack = async () => {
+    if (!ctx.on()) return;
     const was = panel;
     if (pack === 'own') {
       // The pictures stored (lib/lookx.js imgIds): read in sticker mode only.
       const all = await get(null);
-      if (!live || panel !== was || !panel || pack !== 'own') return;
+      if (!ctx.on() || !live || panel !== was || !panel || pack !== 'own') return;
       const ids = GZ_LX.imgIds(all);
       for (const id of ids) if (!own[id]) own[id] = blobOf(all[`stkImg:${id}`]) || undefined;
       const file = make('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', hidden: true });

@@ -30,3 +30,9 @@ The later owner reload report adds lifecycle scope: preserve integration `07b839
 make `GZ_CTX.on()` notice invalidation before a body mutation, stop an orphaned Google sync timer and safely close a
 Download all port keepalive. Nav/widget callback guards stay with B7c/B7b. Final integration/full-suite/reload/3D
 verification is still pending, and no claim of live cold-load slowdown is made.
+
+Reload/request fixes now pass 55 focused checks after seven failures on saved pre-fix source and the separate stale
+`GZ_CTX.on()` failure. This includes late card storage, stale sticker construction/action, safe injection and real key
+listeners, JSON auth redirects, Google orphan timer and Port keepalive teardown. Integration 07/a694 guards/budget are
+merged. B7c's pending `gate: discoverNav` must survive the final merge as synchronous native-added-subtree discovery;
+it must not restore the removed hold/mask/timer. Actual Chrome reload and final full-suite remain pending.

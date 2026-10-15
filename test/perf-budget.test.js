@@ -112,7 +112,7 @@ const review = (list, seen, what) => {
 // Timers that fire faster than once a minute, each reviewed: bounded in time, and the clear that ends it must stay.
 const FAST_INTERVALS = [
   // Download all: a 15 s keep-alive to the service worker only while a zip streams; cleared when its port closes.
-  ['features/download.js', "setInterval(() => { if (!closed) port.postMessage({ type: 'ping' }); }, 15000)", 1, /\bclearInterval\s*\(\s*ping\s*\)/],
+  ['features/download.js', "setInterval(() => { if (!closed) post({ type: 'ping' }); }, 15000)", 1, /\bclearInterval\s*\(\s*ping\s*\)/],
 ];
 
 test('no setInterval fires faster than once a minute unless it is reviewed, and its clear is still there', () => {

@@ -4,6 +4,8 @@ _Last updated: 2026-10-15_
 
 Ultra performance changes reuse the page's existing gradebook reads and ignore internal Glaze UI mutations. They add
 no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
+The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep
+their separate, existing URL handling.
 
 ## What Glaze stores
 

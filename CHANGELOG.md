@@ -9,6 +9,8 @@ All notable changes to Glaze are documented here. The format follows
 ### Fixed
 - Ultra route changes show immediately instead of waiting behind Glaze's separate loading gate. Internal widget
   updates no longer trigger native-page sweeps, and an unchanged gradebook keeps its successful empty late-status answer.
+- Tabs left open across an extension reload stop feature work immediately; Google sync and Download all close orphaned
+  timers/ports safely. Shared JSON API reads reject login redirects.
 
 ### Added
 - Blackboard Ultra: hide folders and learning modules locally, with a Show hidden folders count and per-account/course choices included in Export all. Controls follow reused outline rows, save only on your own activation, and malformed imported records preserve saved choices.

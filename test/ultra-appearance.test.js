@@ -73,4 +73,6 @@ test('ordinary Ultra mutation flushes refresh late cards and replacement navigat
   const removed = navs;
   mo.f([inside(child), ...recs(1), { type: 'attributes', target: body, attributeName: 'class', oldValue: '' }]); await runTimers();
   assert.ok(navs > removed, 'native additions and attributes survive a mixed owned/native batch');
+  delete c.chrome.runtime.id;
+  assert.equal(c.GZ_CTX.on(), false, 'reload invalidation is visible before the next core mutation');
 });
