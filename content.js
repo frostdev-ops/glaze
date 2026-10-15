@@ -1916,7 +1916,7 @@
     try {
       const d = f.contentDocument;
       const old = d?.getElementById('gz-unflip');
-      const on = html.matches('[data-gz-dark-theme][data-gz-enhance-darkDocs]'); // as extras.css
+      const on = html.matches('[data-gz-dark-theme][data-gz-enhance-docPages="dark"]'); // as extras.css
       if (!d?.documentElement || on === !!old) return;
       if (old) return old.remove();
       const s = d.createElement('style');
@@ -1969,10 +1969,13 @@
     syncDocTools();
     if (!ultra) docTools?.querySelector('[data-gz="focus"]')?.focus({ preventScroll: true });
   };
-  const setDark = (on) => {
-    settings = { ...settings, enhance: { ...settings.enhance, darkDocs: on } };
-    setAttr('data-gz-enhance-darkDocs', on);
+  // The moon button: dimmed, or back to as they are (the editor also has inverted).
+  const setDark = () => {
+    const v = settings.enhance.docPages === 'plain' ? 'dim' : 'plain';
+    settings = { ...settings, enhance: { ...settings.enhance, docPages: v } };
+    setAttr('data-gz-enhance-docPages', v);
     syncDocTools();
+    tellDocs();
     try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
@@ -2000,7 +2003,7 @@
       docTools.setAttribute('aria-label', t('Document'));
       const time = document.createElement('span');
       time.className = 'gz-doc-time';
-      docTools.append(time, docButton('dark', t('Dark documents'), () => setDark(!settings.enhance.darkDocs)), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
+      docTools.append(time, docButton('dark', t('Dark documents'), setDark), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
       document.body.append(docTools);
     }
     if (!ultra) {
@@ -2015,11 +2018,36 @@
     const read = mins && t('{n} min read', { n: mins });
     if (mins && time.textContent !== read) time.textContent = read;
     darkB.hidden = !dark;
-    darkB.setAttribute('aria-pressed', String(settings.enhance.darkDocs));
+    darkB.setAttribute('aria-pressed', String(settings.enhance.docPages !== 'plain'));
     focusB.hidden = !doc;
     focusB.setAttribute('aria-pressed', String(!!focusAt));
     html.setAttribute('data-gz-doc-tools', '');
   };
+  // ---- DocViewer (Canvas) ------------------------------------------------------------------------
+  // features/docviewer.js, in a canvadocs frame of this page, asks for the palette, switches, file and user (its canvadoc_session
+  // blob names both) and Glaze's words. Answered at its origin only; told again on every applySettings.
+  const docFrames = new Map(); // a DocViewer frame's window -> what tells it
+  const tellDocs = () => { for (const [w, tell] of docFrames) if (w.closed) docFrames.delete(w); else tell(); };
+  if (!ultra && !moodle) addEventListener('message', (e) => {
+    const q = e.data;
+    if (q?.gz !== 'docs?' || !/^https:\/\/canvadocs(-[\w-]+)?\.instructure\.com$/.test(e.origin)) return;
+    const f = [...document.getElementsByTagName('iframe')].find((x) => x.contentWindow === e.source);
+    if (!f) return;
+    let b = {};
+    try { b = JSON.parse(new URL(f.src, location.href).searchParams.get('blob')) || {}; } catch { /* another address */ }
+    const id = (v) => (/^\d{1,20}$/.test(v) ? String(v) : '');
+    const file = id(b.attachment_id) || id(location.pathname.match(/\/files\/(\d+)/)?.[1]) || id(new URLSearchParams(location.search).get('preview'));
+    const asked = (Array.isArray(q.words) ? q.words : []).filter((w) => typeof w === 'string' && w.length < 100).slice(0, 40);
+    const tell = () => {
+      try {
+        e.source.postMessage({ gz: 'docs', on: !!links.length, dark: darkTheme, colors: Object.fromEntries(GZ_COLORS.map(([v]) => [v, html.style.getPropertyValue(v)])),
+          theme: settings.enhance.docTheme, pages: settings.enhance.docPages, ink: settings.enhance.docInk, file, user: id(b.user_id), words: Object.fromEntries(asked.map((w) => [w, t(w)])) }, e.origin);
+      } catch { docFrames.delete(e.source); }
+    };
+    docFrames.set(e.source, tell);
+    tell();
+    if (!words()) wordsIn.add(tell);
+  });
   const frameIO = new IntersectionObserver((es) => {
     for (const e of es) if (e.isIntersecting) framesShown.add(e.target); else framesShown.delete(e.target);
     syncDocTools();
@@ -2577,6 +2605,7 @@
     } else if (dark && surface !== colors['--gz-surface']) relift();
     if (!s.look.tooltips) hideTip();
     if (said) syncDocTools();
+    tellDocs();
     syncScene();
     themeEditors();
     armFlip();
@@ -2688,6 +2717,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     stopSweep();
     clearSettings();
     syncDocTools();
+    tellDocs();
     syncFooter();
   };
 

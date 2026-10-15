@@ -45,7 +45,10 @@ html[data-gz-hide-banner] .ic-DashboardCard__header_image { background-image: no
 #gz-doc-tools [hidden] { display: none; }
 #gz-doc-tools svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .gz-doc-time { font-size: 11px; color: var(--gz-ink-muted); }
-html[data-gz-dark-theme][data-gz-enhance-darkDocs] :is(#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe) { filter: invert(0.9) hue-rotate(180deg); }
+/* Documents in a dark palette (enhance.docPages): a preview frame dimmed or inverted whole. Canvas's own viewer (its
+   frame opens /api/v1/canvadoc_session) does this to its pages alone, from inside (features/docviewer.js). */
+html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] :is(#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe):not([src*="canvadoc"]) { filter: brightness(0.8); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] :is(#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe):not([src*="canvadoc"]) { filter: invert(0.9) hue-rotate(180deg); }
 .ef-file-preview-stretch:has(> #gz-doc-tools) { display: flex; flex-direction: column; }
 .ef-file-preview-stretch > #gz-doc-tools { flex-shrink: 0; }
 .ef-file-preview-stretch:has(> #gz-doc-tools) > iframe { flex: 1; min-height: 0; }

@@ -96,9 +96,10 @@ test('declutter tabs keep only known slugs, once each', () => {
   assert.deepEqual(b.declutter.tabs, [], 'defaults are not shared between results');
 });
 
-test('score bars, countdowns, folder previews, course progress, card grades, draft backup, download all, remembering your place, the course menu, the document buttons and search in your courses are on by default; the rest are off', () => {
-  const on = Object.entries(G.GZ_DEFAULTS.enhance).filter(([, v]) => v).map(([k]) => k);
-  assert.deepEqual(on.sort(), ['calc', 'coursemenu', 'download', 'drafts', 'inline', 'newcontent', 'newgrades', 'overall', 'palette', 'place', 'previews', 'progress', 'scores', 'search', 'toggles']);
+test('score bars, countdowns, folder previews, course progress, card grades, draft backup, download all, remembering your place, the course menu, the document buttons, the document viewer\'s palette and search in your courses are on by default; the rest are off', () => {
+  const on = Object.entries(G.GZ_DEFAULTS.enhance).filter(([, v]) => v === true).map(([k]) => k);
+  assert.deepEqual(on.sort(), ['calc', 'coursemenu', 'docTheme', 'download', 'drafts', 'inline', 'newcontent', 'newgrades', 'overall', 'palette', 'place', 'previews', 'progress', 'scores', 'search', 'toggles']);
+  assert.equal(G.GZ_DEFAULTS.enhance.docPages, 'plain');
   assert.equal(G.GZ_SANITIZE({ enhance: { scores: false } }).enhance.scores, false, 'an explicit off is kept');
 });
 
@@ -298,4 +299,14 @@ test('nicknames: the budget is the whole courses item, colors, ticks and looks i
   assert.equal(Object.keys(G.GZ_SANITIZE({ courses: { names: raw.courses.names } }).courses.names).length, 59);
   // What fits is kept as it is: sanitizing again changes nothing.
   assert.deepEqual(G.GZ_SANITIZE({ courses: c }).courses, c);
+});
+
+test('dark documents, a switch up to 2.2, become inverted documents; a choice made since is kept', () => {
+  const pages = (enhance) => G.GZ_SANITIZE({ enhance }).enhance.docPages;
+  assert.equal(pages({ darkDocs: true }), 'dark');
+  assert.equal(pages({ darkDocs: false }), 'plain');
+  assert.equal(pages({ darkDocs: true, docPages: 'dim' }), 'dim');
+  assert.equal(pages({ darkDocs: true, docPages: 'plain' }), 'plain');
+  assert.equal(pages({ docPages: 'sepia' }), 'plain');
+  assert.ok(!('darkDocs' in G.GZ_SANITIZE({ enhance: { darkDocs: true } }).enhance));
 });

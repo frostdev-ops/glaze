@@ -76,6 +76,12 @@ _Last updated: 2026-10-15_
 - **Canvas course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
   card style (`cards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
   (`links`: their names, addresses and icons), by your Canvas site's address and course number.
+- **Your marks on documents** (Canvas, "Pen and highlighter on documents", off by default), in `chrome.storage.local`,
+  on this device only, per Canvas site, signed-in user id and file id (which the viewer's address on your Canvas page
+  names): each pen or highlighter stroke's points, color and width, page by page. Canvas's document viewer runs on
+  Instructure's own host, and Glaze asks your Canvas page for the palette, the file and the user over the browser's
+  messaging between the two, at each one's exact address. Nothing is sent to Canvas, Instructure or anywhere else.
+  Export annotations saves them as a file you keep; Clear page and undo remove them.
 - **Pictures you choose for course cards from your computer**, in `chrome.storage.local`, on this device only:
   scaled down to at most 960 pixels and kept as WebP (JPEG in Safari), at most about 400 KB each and 4 MB in all.
   They are never synced, exported or put in a theme code. Choosing another picture, or removing the card's style,
@@ -248,7 +254,7 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 
 ## Permissions
 
-- `storage` — to save the settings, GPA choices, course names, places, what-if scores, due list, Better To Do's tasks and plans, reminder and streak state,
+- `storage` — to save the settings, GPA choices, course names, places, what-if scores, due list, Better To Do's tasks and plans, reminder and streak state, marks on documents,
   typed-text backups, Looks history and favorites, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
@@ -256,7 +262,8 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
   self-hosted per institution on arbitrary domains, always under the `/ultra/` path, so the match
   pattern cannot name a fixed host. Glaze reads and restyles the page in your browser only.
 - Host access to `https://*.instructure.com/*` — to apply the theme on Canvas, which Instructure hosts
-  for most schools under that domain.
+  for most schools under that domain, and in Canvas's document viewer on `canvadocs.instructure.com`, where a
+  separate small script applies the palette and, if you switch them on, your marks on documents.
 - Host access to `https://*/*` and `scripting` — Canvas also runs on schools' own domains, and Moodle always does.
   The check described above runs on https pages for that reason; when it finds Canvas or Moodle, Glaze styles that
   site, and only that site, the same way. The hostname is kept in the extension's local storage on your device.

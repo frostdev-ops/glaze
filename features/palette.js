@@ -16,7 +16,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
     gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', search: 'Search in your courses',
-    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', streak: 'Streak' };
+    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', streak: 'Streak',
+    docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
