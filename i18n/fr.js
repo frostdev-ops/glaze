@@ -1867,4 +1867,11 @@
   "Viewport": "Taille d’affichage",
   "On this device": "Sur cet appareil",
   "Preview could not load. Try reloading settings.": "L’aperçu n’a pas pu être chargé. Rechargez les réglages.",
+  "Course card": "Carte de cours",
+  "+ Course cards": "+ Cartes de cours",
+  "+ Course card": "+ Carte de cours",
+  "Up to {n} course cards per board.": "Jusqu’à {n} cartes de cours par tableau.",
+  "Ultra's search, filters and term picker stay in its course list.": "La recherche, les filtres et le choix du semestre d’Ultra restent dans sa liste de cours.",
+  "Show course cards": "Afficher les cartes de cours",
+  "Show Ultra’s course list": "Afficher la liste de cours d’Ultra",
 };

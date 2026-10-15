@@ -257,7 +257,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
   box-shadow: var(--gz-rest-shadow) !important;
   transition: var(--gz-card-transition) !important;
 }
-.element-card:hover, .content-list-item .itemContainer:hover {
+:is(.element-card, .gz-course-card):hover, .content-list-item .itemContainer:hover {
   transform: var(--gz-lift);
   box-shadow: var(--gz-hover-shadow) !important;
   border-color: var(--gz-line-strong) !important;
@@ -733,6 +733,15 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 #site-wrap .layer-content::after { display: none !important; }
 #site-wrap .layer-details :is(.full-panel-details-title, .separation-border, .guidance-wrapper, [class*="makeStyleselementDetails-"], .element-details) { border-bottom: 0 !important; }
 #site-wrap .layer-details .discussion-participants li::before { display: none !important; }
+/* Item pages' wells and lists (an assignment's due date, attempts and details; a profile's lists; a group set with
+   nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the wells in the page's own colour,
+   square, so they read as empty outlines. */
+#site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .base-profile section ul, .group-empty-state) {
+  border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important;
+  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
+}
+#site-wrap .assessment-details-section > ul.section-content { padding: 0.75rem 1rem !important; }
+#site-wrap .base-profile section ul { overflow: hidden; } /* its rows paint their own fill: kept inside the corners */
 /* Item type at a glance: the type icon carries its name as aria-label. */
 #site-wrap .content-list-item svg[aria-label] { color: var(--gz-type, var(--gz-accent)) !important; }
 #site-wrap .content-list-item svg:is([aria-label="Assignment"], [aria-label*="Assessment"]) { --gz-type: var(--gz-warn); }
@@ -973,36 +982,36 @@ html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[c
   html[data-gz-nav-size="large"] .MuiDrawer-root:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), html[data-gz-nav-size="large"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { width: 280px; flex-basis: 280px; }
   html[data-gz-nav-collapsed] .MuiDrawer-root:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), html[data-gz-nav-collapsed] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { width: 88px !important; flex-basis: 88px !important; }
 }
-html[data-gz-card-hover="none"] #site-wrap article.course-element-card:hover { transform: none; }
+html[data-gz-card-hover="none"] #site-wrap article:is(.course-element-card, .gz-course-card):hover { transform: none; }
 @media (hover: hover) {
-  html[data-gz-card-hover="grow"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover { transform: scale(1.035); }
-  html[data-gz-card-hover="tilt"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover { transform: perspective(900px) rotateX(4deg) rotateY(-5deg) translateY(-3px); }
-  html[data-gz-card-hover="glow"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover {
+  html[data-gz-card-hover="grow"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article:is(.course-element-card, .gz-course-card):hover { transform: scale(1.035); }
+  html[data-gz-card-hover="tilt"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article:is(.course-element-card, .gz-course-card):hover { transform: perspective(900px) rotateX(4deg) rotateY(-5deg) translateY(-3px); }
+  html[data-gz-card-hover="glow"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article:is(.course-element-card, .gz-course-card):hover {
     box-shadow: 0 0 0 1px var(--gz-card-c, var(--gz-course, var(--gz-accent))), 0 10px 32px -8px color-mix(in srgb, var(--gz-card-c, var(--gz-course, var(--gz-accent))) 75%, transparent);
   }
   /* Shine: a band of light crosses the card once. */
-  html[data-gz-card-hover="shine"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover::after {
+  html[data-gz-card-hover="shine"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article:is(.course-element-card, .gz-course-card):hover::after {
     content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
     background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.28) 50%, transparent 65%) -150% 0 / 250% 100% no-repeat;
     animation: gz-card-shine 0.9s var(--gz-ease) forwards;
   }
   /* Particles over the picture while the pointer is on the card: soft dots on a repeating tile, drifting. */
-  html:not([data-gz-card-particles="none"], [data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover::before {
+  html:not([data-gz-card-particles="none"], [data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article:is(.course-element-card, .gz-course-card):hover::before {
     content: ""; position: absolute; inset: 0 0 auto; height: var(--gz-card-h, 146px); z-index: 1; pointer-events: none;
     background-size: 90px 90px; animation: gz-card-fall 2.4s linear infinite; animation-play-state: var(--gz-ambient, running);
   }
-  html[data-gz-card-particles="sparkles"] #site-wrap article.course-element-card:hover::before {
+  html[data-gz-card-particles="sparkles"] #site-wrap article:is(.course-element-card, .gz-course-card):hover::before {
     background-image: radial-gradient(circle at 20% 30%, #fff 0 1.5px, transparent 2.5px), radial-gradient(circle at 70% 65%, var(--gz-accent-hi) 0 1.5px, transparent 2.5px), radial-gradient(circle at 45% 85%, #fff 0 1px, transparent 2px);
     animation-name: gz-card-twinkle; animation-direction: alternate; animation-duration: 0.8s;
   }
-  html[data-gz-card-particles="snow"] #site-wrap article.course-element-card:hover::before {
+  html[data-gz-card-particles="snow"] #site-wrap article:is(.course-element-card, .gz-course-card):hover::before {
     background-image: radial-gradient(circle at 25% 20%, rgb(255 255 255 / 0.9) 0 2.5px, transparent 3.5px), radial-gradient(circle at 75% 60%, rgb(255 255 255 / 0.75) 0 1.8px, transparent 2.8px);
   }
-  html[data-gz-card-particles="bubbles"] #site-wrap article.course-element-card:hover::before {
+  html[data-gz-card-particles="bubbles"] #site-wrap article:is(.course-element-card, .gz-course-card):hover::before {
     background-image: radial-gradient(circle at 30% 40%, transparent 0 4px, rgb(255 255 255 / 0.7) 4.5px 5.5px, transparent 6px), radial-gradient(circle at 75% 80%, transparent 0 2.5px, rgb(255 255 255 / 0.6) 3px 3.8px, transparent 4.3px);
     animation-name: gz-card-rise;
   }
-  html[data-gz-card-particles="confetti"] #site-wrap article.course-element-card:hover::before {
+  html[data-gz-card-particles="confetti"] #site-wrap article:is(.course-element-card, .gz-course-card):hover::before {
     background-image: linear-gradient(30deg, transparent 40%, var(--gz-accent) 40% 60%, transparent 60%), linear-gradient(-40deg, transparent 42%, var(--gz-warn) 42% 58%, transparent 58%), linear-gradient(80deg, transparent 44%, var(--gz-ok) 44% 56%, transparent 56%);
     background-size: 9px 5px, 7px 6px, 8px 4px; background-repeat: no-repeat; animation-name: gz-card-confetti;
   }
@@ -1021,8 +1030,8 @@ html[data-gz-card-hover="none"] #site-wrap article.course-element-card:hover { t
   animation: gz-pet-idle 2.46s step-end infinite; animation-play-state: var(--gz-ambient, running);
 }
 /* The stretch or hop only with hover motion on; Off (and reduced motion, which content.js makes Off) stills it. */
-@media (hover: hover) { html:not([data-gz-motion="off"], [data-gz-no-hover]) article.course-element-card:hover > .gz-pet { animation: gz-pet-act 0.98s step-end 1; } }
-html[data-gz-motion="off"] article.course-element-card > .gz-pet { animation: none !important; }
+@media (hover: hover) { html:not([data-gz-motion="off"], [data-gz-no-hover]) article:is(.course-element-card, .gz-course-card):hover > .gz-pet { animation: gz-pet-act 0.98s step-end 1; } }
+html[data-gz-motion="off"] article:is(.course-element-card, .gz-course-card) > .gz-pet { animation: none !important; }
 html[data-gz-card-pet="none"] #site-wrap .gz-pet { display: none; }
 /* Condensed cards have the name low on the picture: the pet peeks in at the top instead, a little smaller. */
 html[data-gz-card-condensed] #site-wrap .gz-pet { top: 2px; right: calc(50% - 32px); scale: 0.75; transform-origin: top center; }

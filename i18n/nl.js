@@ -1867,4 +1867,11 @@
   "Viewport": "Venstergrootte",
   "On this device": "Op dit apparaat",
   "Preview could not load. Try reloading settings.": "Het voorbeeld kon niet laden. Laad de instellingen opnieuw.",
+  "Course card": "Cursuskaart",
+  "+ Course cards": "+ Cursuskaarten",
+  "+ Course card": "+ Cursuskaart",
+  "Up to {n} course cards per board.": "Maximaal {n} cursuskaarten per bord.",
+  "Ultra's search, filters and term picker stay in its course list.": "Zoeken, filters en de periodekiezer van Ultra blijven in de eigen cursuslijst.",
+  "Show course cards": "Cursuskaarten tonen",
+  "Show Ultra’s course list": "Cursuslijst van Ultra tonen",
 };

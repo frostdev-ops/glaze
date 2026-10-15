@@ -1867,4 +1867,11 @@
   "Viewport": "Área de visualização",
   "On this device": "Neste dispositivo",
   "Preview could not load. Try reloading settings.": "Não foi possível carregar a prévia. Recarregue as configurações.",
+  "Course card": "Cartão de curso",
+  "+ Course cards": "+ Cartões de cursos",
+  "+ Course card": "+ Cartão de curso",
+  "Up to {n} course cards per board.": "Até {n} cartões de cursos por painel.",
+  "Ultra's search, filters and term picker stay in its course list.": "A busca, os filtros e o seletor de períodos do Ultra continuam na lista de cursos.",
+  "Show course cards": "Mostrar cartões de cursos",
+  "Show Ultra’s course list": "Mostrar a lista de cursos do Ultra",
 };

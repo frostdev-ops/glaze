@@ -90,7 +90,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   // undefined until the current course's gradebook answers.
   const gradesIn = () => { const cid = courseId(); return cid ? bookFor(cid, true).grades : undefined; };
-  const onBook = () => { tagExtras([document.body]); renderNew(); renderCalc(); };
+  const onBook = () => { tagExtras([document.body]); renderNew(); renderCalc(); globalThis.GZ_COURSE_CARDS?.sync(); };
 
   // ---- grades on course cards (Extras) ---------------------------------------------------------
   // On the Courses page each card's status line ("Open") gains the course's overall grade, drawn by CSS
@@ -718,7 +718,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
     syncTodo, syncCardTasks, syncRemind, syncWidgets,
-    ctx: { me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
+    ctx: { canvasPeek: () => ({ me: meId, courses: memberships, books }), me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
   };
 });
 

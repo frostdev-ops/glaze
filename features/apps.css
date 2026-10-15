@@ -760,3 +760,27 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 .base-header-tools > .gz-ins-open { margin: 0; padding: 0.35rem 0.9rem; font: 600 13px/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; }
 .base-header-tools > .gz-ins-open:hover { border-color: var(--gz-accent); }
 .base-header-tools > .gz-ins-open:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+
+/* Ultra course tiles (opt-in): React keeps its own list, filters and term picker intact. */
+html[data-gz-course-tiles] .courses-panel .course-columns { display: none !important; }
+.gz-course-pick { max-width: 100%; }
+.gz-course-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--gz-line); border-radius: var(--gz-card-r, var(--gz-radius)); background: var(--gz-surface); color: var(--gz-text); }
+.gz-course-card .course-banner { position: relative; isolation: isolate; overflow: hidden; height: var(--gz-card-h, 128px); border-radius: 0 !important; background: var(--gz-card-grad, var(--gz-card-c, var(--gz-course, var(--gz-accent)))) !important; }
+.gz-course-card[data-gz-card="image"] .course-banner::before, .gz-course-card[data-gz-card="image"] .course-banner::after { content: ''; position: absolute; inset: 0; pointer-events: none; }
+.gz-course-card[data-gz-card="image"] .course-banner::before { background: var(--gz-card-img) var(--gz-card-pos) / cover no-repeat; transform: scale(var(--gz-card-zoom)); transform-origin: var(--gz-card-pos); filter: var(--gz-card-filter); }
+.gz-course-card[data-gz-card="image"] .course-banner::after { background: var(--gz-card-ov); opacity: var(--gz-card-ov-a); }
+html[data-gz-card-plain] .gz-course-card .course-banner::after { display: none; }
+html[data-gz-card-condensed] .gz-course-card .course-banner { height: 56px; }
+.gz-course-card .element-details { padding: 12px; min-width: 0; }
+.gz-course-card .course-title { display: block; font-size: 1.1rem; font-weight: 650; color: var(--gz-text); overflow-wrap: anywhere; }
+.gz-course-card :is(.course-id, .gz-course-term, .gz-course-grade) { margin: 4px 0; font-size: .85rem; overflow-wrap: anywhere; }
+.gz-course-card .gz-course-term { color: var(--gz-muted); }
+.gz-course-card .gz-cm-btn { position: absolute; inset: 8px 8px auto auto; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--gz-line); background: var(--gz-surface); color: var(--gz-text); }
+.gz-course-card .gz-bm { position: absolute; z-index: 2; top: 8px; left: 8px; right: 48px; display: flex; flex-wrap: wrap; gap: 4px; }
+.gz-course-card .gz-ct { list-style: none; margin: 0; padding: 8px 12px; border-top: 1px solid var(--gz-line); }
+.gz-course-card .gz-ct li { margin: 0; padding: 4px 0; }
+.gz-course-card .gz-ct-row { display: flex; flex-wrap: wrap; column-gap: 8px; color: var(--gz-text); }
+.gz-course-card .gz-ct-t { flex: 1 1 100%; overflow-wrap: anywhere; }
+.gz-course-card .gz-ct-when, .gz-course-card .gz-ct-part { font-size: .8rem; color: var(--gz-muted); }
+.gz-course-card .gz-ct [data-done] .gz-ct-t { text-decoration: line-through; }
+.gz-course-card a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }

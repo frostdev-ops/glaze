@@ -687,3 +687,14 @@ test('a global tile keyboard announcement uses its clamped margin, matching its 
   assert.equal(px(p.tile('notes').style.left), 200 + W.EDGE);
   assert.match(p.doc.querySelector('#gz-float .gz-sr').textContent, /12 px from the left, 12 px from the top/);
 });
+
+test('Reset layout never sends another school’s course tiles to this school’s broker', async () => {
+  const old = ONLY(['notes']);
+  old.boards = { courses: [{ id: 'course:https://other.test/_101_1', on: true, x: 320, y: 80 }] };
+  const p = page({ local: { widgetLayout: old } }); p.ui.sync(true); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  p.doc.fire(p.doc.querySelector('.gz-dash-reset'), 'click'); await settle();
+  const reset = p.sent.filter((m) => m.type === 'glaze:widgetLayout').at(-1);
+  assert.ok(reset.ops.every((x) => !W.course(x.id)), 'only this site’s tiles are changed');
+  assert.equal(lay(p).boards.courses.find((x) => W.course(x.id)).x, 320, 'other school’s placement stays');
+});

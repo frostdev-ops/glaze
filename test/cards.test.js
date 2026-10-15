@@ -79,8 +79,8 @@ test('contrast is measured, never corrected', () => {
 });
 
 // canvas.css rules, as [selector, body], comments removed; @media blocks flattened.
-const cssRules = () => {
-  const css = require('fs').readFileSync(require('path').join(__dirname, '../canvas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const cssRules = (file = 'canvas.css') => {
+  const css = require('fs').readFileSync(require('path').join(__dirname, '..', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const out = [];
   const walk = (text) => {
     for (let i = 0; i < text.length;) {
@@ -109,6 +109,13 @@ test('motion off stills the pet and the particles; hover motion off stops what a
     }
   }
   assert.ok(rules.some(([sel, body]) => /data-gz-motion="off"\][^{]*\.gz-pet/.test(sel) && /animation:\s*none\s*!important/.test(body)), 'an Off rule that no hover rule outranks');
+});
+
+test('Ultra board cards share the existing hover effects and the pet motion-Off rule', () => {
+  const rules = cssRules('theme.css');
+  assert.ok(rules.some(([sel, body]) => sel.includes('.gz-course-card') && sel.includes('data-gz-motion="off"]') && /animation:\s*none\s*!important/.test(body)), 'reduced motion stops the board pet');
+  for (const effect of ['grow', 'tilt', 'glow', 'shine']) assert.ok(rules.some(([sel]) => sel.includes(`data-gz-card-hover="${effect}"`) && sel.includes('.gz-course-card')), effect);
+  assert.ok(rules.some(([sel, body]) => sel.includes('.gz-course-card') && /animation:\s*gz-card-fall/.test(body)), 'board particles use the guarded shared rule');
 });
 
 test("turning off Canvas's overlay never hides a card's own style", () => {

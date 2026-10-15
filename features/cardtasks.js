@@ -85,10 +85,46 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
 
   // ---- the cards ----
   // Only what changed is drawn again: a pass over unchanged cards writes nothing (each list keeps what it shows).
+  // The same renderer for native cards and board cards. A board supplies only a stored planner answer.
+  const render = (el, cid, head, course, { L, o, data, cache, uid, tz, extra = [] }) => {
+    const now = Date.now(), lang = GZ_I18N.locale(ctx.locale());
+    const was = el.querySelector(':scope > .gz-ct');
+    if (!head || !cid || !cache) { was?.remove(); return; }
+    // Ultra has no planner to tick in: its ticks are this device's, as Better To Do's there.
+    // All of the course's rows are counted; o.cardN are shown, then "and N more" (the card grows to fit, never scrolls).
+    const all = L.card(L.build({ items: [...(cache.items || []), ...extra], data, o, now, tz, course: cid, sync: !ultra && o.sync }), Infinity, o.cardCross, tz);
+    const more = all.length - o.cardN;
+    const rows = all.slice(0, o.cardN).map((r) => {
+      // Undated work planned for a day (a "do on" day or a focus session) reads as planned for that day.
+      const w = L.label(r.at === null ? { allDay: true, day: r.plan } : r, now, tz, lang);
+      const text = o.rel ? w.rel : w.abs;
+      return { ...r, when: r.at === null ? t('Planned for {when}', { when: text }) : r.type === 'planner_note' ? text : t(r.past ? 'Was due {when}' : 'Due {when}', { when: text }), other: o.rel ? w.abs : w.rel };
+    });
+    // Ultra couldn't send everything: said, and never "Nothing due".
+    const part = cache.complete === false && t('Blackboard sent only part of your calendar, so some work may be missing.');
+    const sig = JSON.stringify([o.cardStatus, part, more, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
+    if (was?.dataset.sig === sig) return;
+    const box = rows.length
+      ? make('ul', {}, ...rows.map((r) => {
+        const li = make('li', {}, make(r.url ? 'a' : 'span', { className: 'gz-ct-row', ...(r.url && { href: r.url }) },
+          make('span', { className: 'gz-ct-t', textContent: r.title }),
+          make('span', { className: 'gz-ct-when', title: r.other, textContent: r.when }),
+          r.type === 'gradescope' && make('span', { className: 'gz-todo-chip', textContent: 'Gradescope' }),
+          r.status && (o.cardStatus ? chip(r.status) : r.done && make('span', { className: 'screenreader-only', textContent: t(r.status) }))));
+        if (r.done) li.dataset.done = '';
+        if (r.past) li.dataset.past = '';
+        return li;
+      }), more > 0 && make('li', { className: 'gz-ct-part', textContent: t('and {n} more', { n: more }) }), part && make('li', { className: 'gz-ct-part', textContent: part }))
+      : make('p', { textContent: part || t('Nothing due') });
+    box.className = 'gz-ct';
+    box.dataset.sig = sig;
+    if (ultra) for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) box.addEventListener(ev, keep);
+    if (rows.length) box.setAttribute('aria-label', t('Tasks for {course}', { course }));
+    if (was) was.replaceWith(box); else head.after(box);
+  };
   const paint = () => {
     if (!on || !data) return;
     const now = Date.now();
-    const lang = GZ_I18N.locale(ctx.locale());
     const [sel, idOf, headOf, nameOf] = CARDS;
     for (const el of document.querySelectorAll(sel)) {
       const head = headOf(el);
@@ -96,39 +132,9 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       const was = el.querySelector(':scope > .gz-ct');
       if (!head || !cid || !cache) { was?.remove(); continue; }
       gs ||= L.gradescope(paint);
-      // Ultra has no planner to tick in: its ticks are this device's, as Better To Do's there.
-      // All of the course's rows are counted; o.cardN are shown, then "and N more" (the card grows to fit, never scrolls).
-      const all = L.card(L.build({ items: [...(cache.items || []), ...gs(now, uid)], data, o, now, tz, course: cid, sync: !ultra && o.sync }), Infinity, o.cardCross, tz);
-      const more = all.length - o.cardN;
-      const rows = all.slice(0, o.cardN).map((r) => {
-        // Undated work planned for a day (a "do on" day or a focus session) reads as planned for that day.
-        const w = L.label(r.at === null ? { allDay: true, day: r.plan } : r, now, tz, lang);
-        const text = o.rel ? w.rel : w.abs;
-        return { ...r, when: r.at === null ? t('Planned for {when}', { when: text }) : r.type === 'planner_note' ? text : t(r.past ? 'Was due {when}' : 'Due {when}', { when: text }), other: o.rel ? w.abs : w.rel };
-      });
-      // Ultra couldn't send everything: said, and never "Nothing due".
-      const part = cache.complete === false && t('Blackboard sent only part of your calendar, so some work may be missing.');
-      const sig = JSON.stringify([o.cardStatus, part, more, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
-      if (was?.dataset.sig === sig) continue;
-      const course = nameOf(el);
-      const box = rows.length
-        ? make('ul', {}, ...rows.map((r) => {
-          const li = make('li', {}, make(r.url ? 'a' : 'span', { className: 'gz-ct-row', ...(r.url && { href: r.url }) },
-            make('span', { className: 'gz-ct-t', textContent: r.title }),
-            make('span', { className: 'gz-ct-when', title: r.other, textContent: r.when }),
-            r.type === 'gradescope' && make('span', { className: 'gz-todo-chip', textContent: 'Gradescope' }),
-            r.status && (o.cardStatus ? chip(r.status) : r.done && make('span', { className: 'screenreader-only', textContent: t(r.status) }))));
-          if (r.done) li.dataset.done = '';
-          if (r.past) li.dataset.past = '';
-          return li;
-        }), more > 0 && make('li', { className: 'gz-ct-part', textContent: t('and {n} more', { n: more }) }), part && make('li', { className: 'gz-ct-part', textContent: part }))
-        : make('p', { textContent: part || t('Nothing due') });
-      box.className = 'gz-ct';
-      box.dataset.sig = sig;
-      if (ultra) for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) box.addEventListener(ev, keep);
-      if (rows.length) box.setAttribute('aria-label', t('Tasks for {course}', { course }));
-      if (was) was.replaceWith(box); else head.after(box);
+      render(el, cid, head, nameOf(el), { L, o, data, cache, uid, tz, extra: gs(now, uid) });
     }
+
     // Gradescope's one-time question (lib/todo.js gradescope question), one quiet line above the first card's tasks,
     // unless Better To Do on this page asks it already (one question a page); drawn again only when what it asks
     // changes, so a pass never moves focus off it.
@@ -180,7 +186,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     if (L) listed = list;
   };
 
-  return { sync };
+  return { sync, render };
 })();
 
 GZ_CARD_TASKS;
