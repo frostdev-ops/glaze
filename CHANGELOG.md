@@ -9,7 +9,9 @@ All notable changes to Glaze are documented here. The format follows
 ### Fixed
 - Course tabs stay visible on Ultra's full routed documents and positively cached Assignment overviews, preserving
   their allowed URL context and content scroller. Unknown assessments and tests return to Course Content; tabs never
-  fetch a gradebook to classify an overview or open an attempt.
+  fetch a gradebook to classify an overview or open an attempt. Saved page and scroll wait for native content to arrive;
+  a refreshed native gradebook immediately replaces an older Assignment classification. Floating widgets keep clear
+  of the routed native header as well as the strip.
 - Course tabs use automatic short names by default, removing common term/section wrappers and spacing subject codes.
   Nicknames still win, saved full-name/code choices stay intact, and the full name/code remain in tooltips and accessible names.
 - Ultra route changes show immediately instead of waiting behind Glaze's separate loading gate. Internal widget

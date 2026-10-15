@@ -281,7 +281,8 @@ you import) are bundled. It makes requests in these cases:
   reads above. Replaying the copy makes no requests: the page's existing stylesheets remain in place and unreadable
   stylesheets are never linked again. Blackboard routes the selected course normally; if it fails to switch in place
   within 2.5 seconds, Glaze loads that selected course's own-site address. Glaze never prefetches a course or opens one
-  in the background.
+  in the background. Assignment overviews require a positive classification from the gradebook already held by the
+  native grade features; tabs make no request to classify them and recheck before recording or replaying a copy.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette

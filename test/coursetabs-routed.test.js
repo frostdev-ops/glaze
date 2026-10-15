@@ -61,7 +61,7 @@ test('a routed content scroller need not contain the strip to save its position'
   vm.runInNewContext(part('  const onScroll = ', '  // ---- snapshots') + '\nonScroll({target:sc});', {
     go: null, ctx: { courseId: () => '_71_1' }, document: {}, sc, Element: Object, strip: {}, tabs: [tab],
     location: { pathname: documentPath, search: '?view=content&state=view' }, L,
-    pageScroller: () => sc, safePath: () => documentPath, save: () => saves++,
+    pageScroller: () => sc, safePath: () => documentPath, atView: () => true, save: () => saves++,
   });
   assert.equal(tab.top, 610); assert.equal(saves, 1);
 });
@@ -81,7 +81,7 @@ test('a full routed switch waits for native content replacement, then settles wi
   const old = {}, main = {}, next = {}, g = { cid: '_71_1', url: documentPath, at: 0, before: [old, main] }; let ended = 0, current = [old, main];
   const check = vm.runInNewContext(part('  const check = ', '  const end = ') + '\ncheck;', {
     go: g, performance: { now: () => 500 }, courseBar: () => null, shown: () => false,
-    ctx: { courseId: () => '_71_1', holding: () => false }, view: () => current,
+    ctx: { on: () => true, courseId: () => '_71_1', holding: () => false }, view: () => current,
     sameView: (a, b) => a?.every((v, i) => v === b?.[i]), loading: () => false,
     readyView: () => true,
     document: {}, location: { pathname: documentPath }, end: () => ended++,
@@ -97,7 +97,7 @@ test('header-only and reused-header transitions cannot certify or capture the ol
   const go = { cid: '_71_1', at: 0, before: current };
   const api = vm.runInNewContext(helper + part('  let liveView = ', '  // A panel over the bar') + part('  const check = ', '  const end = ') + '\n({observeView, check, live:()=>liveView});', {
     view: () => current, location: { get pathname() { return pathname; }, search: '' }, shown: (e) => !!e, loading: () => false,
-    go, courseBar: () => null, ctx: { courseId: () => '_71_1', holding: () => false }, performance: { now: () => 500 }, document: {}, end: () => ended++,
+    go, courseBar: () => null, ctx: { on: () => true, courseId: () => '_71_1', holding: () => false }, performance: { now: () => 500 }, document: {}, end: () => ended++,
   });
   api.observeView(); const previous = api.live();
   pathname = `${C}/document/_86_1`;

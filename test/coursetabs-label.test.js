@@ -14,12 +14,18 @@ test('generic term and section wrappers shorten invented course names without re
     'FA28-ZZ3456-001': 'ZZ 3456', 'ZZ3456.01 FA28': 'ZZ 3456',
     'Fall 2028 ZZ3456 Section 2': 'ZZ 3456', 'ZZ3456 (Spring 2028)': 'ZZ 3456',
     '2028FA ZZ3456 Sec 01': 'ZZ 3456', 'ZZ3456-001-2028FA': 'ZZ 3456',
+    '2028 ZZ3456-007': 'ZZ 3456', 'ZZ3456-007 2028': 'ZZ 3456', 'Q1010': 'Q 1010',
     'CS1010': 'CS 1010', 'History of Imaginary Cities': 'History of Imaginary Cities',
     'Imaginary Cities Section 2': 'Imaginary Cities', 'ZZ-101': 'ZZ-101',
     '202640': '202640', 'Spring 2028': 'Spring 2028', '99999': '99999',
   };
   assert.equal(typeof L.shortName, 'function');
   for (const [name, expected] of Object.entries(cases)) assert.equal(L.shortName(name), expected, name);
+});
+
+test('very long doubtful course names keep the full value without applying term expressions', () => {
+  const value = 'Title ' + '-'.repeat(50000) + 'X';
+  assert.equal(L.shortName(value), value);
 });
 
 test('nickname wins, explicit full/code choices remain, and the closed-tab note shares the display label', () => {
