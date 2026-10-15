@@ -785,3 +785,6 @@ synthetic Ultra, `test/fixtures/ultra-course.html`, and `scripts/ultra-tabs-chec
 
 - Buddy repaint timers and the hub check runtime identity directly, before using Chrome APIs or mutating their DOM.
   The core may not yet have observed a page mutation after the extension was reloaded.
+- Ultra's agenda shares `GZ_ULTRA.page.profile()` and `page.planned()` with Next due: this account's covered To Do copy
+  under ten minutes old, else the shared two-minute memo for that account and range. Failed reads can be retried, and
+  planner links use the page's own origin despite Ultra's CDN base. Canvas keeps its existing profile and day memo.
