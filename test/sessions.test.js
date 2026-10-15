@@ -37,8 +37,9 @@ const start = async (t) => {
 };
 const device = (url, { local = localArea({ [NK]: N.clean({}), [TK]: T.clean({}) }), db = database(), notes = notesDB() } = {}) => {
   let online = true, permission = true;
-  const d = { local, db, notes, online: (v) => { online = v; }, permission: (v) => { permission = v; }, requests: [] };
-  d.worker = S.make({ local, sync: localArea(), db, notes, relay: url, dev: true, permission: async () => permission,
+  const settings = localArea();
+  const d = { local, db, notes, settings, online: (v) => { online = v; }, permission: (v) => { permission = v; }, requests: [] };
+  d.worker = S.make({ local, sync: settings, db, notes, relay: url, dev: true, permission: async () => permission, offerLook: async (code) => { d.offered = code; return true; },
     fetch: (...args) => { d.requests.push(args[0]); if (!online) throw new Error('offline'); return fetch(...args); }, WebSocket });
   d.send = (op, rest = {}) => d.worker.handle({ op, ...rest });
   d.list = async () => (await d.send('list')).sessions;
@@ -60,6 +61,8 @@ test('optional switch: list/export/import are offline; permission, key reads and
   const key = G.exportKeys(G.create('collection'));
   await d.send('importKeys', { keys: [key] }).catch(() => {}); // another origin is refused even for a backup
   assert.equal(d.requests.length, 0);
+  await assert.rejects(d.send('create', { kind: 'notes', title: 'x', key: NK, ids: [crypto.randomUUID()] }), /missing/);
+  assert.equal(d.local.data.shareOn, undefined);
   d.permission(false);
   await assert.rejects(d.send('create', { kind: 'look', title: 'x' }), /permission/);
   assert.equal(d.local.data.shareOn, undefined);
@@ -124,7 +127,7 @@ test('disk relay: live doorbell catches changes while open and disconnect cancel
   assert.match((await b.send('read', { sid })).view[id].html, /live change/);
   disconnect(); await b.send('pause');
   const requests = b.requests.length;
-  await sync(b, sid);
+  await assert.rejects(sync(b, sid), /off/);
   assert.equal(b.requests.length, requests);
 });
 
@@ -196,4 +199,24 @@ test('session worker accepts only exact extension pages; an LMS or another exten
     assert.equal(r.error, 'sender');
   }
   assert.ok(!imported.includes('sharing.js'), 'refused callers do not even load the crypto dependency');
+});
+
+test('disk relay: custom tasks carry only cleaned task/plan fields; joined Looks never apply themselves', async (t) => {
+  const { url } = await start(t), a = device(url), b = device(url);
+  t.after(() => { a.worker.stop(); b.worker.stop(); });
+  a.local.data[TK] = T.clean({ tasks: [{ id: 'task1', title: 'Write essay', cid: '123', at: Date.now() }], items: { 'task:task1': { on: '2026-10-20', subs: [{ id: 'step', title: 'Outline', done: false }] } } });
+  const taskSession = await a.send('create', { kind: 'todo', title: 'Our work', key: TK, ids: ['task1'] });
+  const view = (await a.send('read', taskSession)).view;
+  assert.equal(view.task1.task.cid, '');
+  assert.equal(view.task1.plan.on, '2026-10-20');
+  await b.send('join', { link: (await a.send('link', { ...taskSession, edit: true })).link });
+  await b.send('attach', { ...taskSession, key: TK });
+  assert.equal(b.local.data[TK].tasks[0].title, 'Write essay');
+  assert.notEqual(b.local.data[TK].tasks[0].id, 'task1');
+  const lookSession = await a.send('create', { kind: 'look', title: 'Study Look' });
+  await b.send('join', { link: (await a.send('link', lookSession)).link });
+  assert.deepEqual(b.settings.data, {}, 'following never changes the theme');
+  await b.send('useLook', lookSession);
+  assert.ok(b.offered.startsWith('glaze1:'));
+  assert.deepEqual(b.settings.data, {}, 'Use this Look goes through the existing editor preview/apply contract');
 });

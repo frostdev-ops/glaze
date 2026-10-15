@@ -1673,4 +1673,15 @@
   "Hide folder: {title}": "Map verbergen: {title}",
   "Unhide folder: {title}": "Map tonen: {title}",
   "Show hidden folders ({n})": "Verborgen mappen tonen ({n})",
+  "Choose a name and items from one local account.": "Kies een naam en items uit één lokaal account.",
+  "Edit access": "Bewerktoegang",
+  "Invite copied. Keep it private.": "Uitnodiging gekopieerd. Houd deze privé.",
+  "Notes and share keys exported. Keep the backup private.": "Notities en deelsleutels geëxporteerd. Houd de back-up privé.",
+  "Notes and share keys imported locally. Resume to reconnect.": "Notities en deelsleutels lokaal geïmporteerd. Hervat om opnieuw te verbinden.",
+  "Paste an invite for https://share.frostdev.io.": "Plak een uitnodiging voor https://share.frostdev.io.",
+  "Session saved locally. Share an invite when it is up to date.": "Sessie lokaal opgeslagen. Deel een uitnodiging zodra deze is bijgewerkt.",
+  "Sharing is on while a shared surface is open.": "Delen is actief zolang een gedeelde weergave openstaat.",
+  "Sharing is paused. Create, join or resume to connect.": "Delen is gepauzeerd. Maak een sessie, neem deel of hervat om te verbinden.",
+  "View access": "Leestoegang",
+
 };

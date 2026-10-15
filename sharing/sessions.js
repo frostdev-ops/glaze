@@ -16,7 +16,7 @@
     if (busy) return;
     busy = true;
     try { await f(); if (!dead) await load(); }
-    catch { if (!dead) say('Could not finish. Your local copies are kept. Try again.', true); }
+    catch (e) { if (!dead) { say('Could not finish. Your local copies are kept. Try again.', true); if (e.ui) $('#status').textContent += ' ' + e.ui; } }
     finally { busy = false; }
   };
   const button = (key, f) => {
@@ -114,32 +114,54 @@
       if (!file) return;
       act(async () => {
         const cap = GZ_NOTES.LIMIT.total + (64 << 20);
-        if (file.size > cap) throw new Error('big');
-        const zip = GZ_DOCTEXT.unzip(new Uint8Array(await file.arrayBuffer()), { limits: { input: cap, entry: 64 << 20, total: cap, entries: 20000 } });
-        const json = await zip.text('notes.json');
-        const data = GZ_NOTES.parseExport(json, { site: new URL(key.slice(9)).origin });
+        if (file.size > cap) throw Object.assign(new Error('big'), { ui: t('That file is too big to import (up to {size}).', { size: Math.round(cap / 1048576) + ' MB' }) });
+        $('#status').textContent = t('Reading {name}…', { name: file.name });
+        let zip, json, data;
+        try {
+          zip = GZ_DOCTEXT.unzip(new Uint8Array(await file.arrayBuffer()), { limits: { input: cap, entry: 64 << 20, total: cap, entries: 20000 } });
+          json = await zip.text('notes.json');
+          data = GZ_NOTES.parseExport(json, { site: new URL(key.slice(9)).origin });
+        } catch { throw Object.assign(new Error('bad'), { ui: t("That isn't a notes export from Glaze, or it's damaged.") }); }
         const shareKeys = await zip.text('share-keys.json');
         if (shareKeys !== null && shareKeys !== undefined) await send('importKeys', { keys: JSON.parse(shareKeys) });
-        for (const f of data.files) {
+        for (const [i, f] of data.files.entries()) {
+          $('#status').textContent = t('Importing… {n} of {all}', { n: i + 1, all: data.files.length + data.notes.length });
           const bytes = await zip.bytes(f.path);
-          if (!bytes || bytes.length !== f.size) throw new Error('missing');
+          if (!bytes || bytes.length !== f.size) throw Object.assign(new Error('missing'), { ui: t('Left out: {names}', { names: f.name }) });
           const owner = data.notes.find((n) => GZ_NOTES.refs(n.html).has(f.id));
           if (owner) await send('notesFile', { key, file: { id: f.id, note: owner.id, kind: f.kind, name: f.name, data: GZ_NOTES.b64(bytes) } });
         }
-        await send('notesImport', { key, json });
+        const raw = JSON.parse(json);
+        let done = 0, skipped = 0;
+        for (let i = 0; i < data.notes.length || i === 0; i += 5) {
+          const r = await send('notesImport', { key, json: JSON.stringify({ format: raw.format, version: raw.version, site: raw.site, folders: data.folders, files: data.files, notes: data.notes.slice(i, i + 5) }) });
+          done += r.done; skipped += r.skipped;
+        }
         say('Notes and share keys imported locally. Resume to reconnect.');
+        $('#status').textContent += ' ' + t('Notes imported: {n}', { n: done }) + (skipped ? ' · ' + t('Skipped, already here and not older: {n}', { n: skipped }) : '');
       });
     });
     $('#export-notes').addEventListener('click', (e) => {
       if (!human(e)) return;
       act(async () => {
-        const r = await send('backupNotes', { key });
-        const data = r.data; for (const f of data.files) f.bytes = GZ_NOTES.unb64(f.data);
+        const r = await send('backupNotes', { key }).catch(() => { throw Object.assign(new Error('read'), { ui: t("Couldn't read your notes. Nothing was saved.") }); });
+        const data = r.data, seen = new Set();
+        for (const [i, n] of data.notes.entries()) {
+          $('#status').textContent = t('Exporting… {n} of {all}', { n: i + 1, all: data.notes.length });
+          const body = await send('notesRead', { key, id: n.id }).catch(() => { throw Object.assign(new Error('read'), { ui: t("Couldn't export “{title}”. Nothing was saved.", { title: n.title }) }); });
+          if (body.rev !== n.rev) throw new Error('changed'); // A mixed-revision archive is not a backup.
+          n.html = body.html;
+          for (const id of GZ_NOTES.refs(n.html)) if (!seen.has(id)) {
+            seen.add(id); const f = await send('notesGetFile', { key, id });
+            data.files.push({ id, ...f, bytes: GZ_NOTES.unb64(f.data) });
+          }
+        }
         const entries = GZ_NOTES.exportZip(data);
         entries.push({ name: 'share-keys.json', data: new TextEncoder().encode(JSON.stringify(data.keys, null, 2)), date: new Date() });
         const url = URL.createObjectURL(new Blob(GZ_ZIP.zip(entries), { type: 'application/zip' }));
         const a = make('a', undefined, { href: url, download: 'glaze-notes.zip' }); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
         say('Notes and share keys exported. Keep the backup private.');
+        $('#status').textContent += ' ' + t('Notes exported: {n}', { n: data.notes.length });
       });
     });
   }
@@ -147,6 +169,6 @@
   try { port = chrome.runtime.connect({ name: 'glaze:sessions' }); port.onMessage.addListener(() => { if (!busy) load().catch(() => say('Could not finish. Your local copies are kept. Try again.', true)); }); }
   catch { say('Could not finish. Your local copies are kept. Try again.', true); }
   addEventListener('pagehide', () => { dead = true; $('#invite').value = ''; port?.disconnect(); });
-  addEventListener('online', () => { if (!dead) load().catch(() => {}); });
+  addEventListener('online', () => { if (!dead) { port?.postMessage({ online: true }); load().catch(() => {}); } });
   load().catch(() => say('Could not finish. Your local copies are kept. Try again.', true));
 })();

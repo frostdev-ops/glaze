@@ -1673,4 +1673,15 @@
   "Hide folder: {title}": "Masquer le dossier : {title}",
   "Unhide folder: {title}": "Afficher le dossier : {title}",
   "Show hidden folders ({n})": "Afficher les dossiers masqués ({n})",
+  "Choose a name and items from one local account.": "Choisissez un nom et des éléments d’un seul compte local.",
+  "Edit access": "Accès en modification",
+  "Invite copied. Keep it private.": "Invitation copiée. Gardez-la privée.",
+  "Notes and share keys exported. Keep the backup private.": "Notes et clés de partage exportées. Gardez la sauvegarde privée.",
+  "Notes and share keys imported locally. Resume to reconnect.": "Notes et clés importées localement. Reprenez pour vous reconnecter.",
+  "Paste an invite for https://share.frostdev.io.": "Collez une invitation pour https://share.frostdev.io.",
+  "Session saved locally. Share an invite when it is up to date.": "Session enregistrée localement. Partagez une invitation une fois à jour.",
+  "Sharing is on while a shared surface is open.": "Le partage est actif tant qu’une vue partagée est ouverte.",
+  "Sharing is paused. Create, join or resume to connect.": "Partage en pause. Créez, rejoignez ou reprenez une session pour vous connecter.",
+  "View access": "Accès en lecture",
+
 };

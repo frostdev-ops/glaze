@@ -382,7 +382,7 @@ test('Export all settles the open note, then opens extension-only backup with no
   assert.ok(!P.sent.some((m) => m.type === 'glaze:sessions-open'));
   release.resolve(); await settle(60);
   assert.equal(P.blobs.length, 0, 'no key-bearing blob in the LMS world');
-  assert.deepEqual(P.sent.find((m) => m.type === 'glaze:sessions-open'), { type: 'glaze:sessions-open', key: 'notesIdx:https://school.instructure.com/5' });
+  assert.deepEqual(JSON.parse(JSON.stringify(P.sent.find((m) => m.type === 'glaze:sessions-open'))), { type: 'glaze:sessions-open', key: 'notesIdx:https://school.instructure.com/5' });
   const before = P.sent.length;
   P.fire(P.button('Import'), 'click', { trusted: false }); await settle();
   assert.equal(P.sent.length, before, 'a synthetic import does not open the extension surface');
