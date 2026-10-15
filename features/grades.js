@@ -186,6 +186,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   };
   const keep = (st) => {
     st.what = C.whatOf(st.rec);
+    // Not while Glaze 2.2's scores are moving in (migrate): a whole record written then would take them out again, so
+    // it's written once the move has answered, with them.
+    if (st.moving) return st.moving.then(() => keep(st));
     const rec = st.rec;
     return send({ op: 'course', key: st.key, cid: st.cid, rec: { s: rec.s, h: rec.h, p: rec.p } });
   };
@@ -197,8 +200,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // again is checked against it as rebuild does, so a grade that came in meanwhile takes its old score away, with a word.
   const migrate = (st, old, waiting) => {
     const cut = st.cut;
-    return send({ op: 'legacy', key: st.key, cid: st.cid, at: st.oldAt, seen: Object.fromEntries(Object.entries(old).map(([id, [v]]) => [id, v])), keep: waiting })
+    return (st.moving = send({ op: 'legacy', key: st.key, cid: st.cid, at: st.oldAt, seen: Object.fromEntries(Object.entries(old).map(([id, [v]]) => [id, v])), keep: waiting })
       .then((x) => {
+        st.moving = null;
         const add = (x?.ok ? x.moved || [] : []).filter((id) => old[id] && !(id in st.rec.s));
         if (st.cut !== cut || !add.length) return;
         const r = C.reconcile({ s: Object.fromEntries(add.map((id) => [id, old[id]])) }, st.course);
@@ -207,7 +211,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         if (r.gone.length) { st.open = true; keep(st); } else st.what = C.whatOf(st.rec);
         st.v++;
         whatIf();
-      });
+      }));
   };
 
   const whatIf = () => {
