@@ -749,4 +749,6 @@
   "Exam": "Prova",
   "Planned day": "Dia planejado",
   "Reminders and a streak on Canvas, if you turn them on. In the page only, never notifications.": "Lembretes e uma sequência no Canvas, se você ativar: só dentro da página, nunca como notificações.",
+  "Recent": "Recentes",
+  "Snoozed until {when}": "Adiado até {when}",
 };

@@ -63,7 +63,8 @@ _Last updated: 2026-10-15_
   minutes is how long that copy counts as fresh, not how long it is kept: it stays until the next fetch replaces it,
   or until Glaze is removed.
 - **Reminders and streak** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site
-  and signed-in user id: which reminders have been shown (so another tab doesn't show them again), the ones you
+  and signed-in user id: which reminders have been shown (so another tab doesn't show them again; while one tab is
+  showing one, a random id for that tab holds it for 30 seconds), the ones you
   snoozed and the items you muted, each with a time (dropped after a month; mutes after three months), and, with the
   streak on, the day your run started, your best, what a restore forgave and how many restores you used this month.
   It's kept apart from Canvas's own read and done state, which Glaze never changes. Nothing sends it anywhere, and

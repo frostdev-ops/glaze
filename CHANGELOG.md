@@ -81,10 +81,11 @@ All notable changes to Glaze are documented here. The format follows
     under reduced motion. Never on a quiz you're taking or a tool's page. No notifications permission, no badge, no sound.
   - What came due while no Canvas page was open shows once, as one toast that says how many more there are, not a pile;
     a reminder shown in one tab doesn't show in another.
-  - A hub (the bell in the To Do header, or Ctrl+K "Reminders") lists what's coming up, lets you mute an item and bring
-    it back, and has the settings.
+  - A hub (the bell in the To Do header, or Ctrl+K "Reminders") lists what's coming up, what was shown in the last
+    three days and what's snoozed, lets you mute an item and bring it back, and has the settings. A reminder counts
+    as shown only once a tab has drawn it: one that closes or goes quiet first leaves it for the next.
   - Streak: days in a row with nothing missed, and your best, in the To Do header. Work past due and not handed in, or
-    handed in late, ends a run; excused work and work with nothing to hand in never count. Two free restores a month
+    handed in late (ticked or not), ends a run; excused work and work with nothing to hand in never count. Two free restores a month
     put back a run. Never a guilt message.
   - One timer to the next reminder, set again when the page is shown and at most ten minutes long: no polling. It
     reuses Better To Do's planner copy. What's seen, snoozed, muted and the streak stay on this device, apart from

@@ -749,4 +749,6 @@
   "Exam": "Toets",
   "Planned day": "Geplande dag",
   "Reminders and a streak on Canvas, if you turn them on. In the page only, never notifications.": "Herinneringen en een reeks op Canvas, als je ze aanzet: alleen op de pagina, nooit als meldingen.",
+  "Recent": "Recent",
+  "Snoozed until {when}": "Uitgesteld tot {when}",
 };

@@ -100,13 +100,20 @@ test('missed while no page was open: one per item, newest first, once', () => {
   // Several items missed: the newest one shows, and the toast names the rest.
   const two = R.events({ rows: [row({ id: 1, at: NOW + 6e5, day: day('2026-10-15') }), row({ id: 3, at: NOW + 1.2e6, day: day('2026-10-15') })], cats, o: { ...O, h3: true }, tz: NY });
   assert.deepEqual(R.pending(two, st, NOW).show.map((e) => e.key), ['assignment:3', 'assignment:1']);
+  // The hub's recent list: every reminder the one toast stood for, not only the one it named, and the snoozed.
+  const shown = Object.fromEntries(R.pending(two, st, NOW).ids.map((id) => [id, NOW]));
+  assert.deepEqual(R.recent(two, { ...st, seen: shown }, NOW).map((e) => e.key), ['assignment:1', 'assignment:3']);
+  const snoozed = R.recent(two, { ...st, snooze: { [two[0].id]: NOW + 36e5 } }, NOW);
+  assert.deepEqual(snoozed.map((e) => [e.key, e.snoozed]), [['assignment:1', NOW + 36e5]]);
+  assert.deepEqual(R.recent(two, { ...st, seen: shown }, NOW + 4 * 864e5), [], 'three days');
+  assert.deepEqual(R.recent(two, { ...st, seen: shown, mute: { 'assignment:1': NOW } }, NOW).map((e) => e.key), ['assignment:3']);
   // The hub's list: what's still to fire.
   assert.deepEqual(R.upcoming(evs, { ...st, seen }, NOW).map((e) => [e.key, e.fires]), [['assignment:2', NOW + 864e5]]);
 });
 
 // ---- the streak ----
 const item = (id, due, sub = { submitted: false }, x = {}) => ({ type: 'assignment', id: String(id), cid: '5', course: 'Biology', title: `A${id}`, at: at(due), url: `/courses/5/assignments/${id}`, sub, ov: null, ...x });
-const built = (items, now = NOW, tz = NY, data) => T.build({ items, data, o: TODO, now, tz, cids: null });
+const built = (items, now = NOW, tz = NY, data, o = TODO) => T.build({ items, data, o, now, tz, cids: null });
 const today = T.dayOf(NOW, NY);
 
 test('streak: days in a row, and today counts once nothing due today is open', () => {
@@ -139,6 +146,20 @@ test('streak: a miss ends a run, excused never does, late work does, and work wi
   assert.equal(R.streak(built([], NOW, NY, task), st, today).broke, day('2026-10-13'));
 });
 
+test('streak: work with nothing to hand in that is due today never holds today back', () => {
+  const st = { start: today - 10, best: 0 };
+  const s = R.streak(built([item(1, '2026-10-16T03:59:00Z', null, { type: 'wiki_page' })]), st, today);
+  assert.deepEqual([s.extended, s.current], [true, 11]);
+});
+
+test('streak: a late hand-in ends a run whatever "done means"', () => {
+  const st = { start: today - 10, best: 0 };
+  const late = [item(1, '2026-10-13T03:59:00Z', { submitted: true, late: true })];
+  assert.equal(R.streak(built(late, NOW, NY, undefined, { ...TODO, done: 'manual' }), st, today).broke, day('2026-10-12'));
+  // Handed in on time but not ticked, with "only what I tick": nothing missed.
+  assert.equal(R.streak(built([item(1, '2026-10-13T03:59:00Z', { submitted: true })], NOW, NY, undefined, { ...TODO, done: 'manual' }), st, today).broke, null);
+});
+
 test('streak: days are the Canvas zone\'s', () => {
   // 11:30 PM Tuesday in New York is 5:30 AM Wednesday in Berlin. A run that started Wednesday: only Berlin's breaks.
   const items = [item(1, '2026-10-14T03:30:00Z')];
@@ -153,11 +174,25 @@ const area = (stored = {}) => {
 };
 const KEY = R.storeKey('https://canvas.test', '3');
 
-test('the worker: a reminder is claimed once across tabs, snoozed, muted', async () => {
+test('the worker: a reminder is leased to one tab, seen only once that tab showed it, and free again if it never did', async () => {
   const a = area();
   const id = `assignment:1@${NOW}`;
-  assert.deepEqual((await R.change({ key: KEY, op: 'claim', ids: [id, 'nonsense'] }, a, NOW)).claimed, [id]);
-  assert.deepEqual((await R.change({ key: KEY, op: 'claim', ids: [id] }, a, NOW)).claimed, []);
+  assert.deepEqual((await R.change({ key: KEY, op: 'claim', tab: 'a', ids: [id, 'nonsense'] }, a, NOW)).claimed, [id]);
+  assert.deepEqual(a.box[KEY].seen, {}, 'not seen until shown');
+  assert.deepEqual((await R.change({ key: KEY, op: 'claim', tab: 'b', ids: [id] }, a, NOW)).claimed, []);
+  // Tab a closed (or went quiet) without showing it: once the lease runs out, b may.
+  const later = NOW + R.LEASE + 1;
+  assert.deepEqual((await R.change({ key: KEY, op: 'claim', tab: 'b', ids: [id] }, a, later)).claimed, [id]);
+  await R.change({ key: KEY, op: 'confirm', tab: 'a', ids: [id] }, a, later);
+  assert.deepEqual(a.box[KEY].seen, {}, "a's late confirm doesn't take b's lease");
+  await R.change({ key: KEY, op: 'confirm', tab: 'b', ids: [id] }, a, later);
+  assert.deepEqual([a.box[KEY].seen, a.box[KEY].held], [{ [id]: later }, {}]);
+  assert.deepEqual((await R.change({ key: KEY, op: 'claim', tab: 'a', ids: [id] }, a, later)).claimed, []);
+  // What the page reckons: another tab's lease waits until it runs out; its own doesn't.
+  const ev = [{ id, key: 'assignment:1', at: NOW - 1, until: NOW + 864e5 }];
+  const st = R.clean({ held: { [id]: { by: 'a', until: NOW + R.LEASE } } }, NOW);
+  assert.deepEqual([R.pending(ev, st, NOW, 'b').show.length, R.pending(ev, st, NOW, 'b').next], [0, NOW + R.LEASE]);
+  assert.equal(R.pending(ev, st, NOW, 'a').show.length, 1);
   await R.change({ key: KEY, op: 'snooze', id, until: NOW + 36e5 }, a, NOW);
   assert.deepEqual([a.box[KEY].seen, a.box[KEY].snooze], [{}, { [id]: NOW + 36e5 }]);
   await R.change({ key: KEY, op: 'mute', item: 'assignment:1' }, a, NOW);
@@ -200,8 +235,8 @@ test('clean: what storage or a page hands over is checked, and old entries go', 
     restores: { month: 'soon', n: 1 },
   }, NOW);
   assert.deepEqual(c, {
-    seen: { [`assignment:1@${NOW}`]: NOW }, snooze: { [`task:a@${NOW}`]: NOW + 1 }, mute: { 'assignment:1': NOW },
+    seen: { [`assignment:1@${NOW}`]: NOW }, snooze: { [`task:a@${NOW}`]: NOW + 1 }, held: {}, mute: { 'assignment:1': NOW },
     streak: { start: 100, best: 0, was: null, keys: ['assignment:1'], ok: [], broke: null }, restores: null,
   });
-  assert.deepEqual(R.clean(null, NOW), { seen: {}, snooze: {}, mute: {}, streak: null, restores: null });
+  assert.deepEqual(R.clean(null, NOW), { seen: {}, snooze: {}, held: {}, mute: {}, streak: null, restores: null });
 });

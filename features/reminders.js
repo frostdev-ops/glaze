@@ -22,6 +22,8 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   let T = null, R = null, who = null, todoKey = '', key = '';
   let todoO = null, o = null, data = { tasks: [], items: {} }, cache = null, st = null, cids = null;
   let on = false, starting = null, asking = null, failed = 0, timer = 0, writing = false, sig = '';
+  let busy = false, wait = 0; // a claim in flight; no new one before wait (the worker didn't answer)
+  const tab = crypto.randomUUID(); // this page, to the worker's leases (lib/remind.js claim and confirm)
   let live = null, hub = null, opener = null, run = null; // run: the streak as reckoned last
   const sources = new Map(); // reminders other packages add (class start W14, study W18): name -> () => events
 
@@ -72,9 +74,12 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     if (!(cache?.key === todoKey && cache.at > best.at)) cache = best;
     arm();
   };
+  // The To Do list and the card tasks ask for themselves on the pages they run on, if they're on: by their settings, not
+  // by whether they've drawn yet (content.js todoHere, cardsHere), so a page that's still starting isn't asked twice.
+  const theyAsk = () => { const e = en(), p = location.pathname; return (e.todo && /^\/(courses\/\d+\/?)?$/.test(p)) || (e.cardTasks && p === '/'); };
   const refresh = () => {
     const now = Date.now();
-    if (!on || !T || asking || now - failed < 6e4 || (cache && now - cache.at < OLD) || document.querySelector('#gz-todo, .gz-ct')) return;
+    if (!on || !T || asking || now - failed < 6e4 || (cache && now - cache.at < OLD) || theyAsk()) return;
     asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; });
   };
 
@@ -96,19 +101,33 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     if (en().streak && cache) keepStreak(b, now);
     paintHead();
     if (hub) drawHub();
-    const p = reminding() ? R.pending(evs, st, now) : { show: [], next: Infinity };
-    if (p.show.length && !quiet()) fire(p);
-    const next = Math.min(p.next, en().streak ? T.midnight(T.dayOf(now, who.tz) + 1, who.tz) : Infinity);
+    const p = reminding() ? R.pending(evs, st, now, tab) : { show: [], next: Infinity };
+    if (p.show.length && !quiet() && !busy && now >= wait) fire(p);
+    const next = Math.min(p.next, wait > now ? wait : Infinity, en().streak ? T.midnight(T.dayOf(now, who.tz) + 1, who.tz) : Infinity);
     if (next < Infinity) timer = setTimeout(arm, Math.max(1000, Math.min(next - now, OLD)));
   };
-  // Every tab may have the same reminder due: the one whose claim the worker takes first shows it.
-  const fire = (p) => send({ op: 'claim', ids: p.ids }).then((r) => {
-    if (!r?.ok || !on) return;
-    st = R.clean(r.data);
-    const mine = new Set(r.claimed);
-    const show = p.show.filter((e) => mine.has(e.id));
-    if (show.length) toast(show[0], p.show.length - 1);
-  });
+  // Every tab may have the same reminder due: the one whose claim the worker takes first holds it, shows it, and then
+  // confirms it, which marks it seen. Whether this tab may show anything is asked again once the worker answers: hidden
+  // by then, on a quiz, or turned off, it shows nothing and confirms nothing, and the lease runs out for this tab or
+  // another to show it later. A worker that doesn't answer is asked again after a lease's length, not at once.
+  const fire = (p) => {
+    busy = true;
+    let ok = false;
+    return send({ op: 'claim', ids: p.ids, tab }).then((r) => {
+      if (!r?.ok) return;
+      st = R.clean(r.data);
+      ok = true;
+      const mine = new Set(r.claimed);
+      const show = p.show.filter((e) => mine.has(e.id));
+      if (!show.length || !on || quiet()) return;
+      toast(show[0], p.show.length - 1);
+      return send({ op: 'confirm', ids: [...mine], tab }).then((c) => { if (c?.ok) st = R.clean(c.data); else ok = false; });
+    }).finally(() => {
+      busy = false;
+      if (!ok) wait = Date.now() + R.LEASE;
+      if (on) arm();
+    });
+  };
   const keepStreak = (b, now) => {
     const s = R.streak(b, st.streak, T.dayOf(now, who.tz));
     run = s;
@@ -220,6 +239,19 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
           return make('li', {}, make('span', { className: 'gz-rm-at', textContent: when(e.fires, now).abs }),
             make('span', { className: 'gz-rm-main' }, make('span', { className: 'gz-rm-kind', textContent: t(KIND[e.cat] || 'Reminder') }), make('span', { textContent: e.title })), mute);
         })) : make('p', { className: 'gz-rm-desc', textContent: t('No reminders coming up.') })));
+      // What toasts stood for lately (one names an item and counts the rest) and what's snoozed: all of it, here.
+      const back = R.recent(evs, st, now).slice(0, 30);
+      if (back.length) {
+        parts.push(make('section', {}, make('h3', { textContent: t('Recent') }), make('ul', { className: 'gz-rm-list' }, ...back.map((e) => {
+          const mute = button(t('Mute'), 'mute', t('Mute reminders for {title}', { title: e.title }));
+          mute.dataset.item = e.key;
+          mute.dataset.focus = `recent ${e.key}`;
+          const at = e.snoozed ? t('Snoozed until {when}', { when: when(e.snoozed, now).abs }) : when(e.seen, now).abs;
+          return make('li', {}, make('span', { className: 'gz-rm-at', textContent: at }),
+            make('span', { className: 'gz-rm-main' }, make('span', { className: 'gz-rm-kind', textContent: what(e, now) }),
+              e.url ? make('a', { href: e.url, textContent: e.title }) : make('span', { textContent: e.title })), mute);
+        }))));
+      }
       const muted = Object.keys(st.mute).filter((k) => titles.has(k));
       if (muted.length) {
         parts.push(make('section', {}, make('h3', { textContent: t('Muted') }), make('ul', { className: 'gz-rm-list' }, ...muted.map((k) => {
