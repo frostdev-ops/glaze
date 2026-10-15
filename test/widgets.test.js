@@ -405,3 +405,8 @@ test("change: the worker's side reads what is stored, applies the change, and st
   assert.deepEqual(r.layout, store.widgetLayout);
   assert.deepEqual(await W.change({ ops: [] }, { get: async () => ({}), set: async () => false }), { ok: false, error: 'write' });
 });
+
+
+test('global floats taller than the available room use the bounded scrolling stack', () => {
+  assert.equal(W.floating([{ id: 'notes', x: 0, y: 0 }], { notes: { w: 288, h: 240 } }, 900, 200).stack, true);
+});
