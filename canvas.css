@@ -289,10 +289,52 @@ html[data-gz-font-mono] :is(code, pre, kbd, samp, .keycode) { font-family: var(-
 #header .ic-avatar { border-color: var(--gz-line-strong); }
 #header .ic-app-header__menu-list-item--active .ic-avatar { border-color: var(--gz-accent); }
 /* The logomark is white, drawn for Canvas's dark rail: dark on a light palette, hues kept. */
-html:not([data-gz-dark-theme]) #header .ic-app-header__logomark { filter: invert(1) hue-rotate(180deg); }
+html:not([data-gz-dark-theme]):not([data-gz-nav]) #header .ic-app-header__logomark { filter: invert(1) hue-rotate(180deg); }
 #skip_navigation_link { background: var(--gz-accent); color: var(--gz-accent-ink); }
 /* The unread count: Canvas makes it white and fills it in later, which the sweep can catch in between. */
 #header .menu-item__badge { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
+
+/* A chosen rail style stays behind Canvas's own links, icons, trays and skip link. */
+html[data-gz-nav] #header { isolation: isolate; background: var(--gz-nav-c); }
+html[data-gz-nav="gradient"] #header { background: var(--gz-nav-grad); }
+html[data-gz-nav="image"] #header::before,
+html[data-gz-nav="image"] #header::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+html[data-gz-nav="image"] #header::before {
+  z-index: -2; background: var(--gz-nav-img) var(--gz-nav-pos) / cover no-repeat;
+  filter: var(--gz-nav-filter); transform: scale(var(--gz-nav-zoom));
+}
+html[data-gz-nav="image"] #header::after { z-index: -1; background: var(--gz-nav-ov); opacity: var(--gz-nav-ov-a); }
+html[data-gz-nav] #header .ic-app-header__menu-list-link,
+html[data-gz-nav] #header .ic-app-header__menu-list-link :is(.menu-item__text, .menu-item-icon-container, .ic-icon-svg) { color: var(--gz-nav-ink) !important; }
+html[data-gz-nav] #header .ic-icon-svg { fill: currentColor; }
+html[data-gz-nav] #header .ic-app-header__menu-list-link:is(:hover, :focus, :active),
+html[data-gz-nav] #header .ic-app-header__menu-list-item--active > .ic-app-header__menu-list-link { background: transparent; }
+html[data-gz-nav] #header .ic-app-header__menu-list-link:is(:hover, :focus) .menu-item__text { text-decoration: underline; }
+html[data-gz-nav] #header .ic-app-header__menu-list-link:focus { box-shadow: inset 0 0 0 2px var(--gz-nav-ink); }
+html[data-gz-nav] #header .ic-app-header__menu-list-item--active > a::before { background: var(--gz-nav-ink); box-shadow: none; }
+html[data-gz-nav-collapsed] #primaryNavToggle .ic-icon-svg--navtoggle { transform: none; }
+html[dir="rtl"][data-gz-nav-collapsed] #primaryNavToggle .ic-icon-svg--navtoggle { transform: rotate(180deg); }
+html[data-gz-nav-no-logo] #header .ic-app-header__logomark-container { display: none; }
+html[data-gz-nav-size] { --gz-nav-wide: 84px; --gz-nav-narrow: 54px; --gz-nav-icon: 26px; }
+html[data-gz-nav-size="small"] { --gz-nav-wide: 72px; --gz-nav-narrow: 48px; --gz-nav-icon: 22px; }
+html[data-gz-nav-size="large"] { --gz-nav-wide: 100px; --gz-nav-narrow: 64px; --gz-nav-icon: 30px; }
+@media (min-width: 768px) {
+  html[data-gz-nav-size] body:not(.hide-global-nav) { --gz-nav-width: var(--gz-nav-wide); }
+  html[data-gz-nav-size] body:not(.primary-nav-expanded) { --gz-nav-width: var(--gz-nav-narrow); }
+  html[data-gz-nav-collapsed] body { --gz-nav-width: var(--gz-nav-narrow) !important; }
+  html[data-gz-nav-size] body:not(.hide-global-nav) #header { width: var(--gz-nav-width); overflow-y: auto; overflow-x: hidden; }
+  html[data-gz-nav-size] body:not(.hide-global-nav) #wrapper,
+  html[data-gz-nav-size] body:not(.hide-global-nav) .tray-with-space-for-global-nav { margin-inline-start: var(--gz-nav-width); }
+  html[data-gz-nav-size] #header .ic-app-header__main-navigation { flex: 1 0 auto; }
+  html[data-gz-nav-size] #header .ic-app-header__secondary-navigation { position: static; width: auto; }
+  html[data-gz-nav-size] #header .menu-item-icon-container :is(svg, .ic-avatar) { width: var(--gz-nav-icon); height: var(--gz-nav-icon); }
+  html[data-gz-nav-labels="small"] #header .menu-item__text { display: block; font-size: 10px; line-height: 1.2; }
+  html:is([data-gz-nav-collapsed], [data-gz-nav-labels="icons"]) #header .menu-item__text {
+    display: block; position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  html:is([data-gz-nav-collapsed], [data-gz-nav-labels="icons"]) #header .ic-app-header__menu-list-link { position: relative; min-height: 40px; box-sizing: border-box; }
+
+}
 
 /* ---- breadcrumbs: the bar above a page, glass like the rail ---- */
 #application .ic-app-nav-toggle-and-crumbs {

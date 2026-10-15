@@ -31,6 +31,7 @@ domain, and on Canvas, which Glaze recognizes on any school's domain.
 - **Looks** — ten ready-made combinations (Graveyard and Pumpkin Patch are for Halloween) of palette, fonts, shape and background, one click each in the popup or the editor, or one for a single course.
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
+- **Canvas sidebar** — style Canvas's own navigation with a solid color, gradient or picture, filters and an overlay; choose text and icon colors, labels and size, hide the institution logo or collapse the rail. Every native link stays reachable. The editor warns about low contrast; local pictures share the course-card storage limits and stay on this device. Theme codes carry linked pictures only. Canvas only.
 - **Canvas course cards** — each Dashboard card its own color, gradient or picture (a link, or a file kept on your computer) with filters, focus, zoom and overlay; bookmarks as icons on the card; card width, spacing, corners, picture height and a condensed layout; hover effects, particles and a cat or bunny on your first card; an optional create button. The card editor warns, with the measured ratio, when text on a card would be hard to read. Fonts can be searched.
 - **Looks gallery** — free Looks shared openly at [frostdev.io/glaze/looks](https://frostdev.io/glaze/looks). Use this Look in Glaze opens it in the editor's preview; save favorites, and go back with Previous Look from a history of the themes you wore. Both stay on your device.
 - **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
@@ -205,7 +206,7 @@ marks it done or not done in your own Canvas planner, as Canvas's List View does
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards; on Canvas a course's assignment groups when you use its what-if calculator;
 your course list and a course's items for the command palette and new-content badges), to Google Fonts or jsDelivr for a web
-font you choose, and to a background image or course card picture you choose. For Canvas Download all, the extension's background worker
+font you choose, and to a background image, course card picture or sidebar picture you choose. For Canvas Download all, the extension's background worker
 fetches signed file links from your school's file host without cookies. Links and file bytes stay in memory while
 Glaze makes the zip; they are not saved in extension storage. The downloaded Mac app also checks
 `https://frostdev.io/projects/glaze/appcast.xml` about once a day and downloads updates from GitHub,

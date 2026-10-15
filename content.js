@@ -765,6 +765,7 @@
     tagExtras([document.body]);
     watchDrafts();
     syncCourseMenu();
+    syncNav();
     if (!ultra) renderProgress();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
@@ -948,7 +949,7 @@
     if (hinted && titled && !titled.contains(hinted[0])) hinted = null;
     if (hinted && hinted[0] === tipFor) return;
     // Canvas: a title that only repeats the text beside it, uncut.
-    if (!ultra && titled && !hinted && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
+    if (!ultra && titled && !hinted && !titled.closest('#header') && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
     hideTip();
     const text = titled?.getAttribute('title')?.trim();
     if (titled && !text && !hinted) return;
@@ -2412,7 +2413,13 @@
     if (u.protocol === 'https:' || u.protocol === 'http:') location.assign(u.href);
   };
   const pages = () => (ultra ? TOOLS : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
-  const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
+  const store = (patch) => async () => {
+    try {
+      const { nav, ...rest } = patch;
+      if (nav && !(await chrome.runtime.sendMessage({ type: 'glaze:nav', nav }))?.ok) return;
+      await chrome.storage.sync.set({ version: 2, ...rest });
+    } catch { /* extension reloaded under the tab */ }
+  };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
     const title = new Map(all.map((c) => [c.id, c.title]));
     return all.filter((c) => c.links?.[0]?.href).map((c) => ({ label: c.title, hint: title.get(c.parentId) || '', group: 'In this course', run: go(c.links[0].href.replace(/^https?:\/\/[^/]+/, '')) }));
@@ -2435,6 +2442,7 @@
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
       ...Object.entries(ultra ? EXTRAS : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
       { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
+      ...(!ultra ? [{ label: t('Canvas sidebar'), hint: t('Opens the editor'), group: 'Glaze', run: () => chrome.runtime.sendMessage('options').catch(() => {}) }] : []),
       { label: t('Glaze settings'), hint: t('Opens the editor'), group: 'Glaze', run: () => { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } },
     ];
   };
@@ -3228,6 +3236,30 @@
   };
   if (!ultra) addEventListener('pagereveal', (e) => { if (e.viewTransition) setAttr('data-gz-vt-in', true); });
 
+  const paintNav = (n, picture) => {
+    if (ultra) return;
+    for (const k of ['size', 'labels']) setAttr(`data-gz-nav-${k}`, n[k]);
+    setAttr('data-gz-nav-collapsed', n.collapsed);
+    setAttr('data-gz-nav-no-logo', !n.logo);
+    setVar('--gz-nav-ink', n.ink);
+    setVar('--gz-nav-c', n.c);
+    setVar('--gz-nav-img', 'none');
+    let src = n.u;
+    if (n.i && picture) src = picture;
+    else if (n.i) try {
+      const p = JSON.parse(sessionStorage.getItem('gz-nav-picture'));
+      src = p?.id === n.i && typeof p.src === 'string' && p.src.length <= 400000 && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/.test(p.src) ? p.src : '';
+    } catch { src = ''; }
+    const p = GZ_STYLE_PAINT(n.k === 'image' && !src ? { ...n, k: 'solid' } : n, src, 'nav');
+    setAttr('data-gz-nav', p?.kind || false);
+    if (p) for (const [k, v] of Object.entries(p.vars)) setVar(k, v);
+  };
+  const syncNav = () => {
+    if (ultra || isPreview) return;
+    if (worn.nav.i || worn.nav.collapsed || worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
+    else globalThis.GZ_NAV_UI?.sync();
+  };
+
   const applySettings = () => {
     looked = lookHere();
     const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey()) : settings);
@@ -3285,6 +3317,7 @@
     for (const f of [s.look.font, s.look.head, s.look.mono]) GZ_FONTS.load(f);
     setAttr('data-gz-density', s.look.density);
     setAttr('data-gz-depth', String(s.look.depth));
+    paintNav(s.nav);
     // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
     const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
@@ -3313,7 +3346,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncNav(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -3440,12 +3473,13 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     stopScene();
     stopSweep();
     clearSettings();
+    globalThis.GZ_NAV_UI?.sync();
     syncDocTools();
     syncFooter();
   };
 
   // The helpers a file loaded by need() may use (Wave 1's features/*.js): this frame's, read through one name.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, on: () => !!observer });
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => paintNav(worn.nav, src), on: () => !!observer });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.

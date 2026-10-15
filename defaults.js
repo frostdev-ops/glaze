@@ -29,6 +29,20 @@ const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], [
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
 // 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM"). GZ_SANITIZE walks this.
+// Cards and the Canvas rail paint the same kinds of style, including their image filters.
+const GZ_STYLE_FILTERS = {
+  none: '', vivid: 'saturate(1.6) contrast(1.08)', mono: 'grayscale(1)', noir: 'grayscale(1) contrast(1.45) brightness(0.85)',
+  warm: 'sepia(0.35) saturate(1.35) hue-rotate(-10deg)', cool: 'saturate(0.8) hue-rotate(12deg) brightness(1.05)',
+  faded: 'contrast(0.78) saturate(0.7) brightness(1.12)', dreamy: 'blur(1.5px) saturate(1.25) brightness(1.08)',
+};
+const GZ_STYLE_PAINT = (s, src, scope = 'card') => {
+  if (!s || !['solid', 'gradient', 'image'].includes(s.k) || (s.k === 'image' && !src)) return null;
+  const values = s.k === 'solid' ? { c: s.c } : s.k === 'gradient'
+    ? { c: s.c, grad: `linear-gradient(${s.a ?? 135}deg, ${s.c}, ${s.d})` }
+    : { img: `url("${src}")`, pos: `${s.x ?? 50}% ${s.y ?? 50}%`, zoom: String((s.z ?? 100) / 100),
+      filter: (Object.hasOwn(GZ_STYLE_FILTERS, s.f) && GZ_STYLE_FILTERS[s.f]) || 'none', ov: s.c || 'var(--gz-course)', 'ov-a': String((s.o ?? 60) / 100) };
+  return { kind: s.k, vars: Object.fromEntries(Object.entries(values).map(([k, v]) => [`--gz-${scope}-${k}`, v])) };
+};
 const GZ_SPEC = {
   auto: { on: [false, 'bool'], mode: ['device', ['device', 'schedule']], from: ['20:00', 'time'], to: ['08:00', 'time'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
@@ -53,6 +67,11 @@ const GZ_SPEC = {
     // hard bands) and spread (how much of the screen the change of color covers, in %).
     style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
     scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins']], intensity: [50, [0, 100]],
+  },
+  nav: {
+    k: ['default', ['default', 'solid', 'gradient', 'image']], c: ['#243447', 'hex'], d: ['#57748c', 'hex'], a: [135, [0, 360]],
+    u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', Object.keys(GZ_STYLE_FILTERS)], ink: ['#ffffff', 'hex'],
+    logo: [true, 'bool'], labels: ['normal', ['normal', 'small', 'icons']], size: ['medium', ['small', 'medium', 'large']], collapsed: [false, 'bool'],
   },
   motion: {
     level: ['subtle', ['off', 'subtle', 'expressive']],
@@ -207,6 +226,8 @@ const cleanNicks = (raw, room) => {
 
 const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
+  if (rule === 'hex') return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : d;
+  if (rule === 'picture') return typeof v === 'string' && /^[a-z0-9]{12}$/.test(v) ? v : d;
   if (rule === 'time') return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : d;
   if (rule === 'name') return cleanName(v) || d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];
@@ -277,12 +298,13 @@ const GZ_LOOK_APPLY = (s, L) => ({
   auto: { ...s.auto, on: false },
   look: { ...GZ_DEFAULTS.look, tooltips: s.look.tooltips, hints: s.look.hints, ...L.look },
   bg: { ...GZ_DEFAULTS.bg, image: s.bg.image, ...L.bg },
+  ...(L.nav && { nav: GZ_SANITIZE({ nav: { ...L.nav, i: '' } }).nav }),
 });
 // Whether `s` is wearing look L as it was applied.
 const GZ_LOOK_ON = (s, L) => {
   const want = GZ_LOOK_APPLY(s, L);
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  return !s.auto.on && same(s.colors, want.colors) && Object.keys(want.look).every((k) => same(s.look[k], want.look[k])) && Object.keys(want.bg).every((k) => same(s.bg[k], want.bg[k]));
+  return !s.auto.on && same(s.colors, want.colors) && Object.keys(want.look).every((k) => same(s.look[k], want.look[k])) && Object.keys(want.bg).every((k) => same(s.bg[k], want.bg[k])) && (!want.nav || same(s.nav, want.nav));
 };
 // The settings to paint on course `cid`'s pages: its own look (courses.looks) over `s`, or `s` itself.
 const GZ_COURSE_LOOK = (s, cid) => {
@@ -519,5 +541,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_STYLE_FILTERS, GZ_STYLE_PAINT, GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }
