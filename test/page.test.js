@@ -337,6 +337,14 @@ test('Canvas progress counts Complete One Item alternatives as one requirement',
   ]), { done: 2, total: 4 });
 });
 
+test('Canvas progress is unknown for omitted item lists or a full modules page', () => {
+  const mod = { items: [{ completion_requirement: { completed: true } }] };
+  assert.equal(P.canvasProgress([mod, { items_count: 101 }]), null);
+  assert.equal(P.canvasProgress(Array(100).fill(mod)), null);
+  assert.deepEqual(P.canvasProgress(Array(99).fill(mod)), { done: 99, total: 99 });
+  assert.deepEqual(P.canvasProgress([{ items: [] }]), { done: 0, total: 0 });
+});
+
 test('your place in a course: the latest 30 courses, the last 100 open folders each', () => {
   const all = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`_${i}_1`, { open: [], top: 0, at: 1000 + i }]));
   all.junk = null;

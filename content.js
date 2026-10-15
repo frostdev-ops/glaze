@@ -841,7 +841,7 @@
   // course sets, done or not as Canvas's own API has them for this student (asked once a page), above the
   // Modules list, also on a course home that shows it. A course that sets none gets no bar: Canvas calls
   // a module without requirements "completed", and it hides that itself, as nothing there was asked of you.
-  let reqs = null; // Canvas: { cid, done, total }, done and total once known
+  let reqs = null; // Canvas: { cid, progress: { done, total } | null }, null when the whole total isn't known
   const canvasProgress = () => {
     const old = document.getElementById('gz-progress');
     const cid = canvasCourseId();
@@ -849,16 +849,15 @@
     if (!list) return old?.remove();
     if (reqs?.cid !== cid) {
       const r = (reqs = { cid });
-      // ponytail: one page of 100 modules, and Canvas leaves a module's items out past its inline limit;
-      // follow the Link header and items_url if a course ever has that many.
+      // shortcut: hide incomplete module lists; follow Link and items_url if large-course progress is needed.
       capi(`/courses/${cid}/modules?include[]=items&per_page=100`).then((mods) => {
-        Object.assign(r, GZ_PAGE.canvasProgress(mods));
+        r.progress = GZ_PAGE.canvasProgress(mods);
         if (reqs === r) renderProgress();
       }).catch(() => {});
       return;
     }
-    if (!reqs.total) return old?.remove();
-    drawProgress(old, reqs.done, reqs.total, list);
+    if (!reqs.progress?.total) return old?.remove();
+    drawProgress(old, reqs.progress.done, reqs.progress.total, list);
   };
   const renderProgress = () => {
     if (!ultra) return canvasProgress();
