@@ -1463,7 +1463,8 @@
       for (const [i, f] of found.entries()) {
         say(t('{i} of {n} · Cancel', { i: i + 1, n: found.length }), (i / found.length) * 100);
         const r = await fetch(f.url, { credentials: 'same-origin', ...(ultra ? {} : { mode: 'same-origin' }), signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
-        if (!r?.ok) { failed += 1; continue; }
+        // Canvas can redirect an expired session to a successful HTML login page.
+        if (!r?.ok || (!ultra && /^\/login(?:\/|$)/.test(new URL(r.url).pathname))) { failed += 1; continue; }
         const data = new Uint8Array(await r.arrayBuffer());
         bytes += data.length;
         if (bytes > MAX_ZIP) throw tooBig(t('Too big: over {max}', { max: mb(MAX_ZIP) }));
