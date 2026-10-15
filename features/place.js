@@ -54,7 +54,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
     setTimeout(canvasBack, 200);
   };
   const canvasPlace = () => {
-    const cid = window.top === window && ctx.on() && canvasCourseKey();
+    const cid = ctx.solo && ctx.on() && canvasCourseKey();
     if (!cid) return;
     // An item opened from Modules, or with its Next and Previous buttons, carries its module item id.
     const item = new URLSearchParams(location.search).get('module_item_id');
@@ -72,10 +72,13 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
       canvasBack();
     }));
   };
+  // While a place is being put back (data-gz-placing): a course tab's frame waits for it before it shows (features/coursetabs.js).
+  const placing = (on) => document.documentElement.toggleAttribute('data-gz-placing', on);
   const backTo = () => {
     const p = place;
     const b = p?.back;
-    if (!b) return;
+    if (!b) return placing(false);
+    placing(true);
     const rows = outlineRows(p.cid);
     if (!rows.length) { p.back = null; return; }
     if (b.ready && !ctx.holding()) {
@@ -109,7 +112,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
   const sync = () => {
     if (!ctx.settings().enhance.place) { place = null; return; }
     if (!ultra) return canvasPlace();
-    const cid = window.top === window && ctx.on() && courseId();
+    const cid = ctx.solo && ctx.on() && courseId();
     const rows = cid ? outlineRows(cid) : [];
     if (!rows.length) { if (place) place.away = true; return; }
     if (!place || place.away || place.cid !== cid) {
@@ -166,7 +169,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
     }, 500);
   }, { capture: true, passive: true });
   // Anything you do first ends putting your place back.
-  const stop = () => { if (place) place.back = null; };
+  const stop = () => { if (place) place.back = null; placing(false); };
   return { sync, stop };
 })();
 

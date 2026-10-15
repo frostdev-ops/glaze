@@ -2,7 +2,7 @@
 // Listed before content.js for /ultra pages (and in the options preview); content.js calls it with its helpers and live
 // state (I) and puts what it returns over its defaults (X). A second copy keeps the first; it ends on its value (loadable).
 var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
-  const { C, html, isPreview, need, t, locale, api, courseId, markDue, drawProgress, cardBadge, cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled } = I;
+  const { C, html, isPreview, solo, tabFrame, need, t, locale, api, courseId, markDue, drawProgress, cardBadge, cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled } = I;
 
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
@@ -39,7 +39,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Planning (features/todo.js…), as Canvas's part: lib/ultra.js reads; each file loaded once on, asked again as it lands.
   const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
-  const top = () => I.links.length && window.top === window && I.settings.enhance;
+  const top = () => I.links.length && solo && I.settings.enhance;
   const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
   const syncRemind = () => load(() => ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
@@ -239,7 +239,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const renderNew = () => {
     if (globalThis.GZ_CTABS?.showing?.()) return;
     const { newgrades, newcontent } = I.settings.enhance;
-    if (!(newgrades || newcontent) || window.top !== window || !I.observer) return;
+    if (!(newgrades || newcontent) || !solo || !I.observer) return;
     if (!seen) return loadSeen();
     const cid = courseId();
     if (newcontent && cid) renderItems(cid);
@@ -343,7 +343,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const loadIf = (want, f, name, run) => (globalThis[name] || (I.observer && want)) && need(`features/${f}.js`, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
   const onPath = (re) => re.test(location.pathname);
   const renderCalc = () => { const e = I.settings.enhance; loadIf((e.calc && onPath(/^\/ultra\/courses\/_\d+_\d+\/grades/)) || (e.gpa && onPath(/^\/ultra\/grades\/?$/)), 'grades', 'GZ_GRADES_UI', (g) => g.render()); };
-  const sylHere = () => window.top === window && I.settings.enhance.syllabus && onPath(/^\/ultra\/courses\/_\d+_\d+\/outline/);
+  const sylHere = () => solo && I.settings.enhance.syllabus && onPath(/^\/ultra\/courses\/_\d+_\d+\/outline/);
   const syncSyl = () => loadIf(sylHere(), 'syllabus', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
   const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
@@ -367,7 +367,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
     if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);
     if (from && top()?.dashboard) { const f = from; from = ''; if (/^\/ultra(\/(stream|course))?\/?$/.test(f)) need('features/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => GZ_DASH_UI.land(f), () => {}); }
-    if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
+    if (solo && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
   };
   if (window.top === window) try {
     const epoch = floatEpoch;
@@ -378,7 +378,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // ---- course tabs: features/coursetabs.js (after lib/coursetabs.js), in the top frame and the preview -------------
   // Until it's in, extras.css holds the strip's place from data-gz-ctabs (paintCourses): the place and size it last had in
   // this browser tab, else the defaults; gate hands it Ultra's new top bar before that is painted.
-  const tabsOn = () => !!I.links.length && (isPreview || window.top === window) && I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.();
+  const tabsOn = () => !!I.links.length && (isPreview || solo) && I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.();
   const syncTabs = () => (tabsOn() ? need('lib/coursetabs.js', () => globalThis.GZ_CTABS_LIB).then(() => need('features/coursetabs.js', () => globalThis.GZ_CTABS))
     .then(() => GZ_CTABS.sync(tabsOn()), () => {}) : globalThis.GZ_CTABS?.sync(false));
 
