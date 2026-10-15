@@ -2,11 +2,10 @@
 // Jobs: (1) put the stylesheets on the page while the theme is on (<link>s we own, so the popup can
 // toggle them without a reload), (2) push settings onto <html> — colors and look values as inline
 // --gz-* vars, everything else as data-gz-* attributes — so the CSS never branches here,
-// (3) the long tail: tag what no selector can reach and let the CSS restyle the tag.
-// It runs on three sites: Blackboard Ultra, which gets all of that plus its extras (everything marked
-// Extras below), and Canvas LMS, which gets (1) to (3), with its own stylesheet, and three extras: Due this
-// week, the command palette and grades on the dashboard's course cards (marked Canvas below). Moodle is themed as
-// Canvas is (moodle.css), and its three of those load on demand (moodleIn).
+// (3) the long tail: tag what no selector can reach and let the CSS restyle the tag, (4) the extras.
+// This is the part every site runs: Blackboard Ultra, Canvas (each with its own stylesheet and its own part,
+// content-ultra.js and content-canvas.js, listed before this file) and Moodle (themed as Canvas is, moodle.css;
+// its extras load on demand, moodleIn).
 (async () => {
   // Only HTML pages: an /ultra/ address can also be an XML error from Ultra's CDN, or a raw script.
   if (window.__gzGlaze || !/html/.test(document.contentType)) return;
@@ -57,6 +56,11 @@
   // html[data-gz-motion] and the three switches) that any sheet's animations read, so canvas.css doesn't
   // redo them. Its Ultra-named rules (.route-view-container, .element-card…) match nothing in Canvas.
   const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'];
+  // What only one site does: its part puts its own over these ("the site's own part", below). They're Moodle's: nothing.
+  const no = () => {};
+  const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, still: no, stop: no, renderProgress: no,
+    renderNew: no, renderCalc: no, openNew: no, paintCourses: no, tintOf: no, courseColor: no, paintNav: no, syncNav: no, nickOf: () => '', syncNames: no,
+    unname: no, holding: () => false, syncTodo: no, syncCardTasks: no, syncWidgets: no, syncRemind: no, syncSyl: no, syncInsights: no, ctx: {} };
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
   // On Canvas, the whole document: put on a school's own host by lib/background.js mid-load, the body can be
@@ -231,35 +235,11 @@
     document.body.append(b);
     setTimeout(() => b.remove(), 900);
   };
-  // Canvas: a module item's "Mark as done" button (the page's own, or the newer assignment page's) and the
-  // planner's checkboxes (the dashboard's List View). Canvas flips either once its request succeeds, so a
-  // click is followed for five seconds and bursts there if it turns done; only a click starts one, so a page
-  // that loads done never does. A module item's icon on the Modules page only changes as that page loads.
-  const DONE_BY = '#mark-as-done-checkbox, #set-module-item-completion-button, input[data-testid="planner-item-completed-checkbox"]';
-  const isDone = (el) => (el.matches('input') ? el.checked : el.classList.contains('btn-success') || !!el.querySelector('svg[name="IconComplete"]'));
-  let following = null;
-  document.addEventListener('click', (e) => {
-    if (ultra || !e.isTrusted || html.getAttribute('data-gz-motion') !== 'expressive' || !(e.target instanceof Element)) return;
-    const box = e.target.closest('label')?.control;
-    const el = e.target.closest(DONE_BY) || (box?.matches(DONE_BY) && box);
-    // A label's click passes on to its checkbox: one follow. A checkbox clicked itself has already
-    // flipped when the click reaches it; through its label, or a button, flips after.
-    if (!el || el === following || (e.target === el && el.matches('input') ? !el.checked : isDone(el))) return;
-    following = el;
-    const at = Date.now();
-    const look = () => {
-      const now = el.isConnected ? el : el.id && document.getElementById(el.id); // React may draw it anew
-      if (now && isDone(now)) celebrate(now.labels?.[0] || now);
-      else if (Date.now() - at < 5000) return setTimeout(look, 150);
-      following = null;
-    };
-    setTimeout(look, 150);
-  }, true);
 
   // ---- the student's courses -------------------------------------------------------------------
-  // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
-  // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
-  // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
+  // Every course and its color, for the editor's course list, the course menu and the tint on pages that don't show
+  // it: once a page load, from the site's own list (Ultra's and Canvas's are their parts', X.record; Moodle's is
+  // features/moodle.js). Stored locally; nothing leaves the device.
   let canvasRecorded = false;
   // Moodle's: <body>'s course (1 is the site) under its theme sheet's root.
   const canvasCourseKey = (id = moodle ? document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1] : canvasCourseId()) => id ? `${site}:${moodle ? document.querySelector('link[href*="/theme/styles"]')?.href.split('/theme/')[0] : location.origin}/${id}` : null;
@@ -268,37 +248,11 @@
       if (canvasRecorded || window.top !== window) return;
       canvasRecorded = true;
       if (moodle) return moodleIn().then((m) => m.record()).catch(() => { canvasRecorded = false; });
-      Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
-        const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
-          name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
-        }]));
-        // Preserve Blackboard and other schools; Canvas ids alone are only unique within their own host.
-        chrome.storage.local.get('seenCourses', (r) => {
-          const all = { ...r?.seenCourses, ...seen };
-          chrome.storage.local.set({ seenCourses: all });
-          courseList = all;
-          paintCourses();
-          syncCourseMenu();
-          reapply();
-        });
-      }).catch(() => { canvasRecorded = false; });
+      X.record().catch(() => { canvasRecorded = false; });
       return;
     }
     if (window.top !== window) return;
-    try {
-      chrome.storage.local.get('seenCoursesAt', (r) => {
-        if (Date.now() - (r?.seenCoursesAt || 0) < 600000) return;
-        myCourses().then((ms) => {
-          const seen = GZ_COURSES(ms);
-          if (!Object.keys(seen).length) return;
-          for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
-          try { chrome.storage.local.get('seenCourses', (r) => {
-            const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k]) => k.includes(':')));
-            chrome.storage.local.set({ seenCourses: { ...canvas, ...seen }, seenCoursesAt: Date.now(), courseSlots });
-          }); } catch { /* reloaded */ }
-        });
-      });
-    } catch { /* extension reloaded under the tab */ }
+    X.record();
   };
   // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, or on Canvas from
   // its planner (GZ_CANVAS_DUE_WEEK), for the command palette and the popup (which can't ask the site, so it
@@ -357,23 +311,6 @@
   };
   // Moodle's extras, on first use: its data read (lib/moodle.js), then asked of the page's own Moodle.
   const moodleIn = () => need('lib/moodle.js', () => globalThis.GZ_MOODLE).then(() => need('features/moodle.js', () => globalThis.GZ_MOODLE_PAGE)).then(() => GZ_MOODLE_PAGE);
-  // Better To Do (features/todo.js)
-  const todoHere = () => !ultra && !moodle && links.length && settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
-  const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
-  // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
-  const cardsHere = () => !ultra && !moodle && links.length && settings.enhance.cardTasks && location.pathname === '/';
-  const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
-  // Dashboard notes and widgets, floating ones on every page (features/widgets.js); the palette opens its hub.
-  const widgetsHere = () => !ultra && !moodle && links.length && window.top === window && (settings.enhance.widgets || (settings.enhance.notes && location.pathname === '/'));
-  const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
-  // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
-  const remindHere = () => !ultra && !moodle && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => settings.enhance[k]);
-  const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
-  // Syllabus import (features/syllabus.js): a course's home and Syllabus page, top frame.
-  const sylHere = () => !ultra && !moodle && links.length && window.top === window && settings.enhance.syllabus && /^\/courses\/\d+(\/assignments\/syllabus)?\/?$/.test(location.pathname);
-  const syncSyl = () => (sylHere() ? need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.sync(sylHere()), () => {}) : globalThis.GZ_SYL_UI?.sync(false));
-  // Insights' Dashboard button (features/insights.js).
-  const syncInsights = () => (globalThis.GZ_INSIGHTS_UI || (!ultra && !moodle && links.length && settings.enhance.insights && location.pathname === '/')) && need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.sync(), () => {});
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
   // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
@@ -400,164 +337,24 @@
   // ---- the gradebook --------------------------------------------------------------------------
   // Due-date status, new grades and the what-if calculator read the student's own gradebook records,
   // asked of their own Blackboard (same origin, their session) the way Ultra's Grades page asks: at
-  // most once a minute per course, and only for courses on the page where one of those is showing.
-  // Absolute URLs: Ultra's <base href> points at its CDN.
+  // most once a minute per course, and only for courses on the page where one of those is showing
+  // (content-ultra.js). Absolute URLs: Ultra's <base href> points at its CDN.
   // Canvas's REST API is the same thing under /api/v1 (capi): its string-id JSON keeps long ids exact, and an
   // older Canvas starts a response with `while(1);`.
   const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept } })
     .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
-  // Progress and new-content badges share this exact capped list; news can refresh after five minutes.
-  const canvasModuleLists = new Map();
-  const canvasModules = (cid) => {
-    let c = canvasModuleLists.get(cid);
-    if (!c || Date.now() - c.at >= 300000) {
-      c = { at: Date.now() };
-      c.p = capi(`/courses/${cid}/modules?include[]=items&per_page=100`).catch((e) => {
-        if (canvasModuleLists.get(cid) === c) canvasModuleLists.delete(cid);
-        throw e;
-      });
-      canvasModuleLists.set(cid, c);
-    }
-    return c.p;
-  };
   // The Canvas course this page is in (/courses/:id/...), or undefined.
   const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1];
-  // One /users/me for everything that asks at once; asked again only if it failed.
-  let meId = null;
-  const me = () => (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meId = null; throw e; }));
-  // The student's courses, once per page: names for the command palette, and each membership's
-  // due-date exception setting.
-  let memberships = null;
-  const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`)).then((j) => j.results || []).catch(() => (memberships = null, [])));
-  // Submitted late: the latest attempt against the due date, for work waiting to be graded. An
-  // attempt's date never changes, so each is asked once. Nothing is called late in a course that
-  // gives this student due-date exceptions, or for an item with one of its own.
-  const attempts = new Map();
-  const lateIn = (cid, results) => {
-    const waiting = GZ_GRADES.awaiting(results);
-    if (!waiting.length || !settings.enhance.inline) return Promise.resolve(new Set());
-    const excepted = myCourses().then((ms) => {
-      const m = ms.find((x) => x.courseId === cid);
-      if (!m || m.dueDateExceptionType !== 'Normal') return () => true;
-      return api(`/courses/${cid}/gradebook/memberships/${m.id}/exceptions?columnId=${waiting.map((g) => g.columnId).join(',')}`)
-        .then((j) => { const text = JSON.stringify(j.results || []); return (col) => text.includes(col); }, () => () => true);
-    });
-    const dates = waiting.map((g) => {
-      if (!attempts.has(g.lastAttemptId)) attempts.set(g.lastAttemptId, api(`/courses/${cid}/gradebook/attempts/${g.lastAttemptId}?columnId=${g.columnId}`).then((a) => a.attemptDate, () => null));
-      return attempts.get(g.lastAttemptId);
-    });
-    return Promise.all([excepted, ...dates]).then(([exc, ...when]) => new Set(waiting.filter((g, i) => !exc(g.columnId) && GZ_GRADES.late(when[i], g.column.dueDate)).map((g) => g.columnId)));
-  };
 
-  // ---- grades on course cards (Extras; Canvas below) -----------------------------------------
-  // On the Courses page each card's status line ("Open") gains the course's overall grade, drawn by CSS
-  // from attributes. Grid and list views share one card; the Recent Courses strip has its own. A card's
-  // book is asked for only once the card is on screen.
-  const CARD_STATUS = 'article.course-element-card[data-course-id] .course-status, a[class*="courseCard"] [class*="courseStatus"]';
-  const onScreen = new Set();
-  const cardsIO = new IntersectionObserver((es) => {
-    for (const e of es) if (e.isIntersecting) onScreen.add(e.target); else onScreen.delete(e.target);
-    tagCards();
-  });
+  // ---- grades on course cards (Extras) ---------------------------------------------------------
+  // A course card's overall grade, drawn by CSS from attributes: Ultra's Courses page and Canvas's Dashboard (X.tagCards),
+  // Moodle's Dashboard and My courses (features/moodle.js).
   const tagCards = () => {
     if (!observer || !settings.enhance.overall) return;
     if (moodle) return document.querySelector('[data-region="course-content"]') && moodleIn().then((m) => m.cards(), () => {});
-    if (!ultra) return tagCanvasCards();
-    if (location.pathname !== '/ultra/course') return;
-    for (const el of document.querySelectorAll(CARD_STATUS)) cardsIO.observe(el);
-    for (const el of onScreen) {
-      if (!el.isConnected) { onScreen.delete(el); cardsIO.unobserve(el); continue; }
-      const cid = el.closest('[data-course-id]')?.dataset.courseId || el.closest('a')?.href.match(/\/courses\/(_\d+_\d+)\//)?.[1];
-      const g = cid && bookFor(cid).overall;
-      if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); }
-      else if (g === null) { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
-    }
+    X.tagCards();
   };
-  // Canvas: the dashboard's cards (card view) get the same chip, on the course code's line: the course's current
-  // score (GZ_PAGE.canvasOverall), drawn by canvas.css from the same attributes. One course list with scores
-  // serves every card, asked once a page load; the command palette's course list is that answer too.
-  // ponytail: the first 100 courses, no paging.
-  let canvasList = null;
-  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
-    .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
-  // Your profile (id, time zone), asked once a page for whoever needs it; again after a failure.
-  let mine = null;
-  const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
-  // The chip is drawn after the course code (canvas.css), inside the card's link: a click on it opens the grades.
-  if (!ultra) addEventListener('click', (e) => {
-    const el = settings.enhance.overall && e.target.closest?.('.ic-DashboardCard [data-gz-grade]');
-    const r = el && document.createRange();
-    if (!r) return;
-    r.selectNodeContents(el);
-    const b = r.getBoundingClientRect();
-    if (html.dir === 'rtl' ? e.clientX >= b.left : e.clientX <= b.right) return; // on the code, not the chip
-    e.preventDefault();
-    const url = `${el.closest('a').href}/grades`;
-    if (e.ctrlKey || e.metaKey) open(url); else location.assign(url);
-  }, true);
-  const tagCanvasCards = () => {
-    if (!document.querySelector('.ic-DashboardCard')) return;
-    canvasCourses().then((list) => {
-      if (!observer) return; // switched off while it was asked
-      const grades = GZ_PAGE.canvasOverall(list, locale());
-      for (const card of document.querySelectorAll('.ic-DashboardCard')) {
-        const el = card.querySelector('.ic-DashboardCard__header-subtitle, .ic-DashboardCard__header-term');
-        if (!el) continue;
-        const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/([^/?#]+)/)?.[1];
-        const g = grades[id];
-        if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); } else { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
-        // The same grade as a link of its own to the course's grades, for the keyboard and screen readers: right after
-        // the card's link (next in Tab order), not in it, and shown when focused (canvas.css). Written only on a change.
-        let a = card.querySelector('.gz-card-grade');
-        if (!g) { a?.remove(); continue; }
-        const name = t('Grades for {course}: {grade}', { course: card.getAttribute('aria-label') || id, grade: g.label });
-        if (!a) el.closest('a')?.after(a = Object.assign(document.createElement('a'), { className: 'gz-card-grade' }));
-        if (a.getAttribute('aria-label') !== name) { a.href = `/courses/${id}/grades`; a.textContent = g.label; a.setAttribute('aria-label', name); }
-      }
-    });
-  };
-  // Canvas: its course colors come inline on the card's hero and the list view's group (canvas.css, Course colors),
-  // where no selector can read them: copied into --gz-course-raw on the card or group, which canvas.css tones. The
-  // source is the inline value, never computed: canvas.css overrides it with !important and never writes it, so
-  // what is read is always Canvas's own (a color changed on the page re-renders it, and the style mutation brings
-  // us back here). Run from the mutation callback, so a new card is toned before its first paint. Only on change:
-  // our own write is a mutation too. Not /users/self/colors: Canvas picks a default color in the browser for a course
-  // with none and saves it only after painting, and a color changed on the page never reaches a list asked for once.
-  const COURSE_BOXES = [['.ic-DashboardCard', '.ic-DashboardCard__header_hero', 'backgroundColor'], ['.planner-grouping', ':scope > ol', 'borderColor']];
-  const liftCourses = () => {
-    for (const [box, src, prop] of COURSE_BOXES) {
-      for (const el of document.querySelectorAll(box)) {
-        const c = el.querySelector(src)?.style[prop];
-        if (c && el.style.getPropertyValue('--gz-course-raw') !== c) el.style.setProperty('--gz-course-raw', c);
-      }
-    }
-  };
-  // cid → { at, pending, results, grades (by content item), overall, late (column ids), key }. Lateness is
-  // asked only by the due-date chips (late = true), so a course card never costs attempt requests. An
-  // answer that changes anything re-tags the page.
-  const books = new Map();
-  const bookFor = (cid, late = false) => {
-    let b = books.get(cid);
-    if (!b || (!b.pending && (Date.now() - b.at > 60000 || (late && !b.late)))) {
-      b = { key: '', ...b, at: Date.now(), pending: true };
-      books.set(cid, b);
-      // ponytail: one page, Ultra's cap of 200 grades; items past that show only their countdown.
-      me().then((id) => api(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
-        .then((j) => (late || b.late ? lateIn(cid, j.results) : Promise.resolve(undefined)).then((lateCols) => {
-          b.pending = false;
-          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])]]);
-          if (key === b.key) return;
-          Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results, locale()), late: lateCols, key });
-          onBook();
-        }))
-        .catch(() => { b.pending = false; });
-    }
-    return b;
-  };
-  // undefined until the current course's gradebook answers.
-  const gradesIn = () => { const cid = courseId(); return cid ? bookFor(cid, true).grades : undefined; };
-  const onBook = () => { tagExtras([document.body]); renderNew(); renderCalc(); };
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   // The chip and urgency on a due date, drawn by CSS from these attributes.
@@ -573,119 +370,10 @@
       el.removeAttribute('data-gz-chip');
     }
   };
-  // Canvas: the same extras on Canvas's markup, from the whole page each pass (a few selectors).
-  // - Scores are read off the page, so a what-if score Canvas draws gets its bar too, and a course that restricts
-  //   quantitative data (letters only) gets none: the course Grades page's cells and group totals, the Grades page
-  //   of all courses, the Assignments index's "18/20 pts". The share goes beside points, never beside a percentage.
-  // - Due dates on the Assignments index and Modules take the date and where the work stands from the course's
-  //   assignments with the student's submission, asked once a page load (a module item names its assignment, quiz
-  //   or topic in its class). The To Do sidebar's (dashboard, course home) are read from its text: only how long is
-  //   left and never overdue, as Ultra's outside course content (an announcement's date there is when it was posted).
-  const CANVAS_SCORES = '#grades_summary td.assignment_score .score_holder, .student_grades td.percent, div.ig-row[id^="assignment_"] .score-display';
-  const CANVAS_DUE = 'div.ig-row[id^="assignment_"][data-item-id] .assignment-date-due, li.context_module_item .due_date_display';
-  let canvasWork = null;
-  const workIn = (cid) => {
-    if (canvasWork?.cid !== cid) {
-      const w = (canvasWork = { cid, by: null });
-      capi(`/courses/${cid}/assignments?include[]=submission&per_page=100`).then((list) => {
-        // ponytail: the first 100 assignments, no paging.
-        w.by = new Map((Array.isArray(list) ? list : []).flatMap((a) => [[`Assignment_${a.id}`, a], ...(a.quiz_id ? [[`Quiz_${a.quiz_id}`, a]] : []),
-          ...(a.discussion_topic?.id ? [[`DiscussionTopic_${a.discussion_topic.id}`, a]] : [])]));
-        if (observer && canvasWork === w) tagExtras([document.body]);
-      }, () => {});
-    }
-    return canvasWork.by;
-  };
-  const tagCanvasExtras = () => {
-    const { scores, urgency, inline } = settings.enhance;
-    if (!scores && !urgency && !inline) return;
-    const now = new Date();
-    const loc = locale();
-    if (scores || inline) {
-      for (const el of document.querySelectorAll(CANVAS_SCORES)) {
-        // The Grades page's cell keeps Canvas's own numbers in a hidden block beside the shown ones.
-        const shown = el.matches('.score_holder') ? el.querySelector(':scope > .tooltip') : el;
-        const sc = GZ_PAGE.canvasScore(shown?.textContent);
-        if (scores && sc && el.style.getPropertyValue('--gz-score') !== String(sc.ratio)) el.style.setProperty('--gz-score', sc.ratio);
-        if (scores && sc) el.setAttribute('data-gz-score', sc.band);
-        else el.removeAttribute('data-gz-score');
-        if (inline && sc?.max) shown.setAttribute('data-gz-pct', GZ_I18N.pct(Math.round(sc.ratio * 100), loc));
-        else shown?.removeAttribute('data-gz-pct');
-      }
-    }
-    if (!urgency && !inline) return;
-    const due = document.querySelectorAll(CANVAS_DUE);
-    const by = due.length && canvasCourseId() && workIn(canvasCourseId());
-    if (by) {
-      for (const el of due) {
-        const index = el.matches('.assignment-date-due');
-        const a = by.get(index ? `Assignment_${el.closest('.ig-row').dataset.itemId}` : el.closest('li').className.match(/\b(?:Assignment|Quiz|DiscussionTopic)_\d+\b/)?.[0]);
-        const state = urgency && a?.due_at && !GZ_PAGE.isDone(null, GZ_PAGE.canvasGrade(a)) && GZ_PAGE.due(new Date(a.due_at), now, loc);
-        markDue(el, state, inline && GZ_PAGE.canvasStatus(a, now, loc, index));
-      }
-    }
-    for (const el of document.querySelectorAll('[data-testid="ToDoSidebarItem__InformationRow"] > li')) {
-      const d = GZ_PAGE.canvasDate(el.textContent, loc, now);
-      const w = d?.timed && GZ_PAGE.when(d, now, loc);
-      const state = urgency && w && !w.past && GZ_PAGE.due(d.at, now, loc);
-      markDue(el, state, inline && w && !w.past && { label: w.rel, tone: '' });
-    }
-  };
+  // Score bars and due dates: Ultra's from the subtrees a pass looks at, Canvas's from its few selectors (X.tagExtras).
   const tagExtras = (roots) => {
     tagCards();
-    if (!ultra) return tagCanvasExtras();
-    const { scores, urgency, inline } = settings.enhance;
-    if (!scores && !urgency && !inline) return;
-    const now = new Date();
-    const loc = locale();
-    for (const root of roots) {
-      if (scores || inline) {
-        for (const pill of root.querySelectorAll('.readonly-pill, .wrapping-input-style.pill-style')) {
-          const sc = GZ_PAGE.score(pill.querySelector('.js-pill-grade')?.textContent, pill.querySelector('.pill-points-possible')?.textContent);
-          if (!sc) continue;
-          // Only on change: a style write is itself a mutation the observer would hand back.
-          if (scores && pill.style.getPropertyValue('--gz-score') !== String(sc.ratio)) pill.style.setProperty('--gz-score', sc.ratio);
-          if (scores) pill.setAttribute('data-gz-score', sc.band);
-          if (inline) pill.setAttribute('data-gz-pct', GZ_I18N.pct(Math.round(sc.ratio * 100), loc));
-        }
-      }
-      if (urgency || inline) {
-        // Due dates by where Ultra puts them; in English, also by the word ("puede" isn't one).
-        const en = /^en\b/i.test(loc);
-        const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => ((en && /due/i.test(n.data)) || (/\d/.test(n.data) && dueLabelled(n.parentElement)) ? 1 : 3) });
-        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-          const el = n.parentElement;
-          const text = /due/i.test(n.data) ? n.data : `Due: ${n.data}`;
-          // A course item's circle ('false' empty, 'mixed' half, 'true' full; null without progress
-          // tracking) and gradebook record say where the work stands.
-          const item = el.closest('.content-list-item[data-content-id]');
-          const circle = item?.querySelector('.js-review-state-icon-button')?.getAttribute('aria-checked') ?? null;
-          // An assignment's own page: the due date in its details card, its id in the address.
-          const pageId = !item && el.closest('.due-date-container') && location.pathname.match(/\/assessment\/(_\d+_\d+)\//)?.[1];
-          // A discussion's outline item is a link with its own id; the gradebook knows the discussion's.
-          const grades = (item || pageId) && gradesIn();
-          const grade = !grades ? undefined : pageId ? grades.get(pageId) : grades.get(item.dataset.contentId)
-            ?? grades.get(item.querySelector('a[href*="/discussion/"]')?.getAttribute('href').match(/\/discussion\/(_\d+_\d+)/)?.[1]);
-          const late = !!grade && !!books.get(courseId())?.late?.has(grade.columnId);
-          // The date itself from the gradebook where it has one, so it reads in any locale; otherwise
-          // from the text, in Ultra's locale.
-          const at = grade?.column?.dueDate && dueLabelled(el) ? new Date(grade.column.dueDate) : text;
-          // Nothing is urgent once it's done. Elsewhere a past date may well be done, and the stream
-          // says "Past due" itself.
-          let state = urgency && GZ_PAGE.due(at, now, loc);
-          if (state && (GZ_PAGE.isDone(circle, grade) || (!item && !pageId && state === 'overdue'))) state = null;
-          // The chip is drawn by CSS from these attributes: no element is added to Ultra's tree. In course
-          // content it says where the work stands; elsewhere only how long is left, never how long ago.
-          let chip = null;
-          if (inline && (item || pageId)) chip = GZ_PAGE.status(at, circle, grade, now, late, loc);
-          else if (inline) {
-            const w = GZ_PAGE.when(at, now, loc, true);
-            if (w && !w.past) chip = { label: w.rel, tone: '' };
-          }
-          markDue(el, state, chip);
-        }
-      }
-    }
+    X.tagExtras(roots);
   };
 
   let dirty = new Set();
@@ -698,68 +386,37 @@
     const all = full || (said && wordsLate);
     if (full) { full = false; sweepAll(); } else sweepRoots(roots);
     if (said) { tagExtras(all ? [document.body] : roots); wordsLate = false; } else wordsLate = true;
-    // Both sites run the same list; a helper that isn't on Canvas yet returns at its top (`if (!ultra) return`).
+    // Every site runs the same list; what a site doesn't do is a default that does nothing (X).
     themeEditors();
     if (tip && ultraTipShown()) hideTip();
-    paintCourses();
+    X.paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
     placeScene();
     if (!said) return;
-    if (all) syncNav();
-    renderProgress();
-    renderNew();
+    if (all) X.syncNav();
+    X.renderProgress();
+    X.renderNew();
     keepPlace();
-    renderCalc();
+    X.renderCalc();
     watchDrafts();
     syncDownloads();
     syncDocTools();
     syncCourseMenu();
-    syncTodo();
-    syncCardTasks();
-    syncWidgets();
-    syncRemind();
-    syncSyl();
-    syncInsights();
+    X.syncTodo();
+    X.syncCardTasks();
+    X.syncWidgets();
+    X.syncRemind();
+    X.syncSyl();
+    X.syncInsights();
   };
   // ---- page loads ------------------------------------------------------------------------------
-  // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
-  // Glaze's progress bar and chips landing on top. A page's container (a course tab's, not the course
-  // shell around it) is held hidden while that happens and let go once it's built: still for 300 ms
-  // (pages that load per course, like Grades, pause ~250 ms between parts), no spinner or skeleton
-  // showing, the course's grades in, or after 2.5 s at most. It then resolves from a blur, once
-  // (motion.css).
-  const GATE = '.route-view-container:not(.bb-offcanvas-container)';
-  const held = new Map(); // container -> { at, still }
-  let gateTimer = 0;
-  const loaderIn = (el) => [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root')]
-    .some((e) => e.getClientRects().length && !e.closest('.ng-hide'));
-  const release = () => {
-    const now = performance.now();
-    for (const [el, t] of held) {
-      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || timer || [...books.values()].some((b) => b.pending) || loaderIn(el))) continue;
-      held.delete(el);
-      // Cards already there arrive with the page, not one by one after it.
-      for (const c of el.querySelectorAll('.content-list-item, .element-card')) c.setAttribute('data-gz-held', '');
-      el.setAttribute('data-gz-reveal', '');
-      el.removeAttribute('data-gz-loading');
-      setTimeout(() => el.removeAttribute('data-gz-reveal'), 800);
-    }
-    if (!held.size) { clearInterval(gateTimer); gateTimer = 0; }
-  };
-  const hold = (el) => {
-    if (held.has(el) || el.parentElement?.closest('[data-gz-loading]')) return;
-    const now = performance.now();
-    held.set(el, { at: now, still: now });
-    // data-gz-held: the reveal is its entrance, so its own fade-up never starts (motion.css).
-    el.setAttribute('data-gz-held', '');
-    el.setAttribute('data-gz-loading', '');
-    gateTimer ||= setInterval(release, 50);
-  };
+  // Ultra holds a page's container hidden while it is built (X.gate, X.still: content-ultra.js), from here, so
+  // it's held before it's first painted.
 
   // Throttle, not debounce: Ultra never stops mutating (ripples, popper repositioning), and a
   // debounce that restarts on every record would put the sweep off indefinitely.
   const schedule = (records) => {
-    if (!ultra) liftCourses();
+    X.lift();
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {
         if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true'
@@ -774,11 +431,9 @@
       for (const n of r.addedNodes) {
         if (n.nodeType !== 1) continue;
         dirty.add(n);
-        if (!ultra) continue; // holding a page while it loads is Ultra's
-        if (n.matches(GATE)) hold(n);
-        else if (n.firstElementChild) for (const c of n.querySelectorAll(GATE)) hold(c);
+        if (ultra) X.gate(n); // holding a page while it loads is Ultra's
       }
-      if (held.size) for (const [el, t] of held) if (el.contains(r.target)) t.still = performance.now();
+      if (ultra) X.still(r.target);
     }
     // Too many separate subtrees to be worth tracking: one full pass is cheaper.
     if (dirty.size > 500) { dirty.clear(); full = true; }
@@ -789,16 +444,16 @@
     sweepAll();
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
-    if (window.top === window && !todoHere() && !cardsHere()) dueWeek();
-    if (!ultra) liftCourses();
+    if (window.top === window && !X.planner()) dueWeek();
+    X.lift();
     recordCourses();
-    if (!ultra) paintCourses();
+    if (!ultra) X.paintCourses();
     if (!words()) { wordsLate = true; return; }
     tagExtras([document.body]);
     watchDrafts();
     syncCourseMenu();
-    syncNav();
-    if (!ultra) renderProgress();
+    X.syncNav();
+    if (!ultra) X.renderProgress();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -808,8 +463,7 @@
     timer = 0;
     dirty.clear();
     full = false;
-    cardsIO.disconnect();
-    onScreen.clear();
+    X.stop();
     clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
     liftable.clear();
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
@@ -1010,28 +664,9 @@
   // A folder's or learning module's own fold toggle, by the id Ultra gives it in every language; null for
   // anything else (an Ultra document is a folder to the API, but has none).
   const toggleOf = (item) => item?.querySelector(`[id="folder-title-${item.dataset.contentId}"], [id="learning-module-title-${item.dataset.contentId}"]`);
-  const peeks = new Map();
-  // Canvas paginates these lists; cache complete answers, shared by previews and module downloads.
-  const canvasPeekList = async (path) => {
-    const out = [];
-    for (let page = 1; ; page++) {
-      const rows = await capi(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
-      if (!Array.isArray(rows)) throw new Error('Invalid list');
-      out.push(...rows);
-      if (rows.length < 100) return out;
-    }
-  };
-  const canvasPeek = (path) => {
-    const key = `canvas:${path}`;
-    const hit = peeks.get(key);
-    if (hit && Date.now() - hit.at < 60000) return hit.p;
-    const p = canvasPeekList(path).catch((e) => { peeks.delete(key); throw e; });
-    peeks.set(key, { at: Date.now(), p });
-    return p;
-  };
-  const moduleItems = (cid, mid, fresh = false) => (fresh ? canvasPeekList : canvasPeek)(`/courses/${cid}/modules/${mid}/items?include[]=content_details`);
-  // What a folder or module holds, shown when the pointer rests on its row: features/previews.js, loaded the first
-  // time it does (or, on Canvas, focus reaches one), then handed that event if the row is still where it was.
+  // What a folder or module holds, shown when the pointer rests on its row: features/previews.js (Canvas's lists are
+  // content-canvas.js'), loaded the first time it does (or, on Canvas, focus reaches one), then handed that event if
+  // the row is still where it was.
   const PEEK_AT = ultra ? '.content-list-item[data-content-id]' : '.context_module .expand_module_link, a[href*="/files/folder/"]';
   const peekIn = (e) => {
     if (globalThis.GZ_PEEK || !settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
@@ -1043,49 +678,7 @@
   document.addEventListener('focusin', (e) => { if (!ultra) peekIn(e); }, true);
 
   // ---- course progress (Extras) ---------------------------------------------------------------
-  // One bar above the course outline adding up what the outline already says: each folder's
-  // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
-  // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
-  // On Canvas the outline with a done state is Modules: the bar adds up the completion requirements the
-  // course sets, done or not as Canvas's own API has them for this student (asked once a page), above the
-  // Modules list, also on a course home that shows it. A course that sets none gets no bar: Canvas calls
-  // a module without requirements "completed", and it hides that itself, as nothing there was asked of you.
-  let reqs = null; // Canvas: { cid, progress: { done, total } | null }, null when the whole total isn't known
-  const canvasProgress = () => {
-    const old = document.getElementById('gz-progress');
-    const cid = canvasCourseId();
-    const list = observer && settings.enabled && settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
-    if (!list) return old?.remove();
-    if (reqs?.cid !== cid) {
-      const r = (reqs = { cid });
-      // shortcut: hide incomplete module lists; follow Link and items_url if large-course progress is needed.
-      canvasModules(cid).then((mods) => {
-        r.progress = GZ_PAGE.canvasProgress(mods);
-        if (reqs === r) renderProgress();
-      }).catch(() => {});
-      return;
-    }
-    if (!reqs.progress?.total) return old?.remove();
-    drawProgress(old, reqs.progress.done, reqs.progress.total, list);
-  };
-  const renderProgress = () => {
-    if (!ultra) return canvasProgress();
-    const old = document.getElementById('gz-progress');
-    if (!settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
-    const top = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
-    let done = 0;
-    let total = 0;
-    for (const it of top) {
-      // Some are done where Ultra puts its check in the line (all done) or a completed part in its chart.
-      const msg = it.querySelector('.js-completion-status-message');
-      const m = msg && GZ_PAGE.completion(msg.textContent, !!msg.querySelector('svg') || !!msg.parentElement.querySelector('.js-completion-chart [class*="chartLineCompleted"]'));
-      if (m) { total += m.total; done += m.done; continue; }
-      const rs = it.querySelector('.js-review-state-icon-button');
-      if (rs) { total += 1; if (rs.getAttribute('aria-checked') === 'true') done += 1; }
-    }
-    if (!total) return old?.remove();
-    drawProgress(old, done, total, top[0].parentElement);
-  };
+  // One bar above a course's outline (Ultra) or Modules list (Canvas) adding up what is done there (X.renderProgress).
   // The bar, drawn before `before` (the list it adds up), or brought up to date.
   const drawProgress = (old, done, total, before) => {
     const key = `${done}/${total} ${locale()}`;
@@ -1106,32 +699,7 @@
   };
 
   // ---- new grades (Extras) --------------------------------------------------------------------
-  // "New" on a course gradebook's rows graded since that gradebook was last shown here (or, the first
-  // time, that Ultra says are unviewed), and a count on course cards elsewhere. Showing a gradebook marks
-  // its grades seen; the badges stay until the page is left. Kept on this device (storage.local).
-  let seen = null; // { cid: { columnId: mark } }
-  let seenItems = null; // { cid: [content ids] }, for new content (below)
-  let seenLoad = null;
-  const shown = new Map(); // cid → column ids badged on this page
-  const loadSeen = () => {
-    seenLoad ||= new Promise((res) => {
-      try { chrome.storage.local.get(['seenGrades', 'seenContent'], (r) => res(r || {})); } catch { res({}); }
-    }).then((r) => { seen = r.seenGrades || {}; seenItems = r.seenContent || {}; renderNew(); });
-  };
-  // One course at a time, over what's stored: another tab may have recorded other courses since.
-  const keepSeen = (key, cid, v) => {
-    try { chrome.storage.local.get(key, (r) => chrome.storage.local.set({ [key]: { ...r?.[key], [cid]: v } })); } catch { /* extension reloaded under the tab */ }
-  };
-  // [card selector, its course id, where the badge goes]. Course list cards, recent courses, Grades tiles.
-  const COURSE_CARDS = [
-    ['article[id^="course-list-course-"]', (e) => e.id.slice(19), (e) => e.querySelector('h4[id^="course-name-"]')],
-    ['bb-recent-courses-view a[href*="/ultra/courses/_"]', (e) => e.getAttribute('href').match(/courses\/(_\d+_\d+)/)?.[1], (e) => e.querySelector('[class*="courseName"]')],
-    ['.base-grades-course-tile', (e) => e.querySelector('a[href*="/grades"]')?.getAttribute('href').match(/(_\d+_\d+)\/grades/)?.[1], (e) => e.querySelector('.grades-header a.bb-click-target')],
-  ];
-  const badge = (el, label) => {
-    if (!label) el.removeAttribute('data-gz-new');
-    else if (el.getAttribute('data-gz-new') !== label) el.setAttribute('data-gz-new', label);
-  };
+  // "New" on what was graded or added since it was last looked at, and counts on course cards (X.renderNew).
   // Counts are real link-like pills: on a card, first in the course name (where an ellipsis can't cut
   // it), opening that course's gradebook at the first new grade ('grades') or its outline at the newest
   // item ('items'); on a closed folder in the outline, after its title, unfolding it down to its newest
@@ -1155,230 +723,16 @@
     }
     pill.dataset.cid = cid;
   };
-  const openNew = (e) => {
-    const pill = e.target instanceof Element && e.target.closest('.gz-new[role="link"]');
-    if (!pill || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type !== 'click' && e.type !== 'keydown') return;
-    const { kind, cid } = pill.dataset;
-    if (kind === 'inside') { jump = { under: pill.closest('[data-content-id]').dataset.contentId, at: Date.now(), opened: new Set() }; return renderNew(); }
-    sessionStorage.setItem('gz-new-jump', `${kind} ${cid}`);
-    location.assign(`${location.origin}/ultra/courses/${cid}/${kind === 'items' ? 'outline' : 'grades'}`);
-  };
-  const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
-  for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, openNew, true);
-  const renderNew = () => {
-    if (!ultra) return renderCanvasNew();
-    const { newgrades, newcontent } = settings.enhance;
-    if (!(newgrades || newcontent) || window.top !== window || !observer) return;
-    if (!seen) return loadSeen();
-    const cid = courseId();
-    if (newcontent && cid) renderItems(cid);
-    if (newgrades && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname)) {
-      const b = bookFor(cid);
-      if (b.results) {
-        const { ids, seen: now } = GZ_GRADES.fresh(b.results, seen[cid]);
-        const set = shown.get(cid) || new Set();
-        for (const id of ids) set.add(id);
-        shown.set(cid, set);
-        if (JSON.stringify(now) !== JSON.stringify(seen[cid])) { seen[cid] = now; keepSeen('seenGrades', cid, now); }
-        for (const el of document.querySelectorAll('[id^="course-student-grades-item-name-"]')) badge(el, set.has(el.id.slice(32)) && t('New'));
-        // Arrived from a card's "N new": bring the first new grade into view, once.
-        const first = sessionStorage.getItem('gz-new-jump') === `grades ${cid}` && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
-        if (first) { sessionStorage.removeItem('gz-new-jump'); glide(first.closest('li, tr, [role="row"]')); }
-      }
-    }
-    // Cards only count: nothing is marked seen until its gradebook is shown. Only on the Courses and
-    // Grades pages themselves, not under a course opened over them.
-    // ponytail: the first 12 cards, one gradebook request each a minute; a long course list waits its turn.
-    // New content is counted only for courses opened before (there's nothing to compare with
-    // otherwise), and asked for only while the card is on screen.
-    if (!/^\/ultra\/(course|grades)\/?$/.test(location.pathname)) return;
-    for (const el of inView) if (!el.isConnected) { inView.delete(el); cardsInView.unobserve(el); }
-    let n = 0;
-    for (const [sel, idOf, where] of COURSE_CARDS) {
-      for (const card of document.querySelectorAll(sel)) {
-        const id = idOf(card);
-        const el = where(card);
-        if (!id || !el) continue;
-        if (newgrades && n++ < 12) {
-          const b = bookFor(id);
-          cardBadge(el, id, b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : 0);
-        }
-        if (!newcontent) continue;
-        cardsInView.observe(el);
-        const items = seenItems[id] && (inView.has(el) ? courseItems(id) : contents.get(id))?.items;
-        cardBadge(el, id, GZ_GRADES.newItems(items, seenItems[id]).ids.size, 'items');
-      }
-    }
-  };
-
-  // Canvas keeps unread grade dots itself. A passive HTML GET reads those exact dots, without running
-  // the grade page's scripts. The submissions API's include[]=read_state would mark submissions read.
-  // Keep only counts and module ids, scoped to this host AND signed-in user; five-minute cache across pages.
-  // shortcut: first 100 modules; Canvas omits items in oversized modules. Don't guess at their contents.
-  let canvasNews = null, canvasNewsLoad = null, canvasNewsUser = null;
-  const canvasNewsPending = new Set(), canvasNewsShown = new Map();
-  const canvasNewsKey = (cid) => `${location.origin}/${canvasNewsUser}/${cid}`;
-  const canvasNewsStore = `canvasNews:${location.origin}`;
-  // One origin's map is one write boundary; hold its lock until storage's set callback completes.
-  let canvasNewsWrite = Promise.resolve();
-  const saveCanvasNews = (key, patch) => {
-    const write = () => new Promise((done) => {
-      try { chrome.storage.local.get(canvasNewsStore, (r) => {
-        const record = GZ_GRADES.canvasNewsRecord(r ? r[canvasNewsStore]?.[key] : canvasNews[key], patch);
-        canvasNews[key] = record;
-        try { chrome.storage.local.set({ [canvasNewsStore]: { ...r?.[canvasNewsStore], [key]: record } }, done); } catch { done(); }
-      }); } catch { canvasNews[key] = GZ_GRADES.canvasNewsRecord(canvasNews[key], patch); done(); } // extension reloaded under the tab
-    });
-    // shortcut: without usable Web Locks, writes are ordered within this tab only.
-    return canvasNewsWrite = canvasNewsWrite.then(() => navigator.locks?.request ? navigator.locks.request(`glaze:${canvasNewsStore}`, write).catch(write) : write());
-  };
-  const loadCanvasNews = () => {
-    canvasNewsLoad ||= Promise.all([capi('/users/self').then((u) => u.id), new Promise((resolve) => {
-      try { chrome.storage.local.get(canvasNewsStore, (r) => resolve(r?.[canvasNewsStore] || {})); } catch { resolve({}); }
-    })]).then(([id, kept]) => {
-      if (!id) throw new Error('No Canvas user');
-      canvasNewsUser = String(id); canvasNews = kept; renderNew();
-    }).catch(() => { setTimeout(() => { canvasNewsLoad = null; }, 60000); });
-  };
-  const askCanvasNews = (cid, kind) => {
-    const key = canvasNewsKey(cid), kept = canvasNews[key]?.[kind], pending = `${key}/${kind}`;
-    if (kept && Date.now() - kept.at < 300000 || canvasNewsPending.has(pending) || document.hidden) return kept;
-    canvasNewsPending.add(pending);
-    const p = kind === 'items' ? canvasModules(cid).then(GZ_GRADES.canvasItems)
-      : fetch(`${location.origin}/courses/${cid}/grades`, { credentials: 'same-origin', headers: { accept: 'text/html' } })
-        .then((r) => r.ok && new URL(r.url).origin === location.origin && new URL(r.url).pathname === `/courses/${cid}/grades` ? r.text() : Promise.reject())
-        .then((text) => {
-          const doc = new DOMParser().parseFromString(text, 'text/html');
-          // Restricted and upgraded React grade pages have no server-rendered table: fail closed.
-          return doc.querySelector('#grades_summary') ? doc.querySelectorAll('#grades_summary .unread_dot.grade_dot').length : null;
-        });
-    const at = kind === 'items' ? canvasModuleLists.get(cid).at : null;
-    p.then((value) => saveCanvasNews(key, { [kind]: { at: at ?? Date.now(), value } }), () => saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } })).finally(() => {
-      canvasNewsPending.delete(pending);
-      if (observer && settings.enhance[kind === 'items' ? 'newcontent' : 'newgrades']) renderNew();
-    });
-    return kept;
-  };
-  const canvasNewsBadge = (host, cid, n, kind) => {
-    let pill = host.querySelector(`:scope > .gz-new[data-kind="${kind}"]`);
-    if (!n) return pill?.remove();
-    if (!pill) {
-      pill = document.createElement('a'); pill.className = 'gz-new'; pill.dataset.kind = kind;
-      pill.href = `/courses/${cid}/${kind === 'grades' ? 'grades' : 'modules'}`;
-      host.append(pill);
-    }
-    const text = t(kind === 'items' ? '{n} new items' : '{n} new', { n });
-    if (pill.textContent !== text) pill.textContent = text;
-    const label = t(KIND[kind], { n });
-    if (pill.getAttribute('aria-label') !== label) pill.setAttribute('aria-label', label);
-  };
-  const renderCanvasNew = () => {
-    const { newgrades, newcontent } = settings.enhance;
-    if (!(newgrades || newcontent) || !observer || document.hidden || window.top !== window) return;
-    const cid = canvasCourseId(), modules = cid && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.querySelector('#context_modules');
-    const grades = newgrades && cid && /^\/courses\/\d+\/grades\/?$/.test(location.pathname);
-    const cards = location.pathname === '/' && document.querySelectorAll('.ic-DashboardCard');
-    if (!(newcontent && modules || grades || cards?.length)) return;
-    if (!canvasNews) return loadCanvasNews();
-    // Native page scripts can mark grades read; refresh the passive count when the student returns.
-    if (grades && canvasNews[canvasNewsKey(cid)]?.grades?.at) saveCanvasNews(canvasNewsKey(cid), { grades: { at: 0, value: null } });
-    if (newcontent && modules) {
-      const key = canvasNewsKey(cid), items = askCanvasNews(cid, 'items')?.value;
-      if (items) {
-        const rows = [...document.querySelectorAll('.context_module_item[id^="context_module_item_"]')];
-        const looked = new Set(rows.filter((r) => r.getClientRects().length).map((r) => r.id.slice(20)));
-        const was = canvasNews[key]?.seen;
-        const { ids, seen: now } = GZ_GRADES.newItems(items, was, looked);
-        const shown = canvasNewsShown.get(key) || new Set();
-        for (const id of ids) shown.add(id);
-        canvasNewsShown.set(key, shown);
-        if (now !== was) saveCanvasNews(key, { seen: now });
-        for (const row of rows) {
-          const title = row.querySelector('.ig-title');
-          if (title) cardBadge(title, cid, shown.has(row.id.slice(20)) ? 1 : 0, 'item');
-        }
-      }
-    }
-    let n = 0;
-    for (const card of cards || []) {
-      const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1];
-      const host = card.querySelector('.ic-DashboardCard__header');
-      if (!id || !host) continue;
-      cardsInView.observe(host);
-      if (!inView.has(host) || n++ >= 12) continue;
-      if (newgrades) canvasNewsBadge(host, id, askCanvasNews(id, 'grades')?.value, 'grades');
-      if (newcontent && canvasNews[canvasNewsKey(id)]?.seen) {
-        const items = askCanvasNews(id, 'items')?.value;
-        canvasNewsBadge(host, id, GZ_GRADES.newItems(items, canvasNews[canvasNewsKey(id)].seen).ids.size, 'items');
-      }
-    }
-  };
-  document.addEventListener('visibilitychange', () => { if (!ultra && !document.hidden) renderNew(); });
+  // Ultra's pills (X.openNew); registered here, on every site as before, so they still come before the other listeners.
+  for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, (e) => X.openNew(e), true);
 
   // ---- new content (Extras) -------------------------------------------------------------------
-  // "New" on course items added (or made visible) since the course's content was last looked at here,
-  // a count on a closed folder or module holding some, and on course cards. The first visit records
-  // everything; an item is seen once its row has been on the page (the badge stays for that visit), so
-  // what's in a folder only once it's unfolded. Kept on this device (storage.local, seenContent).
-  // ponytail: "on the page", not on screen; a long outline's last rows count as seen unscrolled.
-  // The course's items come from one request, shared with the command palette and asked again after
-  // five minutes at most, with only the fields used. Courses past 200 items show the first 200.
-  const contents = new Map(); // cid → { at, p, items }
-  const courseItems = (cid) => {
-    let c = contents.get(cid);
-    if (!c || Date.now() - c.at > 300000) {
-      c = { at: Date.now(), items: c?.items };
-      c.p = api(`/courses/${cid}/contents?recursive=true&limit=200&fields=id,parentId,title,availability.available,links,contentHandler.isBbPage`, '/learn/api/public/v1')
-        .then((j) => { c.items = (j.results || []).filter((i) => i.availability?.available !== 'No'); renderNew(); return c.items; }, () => c.items || []);
-      contents.set(cid, c);
-    }
-    return c;
-  };
+  // The course cards on screen, whose counts are asked for.
   const inView = new Set();
   const cardsInView = new IntersectionObserver((es) => {
     for (const e of es) if (e.isIntersecting) inView.add(e.target); else inView.delete(e.target);
-    renderNew();
+    X.renderNew();
   });
-  const shownItems = new Map(); // cid → content ids badged on this page
-  let jump = null; // { under (a folder id, or null for the whole course), at, opened (folder ids) }
-  const renderItems = (cid) => {
-    const rows = document.querySelectorAll('.content-list-item[data-content-id]');
-    const c = rows.length && courseItems(cid);
-    if (!c?.items) return;
-    const { ids, seen: now, inside } = GZ_GRADES.newItems(c.items, seenItems[cid], new Set([...rows].map((r) => r.dataset.contentId)));
-    const set = shownItems.get(cid) || new Set();
-    for (const id of ids) set.add(id);
-    shownItems.set(cid, set);
-    if (now !== seenItems[cid]) { seenItems[cid] = now; keepSeen('seenContent', cid, now); }
-    // A row's own title comes first; an open folder's rows follow it.
-    for (const r of rows) {
-      const title = r.querySelector('[class*="contentItemTitle"]')?.parentElement;
-      if (!title) continue;
-      const id = r.dataset.contentId;
-      const closed = r.querySelector('[aria-expanded]')?.getAttribute('aria-expanded') === 'false';
-      cardBadge(title, cid, set.has(id) ? 1 : 0, 'item');
-      cardBadge(title, cid, !set.has(id) && closed ? inside.get(id) : 0, 'inside');
-    }
-    // Arrived from a card's count, or a folder's count was clicked: unfold the folders down to the
-    // newest new item (the highest id) and bring it into view. Folders are only unfolded, never opened,
-    // and each at most once, so a slow one isn't folded back. Given up after ten seconds.
-    if (sessionStorage.getItem('gz-new-jump') === `items ${cid}`) { sessionStorage.removeItem('gz-new-jump'); jump = { under: null, at: Date.now(), opened: new Set() }; }
-    if (!jump) return;
-    const up = new Map(c.items.map((i) => [i.id, i.parentId]));
-    const chain = (id) => { const a = []; for (let p = up.get(id); up.has(p); p = up.get(p)) a.unshift(p); return a; };
-    const target = [...set].filter((id) => !jump.under || chain(id).includes(jump.under)).sort((a, b) => b.split('_')[1] - a.split('_')[1])[0];
-    const row = (id) => document.querySelector(`.content-list-item[data-content-id="${id}"]`);
-    if (!target || Date.now() - jump.at > 10000) { jump = null; return; }
-    if (row(target)) { glide(row(target)); jump = null; return; }
-    for (const f of chain(target)) {
-      const t = row(f)?.querySelector('[aria-expanded]');
-      if (!t) return;
-      if (t.getAttribute('aria-expanded') === 'false' && !jump.opened.has(f)) { jump.opened.add(f); t.click(); return; }
-    }
-  };
 
   // ---- your place in a course (Extras) --------------------------------------------------------
   // Ultra: a course outline's open folders and how far down it you were; Canvas: how far down a course's Modules list,
@@ -1402,23 +756,8 @@
 
   // ---- what-if calculator (Extras) -----------------------------------------------------------
   // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make, and a target what
-  // it takes. Ultra's is features/whatif.js (with lib/gradecalc.js), loaded on a course's Grades once its grades are in.
+  // it takes: Ultra's features/whatif.js, Canvas's features/grades.js, each asked for by its part (X.renderCalc).
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
-  // Canvas: the what-if calculator (a course's Grades) and the GPA (Dashboard) are features/grades.js, asked for where on.
-  const canvasGrades = () => {
-    const e = settings.enhance;
-    if (observer && (globalThis.GZ_GRADES_UI || (e.calc && /^\/courses\/\d+\/grades\/?$/.test(location.pathname)) || (e.gpa && location.pathname === '/'))) {
-      need('features/grades.js', () => globalThis.GZ_GRADES_UI).then(() => GZ_GRADES_UI.render(), () => {});
-    }
-  };
-  const renderCalc = () => {
-    if (!ultra) return moodle || canvasGrades();
-    if (globalThis.GZ_WHATIF) return GZ_WHATIF.render();
-    const cid = courseId();
-    if (settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview') && bookFor(cid).results) {
-      need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(() => need('features/whatif.js', () => globalThis.GZ_WHATIF)).then(() => GZ_WHATIF.render(), () => {});
-    }
-  };
 
   // ---- draft backup (Extras) ------------------------------------------------------------------
   // What you write in Ultra's editors, or in Canvas's Inbox compose, is kept on this device until it posts, and offered
@@ -1525,8 +864,6 @@
       need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
     }
   };
-  // A canvadocs frame (features/docviewer.js) asking for the palette and its file: features/docs.js answers.
-  if (!ultra && !moodle) addEventListener('message', (e) => { if (e.data?.gz === 'docs?' && /^https:\/\/canvadocs(-[\w-]+)?\.instructure\.com$/.test(e.origin)) need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.ask(e), () => {}); });
   // Here, so it is first to see the key: Esc leaves focus mode, and the site doesn't also act on it.
   addEventListener('keydown', (e) => globalThis.GZ_DOCS?.esc(e), true);
 
@@ -1574,47 +911,6 @@
       e.stopPropagation();
       cmdWanted = true;
       need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (cmdWanted && observer && settings.enhance.palette) GZ_CMD.open(); }, () => {}).finally(() => { cmdWanted = null; });
-    }, true);
-  }
-
-  // ---- page changes ---------------------------------------------------------------------------
-  // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
-  // stall it for half a second). A click on the main menu or a course's tabs instead holds the old
-  // page in a view transition until the next one exists, then crossfades into it: when the address has
-  // changed and the new page is being held while it loads (see page loads), or has been still for
-  // 120 ms, or after 500 ms at most. Top frame only, and only while entrances are on.
-  if (ultra && window.top === window && document.startViewTransition) {
-    const PAGE_LINKS = '#base_tools a, .bb-ui-navigation-list-horizontal a';
-    const settled = (from) => new Promise((done) => {
-      const t0 = performance.now();
-      let still = t0;
-      const mo = new MutationObserver(() => { still = performance.now(); });
-      mo.observe(document.body, { childList: true, subtree: true });
-      const check = () => {
-        const now = performance.now();
-        if ((location.href !== from && (held.size || now - still > 120)) || now - t0 > 500) { mo.disconnect(); done(); } else setTimeout(check, 25);
-      };
-      setTimeout(check, 25);
-    });
-    let replaying = false;
-    document.addEventListener('click', (e) => {
-      if (replaying || !observer || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      if (html.getAttribute('data-gz-motion') === 'off' || html.hasAttribute('data-gz-no-enter')) return;
-      const link = e.target instanceof Element && e.target.closest(PAGE_LINKS);
-      if (!link || link.matches('[aria-current="page"], .active')) return;
-      // Ultra gets the click inside the transition, once the old page has been captured.
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const from = location.href;
-      document.startViewTransition(async () => {
-        replaying = true;
-        link.click();
-        replaying = false;
-        await settled(from);
-        // The crossfade is the entrance: the new page's own fade-up would be a second movement. Marked
-        // on the element rather than switched on <html>, so it can't restart when the mark goes.
-        for (const el of document.querySelectorAll('.route-view-container, .panel-wrap')) el.setAttribute('data-gz-held', '');
-      });
     }, true);
   }
 
@@ -1694,7 +990,6 @@
   // keeps. Inside a course picked in the editor, the palette also leans toward it (GZ_TINT). A
   // course's own pages carry its color slot on the course section; its item pages carry nothing, so
   // the slot is remembered per course id, on this device. flush() re-checks on every page change.
-  const COURSE = 'section.course[class*="course-color-"]';
   const courseSlots = {};
   let courseList = {};
   const courseColors = () => GZ_COURSE_COLORS(courseList, settings.courses.colors);
@@ -1705,117 +1000,18 @@
       reapply();
     });
   } catch { /* extension reloaded under the tab */ }
-  // A course's own color on everything of it Glaze can tell is it: a course's section, a Messages card
-  // (data-course-id), a Grades row (a link into the course), anything on the course's own pages, a
-  // calendar entry by its title (calendarCourse).
-  const courseOf = (el) => el.getAttribute('bb-course-membership-markups') || el.closest('[data-course-id]')?.dataset.courseId
-    || (el.closest('a[href*="/courses/_"]') || el.querySelector('a[href*="/courses/_"]'))?.getAttribute('href').match(/\/courses\/(_\d+_\d+)/)?.[1]
-    || courseId() || calendarCourse(el);
-  // Calendar entries name no course: on the calendar, an entry is the course's whose item title it shows,
-  // when no other course sharing its slot has an item by that title (GZ_CAL_COURSE); otherwise it keeps
-  // its slot's color. The items are the calendar's own list, asked for once a page load.
-  // ponytail: six weeks back to ten on; entries outside that keep their slot's color.
-  let calItems = null;
-  const calendarCourse = (el) => {
-    if (!location.pathname.startsWith('/ultra/calendar')) return null;
-    if (!calItems) {
-      calItems = [];
-      const at = (days) => new Date(Date.now() + days * 864e5).toISOString();
-      api(`/calendars/calendarItems?since=${at(-42)}&until=${at(70)}`).then((j) => { calItems = j.results || []; paintCourses(); }, () => {});
-    }
-    return GZ_CAL_COURSE(el.textContent, el.className.match?.(/course-color-(\d+)/)?.[1], calItems, courseList);
-  };
-  const paintCourses = () => {
-    if (!ultra) {
-      if (!observer || !settings.enabled) return;
-      const changed = {};
-      // A native color edit repaints the hero before a new API request would see it.
-      for (const card of document.querySelectorAll('.ic-DashboardCard')) {
-        const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1];
-        const c = courseList[canvasCourseKey(id)];
-        const raw = C.parse(card.querySelector('.ic-DashboardCard__header_hero')?.style.backgroundColor || '');
-        if (c && raw && c.color !== C.hex(raw)) { c.color = C.hex(raw); changed[canvasCourseKey(id)] = c; }
-      }
-      if (Object.keys(changed).length) try { chrome.storage.local.get('seenCourses', (r) => chrome.storage.local.set({ seenCourses: { ...r?.seenCourses, ...changed } })); } catch { /* reloaded */ }
-      const cid = canvasCourseKey();
-      const targets = new Map();
-      if (cid) for (const el of document.querySelectorAll('#breadcrumbs li:nth-child(2), #section-tabs')) targets.set(el, cid);
-      // Calendar and dashboard colors are native; Grades links and Inbox course labels have no color.
-      if (location.pathname === '/grades') for (const el of document.querySelectorAll('#content a[href*="/courses/"]')) {
-        targets.set(el, canvasCourseKey(el.getAttribute('href').match(/\/courses\/(\d+)/)?.[1]));
-      }
-      if (location.pathname === '/conversations') {
-        const list = Object.entries(courseList).filter(([id, c]) => id.startsWith(`canvas:${location.origin}/`) && c.color);
-        // MessageDetailItem’s second header field is the native context label, not the message body.
-        // Canvas supplies only its name; ambiguous names keep Canvas’s own styling.
-        for (const el of document.querySelectorAll('[data-testid^="message-detail-item-"] > :nth-child(2) > :first-child > :nth-child(2) > span')) {
-          if (el.children.length) continue;
-          const matches = list.filter(([, c]) => [c.name, c.code].includes(el.textContent.trim()));
-          if (matches.length === 1) targets.set(el, matches[0][0]);
-        }
-      }
-      for (const el of document.querySelectorAll('[data-gz-course-color]')) if (!targets.has(el) || !courseList[targets.get(el)]?.color) {
-        el.removeAttribute('data-gz-course-color');
-        el.style.removeProperty('--gz-course-raw');
-      }
-      for (const [el, id] of targets) {
-        const color = courseList[id]?.color;
-        if (!color) continue;
-        if (el.style.getPropertyValue('--gz-course-raw') !== color) el.style.setProperty('--gz-course-raw', color);
-        if (!el.hasAttribute('data-gz-course-color')) el.setAttribute('data-gz-course-color', '');
-      }
-      return;
-    }
-    if (isPreview) return;
-    const colors = courseColors();
-    for (const el of document.querySelectorAll('[class*="course-color-"]')) {
-      const v = GZ_COURSE_VARS(colors[courseOf(el)]);
-      for (const k of ['--gz-pick', '--gz-course-raw']) {
-        if (el.style.getPropertyValue(k) === (v[k] || '')) continue;
-        if (v[k]) el.style.setProperty(k, v[k]);
-        else el.style.removeProperty(k);
-      }
-    }
-  };
+  // Each course's color on the page's own elements of it is the site part's: Ultra's slots, Canvas's breadcrumb and
+  // course tabs (X.paintCourses).
   const varText = (v) => Object.entries(v).map(([k, x]) => `${k}:${x}`).join(';');
-  // The course tinting the page now, as { key, slot, vars }, or null.
+  // The course tinting the page now, as { key, color } (Canvas, Moodle: the course list's color), Ultra's as { key, slot,
+  // vars } (X.tintOf), or null.
   const tintOf = () => {
-    if (!ultra) {
-      const id = canvasCourseKey();
-      const color = courseList[id]?.color;
-      return color && settings.courses.tint && settings.courses.tinted.includes(id) && chrome.runtime?.id ? { key: `${id};${color}`, color } : null;
-    }
-    const cid = courseId();
-    const sec = document.querySelector(COURSE);
-    const slot = sec?.className.match(/course-color-(\d+)/)?.[1];
-    // The section names its course: the address changes ~250 ms before the next course's section
-    // replaces the last one's.
-    const id = sec?.getAttribute('bb-course-membership-markups') || cid;
-    if (id && slot && courseSlots[id] !== slot) {
-      courseSlots[id] = slot;
-      try { chrome.storage.local.set({ courseSlots }); } catch { /* reloaded */ }
-    }
-    const { tint, tinted: picked } = settings.courses;
-    // Cut off by a reload or update of Glaze (no runtime id), ticks since removed never arrive: no tint.
-    if (!tint || !chrome.runtime?.id) return null;
-    // The editor's preview is its first ticked course: the section carries that course's slot and color.
-    if (!cid) return isPreview && slot && picked.length ? { key: `${slot};${sec.style.cssText}`, slot, vars: sec.style.cssText } : null;
-    // Ticked by id; a slot number is a tick from before each course had its own.
-    const now = courseSlots[cid];
-    return now && (picked.includes(cid) || picked.includes(now)) ? { key: cid, slot: now, vars: varText(GZ_COURSE_VARS(courseColors()[cid])) } : null;
+    if (ultra) return X.tintOf();
+    const id = canvasCourseKey();
+    const color = courseList[id]?.color;
+    return color && settings.courses.tint && settings.courses.tinted.includes(id) && chrome.runtime?.id ? { key: `${id};${color}`, color } : null;
   };
   const tintKey = () => tintOf()?.key || null;
-  // The color the Course colors section already resolves (--gz-course: a pick, toned or raw), read
-  // off a hidden probe on <html>, outside the observed body. Null until theme.css has loaded.
-  const courseColor = (slot, vars = '') => {
-    const p = document.createElement('i');
-    p.className = `course-color-${slot}`;
-    p.style.cssText = `${vars};display:none;color:color-mix(in srgb, var(--gz-course, transparent) 100%, transparent)`;
-    html.append(p);
-    const c = C.parse(getComputedStyle(p).color);
-    p.remove();
-    return c?.a ? C.hex(c) : null;
-  };
   let tinted = null; // the key of the course whose color is painted now
   let palette = GZ_DEFAULTS.colors; // the colors painted, tint included
   // A course given a look of its own wears it on its pages (GZ_COURSE_LOOK); flush() re-checks. Once
@@ -1832,67 +1028,8 @@
   // settings as it does after an edit made there. The popover lives in <body>, not in the card: a press in it can't
   // reach the card (a link) behind it. Ultra only, top frame only; off with the Extras switch (nicknames with it).
   // The popover itself, and the edits it makes, are features/coursemenu.js, loaded when a button is first pointed at.
-  const CARD = COURSE_CARDS[0][0];
-
-  // The nickname given to a course, while the Extra is on; '' for none. Only Glaze's own surfaces and the page's
-  // course names call this: Blackboard's real name is always the course list's (recordCourses), never the page's.
-  const nickOf = (cid) => (ultra && observer && settings.enhance.coursemenu && settings.courses.names[cid]) || '';
-
-  // -- nicknames: swapped into the page's own text, and put back exactly --
-  // Where Ultra writes a course's name: [selector, course id of a match, the element holding the name, whether the
-  // name is only one text among others there]. A card's title is the name, so its first text is swapped; the course's
-  // header and a breadcrumb hold other text too, so there only a text that is the course's name is.
-  // ponytail: the header and breadcrumb selectors are guesses at Ultra's markup (the cards' are COURSE_CARDS');
-  // check them on a real site, and add a surface by adding a row.
-  const NAME_AT = [
-    ...COURSE_CARDS.map(([sel, idOf, where]) => [sel, idOf, where, false]),
-    ['course-page-header > header', () => courseId(), (e) => e, true],
-    ['[class*="readcrumb"]', () => courseId(), (e) => e, true],
-  ];
-  // The swapped text's parent keeps what Ultra wrote (data-gz-real), what Glaze wrote over it (data-gz-nick) and
-  // whose name it is (data-gz-cid), and the real name as a tooltip unless the element has a title of its own
-  // (data-gz-titled). Putting it back is exact; a text Ultra has since rewritten is left as Ultra wrote it.
-  const unname = (p) => {
-    const mine = [...p.childNodes].find((n) => n.nodeType === 3 && n.data === p.dataset.gzNick);
-    if (mine) mine.data = p.dataset.gzReal;
-    if (p.dataset.gzTitled !== undefined) p.removeAttribute('title');
-    for (const k of ['gzReal', 'gzNick', 'gzCid', 'gzTitled']) delete p.dataset[k];
-  };
-  const paintName = (scope, cid, exact) => {
-    const nick = nickOf(cid);
-    const real = courseList[cid]?.name;
-    const walk = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (!n.data.trim() || n.parentElement?.closest('.gz-new, .gz-cm-btn') ? 3 : 1) });
-    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-      const p = n.parentElement;
-      const was = p.dataset.gzReal;
-      if (was === undefined) {
-        // Nothing swapped here yet.
-        if (!nick || !real || (exact && n.data.replace(/\s+/g, ' ').trim() !== real)) continue;
-        p.dataset.gzReal = n.data;
-        p.dataset.gzCid = cid;
-        if (!p.hasAttribute('title') && p.dataset.gzTitle === undefined) { p.title = real; p.dataset.gzTitled = ''; }
-      } else if (n.data !== was && n.data !== p.dataset.gzNick) continue; // another text of this element
-      if (!nick) unname(p);
-      else {
-        if (n.data !== nick) n.data = nick;
-        p.dataset.gzNick = nick;
-      }
-      if (!exact) break;
-    }
-  };
-  // Run with the flush: Ultra draws cards and headers again as it likes, and this puts the nicknames back.
-  const syncNames = () => {
-    if (!document.querySelector('[data-gz-real]') && !Object.keys(settings.courses.names).length) return;
-    for (const [sel, idOf, where, exact] of NAME_AT) {
-      for (const el of document.querySelectorAll(sel)) {
-        const cid = idOf(el);
-        const at = cid && where(el);
-        if (at) paintName(at, cid, exact);
-      }
-    }
-    // What is still swapped whose nickname is gone or off (or whose element Ultra moved out of reach).
-    for (const p of document.querySelectorAll('[data-gz-real]')) if (!nickOf(p.dataset.gzCid)) unname(p);
-  };
+  // Nicknames, swapped into Ultra's own text, are content-ultra.js' (X.nickOf, X.syncNames).
+  const CARD = 'article[id^="course-list-course-"]';
 
   // -- the button on each card --
   const menuOn = () => !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
@@ -1903,7 +1040,7 @@
       let b = card.querySelector(':scope > .gz-cm-btn');
       if (b && (!on || b.dataset.cid !== cid || !courseList[cid])) { b.remove(); b = null; }
       if (!on || !courseList[cid]) continue;
-      const label = t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name: nickOf(cid) || courseList[cid].name });
+      const label = t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name: X.nickOf(cid) || courseList[cid].name });
       if (!b) {
         // Inside Ultra's card, positioned over its corner (extras.css); document-level capture listeners take
         // its events, below.
@@ -1921,7 +1058,7 @@
       }
     }
     globalThis.GZ_COURSE_MENU?.sync(on);
-    if (ultra) syncNames(); else syncCards();
+    if (ultra) X.syncNames(); else syncCards();
   };
   // Canvas's dashboard cards: features/cards.js.
   const cardUI = (f) => need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => f(GZ_CARD_UI), () => {});
@@ -1930,7 +1067,7 @@
   const unmenu = () => {
     globalThis.GZ_COURSE_MENU?.close(false, true);
     for (const b of document.querySelectorAll('.gz-cm-btn')) b.remove();
-    for (const p of document.querySelectorAll('[data-gz-real]')) unname(p);
+    X.unname();
   };
 
   // The button is taken at the document, in the capture phase, as the cards' counts are (openNew): Ultra's card
@@ -1987,21 +1124,6 @@
   };
   if (!ultra) addEventListener('pagereveal', (e) => { if (e.viewTransition) setAttr('data-gz-vt-in', true); });
 
-  const paintNav = (n, picture) => {
-    if (site !== 'canvas' || window.top !== window) return;
-    setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
-    for (const k of ['labels', 'collapsed', 'f']) setAttr(`data-gz-nav-${k}`, n[k]);
-    setAttr('data-gz-nav-no-logo', !n.logo);
-    const src = n.i ? picture : n.u;
-    setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
-    for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) setVar(`--gz-nav-${k}`, v);
-  };
-  const syncNav = () => {
-    if (site !== 'canvas' || isPreview || window.top !== window) return;
-    if (worn.nav.i || worn.nav.collapsed || worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
-    else globalThis.GZ_NAV_UI?.sync();
-  };
-
   const applySettings = () => {
     looked = lookHere();
     const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey()) : settings);
@@ -2023,11 +1145,11 @@
       }
       // The course color is worked out from the untinted palette set above, then painted over it.
       const on = tintOf();
-      const course = on && courseColor(on.slot, on.vars);
+      const course = on && X.courseColor(on.slot, on.vars);
       tinted = course ? on.key : null;
       colors = course ? GZ_TINT(base, course, s.courses.strength / 100) : base;
       if (course) for (const [v] of GZ_COLORS) setVar(v, colors[v]);
-      paintCourses();
+      X.paintCourses();
     } else {
       const on = tintOf();
       tinted = on?.key || null;
@@ -2035,7 +1157,7 @@
         colors = GZ_TINT(base, on.color, s.courses.strength / 100);
         for (const [v] of GZ_COLORS) setVar(v, colors[v]);
       }
-      paintCourses();
+      X.paintCourses();
     }
     const surface = palette['--gz-surface'];
     palette = colors;
@@ -2059,7 +1181,7 @@
     for (const f of [s.look.font, s.look.head, s.look.mono]) GZ_FONTS.load(f);
     setAttr('data-gz-density', s.look.density);
     setAttr('data-gz-depth', String(s.look.depth));
-    paintNav(s.nav);
+    X.paintNav(s.nav);
     // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
     const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
@@ -2088,10 +1210,10 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncSyl(); syncWidgets(); syncInsights(); syncNav(); }
+    if (said) { X.renderProgress(); X.renderCalc(); syncDownloads(); syncCourseMenu(); X.syncTodo(); X.syncCardTasks(); X.syncRemind(); X.syncSyl(); X.syncWidgets(); X.syncInsights(); X.syncNav(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
-    if (said) renderNew();
+    if (said) X.renderNew();
     if (was.drafts && !s.enhance.drafts) { globalThis.GZ_DRAFT_UI?.drop(true); tidyDrafts(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
@@ -2191,6 +1313,8 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
       if (!ultra) await ready;
+      // The site's part still on its way: the theme is on already; the sweep and the extras wait for it.
+      if (partIn) await partIn;
       if (!links.length) return;
       if (!on(settings)) return disable();
       syncFooter();
@@ -2212,12 +1336,12 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     for (const l of links) l.remove();
     links = [];
     armFlip();
-    syncTodo();
-    syncCardTasks();
-    syncWidgets();
-    syncRemind();
-    syncSyl();
-    syncInsights();
+    X.syncTodo();
+    X.syncCardTasks();
+    X.syncWidgets();
+    X.syncRemind();
+    X.syncSyl();
+    X.syncInsights();
     themeEditors();
     syncPageFade();
     stopScene();
@@ -2228,15 +1352,33 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     syncFooter();
   };
 
-  // The helpers a file loaded by need() may use (features/*.js): this frame's, read through one name.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, profile, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => paintNav(worn.nav, src), on: () => !!observer,
+  const reapply = () => { if (settings.enabled && links.length) applySettings(); };
+
+  // ---- the site's own part -------------------------------------------------------------------------
+  // content-ultra.js or content-canvas.js is given what it needs from here (I; live state through getters), and puts
+  // its own over X. A page that hasn't it (its host was registered for Moodle) asks for it, and the theme doesn't wait:
+  // only the sweep and the extras do (enable). Without it, the theme stays on.
+  const I = { C, html, isPreview, need, t, locale, api, capi, canvasCourseKey, canvasCourseId, courseId, celebrate, markDue, drawProgress, cardBadge, KIND,
+    cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled, setVar, setAttr,
+    setCourseList: (all) => { courseList = all; X.paintCourses(); syncCourseMenu(); reapply(); },
+    get settings() { return settings; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
+    get courseList() { return courseList; }, get worn() { return worn; } };
+  const part = { ultra: 'GZ_SITE_ULTRA', canvas: 'GZ_SITE_CANVAS' }[site];
+  const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
+  const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
+  if (!partIn) takePart();
+
+  // The helpers a file loaded by need() may use (features/*.js): this frame's, read through one name. The part's are
+  // asked of it when called, so a part that comes late still answers.
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer,
     // The palette, the keys, the course menu, the previews and Download all (W0c).
-    site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, myCourses, courseId, courseItems, toggleOf, canvasPeek, moduleItems,
-    nickOf, courseList: () => courseList, courseColor, courseColors, varText, cardUI,
+    site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf,
+    nickOf: (cid) => X.nickOf(cid), courseList: () => courseList, courseColors, varText, cardUI,
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
-    draftEditor: DRAFT_ED, draftAt, bookFor, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    canvasCourseKey, ROWS, holding: () => held.size > 0, tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked });
+    draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
+    canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked,
+    ...Object.fromEntries(['canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.
@@ -2292,7 +1434,6 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       else if (on(s)) applySettings();
     });
   });
-  const reapply = () => { if (settings.enabled && links.length) applySettings(); };
   // Moodle's course is on <body>: its tint and look before that is drawn.
   if (moodle && !document.body) new MutationObserver((_, o) => document.body && (o.disconnect(), reapply())).observe(html, { childList: true });
   darkMQ.addEventListener('change', reapply);

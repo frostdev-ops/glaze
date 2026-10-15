@@ -11,7 +11,7 @@ extension reload. Run `node --test` before sending a change.
 
 ## Layout
 
-- `content.js` — runs on Ultra and Canvas pages: adds the stylesheets, applies settings, the DOM sweep, tooltips and the extras.
+- `content.js` — runs on Ultra, Canvas and Moodle pages: adds the stylesheets, applies settings, the DOM sweep, tooltips and the extras. What only one site does is in its part, `content-ultra.js` or `content-canvas.js`, listed before `content.js` for that site (Moodle has none); each site's first script has its own budget (`test/perf-budget.test.js`).
 - `theme.css` (palette and page polish), `motion.css` (motion levels), `extras.css` (backgrounds and extras).
 - `defaults.js` — the settings schema, defaults, presets and `GZ_SANITIZE`. `lib/` — pure helpers with tests in `test/`, plus `scene.js` (the animated backgrounds) and the vendored `three.min.js`.
 - `popup.*`, `options.*`, `ui.*` — the popup, the editor and what they share. `preview.html` is the editor's mock Ultra page.

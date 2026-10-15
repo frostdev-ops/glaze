@@ -110,6 +110,12 @@ and uploads the build to App Store Connect. It needs an App Store Connect API ke
 on first use. `APPSTORE_EXPORT_ONLY=1` builds the signed package without uploading. Listing text,
 screenshots and review submission happen in App Store Connect.
 
+The app bundles only the files the Xcode project lists for its two extension targets (Mac and iOS); a folder
+reference brings everything under it. Every build script copies the package into the project's Resources folder
+and then runs `node scripts/safari-resources.js` on it, which stops the build if the package has a file the
+project doesn't list. Add a new top-level file or folder to both extension targets in Xcode;
+`test/safari-resources.test.js` checks the project against everything the package ships.
+
 `scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
 Use it only when you mean to regenerate the project. It doesn't know about the iPhone and iPad targets below.
 
@@ -171,6 +177,11 @@ script writes from your saved settings, so the CSS never needs JavaScript to dec
 DOM sweep tags the long tail — hardcoded light backgrounds, dark text, viewport-fixed bars — with
 `data-gz-*` attributes the stylesheets then restyle.
 
+Each LMS loads only what it needs at first paint: the shared `content.js` (with the small libraries it uses)
+plus that site's own part, `content-ultra.js` on Blackboard Ultra and `content-canvas.js` on Canvas. Moodle
+has no part; it is themed by `content.js` and `moodle.css`. Everything else, from the command palette to the
+grade calculators, loads on demand from `features/` the first time a page needs it.
+
 ## Building
 
 ```sh
@@ -229,7 +240,7 @@ your overall grade on course cards; on Canvas a course's assignment groups when 
 your course list and a course's items for the command palette and new-content badges; on Canvas, what you type in the command palette, to search your courses' titles), to Google Fonts or jsDelivr for a web
 font you choose, and to a background image, course card picture or sidebar picture you choose. For Canvas Download all, the extension's background worker
 fetches signed file links from your school's file host without cookies. Links and file bytes stay in memory while
-Glaze makes the zip; they are not saved in extension storage. The downloaded Mac app also checks
+Glaze makes the zip; they are not saved in extension storage. Blackboard's course content answers can include a course tool's launch credentials: Glaze asks for them to be left out and never keeps them. The downloaded Mac app also checks
 `https://frostdev.io/projects/glaze/appcast.xml` about once a day and downloads updates from GitHub,
 with system profiling disabled. These services receive ordinary network requests, including your IP
 address. See [PRIVACY.md](PRIVACY.md).

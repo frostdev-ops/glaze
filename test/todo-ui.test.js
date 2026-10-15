@@ -115,13 +115,13 @@ const planner = (calls) => calls.filter((u) => u.includes('/planner/items')).len
 const summaries = (calls) => calls.filter((u) => u.includes('submission_summary')).length;
 
 test('a module that arrives after the list was turned off stays off', async () => {
-  const decls = read('content.js').match(/ {2}const todoHere = .*\n {2}const syncTodo = .*\n/)[0];
+  const decls = read('content-canvas.js').match(/ {2}const todoHere = .*\n {2}const syncTodo = .*\n/)[0];
   let arrive;
-  const ctx = { ultra: false, moodle: false, links: [1], settings: { enhance: { todo: true } }, location: { pathname: '/' }, need: () => new Promise((r) => { arrive = r; }) };
+  const ctx = { I: { links: [1], settings: { enhance: { todo: true } } }, location: { pathname: '/' }, need: () => new Promise((r) => { arrive = r; }) };
   vm.createContext(ctx);
   vm.runInContext(`${decls}\nglobalThis.syncTodo = syncTodo;`, ctx);
   const late = ctx.syncTodo();
-  ctx.settings.enhance.todo = false;
+  ctx.I.settings.enhance.todo = false;
   ctx.syncTodo(); // the off pass: nothing loaded yet to turn off
   const asked = [];
   ctx.GZ_TODO_UI = { sync: (on) => asked.push(on) };

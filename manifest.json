@@ -55,7 +55,26 @@
     {
       "matches": [
         "https://*/ultra",
-        "https://*/ultra/*",
+        "https://*/ultra/*"
+      ],
+      "js": [
+        "lib/color.js",
+        "lib/i18n.js",
+        "lib/page.js",
+        "lib/grades.js",
+        "lib/fonts.js",
+        "defaults.js",
+        "content-ultra.js",
+        "content.js"
+      ],
+      "exclude_matches": [
+        "https://*.instructure.com/*"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
         "https://*.instructure.com/*"
       ],
       "js": [
@@ -65,6 +84,7 @@
         "lib/grades.js",
         "lib/fonts.js",
         "defaults.js",
+        "content-canvas.js",
         "content.js"
       ],
       "exclude_matches": [

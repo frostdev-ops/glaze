@@ -45,7 +45,7 @@ const fromJs = (js) => {
   return out;
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/todo.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+const JS = ['content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/todo.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 const used = new Set([
   ...['options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
@@ -88,7 +88,7 @@ test('translations keep their placeholders, and counts have an other form', () =
 test('every catalogue is loaded wherever Glaze speaks', () => {
   // On the LMS, only the page's own, on demand (content.js words(), lib/background.js LOADABLE); the extension's
   // pages have them all.
-  const content = require('../manifest.json').content_scripts[0].js;
+  const content = require('../manifest.json').content_scripts.flatMap((c) => c.js);
   assert.deepEqual(I.CODES, files.map((f) => f.replace(/\.js$/, '')), 'GZ_I18N.CODES lists i18n/');
   for (const f of files) {
     assert.ok(!content.includes(`i18n/${f}`), `manifest: i18n/${f} loads on demand, not with every page`);
