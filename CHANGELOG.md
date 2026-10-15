@@ -14,6 +14,16 @@ All notable changes to Glaze are documented here. The format follows
   term. Import it into Google Calendar, Outlook or Apple Calendar; stable event identifiers mean a newer file updates
   the same events where the calendar supports it. Made on the device, downloaded by the browser (no new permission);
   the choices are remembered and also in the options page. No subscribe link: that would need a server.
+- **Past terms, GPA trends and a GPA goal** (Canvas, with the GPA on): add earlier terms by hand or import them from a
+  transcript's text, a web page or a Word file, read on this device and always shown for review first (the transcript's
+  own term GPA is checked against Glaze's). Plus/minus or whole-letter scales per term, credits, honors and AP;
+  pass/fail, withdrawn, transfer and incomplete courses are listed but left out. The Dashboard's GPA gains an overall
+  figure with past terms, a chart of term and cumulative GPA (with a table of the same figures for screen readers),
+  and a cumulative or term goal: what this term needs, whether it's in reach, and one route there from your grades
+  now, with the lowest percent for each letter and, per course, what the work left needs. Ctrl+K: GPA: past terms,
+  trends and goal. Free, unlimited and kept on this device; nothing is uploaded. PDF and photo transcripts aren't
+  read yet.
+
 - **Canvas sidebar:** style Canvas's native global navigation with a solid color, two-color gradient or picture
   (an https link or local file), filters and an overlay. Choose text and icon colors, normal/small/icon-only labels,
   three sizes, logo visibility and a collapsed rail. Native links keep their labels and keyboard access. The

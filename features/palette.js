@@ -65,6 +65,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...(globalThis.GZ_TODO_UI?.cmds() || []),
       ...(globalThis.GZ_REMIND_UI?.cmds() || []),
       { label: t('Export calendar (.ics)'), hint: 'Glaze', group: 'Glaze', run: () => need('features/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => {}) },
+      // Opens the GPA's past terms, trends and goal (features/grades.js), on the Dashboard.
+      ...(ctx.settings().enhance.gpa ? [{ label: t('GPA: past terms, trends and goal'), hint: 'Glaze', group: 'Glaze', run: () => (location.pathname === '/' && globalThis.GZ_GRADES_UI ? GZ_GRADES_UI.open() : go('/#gz-gpa')()) }] : []),
       ...glazeCmds(),
       // Every Canvas extra with its switch (features/widgets.js), whether or not the widgets are on.
       { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },

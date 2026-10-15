@@ -312,6 +312,148 @@ test('GPA: a course answer without a grading scheme says the what-if needs a sca
   assert.equal(asked.length, 1, 'and not again');
 });
 
+// The GPA with past terms, trends and a goal (features/gpaterms.js, lib/gpa.js), kept through the service worker.
+const histPage = (store, held = {}) => {
+  const doc = page();
+  doc.createElementNS = (ns, tag) => new El(tag, doc);
+  doc.body.append(el(doc, 'div', { id: 'DashboardCard_Container' }));
+  const state = { settings: { enabled: true, enhance: { gpa: true, gpaPlus: true } } };
+  store.send ||= serviceWorker(store);
+  const sender = { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` };
+  const list = [{ id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 92 }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } }];
+  let ctx;
+  const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
+  const chrome = { runtime: { sendMessage: (m) => store.send(m, sender) }, storage: { local: store.tab(held), sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
+  ctx = vm.createContext({
+    document: doc, location: { pathname: '/', search: '', hash: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome,
+    GZ_CTX: {
+      t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', capi: () => Promise.resolve(null), canvasCourses: () => Promise.resolve(list), canvasCourseId: () => undefined,
+      need, settings: () => state.settings, on: () => true,
+    },
+  });
+  vm.runInContext(read('lib/gradecalc.js'), ctx);
+  vm.runInContext(read('features/grades.js'), ctx);
+  const box = () => doc.getElementById('gz-gpa');
+  const f = (key) => find(box(), (e) => e.dataset.f === key);
+  return { doc, UI: ctx.GZ_GRADES_UI, box, f, hist: () => find(box(), (e) => /gz-gpa-hist\b/.test(e.className)) };
+};
+
+test('GPA: past terms count in the overall GPA, show as a trend table, set a goal and come in from a transcript', async () => {
+  const TKEY = `gpaTerms:${ORIGIN}:3`;
+  const store = shared({ [TKEY]: { t: [
+    { id: 'b', n: 'Spring 2026', c: [{ n: 'MATH 201', cr: 4, g: 'B' }, { n: 'HIST 110', cr: 3, g: 'W' }] },
+    { id: 'a', n: 'Fall 2025', c: [{ n: 'BIO 101', cr: 4, g: 'A-' }, { n: 'ENG 101', cr: 3, g: 'B+' }, { n: 'ART 120', cr: 2, g: 'P' }] },
+  ] } });
+  const p = histPage(store);
+  p.UI.render();
+  await settle(10);
+  // Fall 24.7 over 7, Spring 12 over 4, Calculus I at 92% is an A- (3.7) over 3: 47.8 / 14.
+  assert.match(p.box().textContent, /3\.41Overall, with past terms/);
+  const h = p.hist();
+  h.open = true;
+  h.fire('toggle');
+  await settle(10);
+  const table = find(h, (e) => e.tagName === 'TABLE' && /Your GPA by term/.test(e.textContent));
+  assert.deepEqual(table.all((e) => e.tagName === 'TR').slice(1).map((r) => r.children.map((c) => c.textContent)),
+    [['Fall 2025', '3.53', '7', '3.53'], ['Spring 2026', '3.00', '4', '3.34'], ['Fall 2026Now, from Canvas', '3.70', '3', '3.41']], 'oldest first, then this term');
+  assert.ok(find(h, (e) => e.tagName === 'SVG' && e.getAttribute('aria-hidden') === 'true'), 'a chart, with the table for screen readers');
+  assert.match(h.textContent, /Withdrawn: not in the GPA/);
+  // A goal out of reach, then one within it.
+  p.f('goal:v').value = '3.5';
+  p.f('goal:v').fire('change');
+  await settle(10);
+  assert.deepEqual(store.data[TKEY].g, { k: 'cum', v: 3.5 }, 'kept by the service worker');
+  assert.match(p.hist().textContent, /Out of reach this term: straight A's would bring your cumulative GPA to 3\.48\./);
+  p.f('goal:v').value = '3.4';
+  p.f('goal:v').fire('change');
+  await settle(10);
+  assert.match(p.hist().textContent, /This term needs a GPA of 3\.64: about A- in every course\.Your grades now get you there\./);
+  // A term from a transcript's text: reviewed first, then kept.
+  p.f('imp:text').value = 'Fall 2024\nCHEM 101 General Chemistry 4.00 C+\nTerm GPA: 2.30';
+  p.f('imp:text').fire('input');
+  byText(p.hist(), 'Read it').fire('click');
+  await settle(10);
+  assert.match(p.hist().textContent, /Your transcript says 2\.30; Glaze makes it 2\.30\./);
+  assert.equal(store.data[TKEY].t.length, 2, 'nothing kept before review');
+  byText(p.hist(), 'Add these terms').fire('click');
+  await settle(10);
+  assert.deepEqual(store.data[TKEY].t.map((x) => x.n), ['Spring 2026', 'Fall 2025', 'Fall 2024']);
+  const trend = find(p.hist(), (e) => e.tagName === 'TABLE' && /Your GPA by term/.test(e.textContent));
+  assert.equal(trend.all((e) => e.tagName === 'TR')[1].children[0].textContent, 'Fall 2024', 'first in the trend');
+  // A new term, kept at once.
+  byText(p.hist(), 'Add a term').fire('click');
+  await settle(10);
+  assert.equal(store.data[TKEY].t.length, 4);
+  const other = await store.send({ type: 'glaze:gpaterms', key: 'gpaTerms:https://other.instructure.com:3', op: 'clear', at: Date.now() }, { id: WORKER_ID, tab: { id: 1 }, frameId: 0, url: `${ORIGIN}/` });
+  assert.deepEqual(other, { ok: false, error: 'sender' }, "a page can't change another site's terms");
+});
+
+test('GPA: a read of past terms held up while another tab removed them all doesn\'t bring them back', async () => {
+  const TKEY = `gpaTerms:${ORIGIN}:3`;
+  const store = shared({ [TKEY]: { t: [{ id: 'a', n: 'Fall 2025', c: [{ n: 'BIO 101', cr: 4, g: 'A' }] }] } });
+  const held = { on: true, queue: [] };
+  const p = histPage(store, held);
+  p.UI.render();
+  await settle(10);
+  // Remove all from another tab, while this tab's first read is still on its way.
+  const sender = { id: WORKER_ID, tab: { id: 2 }, frameId: 0, url: `${ORIGIN}/` };
+  assert.deepEqual(await store.send({ type: 'glaze:gpaterms', key: TKEY, op: 'clear', at: Date.now() }, sender), { ok: true });
+  held.on = false;
+  while (held.queue.length) held.queue.shift()();
+  await settle(10);
+  assert.doesNotMatch(p.box().textContent, /with past terms/, 'the old read is dropped');
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  assert.doesNotMatch(p.hist().textContent, /Fall 2025/);
+  // And a change sent from a view that never saw the clear is refused.
+  assert.deepEqual(await store.send({ type: 'glaze:gpaterms', key: TKEY, op: 'term', term: { id: 'a', n: 'Fall 2025', c: [] }, at: Date.now() + 1, base: 0 }, sender), { ok: false, error: 'stale' });
+  assert.deepEqual(store.data[TKEY].t, []);
+});
+
+test('GPA: a transcript whose term GPA matches over fewer credits than it printed is flagged in review, and its course kept', async () => {
+  const TKEY = `gpaTerms:${ORIGIN}:3`;
+  const store = shared();
+  const p = histPage(store);
+  p.UI.render();
+  await settle(10);
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  p.f('imp:text').value = 'Fall 2025\nCIS301 Software Quality Assurance 3 A\nTerm GPA 4.00 Credits 6.00';
+  p.f('imp:text').fire('input');
+  byText(p.hist(), 'Read it').fire('click');
+  await settle(10);
+  const text = p.hist().textContent;
+  assert.match(text, /These courses come to 3 credits, a total your transcript doesn't show/);
+  assert.match(text, /Your transcript says 4\.00; Glaze makes it 4\.00\. Check the grades and credits\./, 'no reassurance');
+  byText(p.hist(), 'Add these terms').fire('click');
+  await settle(10);
+  assert.deepEqual(store.data[TKEY].t[0].c.map((c) => c.n), ['CIS301 Software Quality Assurance']);
+});
+
+test('GPA: of two transcript files picked one after the other, the later one is reviewed even if the earlier is read last', async () => {
+  const p = histPage(shared());
+  p.UI.render();
+  await settle(10);
+  p.hist().open = true;
+  p.hist().fire('toggle');
+  await settle(10);
+  const later = [];
+  const file = (name, text) => ({ name, type: 'text/plain', size: text.length, text: () => new Promise((r) => later.push(() => r(text))) });
+  const input = p.f('imp:file');
+  input.files = [file('fall.txt', 'Fall 2024\nBIO 101 Biology 4 A')];
+  input.fire('change');
+  p.f('imp:file').files = [file('spring.txt', 'Spring 2025\nENG 101 Writing 3 B')];
+  p.f('imp:file').fire('change');
+  later[1]();
+  await settle(10);
+  later[0]();
+  await settle(10);
+  assert.match(p.hist().textContent, /Spring 2025/);
+  assert.doesNotMatch(p.hist().textContent, /Fall 2024/);
+});
+
 // ---- content.js: the Dashboard cards' grade, as a link of its own ----
 const source = read('content.js');
 const block = (from, to) => { const a = source.indexOf(from), b = source.indexOf(to, a); assert.ok(a > 0 && b > a, `${from} … ${to}`); return source.slice(a, b); };
