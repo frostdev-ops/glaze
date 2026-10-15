@@ -81,3 +81,23 @@ test('a nickname is trimmed to one line, and clearing it lets it go', () => {
   G.GZ_COURSE_EDIT.name(c, '_1_1', '   ');
   assert.deepEqual(c.names, {});
 });
+
+// Native Canvas colors stay outside sync settings; only tint/Look use the origin-scoped id.
+test('Canvas course tint and Look survive sanitizing without colliding with Ultra or another school', () => {
+  const a = 'canvas:https://school.instructure.com/25';
+  const b = 'canvas:http://localhost:3000/25';
+  const c = fresh();
+  G.GZ_COURSE_EDIT.tint(c, a, true);
+  G.GZ_COURSE_EDIT.tint(c, b, true);
+  G.GZ_COURSE_EDIT.look(c, a, G.GZ_LOOKS[0].name);
+  G.GZ_COURSE_EDIT.look(c, '_25_1', G.GZ_LOOKS[1].name);
+  kept(c);
+  assert.deepEqual(c.tinted, [a, b]);
+  assert.equal(G.GZ_COURSE_TINTED(c, '_25_1'), false);
+  assert.equal(c.looks[b], undefined);
+  G.GZ_COURSE_EDIT.tint(c, a, false);
+  assert.deepEqual(c.tinted, [b]);
+  const bad = ['25', 'canvas:25', 'canvas:javascript:alert(1)/25', 'canvas:https://host/course/25', '__proto__'];
+  assert.deepEqual(fresh({ tinted: bad, looks: Object.fromEntries(bad.map((id) => [id, G.GZ_LOOKS[0].name])) }).tinted, []);
+  assert.deepEqual(fresh({ looks: Object.fromEntries(bad.map((id) => [id, G.GZ_LOOKS[0].name])) }).looks, {});
+});

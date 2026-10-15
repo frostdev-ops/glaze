@@ -91,7 +91,6 @@
   "Inside each course ticked below, the accent takes the course's color and the background leans toward it, so you can tell at a glance which course you're in.": 'Binnen elke cursus die hieronder is aangevinkt, neemt het accent de kleur van de cursus over en neigt de achtergrond ernaar, zodat je in één oogopslag ziet in welke cursus je bent.',
   'Tint strength': 'Sterkte van de kleuring',
   'Organizations': 'Organisaties',
-  'Open Blackboard once and your courses show up here, each with a colour you can change.': 'Open één keer Blackboard, dan verschijnen je cursussen hier, elk met een kleur die je kunt aanpassen.',
   'On Canvas you get the theme, Due this week, the command palette and grades on course cards. The other extras are for Blackboard.': 'In Canvas krijg je het thema, "Deze week in te leveren", het opdrachtpalet en cijfers op cursuskaarten. De andere extra\'s zijn voor Blackboard.',
   'Due-date urgency': 'Urgentie van deadlines',
   'Marks items overdue, due today or due within three days.': 'Markeert items die te laat zijn, vandaag moeten of binnen drie dagen.',
@@ -398,4 +397,7 @@
   "its overall grade uses rules Glaze can't read": 'het gebruikt regels die Glaze niet kan lezen',
   "its overall grade uses rules Glaze can't read, like dropped scores or single weighted items": 'het gebruikt regels die Glaze niet kan lezen, zoals geschrapte cijfers of los gewogen onderdelen',
   "its overall grade names a category Glaze can't find": 'het noemt een categorie die Glaze niet kan vinden',
+  "Tint and look for {name}": "Tint en uiterlijk voor {name}",
+  "Change the colour and nickname in Canvas’s own card menu.": "Wijzig de kleur en bijnaam in het kaartmenu van Canvas.",
+  "Open Blackboard or Canvas once and your courses show up here. Change Canvas colours in its own card menu.": "Open Blackboard of Canvas om je cursussen hier te zien. Wijzig Canvas-kleuren in het eigen kaartmenu.",
 };
