@@ -11,7 +11,7 @@ const ICS = require('../lib/ics.js');
 const TZ = 'America/New_York';
 const NOW = Date.parse('2026-10-15T14:00:00Z'); // Thursday, 10:00 in New York
 const ALL = { icsDue: true, icsTasks: true, icsPlan: true, icsGs: true };
-const words = { plan: (x) => `Do: ${x}`, focus: (x) => `Focus: ${x}` };
+const words = { plan: (x) => `Do: ${x}`, focus: (x) => `Focus: ${x}`, untitled: 'Planned work' };
 const item = (o) => ({ type: 'assignment', id: '1', cid: '7', course: 'Biology', title: 'Lab 1', at: Date.parse('2026-10-20T03:59:00Z'), url: '/courses/7/assignments/1', ov: null, allDay: false, ...o });
 
 const run = (o = {}) => {
@@ -73,13 +73,13 @@ test('custom tasks with a due date; plans and focus sessions under their item\'s
     items: {
       'assignment:1': { on: '2026-10-17', sessions: [{ at: Date.parse('2026-10-16T18:00:00Z'), min: 50 }, { at: NOW - 864e5, min: 30 }] },
       'task:a3': { on: '2026-10-19' },
-      'assignment:404': { on: '2026-10-19' }, // not in what was read: left out
+      'assignment:404': { on: '2026-10-19' }, // not among what was read: kept, untitled
     },
   };
   const ev = run({ items: [item()], gs, data });
   const by = Object.fromEntries(ev.map((e) => [e.uid, e]));
   assert.deepEqual(Object.keys(by).sort(), [
-    'canvas.test/assignment/1@glaze', 'canvas.test/gradescope/55@glaze', 'canvas.test/on/assignment%3A1@glaze', 'canvas.test/on/task%3Aa3@glaze',
+    'canvas.test/assignment/1@glaze', 'canvas.test/gradescope/55@glaze', 'canvas.test/on/assignment%3A1@glaze', 'canvas.test/on/assignment%3A404@glaze', 'canvas.test/on/task%3Aa3@glaze',
     `canvas.test/session/assignment%3A1/${Date.parse('2026-10-16T18:00:00Z')}@glaze`, 'canvas.test/task/a1@glaze', 'canvas.test/task/a2@glaze',
   ]);
   assert.deepEqual([by['canvas.test/task/a1@glaze'].start, by['canvas.test/task/a1@glaze'].description], ['2026-10-18', 'Biology\npages 80-95']);
@@ -89,7 +89,8 @@ test('custom tasks with a due date; plans and focus sessions under their item\'s
   assert.equal(by['canvas.test/on/task%3Aa3@glaze'].summary, 'Do: Someday');
   // Each part has its own switch; a plan keeps its title when its item's deadline isn't exported.
   const plansOnly = run({ items: [item()], gs, data, o: { icsPlan: true } });
-  assert.deepEqual(plansOnly.map((e) => e.summary).sort(), ['Do: Lab 1', 'Do: Someday', 'Focus: Lab 1']);
+  assert.deepEqual(plansOnly.map((e) => e.summary).sort(), ['Do: Lab 1', 'Do: Planned work', 'Do: Someday', 'Focus: Lab 1']);
+  assert.deepEqual(X.planned(data, X.range('4w', NOW, TZ)).sort(), ['assignment:1', 'assignment:404', 'task:a3']);
   assert.ok(!run({ items: [item()], gs, data, o: { ...ALL, icsGs: false } }).some((e) => e.uid.includes('gradescope')));
   // W14's class periods pass straight through.
   const cls = { uid: 'x@glaze', summary: 'BIO 101', start: '2026-10-19T09:00', end: '2026-10-19T09:50', rrule: { freq: 'WEEKLY', byday: ['MO'] } };
@@ -119,4 +120,95 @@ test('the on-demand files end on their module and keep the first when loaded twi
     vm.runInContext(read(file), ctx);
     assert.equal(vm.runInContext(name, ctx), first, file);
   }
+});
+
+test('review: overdue work planned for later keeps its plan; its past deadline stays out', () => {
+  const late = item({ at: NOW - 864e5 }); // due yesterday
+  const data = { items: { 'assignment:1': { on: '2026-10-16' } } };
+  assert.deepEqual(run({ items: [late], data }).map((e) => [e.summary, e.start]), [['Do: Lab 1', '2026-10-16']]);
+  // Even when its item wasn't read at all.
+  assert.deepEqual(run({ items: [], data }).map((e) => e.summary), ['Do: Planned work']);
+  // A dismissed item's plan stays out, as Better To Do doesn't show it.
+  assert.deepEqual(run({ items: [item({ ov: { id: '9', dismissed: true } })], data }), []);
+});
+
+// features/calexport.js run() in a page of its own: Canvas's answers can be held, and storage changed meanwhile.
+const page = () => {
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const UID = '3', ORIGIN = 'https://canvas.test', ACCT = 'a'.repeat(24);
+  const store = {
+    sync: { version: 2, enabled: true, enhance: { gradescope: true } },
+    local: {
+      [`todo:${ORIGIN}/${UID}`]: { tasks: [], items: { 'assignment:1': { on: '2026-10-16' } } },
+      gradescope: {
+        acct: { id: ACCT, name: 'Sam' }, map: { 11: { to: `canvas:${ORIGIN}/7`, name: 'BIO' } },
+        courses: { 11: { at: NOW, bad: 0, rows: [{ id: '55', title: 'HW 3', due: Date.parse('2026-10-20T03:59:00Z'), late: null, sub: false, graded: false, score: null, points: 10, lateSub: false }] } },
+        bind: { [`${ORIGIN}/${UID}`]: { id: ACCT, show: true } },
+      },
+    },
+  };
+  const asked = [], held = [];
+  let hold = false;
+  const answer = (url) => {
+    const late = url.includes('start_date=2026-04') ? [{ plannable_type: 'assignment', plannable_id: '1', course_id: '7', context_name: 'Biology', plannable: { title: 'Lab 1' }, plannable_date: '2026-10-14T03:59:00Z', html_url: '/courses/7/assignments/1' }] : [];
+    return { ok: true, headers: { get: () => null }, text: async () => JSON.stringify(late) };
+  };
+  const get = (area) => (keys, cb) => { const all = JSON.parse(JSON.stringify(store[area])); cb(keys === null ? all : Object.fromEntries([keys].flat().filter((k) => k in all).map((k) => [k, all[k]]))); };
+  const c = vm.createContext({
+    TextEncoder, URL, Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
+    location: { origin: ORIGIN, host: 'canvas.test' },
+    chrome: { storage: { sync: { get: get('sync') }, local: { get: get('local') } } },
+    fetch: async (url) => { asked.push(decodeURIComponent(url)); if (hold) await new Promise((res) => held.push(res)); return answer(url); },
+    GZ_CTX: {
+      t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need: async () => {}, settings: () => ({ enabled: true, enhance: { gradescope: true } }),
+      profile: async () => ({ id: UID, time_zone: TZ }), canvasCourses: async () => [{ id: '7', name: 'Biology' }],
+    },
+  });
+  vm.runInContext('globalThis.globalThis = this; Date.UTC = Object.getPrototypeOf(Date).UTC; Date.parse = Object.getPrototypeOf(Date).parse;', c);
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'features/calexport.js']) vm.runInContext(read(f), c);
+  const saved = [];
+  const go = (alive = () => true) => c.GZ_CAL_UI.run({ icsDue: true, icsTasks: true, icsPlan: true, icsGs: true, icsRange: '2w' }, alive, (text) => { saved.push(text); return 'f.ics'; });
+  return { store, asked, held, saved, go, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); } };
+};
+const settle = () => new Promise((res) => setImmediate(res));
+
+test('review: an export with nothing changed saves Gradescope work and the overdue item\'s plan, after asking further back', async () => {
+  const p = page();
+  const r = await p.go();
+  assert.equal(r.name, 'f.ics');
+  assert.match(p.saved[0], /UID:canvas\.test\/gradescope\/55@glaze/);
+  assert.match(p.saved[0], /SUMMARY:Do: Lab 1/);
+  assert.ok(!/UID:canvas\.test\/assignment\/1@glaze/.test(p.saved[0]), 'its past deadline stays out');
+  assert.equal(p.asked.length, 2);
+  assert.match(p.asked[1], /start_date=2026-04-18T04:00:00\.000Z&end_date=2026-10-15T04:00:00\.000Z/);
+});
+
+for (const [what, change] of [
+  ['Gradescope consent withdrawn', (s) => { s.local.gradescope.bind['https://canvas.test/3'].show = false; }],
+  ['Gradescope switched off', (s) => { s.sync.enhance.gradescope = false; }],
+  ['Glaze turned off', (s) => { s.sync.enabled = false; }],
+]) {
+  test(`review: ${what} while Canvas answers: no file`, async () => {
+    const p = page();
+    p.hold();
+    const job = p.go();
+    await settle();
+    assert.ok(p.held.length, 'the planner request is out');
+    change(p.store);
+    p.release();
+    assert.equal(await job, null);
+    assert.deepEqual(p.saved, []);
+  });
+}
+
+test('review: the dialog closed while Canvas answers: no file', async () => {
+  const p = page();
+  let open = true;
+  p.hold();
+  const job = p.go(() => open);
+  await settle();
+  open = false;
+  p.release();
+  assert.equal(await job, null);
+  assert.deepEqual(p.saved, []);
 });

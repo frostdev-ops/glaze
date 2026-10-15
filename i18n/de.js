@@ -1073,4 +1073,5 @@
   "Download": "Herunterladen",
   "On Canvas: Export in Better To Do, or Export calendar (.ics) in Ctrl+K.": "Auf Canvas: Exportieren in Better To Do oder Kalender exportieren (.ics) mit Strg+K.",
   "With Gradescope in To Do on, for a Canvas account that said yes to showing it.": "Mit eingeschaltetem Gradescope in To Do, für ein Canvas-Konto, das der Anzeige zugestimmt hat.",
+  "Planned work": "Geplante Arbeit",
 };

@@ -218,7 +218,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
 - **Export calendar (.ics)** (Canvas, only when you press Download). Glaze asks your own Canvas site for your profile
   (user id and time zone), your active courses (with their term dates, for "This term") and, for Canvas deadlines or
   plans, your planner items from today to eight weeks past the end of the range you picked (so a plan has its item's
-  title). Read-only GETs with your existing session, one export at a time; the answer isn't kept. With Gradescope in
+  title) and, only when a plan in the range is for work not among those (overdue work planned for later), your planner
+  items from half a year back to today. Read-only GETs with your existing session, one export at a time; the answer
+  isn't kept. If Glaze, the Gradescope switch or your Gradescope answer changes, or the dialog closes, while Canvas
+  answers, no file is saved. With Gradescope in
   To Do on, the Gradescope work comes from what's already kept on this device; nothing is asked of Gradescope.
 - **Tasks on course cards** (Canvas, off by default). On the Dashboard's card view, Glaze asks your own Canvas site
   for your profile (user id and time zone; one request a page, shared with Better To Do) and uses Better To Do's copy
