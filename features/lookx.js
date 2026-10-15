@@ -82,7 +82,8 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   const pending = new Map();
   let own = {}; // id -> blob: address, of the student's pictures read so far
   // Sticker mode shows them while "Show stickers" is on its way to being saved.
-  const shown = () => top && ctx.on() && (X().stickers || editing) && !quiz();
+  // A course tab's frame shows its own page's stickers (ctx.solo); the Look rotation stays the top page's.
+  const shown = () => ctx.solo && ctx.on() && (X().stickers || editing) && !quiz();
   const ownId = (s) => (s.startsWith('own:') ? s.slice(4) : null);
   const src = (s) => (ownId(s) ? own[ownId(s)] || '' : url(GZ_LX.file(s)));
   const nameOf = (s) => (ownId(s) ? t('Your picture') : t(GZ_LX.BUNDLED.get(s)));

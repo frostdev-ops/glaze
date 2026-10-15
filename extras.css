@@ -584,3 +584,5 @@ html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:ha
 #gz-ctabs-frames > .gz-ctabs-pic { position: absolute; inset: 0; z-index: 1; overflow: hidden; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
 html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
 html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
+/* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
+html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }
