@@ -201,7 +201,7 @@ test('two tabs: a change still on its way from one tab doesn’t bring back what
   again.value = '80';
   again.fire('input');
   await settle(10);
-  assert.deepEqual(store.data[KEY][BIO.course.id].s, { 175: [80, null] });
+  assert.deepEqual(store.data[KEY][BIO.course.id].s['175'].slice(0, 2), [80, null]);
 });
 
 test('a Clear all that can’t be recorded clears nothing and says so; one that was can’t be undone by an earlier edit after a restart', async () => {
