@@ -164,7 +164,7 @@ class El {
   getBoundingClientRect() { return { left: 0, top: 0, width: 1000, height: 0 }; }
   find(id) { return this.id === id ? this : this.children.map((c) => c.find(id)).find(Boolean) || null; }
 }
-const page = (local, pathname = '/courses/1') => {
+const page = (local, pathname = '/courses/1', send = (m, cb) => cb?.({ ok: true })) => {
   const html = new El('html'), head = new El('head'), body = new El('body');
   html.append(head, body);
   html.style.setProperty = (k, v) => { html.style[k] = v; };
@@ -175,16 +175,18 @@ const page = (local, pathname = '/courses/1') => {
   const held = []; // storage reads made to wait: { keys, release }
   let hold = () => false;
   const timers = new Map();
+  const fns = new Map();
+  const win = {};
   let n = 0;
   const context = vm.createContext({
     console, Promise, Date, Map, Set, structuredClone, crypto: globalThis.crypto, Blob, atob, Uint8Array,
     URL: { createObjectURL: () => { const u = `blob:x/${++b}`; blobs.add(u); return u; }, revokeObjectURL: (u) => blobs.delete(u) },
-    setTimeout: (f, ms) => { const id = ++n; timers.set(id, ms); return id; }, clearTimeout: (id) => { timers.delete(id); },
-    addEventListener() {}, innerWidth: 1000, innerHeight: 800,
+    setTimeout: (f, ms) => { const id = ++n; timers.set(id, ms); fns.set(id, f); return id; }, clearTimeout: (id) => { timers.delete(id); fns.delete(id); },
+    addEventListener: (type, f) => { (win[type] ||= []).push(f); }, innerWidth: 1000, innerHeight: 800,
     location: { origin: SITE, pathname },
     document: { documentElement: html, head, body, createElement: (t) => new El(t), getElementById: (id) => html.find(id), addEventListener() {}, hidden: false },
     chrome: {
-      runtime: { getURL: (f) => `chrome-extension://x/${f}`, sendMessage: (m, cb) => cb?.({ ok: true }) },
+      runtime: { getURL: (f) => `chrome-extension://x/${f}`, sendMessage: (m, cb) => send(structuredClone(m), cb) },
       storage: {
         onChanged: { addListener() {} },
         sync: { set() {} },
@@ -204,7 +206,10 @@ const page = (local, pathname = '/courses/1') => {
   context.globalThis = context;
   vm.runInContext(read('lib/lookx.js'), context);
   vm.runInContext(read('features/lookx.js'), context);
-  return { lx: context.GZ_LOOKX, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; } };
+  // Runs the timers due now (the 300 ms save; not rotation's ten-minute one).
+  const runTimers = () => { for (const [id, f] of [...fns]) if (timers.get(id) <= 1000) { timers.delete(id); fns.delete(id); f(); } };
+  const fire = (type, e = {}) => { for (const f of win[type] || []) f(e); };
+  return { lx: context.GZ_LOOKX, location: context.location, runTimers, fire, settings, html, body, held, timers, blobs, holdWhen: (f) => { hold = f; } };
 };
 
 test('page: a picture read that answers after Hide doesn\'t draw the stickers back', async () => {
@@ -281,4 +286,57 @@ test('page: own sticker and pointer pictures reach the page as blob: addresses, 
   await tick();
   assert.equal(p.blobs.size, 1);
   assert.equal(p.html.style['--gz-cursor'], undefined);
+});
+
+// A tab on a computer whose worker is the real one (lib/background.js), in sticker mode on `path`.
+const key = (e, k) => { for (const f of e.on?.keydown || []) f({ key: k, shiftKey: false, preventDefault() {}, stopPropagation() {} }); };
+const stickersOf = (p) => p.body.find('gz-stickers').children;
+const settle = async () => { for (let i = 0; i < 30; i++) await tick(); };
+const inSickerMode = async (w, path = '/courses/1') => {
+  const p = page(w.local, path, (m, cb) => w.send(m, { id: 'glaze', tab: {}, url: `${SITE}${p.location.pathname}` }).then((r) => cb?.(r)));
+  await p.lx.edit();
+  await settle();
+  return p;
+};
+
+test('page: a move in one tab and a turn in another, both from the UI, both land', async () => {
+  const w = worker({ [KEY]: [sticker('a')] });
+  const A = await inSickerMode(w);
+  const B = await inSickerMode(w);
+  key(stickersOf(A)[0], 'ArrowRight'); // tab A moves it right
+  const turn = (function find(e) { return e.attrs?.['aria-label'] === 'Turn {name} right' ? e : e.children.map(find).find(Boolean); })(B.body.find('gz-stk-panel'));
+  turn.click(); // tab B, which never saw the move, turns it
+  A.runTimers();
+  B.runTimers();
+  await settle();
+  const [a] = w.local[KEY];
+  assert.ok(a.x > 50, `the move stands (x ${a.x})`);
+  assert.equal(a.r, 5, 'and the turn');
+});
+
+test('page: a move still waiting to be saved when the page changes in place is saved to the page it was made on', async () => {
+  const w = worker({ [KEY]: [sticker('a')] });
+  const A = await inSickerMode(w);
+  key(stickersOf(A)[0], 'ArrowDown');
+  // Ultra changes pages in place before the save rests.
+  A.location.pathname = '/courses/2';
+  await A.lx.sync();
+  await settle(); // the new page's stickers are read before the save's 300 ms are up
+  A.runTimers();
+  await settle();
+  assert.equal(w.local[KEY][0].y, 108, 'the first page has its move');
+  assert.ok(!(`stk:${SITE}/courses/2` in w.local), 'and the second page nothing');
+});
+
+test('page: a pointer picture read that answers after the page is hidden makes no blob: address', async () => {
+  const data = `data:image/png;base64,${Buffer.from('png').toString('base64')}`;
+  const p = page({ cursorImg: data });
+  p.settings.extras = { ...p.settings.extras, stickers: false, cursor: 'own' };
+  p.holdWhen((keys) => [].concat(keys).includes('cursorImg'));
+  p.lx.sync();
+  for (let i = 0; i < 20 && !p.held.length; i++) await tick();
+  p.fire('pagehide');
+  p.held.shift().release();
+  await settle();
+  assert.equal(p.blobs.size, 0);
 });

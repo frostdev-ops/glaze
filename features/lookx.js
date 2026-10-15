@@ -32,15 +32,16 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
 
   // ---- the pointer: CSS cursor on the page (features/lookx.css), the system's I-beam kept on text ----------------
   let pointer = ''; // the own pointer's blob: address
+  let live = true; // false from pagehide until the page is shown again: no blob: address is made meanwhile
   const cursor = async () => {
     const c = ctx.on() ? X().cursor : 'off';
     let d = '', p = '', made = '';
     if (c === 'own') {
       const { cursorImg: img } = await get('cursorImg');
+      if (!live || c !== (ctx.on() ? X().cursor : 'off')) return; // hidden or changed while reading: a newer pass draws
       made = blobOf(img);
       if (made) d = p = `url("${made}") 0 0`;
     } else if (GZ_LX.CURSORS[c]) [d, p] = ['default', 'pointer'].map((k) => `url("${url(`assets/art/cursors/${c}/${k}.png`)}") ${GZ_LX.CURSORS[c][k].join(' ')}`);
-    if (c !== (ctx.on() ? X().cursor : 'off')) { if (made) URL.revokeObjectURL(made); return; } // changed while reading
     if (pointer) URL.revokeObjectURL(pointer);
     pointer = made;
     if (d) {
@@ -75,7 +76,9 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
 
   // ---- stickers ----------------------------------------------------------------------------------------------------
   let key = '', list = [], layer = null, els = [], editing = false, panel = null, pack = 'study', saving = 0, drawing = 0;
-  const pending = new Map(); // id -> { p, at }: moves, sizes and turns not yet sent
+  // Moves, sizes and turns not yet sent, by page and sticker: { key, id, p, at }, p holding only the fields the student
+  // changed (a move x and y, a resize w, a turn r), so another tab's change to the others stands.
+  const pending = new Map();
   let own = {}; // id -> blob: address, of the student's pictures read so far
   // Sticker mode shows them while "Show stickers" is on its way to being saved.
   const shown = () => top && ctx.on() && (X().stickers || editing) && !quiz();
@@ -84,7 +87,9 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   const nameOf = (s) => (ownId(s) ? t('Your picture') : t(GZ_LX.BUNDLED.get(s)));
   const readOwn = async (ids) => {
     const want = ids.filter((id) => !(id in own)).map((id) => `stkImg:${id}`);
-    if (want.length) for (const [k, v] of Object.entries(await get(want))) if (!(k.slice(7) in own)) own[k.slice(7)] = blobOf(v) || undefined;
+    if (!want.length) return;
+    const got = await get(want);
+    if (live) for (const [k, v] of Object.entries(got)) if (!(k.slice(7) in own)) own[k.slice(7)] = blobOf(v) || undefined;
   };
   // Every await is followed by a check that this is still the newest pass and stickers are still shown: a read that
   // answers after Hide (or after the page changed) must not draw them back.
@@ -92,6 +97,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     const g = ++drawing;
     const still = () => g === drawing && shown();
     if (!shown()) {
+      flush();
       if (editing) stopEdit();
       layer?.remove();
       layer = null;
@@ -100,6 +106,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     }
     const k = GZ_LX.pageKey(location.origin, location.pathname);
     if (k !== key) {
+      flush(); // the last page's edits go under its own key
       const r = await get(k);
       if (!still()) return;
       key = k;
@@ -114,7 +121,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   const flush = () => {
     clearTimeout(saving);
     saving = 0;
-    for (const [id, { p, at }] of pending) send({ type: 'glaze:stickers', key, op: 'set', id, p, at });
+    for (const { key: k, id, p, at } of pending.values()) send({ type: 'glaze:stickers', key: k, op: 'set', id, p, at });
     pending.clear();
   };
   const pos = (el, p) => {
@@ -154,13 +161,14 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (!p) return;
     list[i] = p;
     pos(els[i], p);
-    pending.set(p.id, { p: { x: p.x, y: p.y, w: p.w, r: p.r }, at: Date.now() });
+    const was = pending.get(`${key} ${p.id}`);
+    pending.set(`${key} ${p.id}`, { key, id: p.id, p: { ...was?.p, ...Object.fromEntries(Object.keys(patch).map((f) => [f, p[f]])) }, at: Date.now() });
     clearTimeout(saving);
     saving = setTimeout(flush, 300);
   };
   const remove = (i) => {
     const [p] = list.splice(i, 1);
-    pending.delete(p.id);
+    pending.delete(`${key} ${p.id}`);
     op({ op: 'del', id: p.id });
     draw();
     say(t('{name} removed.', { name: nameOf(p.s) }));
@@ -319,11 +327,12 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) arm(); });
   addEventListener('pagehide', () => {
     flush();
+    live = false;
     for (const u of [...Object.values(own), pointer]) if (u) URL.revokeObjectURL(u);
     own = {};
     pointer = '';
   });
-  addEventListener('pageshow', (e) => { if (e.persisted) { key = ''; sync(); } });
+  addEventListener('pageshow', (e) => { live = true; if (e.persisted) { key = ''; sync(); } });
   // Ultra changes pages in place: its stickers are the new path's.
   globalThis.navigation?.addEventListener('navigatesuccess', () => { if (key) stickers(); });
 
