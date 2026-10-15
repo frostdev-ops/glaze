@@ -316,6 +316,7 @@
   'Was due {when}': 'Venció {when}',
   'Due {when}': 'Vence {when}',
   'Exempt': 'Exento',
+  'Excused': 'Justificado',
   'Graded · {mark}': 'Calificado · {mark}',
   'Graded': 'Calificado',
   'Submitted late': 'Entregado tarde',

@@ -316,6 +316,7 @@
   'Was due {when}': 'Échéance passée, {when}',
   'Due {when}': 'Échéance {when}',
   'Exempt': 'Dispensé',
+  'Excused': 'Excusé',
   'Graded · {mark}': 'Noté · {mark}',
   'Graded': 'Noté',
   'Submitted late': 'Rendu en retard',

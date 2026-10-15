@@ -316,6 +316,7 @@
   'Was due {when}': 'Deadline was {when}',
   'Due {when}': 'Deadline {when}',
   'Exempt': 'Vrijgesteld',
+  'Excused': 'Vrijgesteld',
   'Graded · {mark}': 'Beoordeeld · {mark}',
   'Graded': 'Beoordeeld',
   'Submitted late': 'Te laat ingeleverd',

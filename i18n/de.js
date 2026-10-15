@@ -316,6 +316,7 @@
   'Was due {when}': 'War fällig: {when}',
   'Due {when}': 'Fällig {when}',
   'Exempt': 'Befreit',
+  'Excused': 'Entschuldigt',
   'Graded · {mark}': 'Bewertet · {mark}',
   'Graded': 'Bewertet',
   'Submitted late': 'Verspätet abgegeben',
