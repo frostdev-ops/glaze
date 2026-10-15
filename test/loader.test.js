@@ -100,7 +100,7 @@ test('success means the file ran to its end: an injection that fails, throws or 
 });
 
 // What a feature file reads from content.js when it loads (features/*.js).
-const CTX = { t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}), site: 'canvas', wordsIn: new Set() };
+const CTX = { placeAsked: () => 0, t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}), site: 'canvas', wordsIn: new Set() };
 // What a feature file touches as it loads: the listeners it adds (features/keys.js, coursemenu.js, previews.js).
 const page = () => ({ document: { addEventListener() {}, documentElement: {} }, addEventListener() {}, GZ_COLOR: {}, IntersectionObserver: class {} });
 // Moved out of the first content script in W0c: the palette, the keys, the course menu, the previews and Download all.

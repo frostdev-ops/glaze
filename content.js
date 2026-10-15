@@ -1377,17 +1377,19 @@
   // back. Anything you do first (wheel, touch, a key, a click) ends putting it back, so that is watched from the start.
   const ROWS = '.content-list-item[data-content-id]';
   let tapped = null; // { id, at }: the row of your last click
-  let acted = false; // anything done on this page yet (Canvas: before the list is even there, it ends the restore too)
+  let acted = 0; // when you last did anything on this page (Canvas: before the list is even there, it ends the restore too)
+  let placeAsked = 0; // when the outline or list was first there to put back: anything done after it, while place.js loads, ends that
   const keepPlace = () => {
     if (globalThis.GZ_PLACE) return GZ_PLACE.sync();
     if (!settings.enhance.place || window.top !== window || !observer) return;
     if (ultra ? courseId() && /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/.test(location.pathname) && document.querySelector(ROWS)
       : canvasCourseKey() && (new URLSearchParams(location.search).get('module_item_id') || (/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container')))) {
+      placeAsked ||= Date.now();
       need('features/place.js', () => globalThis.GZ_PLACE).then(() => GZ_PLACE.sync(), () => {});
     }
   };
   document.addEventListener('click', (e) => { if (e.isTrusted && e.target instanceof Element) tapped = { id: e.target.closest(ROWS)?.dataset.contentId, at: Date.now() }; }, true);
-  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (!e.isTrusted) return; acted = true; globalThis.GZ_PLACE?.stop(); }, { capture: true, passive: true });
+  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (!e.isTrusted) return; acted = Date.now(); globalThis.GZ_PLACE?.stop(); }, { capture: true, passive: true });
 
   // ---- what-if calculator (Extras) -----------------------------------------------------------
   // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make, and a target what
@@ -2201,7 +2203,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, bookFor, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    canvasCourseKey, ROWS, holding: () => held.size > 0, tapped: () => tapped, acted: () => acted });
+    canvasCourseKey, ROWS, holding: () => held.size > 0, tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.

@@ -79,6 +79,19 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     typed.set(key, { ed, ...d, gone: 0 });
     local((s) => s.set({ [key]: d }));
   };
+  // Canvas: who you are and your courses, asked once the compose dialog is there or written in; again a minute after a
+  // failure. An editor written in meanwhile is taken up once it is in, as if just written in.
+  const accountWaiting = new Set();
+  const loadAccount = () => {
+    if (inboxAccount || inboxLoading || Date.now() < inboxRetry) return;
+    inboxLoading = true;
+    Promise.all([profile(), canvasCourses()]).then(([user, courses]) => {
+      inboxAccount = { user: String(user.id), courses };
+      const eds = [...accountWaiting];
+      accountWaiting.clear();
+      for (const ed of eds) if (ed.isConnected) write({ type: 'input', target: ed });
+    }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
+  };
   // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
   const write = (e) => {
     if (!ultra && e.type !== 'input') return;
@@ -89,6 +102,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       return;
     }
     if (!ultra) {
+      // A copy's key needs the account (who you are, your courses): what is written before it is in waits for it.
+      if (!inboxAccount) { accountWaiting.add(ed); loadAccount(); return; }
       inboxWrites.set(ed, draftKey(ed));
       captureInboxDraft(ed);
       for (const [bar, editor] of bars) if (editor === ed) { bar.remove(); bars.delete(bar); }
@@ -210,12 +225,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const watchInboxDrafts = () => {
     if (!ctx.settings().enhance.drafts || !/^\/conversations\/?$/.test(location.pathname)) return;
     const ed = document.querySelector(EDITOR);
-    if (ed && !inboxAccount && !inboxLoading && Date.now() >= inboxRetry) {
-      inboxLoading = true;
-      Promise.all([profile(), canvasCourses()]).then(([user, courses]) => {
-        inboxAccount = { user: String(user.id), courses };
-      }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
-    }
+    if (ed) loadAccount();
     for (const ed of inboxPending.keys()) if (!ed.isConnected) saveDraft(ed);
     for (const [key, d] of typed) if (!d.ed.isConnected) {
       typed.delete(key);
