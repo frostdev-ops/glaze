@@ -162,7 +162,7 @@ test("the student's own: custom tasks, do-on dates, timed sessions, local marks"
   assert.deepEqual(groups(out), {
     past: ['assignment:1', 'assignment:3', 'task:d'],
     today: ['quiz:4', 'assignment:6'],
-    tomorrow: ['planner_note:20', 'task:a', 'assignment:8'],
+    tomorrow: ['planner_note:20', 'assignment:6', 'task:a', 'assignment:8'], // 6: due tomorrow, a session today
     week: ['assignment:14', 'discussion_topic:7'],
     none: ['task:b'],
   });
@@ -270,4 +270,28 @@ test('real calendar dates only; a skipped time moves forward; a redo stays open'
   const redo = T.slim(item('assignment', 30, '2026-10-16T18:00:00Z', { sub: sub({ submitted: true, graded: true, redo_request: true }) }));
   assert.equal(T.isDone(redo, 'auto'), false);
   assert.ok(keys(T.build({ items: [redo], o: O, now: NOW, tz: NY }).groups.flatMap(([, l]) => l)).includes('assignment:30'));
+});
+
+test('a plan never hides a deadline: planned for another day, an item shows under both until it is done', () => {
+  const o = { ...O, span: 'custom', n: 3, unit: 'weeks' };
+  const plan = (on) => groups(T.build({ items: ITEMS, data: { items: { 'assignment:6': { on } } }, o, now: NOW, tz: NY, cids: new Set(['25']) }));
+  // Due tomorrow, planned for 1 November: under Tomorrow and under Later.
+  const later = plan('2026-11-01');
+  assert.ok(later.tomorrow.includes('assignment:6'));
+  assert.ok(later.later.includes('assignment:6'));
+  // Planned past the timeframe: still under its due date.
+  assert.ok(plan('2026-12-24').tomorrow.includes('assignment:6'));
+  // Planned for the day it's due: once.
+  assert.equal(Object.values(plan('2026-10-16')).flat().filter((k) => k === 'assignment:6').length, 1);
+  // Overdue and planned for tomorrow: under Past due and Tomorrow.
+  const late = groups(T.build({ items: ITEMS, data: { items: { 'assignment:1': { on: '2026-10-16' } } }, o, now: NOW, tz: NY, cids: new Set(['25']) }));
+  assert.ok(late.past.includes('assignment:1') && late.tomorrow.includes('assignment:1'));
+  // Counted once, and once in a single list by date.
+  const out = T.build({ items: ITEMS, data: { items: { 'assignment:6': { on: '2026-11-01' } } }, o, now: NOW, tz: NY, cids: new Set(['25']) });
+  const flat = T.build({ items: ITEMS, data: { items: { 'assignment:6': { on: '2026-11-01' } } }, o: { ...o, group: false }, now: NOW, tz: NY, cids: new Set(['25']) });
+  assert.equal(out.count.all, flat.groups[0][1].length + out.count.done);
+  assert.equal(flat.groups[0][1].filter((r) => r.key === 'assignment:6').length, 1);
+  // Done: gone from both.
+  const done = groups(T.build({ items: ITEMS, data: { items: { 'assignment:6': { on: '2026-11-01', done: true } } }, o, now: NOW, tz: NY, cids: new Set(['25']) }));
+  assert.ok(!Object.values(done).flat().includes('assignment:6'));
 });

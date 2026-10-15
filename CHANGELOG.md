@@ -27,7 +27,8 @@ All notable changes to Glaze are documented here. The format follows
   today, tomorrow, this week, later, no date), or one list by date; what's done, what's graded and announcements
   (unread first) apart. Relative or exact dates, urgent items marked, and how long past-due work stays.
   - A custom timeframe of any number of days or weeks, from today or from the start of your week. Free.
-  - Your own tasks (with a course, due date and notes), steps, a "do on" day and timed focus sessions on any item,
+  - Your own tasks (with a course, due date and notes), steps, a "do on" day and timed focus sessions on any item
+    (a planned item still shows under its due date until it's done),
     kept on this device and included in Export settings.
   - Done follows your submissions, or only what you tick. "Tick off in Canvas too" marks items done in Canvas's own
     planner, as Canvas's List View does; Glaze's first and only write to Canvas: opt-in, only from your own tick, and a tick Canvas doesn't confirm goes back and is checked with Canvas again.

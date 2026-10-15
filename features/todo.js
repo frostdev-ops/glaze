@@ -118,6 +118,9 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     }).finally(() => { fetching = null; setBusy(false); if (typing()) drawn = ''; else render(true); });
     return fetching;
   };
+  // The courses the Dashboard list shows: active ones Canvas lets the student into. canvasCourses() answers [] both
+  // when the student has none and when the request failed (its other callers want that), so an empty answer filters
+  // nothing either way: nothing is hidden on a guess.
   const coursesIn = (list) => {
     const live = list.filter((c) => /^\d+$/.test(String(c.id)) && c.name && !c.access_restricted_by_date);
     courses = { cids: live.length ? new Set(live.map((c) => String(c.id))) : null, names: Object.fromEntries(live.map((c) => [String(c.id), c.name])), list: live };
@@ -168,18 +171,24 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     }
     return '';
   };
-  const row = (r, now) => {
-    const id = `gz-todo-${r.key.replace(/\W/g, '-')}`;
+  // kind: the group it's drawn in. An item planned for another day than it's due is drawn in both: ids and focus keys
+  // are per group, and its details open under the first.
+  let firstIds = new Map(); // key -> id of the row drawn first, this render
+  const row = (r, now, kind = '') => {
+    const id = `gz-todo-${kind}-${r.key.replace(/\W/g, '-')}`;
+    if (!firstIds.has(r.key)) firstIds.set(r.key, id);
+    const first = firstIds.get(r.key) === id;
+    const fk = `${kind} ${r.key}`;
     const subs = r.local.subs || [];
     const check = make('input', { type: 'checkbox', checked: r.done });
     check.dataset.act = 'done';
-    check.dataset.focus = `${r.key} done`;
+    check.dataset.focus = `${fk} done`;
     check.setAttribute('aria-labelledby', `${id}-t`);
     check.setAttribute('aria-describedby', `${id}-m`);
     const title = r.url
       ? make('a', { href: r.url, id: `${id}-t`, className: 'gz-todo-title', textContent: r.title })
       : make('button', { type: 'button', id: `${id}-t`, className: 'gz-todo-title', textContent: r.title });
-    if (!r.url) { title.dataset.act = 'more'; title.dataset.focus = `${r.key} title`; title.setAttribute('aria-expanded', String(open.has(r.key))); title.setAttribute('aria-controls', `${id}-d`); } else title.dataset.focus = `${r.key} title`;
+    if (!r.url) { title.dataset.act = 'more'; title.dataset.focus = `${fk} title`; title.setAttribute('aria-expanded', String(open.has(r.key))); title.setAttribute('aria-controls', `${firstIds.get(r.key)}-d`); } else title.dataset.focus = `${fk} title`;
     const plan = planText(r, now);
     const meta = make('div', { className: 'gz-todo-meta', id: `${id}-m` },
       r.course && !ctx.canvasCourseId() && make('span', { textContent: r.course }),
@@ -189,11 +198,11 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       subs.length > 0 && make('span', { textContent: t('{done} of {n} steps', { done: subs.filter((x) => x.done).length, n: subs.length }) }));
     const more = make('button', { type: 'button', className: 'gz-todo-more', title: t('Plan it'), textContent: '⋯' });
     more.dataset.act = 'more';
-    more.dataset.focus = `${r.key} more`;
+    more.dataset.focus = `${fk} more`;
     more.setAttribute('aria-expanded', String(open.has(r.key)));
-    more.setAttribute('aria-controls', `${id}-d`);
+    more.setAttribute('aria-controls', `${firstIds.get(r.key)}-d`);
     more.setAttribute('aria-label', t('Plan {title}', { title: r.title }));
-    const li = make('li', { className: 'gz-todo-item' }, check, make('div', { className: 'gz-todo-main' }, title, meta), more, open.has(r.key) && detail(r, id, now));
+    const li = make('li', { className: 'gz-todo-item' }, check, make('div', { className: 'gz-todo-main' }, title, meta), more, first && open.has(r.key) && detail(r, id, now));
     li.dataset.key = r.key;
     if (r.urgent) li.dataset.urgent = r.past ? 'past' : 'soon';
     if (r.done) li.dataset.done = '';
@@ -255,7 +264,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const section = (kind, label, rows, now, opts = {}) => {
     const all = open.has(`group:${kind}`);
     const shown = all ? rows : rows.slice(0, CAP);
-    const ul = make('ul', { className: 'gz-todo-list' }, ...shown.map((r) => (opts.draw || row)(r, now)));
+    const ul = make('ul', { className: 'gz-todo-list' }, ...shown.map((r) => (opts.draw || row)(r, now, kind)));
     const rest = rows.length - shown.length;
     const more = rest > 0 && small('all', t('Show {n} more', { n: rest }));
     if (more) { more.dataset.group = kind; more.dataset.focus = `group:${kind}`; }
@@ -315,6 +324,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (f && form) form.draft = Object.fromEntries([...new FormData(f)].map(([k, v]) => [k, String(v)]));
     const course = ctx.canvasCourseId() || '';
     const out = L.build({ items: cache?.items || [], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: o().sync });
+    firstIds = new Map();
     shown = new Map([...out.groups.flatMap(([, l]) => l), ...out.done, ...out.graded].map((r) => [r.key, r]));
     // The focused control, found again in the new tree by what it was for; if that went out of sight (a ticked item
     // into the closed Done section), the one after it.
