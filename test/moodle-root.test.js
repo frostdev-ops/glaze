@@ -49,8 +49,8 @@ test('what Canvas\'s part keys on is nowhere on Moodle\'s pages', () => {
   }
 });
 
-// The palette's search in your courses asks Canvas's /api/v1: on Moodle (or Ultra) it never starts.
-test('search in your courses is Canvas only', () => {
+// The shared palette has Canvas and Ultra adapters; Moodle content search stays off.
+test('search in your courses is Canvas and Ultra only', () => {
   const palette = fs.readFileSync(require.resolve('../features/palette.js'), 'utf8');
   const line = palette.match(/^ {2}const searchHere = \(\) => [^\n]*;$/m)?.[0];
   assert.ok(line, 'features/palette.js has searchHere');
@@ -59,5 +59,5 @@ test('search in your courses is Canvas only', () => {
   const on = (site) => vm.runInNewContext(`${line} searchHere()`, { ultra: site === 'ultra', moodle: site === 'moodle', ctx: { settings: () => ({ enhance: { search: true } }) } });
   assert.ok(on('canvas'));
   assert.ok(!on('moodle'));
-  assert.ok(!on('ultra'));
+  assert.ok(on('ultra'));
 });
