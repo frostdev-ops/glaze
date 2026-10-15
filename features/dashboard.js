@@ -24,7 +24,7 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
       if (h.dataset.gzDashReal === undefined) h.dataset.gzDashReal = h.textContent;
       if (h.textContent !== t('Dashboard')) h.textContent = t('Dashboard');
     } else if (h.dataset.gzDashReal !== undefined) {
-      h.textContent = h.dataset.gzDashReal;
+      if (h.textContent === t('Dashboard')) h.textContent = h.dataset.gzDashReal;
       delete h.dataset.gzDashReal;
     }
   };
@@ -91,7 +91,11 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
   // page (a new history entry; Ultra's own move to its start page replaces the address).
   const ask = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   let len = 0;
-  const still = (from) => !ctx.acted() && history.length === len && GZ_WIDGETS.landing({ from, now: location.pathname, referrer: document.referrer, origin: location.origin });
+  const still = (from) => {
+    const s = ctx.settings();
+    // The first content settings may predate this lazy schema; the worker checks the saved opt-in before granting it.
+    return s.enabled && s.enhance.dashboard && s.widgets?.land !== false && !ctx.acted() && history.length === len && GZ_WIDGETS.landing({ from, now: location.pathname, referrer: document.referrer, origin: location.origin });
+  };
   const land = async (from) => {
     len = history.length;
     const s = await new Promise((res) => { try { chrome.storage.sync.get('widgets', (r) => res(chrome.runtime.lastError ? {} : r)); } catch { res({}); } });
@@ -104,7 +108,7 @@ var GZ_DASH_UI = globalThis.GZ_DASH_UI || (() => {
     // can't, it doesn't go.
     if ((await ask({ type: 'glaze:landed' }))?.first !== true || !still(from)) return;
     pick('dash');
-    const link = [...document.querySelectorAll('a[href]')].find((a) => { try { return new URL(a.getAttribute('href'), location.href).pathname === PATH; } catch { return false; } });
+    const link = [...document.querySelectorAll('a[href]')].find((a) => { try { const u = new URL(a.getAttribute('href'), location.href); return u.origin === location.origin && u.pathname === PATH; } catch { return false; } });
     // Absolute: Ultra's <base href> is its CDN's.
     if (link) link.click(); else location.assign(`${location.origin}${PATH}`);
   };

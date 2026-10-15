@@ -24,7 +24,7 @@ const later = () => { let done; const p = new Promise((res, rej) => { done = { r
 // column under the courses). store: one shared by two tabs. hold: { file: promise } for need(). header: false for a
 // Dashboard page without the header's anchors. landed: the worker's tabs that landed; tab: this one's id.
 // Elements are compared with ===: an assertion message would print the whole stand-in document.
-const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, sync = {}, nav = 'navigate', path: where, hold = {}, header = true, landed = new Set(), tab = 1, acted = 0, history = 1, enhance = {} } = {}) => {
+const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, sync = {}, nav = 'navigate', path: where, hold = {}, header = true, landed = new Set(), tab = 1, acted = 0, history = 1, enhance = {}, holdReplies = false } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => new El(t, doc);
   doc.root = make('html');
@@ -69,8 +69,9 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
   Object.assign(doc, { createElement: make, createTextNode: (data) => ({ data, textContent: data }), getElementById: (x) => doc.root.all().find((e) => e.id === x) || null,
     querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), addEventListener() {}, removeEventListener() {}, visibilityState: 'visible',
     documentElement: doc.root, referrer: '' });
-  const wrote = [], sent = [], loads = [];
-  const settings = D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, ...enhance } });
+  const wrote = [], sent = [], loads = [], replies = [], listeners = [];
+  const changed = (ch) => { for (const f of [...listeners]) f(ch, 'local'); };
+  const settings = D.GZ_SANITIZE({ ...sync, enhance: { notes: true, widgets: true, ...enhance } });
   const store = shared || { ...structuredClone(local) };
   // The worker's side, as lib/background.js runs it: the layout's changes on what is stored (lib/widgets.js change).
   const area = {
@@ -91,7 +92,7 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
     console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, setTimeout: () => 0, clearTimeout() {},
     document: doc, location: { origin: 'https://school.blackboard.test', pathname: where || { courses: '/ultra/course', dash: '/ultra/institution-page', outline: '/ultra/courses/_1_1/outline' }[at], href: 'https://school.blackboard.test/ultra', assign: (u) => clicks.push(`assign ${u}`) },
     innerWidth: width, innerHeight: 900, addEventListener() {}, removeEventListener() {},
-    ResizeObserver: class { observe() {} disconnect() {} }, requestAnimationFrame: () => 0, cancelAnimationFrame() {},
+    ResizeObserver: class { observe() {} unobserve() {} disconnect() {} }, requestAnimationFrame: () => 0, cancelAnimationFrame() {},
     performance: { getEntriesByType: () => [{ type: nav }] },
     history: { length: history },
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W,
@@ -100,11 +101,11 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
       need: async (f) => { loads.push(f); if (hold[f]) await hold[f]; if (f === 'features/dashboard.js' && !c.GZ_DASH_UI) vm.runInContext(read(f), c); },
     },
     chrome: {
-      runtime: { lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); worker(m).then((r) => cb?.(r)); } },
+      runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); worker(m).then((r) => { if (holdReplies && m.type === 'glaze:widgetLayout') replies.push(() => cb?.(r)); else cb?.(r); }); } },
       storage: {
         local: { get: (keys, cb) => area.get(keys).then(cb), set: (v) => { area.set(v); } },
         sync: { get: (k, cb) => cb(structuredClone(sync)) },
-        onChanged: { addListener() {}, removeListener() {} },
+        onChanged: { addListener: (f) => listeners.push(f), removeListener: (f) => listeners.splice(listeners.indexOf(f), 1) },
       },
     },
   };
@@ -115,7 +116,7 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
   const tile = (id) => doc.querySelector(`section[data-tile="${id}"]`);
   const ev = (type, x = {}) => ({ type, target: null, button: 0, pointerId: 1, clientX: 0, clientY: 0, altKey: false, shiftKey: false, preventDefault() {}, stopPropagation() {}, ...x });
   const tool = (id, name) => tile(id).querySelector('.gz-w-tools').children.find((x) => x.getAttribute('aria-label') === name);
-  return { ui, doc, c, store, wrote, sent, loads, clicks, ip, h1, tile, tool, ev, room: () => doc.getElementById('gz-room'), grid: () => doc.querySelector('#gz-dash .gz-dash-grid'), floats: () => doc.getElementById('gz-float') };
+  return { ui, doc, c, store, wrote, sent, loads, clicks, ip, h1, tile, tool, ev, settings, replies, changed, room: () => doc.getElementById('gz-room'), grid: () => doc.querySelector('#gz-dash .gz-dash-grid'), floats: () => doc.getElementById('gz-float') };
 };
 const px = (v) => Number(String(v ?? '').replace('px', ''));
 const lay = (p) => W.layout(p.store.widgetLayout);
@@ -504,4 +505,165 @@ test('the Dashboard is on by default with its own switch: its widgets and To Do 
   await settle();
   assert.equal(r.doc.getElementById('gz-dash'), null);
   assert.equal(r.doc.querySelector('[role="tablist"]'), null);
+});
+
+
+test('layout callbacks arriving backwards cannot redraw an older fold or overwrite a newer storage event', async () => {
+  const p = page({ holdReplies: true });
+  p.ui.sync(true);
+  await settle();
+  p.doc.fire(p.tile('notes').querySelector('.gz-w-fold'), 'click');
+  await settle();
+  p.doc.fire(p.tile('notes').querySelector('.gz-w-fold'), 'click');
+  await settle();
+  assert.equal(on(p, 'courses', 'notes').fold, false);
+  p.replies.pop()();
+  p.replies.pop()();
+  await settle();
+  assert.equal(p.tile('notes').querySelector('.gz-w-fold').getAttribute('aria-expanded'), 'true', 'newest saved fold, not the last callback');
+  // Another tab changes the layout while this one waits for its reply.
+  p.doc.fire(p.tile('notes').querySelector('.gz-w-fold'), 'click');
+  await settle();
+  p.store.widgetLayout = W.apply(p.store.widgetLayout, { ops: [{ s: 'courses', id: 'notes', set: { fold: false } }] });
+  p.changed({ widgetLayout: { newValue: p.store.widgetLayout } });
+  p.replies.pop()();
+  await settle();
+  assert.equal(p.tile('notes').querySelector('.gz-w-fold').getAttribute('aria-expanded'), 'true', "the other tab's newer change is kept on screen too");
+  p.doc.fire(p.tile('notes').querySelector('.gz-w-fold'), 'click');
+  await settle();
+  const get = p.c.chrome.storage.local.get;
+  p.c.chrome.storage.local.get = (keys, cb) => { p.c.chrome.runtime.lastError = { message: 'unavailable' }; cb({}); p.c.chrome.runtime.lastError = undefined; };
+  p.replies.pop()();
+  await settle();
+  assert.equal(p.tile('notes').querySelector('.gz-w-fold').getAttribute('aria-expanded'), 'false', 'a failed reread does not replace known state with defaults');
+  p.c.chrome.storage.local.get = get;
+  p.ui.sync(false);
+  p.changed({ widgetLayout: { newValue: p.store.widgetLayout } });
+  assert.equal(p.doc.getElementById('gz-dash'), null, 'a late layout never reopens a disabled UI');
+});
+
+test('landing rechecks current master and Dashboard settings after a delayed library or worker reply', async () => {
+  for (const key of ['enabled', 'dashboard', 'land']) {
+    const lib = later();
+    const p = page({ sync: { widgets: { land: true } }, path: '/ultra/stream', hold: { 'lib/widgets.js': lib } });
+    vm.runInContext(read('features/dashboard.js'), p.c);
+    const going = p.c.GZ_DASH_UI.land('/ultra');
+    await settle();
+    if (key === 'enabled') p.settings.enabled = false;
+    else if (key === 'dashboard') p.settings.enhance.dashboard = false;
+    else p.settings.widgets.land = false;
+    lib.res();
+    await going;
+    assert.deepEqual(p.clicks, [], key);
+    assert.equal(p.store.dashTab, undefined, 'no stale preference write');
+  }
+});
+
+test('leaving Dashboard preserves a heading Ultra has already repainted for the next route', async () => {
+  const p = page({ at: 'dash' });
+  p.ui.sync(true);
+  await settle();
+  assert.equal(p.h1.textContent, 'Dashboard');
+  p.h1.textContent = 'Courses';
+  p.c.location.pathname = '/ultra/course';
+  p.ui.sync(false);
+  assert.equal(p.h1.textContent, 'Courses', 'do not restore Institution Page over the new route');
+});
+
+test('global floats keep clear of an RTL right nav and B8 top strip without changing their saved placement', async () => {
+  const p = page({ at: 'outline', local: { widgetLayout: { tiles: [{ id: 'notes', on: true, float: true, x: 1, y: 0 }] } } });
+  p.doc.querySelector('.MuiDrawer-paper').box = { left: 1080, top: 0, width: 200, height: 900 };
+  const tabs = p.doc.createElement('div');
+  tabs.setAttribute('data-gz-keep-clear', '');
+  tabs.box = { left: 0, top: 94, width: 1080, height: 48 };
+  p.doc.body.append(tabs);
+  p.ui.sync(true);
+  await settle();
+  assert.ok(px(p.tile('notes').style.left) + W.WIDTH.m <= 1080 - W.EDGE, 'right nav stays clear');
+  assert.ok(px(p.tile('notes').style.top) >= 142 + W.EDGE, 'B8 strip stays clear');
+  assert.equal(p.wrote.length, 0, 'no geometry saved just to fit');
+});
+
+
+test('Dashboard widgets floated explicitly remain available with legacy Widgets off, including the native tab', async () => {
+  const p = page({ at: 'dash', enhance: { notes: false, widgets: false, pet: false } });
+  p.ui.sync(true);
+  await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  p.doc.fire(p.tool('timer', 'Float Focus timer on every Blackboard page'), 'click');
+  await settle();
+  p.doc.fire(p.doc.querySelectorAll('[role="tab"]')[1], 'click');
+  assert.ok(p.tile('timer')?.parentNode === p.floats(), 'global tile remains on native Institution tab');
+  assert.equal(p.doc.getElementById('gz-dash').hidden, true, 'only its Dashboard surface hides');
+  const q = page({ at: 'outline', enhance: { notes: false, widgets: false, pet: false }, local: p.store });
+  q.ui.sync(true);
+  await settle();
+  assert.ok(q.tile('timer')?.parentNode === q.floats(), 'explicit global timer remains on a course route');
+  assert.equal(q.doc.querySelectorAll('section[data-tile="timer"]').length, 1);
+});
+
+test('an unavailable widget library fails open to the native Institution page', async () => {
+  const lib = later();
+  const p = page({ at: 'dash', hold: { 'lib/widgets.js': lib } });
+  p.doc.root.setAttribute('data-gz-dash', '');
+  p.ui.sync(true);
+  lib.rej(Error('unavailable'));
+  await settle();
+  assert.equal(p.doc.root.dataset.gzDash, 'ip', 'native content is reachable after an inner lazy-load failure');
+});
+
+test('a keep-clear strip inserted after floats mount is measured on the next content pass', async () => {
+  const p = page({ at: 'outline', local: { widgetLayout: { tiles: [{ id: 'notes', on: true, float: true, x: 0, y: 0 }] } } });
+  p.ui.sync(true);
+  await settle();
+  const tabs = p.doc.createElement('div');
+  tabs.setAttribute('data-gz-keep-clear', '');
+  tabs.box = { left: 200, top: 94, width: 1080, height: 48 };
+  p.doc.body.append(tabs);
+  p.ui.sync(true);
+  assert.ok(px(p.tile('notes').style.top) >= 142 + W.EDGE, 'new B8 strip is clear without a resize');
+  tabs.remove();
+  p.ui.sync(true);
+  assert.equal(px(p.tile('notes').style.top), 94 + W.EDGE, 'removed strip releases its room without saving the layout');
+});
+
+
+test('landing works before the lazy widgets schema reaches content settings, and only follows a same-origin nav link', async () => {
+  const p = page({ sync: { widgets: { land: true } }, path: '/ultra/stream' });
+  delete p.settings.widgets;
+  p.doc.querySelector('a').attrs.href = 'https://other.test/ultra/institution-page';
+  vm.runInContext(read('features/dashboard.js'), p.c);
+  await p.c.GZ_DASH_UI.land('/ultra');
+  await settle();
+  assert.deepEqual(p.clicks, ['assign https://school.blackboard.test/ultra/institution-page']);
+});
+
+
+test('a global widget returns to the enabled Dashboard when its Courses grid is disabled', async () => {
+  const p = page({ at: 'outline', enhance: { notes: false, widgets: false, pet: false }, local: { widgetLayout: { boards: { pages: [{ id: 'timer', on: true }] } } } });
+  p.ui.sync(true);
+  await settle();
+  const back = p.tool('timer', 'Put Focus timer back on the Dashboard');
+  assert.ok(back, 'back control names the enabled destination');
+  p.doc.fire(back, 'click');
+  await settle();
+  assert.equal(on(p, 'pages', 'timer').on, false);
+  assert.equal(on(p, 'dash', 'timer').on, true);
+  assert.equal(p.tile('timer'), null, 'left this course route');
+  assert.match(p.doc.querySelector('#gz-float .gz-sr').textContent, /back on the Dashboard/);
+  const q = page({ at: 'dash', enhance: { notes: false, widgets: false, pet: false }, local: p.store });
+  q.ui.sync(true);
+  await settle();
+  assert.ok(q.tile('timer'), 'reachable at its named destination');
+});
+
+
+test('a global tile keyboard announcement uses its clamped margin, matching its visible position', async () => {
+  const p = page({ at: 'outline', local: { widgetLayout: { tiles: [{ id: 'notes', on: true, float: true, x: 0, y: 0 }] } } });
+  p.ui.sync(true);
+  await settle();
+  p.tile('notes').querySelector('.gz-w-grip').dispatchEvent(p.ev('keydown', { key: 'ArrowLeft' }));
+  await settle();
+  assert.equal(px(p.tile('notes').style.left), 200 + W.EDGE);
+  assert.match(p.doc.querySelector('#gz-float .gz-sr').textContent, /12 px from the left, 12 px from the top/);
 });

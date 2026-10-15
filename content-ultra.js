@@ -390,15 +390,26 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // (html[data-gz-dash], apps.css), so it doesn't show for a moment first. A page loaded at Ultra's start may go on to the
   // Dashboard (opt-in, once: features/dashboard.js); from is its first address, kept until a pass has the settings.
   let from = location.pathname;
+  let globalFloats = false, floatEpoch = 0;
+  const floatsIn = (l) => {
+    globalFloats = Array.isArray(l?.boards?.pages) ? l.boards.pages.some((x) => x?.on === true)
+      : Array.isArray(l?.tiles) && l.tiles.some((x) => x?.on === true && x.float === true);
+    syncWidgets();
+  };
   const dash = () => top()?.dashboard && /^\/ultra\/institution-page\/?$/.test(location.pathname);
-  const widgetsHere = () => { const e = top(); return !!e && (dash() || e.widgets || e.notes || e.pet); };
+  const widgetsHere = () => { const e = top(); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats)); };
   const syncWidgets = () => {
     const on = widgetsHere();
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
-    if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => html.setAttribute('data-gz-dash', 'ip')); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);
     if (from && top()?.dashboard) { const f = from; from = ''; if (/^\/ultra(\/(stream|course))?\/?$/.test(f)) need('features/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => GZ_DASH_UI.land(f), () => {}); }
     if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
   };
+  if (window.top === window) try {
+    const epoch = floatEpoch;
+    chrome.storage.local.get('widgetLayout', (r) => { if (!chrome.runtime.lastError && epoch === floatEpoch) floatsIn(r?.widgetLayout); });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { floatEpoch++; floatsIn(ch.widgetLayout.newValue); } });
+  } catch { /* extension reloaded */ }
 
   // ---- page changes ---------------------------------------------------------------------------
   // Ultra swaps pages in place, painting its half-built states on the way (and one long script can

@@ -48,7 +48,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     clearTimeout: (id) => timers.delete(id),
     addEventListener() {}, removeEventListener() {},
     chrome: {
-      runtime: { lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
+      runtime: { id: 'glaze', lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); const r = replies.shift() || { ok: true, kept: true }; if (hold) held.push(() => cb(r)); else Promise.resolve().then(() => cb(r)); } },
       storage: {
         local: { get: (keys, cb) => reads.push(() => cb(Object.fromEntries([keys].flat().filter((k) => k in local).map((k) => [k, local[k]])))), set: (v, cb) => { Object.assign(local, v); cb?.(); } },
         sync: { get: (k, cb) => cb({}) },
@@ -65,7 +65,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
   const answer = () => { while (reads.length) reads.shift()(); };
-  return { ui, timers, answer, sent, listeners, local, clock, held };
+  return { ui, timers, answer, sent, listeners, local, clock, held, c };
 };
 const find = (el, pred) => (pred(el) ? el : el.children?.map((c) => find(c, pred)).find(Boolean) || null);
 
@@ -332,4 +332,41 @@ test("the timer never shows an answer older than what's stored since: a late Sta
   await settle();
   assert.equal(start.textContent, 'Start', 'what is stored, not the late answer');
   assert.equal(body.dataset.running, 'no');
+});
+
+
+test('the timer initial storage read cannot replace a newer storage event', async () => {
+  const clock = { t: 1e12 };
+  const p = page({ clock, local: { widgetTimer: W.IDLE } });
+  const body = new E();
+  p.ui.probe.WIDGETS.timer(body);
+  const running = { phase: 'work', end: clock.t + 25 * 6e4, left: 0 };
+  for (const f of [...p.listeners]) f({ widgetTimer: { newValue: running } }, 'local');
+  p.answer(); // old read's callback arrives after the worker's newer running event
+  await settle();
+  assert.equal(body.dataset.running, 'yes');
+  assert.equal(find(body, (e) => e.className === 'gz-w-btn gz-w-main').textContent, 'Pause');
+});
+
+
+test('buddy timer checks context invalidation before any core mutation or runtime URL access', async () => {
+  for (const failure of ['missing id', 'throwing id']) {
+    const clock = { t: 1e12 };
+    const p = page({ clock });
+    const body = new E();
+    const tile = p.ui.probe.WIDGETS.buddy(body);
+    p.answer(); await settle();
+    find(body, (e) => e.className === 'gz-w-pet').fire('click');
+    const timer = [...p.timers.values()].find((x) => x.ms > 60000);
+    assert.ok(timer, 'a live buddy arms its next repaint');
+    let calls = 0;
+    p.c.chrome.runtime.getURL = () => { calls++; throw Error('Extension context invalidated'); };
+    if (failure === 'missing id') delete p.c.chrome.runtime.id;
+    else Object.defineProperty(p.c.chrome.runtime, 'id', { get() { throw Error('Extension context invalidated'); } });
+    clock.t += 60050;
+    assert.doesNotThrow(() => timer.f(), failure);
+    assert.equal(calls, 0, 'guard precedes runtime URL access');
+    assert.ok(![...p.timers.values()].some((x) => x.ms > 60000), 'invalid repaint does not rearm');
+    tile.stop();
+  }
 });

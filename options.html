@@ -643,7 +643,8 @@
         </div>
         <div class="group" id="widgets">
           <h3>Notes and widgets</h3>
-          <label class="check"><input type="checkbox" data-key="enhance.notes"><span>Notes</span>
+          <div class="group"><h3>Share sessions</h3><p class="desc">Invite only, end-to-end encrypted through https://share.frostdev.io. Your local copies keep working without the server.</p><p class="desc">Off until you create or join. Pause or resume from Share sessions.</p><button type="button" id="share-sessions">Open Share sessions</button></div>
+        <label class="check"><input type="checkbox" data-key="enhance.notes"><span>Notes</span>
             <span class="desc">On Canvas and Blackboard Ultra: a box for your own notes on Canvas's Dashboard or Ultra's Courses page (small, medium or large; web addresses in them become links) and a notes app with folders, formatting, checklists, pictures, attachments and links to your courses' content. Open the app from Ctrl+K, the notes box, a Canvas course card's + menu, or Course notes on a Canvas course's home or an Ultra course's outline. Kept on this device only, for each site and account, in Glaze's own storage, which the school's site can't read. Deleted notes stay in the trash for 30 days; export everything as a zip at any time.</span></label>
           <label class="check"><input type="checkbox" data-key="enhance.widgets"><span>Widgets</span>
             <span class="desc">An agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. On Canvas's Dashboard, Edit widgets adds, orders and sizes them, and any of them can float over every Canvas page. On Blackboard Ultra they float on the Courses page and on Glaze's Dashboard (the Institution page, with Better To Do), each with a layout of its own, and any of them can float over every Blackboard page: Edit layout lets you drag them anywhere or move them with the arrow keys; they snap to a grid, the edges and each other, and Alt places them freely.</span></label>
@@ -752,6 +753,7 @@
           <label class="row"><button type="button" id="import-btn">Import settings…</button><input type="file" id="import" accept="application/json,.json" hidden></label>
           <button type="button" id="reset-all" class="danger">Reset everything</button>
         </div>
+        <p class="desc">Includes all share keys and creator delete tokens, even while sharing is paused. Anyone with this backup can open those sessions and may change or delete them. Keep it private.</p>
         <p class="desc">Exports are a JSON file with your palette, presets, options, any course nicknames you set, and your Better To Do tasks and plans. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
         <p class="desc">Card styles and bookmarks go in the export too. Pictures kept for cards stay on this computer.</p>
         <div class="group">
