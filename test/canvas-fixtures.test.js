@@ -136,7 +136,7 @@ const HOOKS = [
 
 // The classes and ids canvas.css and features/apps.css (what Glaze draws itself, on Canvas and Ultra) key on, read from
 // their selectors: Glaze's own gz-* aside, and features/apps.css's Ultra markup (ULTRA_CSS).
-const ULTRA_CSS = new Set(['#site-wrap', '.todo-panel', '.outline-actions', '.base-header-tools']);
+const ULTRA_CSS = new Set(['#site-wrap', '.todo-panel', '.outline-actions', '.base-header-tools', '.courses-panel', '.course-columns', '.course-banner', '.element-details', '.course-title', '.course-id']);
 const cssNames = () => {
   const css = ['canvas.css', 'features/apps.css'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
   const selectors = css.replace(/\{[^{}]*\}/g, '{}').replace(/@[^{]*\{/g, '').replace(/url\([^)]*\)/g, '');

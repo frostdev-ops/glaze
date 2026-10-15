@@ -815,3 +815,13 @@ synthetic Ultra, `test/fixtures/ultra-course.html`, and `scripts/ultra-tabs-chec
 | Allow only Relay Save/Test from the exact extension top-frame editor | Giving the editor general session operations | Existing validation, HTTP health timeout and Pause/generation rules remain in the worker. Test is explicit and neither saves the origin nor approves/enables session traffic. |
 | A separate exact-editor nickname operation changes one Ultra course on the current stored preferences | Saving the editor's stale whole course map | The worker uses the existing nickname sanitizer and sync-size limit, preserving other course fields. Relay access remains only Save/Test, alongside the existing key export/import operations. |
 | Replace the preview frame's same-origin location when switching sites | Adding preview entries to the editor's joint session history | Back and Forward should move between settings sections even when those sections show different LMS previews. |
+
+
+## B10 — Ultra course cards on the boards
+
+| Decision | Reason |
+|---|---|
+| Render Glaze-owned course cards, leaving React’s cards in place | Board movement cannot detach nodes that Ultra owns. Native search/filter/term controls remain available through the toolbar; native view is a temporary page choice, while per-board tiles persist. Hiding the board or removing its last course restores the native list. |
+| Canonical `course:<https origin>/<Ultra course id>` keys; at most 48 per school on each board (384 across schools per board); no global course floats | Schools can reuse IDs. Course cards belong only to Courses/Dashboard boards, have independent placements, and use the same existing per-tile worker queue. Removing a course tile frees a slot without removing the course’s other data. |
+| The Ultra-only `canvasPeek` returns existing identity/membership promises and the book Map; the existing grade callback wakes mounted cards | The owner approved up to 100 B for cached-only hooks; together they add 99 B. Neither starts a request. Late existing grade answers refresh the cards even without native DOM mutations. Shared core, Canvas and Moodle grow 0 B. |
+| Reuse the card painter/menu and the native card-task renderer with stored account data | No new fetch path or duplicate done/date rules; board creation adds no request. Progress and new-work badges are copied as primitive values only while the native card already supplies them. |

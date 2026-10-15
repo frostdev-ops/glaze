@@ -187,3 +187,39 @@ test('default Dashboard alone does not load widgets on course routes; an explici
   await settle();
   assert.equal(asks(r), 1, 'a float enabled in another tab becomes available');
 }));
+
+test('Ultra course cards peek at existing promises and books without starting a reader', async () => {
+  const p = page({ site: 'ultra', preload: true, raw: { enabled: false } });
+  await p.done;
+  let requests = 0;
+  p.c.fetch = async (u) => { requests++; return { ok: true, url: u, text: async () => JSON.stringify(u.endsWith('/users/me') ? { id: '_900_1' } : { results: [] }), headers: { get: () => null } }; };
+  const cold = p.c.GZ_CTX.canvasPeek();
+  for (let i = 0; i < 10; i++) { const next = p.c.GZ_CTX.canvasPeek(); assert.equal(next.me, cold.me); assert.equal(next.courses, cold.courses); assert.equal(next.books, cold.books); }
+  assert.equal(requests, 0, 'peeking starts nothing, even if the boot already has a pending reader');
+  const me = p.c.GZ_CTX.me(), courses = p.c.GZ_CTX.myCourses(), book = p.c.GZ_CTX.bookFor('_101_1');
+  await Promise.all([me, courses, book.pending]);
+  const count = requests, warm = p.c.GZ_CTX.canvasPeek();
+  assert.equal(warm.me, me); assert.equal(warm.courses, courses); assert.equal(warm.books.get('_101_1'), book);
+  assert.equal(p.c.GZ_CTX.canvasPeek().books, warm.books); assert.equal(requests, count);
+});
+
+test('an existing Ultra grade request refreshes mounted course cards when it finishes without native DOM', async () => {
+  const p = page({ site: 'ultra', preload: true, raw: { enabled: false }, pathname: '/ultra/institution-page' });
+  await p.done;
+  let updates = 0, requests = 0, finish, observed;
+  p.c.GZ_COURSE_CARDS = { sync: () => { updates++; observed = p.c.GZ_CTX.canvasPeek().books.get('_101_1').overall?.label; } };
+  p.c.fetch = async (u) => {
+    requests++;
+    const profile = u.endsWith('/users/me');
+    if (!profile) await new Promise((r) => { finish = r; });
+    return { ok: true, url: u, text: async () => JSON.stringify(profile ? { id: '_900_1' } : { results: [{ columnId: '_5_1', effectiveScore: 87, pointsPossible: 100, displayGrade: { text: '87%' }, column: { externalGrade: true } }] }), headers: { get: () => null } };
+  };
+  const book = p.c.GZ_CTX.bookFor('_101_1');
+  await settle();
+  assert.equal(book.pending, true); assert.equal(updates, 0);
+  finish(); await settle();
+  assert.equal(book.pending, false);
+  assert.equal(updates, 1, 'the existing grade reader wakes cached board cards');
+  assert.equal(observed, '87%', 'the cache is ready before the callback');
+  assert.equal(requests, 2, 'only the existing profile and grade requests');
+});

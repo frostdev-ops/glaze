@@ -5,7 +5,7 @@
 var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   const { need, t, capi } = globalThis.GZ_CTX;
   const ultra = GZ_CTX.site === 'ultra';
-  const CARD = ultra ? 'article.course-element-card[data-course-id]' : '.ic-DashboardCard';
+  const CARD = ultra ? 'article.course-element-card[data-course-id], article.gz-course-card[data-course-id]' : '.ic-DashboardCard';
   const cardsKey = ultra ? 'ucards' : 'cards', linksKey = ultra ? 'ulinks' : 'links', imageKey = ultra ? 'ultraCardImg:' : 'cardImg:';
   const html = document.documentElement;
   const NS = 'http://www.w3.org/2000/svg';

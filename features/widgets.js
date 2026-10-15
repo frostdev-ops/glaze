@@ -24,7 +24,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const MORE = { pet: { file: 'features/pet.js', name: 'Pet habitat', size: 'm' } };
   const loadingMore = new Map(); // id -> retry time, Infinity while loading
   const added = new Map(); // id -> fill(body, api), from register()
-  const nameOf = (id) => NAMES[id] || MORE[id]?.name || id;
+  const nameOf = (id) => NAMES[id] || MORE[id]?.name || globalThis.GZ_COURSE_CARDS?.title(id) || id;
   const ultra = ctx.site === 'ultra';
   const SIZE_NAMES = { s: 'Small', m: 'Medium', l: 'Large' };
   // Written for Glaze (original, not quoted from anyone), each in every language Glaze speaks.
@@ -111,6 +111,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Better To Do's tile: on Ultra's Dashboard only, with its switch (it has its own place everywhere else: one copy).
   // The Dashboard is its own switch: its widgets need no other, but the notes and the pet keep theirs.
   const allowed = (id) => {
+    if (W?.course(id)) return ultra && !!board && W.course(id).origin === location.origin;
     const e = ctx.settings().enhance;
     return id === 'todo' ? ultra && !!board && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
   };
@@ -594,7 +595,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       fold.setAttribute('aria-expanded', String(!tile.fold));
       x.body.hidden = tile.fold;
       x.tools.replaceChildren(...(tile.float ? [label(button('⇲', () => floatBack(tile.id), { className: 'gz-w-icon' }), t(board ? 'Put {name} back on this page' : backBoard() === 'dash' ? 'Put {name} back on the Dashboard' : 'Put {name} back on the Courses page', { name }))]
-        : editing ? [size, ...(tile.id === 'todo' ? [] : [label(button('⇱', () => floatOut(tile.id), { className: 'gz-w-icon' }), t('Float {name} on every Blackboard page', { name }))]), label(button('×', () => saveBoard(tile.id, { on: false }), { className: 'gz-w-icon' }), t('Remove {name}', { name }))] : []), fold);
+        : editing ? [size, ...(tile.id === 'todo' || W.course(tile.id) ? [] : [label(button('⇱', () => floatOut(tile.id), { className: 'gz-w-icon' }), t('Float {name} on every Blackboard page', { name }))]), label(button('×', () => change({ ops: [{ s: board, id: tile.id, ...(W.course(tile.id) ? { remove: true } : { set: { on: false } }) }] }), { className: 'gz-w-icon' }), t('Remove {name}', { name }))] : []), fold);
       return;
     }
     if (tile.float) {
@@ -764,11 +765,67 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     draw();
   };
   const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); bar?.querySelector('.gz-dash-edit')?.focus(); } };
+  let loadingCourses = null, nativeShown = false, courseSpace = null;
+  const loadCourses = () => {
+    if (!ultra || globalThis.GZ_COURSE_CARDS || loadingCourses) return;
+    loadingCourses = ctx.need('features/coursecards.js', () => globalThis.GZ_COURSE_CARDS).then(() => {
+      loadingCourses = null;
+      if (on && board && globalThis.GZ_COURSE_CARDS) { GZ_COURSE_CARDS.sync(draw); draw(); }
+    }, () => { loadingCourses = null; });
+  };
+  const coursePicker = (add) => {
+    const C = globalThis.GZ_COURSE_CARDS;
+    if (!C) return;
+    const available = C.list().filter((c) => !lay.boards[board].some((x) => x.id === c.key && x.on));
+    const count = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin).length;
+    const room = Math.max(0, Math.min(W.COURSE_MAX - count, W.COURSE_TOTAL - lay.boards[board].filter((x) => W.course(x.id)).length));
+    if (board === 'courses') {
+      add.append(button(t('+ Course cards'), () => {
+        nativeShown = false;
+        change({ ops: available.slice(0, room).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term } })) });
+      }, { className: 'gz-w-small gz-course-add', disabled: !available.length || !room }));
+    } else {
+      const select = make('select', { className: 'gz-course-pick' }, ...available.map((c) => make('option', { value: c.key, textContent: [C.title(c.key), c.term, c.code].filter(Boolean).join(' · ') })));
+      select.setAttribute('aria-label', t('Course card'));
+      const addOne = button(t('+ Course card'), () => {
+        const c = available.find((c) => c.key === select.value);
+        if (c) change({ ops: [{ s: board, id: c.key, set: { on: true, size: 's', term: c.term } }] });
+      }, { className: 'gz-w-small gz-course-add', disabled: !available.length || !room });
+      add.append(select, addOne);
+    }
+    add.append(make('span', { className: 'gz-w-faint', textContent: t('Up to {n} course cards per board.', { n: W.COURSE_MAX }) }));
+  };
+  const clearCourses = () => {
+    document.documentElement?.removeAttribute('data-gz-course-tiles');
+    courseSpace?.remove(); courseSpace = null;
+    bar?.querySelector('.gz-course-native')?.remove();
+    nativeShown = false;
+  };
+  const nativeCourses = (want, away) => {
+    const selected = board === 'courses' && want.some((x) => W.course(x.id));
+    const cardsOn = selected && !away && !nativeShown;
+    if (!ultra) return;
+    document.documentElement?.toggleAttribute('data-gz-course-tiles', cardsOn);
+    let toggle = bar?.querySelector('.gz-course-native');
+    if (selected && !toggle) {
+      toggle = button('', () => { nativeShown = !nativeShown; draw(); }, { className: 'gz-w-small gz-course-native' });
+      toggle.title = t("Ultra's search, filters and term picker stay in its course list.");
+      bar.append(toggle);
+    }
+    if (toggle) {
+      if (!selected) toggle.remove();
+      else { const text = t(nativeShown ? 'Show course cards' : "Show Ultra’s course list"); if (toggle.textContent !== text) toggle.textContent = text; toggle.setAttribute('aria-pressed', String(nativeShown)); }
+    }
+    for (const [id, x] of tiles) if (W.course(id) && x.el.hidden !== (nativeShown && selected)) x.el.hidden = nativeShown && selected;
+    const home = cardsOn && document.querySelector('.courses-panel .base-courses');
+    if (home) { courseSpace ||= make('div', { className: 'gz-course-space', ariaHidden: 'true' }); if (courseSpace.parentNode !== home) home.append(courseSpace); }
+    else { courseSpace?.remove(); courseSpace = null; }
+  };
   const gridEl = () => {
     const edit = button(t(board ? 'Edit layout' : 'Edit widgets'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
     const reset = board && button(t('Reset layout'), () => {
-      change({ ops: lay.boards[board].map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false } })), widths: { [board]: 0 } });
+      change({ ops: lay.boards[board].filter((x) => !W.course(x.id) || W.course(x.id).origin === location.origin).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false } })), widths: { [board]: 0 } });
       say(t('Layout reset.'));
     }, { className: 'gz-w-small gz-dash-reset', hidden: true });
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
@@ -841,6 +898,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     cancelAnimationFrame(floatFrame);
     globalThis.GZ_DASH_UI?.tabs(null);
     document.documentElement?.removeAttribute('data-gz-todo-tile');
+    clearCourses();
     for (const e of [grid, panel, room, bar, all && floats]) e?.remove?.();
     grid = panel = room = bar = null;
     if (all) floats = null;
@@ -867,9 +925,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       let x = tiles.get(tile.id);
       if (!x) {
         x = tileEl(tile.id);
-        Object.assign(x, (WIDGETS[tile.id] || added.get(tile.id))(x.body, api(tile.id)) || {});
+        Object.assign(x, (WIDGETS[tile.id] || added.get(tile.id) || GZ_COURSE_CARDS.fill)(x.body, api(tile.id)) || {});
         tiles.set(tile.id, x);
         ro?.observe(x.el);
+      }
+      if (W.course(tile.id)) {
+        const name = nameOf(tile.id);
+        if (x.head.querySelector('h3').textContent !== name) { x.head.querySelector('h3').textContent = name; x.el.setAttribute('aria-label', name); }
       }
       x.el.dataset.size = tile.size;
       x.el.draggable = editing && !ultra && !tile.float;
@@ -892,6 +954,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     for (const e of [room, panel, floats]) if (e && e.hidden !== away) e.hidden = away;
     const hb = bar?.querySelector('.gz-dash-hide');
     if (hb) { hb.textContent = t(hidden ? 'Show widgets' : 'Hide widgets'); hb.setAttribute('aria-pressed', String(hidden)); }
+    nativeCourses(want, away);
     if (board) layoutBoard();
     placeFloats();
     if (grid) {
@@ -899,12 +962,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       grid.toggleAttribute('data-editing', editing);
       room?.toggleAttribute('data-editing', editing);
       const add = grid.querySelector('.gz-dash-add');
-      const off = (board ? lay.boards[board] : lay.tiles).filter((x) => !x.on && allowed(x.id) && !(ultra && fl(x.id)));
+      const off = (board ? lay.boards[board] : lay.tiles).filter((x) => !W.course(x.id) && !x.on && allowed(x.id) && !(ultra && fl(x.id)));
       // A Dashboard with every widget off is still the Dashboard: it says how to fill it.
       const empty = board === 'dash' && !editing && !want.some((x) => !x.float);
       add.replaceChildren(...(editing && off.length ? [make('span', { className: 'gz-w-faint', textContent: t('Add:') }),
         ...off.map((x) => button(`+ ${t(nameOf(x.id))}`, () => change({ ops: [{ s: board || 'canvas', id: x.id, set: board ? { on: true, x: null, y: null } : { on: true } }] }), { className: 'gz-w-small' }))]
         : empty ? [make('p', { className: 'gz-w-faint', textContent: t('Nothing here yet. Edit layout adds widgets.') })] : []));
+      if (board && editing) { loadCourses(); coursePicker(add); }
     }
   };
 
@@ -926,15 +990,18 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       dims[x.id] = { w: W.WIDTH[x.size], h: heights.get(x.id) || el.offsetHeight };
     }
     const width = host.clientWidth;
-    let col = null, lines = null, side = true;
+    let col = null, lines = null, side = true, courseArea = null;
     if (board === 'courses') {
       // Ultra's column, where the panel is: beside the courses, or (narrow) under them at their width.
       const r = host.getBoundingClientRect(), g = area.getBoundingClientRect();
       col = { right: Math.max(0, Math.round(r.right - g.right)), top: Math.round(g.top - r.top) };
       lines = [g.left - r.left, g.right - r.left];
       side = g.width > 0 && g.width <= width / 2;
+      const c = document.querySelector('.courses-panel .base-courses')?.getBoundingClientRect();
+      if (c) courseArea = { left: Math.max(0, Math.round(c.left - r.left)), top: Math.max(0, Math.round(c.top - r.top)), width: c.width };
+
     }
-    const res = W.arrange(list, dims, width, { col, w0: lay.widths[board] });
+    const res = W.arrange(list, dims, width, { col, courseArea, w0: lay.widths[board] });
     lastAt = res.at;
     lastW = width;
     stacked = !side || res.stack;
@@ -956,6 +1023,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (focus !== document.activeElement && focus?.isConnected) focus.focus({ preventScroll: true });
     const keep = stacked ? '' : `${board === 'courses' ? W.reserve(Object.values(res.at), lines[0], lines[1], col.top) : res.bottom + W.GAP}px`;
     if (area.style.height !== keep) area.style.height = keep;
+    if (courseSpace) {
+      const height = stacked || !courseArea ? '0px' : `${W.reserve(Object.values(res.at), courseArea.left, courseArea.left + courseArea.width, courseArea.top) + W.GAP}px`;
+      if (courseSpace.style.height !== height) courseSpace.style.height = height;
+    }
   };
 
   // What this page shows: tiles that are on, allowed by their switch, and on this board, or (Canvas) floating or with
@@ -966,6 +1037,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     ...(ultra ? lay.boards.pages.filter((x) => x.on).map((x) => ({ ...x, float: true })) : []),
   ].filter((x) => {
     if (!x.on || !allowed(x.id)) return false;
+    if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS; }
     if (WIDGETS[x.id] || added.has(x.id)) return true;
     if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
       loadingMore.set(x.id, Infinity);
@@ -975,7 +1047,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   });
   // What a tile from another file is given besides its body.
   const account = () => who().then(() => ({ ...me }));
-  const api = (id) => ({ who: account, site: ctx.site, size: () => cur(id)?.size || 's' });
+  const api = (id) => ({ id, term: () => cur(id)?.term || '', who: account, site: ctx.site, size: () => cur(id)?.size || 's' });
   // Ultra's floating tiles (lib/widgets.js floating): each at its place in the room the window leaves right of the nav
   // and below a course's top bar, on top in the order they were moved; stacked at the window's edge (data-stack) when
   // the window is too narrow for where they were placed. Their width is their size's, as on the boards.
@@ -1128,6 +1200,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       setTimeout(() => { starting = null; }, 60000);
     });
     else if (W && lay) {
+      if (ultra && board) globalThis.GZ_COURSE_CARDS?.sync(draw);
       // A pass: draw only when something changed (a switch let a tile in or out, Canvas redrew the Dashboard), so the
       // page's observer isn't fed changes of Glaze's own.
       const h = home();

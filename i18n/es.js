@@ -1867,4 +1867,11 @@
   "Viewport": "Tamaño de vista",
   "On this device": "En este dispositivo",
   "Preview could not load. Try reloading settings.": "No se pudo cargar la vista previa. Vuelve a cargar los ajustes.",
+  "Course card": "Tarjeta de curso",
+  "+ Course cards": "+ Tarjetas de cursos",
+  "+ Course card": "+ Tarjeta de curso",
+  "Up to {n} course cards per board.": "Hasta {n} tarjetas de cursos por tablero.",
+  "Ultra's search, filters and term picker stay in its course list.": "La búsqueda, los filtros y el selector de períodos de Ultra siguen en su lista de cursos.",
+  "Show course cards": "Mostrar tarjetas de cursos",
+  "Show Ultra’s course list": "Mostrar la lista de cursos de Ultra",
 };
