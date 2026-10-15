@@ -68,6 +68,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
 
   let editing = null; // the course in the editor: { key, style, links }, shown while it saves
   const paint = async () => {
+    if (!chrome.runtime?.id) return; // cut off by a reload of Glaze
     if (window.top !== window && !globalThis.location?.pathname.endsWith('/preview.html')) return;
     let d;
     try { d = await read(); } catch { return; }
