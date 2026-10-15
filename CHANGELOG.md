@@ -147,6 +147,9 @@ All notable changes to Glaze are documented here. The format follows
 - **Pages load less code until you use a feature:** the command palette, keyboard shortcuts, the course menu's
   popover, folder previews and Download all's buttons now load the first time you use them (or, for Download all, on
   a course page with folders), so every other page starts with about 46 KB less. They work as before.
+- **And about 30 KB less again:** draft backup, Blackboard's what-if calculator, the document buttons (focus mode,
+  reading time, dark file previews) and remembering your place in a course now load only on the pages where they
+  appear. They work as before.
 
 ### Fixed
 
