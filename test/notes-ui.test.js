@@ -168,6 +168,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     GZ_NOTES: N, GZ_DOCTEXT: require('../lib/doctext.js'), GZ_ZIP: require('../lib/zip.js'), GZ_I18N: require('../lib/i18n.js'), GZ_PAGE: require('../lib/page.js'),
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_LOOKS: D.GZ_LOOKS, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY,
     GZ_CTX: {
+      solo: true,
       t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => env.live, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enabled, enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
       profile: async () => ({ id: 5 }), canvasCourses: async () => [{ id: 7, name: 'Biology' }, { id: 9, name: 'History' }],
       need: (file) => (file === 'features/sharing.js' && env.shareHold) || (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
@@ -492,7 +493,7 @@ test('the Course notes button costs the first script nothing: the worker registe
   // The script loads the notes code on a course's home only.
   for (const [pathname, want] of [['/courses/7', true], ['/courses/7/', true], ['/courses/7/modules', false], ['/', false]]) {
     const asked = [];
-    const ctx = vm.createContext({ window: {}, location: { pathname }, GZ_CTX: { need: (f) => { asked.push(f); return Promise.resolve(); } }, GZ_NOTES_UI: { home() {} } });
+    const ctx = vm.createContext({ window: {}, location: { pathname }, GZ_CTX: { solo: true, need: (f) => { asked.push(f); return Promise.resolve(); } }, GZ_NOTES_UI: { home() {} } });
     ctx.window.top = ctx.window;
     vm.runInContext(read('features/notes-home.js'), ctx);
     assert.deepEqual(asked, want ? ['features/notes.js'] : [], pathname);

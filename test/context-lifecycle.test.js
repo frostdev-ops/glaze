@@ -104,7 +104,7 @@ test('real shortcut listeners leave keys alone after reload before a body mutati
     settings: { enhance: { keys: true, palette: true } },
     document: { addEventListener: (_, fn) => handlers.push(fn) },
     need: () => { loads++; return Promise.reject(new Error('reloaded')); } };
-  c.window = c; c.top = c;
+  c.window = c; c.top = c; c.solo = true;
   vm.runInNewContext(source.slice(start, end), c);
   for (const key of ['?', 'k']) for (const handler of handlers) assert.doesNotThrow(() => handler({
     key, ctrlKey: key === 'k', target: {}, preventDefault: () => consumed++, stopPropagation() {},

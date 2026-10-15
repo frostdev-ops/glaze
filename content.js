@@ -14,7 +14,7 @@
   // The options preview is Ultra. On a site, decide once from its head while the parser is still there;
   // addresses and body classes can belong to another app or a same-host tool.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
-  // A course tab's live page (features/coursetabs.js keeps each in a frame named gz-ctab:<course>): Glaze works there as
+  // A course tab's live page (course tabs keep each in a frame named gz-ctab:<course>): Glaze works there as
   // on a page of its own (solo), but for what only the page around it has (the footer, the due list, the drafts' tidy).
   const tabFrame = window.top !== window && /^gz-ctab:_\d+_\d+$/.test(window.name) ? window.name.slice(8) : '';
   const solo = window.top === window || !!tabFrame;
@@ -973,7 +973,8 @@
       colors: GZ_BG_COLORS(worn.bg.colors, palette),
       dim,
       amount,
-      speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
+      // Still while a course tab's frame covers this page: nothing of it shows.
+      speed: html.hasAttribute('data-gz-ctab-framed') ? 0 : pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
     };
   };
   const syncScene = () => {
@@ -1386,7 +1387,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame,
+    canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => syncScene(),
     ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is

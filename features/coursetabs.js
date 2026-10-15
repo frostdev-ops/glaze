@@ -444,8 +444,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
       const img = Object.assign(document.createElement('img'), { src: snap.shot, alt: '', draggable: false });
-      img.style.cssText = `position:absolute;top:0;left:0;width:${innerWidth}px;height:${innerHeight}px;user-select:none`;
-      box.attachShadow({ mode: 'closed' }).append(img);
+      // Blurred, with a spinner over it: a picture of the page, not the page, until the page itself is ready.
+      const root = box.attachShadow({ mode: 'closed' });
+      root.innerHTML = `<style>img{position:absolute;top:0;left:0;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}
+.s{position:absolute;top:50%;left:50%;width:2.25rem;height:2.25rem;margin:-1.125rem;box-sizing:border-box;border-radius:50%;border:3px solid color-mix(in srgb,var(--gz-ink,#fff) 25%,transparent);border-top-color:var(--gz-accent,#6fdcff);animation:r .8s linear infinite}
+@keyframes r{to{transform:rotate(1turn)}}:host([data-still]) .s{animation:none}</style><div class="s" role="progressbar"></div>`;
+      root.querySelector('.s').setAttribute('aria-label', t('Loading…'));
+      root.prepend(img);
+      if (html.getAttribute('data-gz-motion') === 'off') box.toggleAttribute('data-still', true);
       for (const ev of ['wheel', 'pointerdown', 'touchstart']) box.addEventListener(ev, () => { f.el.style.visibility = ''; unpicture(); }, { passive: true });
       pic = box;
       img.decode().catch(() => {}).then(() => { if (pic === box && host) host.append(box); });
@@ -487,6 +493,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     unpicture(true);
     if (f && !f.ready) picture(cid, f);
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
+    ctx.scene();
     try { if (cid) sessionStorage.setItem('gz-ctabs-shown', cid); else sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
     // The least recently shown frames past LIVE stop.
     for (const [k] of [...frames].filter(([k]) => k !== cid).sort((a, b) => b[1].at - a[1].at).slice(LIVE - 1)) drop(k);
@@ -741,6 +748,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       host?.remove();
       host = null;
       html.removeAttribute('data-gz-ctab-framed');
+      ctx.scene();
       try { sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
       // Switched off (Glaze or the tabs): nothing of the courses is kept in memory any more.
       snaps.clear();
