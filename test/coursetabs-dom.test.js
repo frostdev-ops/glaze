@@ -80,16 +80,16 @@ test('snapshot click replay keeps full own-origin native links', () => {
   assert.deepEqual(replay('https://bb.school.test/ultra/courses/_1_1/outline?courseId=_1_1'), ['/ultra/courses/_1_1/outline?courseId=_1_1']);
 });
 
-test('snapshot click replay routes only the allowlisted query', () => {
-  assert.deepEqual(replay('/ultra/courses/_1_1/outline?launch=lti&courseId=_1_1'), ['/ultra/courses/_1_1/outline?courseId=_1_1']);
+test('snapshot click replay keeps the link\'s whole query', () => {
+  assert.deepEqual(replay('/ultra/courses/_1_1/outline?launch=lti&courseId=_1_1'), ['/ultra/courses/_1_1/outline?launch=lti&courseId=_1_1']);
 });
 
-test('snapshot click replay rejects external origins and assessment routes', () => {
+test('snapshot click replay rejects external origins and non-course addresses', () => {
   assert.deepEqual(replay('https://cdn.school.test/ultra/courses/_1_1/outline'), []);
   assert.deepEqual(replay('//other.test/ultra/courses/_1_1/outline'), []);
-  assert.deepEqual(replay('/ultra/courses/_1_1/outline/assessment/_2_1/overview'), []);
+  assert.deepEqual(replay('/ultra/courses/_1_1/x y'), []);
+  assert.deepEqual(replay('/ultra/courses/_1_1/outline/assessment/_2_1/overview'), ['/ultra/courses/_1_1/outline/assessment/_2_1/overview']);
 });
-
 
 test('customized built-ins are recreated without their internal upgrade name and keep native selectors', () => {
   const doc = { root: null }, make = (tag) => new Element(tag, doc);

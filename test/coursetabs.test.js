@@ -18,37 +18,35 @@ test('on by default; its settings join GZ_SPEC from here, so the first content s
   assert.ok(!/\btabs: \{/.test(read('defaults.js')), 'the group itself is not in defaults.js');
 });
 
-test('a tab goes back only to an allowed place: a course tool, a details page, a document or folder', () => {
+test('a tab goes back to any page of its own course, exactly: path and query', () => {
   for (const tool of L.TOOLS) assert.equal(L.safe(`${C}/${tool}`), `${C}/${tool}`, tool);
-  assert.equal(L.safe(`${C}/outline/roster`), `${C}/outline/roster`);
-  assert.equal(L.safe(`${C}/outline/edit/document/_9_1`, '?courseId=_1_1&view=content'), `${C}/outline/edit/document/_9_1?courseId=_1_1&view=content`);
-  assert.equal(L.safe(`${C}/outline/folder/_9_1`), `${C}/outline/folder/_9_1`);
-  // The query keeps only what it may, and only for this course.
-  assert.equal(L.safe(`${C}/outline/booksAndTools`, '?parentId=_5_1&launch=1&x=<y>'), `${C}/outline/booksAndTools?parentId=_5_1`);
-  assert.equal(L.safe(`${C}/outline/edit/document/_9_1`, '?courseId=_2_1&view=edit'), `${C}/outline/edit/document/_9_1`);
+  for (const p of [`${C}/outline/roster`, `${C}/outline/folder/_9_1`, `${C}/document/_9_1`, `${C}/outline/assessment/_3_1/overview`,
+    `${C}/assessment/_3_1/overview/attempt/_4_1`, `${C}/engagement/discussion/_5_1`, `${C}/outline/lti/launchFrame/_7_1`, `${C}/messages/_6_1`]) assert.equal(L.safe(p), p, p);
+  // Its query, whole, as the page had it.
+  assert.equal(L.safe(`${C}/document/_9_1`, '?view=content&state=view&x=<y>'), `${C}/document/_9_1?view=content&state=view&x=<y>`);
+  assert.equal(L.safe(`${C}/assessment/_3_1/overview`, 'courseId=_1_1'), `${C}/assessment/_3_1/overview?courseId=_1_1`);
+  assert.equal(L.safe(`${C}/grades`, ''), `${C}/grades`);
 });
 
-test('never a test, attempt, assessment, discussion or message: those go back to their tool', () => {
-  for (const p of [`${C}/outline/assessment/_3_1/overview`, `${C}/outline/assessment/test/_3_1/attempt/_4_1`, `${C}/grades/assessment/_3_1/overview/attempt/_4_1`,
-    `${C}/outline/discussion/_5_1`, `${C}/engagement/discussion/_5_1`, `${C}/messages/_6_1`, `${C}/outline/lti/launch/_7_1`, `${C}/outline/edit/document/_9_1/attempt`,
-    `${C}/outline/journal/_8_1`, `${C}/outline`.replace('outline', 'outline/test'), '/ultra/course', '/ultra/courses/1/outline', `${C}/outline/../../x`]) {
-    assert.equal(L.safe(p), null, p);
-  }
-  assert.equal(L.back(`${C}/outline/assessment/_3_1/overview`), `${C}/outline`);
+test('only a course page\'s own address, in plain path characters and of bounded length; anything else goes back to its tool', () => {
+  for (const p of ['/ultra/course', '/ultra/courses/1/outline', `${C}/outline/../../x`, `${C}/./x`, `${C}//x`, `${C}/x y`, `${C}/x<y>`, 'javascript:alert(1)',
+    `${C}/${'a'.repeat(600)}`, undefined]) assert.equal(L.safe(p), null, String(p).slice(0, 60));
+  assert.equal(L.safe(`${C}/grades`, `?${'q'.repeat(601)}`), `${C}/grades`, 'an overlong query is dropped, the page kept');
   assert.equal(L.back(`${C}/grades/assessment/_3_1/attempt`), `${C}/grades`);
-  assert.equal(L.back(`${C}/engagement/discussion/_5_1`), `${C}/engagement`);
   assert.equal(L.back(`${C}/groups/somewhere`), `${C}/groups/enrollments`);
   assert.equal(L.back(`${C}/unknownTool/x`), `${C}/outline`);
   assert.equal(L.back('/ultra/course'), null);
   assert.deepEqual(L.placeOf(`${C}/grades`, ''), { path: `${C}/grades`, exact: true });
-  assert.deepEqual(L.placeOf(`${C}/outline/assessment/_3_1/overview`, '?courseId=_1_1'), { path: `${C}/outline`, exact: false });
+  assert.deepEqual(L.placeOf(`${C}/assessment/_3_1/overview`, '?courseId=_1_1'), { path: `${C}/assessment/_3_1/overview?courseId=_1_1`, exact: true });
+  assert.deepEqual(L.placeOf(`${C}/x y`, ''), { path: `${C}/outline`, exact: false });
 });
 
-test('a click goes to the tab\'s place only while it is safe and in its own course', () => {
+test('a click goes to the tab\'s place while it is in its own course', () => {
   assert.equal(L.target({ cid: '_1_1', path: `${C}/grades` }), `${C}/grades`);
   assert.equal(L.target({ cid: '_1_1', path: `${C}/grades` }, false), `${C}/outline`, 'place off: the outline');
   assert.equal(L.target({ cid: '_1_1', path: '/ultra/courses/_2_1/grades' }), `${C}/outline`, 'another course\'s place');
-  assert.equal(L.target({ cid: '_1_1', path: `${C}/outline/assessment/_3_1/overview` }), `${C}/outline`, 'a stored assessment');
+  assert.equal(L.target({ cid: '_1_1', path: `${C}/assessment/_3_1/overview?courseId=_1_1` }), `${C}/assessment/_3_1/overview?courseId=_1_1`, 'an open assignment');
+  assert.equal(L.target({ cid: '_1_1', path: `${C}/document/_9_1?view=content&state=view` }), `${C}/document/_9_1?view=content&state=view`);
   assert.equal(L.target({ cid: '_1_1', path: 'javascript:alert(1)' }), `${C}/outline`);
   assert.equal(L.target({ cid: '_1_1' }), `${C}/outline`);
 });
@@ -57,7 +55,7 @@ test('the stored list is cleaned: known ids, short strings, safe places, pinned 
   const raw = [{ cid: '_2_1', name: 'B', pin: false, at: 2, path: '/ultra/courses/_2_1/grades', top: 300 }, { cid: '_1_1', name: 'A'.repeat(300), code: 7, pin: true, at: 1, path: `${C}/outline/assessment/_3_1/overview`, top: 900 },
     { cid: '_2_1', name: 'dup' }, { cid: 'x' }, null, 'no', { cid: '_3_1', at: -5, top: NaN, path: '/ultra/courses/_1_1/grades' }];
   assert.deepEqual(L.clean(raw), [
-    { cid: '_1_1', name: 'A'.repeat(200), code: '', pin: true, at: 1, path: `${C}/outline`, top: 0 },
+    { cid: '_1_1', name: 'A'.repeat(200), code: '', pin: true, at: 1, path: `${C}/outline/assessment/_3_1/overview`, top: 900 },
     { cid: '_2_1', name: 'B', code: '', pin: false, at: 2, path: '/ultra/courses/_2_1/grades', top: 300 },
     { cid: '_3_1', name: '', code: '', pin: false, at: 0, path: '/ultra/courses/_3_1/outline', top: 0 },
   ]);

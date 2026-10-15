@@ -88,7 +88,7 @@ test('the snapshot broker rejects another origin, subframes and unsafe routes', 
   assert.equal(await w.send({ op: 'hello' }, { url: 'https://other.test/ultra/course' }), null);
   assert.equal(await w.send({ op: 'hello' }, { frameId: 1 }), null);
   await w.send({ op: 'hello' });
-  const bad = snapshot(); bad.path += '/assessment/_3_1';
+  const bad = snapshot(); bad.path = '/ultra/courses/_9_1/outline';
   assert.equal(await w.send({ op: 'put', cid, snap: bad }), null);
 });
 

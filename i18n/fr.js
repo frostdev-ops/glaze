@@ -1559,7 +1559,6 @@
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Les XP de série nécessitent d’activer Série ; les XP gagnés restent après la désactivation.",
   "Close or unpin a tab to open another course tab.": "Fermez ou désépinglez un onglet pour ouvrir un autre onglet de cours.",
   "Course tabs": "Onglets de cours",
-  "This overview is not a cached Assignment. The tab returns to Course Content.": "Cet aperçu ne correspond pas à un devoir en cache. L’onglet revient au contenu du cours.",
   "On Blackboard Ultra, each course you open gets a tab, as pages do in your browser. A tab takes you back to where you were in its course; one left in a test or an assignment opens at the course's tool instead, never in the test.": "Sur Blackboard Ultra, chaque cours que vous ouvrez reçoit un onglet, comme les pages de votre navigateur. Un onglet vous ramène là où vous étiez dans son cours ; un onglet quitté dans un test ou un devoir s'ouvre plutôt sur l'outil du cours, jamais dans le test.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Épinglez un onglet pour le garder, faites glisser les onglets pour les ordonner, fermez-en un avec son × ou le bouton du milieu de la souris. Au clavier : les flèches passent d'un onglet à l'autre, Suppr en ferme un, P l'épingle et Maj avec une flèche le déplace.",
   "Above the course's bar": "Au-dessus de la barre du cours",

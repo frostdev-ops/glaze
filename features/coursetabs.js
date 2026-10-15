@@ -54,15 +54,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); };
   const here = () => (preview ? demo : ctx.courseId());
   const shown = (e) => !!e && e.getClientRects().length > 0;
-  const assignment = (path) => {
-    const m = L.OVERVIEW.exec(path);
-    return !!m && globalThis.GZ_SITE_ULTRA?.assignment?.(m[1], m[2]) === true;
-  };
-  const safePath = (path, search) => {
-    if (path === undefined) { path = location.pathname; search = location.search; }
-    return L.safe(path, search, assignment(path));
-  };
-  let refused = '';
+  const safePath = (...a) => (a.length ? L.safe(a[0], a[1]) : L.safe(location.pathname, location.search));
 
   // ---- where the strip goes -------------------------------------------------------------------------------------
   // The course's top bar (parity/spikes/B8.md): div.bb-course-navigation, sticky, two rows (the header, then the tools in
@@ -281,11 +273,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const notePlace = (cid) => {
     if (!atView()) return;
     const x = tabs.find((y) => y.cid === cid);
-    const p = x && L.placeOf(location.pathname, location.search, assignment(location.pathname));
-    if (L.OVERVIEW.test(location.pathname) && !p?.exact && refused !== location.pathname) {
-      refused = location.pathname;
-      say(t('This overview is not a cached Assignment. The tab returns to Course Content.'));
-    }
+    const p = x && L.placeOf(location.pathname, location.search);
     if (p?.path && x.path !== p.path) { x.path = p.path; x.top = 0; save(); }
   };
   const onScroll = (e) => {
@@ -575,7 +563,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (go) end(true);
     x.at = Date.now();
     save();
-    const url = L.target(x, P().place, assignment(String(x.path).split('?')[0]));
+    const url = L.target(x, P().place);
     go = { cid, url, before: view(), at: performance.now(), top: P().place && url === x.path ? x.top : 0 };
     const s = snaps.get(cid);
     if (s?.path === url && safePath(...url.split('?')) === url) cover(s);

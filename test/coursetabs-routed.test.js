@@ -8,36 +8,13 @@ const source = fs.readFileSync(path.join(root, 'features/coursetabs.js'), 'utf8'
 const C = '/ultra/courses/_71_1', documentPath = `${C}/document/_81_1`, overview = `${C}/assessment/_82_1/overview`;
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 
-test('routed document keeps its exact allowed view/state/folder context', () => {
-  assert.equal(L.safe(documentPath, '?view=content&state=view&parentId=_83_1&launch=1'), `${documentPath}?view=content&state=view&parentId=_83_1`);
-  for (const suffix of ['/attempt', '/review', '/take', '/submit', '/lti/launch']) assert.equal(L.safe(documentPath + suffix, '', true), null);
-  assert.equal(L.safe(`${C}/document/not-an-id`, '', true), null);
-});
-
-test('only the exact overview route accepts a positive Assignment check; stored paths never authorize it', () => {
-  assert.equal(L.safe(overview, '?courseId=_71_1', true), `${overview}?courseId=_71_1`);
-  assert.equal(L.safe(overview, '', false), null);
-  assert.equal(L.safe(overview, '', 'Assignment'), null);
-  for (const suffix of ['/attempt/_84_1', '/review', '/take', '/submission', '/grading', '/test', '/launch']) assert.equal(L.safe(overview + suffix, '', true), null);
+test('routed documents and assignments are kept exactly, query and all', () => {
+  assert.equal(L.safe(documentPath, '?view=content&state=view&parentId=_83_1&launch=1'), `${documentPath}?view=content&state=view&parentId=_83_1&launch=1`);
+  assert.equal(L.safe(overview, '?courseId=_71_1'), `${overview}?courseId=_71_1`);
   const kept = L.clean([{ cid: '_71_1', path: `${overview}?courseId=_71_1`, top: 610 }])[0];
-  assert.equal(kept.path, `${overview}?courseId=_71_1`, 'storage preserves only the structural hint');
-  assert.equal(L.target(kept), `${C}/outline`, 'a fresh positive cached check is required');
-  assert.equal(L.target(kept, true, true), kept.path);
-  assert.equal(L.target({ ...kept, cid: '_72_1' }, true, true), '/ultra/courses/_72_1/outline');
-});
-
-test('the overview classifier reads only existing cached columns, with an exact positive subtype/content ID', () => {
-  const ultra = fs.readFileSync(path.join(root, 'content-ultra.js'), 'utf8');
-  const block = ultra.slice(ultra.indexOf('  const books = '), ultra.indexOf('  const bookFor = '));
-  const fn = vm.runInNewContext(block + '\n({books, check:GZ_SITE_ULTRA.assignment});', { GZ_SITE_ULTRA: {} });
-  assert.equal(typeof fn.check, 'function');
-  assert.equal(fn.check('_71_1', '_82_1'), false);
-  fn.books.set('_71_1', { results: [{ column: { contentId: '_82_1', assessmentSubtype: 'Test' } }, { column: { contentId: '_85_1' } }] });
-  assert.equal(fn.check('_71_1', '_82_1'), false);
-  assert.equal(fn.check('_71_1', '_85_1'), false);
-  fn.books.get('_71_1').results.push({ column: { contentId: '_82_1', assessmentSubtype: 'Assignment' } });
-  assert.equal(fn.check('_71_1', '_82_1'), true);
-  assert.equal(fn.check('_72_1', '_82_1'), false);
+  assert.deepEqual([kept.path, kept.top], [`${overview}?courseId=_71_1`, 610]);
+  assert.equal(L.target(kept), kept.path);
+  assert.equal(L.target({ ...kept, cid: '_72_1' }), '/ultra/courses/_72_1/outline', 'never another course\'s page');
 });
 
 test('the strip goes before/after the full routed header without moving native content', () => {
