@@ -2625,6 +2625,9 @@
   const onSchedule = () => (links.length && worn.auto.on && worn.auto.mode === 'schedule' ? worn.auto : null);
   const armFlip = () => {
     if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
+    // The pointer, Look rotation and this page's stickers (features/lookx.js) load once one is in use.
+    const k = `stk:${location.origin}${location.pathname.replace(/(.)\/+$/, '$1')}`, x = settings.extras;
+    local((l) => l.get(k, (r) => { if (globalThis.GZ_LOOKX || links.length && (x.cursor !== 'off' || x.rotate !== 'off' || x.stickers && r?.[k]?.length)) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
