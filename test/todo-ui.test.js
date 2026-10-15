@@ -34,10 +34,12 @@ class E {
   focus() {}
 }
 
-const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, defer = false, profile = async () => ({ id: '3', time_zone: 'America/New_York' }) } = {}) => {
+const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, defer = false, holdPlanner = false, stored = {}, profile = async () => ({ id: '3', time_zone: 'America/New_York' }) } = {}) => {
   const calls = [];
   const kept = [];
-  const waiting = []; // storage callbacks held back (defer), to answer in order
+  const store = JSON.parse(JSON.stringify(stored)); // storage.local
+  const waiting = []; // the student's data writes held back (defer), to answer in order
+  const held = []; // planner answers held back (holdPlanner)
   const native = new E();
   const activation = { isActive: true };
   const runtime = { lastError: undefined };
@@ -63,16 +65,21 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
       storage: {
         local: {
           set: (v, cb) => {
-            const answer = () => { if (setOk) kept.push(JSON.parse(JSON.stringify(v))); else runtime.lastError = { message: 'QUOTA_BYTES' }; cb(); runtime.lastError = undefined; };
-            if (defer) waiting.push(answer); else answer();
+            const answer = () => {
+              if (setOk) { kept.push(JSON.parse(JSON.stringify(v))); Object.assign(store, JSON.parse(JSON.stringify(v))); } else runtime.lastError = { message: 'QUOTA_BYTES' };
+              cb(); runtime.lastError = undefined;
+            };
+            if (defer && Object.keys(v).some((k) => k.startsWith('todo:'))) waiting.push(answer); else answer();
           },
-          get: (k, cb) => cb({}),
+          get: (k, cb) => cb(JSON.parse(JSON.stringify(Object.fromEntries([k].flat().filter((x) => x in store).map((x) => [x, store[x]]))))),
         },
         sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {}, removeListener() {} },
       },
     },
     fetch: async (url, opts = {}) => {
       calls.push(`${opts.method || 'GET'} ${new URL(url).pathname}`);
+      const empty = { ok: true, headers: { get: () => null }, text: async () => '[]' };
+      if (!opts.method && holdPlanner && url.includes('/planner/items')) return new Promise((res) => held.push(() => res(empty)));
       if (opts.method) return { ok: true, headers: { get: () => null }, text: async () => '{"id":"40","marked_complete":true}' };
       return { ok: true, headers: { get: () => null }, text: async () => '[]' };
     },
@@ -86,7 +93,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
   } };`).replace('var GZ_TODO_UI = globalThis.GZ_TODO_UI ||', 'var GZ_TODO_UI =');
   vm.createContext(c);
   vm.runInContext(`${E}\n${src}`, c);
-  return { c, calls, kept, waiting, activation, p: c.GZ_TODO_UI.probe };
+  return { c, calls, kept, store, waiting, held, activation, p: c.GZ_TODO_UI.probe };
 };
 const planner = (calls) => calls.filter((u) => u.includes('/planner/items')).length;
 const summaries = (calls) => calls.filter((u) => u.includes('submission_summary')).length;
@@ -212,4 +219,42 @@ test("a trusted event without the student's activation (a script's .click()) wri
   f.p.onChange({ target: tick(), isTrusted: true });
   await settle();
   assert.deepEqual(f.calls, ['POST /api/v1/planner/overrides']);
+});
+
+const settled = async (n = 6) => { for (let i = 0; i < n; i++) await settle(); };
+const KEY = (uid) => `todo:https://canvas.test/${uid}`;
+
+test('a queued change stays with the account and list it was made in, even after a remount as someone else', async () => {
+  let n = 0;
+  const f = feature({ defer: true, profile: async () => ({ id: String(++n), time_zone: 'America/New_York' }), stored: { [KEY(2)]: { tasks: [{ id: 'two', title: 'Theirs' }], items: {} } } });
+  f.c.GZ_TODO_UI.sync(true);
+  await settled();
+  assert.equal(f.p.get().who.uid, '1');
+  const pick = (k, value) => f.p.onChange({ target: { dataset: { act: 'on' }, value, closest: () => ({ dataset: { key: k } }) }, isTrusted: true });
+  pick('assignment:1', '2026-10-20');
+  pick('assignment:2', '2026-10-21'); // both asked for as user 1; the first is still being stored
+  await settled();
+  f.c.GZ_TODO_UI.sync(false);
+  f.c.GZ_TODO_UI.sync(true); // the list again, now as user 2
+  await settled();
+  assert.equal(f.p.get().who.uid, '2');
+  while (f.waiting.length) { f.waiting.shift()(); await settled(); }
+  assert.ok(f.kept.filter((w) => Object.keys(w).some((k) => k.startsWith('todo:'))).every((w) => Object.keys(w).includes(KEY(1))), 'every change went to user 1');
+  assert.deepEqual(f.store[KEY(1)].items, { 'assignment:1': { on: '2026-10-20' }, 'assignment:2': { on: '2026-10-21' } });
+  assert.deepEqual(f.store[KEY(2)], { tasks: [{ id: 'two', title: 'Theirs' }], items: {} });
+  assert.deepEqual(JSON.parse(JSON.stringify(f.p.get().data)).tasks.map((x) => x.id), ['two'], "user 2's list shows user 2's data");
+  assert.deepEqual(JSON.parse(JSON.stringify(f.p.get().data.items)), {});
+});
+
+test("a list mounted again while the old one's planner request is out asks for its own answer", async () => {
+  const f = feature({ holdPlanner: true });
+  f.c.GZ_TODO_UI.sync(true);
+  await settled();
+  assert.equal(planner(f.calls), 1);
+  f.c.GZ_TODO_UI.sync(false);
+  f.c.GZ_TODO_UI.sync(true);
+  await settled();
+  assert.equal(planner(f.calls), 2, 'the new list asked for itself');
+  while (f.held.length) { f.held.shift()(); await settled(); }
+  assert.ok(f.p.get().cache, 'and has its answer, not Loading');
 });

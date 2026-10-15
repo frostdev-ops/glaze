@@ -533,4 +533,5 @@
   "Couldn't save that on this device, so nothing changed.": "Dat kon niet op dit apparaat worden opgeslagen, dus er is niets veranderd.",
   "Canvas didn't confirm that, so your list is checking with Canvas again.": "Canvas heeft dat niet bevestigd, dus je lijst vraagt het Canvas opnieuw.",
   "Couldn't import {file}, so nothing changed.": "{file} kon niet worden geïmporteerd, dus er is niets veranderd.",
+  "Couldn't import {file}, and undoing it failed too: your Better To Do tasks may be the imported ones. Your settings are as they were.": "{file} kon niet worden geïmporteerd, en terugdraaien mislukte ook: je Better To Do-taken zijn mogelijk de geïmporteerde. Je instellingen zijn zoals ze waren.",
 };

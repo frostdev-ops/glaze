@@ -678,7 +678,12 @@ GZ_UI.load().then((s) => {
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
     flush(); // an edit still waiting goes out first, so it can't land on top of the import
-    try { await GZ_TODO.restore(tasks, { version: 2, ...next }, chrome.storage.local, chrome.storage.sync); } catch {
+    try { await GZ_TODO.restore(tasks, { version: 2, ...next }, chrome.storage.local, chrome.storage.sync); } catch (err) {
+      // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
+      if (err?.undone === false) {
+        GZ_UI.load().then((now) => { Object.assign(s, now); fill(); });
+        return hint(t("Couldn't import {file}, and undoing it failed too: your Better To Do tasks may be the imported ones. Your settings are as they were.", { file: file.name }), true);
+      }
       return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
     }
     Object.assign(s, next);

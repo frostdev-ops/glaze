@@ -339,3 +339,16 @@ test('a backup is imported whole or not at all', async () => {
   assert.deepEqual(Object.keys(l2.s), Object.keys(tasks));
   assert.equal(s2.s.colors, 'theirs');
 });
+
+test("an import whose undo fails too says so, instead of 'nothing changed'", async () => {
+  let sets = 0;
+  const local = { get: async () => ({ 'todo:https://x.test/3': { tasks: [], items: {} } }), set: async () => { if (++sets > 1) throw new Error('quota'); }, remove: async () => {} };
+  const sync = { set: async () => { throw new Error('sync quota'); } };
+  const err = await T.restore({ 'todo:https://x.test/3': { tasks: [{ id: 'n', title: 'New' }], items: {} } }, { version: 2 }, local, sync).catch((e) => e);
+  assert.equal(err.undone, false);
+  // An undo that works: the plain error, nothing changed.
+  const ok = { get: async () => ({}), set: async () => {}, remove: async () => {} };
+  const plain = await T.restore({ 'todo:https://x.test/3': { tasks: [], items: {} } }, { version: 2 }, ok, sync).catch((e) => e);
+  assert.equal(plain.message, 'sync quota');
+  assert.equal(plain.undone, undefined);
+});

@@ -533,4 +533,5 @@
   "Couldn't save that on this device, so nothing changed.": "No se pudo guardar en este dispositivo, así que no ha cambiado nada.",
   "Canvas didn't confirm that, so your list is checking with Canvas again.": "Canvas no lo confirmó, así que tu lista está consultando a Canvas de nuevo.",
   "Couldn't import {file}, so nothing changed.": "No se pudo importar {file}, así que no ha cambiado nada.",
+  "Couldn't import {file}, and undoing it failed too: your Better To Do tasks may be the imported ones. Your settings are as they were.": "No se pudo importar {file}, y deshacerlo también falló: puede que tus tareas de Better To Do sean las importadas. Tus ajustes siguen como estaban.",
 };

@@ -26,7 +26,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let data = { tasks: [], items: {} };
   let cache = null;
   let courses = { cids: null, names: {}, list: [] };
-  let fetching = null;
+  let fetching = null; // the planner (or summaries) request in flight, and the generation it was asked for in
+  let fetchGen = -1;
   let drawn = '';
   let shown = new Map(); // key -> row, for every row the list drew
   const open = new Set(); // rows with their details open, and "show more" groups
@@ -40,6 +41,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     .then((raw) => { prefs = GZ_SANITIZE({ todo: raw }).todo; });
   const lang = () => GZ_I18N.locale(ctx.locale());
   const store = () => { try { return chrome.storage.local; } catch { return null; } };
+  // { ok, value } for one storage.local key; ok false if storage couldn't be read (then nothing is written over it).
+  const get = (k) => new Promise((res) => { try { store().get(k, (r) => res({ ok: !chrome.runtime.lastError, value: r?.[k] })); } catch { res({ ok: false }); } });
   // Resolves true once storage has it, false if it didn't take (quota, the extension reloaded under the tab).
   const put = (v) => new Promise((res) => { try { store().set(v, () => res(!chrome.runtime.lastError)); } catch { res(false); } });
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
@@ -102,16 +105,19 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   // Asked when the list starts, when the page is shown or focused again, when its settings change and after a refused
   // tick; never from content.js's passes. Within two minutes of the last answer only missing grading counts are asked.
+  // A request asked for by a list that has since gone doesn't hold up the new list's own: each generation asks for itself,
+  // and an older answer is dropped when it comes.
   const refresh = (force = false) => {
-    if (!who || fetching || dead) return fetching;
     const g = gen;
+    if (!who || dead) return null;
+    if (fetching && fetchGen === g) return fetching;
+    const done = (p) => { fetching = p; fetchGen = g; p.finally(() => { if (fetching === p) fetching = null; }); return p; };
     if (!force && covers(cache, Date.now())) {
       if (!cache.partial || !o().progress) return null;
-      fetching = summaries(cache).then(() => put({ [CACHE]: cache })).finally(() => { fetching = null; if (typing()) drawn = ''; else render(true); });
-      return fetching;
+      return done(summaries(cache).then(() => put({ [CACHE]: cache })).finally(() => { if (g !== gen) return; if (typing()) drawn = ''; else render(true); }));
     }
     if (!cache) setBusy(true);
-    fetching = load().then((c) => {
+    return done(load().then((c) => {
       if (g !== gen) return;
       cache = c;
       put({ [CACHE]: c });
@@ -119,8 +125,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (g !== gen) return;
       if (!cache) return fail();
       note(t("Couldn't refresh your To Do from Canvas."));
-    }).finally(() => { fetching = null; setBusy(false); if (typing()) drawn = ''; else render(true); });
-    return fetching;
+    }).finally(() => { if (g !== gen) return; setBusy(false); if (typing()) drawn = ''; else render(true); }));
   };
   // The courses the Dashboard list shows: active ones Canvas lets the student into. canvasCourses() answers [] both
   // when the student has none and when the request failed (its other callers want that), so an empty answer filters
@@ -131,21 +136,28 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
 
   // ---- the student's own -------------------------------------------------------------------------------------
-  // The student's changes, one at a time. Each is applied to the data as the change before it left it (not to a copy
-  // taken when it was asked for, so none undoes another), stored, and shown as saved only once storage has it. One
-  // storage refuses is taken back alone and said so. change(d) edits d in place; ok: what to say once it's kept.
+  // The student's changes, one at a time. Each belongs to the account and list it was made in (key and generation
+  // taken when it's asked for), is applied to what storage holds for that account when its turn comes (so none undoes
+  // another, here or in a newer list), and is shown as saved only once storage has it. One storage refuses changes
+  // nothing and is said so. A change made in a list that has since gone (off, remounted, another account) is still
+  // stored under its own account, and shown nowhere. change(d) edits d in place; ok: what to say once it's kept.
   let queue = Promise.resolve();
-  const save = (change, ok = '') => (queue = queue.then(async () => {
-    const before = copy();
-    try { change(data); } catch { data = before; return false; }
-    const next = L.clean(data);
-    const kept = await put({ [key]: next });
-    data = kept ? next : before;
-    note(kept ? ok : t("Couldn't save that on this device, so nothing changed."));
-    render(true);
-    return kept;
-  }));
-  const copy = () => JSON.parse(JSON.stringify(data));
+  const save = (change, ok = '') => {
+    const k0 = key, g0 = gen;
+    return (queue = queue.then(async () => {
+      const was = await get(k0);
+      let next = null;
+      if (was.ok) {
+        try { next = L.clean(was.value); change(next); next = L.clean(next); } catch { next = null; }
+      }
+      const kept = !!next && await put({ [k0]: next });
+      if (g0 !== gen) return kept;
+      if (kept) data = next;
+      note(kept ? ok : t("Couldn't save that on this device, so nothing changed."));
+      render(true);
+      return kept;
+    }));
+  };
   const local = (d, k) => (d.items[k] ||= {});
   const tidy = (d, k) => { if (d.items[k] && !Object.keys(d.items[k]).length) delete d.items[k]; };
   const uid = () => crypto.randomUUID().slice(0, 13);
