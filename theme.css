@@ -267,11 +267,11 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 .multi-column-view .course-banner { border-radius: calc(var(--gz-radius) - 1px) calc(var(--gz-radius) - 1px) 0 0 !important; }
 /* Ultra's 4px frame around each top-level outline card drew a second, squarer outline outside it. */
 #site-wrap .content-list-item [class*="makeStylesparentItem-"] { border: 0 !important; box-shadow: none !important; border-radius: var(--gz-radius) !important; }
-/* Course outline: one card per top-level folder; everything nested is a flat row with a hairline. */
+/* Course outline: one card per top-level folder; what is nested, a row of its own, rounded with the Look (--gz-radius). */
 #site-wrap .content-list-item .itemContainer { overflow: hidden; }
 /* Each on Glaze's surface (see-through over a picture or scene, extras.css), never bare: a module's items show below
    its card, on whatever is behind the page. */
-#site-wrap .content-list-item .content-list-item .itemContainer { background: var(--gz-surface) !important; border: 0 !important; border-top: 1px solid var(--gz-line) !important; border-radius: 0 !important; }
+#site-wrap .content-list-item .content-list-item .itemContainer { background: var(--gz-surface) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important; }
 #site-wrap .content-list-item .content-list-item .itemContainer:hover { transform: none; box-shadow: none !important; background: color-mix(in srgb, var(--gz-accent-soft) 40%, var(--gz-surface)) !important; }
 .content-list-item a, .content-list-item [role=button] { color: var(--gz-ink) !important; }
 .content-list-item a:hover { color: var(--gz-accent) !important; }

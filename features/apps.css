@@ -336,7 +336,7 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game details p,:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-breakdown,:is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game-status{font-size:.85em;color:var(--gz-ink-muted,#526273)}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game details p{margin-top:8px}
 :is(.gz-w[data-tile="pet"],.gz-game-dialog) .gz-game :focus-visible,.gz-game-dialog button:focus-visible{outline:2px solid var(--gz-accent,#16837b);outline-offset:3px}
-.gz-game-dialog{background:var(--gz-surface,#fff);border:1px solid var(--gz-line,#bbc6cc);border-radius:20px;padding:22px;width:min(440px,calc(100vw - 40px));max-height:85vh;overflow:auto}
+.gz-game-dialog{background:var(--gz-surface,#fff);border:1px solid var(--gz-line,#bbc6cc);border-radius:var(--gz-radius,20px);padding:22px;width:min(440px,calc(100vw - 40px));max-height:85vh;overflow:auto}
 .gz-game-dialog::backdrop{background:#17233370}
 .gz-game-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
 .gz-game-dialog h2{font:inherit;font-size:1.25em;font-weight:700;margin:0}
