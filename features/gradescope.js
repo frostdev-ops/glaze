@@ -1,5 +1,5 @@
-// Gradescope in Better To Do (W10), on www.gradescope.com: lib/background.js registers this only while enhance.gradescope
-// is on (and it checks again here). Two things, top frame only:
+// Gradescope in Better To Do (W10), on www.gradescope.com: lib/background.js registers this only while Glaze (enabled)
+// and enhance.gradescope are on (and it checks both again here). Two things, top frame only:
 // - Whenever the student visits Gradescope, every Gradescope course they've put with a Canvas course is read again: the
 //   page itself when it's that course's page, else its course page fetched from this same site with their own session
 //   (plain GETs, one at a time, none read in the last ten minutes). The rows go to the worker's queue ('glaze:gradescope').
@@ -126,8 +126,9 @@
   };
 
   (async () => {
-    const [{ enhance }, { [G.KEY]: raw, seenCourses }] = await Promise.all([get('sync', 'enhance'), get('local', [G.KEY, 'seenCourses'])]);
-    if (enhance?.gradescope !== true) return;
+    const [{ enabled, enhance }, { [G.KEY]: raw, seenCourses }] = await Promise.all([get('sync', ['enabled', 'enhance']), get('local', [G.KEY, 'seenCourses'])]);
+    // Glaze off as a whole counts as off here too, whatever the Gradescope switch says (a stale registration).
+    if (enabled === false || enhance?.gradescope !== true) return;
     const d = G.clean(raw);
     const open = d.hide ? [] : G.courses(document, location.pathname).filter((c) => !(c.gid in d.map));
     if (open.length) { await words().catch(() => {}); bar(d, open, canvasList(seenCourses)); }

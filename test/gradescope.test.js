@@ -170,6 +170,11 @@ test('on a Canvas page: off means no file is asked for and nothing is added', ()
     assert.deepEqual(gs(Date.now()), []); // asked for, not in yet
     gs(Date.now());
     assert.deepEqual(asked, ['lib/gradescope.js']); // once
+    // Glaze switched off as a whole: nothing, whatever the Gradescope switch says.
+    const off = T.gradescope(() => {});
+    globalThis.GZ_CTX = { settings: () => ({ enabled: false, enhance: { gradescope: true } }), need: (f) => { asked.push(f); return new Promise(() => {}); } };
+    assert.deepEqual(off(Date.now()), []);
+    assert.equal(asked.length, 1);
   } finally { delete globalThis.GZ_CTX; }
 });
 
@@ -245,7 +250,51 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   answer = { ok: true, url: 'https://www.gradescope.com/courses/42', text: async () => '<table id="assignments-student-table"></table>' };
   const r = await send(page, canvas);
   assert.deepEqual([r.ok, r.to], [true, to]);
+  // Glaze off as a whole, Gradescope's switch still on: no script, no writes, no daily read, as if it were off.
+  store.local.gsTried = {};
+  store.local.gradescope.courses = {};
+  fetched.length = 0;
+  store.sync.enabled = false;
+  for (const f of changed) f({ enabled: {} }, 'sync');
+  await settle();
+  assert.deepEqual(registered, [], 'unregistered when Glaze is off');
+  assert.deepEqual(await send(map, gs), nope);
+  assert.deepEqual(await send({ type: 'glaze:gradescope', op: 'rows', gid: '42', to, rows: [] }, canvas), nope);
+  assert.deepEqual(await send(page, canvas), nope);
+  assert.deepEqual(fetched, [], 'no request to Gradescope');
+  store.sync.enabled = true;
+  for (const f of changed) f({ enabled: {} }, 'sync');
+  await settle();
+  assert.deepEqual(registered, ['gz-gradescope'], 'back when Glaze is on again');
   // Off again: the script goes.
   await toggle(false);
   assert.deepEqual(registered, []);
+});
+
+test('on Gradescope: the script starts only with Glaze on and its switch on', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const vm = require('node:vm');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  const run = async (sync) => {
+    const fetched = [], drawn = [];
+    const local = { seenCourses: {}, gradescope: { map: { 42: { to: 'canvas:https://c.test/7', name: 'X' } } } };
+    const get = (s) => ({ get: (k, cb) => cb(Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))) });
+    const node = () => ({ prepend: (x) => drawn.push(x) });
+    const context = vm.createContext({
+      URL, console, Promise, Date, setTimeout, crypto: globalThis.crypto, navigator: { language: 'en' }, location: { pathname: '/' },
+      DOMParser: class { parseFromString() { return { querySelector: () => null, querySelectorAll: () => [] }; } },
+      fetch: async (u) => { fetched.push(u); return { ok: true, url: `https://www.gradescope.com${u}`, text: async () => '' }; },
+      document: { querySelector: () => null, querySelectorAll: () => [], body: node(), createElement: () => ({}) },
+      chrome: { i18n: { getUILanguage: () => 'en' }, runtime: { sendMessage: (m, cb) => cb({ ok: true }) }, storage: { sync: get(sync), local: get(local) } },
+    });
+    context.window = context;
+    context.window.top = context;
+    for (const f of ['lib/i18n.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
+    await new Promise((r) => setTimeout(r, 20));
+    return { fetched, drawn };
+  };
+  assert.deepEqual((await run({ enhance: { gradescope: true } })).fetched, ['/courses/42'], 'on: a visit reads the placed course');
+  assert.deepEqual(await run({ enabled: false, enhance: { gradescope: true } }), { fetched: [], drawn: [] }, 'Glaze off: nothing');
+  assert.deepEqual(await run({ enhance: { gradescope: false } }), { fetched: [], drawn: [] }, 'its switch off: nothing');
 });

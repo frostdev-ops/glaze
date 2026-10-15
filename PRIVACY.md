@@ -203,7 +203,7 @@ animated backgrounds) are bundled. It makes requests in these cases:
   never on a timer. Reminders are drawn inside the Canvas page only: Glaze has no notifications permission and sends
   nothing to any other place. It never writes to Canvas.
 - **Gradescope in To Do** (off by default). Gradescope has no API for students, so Glaze reads your Gradescope course
-  pages, signed in as you, and nothing else of Gradescope's. While the switch is on, and only then, Glaze runs on
+  pages, signed in as you, and nothing else of Gradescope's. While the switch is on and Glaze itself is on, and only then, Glaze runs on
   `https://www.gradescope.com` pages. Each time you open a Gradescope page, it reads again every course you've placed
   with a Canvas course and that wasn't read in the last ten minutes: the page you're on if it's that course's, else
   `https://www.gradescope.com/courses/<id>` (a read-only GET from that page, with your existing Gradescope session).
