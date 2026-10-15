@@ -582,7 +582,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       document.addEventListener('visibilitychange', onShow);
       addEventListener('focus', onShow);
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
-      ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
+      const sharedBox = box;
+      ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box === sharedBox) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
       setBusy(true);
     }
     // On a course's outline, a block of Ultra's right column, spaced as its own are.

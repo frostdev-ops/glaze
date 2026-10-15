@@ -12,16 +12,16 @@
     return r;
   };
   const make = (tag, text, props = {}) => Object.assign(document.createElement(tag), { ...(text === undefined ? {} : { textContent: text }), ...props });
-  const act = async (f) => {
-    if (busy) return;
+  const act = async (f, { reload = true, interrupt = false } = {}) => {
+    if (busy && !interrupt) return;
     busy = true;
-    try { await f(); if (!dead) await load(); }
+    try { await f(); if (reload && !dead) await load(); }
     catch (e) { if (!dead) { say('Could not finish. Your local copies are kept. Try again.', true); if (e.ui) $('#status').textContent += ' ' + e.ui; } }
     finally { busy = false; }
   };
-  const button = (key, f) => {
+  const button = (key, f, options) => {
     const b = make('button', t(key), { type: 'button' });
-    b.addEventListener('click', (e) => { if (human(e)) act(f); }); return b;
+    b.addEventListener('click', (e) => { if (human(e)) act(f, options); }); return b;
   };
   const permission = () => chrome.permissions.request({ origins: ['https://share.frostdev.io/*'] });
   const names = { pending: 'Changes saved locally, waiting to send', live: 'Up to date', offline: 'Offline — local copy kept', gone: 'Deleted on the relay — local copy kept', incomplete: 'More changes remain. Sync again.' };
@@ -54,7 +54,7 @@
         const content = make('div');
         for (const x of Object.values(r.view)) if (x.html !== undefined) { content.append(make('h4', x.title || '…'), make('p', GZ_NOTES.text(x.html))); }
         el.append(content);
-      }));
+      }, { reload: false }));
       row.append(button('Copy view invite', async () => { const r = await send('link', { sid: s.sid }); await navigator.clipboard.writeText(r.link); say('Invite copied. Keep it private.'); }));
       if (s.edit) row.append(button('Copy edit invite', async () => { const r = await send('link', { sid: s.sid, edit: true }); await navigator.clipboard.writeText(r.link); say('Invite copied. Keep it private.'); }));
       if (!s.bound && ['notes', 'todo'].includes(s.kind)) {
@@ -72,18 +72,18 @@
         label.append(cb, make('span', t('Delete after a year unused'))); el.append(label);
         row.append(button('Delete session from relay', async () => {
           if (confirm(t('Delete the encrypted session and its files from the relay? Device copies and older backups remain.'))) await send('delete', { sid: s.sid });
-        }));
+        }, { interrupt: true }));
       }
       row.append(button('Leave this device', async () => {
         if (confirm(t('Forget this session’s keys on this device? Your Notes and To Do copies remain. This does not delete it from the relay.'))) await send('leave', { sid: s.sid });
-      }));
+      }, { interrupt: true }));
       el.append(row); return el;
     }));
     if (!state.sessions.length) $('#sessions').append(make('p', t('No sessions on this device.')));
   };
   const load = async () => { state = await send('list'); if (!dead) { render(); if (!$('#sources').children.length) sources(); } };
   $('#kind').addEventListener('change', (e) => { if (human(e)) sources(); });
-  $('#pause').addEventListener('click', (e) => { if (human(e)) act(() => send('pause')); });
+  $('#pause').addEventListener('click', (e) => { if (human(e)) act(() => send('pause'), { interrupt: true }); });
   $('#resume').addEventListener('click', (e) => { if (!human(e) || busy) return; const p = permission(); act(async () => { if (await p) await send('resume'); }); });
   $('#refresh').addEventListener('click', (e) => { if (human(e)) act(async () => { for (const s of state.sessions) await send('sync', { sid: s.sid }); }); });
   $('#create').addEventListener('click', (e) => {

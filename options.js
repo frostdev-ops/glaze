@@ -1053,11 +1053,12 @@ GZ_UI.load().then((s) => {
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
   });
-  $('#import-btn').addEventListener('click', () => $('#import').click());
+  $('#import-btn').addEventListener('click', (e) => { if (e.isTrusted) $('#import').click(); });
   $('#import').addEventListener('change', async (e) => {
+    if (!e.isTrusted) return;
     const file = e.target.files[0];
     e.target.value = '';
-    if (!e.isTrusted || !file) return;
+    if (!file) return;
     let raw;
     try { raw = JSON.parse(await file.text()); } catch { return hint(t("{file} isn't a JSON file.", { file: file.name }), true); }
     if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {

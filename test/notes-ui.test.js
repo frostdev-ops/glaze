@@ -170,7 +170,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     GZ_CTX: {
       t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => env.live, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enabled, enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
       profile: async () => ({ id: 5 }), canvasCourses: async () => [{ id: 7, name: 'Biology' }, { id: 9, name: 'History' }],
-      need: (file) => (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
+      need: (file) => (file === 'features/sharing.js' && env.shareHold) || (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
       // What the command palette (features/palette.js) asks of the page.
       site: 'canvas', capi: async () => [], canvasCourseId: () => '7', dueWeek: async () => [], nickOf: () => '', courseList: () => ({}),
       // Ultra: everything asked of Blackboard goes through lib/ultra.js's reader; the old helpers aren't there.
@@ -388,6 +388,18 @@ test('Export all settles the open note, then opens extension-only backup with no
   assert.equal(P.sent.length, before, 'a synthetic import does not open the extension surface');
   P.fire(P.button('Import'), 'click'); await settle();
   assert.equal(P.sent.at(-1).type, 'glaze:sessions-open');
+});
+
+test('a sharing module loaded for an old Notes opening cannot leak a live port into the next opening', async () => {
+  const P = page();
+  P.run('globalThis.sharePorts = 0; globalThis.GZ_SHARING_UI = { surface: () => { sharePorts++; return () => { sharePorts--; }; } };');
+  P.shareHold = later(); const old = P.shareHold;
+  await P.openView(); P.fire(P.button('Close'), 'click');
+  P.shareHold = later(); const current = P.shareHold;
+  await P.openView(); old.resolve(); current.resolve(); await settle();
+  assert.equal(P.run('sharePorts'), 1);
+  P.fire(P.button('Close'), 'click'); await settle();
+  assert.equal(P.run('sharePorts'), 0);
 });
 
 test('Export as HTML exports the note it was pressed in, whatever is opened meanwhile', async () => {

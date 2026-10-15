@@ -138,7 +138,8 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     opener = document.activeElement;
     document.body.append(box);
     box.showModal();
-    ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
+    const sharedBox = box;
+    ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box === sharedBox) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
     drawLib();
     if (create) newNote(course); else drawEmpty();
     (create ? el.title : el.search).focus();

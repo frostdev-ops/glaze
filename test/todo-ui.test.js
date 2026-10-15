@@ -114,6 +114,17 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
 const planner = (calls) => calls.filter((u) => u.includes('/planner/items')).length;
 const summaries = (calls) => calls.filter((u) => u.includes('submission_summary')).length;
 
+test('a late sharing loader for an old To Do mount cannot leave a port after teardown', async () => {
+  const f = feature(), loaders = [];
+  let ports = 0;
+  f.c.GZ_SHARING_UI = { surface: () => { ports++; return () => { ports--; }; } };
+  f.c.GZ_CTX.need = (file) => file === 'features/sharing.js' ? new Promise((r) => loaders.push(r)) : Promise.resolve();
+  f.c.GZ_TODO_UI.sync(true); f.c.GZ_TODO_UI.sync(false); f.c.GZ_TODO_UI.sync(true);
+  for (const done of loaders) done(); await settle();
+  assert.equal(ports, 1);
+  f.c.GZ_TODO_UI.sync(false); assert.equal(ports, 0);
+});
+
 test('a module that arrives after the list was turned off stays off', async () => {
   const decls = read('content-canvas.js').match(/ {2}const todoHere = .*\n {2}const syncTodo = .*\n/)[0];
   let arrive;

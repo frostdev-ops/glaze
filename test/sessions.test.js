@@ -33,7 +33,7 @@ const start = async (t) => {
   const store = diskStore(path.join(dir, 'blobs'));
   r = relay({ db: path.join(dir, 'share.db'), store });
   const address = await r.listen(0, '127.0.0.1');
-  return { r, url: `http://127.0.0.1:${address.port}` };
+  return { r, url: `http://127.0.0.1:${address.port}`, files: path.join(dir, 'blobs') };
 };
 const device = (url, { local = localArea({ [NK]: N.clean({}), [TK]: T.clean({}) }), db = database(), notes = notesDB() } = {}) => {
   let online = true, permission = true;
@@ -57,6 +57,7 @@ const session = (d, sid) => d.db.get('sessions', sid);
 
 test('optional switch: list/export/import are offline; permission, key reads and local reads fail closed', async () => {
   const d = device('http://127.0.0.1:1');
+  assert.throws(() => S.make({ local: d.local, sync: d.settings, db: d.db, notes: d.notes, relay: 'https://evil.invalid' }), /bad/);
   await d.send('list'); assert.deepEqual((await d.send('exportKeys')).keys, []); assert.equal(d.requests.length, 0);
   const key = G.exportKeys(G.create('collection'));
   await d.send('importKeys', { keys: [key] }).catch(() => {}); // another origin is refused even for a backup
@@ -72,6 +73,38 @@ test('optional switch: list/export/import are offline; permission, key reads and
   await assert.rejects(d.send('exportKeys'), /disk failed/);
   assert.equal(d.requests.length, 0);
   d.worker.stop();
+});
+
+test('the session database reopens after versionchange closes its cached connection', async () => {
+  const original = globalThis.indexedDB, opened = [];
+  globalThis.indexedDB = { open: () => {
+    const request = {};
+    const connection = { closed: false, close() { this.closed = true; }, transaction() {
+      if (this.closed) throw new Error('closed database');
+      const tx = { objectStore: () => ({ getAll: () => { const r = {}; queueMicrotask(() => { r.result = []; r.onsuccess(); tx.oncomplete(); }); return r; } }) };
+      return tx;
+    } };
+    opened.push(connection); request.result = connection; queueMicrotask(() => request.onsuccess()); return request;
+  } };
+  try {
+    const db = S.database(); await db.all('sessions');
+    opened[0].onversionchange();
+    assert.deepEqual(await db.all('sessions'), []);
+    assert.equal(opened.length, 2);
+  } finally { globalThis.indexedDB = original; }
+});
+
+test('Pause during a pending consent read cannot let the older Create enable sharing again', async () => {
+  let release, entered, requests = 0;
+  const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
+  const local = localArea(), worker = S.make({ local, sync: localArea(), notes: notesDB(), db: database(),
+    permission: async () => { entered(); return gate; }, fetch: async () => { requests++; throw new Error('blocked'); } });
+  try {
+    const creating = worker.handle({ op: 'create', kind: 'look', title: 'Pending' }); await ready;
+    await worker.handle({ op: 'pause' }); release(true);
+    await assert.rejects(creating, /off/);
+    assert.equal(local.data.shareOn, false); assert.equal(requests, 0);
+  } finally { release(true); worker.stop(); }
 });
 
 test('disk relay: create, read/edit join, local files, offline restart catch-up and explicit file re-upload', async (t) => {
@@ -134,14 +167,18 @@ test('disk relay: live doorbell catches changes while open and disconnect cancel
 });
 
 test('disk relay: encrypted retained-file re-upload publishes a fresh reference, leave keeps local Notes, delete and one-year expiry', async (t) => {
-  const { r, url } = await start(t), a = device(url), b = device(url);
+  const { r, url, files } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
   const id = await seed(a, '<p>with file</p>', true), { sid } = await create(a, id);
   const before = (await a.send('read', { sid })).view;
   const fe = Object.keys(before).find((k) => k.startsWith('f_'));
+  // Simulate restored metadata without the fixture's encrypted file store; recovery uses only public client calls.
+  fs.rmSync(files, { recursive: true, force: true }); fs.mkdirSync(files, { recursive: true });
+  await assert.rejects(G.session((await session(a, sid)).st).get(before[fe].file));
   await a.send('reupload', { sid });
   const after = (await a.send('read', { sid })).view;
   assert.notEqual(after[fe].file.id, before[fe].file.id);
+  assert.equal(new TextDecoder().decode(await G.session((await session(a, sid)).st).get(after[fe].file)), 'private bytes');
   // A newer encrypted reference is still untrusted: never label cached old bytes as the new file.
   const record = await session(a, sid), c = G.session(record.st);
   const changed = new TextEncoder().encode('newly shared bytes');
@@ -152,6 +189,13 @@ test('disk relay: encrypted retained-file re-upload publishes a fresh reference,
   const current = await N.run({ key: NK, op: 'load', id }, { local: a.local }, a.notes);
   const currentFile = await N.run({ key: NK, op: 'getFile', id: [...N.refs(current.html)][0] }, { local: a.local }, a.notes);
   assert.equal(new TextDecoder().decode(N.unb64(currentFile.data)), 'newly shared bytes');
+  const renamed = await session(a, sid), rc = G.session(renamed.st), rv = rc.view();
+  rv[fe].file = { ...rv[fe].file, n: 'renamed.txt' };
+  await rc.edit(rv); await rc.sync(); await a.db.put('sessions', sid, renamed); await sync(a, sid);
+  const renamedNote = await N.run({ key: NK, op: 'load', id }, { local: a.local }, a.notes);
+  const renamedId = [...N.refs(renamedNote.html)][0];
+  assert.notEqual(renamedId, [...N.refs(current.html)][0], 'changed references receive new immutable local file IDs');
+  assert.equal((await N.run({ key: NK, op: 'getFile', id: renamedId }, { local: a.local }, a.notes)).name, 'renamed.txt');
   await b.send('join', { link: (await a.send('link', { sid })).link });
   await b.send('attach', { sid, key: NK });
   assert.equal((await session(b, sid)).bind, null, 'a viewer gets a detached local app copy');
@@ -179,6 +223,36 @@ test('adapters validate every received carrier and remove account/course identif
   assert.deepEqual(await a.clean('plan', { on: 'bad', subs: [{ id: 'x', title: 'step', done: true }], unrelated: 'secret' }), { subs: [{ id: 'x', title: 'step', done: true }] });
 });
 
+test('a changed file reference is validated even when its claimed hash is unchanged', async (t) => {
+  const { url } = await start(t), a = device(url);
+  t.after(() => a.worker.stop());
+  const id = await seed(a, '<p>file</p>', true), { sid } = await create(a, id);
+  const record = await session(a, sid), c = G.session(record.st), view = c.view();
+  const entity = Object.keys(view).find((k) => view[k].file), original = clone(view[entity].file);
+  view[entity].file = { ...original, id: 'A'.repeat(original.id.length) };
+  await c.edit(view); await c.sync(); await a.db.put('sessions', sid, record);
+  await sync(a, sid);
+  assert.equal((await a.list())[0].status, 'offline', 'the changed reference must go through client.get before cached bytes are reused');
+  assert.deepEqual((await a.db.get('files', `${sid}/${entity}`)).ref, original);
+});
+
+test('disconnect during catch-up does not restart the live connection', async (t) => {
+  const { url } = await start(t), a = device(url), b = device(url);
+  t.after(() => { a.worker.stop(); b.worker.stop(); });
+  const id = await seed(a), { sid } = await create(a, id);
+  await b.send('join', { link: (await a.send('link', { sid })).link });
+  let release, entered;
+  const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
+  const fetch = globalThis.fetch;
+  const worker = S.make({ local: b.local, sync: b.settings, db: b.db, notes: b.notes, relay: url, dev: true, permission: async () => true,
+    fetch: async (...args) => { entered(); await gate; return fetch(...args); }, WebSocket });
+  t.after(() => { release(); worker.stop(); });
+  const close = worker.connect();
+  await ready; close(); release();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal((await b.db.get('sessions', sid)).status, 'live', 'an aborted update must not write a stale offline result');
+});
+
 test('key-bearing import/export runs only in extension pages; LMS actions route without carrying keys', () => {
   const notes = read('features/notes.js');
   const start = notes.indexOf('  const exportAll =');
@@ -204,14 +278,38 @@ test('session worker accepts only exact extension pages; an LMS or another exten
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
-  const send = (op, url, id = 'glaze') => new Promise((resolve) => {
-    for (const f of listeners) if (f({ type: 'glaze:sessions', op }, { id, url, frameId: 0, tab: {} }, resolve) === true) return;
+  const send = (op, url, id = 'glaze', extra = {}, rest = {}) => new Promise((resolve) => {
+    for (const f of listeners) if (f({ type: 'glaze:sessions', op, ...rest }, { id, url, frameId: 0, tab: {}, ...extra }, resolve) === true) return;
   });
   for (const [url, id] of [['https://school.instructure.com/courses/1'], ['chrome-extension://glaze/sharing/sessions.html.evil'], ['chrome-extension://other/sharing/sessions.html'], ['chrome-extension://glaze/sharing/sessions.html', 'other']]) {
     const r = await send('exportKeys', url, id);
     assert.equal(r.error, 'sender');
   }
+  for (const extra of [{ frameId: 2 }, { origin: 'https://school.instructure.com' }]) assert.equal((await send('exportKeys', 'chrome-extension://glaze/sharing/sessions.html', 'glaze', extra)).error, 'sender');
+  assert.equal((await send('unknown', 'chrome-extension://glaze/sharing/sessions.html')).error, 'sender');
+  assert.equal((await send('exportKeys', 'chrome-extension://glaze/sharing/sessions.html', 'glaze', { origin: 'chrome-extension://glaze' }, { payload: 'x'.repeat(33 << 20) })).error, 'sender');
   assert.ok(!imported.includes('sharing.js'), 'refused callers do not even load the crypto dependency');
+});
+
+test('Pause interrupts a running sync before waiting for the shared storage queue', async () => {
+  const listeners = [], area = localArea();
+  let release, entered, stopped = 0, syncs = 0;
+  const gate = new Promise((r) => { release = r; }), ready = new Promise((r) => { entered = r; });
+  const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa,
+    GZ_SESSIONS: { make: () => ({ handle: async (m) => { if (m.op === 'sync') { syncs++; entered(); await gate; } return { ok: true }; }, stop: () => { stopped++; release(); } }) },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); }, navigator: {},
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
+  vm.runInContext(read('lib/background.js'), ctx);
+  const send = (op) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op }, { id: 'glaze', url: 'chrome-extension://glaze/sharing/sessions.html', origin: 'chrome-extension://glaze', frameId: 0 }, resolve) === true) return; });
+  const pending = send('sync'); await ready;
+  const queued = send('sync');
+  const paused = send('pause');
+  try { await new Promise(setImmediate); assert.ok(stopped > 0, 'Pause must abort before its queued mutation can run'); }
+  finally { release(); await pending; await paused; }
+  assert.equal((await queued).error, 'off', 'an old queued sync cannot restart after Pause');
+  assert.equal(syncs, 1);
 });
 
 test('disk relay: custom tasks carry only cleaned task/plan fields; joined Looks never apply themselves', async (t) => {
@@ -232,4 +330,42 @@ test('disk relay: custom tasks carry only cleaned task/plan fields; joined Looks
   await b.send('useLook', lookSession);
   assert.ok(b.offered.startsWith('glaze1:'));
   assert.deepEqual(b.settings.data, {}, 'Use this Look goes through the existing editor preview/apply contract');
+});
+
+test('disk relay: two offline bound editors preserve both note bodies and touch only the chosen local account', async (t) => {
+  const { url } = await start(t), a = device(url), b = device(url);
+  t.after(() => { a.worker.stop(); b.worker.stop(); });
+  const other = 'notesIdx:https://school.instructure.com/6';
+  b.local.data[other] = N.clean({});
+  const untouched = clone(b.local.data[other]);
+  const id = await seed(a), { sid } = await create(a, id);
+  await b.send('join', { link: (await a.send('link', { sid, edit: true })).link });
+  await b.send('attach', { sid, key: NK });
+  const copy = (await session(b, sid)).bind.map[id];
+  for (const [d, nid, html] of [[a, id, '<p>offline A</p>'], [b, copy, '<p>offline B</p>']]) {
+    d.online(false);
+    await N.run({ key: NK, op: 'save', id: nid, base: d.local.data[NK].notes[nid].rev, sid: crypto.randomUUID(), copy: crypto.randomUUID(), html }, { local: d.local }, d.notes);
+    await sync(d, sid);
+  }
+  a.online(true); b.online(true);
+  await sync(a, sid); await sync(b, sid); await sync(a, sid);
+  const bodies = Object.values((await a.send('read', { sid })).view).map((v) => v.html || '').join(' ');
+  assert.match(bodies, /offline A/); assert.match(bodies, /offline B/);
+  assert.deepEqual(b.local.data[other], untouched);
+});
+
+test('disk relay: selected-note sharing stays selected; only an explicit folder share includes new folder notes', async (t) => {
+  const { url } = await start(t), a = device(url);
+  t.after(() => a.worker.stop());
+  const id = await seed(a), { sid } = await create(a, id);
+  const folder = (await session(a, sid)).bind.folder;
+  const extra = await seed(a, '<p>Unselected private note</p>');
+  assert.equal((await N.run({ key: NK, op: 'meta', id: extra, folder, at: Date.now() + 1 }, { local: a.local }, a.notes)).ok, true);
+  await sync(a, sid);
+  assert.equal((await a.send('read', { sid })).view[extra], undefined, 'a new note in the copy folder was never selected to share');
+  const whole = await create(a, id, { folder, ids: [] });
+  const next = await seed(a, '<p>Explicit folder member</p>');
+  await N.run({ key: NK, op: 'meta', id: next, folder, at: Date.now() + 1 }, { local: a.local }, a.notes);
+  await sync(a, whole.sid);
+  assert.match((await a.send('read', whole)).view[next].html, /Explicit folder member/);
 });

@@ -17,6 +17,8 @@ All notable changes to Glaze are documented here. The format follows
 
 - **Optional encrypted share sessions.** Create/join by pasted invite, copy view/edit invites, see encrypted editing-device last-seen information, pause/resume, leave locally, creator deletion and opt-in one-year expiry. Selected notes/folders and encrypted files, the current Look, and selected custom tasks/plans stay copied locally and catch up when reopened. Looks apply only by explicit choice; joined data never replaces existing app items. Recovery can re-upload retained files after a relay restore. Notes import/Export all now use an extension-only backup surface; all settings/notes backups always include session keys and creator delete tokens with a private-backup warning. On-demand only, with no LMS first-script increase or new dependencies. Relay deployment and native Safari/Firefox live checks remain separate.
 
+- **Share-session review fixes.** Pause/leave/delete interrupt busy syncs; old callbacks and closed views cannot reconnect. Changed file references are validated before cached bytes are reused, local-session reading stays visible, and extension caller/import checks fail closed.
+
 - **Planning on Blackboard Ultra.** Better To Do (on by default), tasks on course cards, reminders and the streak, Export
   calendar (.ics), the class schedule, Gradescope in To Do and Google Calendar sync now work on Blackboard Ultra too: the
   same features, settings and words as on Canvas.
