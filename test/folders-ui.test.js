@@ -28,17 +28,17 @@ const fixture = () => {
   parent.append(child, plain); outline.append(parent, module);
   let on = true, enabled = true, cid = '_800_1', mutations, failed = false, held = null;
   const location = { origin: 'https://bb.example.edu', pathname: '/ultra/courses/_800_1/outline' };
-  const store = {}, sent = [], changed = [];
+  const store = {}, sent = [], changed = [], frames = [], watched = { on: false };
   const local = { get: async (keys) => { if (failed) throw Error('storage'); if (held) return held; return structuredClone(keys === null ? store : typeof keys === 'string' ? { [keys]: store[keys] } : Object.fromEntries(keys.map((k) => [k, store[k]]))); }, set: async (p) => { if (failed) return false; Object.assign(store, structuredClone(p)); return true; } };
   const chrome = { storage: { local, onChanged: { addListener: (f) => changed.push(f) } }, runtime: { sendMessage: async (m) => { sent.push(m); return F.change(m, { local }); } } };
   const document = { head, body, createElement: (t) => new E(t), querySelectorAll: (s) => html.querySelectorAll(s), getElementById: (id) => html.querySelector(`#${id}`) };
   const ctx = { on: () => on, settings: () => ({ enhance: { hideFolders: enabled } }), courseId: () => cid,
     toggleOf: (r) => r.querySelector(`#folder-title-${r.dataset.contentId}`) || r.querySelector(`#learning-module-title-${r.dataset.contentId}`), t: (k, args) => k.replace(/\{(\w+)\}/g, (_, p) => args[p]) };
-  const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { constructor(f) { mutations = f; } observe() {} } });
+  const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { constructor(f) { mutations = f; } observe() { watched.on = true; } disconnect() { watched.on = false; } }, requestAnimationFrame: (f) => frames.push(f) });
   vm.runInContext(fs.readFileSync(process.env.GZ_B9_FEATURE || require.resolve('../features/folders.js'), 'utf8'), c);
   const ui = c.GZ_FOLDER_UI;
   const click = async (el, type = 'click', isTrusted = true) => { const e = { isTrusted, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }; el.listeners[type](e); await settle(); return e; };
-  return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => mutations(),
+  return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => { mutations(); while (frames.length) frames.shift()(); }, mutate: () => mutations(), watched, frames,
     identity: Promise.resolve('_900_1'), setOn: (v) => { on = v; }, setEnabled: (v) => { enabled = v; }, fail: (v) => { failed = v; }, hold: (v) => { held = v; }, change: (v) => { cid = v; location.pathname = `/ultra/courses/${v}/outline`; }, path: (v) => { location.pathname = v; }, changed: () => changed.forEach((f) => f({ [F.key(location.origin, '_900_1', cid)]: {} }, 'local')) };
 };
 const eye = (row) => row.querySelector(`#gz-folder-eye-${row.dataset.contentId}`);
@@ -133,4 +133,17 @@ test('malformed cached identities cannot bind another account through string coe
   const e = fixture();
   e.ui.sync(true, Promise.resolve(['_900_1'])); await settle();
   assert.equal(eye(e.parent), null); assert.deepEqual(e.sent, []);
+});
+
+test('the page is watched only on a course outline, and a burst of changes costs one pass', async () => {
+  const p = fixture();
+  p.ui.sync(true, p.identity);
+  await settle();
+  assert.equal(p.watched.on, true, 'on the outline');
+  for (let i = 0; i < 100; i++) p.mutate();
+  assert.equal(p.frames.length, 1, 'a mutation burst schedules one frame');
+  p.redraw(); assert.equal(p.frames.length, 0);
+  p.path('/ultra/course');
+  p.ui.sync(true, p.identity);
+  assert.equal(p.watched.on, false, 'off the outline, nothing watches the page');
 });

@@ -431,7 +431,9 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 /* Tasks on course cards (features/cardtasks.js): the course's next items under the card's header (Canvas) or its details
    (Ultra), each a link with its date and the To Do's status chip. Nothing moves, so there's nothing for reduced motion to stop. */
 :is(#application .ic-DashboardCard, #site-wrap article[id^="course-list-course-"]) > .gz-ct { margin: 0; padding: 0.4rem 0.6rem 0.2rem; list-style: none; font: 0.8125rem/1.35 var(--gz-font); color: var(--gz-ink); }
-#site-wrap article[id^="course-list-course-"] > .gz-ct { flex: none; align-self: stretch; min-width: 0; border-top: 1px solid var(--gz-line); cursor: auto; }
+/* Ultra's card is a wrapping row (B7.md): the list takes a whole line of its own, the card's width, never its longest title's. */
+#site-wrap article[id^="course-list-course-"] > :is(.gz-ct, .gz-ct-ask) { flex: 0 0 100%; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+#site-wrap article[id^="course-list-course-"] > .gz-ct { align-self: stretch; border-top: 1px solid var(--gz-line); cursor: auto; }
 /* Ultra's card has a fixed height (284px, B7.md): with the list it grows instead, and its grid row with it. */
 #site-wrap article[id^="course-list-course-"]:has(> .gz-ct) { height: auto !important; min-height: 284px; }
 :is(#application, #site-wrap) .gz-ct li { margin: 0; }
