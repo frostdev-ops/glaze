@@ -1621,6 +1621,27 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
   border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
 }
 #gz-rm::backdrop { background: rgb(0 0 0 / 0.35); }
+/* The calendar file's dialog (features/calexport.js). */
+#gz-ics {
+  box-sizing: border-box; width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-ics::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-ics form { display: grid; gap: 0.75rem; padding: 1rem 1.1rem 1.1rem; }
+#gz-ics h2 { margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-ics p { margin: 0; }
+#gz-ics .gz-ics-desc { font-size: 12px; color: var(--gz-ink-muted); }
+#gz-ics fieldset { display: grid; gap: 0.35rem; margin: 0; padding: 0; border: 0; }
+#gz-ics .gz-ics-check { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+#gz-ics input[type="checkbox"] { margin: 0; accent-color: var(--gz-accent); }
+#gz-ics .gz-ics-range { display: flex; align-items: center; gap: 0.5rem; }
+#gz-ics select { width: auto; margin: 0; padding: 0.2rem 0.4rem; height: auto; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); }
+#gz-ics .gz-ics-row { display: flex; gap: 0.5rem; }
+#gz-ics button { margin: 0; padding: 0.3rem 0.8rem; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; box-shadow: none; }
+#gz-ics button[type="submit"] { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
+#gz-ics button:hover { border-color: var(--gz-accent); }
+#gz-ics :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #gz-rm .gz-rm-in { display: grid; gap: 0.9rem; padding: 1rem 1.1rem 1.1rem; }
 #gz-rm .gz-rm-top { display: flex; align-items: center; gap: 0.75rem; }
 #gz-rm h2 { flex: 1; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }

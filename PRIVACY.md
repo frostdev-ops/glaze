@@ -62,6 +62,12 @@ _Last updated: 2026-10-15_
   submission status, your planner marks) and, for teachers, the work waiting to be graded with its counts. Two
   minutes is how long that copy counts as fresh, not how long it is kept: it stays until the next fetch replaces it,
   or until Glaze is removed.
+- **Export calendar (.ics)** (Canvas): no data of its own. Which parts go in the file and how far ahead are settings
+  (`chrome.storage.sync`, like the others). The file itself is made on the page and handed to your browser's own
+  download: Glaze keeps no copy and sends it nowhere. It holds what you chose of your Canvas deadlines, your own tasks,
+  your "do on" days and focus sessions and your Gradescope work, with **course and assignment names**, links to them on
+  your Canvas site and your tasks' notes, and the Canvas site's address in each event's identifier. Once saved, it is
+  an ordinary file on your device; what happens to it after you import it is up to you and your calendar provider.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
   which Canvas course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "not a Canvas course"), and for
@@ -209,6 +215,14 @@ animated backgrounds) are bundled. It makes requests in these cases:
   Other pages keep fetching the due list on their own schedule; the two aren't merged because the due list covers the
   next seven days from Blackboard, Canvas or Moodle on every page, while To Do's window follows your settings and only runs
   where the list is.
+- **Export calendar (.ics)** (Canvas, only when you press Download). Glaze asks your own Canvas site for your profile
+  (user id and time zone), your active courses (with their term dates, for "This term") and, for Canvas deadlines or
+  plans, your planner items from today to eight weeks past the end of the range you picked (so a plan has its item's
+  title) and, only when a plan in the range is for work not among those (overdue work planned for later), your planner
+  items from half a year back to today. Read-only GETs with your existing session, one export at a time; the answer
+  isn't kept. If Glaze, the Gradescope switch or your Gradescope answer changes, or the dialog closes, while Canvas
+  answers, no file is saved. With Gradescope in
+  To Do on, the Gradescope work comes from what's already kept on this device; nothing is asked of Gradescope.
 - **Tasks on course cards** (Canvas, off by default). On the Dashboard's card view, Glaze asks your own Canvas site
   for your profile (user id and time zone; one request a page, shared with Better To Do) and uses Better To Do's copy
   of your planner items. Only when that copy is missing or more than two minutes old and the To Do list isn't on the
