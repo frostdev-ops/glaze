@@ -57,7 +57,7 @@
   .course-title { margin: 4px 0; }
 
   /* Panels: the course, and the page opened from it. The panel itself is the scroller. */
-  .panel-wrap { position: absolute; top: 0; right: 0; bottom: 0; left: 220px; overflow-y: auto; background: Canvas; color: CanvasText; }
+  .panel-wrap { position: absolute; top: 0; right: 0; bottom: 0; left: 220px; z-index: 10; overflow-y: auto; background: Canvas; color: CanvasText; }
   .panel-wrap:not(.hide-in-background) { z-index: 20; }
   .panel-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid; }
   .panel-header h1 { margin: 0; font-size: 20px; }

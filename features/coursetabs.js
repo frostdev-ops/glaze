@@ -59,7 +59,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const bars = document.getElementsByClassName('bb-course-navigation');
   const courseBar = () => { for (let i = bars.length - 1; i >= 0; i--) if (bars[i].localName === 'div') return bars[i]; return null; };
   const topLayer = () => [...document.querySelectorAll(LAYER)].filter(shown).pop() || null;
-  const covers = (a, b) => { const r = a.getBoundingClientRect(), s = b.getBoundingClientRect(); return r.top <= s.top + 1 && r.bottom >= s.bottom - 1 && r.left <= s.left + 1 && r.right >= s.right - 1; };
+  // A panel over the bar: one holding the bar's middle (Glaze may inset panels a little from the window's edges).
+  const covers = (a, b) => { const r = a.getBoundingClientRect(), s = b.getBoundingClientRect(), x = s.left + s.width / 2, y = s.top + s.height / 2; return r.left <= x && x <= r.right && r.top <= y && y <= r.bottom; };
   const prev = (e) => { const p = e.previousElementSibling; return p === strip ? p.previousElementSibling : p; };
   // The tools row, at the level where the header row sits beside it.
   const row2 = (bar) => {
@@ -123,12 +124,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const make = () => {
     strip = document.createElement('div');
     strip.id = 'gz-ctabs';
+    strip.setAttribute('data-gz-keep-clear', ''); // floating widgets keep off it (features/widgets.js)
     list = document.createElement('div');
     list.className = 'gz-ctabs-list';
     list.setAttribute('role', 'tablist');
     const hint = Object.assign(document.createElement('span'), { id: 'gz-ctabs-hint', hidden: true });
     note = Object.assign(document.createElement('span'), { className: 'gz-ctabs-note' });
     note.setAttribute('role', 'status');
+    note.addEventListener('click', () => { note.textContent = ''; });
     strip.append(list, hint, note);
     strip.addEventListener('click', onClick);
     strip.addEventListener('auxclick', onClick);
@@ -390,7 +393,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       at.style.inset = inset;
       // <html> and <body> again (Glaze's rules hang off html's data-gz-*), then each ancestor: boxless, there to be matched.
       const h = document.createElement('html');
-      for (const a of html.attributes) if (a.name !== 'style') h.setAttribute(a.name, a.value);
+      for (const a of html.attributes) if (a.name !== 'style' && a.name !== 'data-gz-ctabs') h.setAttribute(a.name, a.value);
       h.style.cssText = `${html.style.cssText};display:contents`;
       const b = document.createElement('body');
       b.className = document.body.className;
@@ -627,7 +630,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const start = () => {
     readPrefs().then(() => { drawn = ''; pass(); });
-    if (preview) { tabs = DEMO.map((x) => ({ ...x })); loaded = true; return; }
+    if (preview) { tabs = L.order(DEMO.map((x) => ({ ...x }))); loaded = true; return; }
     const pending = (() => { try { const v = sessionStorage.getItem('gz-ctabs-go'); sessionStorage.removeItem('gz-ctabs-go'); return v?.split(' '); } catch { return null; } })();
     ctx.me().then((uid) => {
       if (!on) return;
@@ -687,6 +690,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
     pass();
   };
+  // The editor's preview has this file as a <script> after content.js, so its first ask may come before the file is in:
+  // here it follows the editor's edits itself.
+  if (preview) {
+    const follow = () => setTimeout(() => sync(ctx.on() && !!ctx.settings().enhance.tabs));
+    addEventListener('message', (e) => { if (e.data?.gzPreview) follow(); });
+    follow();
+  }
   return { sync, held, snapshots: () => snaps.size };
 })();
 

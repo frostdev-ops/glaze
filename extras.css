@@ -526,7 +526,7 @@ html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding
 #gz-ctabs .gz-ctabs-list { display: flex; align-items: inherit; align-self: stretch; gap: 4px; flex: 1; min-width: 0; overflow: auto hidden; scrollbar-width: none; }
 #gz-ctabs .gz-ctabs-list::-webkit-scrollbar { display: none; }
 #gz-ctabs .gz-ctab {
-  position: relative; display: flex; align-items: center; gap: 7px; box-sizing: border-box; flex: 0 1 var(--gz-ctab-w, 180px); min-width: 76px;
+  position: relative; display: flex; align-items: center; gap: 7px; box-sizing: border-box; flex: 0 1 var(--gz-ctab-w, 180px); min-width: min(104px, var(--gz-ctab-w, 180px));
   max-width: var(--gz-ctab-w, 180px); height: calc(var(--gz-ctabs-h, 40px) - 10px); padding: 0 6px 0 11px; border: 1px solid transparent;
   border-radius: var(--gz-radius-sm, 8px); background: color-mix(in srgb, var(--gz-surface) 55%, transparent); color: var(--gz-ink-muted);
   cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: pan-x; outline: none;
@@ -561,6 +561,14 @@ html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding
 #gz-ctabs .gz-ctab[data-pin] .gz-ctab-x { display: none; }
 #gz-ctabs .gz-ctabs-note { flex: 0 1 auto; align-self: center; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-muted); }
 #gz-ctabs .gz-ctabs-note:empty { display: none; }
+/* Narrow: the word lies over the strip's own end for its few seconds (a click lets it go), not over the tabs' room. */
+@media (max-width: 700px) {
+  #gz-ctabs .gz-ctabs-note {
+    position: absolute; z-index: 3; top: 3px; bottom: 3px; right: 6px; max-width: calc(100% - 12px); display: flex; align-items: center; padding: 0 10px;
+    white-space: normal; line-height: 1.2; color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line-strong);
+    border-radius: var(--gz-radius-sm, 8px); box-shadow: 0 4px 14px color-mix(in srgb, #000 30%, transparent); cursor: pointer;
+  }
+}
 /* A tab's switch: the course's copy on screen (an inert shadow tree) until Ultra's live page is built, the strip on top
    of it where it was, then a fade to the live page. Under Ultra's dialogs (MUI's 1300), over its panels. */
 #gz-ctabs-snap { position: fixed; inset: 0; z-index: 1250; pointer-events: none; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
