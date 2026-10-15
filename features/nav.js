@@ -244,19 +244,27 @@ function GZ_ULTRA_RAIL(X) {
     });
   };
   const refreshNext = async () => {
-    if (isPreview || nextBusy || Date.now() - nextAt < 120000 || !config.widgets.some((w) => w.id === 'next' && w.on)) return;
     const token = rev, read = reads, url = location.href;
+    const current = () => chrome.runtime?.id && active && X.on() && X.settings().enabled && token === rev && read === reads && url === location.href && document.visibilityState !== 'hidden' && config.widgets.some((w) => w.id === 'next' && w.on);
+    if (isPreview || nextBusy || Date.now() - nextAt < 120000 || !current()) return;
     nextBusy = true; nextAt = Date.now();
     try {
       await Promise.all([X.need('lib/ultra.js', () => globalThis.GZ_ULTRA), X.need('lib/todo.js', () => globalThis.GZ_TODO)]);
+      if (!current()) return;
       const start = new Date(); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 7);
       const plan = await GZ_ULTRA.page.planned(+start, +end, local.todoCache);
+      if (!current()) return;
       const [raw, options] = await Promise.all([get('local', plan.key), get('sync', 'todo')]);
-      if (!active || !X.on() || !X.settings().enabled || token !== rev || read !== reads || url !== location.href || !config.widgets.some((w) => w.id === 'next' && w.on)) return;
+      if (!current()) return;
       const data = GZ_TODO.clean(raw[plan.key]), mode = GZ_SANITIZE(options).todo.done;
       nextItems = plan.items.filter((i) => i && !i.ov?.dismissed && !GZ_TODO.isDone(i, mode, data.items[`${i.type}:${i.id}`]?.done)); nextError = false;
-    } catch { if (active && token === rev) { nextItems = []; nextError = true; } }
-    finally { nextBusy = false; if (active && token === rev) drawWidgets(); }
+    } catch { if (current()) { nextItems = []; nextAt = 0; nextError = true; } }
+    finally {
+      const fresh = current();
+      if (fresh) drawWidgets(); else nextAt = 0;
+      nextBusy = false;
+      if (!fresh && active && chrome.runtime?.id) drawWidgets();
+    }
   };
   const timerAction = async (op, node) => {
     if (!W || timerPending || !node.options) return;
@@ -280,7 +288,7 @@ function GZ_ULTRA_RAIL(X) {
   const widgetNodes = new Map();
   const drawWidgets = () => {
     clearTimeout(clock); clock = 0;
-    if (!active || !host || !top || document.visibilityState === 'hidden') return;
+    if (!chrome.runtime?.id || !active || !host || !top || document.visibilityState === 'hidden') return;
     const now = Date.now();
     for (const w of config.widgets.filter((w) => w.on)) {
       const node = widgetNodes.get(w.id); if (!node) continue;

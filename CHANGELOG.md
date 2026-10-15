@@ -6,6 +6,9 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+- **Ultra navigation:** Next due stops pending work when its widget or page changes, retries failed reads on its next
+  clock tick, and invalidated extension clocks stop scheduling callbacks.
+
 ### Fixed
 - Ultra route changes show immediately instead of waiting behind Glaze's separate loading gate. Internal widget
   updates no longer trigger native-page sweeps, and an unchanged gradebook keeps its successful empty late-status answer.
