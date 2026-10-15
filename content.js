@@ -1208,7 +1208,7 @@
     setAttr('data-gz-no-enter', !s.motion.enter);
     setAttr('data-gz-no-hover', !s.motion.hover);
     syncPageFade();
-    setAttr('data-gz-footer', s.footer);
+    setAttr('data-gz-footer', s.footer && window.top === window);
     // Extras: CSS is gated on these; a switch turned on needs one pass over what is already there.
     const was = enhanced;
     enhanced = s.enhance;

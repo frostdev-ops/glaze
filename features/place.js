@@ -77,10 +77,11 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
   const backTo = () => {
     const p = place;
     const b = p?.back;
-    if (!b) return placing(false);
+    const done = () => { if (p) p.back = null; placing(false); };
+    if (!b) return done();
     placing(true);
     const rows = outlineRows(p.cid);
-    if (!rows.length) { p.back = null; return; }
+    if (!rows.length) return done();
     if (b.ready && !ctx.holding()) {
       let busy = false;
       for (const row of rows) {
@@ -96,14 +97,14 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
         const sc = scrollerOf(rows[0]);
         // Anything you do ends this above, so what moved the outline meanwhile is Ultra (it scrolls a
         // module it unfolds into view): the place kept wins.
-        if (!p.top) { p.back = null; return; }
+        if (!p.top) return done();
         // An unfolded module's contents slide open over ~0.4 s and rows can still arrive, so the outline
         // grows under the scroll (clamping it, then anchoring shifts it): set again until it holds there
         // twice running, for three seconds at most. Nothing is saved meanwhile.
         b.scrolled ||= Date.now();
         const there = Math.abs(sc.scrollTop - p.top) < 2;
         b.steady = there ? (b.steady || 0) + 1 : 0;
-        if (b.steady >= 2 || Date.now() - b.scrolled > 3000) { p.back = null; return; }
+        if (b.steady >= 2 || Date.now() - b.scrolled > 3000) return done();
         if (!there) sc.scrollTop = p.top;
       }
     }
