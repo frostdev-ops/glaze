@@ -107,15 +107,21 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       : [...cmd.all.filter((c) => c.group !== 'In this course' && c.group !== 'Glaze'), ...cmd.all.filter((c) => c.group === 'In this course').slice(0, 8)];
     // Searching your courses too (features/search.js): what has the query as typed, then what it finds, each arrival below
     // the last, so no row moves under the pointer; the looser matches (its letters in order) follow once it's done.
-    // Its "Searching…" row is where the next ones go. cmd.head: rows that were on screen when it started (they stay
-    // first until the next keystroke).
+    // Its "Searching…" row is where the next ones go. Until the next keystroke, rows once shown keep their places
+    // (cmd.head above the results, cmd.tail below), even when the palette's own list arrives late: anything new from it
+    // joins the end, and a command it rebuilt is known by its group, hint and label, so it isn't shown twice.
     let at = -1;
-    if (keep !== true) cmd.head = null;
+    if (keep !== true) cmd.head = cmd.tail = null;
     if (q.trim() && cmd.found) {
+      const id = (c) => `${c.group}\n${c.hint}\n${c.label}`;
       const near = (c) => `${c.hint} ${c.label}`.toLowerCase().includes(q.trim().toLowerCase());
-      const close = cmd.head || cmd.shown.filter(near);
+      const close = (cmd.head ||= cmd.shown.filter(near));
       at = close.length + cmd.found.length;
-      cmd.shown = [...close, ...cmd.found, ...(cmd.seeking ? [] : cmd.shown.filter((c) => !close.includes(c)))];
+      if (!cmd.seeking) {
+        const have = new Set([...close, ...cmd.found, ...(cmd.tail || [])].map(id));
+        cmd.tail = [...(cmd.tail || []), ...cmd.shown.filter((c) => !have.has(id(c)))];
+      }
+      cmd.shown = [...close, ...cmd.found, ...(cmd.seeking ? [] : cmd.tail)];
     }
     cmd.active = Math.max(0, was ? cmd.shown.indexOf(was) : 0);
     cmd.list.replaceChildren(...cmd.shown.map((c, i) => {
@@ -145,6 +151,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     closeCmd();
     c.run();
   };
+  // Search in your courses is Canvas's: not on Ultra, nor on Moodle, which has no /api/v1.
+  const searchHere = () => !ultra && !moodle && ctx.settings().enhance.search;
   const openCmd = () => {
     const box = document.createElement('div');
     box.id = 'gz-cmd';
@@ -189,8 +197,9 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     cmd.all = pages();
 
     showCmd();
-    commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(); });
-    if (!ultra && ctx.settings().enhance.search) need('features/search.js', () => globalThis.GZ_SEARCH).then(() => GZ_SEARCH.attach(mine, showCmd), () => {});
+    // While your courses are being searched, what is on screen stays (showCmd's keep); otherwise the list starts afresh.
+    commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(!!cmd.found); });
+    if (searchHere()) need('features/search.js', () => globalThis.GZ_SEARCH).then(() => GZ_SEARCH.attach(mine, showCmd), () => {});
   };
 
   return { open: () => { if (!cmd) openCmd(); }, close: closeCmd, isOpen: () => !!cmd };
