@@ -165,6 +165,59 @@ test('review: a raw-text element ends only at its own end tag, and case-folding 
   assert.equal(D.html('<script>never closed</scrip'), '');
 });
 
+// An archive with a comment after the end record (the comment length field is updated to match).
+const withComment = (z, comment) => {
+  const out = Buffer.concat([Buffer.from(z), comment]);
+  u16(out, eocd(z) + 20, comment.length);
+  return new Uint8Array(out);
+};
+// One entry written with a data descriptor (flag bit 3), as streaming zip writers do.
+const descriptorZip = (name, text, crcInDescriptor) => {
+  const raw = Buffer.from(text), n = Buffer.from(name), data = zlib.deflateRawSync(raw), crc = zlib.crc32(raw);
+  const h = (...f) => { const b = Buffer.alloc(f.reduce((s, [, w]) => s + w, 0)); let o = 0; for (const [x, w] of f) { w === 2 ? b.writeUInt16LE(x, o) : b.writeUInt32LE(x >>> 0, o); o += w; } return b; };
+  const local = h([0x04034b50, 4], [20, 2], [0x808, 2], [8, 2], [0, 2], [0x21, 2], [0, 4], [0, 4], [0, 4], [n.length, 2], [0, 2]);
+  const desc = h([0x08074b50, 4], [crcInDescriptor ?? crc, 4], [data.length, 4], [raw.length, 4]);
+  const cd = Buffer.concat([h([0x02014b50, 4], [20, 2], [20, 2], [0x808, 2], [8, 2], [0, 2], [0x21, 2], [crc, 4], [data.length, 4], [raw.length, 4], [n.length, 2], [0, 2], [0, 2], [0, 2], [0, 2], [0, 4], [0, 4]), n]);
+  const body = Buffer.concat([local, n, data, desc]);
+  return new Uint8Array(Buffer.concat([body, cd, h([0x06054b50, 4], [0, 2], [0, 2], [1, 2], [1, 2], [cd.length, 4], [body.length, 4], [0, 2])]));
+};
+
+test('review: the end record is found past an archive comment, even one holding a fake end record', async () => {
+  const z = zipOf({ 'a.xml': '<x>hello</x>' });
+  const plain = D.unzip(withComment(z, Buffer.from('made by a test')));
+  assert.equal(await plain.text('a.xml'), '<x>hello</x>');
+  const fake = Buffer.alloc(22);
+  fake.writeUInt32LE(0x06054b50, 0); // an end record for an empty archive, inside the comment
+  const tricky = D.unzip(withComment(z, Buffer.concat([Buffer.from('note: '), fake])));
+  assert.deepEqual(tricky.names, ['a.xml']);
+  assert.equal(await tricky.text('a.xml'), '<x>hello</x>');
+});
+
+test('review: local headers, descriptors and member positions must agree with the central directory', async () => {
+  const bad = async (mutate) => { const z = zipOf({ 'a.xml': '<x>hello</x>' }); mutate(z); await assert.rejects((async () => D.unzip(z).text('a.xml'))(), /damaged|multi-disk/); };
+  await bad((z) => { z[30] = 'b'.charCodeAt(0); }); // local name differs
+  await bad((z) => u16(z, 6, 0x0808)); // local says it has a data descriptor
+  await bad((z) => u32(z, 14, 1)); // local CRC differs
+  await bad((z) => u32(z, 18, 1)); // local compressed size differs
+  await bad((z) => u32(z, 22, 1)); // local size differs
+  await bad((z) => u16(z, central(z) + 34, 1)); // central entry starts on another disk
+  // A member placed after the end record (inside the comment) is outside the archive's members.
+  const z = zipOf({ 'a.xml': '<x>hello</x>' });
+  const member = Buffer.from(z.subarray(0, central(z)));
+  const moved = withComment(z, member);
+  u32(moved, central(moved) + 42, z.length);
+  await assert.rejects(D.unzip(moved).text('a.xml'), /damaged/);
+  // Data descriptors: accepted when they agree, refused when their CRC doesn't.
+  assert.equal(await D.unzip(descriptorZip('a.xml', '<x>streamed</x>')).text('a.xml'), '<x>streamed</x>');
+  await assert.rejects(D.unzip(descriptorZip('a.xml', '<x>streamed</x>', 7)).text('a.xml'), /damaged/);
+});
+
+test('review: an XML declaration longer than 200 bytes still sets the encoding', async () => {
+  const xml = (decl) => Buffer.from(W(p(t('Café'))).replace(/^<\?xml[^>]*\?>/, decl), 'latin1');
+  assert.equal(await D.docx(zipOf({ 'word/document.xml': xml(`<?xml version="1.0"${' '.repeat(210)}encoding="windows-1252"?>`) })), 'Café');
+  await assert.rejects(D.docx(zipOf({ 'word/document.xml': `<?xml version="1.0"${' '.repeat(5000)}` })), /XML declaration/);
+});
+
 test('review: malformed markup costs linear time', () => {
   for (const unit of ['<a ', '<script ', '<p title="', '<!--', '<![CDATA[', '<b>x<i y=\'']) {
     const src = unit.repeat(Math.ceil((300 << 10) / unit.length));
