@@ -20,8 +20,9 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // part (content-ultra.js, content-canvas.js; Moodle has none), so each site has its own first script and its own
 // baseline. New features load on demand too. When a cut lands, lower that site's baseline to its new total. B7 (the
 // owner's Ultra dashboard, floating widgets and nav rework) may grow Ultra's, by the owner's decision: raised from 206,952
-// for it, and lowered to what B7 actually measures once it lands.
-const FIRST_SCRIPT_BASELINE = { ultra: 216000, canvas: 201446, moodle: 171507 };
+// for it (216,000, then 221,000 for B7c's nav at first paint and B8's tabs), and lowered to what B7 and B8 actually
+// measure once they land.
+const FIRST_SCRIPT_BASELINE = { ultra: 221000, canvas: 201446, moodle: 171507 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
