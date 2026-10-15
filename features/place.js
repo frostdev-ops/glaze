@@ -13,6 +13,8 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
   const ultra = ctx.site === 'ultra';
   const { local, courseId, canvasCourseKey, toggleOf, ROWS } = ctx;
   const OUTLINE = /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/;
+  // On Ultra, anything you did once the outline was there, while this file loaded, counts as done after the place was made.
+  let since = ctx.placeAsked();
   let place = null; // { cid, open (folder ids), top, seen (id → open), away, loaded, back: { at, opened, clicked, quiet, scrolled, steady } | null }
   const scrollerOf = (el) => {
     for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) if (/auto|scroll|overlay/.test(getComputedStyle(p).overflowY)) return p;
@@ -111,7 +113,9 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
     const rows = cid ? outlineRows(cid) : [];
     if (!rows.length) { if (place) place.away = true; return; }
     if (!place || place.away || place.cid !== cid) {
-      const p = { cid, open: new Set(), top: 0, seen: new Map(), back: { at: Date.now(), opened: new Set(), clicked: 0, quiet: 0 } };
+      const late = since && ctx.acted() >= since;
+      since = 0;
+      const p = { cid, open: new Set(), top: 0, seen: new Map(), back: !late && { at: Date.now(), opened: new Set(), clicked: 0, quiet: 0 } };
       place = p;
       // The newer of what this device and this tab kept.
       let tab = null;

@@ -312,3 +312,82 @@ test('your place loads on a course\'s Modules or an item opened from it (Canvas)
     assert.equal(h.loads.length, loads, why);
   }
 });
+
+// ---- W0d review: what happens while those files are on their way ----
+// Ultra: an outline whose kept place has a folder to unfold, and features/place.js arriving after the hook asked for it.
+const ultraPlace = async (touch) => {
+  const listeners = {};
+  const loads = [];
+  const t = clock();
+  let clicks = 0;
+  class Element {}
+  const toggle = { getAttribute: () => 'false', click: () => clicks++ };
+  const row = { dataset: { contentId: '_9_1' } };
+  const ctx = vm.createContext({
+    Element, Date, Promise, URLSearchParams, GZ_PAGE: require('../lib/page.js'), ultra: true, observer: {}, settings: { enhance: { place: true } },
+    document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => row, querySelectorAll: () => [row], scrollingElement: { scrollTop: 0 }, body: {} },
+    location: { pathname: '/ultra/courses/_1_1/outline', search: '' }, courseId: () => '_1_1', canvasCourseKey: () => null,
+    need: (file) => { const p = later(); loads.push({ file, p }); return p; },
+    sessionStorage: { getItem: () => null, setItem() {} }, getComputedStyle: () => ({ overflowY: 'visible' }),
+    chrome: { storage: { local: { get: (k, f) => f({ coursePlace: { _1_1: { open: ['_9_1'], top: 300, at: 1 } } }), set() {} } } },
+    setTimeout: t.setTimeout, clearTimeout: t.clearTimeout,
+  });
+  ctx.window = { top: null };
+  ctx.window.top = ctx.window;
+  vm.runInContext(`${block('  // ---- your place in a course (Extras)', '  // ---- what-if calculator (Extras)')}
+    globalThis.api = { keepPlace, tapped: () => tapped, acted: () => acted, placeAsked: () => typeof placeAsked === 'undefined' ? 0 : placeAsked };`, ctx);
+  ctx.api.keepPlace();
+  assert.deepEqual(loads.map((l) => l.file), ['features/place.js']);
+  if (touch) for (const f of listeners.wheel) f({ isTrusted: true });
+  ctx.GZ_CTX = { site: 'ultra', settings: () => ctx.settings, on: () => true, local: (fn) => fn(ctx.chrome.storage.local), courseId: ctx.courseId, canvasCourseKey: ctx.canvasCourseKey,
+    toggleOf: () => toggle, ROWS: '.content-list-item[data-content-id]', holding: () => false, tapped: ctx.api.tapped, acted: ctx.api.acted, placeAsked: ctx.api.placeAsked };
+  vm.runInContext(fs.readFileSync(require.resolve('../features/place.js'), 'utf8'), ctx);
+  loads[0].p.resolve();
+  await settle();
+  for (let i = 0; i < 5 && t.due.length; i++) t.due.shift().f(); // a few of the restore's 200 ms steps
+  return clicks;
+};
+
+test('Ultra: a place is put back when the outline loads, but not if you did something while place.js was on its way', async () => {
+  assert.equal(await ultraPlace(false), 1, 'nothing done: its folder unfolds again');
+  assert.equal(await ultraPlace(true), 0, 'a wheel while the file loaded: left as you have it');
+});
+
+test('Canvas: the first input in Inbox compose, while the backup loads, is kept once the account is in', async () => {
+  const saved = [];
+  const t = clock();
+  const loads = [];
+  class Element {}
+  const SEL = '#compose-message-modal textarea[data-testid="message-body"]';
+  const fields = { 'input[data-testid="subject-input"]': { value: 'Lab question' }, 'input[data-testid="course-select-modal"]': { value: 'BIO 1100' } };
+  const modal = { querySelector: (s) => fields[s] || null, querySelectorAll: () => [{ id: 'address-book-label-2-user' }] };
+  const editor = Object.assign(new Element(), { isConnected: true, value: 'A first and only paste, long enough to be worth keeping.',
+    closest: (s) => (s === SEL ? editor : s === '#compose-message-modal' ? modal : null) });
+  const listeners = {};
+  let account;
+  const ctx = vm.createContext({
+    ultra: false, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/conversations', origin: 'https://school.test' },
+    document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: (s) => (s === SEL ? editor : null), querySelectorAll: () => [] },
+    chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
+    need: (file) => { const p = later(); loads.push({ file, p }); return p; },
+    setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, Promise, window: {}, globalThis: null,
+  });
+  ctx.globalThis = ctx;
+  vm.runInContext(`${block('  // ---- draft backup (Extras)', '  // ---- download all (Extras)')}; globalThis.api = { local };`, ctx);
+  for (const f of listeners.input) f({ type: 'input', target: editor });
+  ctx.GZ_DRAFTS = require('../lib/drafts.js');
+  loads[0].p.resolve();
+  await settle();
+  ctx.GZ_CTX = { site: 'canvas', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local, draftEditor: SEL,
+    profile: () => (account ||= later()), canvasCourses: () => Promise.resolve([{ id: 5, name: 'BIO 1100' }]), capi: () => Promise.reject(new Error('offline')) };
+  vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
+  loads[1].p.resolve();
+  await settle();
+  t.run();
+  assert.deepEqual(saved, [], 'nothing kept before the account is in');
+  account.resolve({ id: 7 });
+  await settle();
+  t.run();
+  assert.equal(saved.length, 1, 'the input is kept once the account arrives, without another');
+  assert.match(Object.keys(saved[0])[0], /^draft:canvas:\["https:\/\/school\.test","7","5",\["2"\],"Lab question"\]$/);
+});
