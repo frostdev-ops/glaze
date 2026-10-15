@@ -126,6 +126,7 @@ class El {
 // live: whether Glaze has finished starting on the page (GZ_CTX.on()); enabled: the page's own copy of the master switch.
 // env.syncHold: a promise a storage.sync read answers after (with what was stored when it was asked);
 // env.changeSync(patch): those items changed in storage.sync, reported as storage reports them (only what changed).
+// env.syncFail: a storage.sync read throws (the extension reloaded, or storage failed).
 const D = require('../defaults.js');
 const page = ({ on = true, stored = on, live = true, enabled = true } = {}) => {
   const doc = { activeElement: null, root: null };
@@ -185,7 +186,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true } = {}) => {
     },
     chrome: {
       runtime: { sendMessage: (m, cb) => { sent.push(m); Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => cb(JSON.parse(JSON.stringify(r)))); } },
-      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
+      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { if (env.syncFail) throw new Error('Extension context invalidated.'); const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
     },
   });
   context.window.top = context.window;
@@ -573,4 +574,16 @@ test("restoring a deleted note whose deletion's clean-up failed keeps the file s
   assert.deepEqual(await run({ op: 'import', notes: [{ id: A, title: 'A', created: t, at: t + 1, html: `<p><img data-gz-file="${F}"></p>` }] }, t + 12), { ok: true, done: 1, skipped: 0 });
   assert.equal((await run({ op: 'getFile', id: F }, t + 13)).ok, true);
   assert.equal(db.files.size, 1, 'one file, the same id');
+});
+
+test("a switch change whose read fails takes the button away and closes the view: Notes fails closed", async () => {
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Biology notes', course: '7', html: '<p>bio</p>' }]);
+  await P.openView();
+  assert.ok(P.box(), 'open');
+  P.syncFail = true;
+  P.changeSync({ enabled: false });
+  await settle();
+  assert.equal(P.doc.getElementById('gz-nt-course'), null, 'no button');
+  assert.equal(P.box(), null, 'the view is closed');
 });

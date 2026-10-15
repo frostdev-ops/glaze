@@ -80,7 +80,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const home = () => {
     const my = ++seen;
     return new Promise((res) => { try { chrome.storage.sync.get(['enabled', 'enhance'], (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } })
-      .then((r) => { if (r && my === seen) sync(shows(GZ_SANITIZE(r))); });
+      .then((r) => { if (my === seen) sync(!!r && shows(GZ_SANITIZE(r))); }); // a failed read fails closed
   };
   // Switched off (or on) in another tab or the editor: both switches read afresh from storage, never one of them from the
   // page's own copy of the settings, which may not have caught up (a change names only the item that changed).
