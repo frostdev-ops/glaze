@@ -111,6 +111,9 @@ Wed  9:00</pre><select><option>Fall</option></select><p>Done</p></body></html>`;
     'Wed  9:00',
     'Done',
   ].join('\n'));
+  // A table used for page layout: lists and headings inside a cell keep their own lines.
+  assert.equal(D.html('<table><tr><td><ul><li>Instructor: Ann Lee</li><li>Office: Swords 332</li></ul></td><td><h3>Meeting Times</h3><p>Tue 9-10am</p></td></tr></table>'),
+    'Instructor: Ann Lee\nOffice: Swords 332\nMeeting Times\nTue 9-10am');
   assert.equal(D.html('plain text, no tags'), 'plain text, no tags');
   assert.equal(D.decode('&#0; &#xD800; &#128512; &lt;'), '� � 😀 <');
 });
