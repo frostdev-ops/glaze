@@ -14,15 +14,14 @@ function fixture() {
   let current = [page, oldMain, oldChild];
   const tab = { cid: '_71_1', path: first, top: 430 }, sc = { scrollTop: 0 };
   const api = vm.runInNewContext(part('  const sameView = ', '  // A panel over the bar')
-    + part('  const notePlace = ', '  // ---- snapshots')
-    + part('  const capture = ', '  const keep = ')
-    + '\n({observeView,notePlace,onScroll,capture});', {
+    + part('  const notePlace = ', '  // ---- pictures')
+    + '\n({observeView,notePlace,onScroll});', {
     view: () => current, routed: () => current?.[0], readyView: (v) => !!v?.[1]?.childElementCount,
     shown: (e) => !!e, loading: () => false, courseBar: () => null,
     location: { get pathname() { return pathname; }, search: '' },
     safePath: (p = pathname, q = '') => L.safe(p, q), assignment: () => false, L,
     ctx: { courseId: () => '_71_1', holding: () => false },
-    go: null, on: true, signedOut: false, tabs: [tab], refused: '',
+    showing: '', framed: '', moved() {}, later() {}, capTimer: 0, clearTimeout() {}, on: true, signedOut: false, tabs: [tab],
     save: () => saves++, say() {}, t: (s) => s, document: {}, pageScroller: () => sc,
     strip: null, layers: () => [page], copy: () => { copies++; return '<section>Reading</section>'; },
     chain: () => [], keep() {}, innerWidth: 800, innerHeight: 600,
@@ -48,15 +47,6 @@ test('native route and Back preserve the old saved place and scroll until new ma
   assert.equal(f.tab.top, 520);
   f.native([f.page, f.oldMain, f.oldChild]); f.api.observeView(); f.api.notePlace('_71_1');
   assert.equal(f.tab.path, first, 'a returned native main establishes the Back destination');
-});
-
-test('capture refuses changed or empty routed main even when its URL equals the last accepted URL', () => {
-  const f = fixture();
-  f.native([f.page, { childElementCount: 0, textContent: '', childNodes: [] }, null]);
-  f.api.capture();
-  assert.equal(f.counts().copies, 0, 'last accepted path alone cannot certify current native nodes');
-  f.native([f.page, f.oldMain, f.oldChild]); f.api.capture();
-  assert.equal(f.counts().copies, 1, 'the still-populated accepted view can be copied');
 });
 
 test('the first native scroll after main replacement records its proven path before the next core pass', () => {
@@ -93,22 +83,10 @@ test('an invalidated extension never attempts a delayed storage or worker call',
   let calls = 0;
   const api = vm.runInNewContext(part('  const local = ', '  const readPrefs = ') + '\n({local,send});', {
     chrome: { runtime: { id: undefined, sendMessage: () => { calls++; return null; } }, storage: { local: {} } },
-    preview: false, who: '_41_1', epoch: 1, performance: { timeOrigin: 1 },
+    preview: false, framed: '', who: '_41_1', epoch: 1, performance: { timeOrigin: 1 },
   });
   api.local(() => calls++); await api.send({ op: 'put' });
   assert.equal(calls, 0, 'the old module must not call either API after its runtime ID disappears');
-});
-
-test('an invalidated extension cuts its own switch instead of navigating the native page at fallback time', () => {
-  let reloads = 0, stopped = 0;
-  const check = vm.runInNewContext(part('  const check = ', '  const end = ') + '\ncheck;', {
-    go: { cid: '_71_1', at: 0, url: first }, performance: { now: () => 3000 },
-    ctx: { on: () => false, courseId: () => '_71_1', holding: () => false },
-    courseBar: () => null, shown: () => false, view: () => null, readyView: () => false,
-    location: { pathname: first, origin: 'https://school.test', assign: () => reloads++ },
-    sessionStorage: { setItem() {} }, who: '_41_1', sync: (on) => { assert.equal(on, false); stopped++; },
-  });
-  check(); assert.equal(reloads, 0); assert.equal(stopped, 1);
 });
 
 test('routed header keep-clear moves and tears down without erasing a pre-existing marker', () => {

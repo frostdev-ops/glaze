@@ -576,6 +576,11 @@ html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:ha
 }
 /* A tab's switch: the course's copy on screen (an inert shadow tree) until Ultra's live page is built, the strip on top
    of it where it was, then a fade to the live page. Under Ultra's dialogs (MUI's 1300), over its panels. */
-#gz-ctabs-snap { position: fixed; inset: 0; z-index: 1250; pointer-events: none; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
-#gz-ctabs-snap > #gz-ctabs { position: fixed; top: var(--gz-snap-t, 0); left: var(--gz-snap-l, 0); width: var(--gz-snap-w, 100%); pointer-events: auto; }
-html[data-gz-motion="off"] :is(#gz-ctabs-snap, #gz-ctabs .gz-ctab) { transition: none; }
+/* Course tabs' live frames (features/coursetabs.js): over the whole window, above Glaze's footer; shown only while a tab's
+   frame is picked. Floating widgets stay over them. */
+#gz-ctabs-frames { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1250; visibility: hidden; background: var(--gz-ground, Canvas); }
+#gz-ctabs-frames[data-on] { visibility: visible; }
+#gz-ctabs-frames > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+#gz-ctabs-frames > .gz-ctabs-pic { position: absolute; inset: 0; z-index: 1; overflow: hidden; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
+html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
+html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }

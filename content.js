@@ -14,6 +14,9 @@
   // The options preview is Ultra. On a site, decide once from its head while the parser is still there;
   // addresses and body classes can belong to another app or a same-host tool.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
+  // A course tab's live frame (gz-ctab:<course>) works as a page of its own (solo), without the footer.
+  const tabFrame = window.top !== window && /^gz-ctab:_\d+_\d+$/.test(window.name) ? window.name.slice(8) : '';
+  const solo = window.top === window || !!tabFrame;
   const ULTRA = 'base[href*="/ultra/"]';
   const MOODLE = 'meta[name="keywords"][content^="moodle,"]'; // core writes it on every page
   let site;
@@ -244,13 +247,13 @@
   const canvasCourseKey = (id = moodle ? document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1] : canvasCourseId()) => id ? `${site}:${moodle ? document.querySelector('link[href*="/theme/styles"]')?.href.split('/theme/')[0] : location.origin}/${id}` : null;
   const recordCourses = () => {
     if (!ultra) {
-      if (canvasRecorded || window.top !== window) return;
+      if (canvasRecorded || !solo) return;
       canvasRecorded = true;
       if (moodle) return moodleIn().then((m) => m.record()).catch(() => { canvasRecorded = false; });
       X.record().catch(() => { canvasRecorded = false; });
       return;
     }
-    if (window.top !== window) return;
+    if (!solo) return;
     X.record();
   };
   // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, or on Canvas from
@@ -745,7 +748,7 @@
   let placeAsked = 0; // when the outline or list was first there to put back: anything done after it, while place.js loads, ends that
   const keepPlace = () => {
     if (globalThis.GZ_PLACE) return GZ_PLACE.sync();
-    if (!settings.enhance.place || window.top !== window || !observer) return;
+    if (!settings.enhance.place || !solo || !observer) return;
     if (ultra ? courseId() && /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/.test(location.pathname) && document.querySelector(ROWS)
       : canvasCourseKey() && (new URLSearchParams(location.search).get('module_item_id') || (/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container')))) {
       placeAsked ||= Date.now();
@@ -861,7 +864,7 @@
   const syncDocTools = () => {
     globalThis.GZ_KEYS?.sync();
     if (globalThis.GZ_DOCS) return GZ_DOCS.sync();
-    if (observer && ((ultra && document.querySelector(PREVIEWS)) || (window.top === window && settings.enhance.toggles && document.querySelector(`${DOC}, ${PREVIEWS}`)))) {
+    if (observer && ((ultra && document.querySelector(PREVIEWS)) || (solo && settings.enhance.toggles && document.querySelector(`${DOC}, ${PREVIEWS}`)))) {
       need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
     }
   };
@@ -877,7 +880,7 @@
   const keyOn = (e) => !!chrome.runtime?.id && !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)
     && (ultra || !(e.defaultPrevented || e.repeat || !(moodle || GZ_PAGE.canvasKeys(location.pathname)) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')));
   let keysWaiting = null; // the keys pressed while keys.js loads, as they were: handed over in order when it's in
-  if (window.top === window) {
+  if (solo) {
     document.addEventListener('keydown', (e) => {
       if (!chrome.runtime?.id) return;
       if (globalThis.GZ_KEYS) return GZ_KEYS.key(e);
@@ -901,7 +904,7 @@
   // Ctrl+K (⌘K on a Mac) opens one search over the site's pages, your courses, this course and Glaze's own switches:
   // features/palette.js, loaded the first time. Never while typing (Ultra's editor uses Ctrl+K for links), top frame only.
   let cmdWanted = null; // while palette.js loads: open it when it's in? Each press meanwhile turns that over.
-  if (window.top === window) {
+  if (solo) {
     document.addEventListener('keydown', (e) => {
       if (!chrome.runtime?.id || e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
       // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
@@ -940,7 +943,7 @@
   // or the editor's preview: one WebGL canvas per tab. The canvas lives in the topmost full-screen
   // layer (see extras.css); flush() moves it when a course or item panel opens or closes.
   const LAYERS = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
-  const sceneFrame = window === top || location.protocol !== 'https:';
+  const sceneFrame = solo || location.protocol !== 'https:';
   let scene = null; // { update, draw, stop } from lib/scene.js
   let sceneCanvas = null;
   let sceneLoad = null;
@@ -969,7 +972,7 @@
       colors: GZ_BG_COLORS(worn.bg.colors, palette),
       dim,
       amount,
-      speed: pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
+      speed: html.hasAttribute('data-gz-ctab-framed') ? 0 : pace * ({ off: 0, expressive: 1.6 }[html.getAttribute('data-gz-motion')] ?? 1),
     };
   };
   const syncScene = () => {
@@ -1034,7 +1037,7 @@
   const CARD = 'article[id^="course-list-course-"]';
 
   // -- the button on each card --
-  const menuOn = () => !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
+  const menuOn = () => !!observer && settings.enhance.coursemenu && solo && !isPreview;
   const syncCourseMenu = () => {
     const on = menuOn();
     for (const card of document.querySelectorAll(ultra ? CARD : moodle ? '[data-region="course-content"]' : '.ic-DashboardCard')) {
@@ -1204,7 +1207,7 @@
     setAttr('data-gz-no-enter', !s.motion.enter);
     setAttr('data-gz-no-hover', !s.motion.hover);
     syncPageFade();
-    setAttr('data-gz-footer', s.footer);
+    setAttr('data-gz-footer', s.footer && window.top === window);
     // Extras: CSS is gated on these; a switch turned on needs one pass over what is already there.
     const was = enhanced;
     enhanced = s.enhance;
@@ -1363,7 +1366,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   // content-ultra.js or content-canvas.js is given what it needs from here (I; live state through getters), and puts
   // its own over X. A page that hasn't it (its host was registered for Moodle) asks for it, and the theme doesn't wait:
   // only the sweep and the extras do (enable). Without it, the theme stays on.
-  const I = { C, html, isPreview, need, t, locale, api, capi, canvasCourseKey, canvasCourseId, courseId, celebrate, markDue, drawProgress, cardBadge, KIND,
+  const I = { C, html, isPreview, solo, tabFrame, need, t, locale, api, capi, canvasCourseKey, canvasCourseId, courseId, celebrate, markDue, drawProgress, cardBadge, KIND,
     cardsInView, inView, tagCards, tagExtras, courseSlots, courseColors, varText, CARD, dueLabelled, setVar, setAttr,
     setCourseList: (all) => { courseList = all; X.paintCourses(); syncCourseMenu(); reapply(); },
     get settings() { return settings; }, get observer() { return observer; }, get links() { return links; }, get timer() { return timer; },
@@ -1382,7 +1385,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked,
+    canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => syncScene(),
     ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
