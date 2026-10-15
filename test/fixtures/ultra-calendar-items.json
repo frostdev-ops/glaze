@@ -1,0 +1,156 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See parity/spikes/B0.md.",
+ "paging": {
+  "limit": 50,
+  "nextPage": "",
+  "previousPage": "",
+  "count": 4,
+  "offset": 0
+ },
+ "results": [
+  {
+   "itemSourceId": "_603_1",
+   "itemSourceType": "blackboard.platform.gradebook2.GradableItem",
+   "calendarId": "_101_1",
+   "calendarNameLocalizable": {
+    "rawValue": "FA26-_101_1"
+   },
+   "title": "Lab Report 3",
+   "location": null,
+   "startDate": "2026-10-19T03:59:00.000Z",
+   "endDate": "2026-10-19T03:59:00.000Z",
+   "modifiedDate": null,
+   "color": "#670033",
+   "disableResizing": true,
+   "createdByUser": null,
+   "userCreated": false,
+   "dynamicCalendarItemProps": {
+    "eventType": "Test",
+    "gradable": true,
+    "hasEngagementAssociated": false,
+    "isEngagement": false,
+    "categoryId": "_201_1",
+    "handle": "resource/x-bb-assessment",
+    "attemptable": true,
+    "isDateRangeLimited": false
+   },
+   "permissions": {
+    "create": false,
+    "edit": false,
+    "delete": false
+   },
+   "visibility": "VISIBLE",
+   "description": ""
+  },
+  {
+   "itemSourceId": "_613_1",
+   "itemSourceType": "blackboard.platform.gradebook2.GradableItem",
+   "calendarId": "_102_1",
+   "calendarNameLocalizable": {
+    "rawValue": "FA26-_102_1"
+   },
+   "title": "Essay 3",
+   "location": null,
+   "startDate": "2026-10-23T03:59:00.000Z",
+   "endDate": "2026-10-23T03:59:00.000Z",
+   "modifiedDate": null,
+   "color": "#bc0f0f",
+   "disableResizing": true,
+   "createdByUser": null,
+   "userCreated": false,
+   "dynamicCalendarItemProps": {
+    "eventType": "Test",
+    "gradable": true,
+    "hasEngagementAssociated": false,
+    "isEngagement": false,
+    "categoryId": "_201_1",
+    "handle": "resource/x-bb-assessment",
+    "attemptable": true,
+    "isDateRangeLimited": false
+   },
+   "permissions": {
+    "create": false,
+    "edit": false,
+    "delete": false
+   },
+   "visibility": "VISIBLE",
+   "description": ""
+  },
+  {
+   "itemSourceId": "_606_1",
+   "itemSourceType": "blackboard.platform.gradebook2.GradableItem",
+   "calendarId": "_101_1",
+   "calendarNameLocalizable": {
+    "rawValue": "FA26-_101_1"
+   },
+   "title": "Publisher Homework 4",
+   "location": null,
+   "startDate": "2026-10-18T03:59:00.000Z",
+   "endDate": "2026-10-18T03:59:00.000Z",
+   "modifiedDate": null,
+   "color": "#670033",
+   "disableResizing": true,
+   "createdByUser": null,
+   "userCreated": false,
+   "dynamicCalendarItemProps": {
+    "eventType": "Manual Grade Column",
+    "gradable": true,
+    "hasEngagementAssociated": false,
+    "isEngagement": false,
+    "categoryId": "_204_1",
+    "handle": "calendar",
+    "attemptable": true,
+    "isDateRangeLimited": false
+   },
+   "permissions": {
+    "create": false,
+    "edit": false,
+    "delete": false
+   },
+   "visibility": "VISIBLE",
+   "description": ""
+  },
+  {
+   "itemSourceId": "_730_1",
+   "itemSourceType": "blackboard.data.discussionboard.Engagement",
+   "calendarId": "_101_1",
+   "calendarNameLocalizable": {
+    "rawValue": "FA26-_101_1"
+   },
+   "title": "Discussion: Cells",
+   "location": null,
+   "startDate": "2026-09-14T03:59:00.000Z",
+   "endDate": "2026-09-14T03:59:00.000Z",
+   "modifiedDate": null,
+   "color": "#670033",
+   "disableResizing": true,
+   "createdByUser": null,
+   "userCreated": false,
+   "dynamicCalendarItemProps": {
+    "eventType": "Discussion Message",
+    "gradable": true,
+    "hasEngagementAssociated": true,
+    "isEngagement": true,
+    "categoryId": "_203_1",
+    "handle": "resource/x-bb-forumlink",
+    "attemptable": false,
+    "isDateRangeLimited": false
+   },
+   "permissions": {
+    "create": false,
+    "edit": false,
+    "delete": false
+   },
+   "visibility": "VISIBLE",
+   "description": ""
+  }
+ ],
+ "permissions": {
+  "createCourseEvent": null,
+  "createInstitutionEvent": false,
+  "modifyInstitutionEvent": null,
+  "deleteInstitutionEvent": null,
+  "modifyCourseEvent": null,
+  "deleteCourseEvent": null
+ }
+}
