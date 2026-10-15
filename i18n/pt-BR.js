@@ -400,4 +400,7 @@
   "Tint and look for {name}": "Tonalidade e aparência de {name}",
   "Change the colour and nickname in Canvas’s own card menu.": "Altere a cor e o apelido no menu do cartão do Canvas.",
   "Open Blackboard or Canvas once and your courses show up here. Change Canvas colours in its own card menu.": "Abra o Blackboard ou o Canvas para ver seus cursos aqui. Altere as cores do Canvas no próprio menu do cartão.",
+  'Locked': 'Bloqueado',
+  'Not complete': 'Não concluído',
+  '{n} items': '{n} itens',
 };
