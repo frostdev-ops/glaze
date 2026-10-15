@@ -109,6 +109,12 @@ and uploads the build to App Store Connect. It needs an App Store Connect API ke
 on first use. `APPSTORE_EXPORT_ONLY=1` builds the signed package without uploading. Listing text,
 screenshots and review submission happen in App Store Connect.
 
+The app bundles only the files the Xcode project lists for its two extension targets (Mac and iOS); a folder
+reference brings everything under it. Every build script copies the package into the project's Resources folder
+and then runs `node scripts/safari-resources.js` on it, which stops the build if the package has a file the
+project doesn't list. Add a new top-level file or folder to both extension targets in Xcode;
+`test/safari-resources.test.js` checks the project against everything the package ships.
+
 `scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
 Use it only when you mean to regenerate the project. It doesn't know about the iPhone and iPad targets below.
 
@@ -169,6 +175,11 @@ setting becomes either a `--gz-*` variable or a `data-gz-*` attribute on `<html>
 script writes from your saved settings, so the CSS never needs JavaScript to decide anything. A small
 DOM sweep tags the long tail — hardcoded light backgrounds, dark text, viewport-fixed bars — with
 `data-gz-*` attributes the stylesheets then restyle.
+
+Each LMS loads only what it needs at first paint: the shared `content.js` (with the small libraries it uses)
+plus that site's own part, `content-ultra.js` on Blackboard Ultra and `content-canvas.js` on Canvas. Moodle
+has no part; it is themed by `content.js` and `moodle.css`. Everything else, from the command palette to the
+grade calculators, loads on demand from `features/` the first time a page needs it.
 
 ## Building
 

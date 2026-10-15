@@ -6,10 +6,12 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
-const block = (from, to) => {
-  const a = source.indexOf(from), b = source.indexOf(to, a);
+// Ultra's own part (content-ultra.js): what only Ultra does, which content.js hands its live state (I).
+const ultraPart = fs.readFileSync(require.resolve('../content-ultra.js'), 'utf8');
+const block = (from, to, src = source) => {
+  const a = src.indexOf(from), b = src.indexOf(to, a);
   assert.ok(a > 0 && b > a, `markers ${from} … ${to}`);
-  return source.slice(a, b);
+  return src.slice(a, b);
 };
 // A promise the test settles by hand.
 const later = () => { let resolve, reject; const p = new Promise((y, n) => { resolve = y; reject = n; }); return Object.assign(p, { resolve, reject }); };
@@ -207,7 +209,8 @@ const hooks = (from, to, extra = {}) => {
   });
   ctx.window = { top: null };
   ctx.window.top = ctx.window;
-  vm.runInContext(`${block(from, to)}; globalThis.api = { ${extra.api || ''} };`, ctx);
+  ctx.I = { get settings() { return ctx.settings; }, get observer() { return ctx.observer; } };
+  vm.runInContext(`${block(from, to, extra.src)}; globalThis.api = { ${extra.api || ''} };`, ctx);
   const fire = (type, e) => { for (const f of listeners[type] || []) f(e); };
   return { ctx, loads, fire, Element };
 };
@@ -246,7 +249,7 @@ test('on Canvas, g then ? while features/keys.js loads keeps Canvas\'s own help 
 
 test('Ctrl+K twice while features/palette.js loads leaves it closed; once opens it, once', async () => {
   for (const [presses, opened] of [[2, 0], [1, 1], [3, 1]]) {
-    const h = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- page changes');
+    const h = hooks('  // ---- keyboard shortcuts (Extras)', '  // ---- footer');
     for (let i = 0; i < presses; i++) h.fire('keydown', key('k', { ctrlKey: true }));
     assert.equal(h.loads.filter((l) => l.file === 'features/palette.js').length, 1, 'asked for once');
     let n = 0;
@@ -293,7 +296,7 @@ test('Ultra\'s what-if calculator loads on a course\'s Grades with its grades in
   for (const [why, change, files] of [['grades in', () => {}, ['lib/gradecalc.js', 'features/whatif.js']],
     ['switched off', (c) => { c.settings.enhance.calc = false; }, []], ['the outline', (c) => { c.location.pathname = '/ultra/courses/_1_1/outline'; }, []],
     ['grades not in yet', (c) => { c.bookFor = () => ({}); }, []], ['Glaze off', (c) => { c.observer = null; }, []]]) {
-    const h = hooks('  // ---- what-if calculator (Extras)', '  // ---- draft backup (Extras)', { ultra: true, courseId: () => '_1_1', bookFor: () => ({ results: [] }), location: { ...grades }, api: 'renderCalc' });
+    const h = hooks('  // ---- what-if calculator (Extras)', '  // ---- page changes', { src: ultraPart, ultra: true, courseId: () => '_1_1', bookFor: () => ({ results: [] }), location: { ...grades }, api: 'renderCalc' });
     h.ctx.settings.enhance.calc = true;
     change(h.ctx);
     h.ctx.api.renderCalc();
