@@ -591,7 +591,6 @@
   // Course cards (W4).
   "Cards": "Karten",
   "Course cards": "Kurskarten",
-  "Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.": "Die Karten im Canvas-Dashboard. Eigene Farbe, Verlauf oder Bild und Lesezeichen gibst du einer Karte über ihr Kursmenü im Dashboard.",
   "Card width": "Kartenbreite",
   "Space between cards": "Abstand zwischen Karten",
   "Card corners": "Kartenecken",
@@ -699,8 +698,6 @@
   "Tasks for {course}": "Aufgaben für {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Aufgaben auf Kurskarten: Jede Canvas-Kurskarte zeigt, was als Nächstes fällig ist, wenn du es einschaltest.",
   "Not cleared. Try again in a moment.": "Nicht geleert. Versuch es gleich noch einmal.",
-  "Canvas sidebar": "Canvas-Seitenleiste",
-  "Style Canvas's own global navigation. Links and the site's navigation still work as usual.": "Gestalte die globale Navigation von Canvas. Links und die Navigation der Website funktionieren wie gewohnt.",
   "Sidebar background": "Hintergrund der Seitenleiste",
   "Palette default": "Palettenstandard",
   "First color": "Erste Farbe",
@@ -1443,4 +1440,10 @@
   "Couldn't save the open note, so nothing was exported. Try again in a moment.": "Die geöffnete Notiz konnte nicht gespeichert werden, daher wurde nichts exportiert. Versuche es gleich noch einmal.",
   "Couldn't read your notes. Nothing was saved.": "Deine Notizen konnten nicht gelesen werden. Es wurde nichts gespeichert.",
   "Skipped, already here and not older: {n}": "Übersprungen, schon hier und nicht älter: {n}",
+  // Blackboard appearance (B6).
+  "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Verwende eine https://-Adresse oder einen Pfad auf dieser Blackboard-Seite. Lesezeichensymbole werden von Glaze gezeichnet.",
+  "Canvas and Blackboard navigation": "Navigation für Canvas und Blackboard",
+  "Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.": "Gestalte die globale Navigation in Canvas und Blackboard Ultra. Links und die Navigation der Website funktionieren wie gewohnt.",
+  "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Gestalte Canvas-Dashboardkarten und Blackboard-Ultra-Kurskarten über ihr Kursmenü. Ultra-Listenzeilen behalten ihr Layout; Bannerstile und Rundungen gelten weiterhin.",
+
 };

@@ -4,6 +4,8 @@
 // Classic script in content.js's isolated world, through GZ_CTX; a second injection keeps the first.
 var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   const { need, t, capi } = globalThis.GZ_CTX;
+  const ultra = GZ_CTX.site === 'ultra';
+  const CARD = ultra ? 'article.course-element-card[data-course-id]' : '.ic-DashboardCard';
   const html = document.documentElement;
   const NS = 'http://www.w3.org/2000/svg';
   const C = GZ_COLOR;
@@ -45,11 +47,12 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     for (const v of VARS) prop(el, v, p?.vars[v] || '');
   };
   const keyOf = (el) => {
+    if (ultra) return /^_\d+_\d+$/.test(el.dataset.courseId) ? `ultra:${location.origin}/${el.dataset.courseId}` : null;
     const id = el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
     return id ? `canvas:${location.origin}/${id}` : null;
   };
-  const nameOf = (el) => el?.getAttribute('aria-label') || el?.querySelector('.ic-DashboardCard__header-title')?.title || '';
-  const cardOf = (key) => [...document.querySelectorAll('.ic-DashboardCard')].find((c) => keyOf(c) === key);
+  const nameOf = (el) => el?.getAttribute('aria-label') || el?.querySelector(ultra ? '.course-title' : '.ic-DashboardCard__header-title')?.title || el?.querySelector('.course-title')?.textContent || '';
+  const cardOf = (key) => [...document.querySelectorAll(CARD)].find((c) => keyOf(c) === key);
   const src = (d, s) => s.u || (K.DATA.test(d.imgs[`cardImg:${s.i}`] || '') ? d.imgs[`cardImg:${s.i}`] : '');
   const svg = (d) => {
     const s = document.createElementNS(NS, 'svg');
@@ -63,25 +66,26 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
 
   let editing = null; // the course in the editor: { key, style, links }, shown while it saves
   const paint = async () => {
-    if (window.top !== window) return;
+    if (window.top !== window && !globalThis.location?.pathname.endsWith('/preview.html')) return;
     let d;
     try { d = await read(); } catch { return; }
     const on = html.hasAttribute('data-gz-motion');
-    const p = on ? K.page(d.card) : { vars: {}, attrs: {} };
+    const card = location.pathname.endsWith('/preview.html') ? K.settings(GZ_CTX.settings().card) : d.card;
+    const p = on ? K.page(card) : { vars: {}, attrs: {} };
     for (const v of ['--gz-card-w', '--gz-card-gap', '--gz-card-r', '--gz-card-h']) prop(html, v, p.vars[v] || '');
     for (const a of ['hover', 'particles', 'pet', 'condensed', 'icons', 'plain']) attr(html, `data-gz-card-${a}`, p.attrs[a]);
     // A theme's set goes round the courses in the order they first show.
     const order = new Map();
-    for (const el of document.querySelectorAll('.ic-DashboardCard, .planner-grouping')) {
+    for (const el of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard, .planner-grouping')) {
       const key = on && keyOf(el);
       if (key && !order.has(key)) order.set(key, order.size);
       const own = editing?.key === key ? editing : null;
       const style = key ? K.pick(own ? { ...d.cards, [key]: own.style } : d.cards, key, order.get(key)) : null;
       dress(el, style && K.paint(style, src(d, style)));
-      if (!el.classList.contains('ic-DashboardCard')) continue;
+      if (!ultra && !el.classList.contains('ic-DashboardCard')) continue;
       bookmarks(el, key && d.card.icons ? (own ? own.links.map(K.link).filter(Boolean) : d.links[key]) : null);
-      pet(el, key && order.get(key) === 0 && d.card.pet !== 'none' && d.card.pet);
-      create(el, key && d.card.create && key);
+      pet(el, key && order.get(key) === 0 && card.pet !== 'none' && card.pet);
+      if (!ultra) create(el, key && d.card.create && key);
     }
   };
 
@@ -219,7 +223,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     });
   };
 
-  const KINDS = [['', 'Canvas color'], ['solid', 'Color'], ['gradient', 'Gradient'], ['image', 'Picture']];
+  const KINDS = [['', ultra ? 'Course color' : 'Canvas color'], ['solid', 'Color'], ['gradient', 'Gradient'], ['image', 'Picture']];
   const FILTER_NAMES = { none: 'None', vivid: 'Vivid', mono: 'Mono', noir: 'Noir', warm: 'Warm', cool: 'Cool', faded: 'Faded', dreamy: 'Dreamy' };
   const ICON_NAMES = { link: 'Link', book: 'Book', video: 'Video', chat: 'Chat', doc: 'Document', calendar: 'Calendar', folder: 'Folder', code: 'Code', star: 'Star', globe: 'Globe' };
 
@@ -240,17 +244,18 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (dlg.open) dlg.close();
     dlg.remove();
     paint();
-    document.getElementById(`gz-cm-${key}`)?.focus({ preventScroll: true });
+    document.getElementById(`gz-cm-${ultra ? key.split('/').pop() : key}`)?.focus({ preventScroll: true });
     return true;
   };
 
   const open = async (key) => {
+    if (ultra && /^_\d+_\d+$/.test(key)) key = `ultra:${location.origin}/${key}`;
     if (!await close()) return;
     let d;
     try { d = await read(); } catch { return; }
     const card = cardOf(key);
     const name = nameOf(card);
-    const courseColor = () => C.hex(C.parse(cardOf(key)?.style.getPropertyValue('--gz-course-raw') || '') || { r: 128, g: 128, b: 128 });
+    const courseColor = () => C.hex(C.parse(cardOf(key)?.style.getPropertyValue('--gz-course-raw') || (ultra && GZ_CTX.courseColor?.(cardOf(key)?.className.match(/course-color-(\d+)/)?.[1])) || '') || { r: 128, g: 128, b: 128 });
     const dlg = make('dialog', { id: 'gz-ce' });
     dlg.setAttribute('aria-labelledby', 'gz-ce-title');
     const note = make('p', { className: 'gz-ce-note', hidden: true });
@@ -399,7 +404,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     });
     const linksTab = make('div', { className: 'gz-ce-panel', id: 'gz-ce-links', hidden: true }, list, add,
       make('label', { className: 'gz-ce-check' }, iconsOn, t('Show bookmark icons on cards')),
-      make('p', { className: 'gz-ce-desc', textContent: t('An https:// address, or a path on this Canvas site like /courses/12/files. Icons are Glaze’s own: nothing is asked of the linked site.') }));
+      make('p', { className: 'gz-ce-desc', textContent: t(ultra ? 'Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.' : 'An https:// address, or a path on this Canvas site like /courses/12/files. Icons are Glaze’s own: nothing is asked of the linked site.') }));
     // Rows are drafts until they have an address: only the good ones are shown and kept.
     const saveLinks = () => { ed.leave = false; paint(); save(); };
     const renderLinks = (focus) => {

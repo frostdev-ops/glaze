@@ -591,7 +591,6 @@
   // Course cards (W4).
   "Cards": "Kaarten",
   "Course cards": "Cursuskaarten",
-  "Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.": "De kaarten op het Canvas-dashboard. Geef een kaart een eigen kleur, verloop of afbeelding, en bladwijzers, via het cursusmenu op het dashboard.",
   "Card width": "Kaartbreedte",
   "Space between cards": "Ruimte tussen kaarten",
   "Card corners": "Kaarthoeken",
@@ -699,8 +698,6 @@
   "Tasks for {course}": "Taken voor {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Taken op cursuskaarten: elke Canvas-cursuskaart toont wat er binnenkort moet worden ingeleverd, als je het aanzet.",
   "Not cleared. Try again in a moment.": "Niet gewist. Probeer het zo meteen opnieuw.",
-  "Canvas sidebar": "Canvas-zijbalk",
-  "Style Canvas's own global navigation. Links and the site's navigation still work as usual.": "Geef de eigen globale navigatie van Canvas een stijl. Links en de navigatie van de site blijven gewoon werken.",
   "Sidebar background": "Achtergrond van de zijbalk",
   "Palette default": "Standaard van palet",
   "First color": "Eerste kleur",
@@ -1443,4 +1440,10 @@
   "Couldn't save the open note, so nothing was exported. Try again in a moment.": "De geopende notitie kon niet worden opgeslagen, dus er is niets geëxporteerd. Probeer het zo opnieuw.",
   "Couldn't read your notes. Nothing was saved.": "Je notities konden niet worden gelezen. Er is niets opgeslagen.",
   "Skipped, already here and not older: {n}": "Overgeslagen, al hier en niet ouder: {n}",
+  // Blackboard appearance (B6).
+  "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Gebruik een https://-adres of een pad op deze Blackboard-site. Glaze tekent de bladwijzerpictogrammen.",
+  "Canvas and Blackboard navigation": "Navigatie voor Canvas en Blackboard",
+  "Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.": "Pas de algemene navigatie van Canvas en Blackboard Ultra aan. Links en navigatie blijven gewoon werken.",
+  "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Pas Canvas-dashboardkaarten en Blackboard Ultra-cursuskaarten aan via hun cursusmenu. Ultra-lijstrijen behouden hun indeling; bannerstijlen en afgeronde hoeken blijven gelden.",
+
 };

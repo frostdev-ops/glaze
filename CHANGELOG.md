@@ -8,6 +8,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Blackboard Ultra appearance:** shared course-card editor (solid, gradient, picture, overlay, crop and filters), grid layout and motion-aware effects/pets, bookmarks, and base-navigation backgrounds, labels and sizes. Ultra list rows keep their native layout. No new viewer host access.
+
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
   notes on a course's home (there as soon as Notes is turned on), or a class reminder. It opens and acts only on your own

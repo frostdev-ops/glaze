@@ -591,7 +591,6 @@
   // Course cards (W4).
   "Cards": "Tarjetas",
   "Course cards": "Tarjetas de curso",
-  "Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.": "Las tarjetas del panel de Canvas. Dale a una tarjeta su propio color, degradado o imagen, y marcadores, desde su menú de curso en el panel.",
   "Card width": "Ancho de tarjeta",
   "Space between cards": "Espacio entre tarjetas",
   "Card corners": "Esquinas de tarjeta",
@@ -699,8 +698,6 @@
   "Tasks for {course}": "Tareas de {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Tareas en las tarjetas de curso: cada tarjeta de curso de Canvas muestra lo próximo que vence, si lo activas.",
   "Not cleared. Try again in a moment.": "No se ha borrado. Inténtalo de nuevo en un momento.",
-  "Canvas sidebar": "Barra lateral de Canvas",
-  "Style Canvas's own global navigation. Links and the site's navigation still work as usual.": "Personaliza la navegación global de Canvas. Los enlaces y la navegación del sitio siguen funcionando como siempre.",
   "Sidebar background": "Fondo de la barra lateral",
   "Palette default": "Predeterminado de la paleta",
   "First color": "Primer color",
@@ -1443,4 +1440,10 @@
   "Couldn't save the open note, so nothing was exported. Try again in a moment.": "No se pudo guardar la nota abierta, así que no se exportó nada. Inténtalo de nuevo en un momento.",
   "Couldn't read your notes. Nothing was saved.": "No se pudieron leer tus notas. No se guardó nada.",
   "Skipped, already here and not older: {n}": "Omitidas, ya están aquí y no son más antiguas: {n}",
+  // Blackboard appearance (B6).
+  "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Usa una dirección https:// o una ruta de este sitio Blackboard. Glaze dibuja los iconos de marcadores.",
+  "Canvas and Blackboard navigation": "Navegación de Canvas y Blackboard",
+  "Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.": "Personaliza la navegación global de Canvas y Blackboard Ultra. Los enlaces y la navegación siguen funcionando como siempre.",
+  "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Personaliza las tarjetas de Canvas y Blackboard Ultra desde su menú de curso. Las filas de lista de Ultra conservan su diseño; se aplican estilos de banner y esquinas.",
+
 };

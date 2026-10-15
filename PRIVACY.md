@@ -141,9 +141,9 @@ _Last updated: 2026-10-15_
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
   Clear history in the editor deletes the history; Remove deletes a favorite.
-- **Canvas course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
+- **Canvas and Blackboard Ultra course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
   card style (`cards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
-  (`links`: their names, addresses and icons), by your Canvas site's address and course number.
+  (`links`: their names, addresses and icons), by the LMS site address and course id; Canvas and Ultra use separate keys.
 - **Your marks on documents** (Canvas, "Pen and highlighter on documents", off by default), in `chrome.storage.local`,
   on this device only, per Canvas site, signed-in user id and file id (which the viewer's address on your Canvas page
   names): each pen or highlighter stroke's points, color and width, page by page. Canvas's document viewer runs on
@@ -153,9 +153,9 @@ _Last updated: 2026-10-15_
   are kept apart for that site as "anon" and shown only while signed out; if Glaze can't tell who you are, it keeps and
   shows none, so one person's marks never show for another. Nothing is sent to Canvas, Instructure or anywhere else.
   Export annotations saves them as a file you keep; Clear page and undo remove them.
-- **Canvas sidebar settings**, in `chrome.storage.sync`: background colors, an optional `https://` picture link
+- **Canvas and Blackboard Ultra navigation settings**, in `chrome.storage.sync`: background colors, an optional `https://` picture link
   or a local picture identifier, filter/overlay, text color, logo visibility, labels, size and collapsed state.
-- **Pictures you choose for course cards or the Canvas sidebar from your computer**, in `chrome.storage.local`, on this device only:
+- **Pictures you choose for course cards or navigation from your computer**, in `chrome.storage.local`, on this device only:
   scaled down to at most 960 pixels and kept as WebP (JPEG in Safari), at most about 400 KB each and 4 MB in all.
   They are never synced, exported or put in a theme code. Choosing another picture, removing the card's style,
   or switching the sidebar away from its local picture deletes the old one; Reset everything deletes them all.
@@ -448,3 +448,5 @@ project's GitHub repository at
 ## Contact
 
 admin@frostdev.io
+
+Ultra appearance uses the visible course-card banners and existing color slots; it makes no LMS API requests. Linked images load from their chosen HTTPS hosts, exactly as on Canvas. The Ultra document viewer has no added iframe injection or host access.

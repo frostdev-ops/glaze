@@ -4,13 +4,22 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const X = globalThis.GZ_CTX;
   let reading = '', loaded = null, toggle = null;
   const titled = new Map();
+  const labels = new Set();
   const forget = () => { if (loaded) URL.revokeObjectURL(loaded.src); loaded = null; };
   const sync = () => {
     const n = X.nav();
     const on = X.on() && X.settings().enabled;
-    const b = document.getElementById('primaryNavToggle');
+    const b = X.site === 'ultra' ? null : document.getElementById('primaryNavToggle');
+    for (const el of labels) if (!on || (!n.collapsed && n.labels !== 'icons') || !el.isConnected) { el.classList.remove('gz-nav-label'); labels.delete(el); }
+    if (X.site === 'ultra' && on && (n.collapsed || n.labels === 'icons')) {
+      for (const a of document.querySelectorAll(':is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content')) {
+        for (const el of a.querySelectorAll('.MuiListItemText-root, .MuiTypography-root, span:not(:has(svg))')) {
+          if (!el.querySelector('svg') && !el.closest('.MuiBadge-root') && el.textContent.trim() && !labels.has(el)) { el.classList.add('gz-nav-label'); labels.add(el); }
+        }
+      }
+    }
     if (on && (n.collapsed || n.labels === 'icons')) {
-      for (const a of document.querySelectorAll('#header .ic-app-header__menu-list-link')) if (!titled.has(a) && !a.hasAttribute('title')) {
+      for (const a of document.querySelectorAll(X.site === 'ultra' ? ':is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content' : '#header .ic-app-header__menu-list-link')) if (!titled.has(a) && !a.hasAttribute('title')) {
         const text = a.getAttribute('aria-label') || a.textContent.trim();
         if (text) { titled.set(a, text); a.title = text; }
       }
