@@ -152,13 +152,16 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (!canStart.has(id)) canStart.set(id, capi(`/courses/${id}/permissions?permissions[]=create_discussion_topic`).then((p) => !!p?.create_discussion_topic, () => false));
     const items = [[t('Message the class'), `/conversations?context_id=course_${id}&compose=true`]];
     if (await canStart.get(id)) items.push([t('Start a discussion'), `/courses/${id}/discussion_topics/new`]);
+    // The notes app (features/notes.js), when it's on: a new note for this course.
+    if (GZ_CTX.settings().enhance.notesApp) items.push([t('New note'), '#', () => need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course: id, create: true }), () => {})]);
     if (!btn.isConnected) return;
     const box = Object.assign(document.createElement('div'), { id: 'gz-mk' });
     box.setAttribute('role', 'menu');
     box.setAttribute('aria-label', btn.getAttribute('aria-label'));
-    box.append(...items.map(([label, href]) => {
+    box.append(...items.map(([label, href, run]) => {
       const a = Object.assign(document.createElement('a'), { href, textContent: label });
       a.setAttribute('role', 'menuitem');
+      if (run) a.addEventListener('click', (e) => { e.preventDefault(); closeMk(); run(); });
       return a;
     }));
     document.body.append(box);

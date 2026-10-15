@@ -18,7 +18,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', gradescope: 'Gradescope in To Do', search: 'Search in your courses',
     remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak',
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
-    notes: 'Dashboard notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
+    notes: 'Dashboard notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights', notesApp: 'Notes app' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -71,12 +71,19 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...(ctx.settings().enhance.gpa ? [{ label: t('GPA: past terms, trends and goal'), hint: 'Glaze', group: 'Glaze', run: () => (location.pathname === '/' && globalThis.GZ_GRADES_UI ? GZ_GRADES_UI.open() : go('/#gz-gpa')()) }] : []),
       // Insights (features/insights.js): this term in numbers, on any Canvas page.
       ...(ctx.settings().enhance.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: () => need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.open(), () => {}) }] : []),
+      // The notes app (features/notes.js): the library, a new note, and this course's notes.
+      ...(ctx.settings().enhance.notesApp ? [
+        { label: t('Notes'), hint: 'Glaze', group: 'Glaze', run: () => notes({}) },
+        { label: t('New note'), hint: cid ? t('This course') : 'Glaze', group: 'Glaze', run: () => notes({ create: true, course: cid }) },
+        ...(cid ? [{ label: t('Course notes'), hint: t('This course'), group: 'Glaze', run: () => notes({ course: cid }) }] : []),
+      ] : []),
       ...glazeCmds(),
       // Every Canvas extra with its switch (features/widgets.js), whether or not the widgets are on.
       { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },
       ...(cid && ctx.settings().enhance.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: () => need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.open(), () => {}) }] : []),
     ];
   };
+  const notes = (o) => need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open(o), () => {});
   // Everything the palette can do, built when it opens.
   const commands = async () => {
     // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches (glazeCmds).

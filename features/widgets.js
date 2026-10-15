@@ -28,7 +28,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     ['Dashboard', ['notes', 'widgets', 'todo', 'cardTasks', 'overall', 'gradeHover', 'gpa', 'insights', 'newgrades', 'newcontent', 'coursemenu']],
     ['Course pages', ['progress', 'place', 'download', 'calc', 'syllabus', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
     ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak']],
-    ['Everywhere', ['palette', 'search', 'keys', 'drafts', 'quizLight']],
+    ['Everywhere', ['notesApp', 'palette', 'search', 'keys', 'drafts', 'quizLight']],
   ];
   const EXTRA = {
     notes: 'Dashboard notes', widgets: 'Widgets', todo: 'Better To Do', cardTasks: 'Tasks on course cards', overall: 'Grades on course cards',
@@ -37,6 +37,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     scores: 'Score bars', urgency: 'Due-date urgency', previews: 'Folder previews', toggles: 'Document buttons', darkDocs: 'Dark documents',
     reading: 'Reading width', clamp: 'Shorter descriptions', palette: 'Command palette', search: 'Search in your courses',
     remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', keys: 'Keyboard shortcuts', drafts: 'Back up what you type', quizLight: 'Keep quizzes light',
+    notesApp: 'Notes app',
   };
 
   let W = null; // lib/widgets.js
@@ -130,8 +131,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         .then((r) => { newer(W.cleanNote(r[key])); if (text.hidden && !draft) render(); }, () => {});
       load();
       render();
-      body.append(view, text, status);
-      return { wake: () => { if (!key) load(); }, stop: () => { save(); removeEventListener('pagehide', leave); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
+      // The notes app (features/notes.js), when it's on: these notes stay as they are, and this opens the rest.
+      const app = make('button', { type: 'button', className: 'gz-w-btn gz-w-note-app', textContent: t('Open Notes'), hidden: !ctx.settings().enhance.notesApp });
+      app.addEventListener('click', () => ctx.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open(), () => {}));
+      body.append(view, text, status, app);
+      return { update: () => { const off = !ctx.settings().enhance.notesApp; if (app.hidden !== off) app.hidden = off; }, wake: () => { if (!key) load(); }, stop: () => { save(); removeEventListener('pagehide', leave); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
     },
 
     agenda(body) {
@@ -705,6 +709,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const head = hasGrid && document.getElementById('dashboard_header_container');
       if (want.map((x) => x.id).sort().join() !== [...tiles.keys()].sort().join() || (hasGrid ? head.nextElementSibling !== grid : grid?.isConnected)
         || (want.some((x) => x.float) && !floats?.isConnected)) draw();
+      tiles.get('notes')?.update?.(); // the notes app's switch, for its button
     }
   };
   // The hub can open with the widgets off: it needs only this file and lib/widgets.js.
