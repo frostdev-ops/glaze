@@ -461,6 +461,8 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await page.click('.gz-course-add');
       await page.waitForSelector(`${courseTile} .gz-course-card`);
       await stable();
+      const nativeColor = await page.locator(`${courseTile} .gz-course-card`).evaluateAll((es) => es.map((e) => ({ id: e.dataset.courseId, classes: e.className, color: getComputedStyle(e.querySelector('.course-banner')).backgroundColor })));
+      ok(nativeColor.some((c) => /course-color-3/.test(c.classes)) && new Set(nativeColor.map((c) => c.color)).size > 1, 'B10: native slot colours reach the banner before any custom card style');
       ok(await page.locator(courseTile).count() >= native, `B10 ${preset} ${width}: each loaded course is a tile`);
       ok(await page.evaluate(() => document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display === 'none'), 'B10: native list steps aside');
       ok(await page.locator('article.course-element-card').count() === native, 'B10: React keeps all its nodes');
@@ -474,7 +476,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       const geometry = await page.locator(courseTile).evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, term: e.querySelector('.gz-course-term').textContent }; }));
       ok(geometry.every((a) => a.l >= 0 && a.r <= width && geometry.every((b) => a === b || a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t)), `B10 ${preset} ${width}: cards fit without overlap`);
       ok(requests.length === count, `B10 ${preset} ${width}: adding cards starts no requests (${requests.length - count})`);
-      await shot(`b10-courses-${preset.toLowerCase()}-${width}`);
+      await page.mouse.move(0, 0); await shot(`b10-courses-${preset.toLowerCase()}-${width}`);
       await page.click('.gz-course-native');
       ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: native filters remain reachable');
       await page.click('.gz-course-native');
@@ -505,12 +507,49 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await page.click('.gz-course-add'); await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
       ok(await page.locator(courseTile).count() === 1, 'B10: Dashboard adds one chosen course');
       ok((await layout()).boards.courses.filter((x) => x.id.startsWith('course:')).length > 1, 'B10: Dashboard keeps the Courses layout');
-      await shot(`b10-dash-${preset.toLowerCase()}-${width}`);
+      await page.mouse.move(0, 0); await shot(`b10-dash-${preset.toLowerCase()}-${width}`);
       await page.goto(`${O}/ultra/course`); await page.waitForSelector(courseTile);
       await page.click('#gz-toolbar .gz-dash-edit');
       while (await page.locator(courseTile).count()) await page.locator(`${courseTile} button[aria-label^="Remove "]`).first().click();
       ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: removing every card restores Ultra');
     }
+    // A full board: unchanged passes must settle, and toggling Glaze must restore the native list exactly.
+    await store(settingsFor('Paper', { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: false, cardTasks: false, overall: false, newgrades: false, newcontent: false } }), { widgetLayout: base });
+    await page.setViewportSize({ width: 1280, height: 1400 });
+    await page.goto(`${O}/ultra/course`); await page.waitForSelector('#gz-toolbar');
+    await page.evaluate(() => {
+      const group = document.querySelector('.term-group'), sample = group.firstElementChild;
+      group.replaceChildren(...Array.from({ length: 48 }, (_, i) => {
+        const node = sample.cloneNode(true), card = node.querySelector('article');
+        card.dataset.courseId = `_${101 + i}_1`; card.id = `course-list-course-_${101 + i}_1`;
+        card.querySelector('.js-course-title-element').textContent = `Synthetic course ${i + 1}`;
+        return node;
+      }));
+    });
+    await page.click('#gz-toolbar .gz-dash-edit'); await page.waitForSelector('.gz-course-add');
+    await stable(); const stressRequests = requests.length, started = Date.now();
+    await page.click('.gz-course-add'); await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+    const stressMs = Date.now() - started;
+    ok(await page.locator(courseTile).count() === 48 && (await layout()).boards.courses.filter((x) => x.id.startsWith('course:')).length === 48, `B10: 48-card board mounts and persists (${stressMs} ms including geometry settling)`);
+    const writes = await page.evaluate(async () => {
+      let n = 0; const observer = new MutationObserver((rs) => { n += rs.length; });
+      observer.observe(document.querySelector('#gz-room'), { subtree: true, attributes: true, childList: true, characterData: true });
+      await new Promise((r) => setTimeout(r, 1200)); observer.disconnect(); return n;
+    });
+    ok(writes === 0, `B10: 48 idle cards produce ${writes} DOM/style mutations in 1.2 seconds`);
+    ok(requests.length === stressRequests, 'B10: 48-card mount starts no requests');
+    await opts.evaluate(() => chrome.storage.sync.set({ card: { pet: 'cat', hover: 'grow', particles: 'snow' } }));
+    await page.waitForSelector(`${courseTile} .gz-pet`);
+    ok(await page.locator(`${courseTile} .gz-pet`).first().evaluate((e) => getComputedStyle(e).animationName === 'none'), 'B10: reduced motion stills the shared card pet');
+    await page.evaluate(() => { document.documentElement.setAttribute('data-gz-motion', 'expressive'); document.documentElement.removeAttribute('data-gz-no-hover'); });
+    await page.locator(`${courseTile} .gz-course-card`).first().hover();
+    ok(await page.locator(`${courseTile} .gz-course-card`).first().evaluate((e) => getComputedStyle(e).transform !== 'none' && getComputedStyle(e, '::before').animationName === 'gz-card-fall'), 'B10: shared hover growth and particles reach board cards');
+    await opts.evaluate(() => chrome.storage.sync.set({ enabled: false }));
+    await page.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-course-tiles'));
+    ok(await page.locator('article.course-element-card').count() === 48 && await page.locator(courseTile).count() === 0, 'B10: disabling Glaze restores all 48 untouched native cards');
+    await opts.evaluate(() => chrome.storage.sync.set({ enabled: true }));
+    await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+    ok(await page.locator(courseTile).count() === 48, 'B10: re-enabling restores the saved board');
     ok(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 5).join(' | ')}` : ''}`);
   } finally {
     await ctx.close();

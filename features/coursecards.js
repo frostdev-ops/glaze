@@ -49,7 +49,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     watch(peek.courses, (rows) => {
       for (const r of rows || []) if (/^_\d+_\d+$/.test(r.courseId)) {
         const c = r.course || {}, old = cards.get(r.courseId);
-        cards.set(r.courseId, { id: r.courseId, name: c.name || old?.name || r.courseId, code: c.courseId || old?.code || '', term: c.term?.name || old?.term || '', slot: r.courseCardColorIndex });
+        cards.set(r.courseId, { id: r.courseId, name: c.name || old?.name || r.courseId, code: c.courseId || old?.code || '', term: c.term?.name || old?.term || '', slot: Number.isInteger(r.courseCardColorIndex) && r.courseCardColorIndex >= 0 ? String(r.courseCardColorIndex % 10 + 1) : old?.slot });
       }
       notify(); render();
     });
@@ -108,7 +108,12 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       const badgeText = newBadges.map((b) => b.textContent).join(' · ');
       setText(badges, badgeText);
       const color = GZ_COURSE_VARS(ctx.courseColors()[id]);
-      for (const [k, v] of Object.entries(color)) if (card.style.getPropertyValue(k) !== v) card.style.setProperty(k, v);
+      const classes = `gz-course-card${/^(10|[1-9])$/.test(c?.slot) ? ` course-color-${c.slot}` : ''}`;
+      if (card.className !== classes) card.className = classes;
+      for (const k of ['--gz-pick', '--gz-course-raw']) {
+        const v = color[k] || '';
+        if (card.style.getPropertyValue(k) !== v) { if (v) card.style.setProperty(k, v); else card.style.removeProperty(k); }
+      }
       const g = uid && ctx.settings().enhance.overall && ctx.canvasPeek().books.get(id)?.overall;
       setText(grade, g?.label || ''); if (grade.hidden !== !g) grade.hidden = !g;
       if (g && grade.dataset.tone !== g.tone) grade.dataset.tone = g.tone;
