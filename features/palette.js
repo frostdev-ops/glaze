@@ -53,6 +53,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...Object.entries(ultra ? ULTRA_EXTRAS : moodle ? { overall: CANVAS_EXTRAS.overall } : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
       ...(globalThis.GZ_LOOKX?.cmds() || []),
       { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
+      { label: t('Share sessions'), hint: 'Glaze', group: 'Glaze', run: (e) => { if (e?.isTrusted) chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => {}); } },
       { label: t('Glaze settings'), hint: t('Opens the editor'), group: 'Glaze', run: () => { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } },
     ];
   };

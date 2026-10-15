@@ -7,6 +7,13 @@
 
 # Glaze
 
+**Optional share sessions:** open **Share sessions** in settings, Ctrl/⌘K, Notes or To Do. Nothing connects until you create, join or resume. Share selected notes/a folder (including encrypted pictures and attachments), your current Look, or selected custom tasks with their steps and plans. Paste invites into Glaze rather than opening them in a web page. Anyone holding an edit invite can edit; a view invite can only read. Joining keeps a separate local copy; explicitly copy into a chosen local account to add new items. An editable copy follows updates; a viewer's copy is detached. A Look changes your theme only when you press **Use this Look**.
+
+While a shared surface is open, changes sync through `https://share.frostdev.io`, end-to-end encrypted, with catch-up on reopening. **Pause sharing** stops connections; Glaze and your local copies still work without the relay. **Leave this device** forgets its keys; only the creator can delete the session from the relay. App copies remain. Sessions stay until deleted unless the creator opts into deletion after a year unused. The device list shows self-chosen editing-device names and last-seen times, not verified identities; view-only devices cannot announce themselves.
+
+Notes **Export all** and **Import** open Glaze's own backup page. Both notes ZIPs and settings backups always include all share keys and creator delete tokens, even while sharing is paused: anyone with the backup can open those sessions and may change or delete them. Keep backups private. Restoring keys does not connect; resume explicitly. After a relay restore, **Re-upload retained files** sends this device's retained bytes encrypted again and publishes fresh references. Missing local bytes cannot be recreated. Caps are 20 sessions, 200 selected notes/tasks, 16 MiB session state, 64 MiB files per session and 200 MiB retained session files per device. Additional carriers need an optional adapter; arbitrary storage and LMS assignments are not shared.
+
+
 Glaze is a Chrome and Safari extension that restyles Blackboard Ultra, Canvas and Moodle. It replaces the palette with one you
 control, reshapes the pages around it, and adds small helpers you can see at a glance. It works on any
 institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/` on its own

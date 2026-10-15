@@ -952,19 +952,26 @@ GZ_UI.load().then((s) => {
   // ---- backup ----
   // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
   // card styles and bookmarks go too; a picture kept on this computer stays here.
-  $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks'], (r) => chrome.storage.local.get(null, (all) => {
-    const tasks = Object.fromEntries(Object.entries(all || {}).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
-    const nav = { ...s.nav, i: '', ...(s.nav.i && { k: 'default', u: '' }) };
-    const blob = new Blob([JSON.stringify({ ...s, nav, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), ucards: GZ_CARDS.styles(r?.ucards), ulinks: GZ_CARDS.links(r?.ulinks), tasks }, null, 2)], { type: 'application/json' });
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  })));
+  $('#share-sessions').addEventListener('click', (e) => { if (e.isTrusted) chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => hint(t('Could not finish. Your local copies are kept. Try again.'), true)); });
+  $('#export').addEventListener('click', async (e) => {
+    if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true)) return;
+    try {
+      const keys = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'exportKeys' });
+      if (!keys?.ok || !Array.isArray(keys.keys)) throw new Error('keys');
+      const r = await chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks']);
+      const all = await chrome.storage.local.get(null);
+      const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
+      const nav = { ...s.nav, i: '', ...(s.nav.i && { k: 'default', u: '' }) };
+      const blob = new Blob([JSON.stringify({ ...s, nav, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
+  });
   $('#import-btn').addEventListener('click', () => $('#import').click());
   $('#import').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
-    if (!file) return;
+    if (!e.isTrusted || !file) return;
     let raw;
     try { raw = JSON.parse(await file.text()); } catch { return hint(t("{file} isn't a JSON file.", { file: file.name }), true); }
     if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {
@@ -992,6 +999,10 @@ GZ_UI.load().then((s) => {
     const styled = await cardsOp({ nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) });
     fill();
     if (!styled || !ultraStyled) return hint(t('Some settings could not be imported. Try again in a moment.'), true);
+    if (raw.shareKeys !== undefined) {
+      const shared = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'importKeys', keys: raw.shareKeys }).catch(() => null);
+      if (!shared?.ok) return hint(t('Settings imported, but share keys could not be restored. Try importing again.'), true);
+    }
     hint(t('Imported {file}.', { file: file.name }));
   });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.

@@ -27,7 +27,6 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const real = (e) => !!e?.isTrusted;
   const typed = (e) => real(e) && activated();
   const libs = () => ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT).then(() => ctx.need('lib/notes.js', () => globalThis.GZ_NOTES));
-  const zipLib = () => ctx.need('lib/zip.js', () => globalThis.GZ_ZIP);
   const uuid = () => crypto.randomUUID();
   const lang = () => GZ_I18N.locale(ctx.locale());
   const mb = (n) => (n >= 2 ** 30 ? `${GZ_I18N.num(Math.round(n / 2 ** 30 * 10) / 10, ctx.locale())} GB` : `${GZ_I18N.num(Math.max(0.1, Math.round(n / 2 ** 20 * 10) / 10), ctx.locale())} MB`);
@@ -105,7 +104,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
 
   // ---- the view ----------------------------------------------------------------------------------------------------
   // gen: the view's current opening; anything that finishes for an older one draws nothing. noteGen: the note shown.
-  let box = null, opener = null, gen = 0, noteGen = 0;
+  let box = null, opener = null, gen = 0, noteGen = 0, shareSurface = null;
   let idx = null, courses = [];
   const view = { trash: false, course: '', folder: '*', sort: 'at', q: '', found: null };
   let cur = null; // the note in the editor: { id, rev, title, folder, course, cn, ro, saved, sid, copy, busy, tries, wait, urls }
@@ -139,6 +138,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     opener = document.activeElement;
     document.body.append(box);
     box.showModal();
+    ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
     drawLib();
     if (create) newNote(course); else drawEmpty();
     (create ? el.title : el.search).focus();
@@ -182,8 +182,6 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     el.ed.setAttribute('aria-label', t('Note'));
     el.file = make('input', { type: 'file', multiple: true, hidden: true });
     el.file.addEventListener('change', (e) => { if (!real(e)) return; const f = [...el.file.files]; el.file.value = ''; addFiles(f); });
-    el.zip = make('input', { type: 'file', accept: '.zip,application/zip', hidden: true });
-    el.zip.addEventListener('change', (e) => { if (!real(e)) return; const f = el.zip.files[0]; el.zip.value = ''; if (f) importZip(f); });
     const lib = make('nav', { className: 'gz-nt-lib' }, el.search, el.filters, el.count, el.list, el.folders, make('div', { className: 'gz-nt-row' }, el.trash), el.usage);
     lib.setAttribute('aria-label', t('Library'));
     box = make('dialog', { id: 'gz-nt' },
@@ -192,10 +190,11 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
         make('div', { className: 'gz-nt-row' },
           button(t('New note'), () => newNote(view.course !== '-' ? view.course : '')),
           button(t('New folder'), newFolder),
+          button(t('Share sessions'), () => chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => {})),
           button(t('Export all'), exportAll),
-          button(t('Import'), () => pickFile(el.zip)),
+          button(t('Import'), exportAll),
           button(t('Close'), close))),
-      el.say, el.ask, make('div', { className: 'gz-nt-main' }, lib, el.ed), el.file, el.zip);
+      el.say, el.ask, make('div', { className: 'gz-nt-main' }, lib, el.ed), el.file);
     attr(box, { role: 'dialog', 'aria-labelledby': 'gz-nt-title' });
     box.addEventListener('click', (e) => { if (e.target === box) close(); });
     // Keys typed here are the view's: Canvas's own page shortcuts (n, e, d, r… on the document) would swallow letters
@@ -215,6 +214,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     // Esc closes a question first, then the view.
     box.addEventListener('cancel', (e) => { if (!el.ask.hidden) { e.preventDefault(); el.ask.dispatchEvent(new Event('gz-cancel')); } });
     box.addEventListener('close', () => {
+      shareSurface?.(); shareSurface = null;
       flush();
       gen++; noteGen++;
       pick?.abort();
@@ -842,90 +842,11 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       download(new Blob([page], { type: 'text/html' }), `${name}.html`);
     }
   };
+  // Keys must never enter an LMS world's blob URL. Export all is confirmed and built on Glaze's own page.
   const exportAll = async () => {
-    const my = gen;
     if (!(await settle())) return say(t("Couldn't save the open note, so nothing was exported. Try again in a moment."));
-    await zipLib();
-    const got = await get(me.key);
-    if (stop(my)) return;
-    if (!got) return say(t("Couldn't read your notes. Nothing was saved."));
-    const snap = N.clean(got[me.key]);
-    const live = N.list(snap);
-    const notes = [], files = [], seen = new Set();
-    try {
-      for (const [i, [id, n]] of live.entries()) {
-        say(t('Exporting… {n} of {all}', { n: i + 1, all: live.length }));
-        const r = await send({ op: 'load', id });
-        if (stop(my)) return;
-        if (!r?.ok) throw new Error(n.title);
-        notes.push({ id, title: n.title || t('Untitled'), folder: n.folder, course: n.course, cn: n.cn, created: n.created, at: n.at, html: r.html });
-        for (const fid of N.refs(r.html)) {
-          if (seen.has(fid)) continue;
-          seen.add(fid);
-          const f = await send({ op: 'getFile', id: fid });
-          if (stop(my)) return;
-          // A picture or attachment that can't be read fails the export: a backup that leaves it out isn't one.
-          if (!f?.ok) throw new Error(n.title);
-          files.push({ id: fid, kind: f.kind, name: f.name, type: f.type, bytes: N.unb64(f.data) });
-        }
-      }
-    } catch (e) { return say(t("Couldn't export “{title}”. Nothing was saved.", { title: e.message || t('Untitled') })); }
-    if (stop(my)) return;
-    const folders = N.folderList(snap).map(([id, f]) => ({ id, ...f }));
-    download(new Blob(GZ_ZIP.zip(N.exportZip({ site: location.origin, folders, notes, files })), { type: 'application/zip' }), `glaze-notes-${new Date().toISOString().slice(0, 10)}.zip`);
-    say(t('Notes exported: {n}', { n: notes.length }));
-  };
-  // A zip Glaze exported: read here (nothing in it runs: JSON, sanitized HTML, pictures checked by their bytes), each
-  // file a note to be imported uses sent to the worker, then the notes in batches. Notes keep their ids: one already
-  // here stays unless the export's is newer (the worker decides), so importing the same export twice adds nothing.
-  const importZip = async (file) => {
-    const my = gen;
-    const D = globalThis.GZ_DOCTEXT;
-    const cap = N.LIMIT.total + (64 << 20);
-    if (file.size > cap) return say(t('That file is too big to import (up to {size}).', { size: mb(cap) }));
-    let back, z;
-    try {
-      say(t('Reading {name}…', { name: file.name }));
-      z = D.unzip(new Uint8Array(await file.arrayBuffer()), { limits: { input: cap, entry: 64 << 20, total: cap, entries: 20000 } });
-      const json = await z.text('notes.json');
-      if (!json) throw new Error('none');
-      back = N.parseExport(json, { site: location.origin });
-    } catch { return say(t("That isn't a notes export from Glaze, or it's damaged.")); }
-    if (stop(my)) return;
-    // A folder already here with the same name and course (and another id) takes its notes, rather than a second one.
-    const have = N.folderList(idx);
-    back.folders = back.folders.filter((f) => {
-      if (idx.folders[f.id]) return true;
-      const same = have.find(([, x]) => x.name === f.name && x.course === f.course)?.[0];
-      if (same) for (const n of back.notes) if (n.folder === f.id) n.folder = same;
-      return !same;
-    });
-    const skipped = [];
-    // Only the files of notes that will be written: one here already, as new or newer, keeps its own.
-    const coming = back.notes.filter((n) => !(idx.notes[n.id]?.at >= n.at));
-    back.files = back.files.filter((f) => coming.some((n) => n.html.includes(`data-gz-file="${f.id}"`)));
-    for (const [i, f] of back.files.entries()) {
-      say(t('Importing… {n} of {all}', { n: i + 1, all: back.files.length + back.notes.length }));
-      let bytes = null;
-      try { bytes = await z.bytes(f.path); } catch { /* damaged entry */ }
-      if (stop(my)) return;
-      if (!bytes || bytes.length !== f.size || (f.kind === 'image' && !N.imageType(bytes))) { skipped.push(f.name); continue; }
-      const owner = coming.find((n) => n.html.includes(`data-gz-file="${f.id}"`))?.id;
-      const r = owner && await send({ op: 'file', id: f.id, kind: f.kind, name: f.name, data: N.b64(bytes), note: owner });
-      if (stop(my)) return;
-      if (r?.error === 'full') return say(t('Not enough room: notes keep up to {size} of pictures and files on this device.', { size: mb(N.LIMIT.total) })); if (!r?.ok) skipped.push(f.name);
-    }
-    let done = 0, same = 0;
-    for (let i = 0; i < back.notes.length; i += 20) {
-      say(t('Importing… {n} of {all}', { n: back.files.length + i + 1, all: back.files.length + back.notes.length }));
-      const r = await send({ op: 'import', folders: i ? [] : back.folders, notes: back.notes.slice(i, i + 20) });
-      if (stop(my)) return;
-      done += r?.done || 0;
-      same += r?.skipped || 0;
-      if (!r?.ok) { say([t('Notes imported: {n}', { n: done }), fail(r)].join(' ')); return; }
-    }
-    say([t('Notes imported: {n}', { n: done }), same && t('Skipped, already here and not older: {n}', { n: same }), skipped.length && t('Left out: {names}', { names: skipped.join(', ') })].filter(Boolean).join(' '));
-    usage();
+    try { await chrome.runtime.sendMessage({ type: 'glaze:sessions-open', key: me.key }); }
+    catch { say(t('Could not finish. Your local copies are kept. Try again.')); }
   };
 
   return { sync, home, open, isOpen: () => !!box };

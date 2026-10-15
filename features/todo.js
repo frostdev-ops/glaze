@@ -19,6 +19,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const FRESH = 120000;
   const CAP = 6; // rows a group shows before "Show more"
   let L = null; // lib/todo.js
+  let shareSurface = null;
   let box = null; // section#gz-todo: its head and body are drawn anew; the status line stays, so it's announced
   let head = null, line = null, body = null;
   let started = null; // the start() promise while mounted
@@ -382,7 +383,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     ics.dataset.focus = 'ics';
     head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }),
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
-      ...(globalThis.GZ_REMIND_UI?.head() || []), ics, add); // the streak and reminders (features/reminders.js), when on
+      ...(globalThis.GZ_REMIND_UI?.head() || []), small('sessions', t('Share sessions')), ics, add); // the streak and reminders (features/reminders.js), when on
     const parts = [form && taskForm()];
     parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
     if (cache?.complete === false) parts.push(make('p', { className: 'gz-todo-hint', textContent: t('Blackboard sent only part of your calendar, so some work may be missing.') }));
@@ -445,6 +446,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const el = e.target.closest('[data-act]');
     if (!el || el.tagName === 'INPUT' || el.tagName === 'FORM') return;
     const act = el.dataset.act;
+    if (act === 'sessions') { if (human(e)) chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => {}); return; }
     const k = el.closest('[data-key]')?.dataset.key;
     if (act === 'add') { form = form ? null : { cid: here() }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
     if (act === 'cancel') { form = null; render(true); box.querySelector('[data-focus="add"]')?.focus(); return; }
@@ -579,6 +581,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       document.addEventListener('visibilitychange', onShow);
       addEventListener('focus', onShow);
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
+      ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
       setBusy(true);
     }
     // On a course's outline, a block of Ultra's right column, spaced as its own are.
@@ -588,6 +591,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     else if (who) render();
   };
   const off = () => {
+    shareSurface?.(); shareSurface = null;
     gen++;
     if (!box) return;
     box.remove();

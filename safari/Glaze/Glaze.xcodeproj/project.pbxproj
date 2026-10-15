@@ -78,6 +78,8 @@
 		B0B1000000000000000000C4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
 		B0B1000000000000000000A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
 		B0B1000000000000000000C5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
+		D6B0000000000000000000A1 /* sharing in Resources */ = {isa = PBXBuildFile; fileRef = D6B0000000000000000000F1 /* sharing */; };
+		D6B0000000000000000000C1 /* sharing in Resources */ = {isa = PBXBuildFile; fileRef = D6B0000000000000000000F1 /* sharing */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -164,6 +166,7 @@
 		D230000000000000000000F2 /* reader.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = reader.js; path = Resources/reader.js; sourceTree = "<group>"; };
 		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
 		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
+		D6B0000000000000000000F1 /* sharing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = sharing; path = Resources/sharing; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -272,6 +275,7 @@
 				B0B1000000000000000000F3 /* moodle.css */,
 				D230000000000000000000F1 /* reader.html */,
 				D230000000000000000000F2 /* reader.js */,
+				D6B0000000000000000000F1 /* sharing */,
 				B0B1000000000000000000F4 /* features */,
 				B0B1000000000000000000F5 /* assets */,
 			);
@@ -454,6 +458,7 @@
 				B0B1000000000000000000A3 /* moodle.css in Resources */,
 				D230000000000000000000A1 /* reader.html in Resources */,
 				D230000000000000000000A2 /* reader.js in Resources */,
+				D6B0000000000000000000A1 /* sharing in Resources */,
 				B0B1000000000000000000A4 /* features in Resources */,
 				B0B1000000000000000000A5 /* assets in Resources */,
 			);
@@ -496,6 +501,7 @@
 				B0B1000000000000000000C3 /* moodle.css in Resources */,
 				D230000000000000000000C1 /* reader.html in Resources */,
 				D230000000000000000000C2 /* reader.js in Resources */,
+				D6B0000000000000000000C1 /* sharing in Resources */,
 				B0B1000000000000000000C4 /* features in Resources */,
 				B0B1000000000000000000C5 /* assets in Resources */,
 			);
