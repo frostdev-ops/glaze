@@ -23,6 +23,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   let todoO = null, o = null, data = { tasks: [], items: {} }, cache = null, st = null, cids = null;
   let on = false, starting = null, asking = null, failed = 0, timer = 0, writing = false, sig = '';
   let busy = false, wait = 0; // a claim in flight; no new one before wait (the worker didn't answer)
+  let unacked = null; // { ids, lease }: a toast drawn whose acknowledgement the worker hasn't kept yet
   const tab = crypto.randomUUID(); // this page, to the worker's leases (lib/remind.js claim and confirm)
   let live = null, hub = null, opener = null, run = null; // run: the streak as reckoned last
   const sources = new Map(); // reminders other packages add (class start W14, study W18): name -> () => events
@@ -106,14 +107,24 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     paintHead();
     if (hub) drawHub();
     const p = reminding() ? R.pending(evs, st, now, tab) : { show: [], next: Infinity };
-    if (p.show.length && !quiet() && !busy && now >= wait) fire(p);
+    // A toast drawn but not yet acknowledged: only the acknowledgement is sent again, never the toast.
+    if (unacked) { if (!busy && now >= wait) retry(); } else if (p.show.length && !quiet() && !busy && now >= wait) fire(p);
     const next = Math.min(p.next, wait > now ? wait : Infinity, en().streak ? T.midnight(T.dayOf(now, who.tz) + 1, who.tz) : Infinity);
     if (next < Infinity) timer = setTimeout(arm, Math.max(1000, Math.min(next - now, OLD)));
   };
   // Every tab may have the same reminder due: the one whose claim the worker takes first holds it, shows it, and then
   // confirms it, which marks it seen. Whether this tab may show anything is asked again once the worker answers: hidden
   // by then, on a quiz, or turned off, it shows nothing and confirms nothing, and the lease runs out for this tab or
-  // another to show it later. A worker that doesn't answer is asked again after a lease's length, not at once.
+  // another to show it later. An answer that came after its lease ended shows nothing either: by then another tab may
+  // hold and have shown it. A worker that doesn't answer is asked again after a lease's length, not at once.
+  const ack = () => send({ op: 'confirm', ids: unacked.ids, lease: unacked.lease, tab }).then((c) => {
+    if (!c?.ok) return false;
+    // Kept, or refused because another claim has replaced this lease: either way there's nothing more to say.
+    st = R.clean(c.data);
+    unacked = null;
+    return true;
+  });
+  const settled = (ok) => { busy = false; if (!ok) wait = Date.now() + R.LEASE; if (on) arm(); };
   const fire = (p) => {
     busy = true;
     let ok = false;
@@ -123,15 +134,13 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
       ok = true;
       const mine = new Set(r.claimed);
       const show = p.show.filter((e) => mine.has(e.id));
-      if (!show.length || !on || quiet()) return;
+      if (!show.length || !on || quiet() || !(Date.now() < r.until)) return;
       toast(show[0], p.show.length - 1);
-      return send({ op: 'confirm', ids: [...mine], tab }).then((c) => { if (c?.ok) st = R.clean(c.data); else ok = false; });
-    }).finally(() => {
-      busy = false;
-      if (!ok) wait = Date.now() + R.LEASE;
-      if (on) arm();
-    });
+      unacked = { ids: [...mine], lease: r.lease };
+      return ack().then((x) => { ok = x; });
+    }).finally(() => settled(ok));
   };
+  const retry = () => { busy = true; ack().then(settled, () => settled(false)); };
   const keepStreak = (b, now) => {
     const s = R.streak(b, st.streak, T.dayOf(now, who.tz));
     run = s;
