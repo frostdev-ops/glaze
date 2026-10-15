@@ -1687,4 +1687,12 @@
 
   "Only the first {n} items are listed.": "Nur die ersten {n} Elemente werden angezeigt.",
 
+  "Hide them again ({n})": "Wieder ausblenden ({n})",
+  "Hidden": "Ausgeblendet",
+  "Folder hidden.": "Ordner ausgeblendet.",
+  "Folder shown.": "Ordner eingeblendet.",
+  "Showing {n} hidden folders.": "{n} ausgeblendete Ordner werden angezeigt.",
+  "Hiding {n} folders.": "{n} Ordner werden ausgeblendet.",
+  "Showing 1 hidden folder.": "Ein ausgeblendeter Ordner wird angezeigt.",
+  "Hiding 1 folder.": "Ein Ordner wird ausgeblendet.",
 };

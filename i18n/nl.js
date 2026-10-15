@@ -1687,4 +1687,12 @@
 
   "Only the first {n} items are listed.": "Alleen de eerste {n} items worden getoond.",
 
+  "Hide them again ({n})": "Weer verbergen ({n})",
+  "Hidden": "Verborgen",
+  "Folder hidden.": "Map verborgen.",
+  "Folder shown.": "Map getoond.",
+  "Showing {n} hidden folders.": "{n} verborgen mappen worden getoond.",
+  "Hiding {n} folders.": "{n} mappen worden verborgen.",
+  "Showing 1 hidden folder.": "1 verborgen map wordt getoond.",
+  "Hiding 1 folder.": "1 map wordt verborgen.",
 };
