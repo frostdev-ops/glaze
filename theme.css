@@ -723,6 +723,16 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 #site-wrap aside.outline-actions > .conditional-block:not(:has(*)) { display: none; }
 #site-wrap .outline-action-block > :first-child { margin-top: 0 !important; }
 #site-wrap .outline-action-block > :last-child { margin-bottom: 0 !important; }
+/* A discussion's side column: Details & Information and Participation as panels like the outline's; the rules under
+   their titles and between their parts, the separators above each participant, and the divider Ultra draws beside the
+   column go. */
+#site-wrap .layer-details :is(.discussion-settings, .discussion-participants) {
+  padding: 0.75rem 1rem; border: 1px solid var(--gz-line); border-radius: var(--gz-radius);
+  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow);
+}
+#site-wrap .layer-content::after { display: none !important; }
+#site-wrap .layer-details :is(.full-panel-details-title, .separation-border, .guidance-wrapper, [class*="makeStyleselementDetails-"], .element-details) { border-bottom: 0 !important; }
+#site-wrap .layer-details .discussion-participants li::before { display: none !important; }
 /* Item type at a glance: the type icon carries its name as aria-label. */
 #site-wrap .content-list-item svg[aria-label] { color: var(--gz-type, var(--gz-accent)) !important; }
 #site-wrap .content-list-item svg:is([aria-label="Assignment"], [aria-label*="Assessment"]) { --gz-type: var(--gz-warn); }
