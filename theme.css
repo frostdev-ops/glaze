@@ -1089,8 +1089,8 @@ html[data-gz-nav-overflow="wrap"] .MuiDrawer-paper:has(:is(#base_tools, nav[clas
 html[data-gz-nav-expanded] .gz-nav-expand { transform: translateX(-50%) rotate(180deg); }
 html[data-gz-nav-expanded] body:has(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) [data-gz-title]) > .gz-tip { visibility: hidden !important; }
 @media (min-width: 900px) {
-  html[data-gz-nav-collapsed] .MuiDrawer-root:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { position: relative; min-height: 100vh; }
-  html[data-gz-nav-collapsed][data-gz-nav-expanded] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { position: absolute; inset-block-start: 0; inset-inline-start: 0; z-index: 1300; width: var(--gz-nav-width) !important; min-height: 100%; box-shadow: var(--gz-shadow); }
+  /* Over the page, as Ultra's own paper is (fixed): an in-flow full-height drawer pushes the page a screen down where Ultra stacks the side menu above it. */
+  html[data-gz-nav-collapsed][data-gz-nav-expanded] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 1300; width: var(--gz-nav-width) !important; box-shadow: var(--gz-shadow); }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="small"][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools) { width: 204px !important; }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="large"][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools) { width: 280px !important; }
 }
