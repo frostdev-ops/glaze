@@ -1870,4 +1870,3 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 #gz-mk a { padding: 0.4rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); text-decoration: none; }
 #gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-accent); outline: none; }
 @media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
-

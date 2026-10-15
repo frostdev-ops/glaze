@@ -123,6 +123,8 @@ for (const site of ['canvas', 'ultra']) {
     assert.equal(p.asked(), 0);
     assert.equal(p.swept.length, 1, 'the sweep started');
     assert.ok(partOn(p, site));
+    // Ultra, once Glaze has started on it: the site is reported to the worker (lib/background.js fromUltra). Canvas has its own.
+    assert.equal(p.sent.filter((m) => m?.type === 'glaze:ultra').length, site === 'ultra' ? 1 : 0);
   }));
 
   test(`${site}: a page without its part keeps the theme while the part is asked for, and sweeps once it is in`, () => noUnhandled(async () => {

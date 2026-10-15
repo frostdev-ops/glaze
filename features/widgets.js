@@ -81,13 +81,21 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Where the grid goes: under Canvas's Dashboard heading; on Ultra's Courses page, first in its right column (or, at a
   // school without Ultra's To Do, above the courses).
   const home = () => dash() && (ultra ? document.querySelector('div.todo-panel') || document.querySelector('div.courses-panel') : document.getElementById('dashboard_header_container'));
+  // Ultra's Reminders button, shown while the reminders (features/reminders.js, which may load after the panel) have a hub.
+  const remindIn = () => {
+    const rm = grid?.querySelector('.gz-dash-remind');
+    const off = !globalThis.GZ_REMIND_UI?.cmds().length;
+    if (rm && rm.hidden !== off) rm.hidden = off;
+  };
   const placed = (h) => (ultra ? h.firstElementChild === panel && panel.contains(grid) : h.nextElementSibling === grid);
   const allowed = (id) => (id === 'notes' ? ctx.settings().enhance.notes : ctx.settings().enhance.widgets);
   const saveLayout = (next) => { lay = next; put({ widgetLayout: lay }); draw(); };
   // Who's signed in (their id names their notes; their Canvas time zone counts the agenda's days), asked only when a
   // tile needs it: a page with nothing of theirs to show asks Canvas nothing. A failed ask is asked again next time.
   let asking = null;
-  const who = () => (asking ||= ctx.profile().then((p) => {
+  // Ultra: /users/me through lib/ultra.js's reader (it has no time zone; the browser's counts).
+  const profile = () => (ultra ? ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin }).me()).then((id) => ({ id })) : ctx.profile());
+  const who = () => (asking ||= profile().then((p) => {
     if (!/^(\d+|_\d+_\d+)$/.test(String(p?.id))) throw new Error('no profile');
     let tz;
     try { tz = p.time_zone && new Intl.DateTimeFormat('en', { timeZone: p.time_zone }).resolvedOptions().timeZone; } catch { /* the browser's */ }
@@ -573,9 +581,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // the panel goes first in its column, above Ultra's To Do and Glaze's Better To Do.
   const placeGrid = () => {
     const h = home();
-    if (!h) { grid?.remove(); panel?.remove(); return false; }
+    // Off this page: Ultra's panel goes with the grid still in it, so it comes back whole.
+    if (!h) { (ultra ? panel : grid)?.remove(); return false; }
     grid ||= gridEl();
-    if (ultra) { panel ||= panelEl(); if (!placed(h)) h.prepend(panel); } else if (!placed(h)) h.after(grid);
+    if (ultra) {
+      panel ||= panelEl();
+      const body = panel.querySelector('#gz-panel-body');
+      if (grid.parentNode !== body) body.append(grid);
+      if (!placed(h)) h.prepend(panel);
+    } else if (!placed(h)) h.after(grid);
     return true;
   };
 
@@ -606,8 +620,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }
     placeFloats();
     if (grid) {
-      const rm = grid.querySelector('.gz-dash-remind');
-      if (rm) rm.hidden = !globalThis.GZ_REMIND_UI?.cmds().length;
+      remindIn();
       grid.toggleAttribute('data-editing', editing);
       const add = grid.querySelector('.gz-dash-add');
       const off = lay.tiles.filter((x) => !x.on && allowed(x.id));
@@ -730,7 +743,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (JSON.stringify(next) !== JSON.stringify(lay)) { lay = next; draw(); }
     }
   };
-  const onShow = () => { for (const x of tiles.values()) x.wake?.(); };
+  const onShow = () => { if (shown()) for (const x of tiles.values()) x.wake?.(); };
   const onResize = () => { if (on && lay) placeFloats(); };
   const start = async () => {
     await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
@@ -762,6 +775,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const want = wanted(!!h);
       if (want.map((x) => x.id).sort().join() !== [...tiles.keys()].sort().join() || (h ? !grid || !placed(h) : grid?.isConnected)
         || (want.some((x) => x.float) && !floats?.isConnected)) draw();
+      else remindIn();
     }
   };
   // The hub can open with the widgets off: it needs only this file and lib/widgets.js.

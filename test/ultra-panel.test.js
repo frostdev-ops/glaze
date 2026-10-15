@@ -32,8 +32,8 @@ const page = ({ site = 'ultra', todo = true, local = {} } = {}) => {
   }
   doc.fire = (target, type, { trusted = true } = {}) => { for (let p = target; p; p = p.parentNode) for (const l of p.listeners.filter((x) => x.type === type)) l.f({ type, target, isTrusted: trusted, preventDefault() {}, stopPropagation() {} }); };
   Object.assign(doc, { createElement: make, createTextNode: (data) => ({ data, textContent: data }), getElementById: (x) => doc.root.all().find((e) => e.id === x) || null,
-    querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), addEventListener() {}, removeEventListener() {}, visibilityState: 'visible' });
-  const filled = [], stopped = [], wrote = [];
+    querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), addEventListener: (type, f) => (docOn[type] ||= []).push(f), removeEventListener() {}, visibilityState: 'visible' });
+  const filled = [], stopped = [], wrote = [], woke = [], docOn = {};
   let ui;
   const c = {
     console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, setTimeout, clearTimeout,
@@ -44,7 +44,7 @@ const page = ({ site = 'ultra', todo = true, local = {} } = {}) => {
       site, t: (k) => k, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true } }),
       profile: async () => ({ id: site === 'ultra' ? '_5_1' : '5' }),
       // The declared tile's file, when asked for, registers it.
-      need: async (f) => { if (f === 'features/pet.js') ui.register('pet', (body, api) => { filled.push([body, api.site]); body.append(make('p')); return { stop: () => stopped.push(body) }; }); },
+      need: async (f) => { if (f === 'features/pet.js') ui.register('pet', (body, api) => { filled.push([body, api.site]); body.append(make('p')); return { stop: () => stopped.push(body), wake: () => woke.push(doc.visibilityState) }; }); },
     },
     chrome: {
       runtime: { lastError: undefined, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => cb?.({ ok: true }) },
@@ -61,7 +61,9 @@ const page = ({ site = 'ultra', todo = true, local = {} } = {}) => {
   const src = read('features/widgets.js').replace('const MORE = {};', "const MORE = { pet: { file: 'features/pet.js', name: 'Study buddy', size: 'm' } };");
   assert.notEqual(src, read('features/widgets.js'));
   ui = vm.runInContext(src, c);
-  return { ui, doc, c, filled, stopped, wrote, local, bbTodo, panel: () => doc.getElementById('gz-panel') };
+  // The page hidden or shown again, as the browser reports it.
+  const visible = (v) => { doc.visibilityState = v ? 'visible' : 'hidden'; for (const f of docOn.visibilitychange || []) f(); };
+  return { ui, doc, c, filled, stopped, wrote, woke, visible, local, bbTodo, panel: () => doc.getElementById('gz-panel') };
 };
 // Only the declared tile is on: the built-in ones have tests of their own.
 const ONLY_PET = { widgetLayout: { tiles: [...W.TILES.map((id) => ({ id, on: false })), { id: 'pet', on: true }] } };
@@ -116,7 +118,14 @@ test('Ultra: leaving the Courses page takes the panel and its tiles away (stoppe
   assert.equal(p.stopped.length, 1, 'the tile was stopped');
   p.c.location.pathname = '/ultra/course';
   p.ui.sync(true);
+  await settle();
   assert.ok(p.panel(), 'back on the Courses page');
+  // Codex B5 review: the panel came back empty (its grid had been taken out of it).
+  assert.ok(p.panel().querySelector('#gz-dash .gz-dash-bar button'), "the grid and its controls are back in the panel");
+  assert.ok(p.panel().querySelector('#gz-dash .gz-dash-grid section[data-tile="pet"]'), 'and the tile');
+  assert.equal(p.filled.length, 2, 'filled again for this visit');
+  p.ui.sync(true);
+  assert.equal(p.panel().querySelectorAll('#gz-dash').length, 1, 'one grid');
   p.ui.sync(false);
   assert.equal(p.panel(), null);
   assert.equal(p.doc.querySelectorAll('.gz-w').length, 0);
@@ -143,4 +152,31 @@ test('Canvas: a declared tile registers and shows in the Dashboard grid the same
   q.ui.sync(true);
   await settle();
   assert.equal(q.filled.length, 0, 'not added: its file is never asked for');
+});
+
+// Codex B5 review: Reminders comes in its own file, often after the panel has settled.
+test('Ultra: the panel offers Reminders once its file is in, on the next pass, and drops it when it has none', async () => {
+  const p = page({ local: structuredClone(ONLY_PET) });
+  p.ui.sync(true);
+  await settle();
+  const button = () => p.panel().querySelector('.gz-dash-remind');
+  assert.equal(button().hidden, true, 'no reminders yet');
+  let cmds = [{ run() {} }];
+  p.c.GZ_REMIND_UI = { cmds: () => cmds };
+  p.ui.sync(true);
+  assert.equal(button().hidden, false, 'shown on the next pass');
+  cmds = [];
+  p.ui.sync(true);
+  assert.equal(button().hidden, true, 'hidden again when reminders are off');
+});
+
+// Codex B5 review: a registered tile's wake() is "the page is shown again", never on hiding.
+test('a registered tile wakes only when the page is shown again', async () => {
+  const p = page({ local: structuredClone(ONLY_PET) });
+  p.ui.sync(true);
+  await settle();
+  p.visible(false);
+  assert.deepEqual(p.woke, [], 'not when hidden');
+  p.visible(true);
+  assert.deepEqual(p.woke, ['visible']);
 });

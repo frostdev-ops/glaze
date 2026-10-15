@@ -381,3 +381,26 @@ test("PRIVACY doesn't promise folder previews leave memory after a minute: the m
   assert.doesNotMatch(para, /kept in memory for a minute/);
   assert.match(para, /until you leave or reload the page/);
 });
+
+// Codex B5 review: the notes app's Blackboard link reads a course's content through the reader, never the old helper.
+test("a course's content for links: the public API through the reader, kept to id, parent, title and links", async () => {
+  const asked = [];
+  const extra = { id: '_9_1', parentId: '_720_1', title: 'Synthetic LTI', links: [{ rel: 'alternate', href: '/ultra/redirect?x=9', type: 'text/html', title: 'UI' }],
+    contentDetail: { 'resource/x-bb-blti-link': { secret: 'synthetic-lti-secret', key: 'synthetic-lti-key' } }, body: '<p>x</p>', availability: { available: 'Yes' } };
+  const hidden = { id: '_8_1', title: 'Hidden', links: [{ rel: 'alternate', href: '/ultra/redirect?x=8' }], availability: { available: 'No' } };
+  const f = async (url, init) => {
+    asked.push([url, init.method, init.redirect, init.signal]);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ results: [...load('contents').results, extra, hidden] }) };
+  };
+  const ctl = new AbortController();
+  const items = await U.read({ origin: o, f, signal: ctl.signal }).contents('_101_1');
+  assert.deepEqual(asked.map(([u, m, r, s]) => [u, m, r, s === ctl.signal]),
+    [[`${o}/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,availability,links`, 'GET', 'error', true]]);
+  assert.equal(items.length, load('contents').results.length + 1, 'what students can open');
+  assert.deepEqual(items.at(-1), { id: '_9_1', parentId: '_720_1', title: 'Synthetic LTI', links: [{ rel: 'alternate', href: '/ultra/redirect?x=9' }] });
+  assert.doesNotMatch(JSON.stringify(items), LTI, 'nothing else kept, whatever came back');
+  assert.deepEqual(await U.read({ origin: o, f }).contents('7'), [], 'an Ultra course id only');
+  // Aborted (the picker closed): the read stops.
+  ctl.abort();
+  await assert.rejects(U.read({ origin: o, f, signal: ctl.signal }).contents('_101_1'), /stale/);
+});

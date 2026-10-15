@@ -99,6 +99,8 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   try {
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'sync' && (ch.enhance || ch.enabled)) home(); });
   } catch { /* extension reloaded */ }
+  // Ultra's reader (lib/ultra.js): what the notes app asks of Blackboard goes only through it.
+  const reader = (o = {}) => ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.read({ origin: location.origin, ...o }));
   const courseHere = () => location.pathname.match(ultra ? /^\/ultra\/courses\/(_\d+_\d+)/ : /^\/courses\/(\d+)/)?.[1] || '';
 
   // ---- the view ----------------------------------------------------------------------------------------------------
@@ -120,9 +122,10 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     try {
       await libs();
       N = globalThis.GZ_NOTES;
-      // Ultra: the student's id from /users/me and their courses from Ultra's own membership list (content-ultra.js).
-      const [p, list] = await Promise.all([ctx.profile(), (ultra ? ctx.myCourses().then((ms) => ms.filter((m) => m?.course).map((m) => ({ id: m.courseId, name: ctx.nickOf(m.courseId) || m.course.name })))
-        : ctx.canvasCourses()).catch(() => [])]);
+      // Ultra: the student's id (/users/me) and their courses (memberships), through lib/ultra.js's reader.
+      const [p, list] = ultra ? await reader().then(async (r) => { const id = await r.me(); return [{ id }, await r.memberships(id).catch(() => [])]; })
+        .then(([p, ms]) => [p, ms.filter((m) => m?.course).map((m) => ({ id: m.courseId, name: ctx.nickOf(m.courseId) || m.course.name }))])
+        : await Promise.all([ctx.profile(), ctx.canvasCourses().catch(() => [])]);
       if (!(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no profile');
       me = { uid: String(p.id), key: N.storeKey(location.origin, String(p.id)) };
       courses = list.filter((c) => c?.id && c.name).map((c) => ({ id: String(c.id), name: c.friendly_name || c.name }));
@@ -802,9 +805,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       try {
         const path = k === 'file' ? `/courses/${cid}/files?per_page=100&sort=updated_at&order=desc` : k === 'page' ? `/courses/${cid}/pages?per_page=100&sort=title`
           : `/courses/${cid}/modules?include[]=items&per_page=50`;
-        // Ultra: the course's content items from the request the palette and the new-content badges share (the public
-        // contents API: titles, folders and links only; never the private contents), whatever the Kind.
-        const got = ultra ? N.ultraLinks(await ctx.courseItems(cid).p, location.origin) : N.canvasLinks(k, await getAll(path, ctl.signal), location.origin, cid);
+        // Ultra: the course's content items, whatever the Kind, through lib/ultra.js's reader (the public contents API, kept to
+        // titles, parents and links; GET on this site, redirects refused, stopped with the picker).
+        const got = ultra ? N.ultraLinks(await (await reader({ signal: ctl.signal })).contents(cid), location.origin) : N.canvasLinks(k, await getAll(path, ctl.signal), location.origin, cid);
         if (ctl.signal.aborted || my !== gen || course.value !== cid || kind.value !== k) return;
         items = got;
         status.textContent = items.length ? '' : t('Nothing here you can open.');

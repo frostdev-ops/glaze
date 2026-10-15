@@ -9,6 +9,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
   const record = () => {
+    // This site is Ultra (Glaze started here): the worker lets its pages keep their own data (lib/background.js fromUltra).
+    try { chrome.runtime.sendMessage({ type: 'glaze:ultra' }).catch(() => {}); } catch { /* reloaded */ }
     try {
       chrome.storage.local.get('seenCoursesAt', (r) => {
         if (Date.now() - (r?.seenCoursesAt || 0) < 600000) return;
@@ -555,7 +557,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
-    syncWidgets, ctx: { myCourses, courseItems, bookFor, courseColor, profile: () => me().then((id) => ({ id })) },
+    syncWidgets, ctx: { myCourses, courseItems, bookFor, courseColor },
   };
 });
 

@@ -35,8 +35,23 @@ test("the worker takes a page's notes changes for its own site's index only", as
   ]) assert.deepEqual(await send(m, sender), { ok: false, error: 'sender' }, why);
   assert.deepEqual(await send({ ...m, key: 'notesIdx:https://school.instructure.com/5/../6' }, page('https://school.instructure.com/')), { ok: false, error: 'sender' }, 'a key outside the pattern');
   assert.deepEqual(await send(m, page('https://school.instructure.com/courses/1')), { ok: false, error: 'db' }, 'its own site: past the check, and the database it lacks fails it');
-  // Blackboard Ultra: a page under /ultra on https, for its own origin's accounts (Ultra's ids are _N_N).
+  // Blackboard Ultra: a page under /ultra on https, on a site Glaze has found to be Ultra (content-ultra.js reports it
+  // once it has started there), for its own origin's accounts (Ultra's ids are _N_N).
   const u = { ...m, key: 'notesIdx:https://school.blackboard.test/_5_1' };
+  // Codex B5 review: an /ultra address alone isn't Ultra.
+  assert.deepEqual(await send(u, page('https://school.blackboard.test/ultra/courses/_7_1/outline')), { ok: false, error: 'sender' }, 'not yet found to be Ultra');
+  const found = (url, frameId = 0) => send({ type: 'glaze:ultra' }, { ...page(url), frameId }).then(() => new Promise((r) => setTimeout(r, 20)));
+  await found('https://school.blackboard.test/ultra/course', 3);
+  await found('https://school.blackboard.test/webapps/login/');
+  await found('http://school.blackboard.test/ultra/course');
+  await send({ type: 'glaze:ultra' }, { id: 'other', tab: {}, frameId: 0, url: 'https://school.blackboard.test/ultra/course' });
+  assert.deepEqual(store.local, {}, 'only a top frame of Glaze in a tab, on an https /ultra page, reports a site');
+  await found('https://school.blackboard.test/ultra/course');
+  assert.deepEqual(JSON.parse(JSON.stringify(store.local)), { ultra: ['https://school.blackboard.test'] }, 'its origin, once');
+  await found('https://school.blackboard.test/ultra/stream');
+  assert.deepEqual(JSON.parse(JSON.stringify(store.local)).ultra, ['https://school.blackboard.test']);
+  assert.deepEqual(await send(u, page('https://unrelated.example/ultra/course')), { ok: false, error: 'sender' }, 'a site never found to be Ultra');
+  assert.deepEqual(await send({ ...u, key: 'notesIdx:https://unrelated.example/_5_1' }, page('https://unrelated.example/ultra/course')), { ok: false, error: 'sender' }, 'not even for its own keys');
   for (const [url, why] of [
     ['https://other.blackboard.test/ultra/course', "another Ultra site's page"],
     ['https://school.blackboard.test/webapps/portal/frameset.jsp', 'not an Ultra page'],
@@ -49,8 +64,10 @@ test("the worker takes a page's notes changes for its own site's index only", as
   const d = { type: 'glaze:notes', key: 'notes:https://school.blackboard.test/_5_1', text: 'hi', at: 1 };
   assert.deepEqual(await send(d, page('https://other.blackboard.test/ultra/course')), { ok: false, error: 'sender' }, "another Ultra site's notes");
   assert.equal((await send(d, page('https://school.blackboard.test/ultra/course'))).ok, true, 'its own');
-  assert.deepEqual(store.local, { 'notes:https://school.blackboard.test/_5_1': { text: 'hi', at: 1 } }, 'only that note written');
+  assert.deepEqual(JSON.parse(JSON.stringify(store.local))['notes:https://school.blackboard.test/_5_1'], { text: 'hi', at: 1 }, 'that note written');
+  assert.deepEqual(Object.keys(store.local).sort(), ['notes:https://school.blackboard.test/_5_1', 'ultra'], 'and nothing else');
   delete store.local['notes:https://school.blackboard.test/_5_1'];
+  delete store.local.ultra;
   assert.deepEqual(store.local, {}, 'nothing written');
 });
 
@@ -90,6 +107,7 @@ const D = require('../defaults.js');
 // ultra: an Ultra course outline instead (its right column, the student's _N_N id, Ultra's course list and the
 // course's content items as content-ultra.js hands them over).
 const ULTRA = 'https://school.blackboard.test';
+const U = require('../lib/ultra.js');
 const page = ({ on = true, stored = on, live = true, enabled = true, ultra = false, items = [] } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => new El(t, doc);
@@ -124,7 +142,16 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
   const idb = { get: async (s, k) => db[s].get(k), put: async (s, k, v) => { db[s].set(k, v); }, del: async (s, ks) => { for (const k of ks) db[s].delete(k); },
     scan: async (s, p) => [...db[s]].filter(([k]) => k.startsWith(p)), keys: async (s, p) => [...db[s].keys()].filter((k) => k.startsWith(p)), estimate: async () => ({ usage: 1, quota: 1e9 }) };
   const sent = [], blobs = [];
-  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null, live, syncHold: null, sync: { enabled: true, enhance: { notes: stored } } };
+  const env = { doc, sent, blobs, activation: true, hold: () => null, zipHold: null, live, syncHold: null, sync: { enabled: true, enhance: { notes: stored } }, fetched: [], contentsHold: null };
+  const ultraFetch = async (url, init) => {
+    env.fetched.push({ url, init });
+    const p = new URL(url).pathname;
+    const body = p.endsWith('/users/me') ? { id: '_5_1' }
+      : p.endsWith('/memberships') ? { results: [{ courseId: '_7_1', course: { id: '_7_1', name: 'Biology' } }, { courseId: '_9_1', course: { id: '_9_1', name: 'History' } }] }
+        : { results: p.includes('/_7_1/contents') ? items : [] };
+    if (p.endsWith('/contents')) await env.contentsHold;
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
   env.changeSync = (patch) => {
     Object.assign(env.sync, structuredClone(patch));
     for (const f of changed) f(Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, { newValue: structuredClone(v) }])), 'sync');
@@ -146,13 +173,11 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
       need: (file) => (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
       // What the command palette (features/palette.js) asks of the page.
       site: 'canvas', capi: async () => [], canvasCourseId: () => '7', dueWeek: async () => [], nickOf: () => '', courseList: () => ({}),
-      ...(ultra && {
-        site: 'ultra', profile: async () => ({ id: '_5_1' }), canvasCourses: () => { throw new Error('not on Ultra'); },
-        myCourses: async () => [{ courseId: '_7_1', course: { id: '_7_1', name: 'Biology' } }, { courseId: '_9_1', course: { id: '_9_1', name: 'History' } }],
-        courseItems: (cid) => ({ p: Promise.resolve(cid === '_7_1' ? items : []) }),
-      }),
+      // Ultra: everything asked of Blackboard goes through lib/ultra.js's reader; the old helpers aren't there.
+      ...(ultra && { site: 'ultra', profile: undefined, canvasCourses: undefined, myCourses: undefined, courseItems: undefined }),
     },
-    GZ_COURSES: D.GZ_COURSES,
+    // The real reader over a stand-in fetch that records what it was asked and how (env.fetched).
+    ...(ultra && { GZ_ULTRA: { ...U, read: (o) => U.read({ ...o, f: ultraFetch }) } }),
     chrome: {
       runtime: { sendMessage: (m, cb) => { sent.push(m); Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => cb(JSON.parse(JSON.stringify(r)))); } },
       storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { if (env.syncFail) throw new Error('Extension context invalidated.'); const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
@@ -593,6 +618,28 @@ test("Ultra: Course notes at the end of a course outline's right column, the Ult
   assert.deepEqual(pick.querySelectorAll('.gz-nt-picks button').map((b) => b.textContent), ['Week 1', 'Lab sheetWeek 1'], "only this site's Ultra addresses, each under its folder");
   P.fire(pick.querySelectorAll('.gz-nt-picks button')[1], 'click');
   assert.deepEqual(inserted.at(-1), ['insertHTML', `<a href="${ULTRA}/ultra/redirect?redirectType=nautilus&amp;courseId=_7_1&amp;contentId=_2_1&amp;parentId=_1_1" data-gz-kind="item">Lab sheet</a>&nbsp;`]);
+  // Codex B5 review: every request through the reader: GET, Ultra's API on this site, redirects refused; the content's
+  // with the picker's signal, so closing the picker stops it.
+  assert.ok(P.fetched.length >= 3);
+  for (const { url, init } of P.fetched) {
+    assert.ok(url.startsWith(`${ULTRA}/learn/api/`), url);
+    assert.deepEqual([init.method, init.redirect, init.credentials], ['GET', 'error', 'same-origin'], url);
+  }
+  const contents = P.fetched.filter((x) => x.url.includes('/contents'));
+  assert.equal(contents.length, 1);
+  assert.match(contents[0].url, /\/learn\/api\/public\/v1\/courses\/_7_1\/contents\?.*fields=id,parentId,title,availability,links$/);
+  assert.equal(contents[0].init.signal.aborted, true, 'the picker closed when a link was picked: its signal is aborted');
+  // A picker closed while its read is on its way: the read is aborted, and nothing is listed.
+  let release;
+  P.contentsHold = new Promise((r) => { release = r; });
+  P.fire(P.button('Blackboard link'), 'click');
+  await settle();
+  const second = P.fetched.at(-1);
+  P.fire(P.box().querySelector('.gz-nt-pick').querySelectorAll('button').find((b) => b.textContent === 'Cancel'), 'click');
+  assert.equal(second.init.signal.aborted, true, 'Cancel aborts the request itself');
+  release();
+  await settle();
+  assert.equal(P.box().querySelector('.gz-nt-pick'), null);
   // Ultra moves to another page without loading one: the button goes, the open notes stay; Notes off closes them.
   P.run("location.pathname = '/ultra/course'");
   P.ui.sync(true);

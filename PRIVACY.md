@@ -384,9 +384,11 @@ you import) are bundled. It makes requests in these cases:
   and stopped when you close the picker or the view. Only the link and title you pick go in the note. Opening a note
   loads nothing from anywhere: a picture from another site, pasted into a note, becomes a link to it instead. Links in
   notes open in a new tab without telling the site where you came from. Nothing about your notes is sent anywhere.
-  On Blackboard Ultra, it uses who is signed in and your course list (as the other extras do), and **Blackboard link**
-  lists a course's content items from Blackboard's public contents API, the same read-only request the command palette
-  and the new-content badges share (titles, folders and links only); only the link and title you pick go in the note.
+  On Blackboard Ultra, it asks your own Ultra site who is signed in and for your course list, and **Blackboard link**
+  lists a course's content items from Blackboard's public contents API (each kept to its title, folder and link):
+  read-only GETs that never follow a redirect and stop when you close the picker. Only the link and title you pick go
+  in the note. Glaze also keeps the address of each Ultra site it has started on (storage.local `ultra`), so only those
+  sites' pages may save notes.
 - **Music widget** (Canvas, off by default). Glaze contacts no music service until you press **Load player**, on each
   page. Then your browser loads that service's player inside the widget, from **Spotify** (`open.spotify.com`),
   **YouTube** or **YouTube Music** (both from `www.youtube-nocookie.com`, YouTube's privacy-enhanced mode) or **Apple
