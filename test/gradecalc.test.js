@@ -278,9 +278,22 @@ test('each what-if change writes only the fields it carries', () => {
   // null) saves an assignment score.
   let r = G.applyWhatIf({ op: 'grade', cid: '25', c: 95, at: 250 }, {}, 200);
   r = G.applyWhatIf({ op: 'course', cid: '25', rec: { s: { 175: [90, null] }, h: [], p: [], c: null }, at: 300 }, r.all, r.cleared);
-  assert.deepEqual([r.all['25'].c, r.all['25'].s], [95, { 175: [90, null] }], 'the course grade stays');
+  assert.deepEqual([r.all['25'].c, r.all['25'].s], [95, { 175: [90, null, 300] }], 'the course grade stays');
   r = G.applyWhatIf({ op: 'grade', cid: '25', c: null, at: 350 }, r.all, r.cleared);
-  assert.deepEqual([r.all['25'].c, r.all['25'].s], [null, { 175: [90, null] }], 'and a course-grade change leaves the scores');
+  assert.deepEqual([r.all['25'].c, r.all['25'].s], [null, { 175: [90, null, 300] }], 'and a course-grade change leaves the scores');
+});
+
+test('a clear arriving late takes each part changed before it, even from a record changed after it', () => {
+  // A score typed at 100; the course grade set at 300; then a Clear all asked for at 200 arrives.
+  let r = G.applyWhatIf({ op: 'course', cid: '25', rec: { s: { 175: [90, null] }, h: [], p: [] }, at: 100 }, {}, 0);
+  r = G.applyWhatIf({ op: 'grade', cid: '25', c: 95, at: 300 }, r.all, r.cleared);
+  r = G.applyWhatIf({ op: 'clear', at: 200 }, r.all, r.cleared);
+  assert.deepEqual([r.all['25'].s, r.all['25'].c, r.cleared], [{}, 95, 200], 'the score goes, the course grade stays');
+  // The same with work left out and a pretend assignment, and a resend that doesn't change a part keeps its time.
+  r = G.applyWhatIf({ op: 'course', cid: '26', rec: { s: { 1: [5, null] }, h: ['2'], p: [{ id: 'p1', g: '9', n: 'Quiz', s: 9, pp: 10, pd: null }] }, at: 400 }, {}, 0);
+  r = G.applyWhatIf({ op: 'course', cid: '26', rec: { s: { 1: [5, null], 3: [7, null] }, h: ['2'], p: [{ id: 'p1', g: '9', n: 'Quiz', s: 9, pp: 10, pd: null }] }, at: 600 }, r.all, r.cleared);
+  r = G.applyWhatIf({ op: 'clear', at: 500 }, r.all, r.cleared);
+  assert.deepEqual([r.all['26'].s, r.all['26'].h, r.all['26'].p], [{ 3: [7, null, 600] }, [], []]);
 });
 
 test('a clear recorded but not finished completes with the next change', () => {
@@ -306,7 +319,7 @@ test('what a tab sends is cleaned before it is stored', () => {
 test('the Dashboard sets a course’s what-if grade without touching the rest of its record', () => {
   const all = { 10: { s: { 1: [5, null] }, h: ['2'], p: [], c: null, at: 1 } };
   const set = G.withCourseGrade(all, '10', 91);
-  assert.deepEqual([set['10'].s, set['10'].h, set['10'].c], [{ 1: [5, null] }, ['2'], 91]);
+  assert.deepEqual([set['10'].s, set['10'].h, set['10'].c], [{ 1: [5, null, 1] }, ['2'], 91], 'parts stored without a time take their record’s');
   assert.deepEqual(G.withCourseGrade({ 11: { s: {}, h: [], p: [], c: 80 } }, '11', null), {}, 'cleared: nothing left, the course goes');
   assert.equal(G.withCourseGrade({ 12: 'junk' }, '12', 70)['12'].c, 70);
 });
