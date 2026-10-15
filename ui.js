@@ -10,13 +10,24 @@ const GZ_UI = (() => {
 
   // Writes only the given top-level keys: sync storage counts every write against a per-minute
   // quota, and the content script re-reads everything anyway. `note` gets '' or the error.
-  const save = (s, keys, note = () => {}) => {
+  const save = (s, keys, note = () => {}, navPatch) => {
     const patch = { version: 2 };
     for (const k of keys) patch[k] = s[k];
     const failed = (error) => GZ_I18N.t('Not saved: {error}', { error }, GZ_I18N.ui());
-    try {
-      store.set(patch, () => note(chrome.runtime.lastError ? failed(chrome.runtime.lastError.message) : ''));
-    } catch (e) { note(failed(e.message)); }
+    const write = () => {
+      try { store.set(patch, () => note(chrome.runtime.lastError ? failed(chrome.runtime.lastError.message) : '')); }
+      catch (e) { note(failed(e.message)); }
+    };
+    if ('nav' in patch) {
+      delete patch.nav;
+      try {
+        const nav = navPatch || s.nav; // Controls send only their changed fields; a Look or import replaces the group.
+        chrome.runtime.sendMessage({ type: 'glaze:nav', nav }, (r) => {
+          if (chrome.runtime.lastError || !r?.ok) return note(GZ_I18N.t('Not saved. Try again in a moment.', {}, GZ_I18N.ui()));
+          if (Object.keys(patch).length > 1) write(); else note('');
+        });
+      } catch (e) { note(failed(e.message)); }
+    } else write();
 
   };
 

@@ -8,6 +8,12 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Canvas sidebar:** style Canvas's native global navigation with a solid color, two-color gradient or picture
+  (an https link or local file), filters and an overlay. Choose text and icon colors, normal/small/icon-only labels,
+  three sizes, logo visibility and a collapsed rail. Native links keep their labels and keyboard access. The
+  editor warns below 4.5:1 and previews the background; colors are never corrected automatically. Theme codes
+  can carry sidebar appearance, with linked pictures only; layout preferences stay yours. Codes with sidebar settings need
+  this Glaze or newer; the gallery checker needs its next vendor update. Canvas only.
 - **Looks gallery:** free Looks and palettes shared openly at frostdev.io/glaze/looks, with no accounts,
   likes or tracking. **Use this Look in Glaze** there opens the editor with the Look in its preview;
   nothing changes until you choose Use this theme. A code made of a palette alone changes only your colors.
@@ -96,8 +102,8 @@ All notable changes to Glaze are documented here. The format follows
     after a finished focus block or an item ticked off. Click it for a word of encouragement.
 - **What Glaze can do:** every Canvas extra in one panel with its switch, from Ctrl+K or the Dashboard, with an
   optional tour of the page and **Report a problem**. Nothing opens by itself.
-- **Report a problem:** opens a new GitHub issue with your Glaze version, browser and system filled in, and nothing
-  else, for you to finish and send. In the editor under Share and back up, and in What Glaze can do.
+- **Report a problem:** opens a new GitHub issue with your Glaze version, browser, system and language filled in, and
+  nothing about your school. GitHub receives that text when the page opens; nothing is posted until you submit it. In the editor under Share and back up, and in What Glaze can do.
 - **Reminders and streak (Canvas, every part off by default; Extras, Reminders and streak):** each its own opt-in:
   - Due-date reminders at any of 15 minutes, 1 hour, 3 hours, 1 day and 2 days before (several at once, free); a day
     before means the same time the day before, in your Canvas time zone, across daylight-saving changes.

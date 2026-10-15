@@ -698,6 +698,7 @@
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
     placeScene();
     if (!said) return;
+    if (all) syncNav();
     renderProgress();
     renderNew();
     keepPlace();
@@ -787,6 +788,7 @@
     tagExtras([document.body]);
     watchDrafts();
     syncCourseMenu();
+    syncNav();
     if (!ultra) renderProgress();
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
@@ -970,7 +972,7 @@
     if (hinted && titled && !titled.contains(hinted[0])) hinted = null;
     if (hinted && hinted[0] === tipFor) return;
     // Canvas: a title that only repeats the text beside it, uncut.
-    if (!ultra && titled && !hinted && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
+    if (!ultra && titled && !hinted && !titled.closest('#header') && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
     hideTip();
     const text = titled?.getAttribute('title')?.trim();
     if (titled && !text && !hinted) return;
@@ -1026,7 +1028,7 @@
     if (globalThis.GZ_PEEK || !settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
     const { target, type } = e;
     if (!(ultra ? courseId() : canvasCourseId()) || !target.closest(PEEK_AT)) return;
-    need('features/previews.js', () => globalThis.GZ_PEEK).then(() => { if (type === 'focusin' ? document.activeElement === target : target.matches(':hover')) GZ_PEEK.on({ target, type }); }, () => {});
+    need('features/previews.js', () => globalThis.GZ_PEEK).then(() => { if (observer && settings.enhance.previews && (type === 'focusin' ? document.activeElement === target : target.matches(':hover'))) GZ_PEEK.on({ target, type }); }, () => {});
   };
   document.addEventListener('pointerover', peekIn, { capture: true, passive: true });
   document.addEventListener('focusin', (e) => { if (!ultra) peekIn(e); }, true);
@@ -1897,7 +1899,7 @@
     : typeof chrome.runtime.connect === 'function' && !!canvasCourseId() && /^\/courses\/\d+(?:\/modules)?\/?$/.test(location.pathname));
   const syncDownloads = () => {
     globalThis.GZ_PEEK?.sync();
-    if (dlHere()) need('features/download.js', () => globalThis.GZ_DOWNLOAD).then(() => GZ_DOWNLOAD.sync(), () => {});
+    if (dlHere()) need('features/download.js', () => globalThis.GZ_DOWNLOAD).then(() => { if (observer && dlHere()) GZ_DOWNLOAD.sync(); }, () => {});
     else globalThis.GZ_DOWNLOAD?.sync();
   };
 
@@ -2042,30 +2044,46 @@
   // "g" then a letter goes somewhere, "/" searches, "?" lists them: features/keys.js, loaded on the first key that
   // starts one while the switch is on, then handed every key. Top frame only.
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
+  // Whether a key is one for the shortcuts: switched on, no modifier, not typing, and on Canvas not repeated, not
+  // already taken, not on a page or in a widget that has keys of its own (keys.js asks this too).
+  const keyOn = (e) => !!settings.enhance.keys && !!observer && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e.target)
+    && (ultra || !(moodle || e.defaultPrevented || e.repeat || !GZ_PAGE.canvasKeys(location.pathname) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')));
+  let keysWaiting = null; // the keys pressed while keys.js loads, as they were: handed over in order when it's in
   if (window.top === window) {
     document.addEventListener('keydown', (e) => {
       if (globalThis.GZ_KEYS) return GZ_KEYS.key(e);
-      if (!settings.enhance.keys || !observer || e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || !(e.key === 'g' || (ultra && (e.key === '/' || e.key === '?')))) return;
-      if (ultra && e.key === '?') e.preventDefault(); // what keys.js does with it, which can't wait for the file
-      // The key as it was now: keys.js reads it when it arrives.
-      const was = { key: e.key, target: e.target, defaultPrevented: e.defaultPrevented, repeat: e.repeat, preventDefault() {}, stopImmediatePropagation() {} };
-      need('features/keys.js', () => globalThis.GZ_KEYS).then(() => GZ_KEYS.key(was), () => {});
+      const was = { key: e.key, target: e.target, metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, repeat: e.repeat, at: Date.now(), preventDefault() {}, stopImmediatePropagation() {} };
+      if (keysWaiting) {
+        // What keys.js does at once with a "?" (Ultra's list; Canvas's g then ?, so Canvas's own help stays shut),
+        // which can't wait for the file.
+        const prev = keysWaiting.findLast((k) => k.key !== 'Shift');
+        if (e.key === '?' && keyOn(e) && (ultra || (prev?.key === 'g' && was.at - prev.at < 1200))) { e.preventDefault(); if (!ultra) e.stopImmediatePropagation(); }
+        keysWaiting.push(was);
+        return;
+      }
+      if (!keyOn(e) || !(e.key === 'g' || (ultra && (e.key === '/' || e.key === '?')))) return;
+      if (ultra && e.key === '?') e.preventDefault();
+      keysWaiting = [was];
+      need('features/keys.js', () => globalThis.GZ_KEYS).then(() => { for (const k of keysWaiting) GZ_KEYS.key(k); }, () => {}).finally(() => { keysWaiting = null; });
     }, true);
   }
 
   // ---- command palette (Extras; Canvas too) --------------------------------------------------
   // Ctrl+K (⌘K on a Mac) opens one search over the site's pages, your courses, this course and Glaze's own switches:
   // features/palette.js, loaded the first time. Never while typing (Ultra's editor uses Ctrl+K for links), top frame only.
+  let cmdWanted = null; // while palette.js loads: open it when it's in? Each press meanwhile turns that over.
   if (window.top === window) {
     document.addEventListener('keydown', (e) => {
       if (e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || !settings.enhance.palette || !observer) return;
       // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
       if (globalThis.GZ_CMD?.isOpen()) { e.preventDefault(); e.stopPropagation(); GZ_CMD.close(); return; }
+      if (cmdWanted !== null) { e.preventDefault(); e.stopPropagation(); cmdWanted = !cmdWanted; return; }
       if (typing(e.target)) return;
       if (!ultra && e.target.closest?.('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       e.preventDefault();
       e.stopPropagation();
-      need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (observer) GZ_CMD.open(); }, () => {});
+      cmdWanted = true;
+      need('features/palette.js', () => globalThis.GZ_CMD).then(() => { if (cmdWanted && observer && settings.enhance.palette) GZ_CMD.open(); }, () => {}).finally(() => { cmdWanted = null; });
     }, true);
   }
 
@@ -2387,8 +2405,9 @@
   };
 
   // -- the button on each card --
+  const menuOn = () => !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
   const syncCourseMenu = () => {
-    const on = !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
+    const on = menuOn();
     for (const card of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard')) {
       const cid = ultra ? (card.dataset.courseId || card.id.slice(19)) : canvasCourseKey(card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1]);
       let b = card.querySelector(':scope > .gz-cm-btn');
@@ -2437,7 +2456,8 @@
     if (e.type === 'pointerdown') e.preventDefault(); // don't blur the nickname before the click commits it
     if (e.type !== 'click') return;
     e.preventDefault();
-    menuUI().then(() => GZ_COURSE_MENU.toggle(b), () => {});
+    // When the file arrives: only if the button is still on the page and the menu still on.
+    menuUI().then(() => { if (menuOn() && b.isConnected && b.getClientRects().length) GZ_COURSE_MENU.toggle(b); }, () => {});
   };
   for (const ev of ['click', 'pointerdown', 'pointerup', 'mousedown', 'mouseup', 'keydown', 'keyup', 'pointerover', 'focusin']) document.addEventListener(ev, onMenuButton, true);
   // ---- settings → <html> ----------------------------------------------------------------------
@@ -2476,6 +2496,21 @@
     } else if (!want && fade) { fade.remove(); fade = null; }
   };
   if (!ultra) addEventListener('pagereveal', (e) => { if (e.viewTransition) setAttr('data-gz-vt-in', true); });
+
+  const paintNav = (n, picture) => {
+    if (site !== 'canvas' || window.top !== window) return;
+    setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
+    for (const k of ['labels', 'collapsed', 'f']) setAttr(`data-gz-nav-${k}`, n[k]);
+    setAttr('data-gz-nav-no-logo', !n.logo);
+    const src = n.i ? picture : n.u;
+    setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
+    for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) setVar(`--gz-nav-${k}`, v);
+  };
+  const syncNav = () => {
+    if (site !== 'canvas' || isPreview || window.top !== window) return;
+    if (worn.nav.i || worn.nav.collapsed || worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
+    else globalThis.GZ_NAV_UI?.sync();
+  };
 
   const applySettings = () => {
     looked = lookHere();
@@ -2534,6 +2569,7 @@
     for (const f of [s.look.font, s.look.head, s.look.mono]) GZ_FONTS.load(f);
     setAttr('data-gz-density', s.look.density);
     setAttr('data-gz-depth', String(s.look.depth));
+    paintNav(s.nav);
     // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
     const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
@@ -2562,7 +2598,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncWidgets(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncWidgets(); syncNav(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -2695,14 +2731,15 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     stopScene();
     stopSweep();
     clearSettings();
+    globalThis.GZ_NAV_UI?.sync();
     syncDocTools();
     syncFooter();
   };
 
   // The helpers a file loaded by need() may use (features/*.js): this frame's, read through one name.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, profile, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, on: () => !!observer,
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, profile, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => paintNav(worn.nav, src), on: () => !!observer,
     // The palette, the keys, the course menu, the previews and Download all (W0c).
-    site, wordsIn, typing, make, dueWeek, moodleIn, myCourses, courseId, courseItems, toggleOf, canvasPeek, moduleItems,
+    site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, myCourses, courseId, courseItems, toggleOf, canvasPeek, moduleItems,
     nickOf, courseList: () => courseList, courseColor, courseColors, varText, cardUI,
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); } });
 

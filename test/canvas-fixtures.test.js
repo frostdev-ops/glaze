@@ -144,6 +144,8 @@ const cssNames = () => {
 // Keyed on, but on no fixture: each needs an interaction, a state or content the seed doesn't have. A fixture that
 // shows one makes the last test below ask for it to be taken off this list.
 const UNSEEN = [
+  // Canvas hides its global rail in embedded layouts; its flyout tray exists only after a menu opens.
+  '.hide-global-nav', '.tray-with-space-for-global-nav',
   // Canvas's mark after a link to another site: on a Dashboard card only once a course bookmark (W4) links elsewhere.
   '.external_link_icon',
   // TinyMCE's menus, dialogs, swatches and tooltips exist only while one is open.

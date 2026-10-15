@@ -181,6 +181,10 @@ test('feedback: a prefilled GitHub issue with version, browser and system only',
   assert.equal(url.origin + url.pathname, 'https://github.com/frostdev-ops/glaze/issues/new');
   const body = url.searchParams.get('body');
   for (const s of ['- Glaze: 2.3.0', '- Browser: Chrome 155', '- System: macOS', '- LMS: Canvas', '- Language: de']) assert.ok(body.includes(s), s);
+  // Only what is passed in, and never anything about the school: an address handed over by mistake stays out.
+  const leak = new URL(W.feedback({ version: '2.3.0', ua: '', lang: 'en', lms: 'Canvas', origin: 'https://school.instructure.com', title: 'BIO 1100' }));
+  assert.ok(!leak.href.includes('instructure') && !leak.href.includes('BIO'));
+  assert.deepEqual([...leak.searchParams.keys()], ['labels', 'body']);
   assert.deepEqual(W.browser('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'), { name: 'Safari 18.0', os: 'iOS' });
   assert.deepEqual(W.browser('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0'), { name: 'Edge 150', os: 'Windows' });
   assert.deepEqual(W.browser(''), { name: 'Unknown', os: 'Unknown' });
