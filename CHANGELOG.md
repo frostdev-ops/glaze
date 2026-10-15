@@ -4,6 +4,27 @@ All notable changes to Glaze are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Canvas:** Glaze restyles Canvas LMS on `*.instructure.com` and on a school's own domain, with the
+  same palettes, Looks, fonts, backgrounds and motion as on Blackboard.
+- **The extras on Canvas,** each where Canvas keeps the same thing: tooltips with date and score hints;
+  score bars and percentages on Grades and Assignments; due-date status and urgency on Assignments,
+  Modules and To Do; shorter announcement previews; reading width; course progress from module
+  completion requirements; your place in Modules; previews of closed modules and Files folders;
+  Download all for a module's files (files you haven't opened are left out); new-grade counts that
+  follow Canvas's own unread grades, and new items in Modules; tint and a Look per course, from a
+  menu on each Dashboard card; course colors on course pages, Grades and the Inbox; focus mode and
+  dark file previews; keyboard shortcuts (g then d, c, a, g or m); hiding the Help link, card
+  images and course links you don't use; draft backup for new Inbox messages.
+- Where Canvas already has its own, Glaze leaves it to Canvas and themes it: what-if scores, editor
+  recovery, course nicknames and colors, folder zips on Files, unread counts.
+- **Halloween Looks:** Graveyard and Pumpkin Patch, each with its own animated scene.
+- **Mac app updates:** the downloaded Mac app checks for updates about once a day while Glaze is in
+  use and installs them quietly.
+
 ## [2.1.4] — 2026-10-14
 
 ### Added

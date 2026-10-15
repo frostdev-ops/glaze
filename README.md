@@ -8,7 +8,7 @@
 # Glaze
 
 Glaze is a Chrome and Safari extension that restyles Blackboard Ultra and Canvas. It replaces the palette with one you
-control, reshapes the pages around it, and adds small helpers you can see at a glance (on Ultra for now). It works on any
+control, reshapes the pages around it, and adds small helpers you can see at a glance. It works on any
 institution's Blackboard Ultra install, because every Ultra deployment lives under `/ultra/` on its own
 domain, and on Canvas, which Glaze recognizes on any school's domain.
 
@@ -26,6 +26,7 @@ domain, and on Canvas, which Glaze recognizes on any school's domain.
 - **Course colors** — every course its own color, from Ultra's stripes blended into your palette or set one by one, on course pages, Messages, Grades and the calendar.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
 - **Extras** — score bars, due-date status ("in 2 days · Unopened", "Submitted", "Submitted late", "Graded · 18/20") and grade percentages, folder previews, course progress, new-grade and new-content badges, a what-if grade calculator that keeps your scores, a Ctrl+K command palette for courses, items, pages, settings and what's due this week (also in the popup), remembering your place in a course's content, a backup of what you type in Blackboard's editors, Download all, which saves a folder's files as one zip, and focus mode for course documents (on by default); due-date urgency, shorter descriptions, reading width, keyboard shortcuts, dark documents and hiding page parts you don't use (off by default).
+- **On Canvas** — the same extras, each where Canvas keeps the same thing: progress, previews, new-item badges, your place and Download all on Modules; due-date status, urgency and score bars on Assignments, Grades and To Do; tint, a Look per course and card grades on the Dashboard; Inbox drafts backed up. Where Canvas has its own (what-if scores, editor recovery, course nicknames and colors, folder zips, unread counts), Glaze leaves it to Canvas, themed. Course progress counts module completion requirements, so a course without any shows no bar.
 - **Looks** — ten ready-made combinations (Graveyard and Pumpkin Patch are for Halloween) of palette, fonts, shape and background, one click each in the popup or the editor, or one for a single course.
 - **Editor** — every setting in one page with a live preview; the popup keeps the quick controls.
 - **Theme codes** — share your palette, fonts, look and background as one line of text; a pasted code previews before it applies.
