@@ -12,7 +12,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
   const TONE = { Missing: 'err', 'Submitted late': 'warn', Submitted: 'ok', Graded: 'ok', Excused: 'ok', Done: 'ok' };
   let L = null; // lib/todo.js
-  let tz, key = '', o = null, data = null, cache = null;
+  let tz, uid = '', key = '', o = null, data = null, cache = null;
   let on = false, starting = null, asking = null, failed = 0, listed = false;
   let gs = null; // Gradescope's items for this site (lib/todo.js gradescope)
 
@@ -77,7 +77,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       const was = el.querySelector(':scope > .gz-ct');
       if (!head || !cid || !cache) { was?.remove(); continue; }
       gs ||= L.gradescope(paint);
-      const rows = L.card(L.build({ items: [...(cache.items || []), ...gs(now)], data, o, now, tz, course: cid, sync: o.sync }), o.cardN, o.cardCross, tz).map((r) => {
+      const rows = L.card(L.build({ items: [...(cache.items || []), ...gs(now, uid)], data, o, now, tz, course: cid, sync: o.sync }), o.cardN, o.cardCross, tz).map((r) => {
         // Undated work planned for a day (a "do on" day or a focus session) reads as planned for that day.
         const w = L.label(r.at === null ? { allDay: true, day: r.plan } : r, now, tz, lang);
         const text = o.rel ? w.rel : w.abs;
@@ -121,7 +121,8 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     const [p] = await Promise.all([ctx.profile(), readPrefs()]);
     if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
     tz = L.zone(p.time_zone);
-    key = L.storeKey(location.origin, String(p.id));
+    uid = String(p.id);
+    key = L.storeKey(location.origin, uid);
     const r = await get([key, CACHE]);
     data = L.clean(r[key]);
     cache = r[CACHE]?.key === key ? r[CACHE] : null;

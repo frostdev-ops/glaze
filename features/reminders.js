@@ -94,7 +94,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   // The list over the next eight days and the past month, as Better To Do counts it (lib/todo.js build).
   const reckon = (now) => {
     gs ||= T.gradescope(() => { if (on) arm(); });
-    const b = T.build({ items: [...(cache?.items || []), ...gs(now)], data, o: { ...todoO, span: 'custom', unit: 'days', n: 8, start: 'rolling', past: 'month', group: false }, now, tz: who.tz, cids, sync: todoO.sync });
+    const b = T.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], data, o: { ...todoO, span: 'custom', unit: 'days', n: 8, start: 'rolling', past: 'month', group: false }, now, tz: who.tz, cids, sync: todoO.sync });
     const extra = [...sources.values()].flatMap((f) => { try { return f() || []; } catch { return []; } });
     return { b, evs: R.events({ rows: b.groups.flatMap(([, l]) => l), cats: { due: en().remind, exam: en().remindExam, plan: en().remindPlan }, o, tz: who.tz, extra }) };
   };

@@ -922,4 +922,11 @@
   "Ask on Gradescope again": "Perguntar de novo no Gradescope",
   "Assignments from your Gradescope courses join Better To Do, the course cards and reminders, marked Gradescope, with a link to each. On gradescope.com Glaze asks once which Canvas course each Gradescope course belongs to, then reads your assignments whenever you visit, signed in as you. It only reads, and what it reads stays on this device.": "As tarefas dos seus cursos do Gradescope entram no Better To Do, nos cartões dos cursos e nos lembretes, marcadas como Gradescope, com um link para cada uma. No gradescope.com, o Glaze pergunta uma vez a qual curso do Canvas cada curso do Gradescope pertence e depois lê suas tarefas sempre que você visita, conectado como você. Ele só lê, e o que lê fica neste dispositivo.",
   "New Gradescope work shows without a visit to Gradescope: once a day at most, a Canvas page has Glaze read each course's Gradescope page, with your Gradescope sign-in in this browser.": "Tarefas novas do Gradescope aparecem sem visitar o Gradescope: no máximo uma vez por dia, uma página do Canvas faz o Glaze ler a página do Gradescope de cada curso, com seu login do Gradescope neste navegador.",
+  "Show": "Mostrar",
+  "Not here": "Aqui não",
+  "Show Gradescope work from {name} here?": "Mostrar aqui as tarefas do Gradescope de {name}?",
+  "Show your Gradescope work here?": "Mostrar aqui suas tarefas do Gradescope?",
+  "Gradescope account: {name}": "Conta do Gradescope: {name}",
+  "Ask on Canvas again": "Perguntar de novo no Canvas",
+  "Each Canvas account is asked once, in Better To Do, before Gradescope work shows there.": "Cada conta do Canvas é perguntada uma vez, no Better To Do, antes de as tarefas do Gradescope aparecerem lá.",
 };

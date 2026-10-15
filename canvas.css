@@ -1497,6 +1497,7 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 #gz-todo .gz-todo-count { font-size: 0.75rem; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
 #gz-todo .gz-todo-say:empty { display: none; }
 #gz-todo .gz-todo-say { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
+#gz-todo .gz-todo-gs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; margin: 0.5rem 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-empty { margin: 0.75rem 0; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-group { margin-top: calc(0.9rem * var(--gz-space)); }
 #right-side #gz-todo :is(h3, summary) {

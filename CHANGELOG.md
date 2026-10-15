@@ -122,7 +122,9 @@ All notable changes to Glaze are documented here. The format follows
   Gradescope course belongs to, with a guess by course code or name; Don't ask again means it, and the choice can be
   changed in Glaze's settings. Glaze reads each course page signed in as you, whenever you visit Gradescope, and
   optionally once a day from Canvas. Rows are read one by one: an odd row is skipped and counted, never the whole
-  course. Ticks stay on this device. Read only, and kept on this device; nothing runs on Gradescope while it's off.
+  course. Ticks stay on this device. Read only, and kept on this device; nothing runs on Gradescope while it or Glaze
+  is off. Each Canvas account is asked once, quietly in Better To Do, before any Gradescope work shows there, so two
+  people sharing a browser never see each other's; signing in to another Gradescope account starts afresh.
 - **Moodle:** Glaze restyles Moodle (the Boost theme of Moodle 5, and 4.x where its markup is the same) on any
   school's domain, with the same palettes, Looks, fonts, backgrounds and motion: the Dashboard and My courses,
   course and activity pages, grades, the calendar, messages and the login page, in light and dark palettes.

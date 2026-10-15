@@ -482,9 +482,14 @@
           <label class="check"><input type="checkbox" data-key="todo.gsDaily"><span>Also check Gradescope once a day from Canvas</span>
             <span class="desc">New Gradescope work shows without a visit to Gradescope: once a day at most, a Canvas page has Glaze read each course's Gradescope page, with your Gradescope sign-in in this browser.</span></label>
           <div id="gs-map" hidden>
+            <p class="desc" id="gs-acct"></p>
             <p class="desc" id="gs-map-note">Your Gradescope courses and the Canvas course each goes with:</p>
             <ul class="gs-map" aria-labelledby="gs-map-note"></ul>
-            <button type="button" id="gs-ask">Ask on Gradescope again</button>
+            <div class="row">
+              <button type="button" id="gs-ask">Ask on Gradescope again</button>
+              <button type="button" id="gs-forget">Ask on Canvas again</button>
+              <span class="desc">Each Canvas account is asked once, in Better To Do, before Gradescope work shows there.</span>
+            </div>
           </div>
         </div>
         <div class="group" id="widgets">

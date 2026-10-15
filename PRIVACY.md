@@ -62,13 +62,16 @@ _Last updated: 2026-10-15_
   submission status, your planner marks) and, for teachers, the work waiting to be graded with its counts. Two
   minutes is how long that copy counts as fresh, not how long it is kept: it stays until the next fetch replaces it,
   or until Glaze is removed.
-- **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Canvas course each
-  of your Gradescope courses goes with (by its Gradescope course id and short name, or "not a Canvas course"), and for
+- **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
+  it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
+  which Canvas course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "not a Canvas course"), and for
   each one placed with a Canvas course, the assignments read from its Gradescope course page (id, title, due and late
   due dates, whether you handed it in, the score if graded, whether it was late), the time they were read and how many
   rows couldn't be read; whether you said "Don't ask again" on Gradescope; and, with the daily check on, when each
-  course was last tried. They show only on the Canvas site of the course they're placed with (and only for courses
-  you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
+  course was last tried; and, per Canvas account (site and Canvas user id), your one-time answer to "Show Gradescope
+  work from … here?". Nothing from Gradescope shows for a Canvas account until it says yes there, so two people sharing
+  a browser don't see each other's; signing in to another Gradescope account starts the Gradescope data afresh. It
+  shows only on the Canvas site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
 - **Dashboard notes and widgets** (Canvas, off by default), in `chrome.storage.local`, on this device only: your notes
@@ -204,12 +207,15 @@ animated backgrounds) are bundled. It makes requests in these cases:
   nothing to any other place. It never writes to Canvas.
 - **Gradescope in To Do** (off by default). Gradescope has no API for students, so Glaze reads your Gradescope course
   pages, signed in as you, and nothing else of Gradescope's. While the switch is on and Glaze itself is on, and only then, Glaze runs on
-  `https://www.gradescope.com` pages. Each time you open a Gradescope page, it reads again every course you've placed
-  with a Canvas course and that wasn't read in the last ten minutes: the page you're on if it's that course's, else
+  `https://www.gradescope.com` pages. When there's something to read or ask, it first reads your account page
+  (`https://www.gradescope.com/account/edit`, for whose data it is: your name and email address, of which only the name
+  and a hash of the address are kept). Each time you open a Gradescope page, it reads again every course you've placed
+  with a Canvas course and that wasn't read in the last ten minutes, asking again before each one whether Glaze and the
+  switch are still on: the page you're on if it's that course's, else
   `https://www.gradescope.com/courses/<id>` (a read-only GET from that page, with your existing Gradescope session).
   With "Also check Gradescope once a day from Canvas" on (off by default), a Canvas page showing your To Do, card tasks
-  or reminders also has Glaze's background worker GET each of that site's placed courses' Gradescope page, at most
-  once a day per course, whether or not it worked (signed out, Gradescope redirects to its sign-in page; Glaze never
+  or reminders, for a Canvas account that said yes, also has Glaze's background worker GET each of that site's placed
+  courses' Gradescope page and your account page (to check it's still the same account), at most once a day per course, whether or not it worked (signed out, Gradescope redirects to its sign-in page; Glaze never
   follows a redirect from Gradescope, here or on Gradescope's own pages, and keeps what it read before); the request carries your Gradescope cookies, as visiting the page would, and the page is read on the Canvas
   page and kept on this device as above. Nothing read on Gradescope is sent to Canvas or anywhere else, and Glaze never
   writes to Gradescope. To suggest a Canvas course on Gradescope, Glaze uses the course names it already keeps on this
