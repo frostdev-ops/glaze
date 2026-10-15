@@ -35,6 +35,7 @@
       label.append(input, make('span', s.title), make('small', s.key.slice(s.key.indexOf(':') + 1)));
       return label;
     }));
+    if (state.partial) $('#sources').append(make('p', t('Only the first {n} items are listed.', { n: 3000 })));
     $('#sources').hidden = kind === 'look';
   };
   const render = () => {

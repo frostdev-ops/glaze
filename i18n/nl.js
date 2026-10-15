@@ -1684,4 +1684,6 @@
   "Sharing is paused. Create, join or resume to connect.": "Delen is gepauzeerd. Maak een sessie, neem deel of hervat om te verbinden.",
   "View access": "Leestoegang",
 
+  "Only the first {n} items are listed.": "Alleen de eerste {n} items worden getoond.",
+
 };

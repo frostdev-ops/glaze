@@ -1684,4 +1684,6 @@
   "Sharing is paused. Create, join or resume to connect.": "Sesiones en pausa. Crea una, únete o reanuda para conectar.",
   "View access": "Acceso de lectura",
 
+  "Only the first {n} items are listed.": "Solo se muestran los primeros {n} elementos.",
+
 };
