@@ -27,6 +27,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let courses = { cids: null, names: {}, list: [] };
   let fetching = null;
   let drawn = '';
+  let shown = new Map(); // key -> row, for every row the list drew
   const open = new Set(); // rows with their details open, and "show more" groups
   const shut = new Set(['done', 'graded', 'read']); // sections closed until opened
   let form = null; // the add/edit form's task: { id?, cid, … } or null
@@ -38,7 +39,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     .then((raw) => { prefs = GZ_SANITIZE({ todo: raw }).todo; });
   const lang = () => GZ_I18N.locale(ctx.locale());
   const store = () => { try { return chrome.storage.local; } catch { return null; } };
-  const put = (v) => { try { store()?.set(v); } catch { /* the extension was reloaded under the tab */ } };
+  // Resolves true once storage has it, false if it didn't take (quota, the extension reloaded under the tab).
+  const put = (v) => new Promise((res) => { try { store().set(v, () => res(!chrome.runtime.lastError)); } catch { res(false); } });
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
   const json = async (r) => { if (!r.ok) throw new Error(String(r.status)); return JSON.parse((await r.text()).replace(/^while\(1\);/, '')); };
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
@@ -73,7 +75,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     return { id: String(j.id), done: !!j.marked_complete, dismissed: !!j.dismissed };
   };
   const covers = (c, now) => {
-    if (!c || c.key !== key || c.partial || now - c.at >= FRESH || c.teach !== o().teacher || c.progress !== o().progress) return false;
+    if (!c || c.key !== key || now - c.at >= FRESH || c.teach !== o().teacher || c.progress !== o().progress) return false;
     const need = L.fetchRange(o(), now, who.tz);
     return Date.parse(c.start) <= Date.parse(need.start) && Date.parse(c.end) >= Date.parse(need.end) - L.DAY;
   };
@@ -84,21 +86,28 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     // The popup and the command palette's due list comes from this same answer (content.js dueWeek).
     put({ dueWeek: GZ_CANVAS_DUE_WEEK(raw, now), dueWeekAt: now, dueWeekFrom: location.origin });
     const teach = o().teacher && list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
-    let grading = [];
-    const sums = {};
-    let partial = false; // a summary that didn't come (the page left mid-way, say): asked again next time
-    if (teach) {
-      grading = (await ctx.capi('/users/self/todo?per_page=100').catch(() => [])).filter((x) => x?.type === 'grading').map(L.slimGrading).filter((g) => g.aid && g.n > 0);
-      // ponytail: thirty summaries, one request each; the rest count as unknown.
-      if (o().progress) {
-        await Promise.all(grading.filter((g) => g.cid).slice(0, 30).map((g) => ctx.capi(`/courses/${g.cid}/assignments/${g.aid}/submission_summary`)
-          .then((x) => { sums[g.aid] = { graded: +x.graded || 0, ungraded: +x.ungraded || 0 }; }, () => { partial = true; })));
-      }
-    }
-    return { key, at: now, start, end, teach: o().teacher, progress: o().progress, partial, items: raw.map(L.slim), grading, sums };
+    const grading = !teach ? [] : (await ctx.capi('/users/self/todo?per_page=100').catch(() => [])).filter((x) => x?.type === 'grading').map(L.slimGrading).filter((g) => g.aid && g.n > 0);
+    const c = { key, at: now, start, end, teach: o().teacher, progress: o().progress, items: raw.map(L.slim), grading, sums: {} };
+    if (teach && o().progress) await summaries(c);
+    return c;
   };
+  // Teachers' grading progress: each listed assignment's submission counts. One that doesn't come (refused, or the page
+  // left mid-way) leaves the cache partial; the planner answer still counts, and only the missing counts are asked for
+  // again, when the page is next shown or focused. ponytail: thirty summaries, one request each; the rest count as unknown.
+  const summaries = async (c) => {
+    c.partial = false;
+    await Promise.all(c.grading.filter((g) => g.cid && !c.sums[g.aid]).slice(0, 30).map((g) => ctx.capi(`/courses/${g.cid}/assignments/${g.aid}/submission_summary`)
+      .then((x) => { c.sums[g.aid] = { graded: +x.graded || 0, ungraded: +x.ungraded || 0 }; }, () => { c.partial = true; })));
+  };
+  // Asked when the list starts, when the page is shown or focused again, when its settings change and after a refused
+  // tick; never from content.js's passes. Within two minutes of the last answer only missing grading counts are asked.
   const refresh = (force = false) => {
-    if (!who || fetching || dead || (!force && covers(cache, Date.now()))) return fetching;
+    if (!who || fetching || dead) return fetching;
+    if (!force && covers(cache, Date.now())) {
+      if (!cache.partial || !o().progress) return null;
+      fetching = summaries(cache).then(() => put({ [CACHE]: cache })).finally(() => { fetching = null; if (typing()) drawn = ''; else render(true); });
+      return fetching;
+    }
     if (!cache) setBusy(true);
     fetching = load().then((c) => {
       cache = c;
@@ -115,7 +124,17 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
 
   // ---- the student's own -------------------------------------------------------------------------------------
-  const save = () => { data = L.clean(data); put({ [key]: data }); render(true); };
+  // The student's change, kept: shown as saved only once storage has it, else put back as it was and said so.
+  // before: data as it was; ok: what to say once it's kept. Resolves whether it was.
+  const save = async (before, ok = '') => {
+    const next = L.clean(data);
+    const kept = await put({ [key]: next });
+    data = kept ? next : before;
+    note(kept ? ok : t("Couldn't save that on this device, so nothing changed."));
+    render(true);
+    return kept;
+  };
+  const copy = () => JSON.parse(JSON.stringify(data));
   const local = (k) => (data.items[k] ||= {});
   const tidy = (k) => { if (data.items[k] && !Object.keys(data.items[k]).length) delete data.items[k]; };
   const uid = () => crypto.randomUUID().slice(0, 13);
@@ -296,6 +315,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (f && form) form.draft = Object.fromEntries([...new FormData(f)].map(([k, v]) => [k, String(v)]));
     const course = ctx.canvasCourseId() || '';
     const out = L.build({ items: cache?.items || [], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: o().sync });
+    shown = new Map([...out.groups.flatMap(([, l]) => l), ...out.done, ...out.graded].map((r) => [r.key, r]));
     // The focused control, found again in the new tree by what it was for; if that went out of sight (a ticked item
     // into the closed Done section), the one after it.
     const was = box.contains(document.activeElement) ? document.activeElement.dataset.focus : null;
@@ -330,14 +350,11 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
 
   // ---- what the student does -----------------------------------------------------------------------------------
-  const rowOf = (el) => {
-    const k = el.closest('[data-key]')?.dataset.key;
-    if (!k) return null;
-    const out = L.build({ items: cache?.items || [], data, o: { ...o(), past: 'always', span: 'custom', n: 52, unit: 'weeks' }, now: Date.now(), tz: who.tz, sync: o().sync });
-    return [...out.groups.flatMap(([, l]) => l), ...out.done, ...out.graded].find((r) => r.key === k) || null;
-  };
+  // The row a control belongs to, from the list as drawn: whatever is on screen can be acted on.
+  const rowOf = (el) => shown.get(el.closest('[data-key]')?.dataset.key) || null;
   const mark = async (r, el) => {
     const want = el.checked;
+    const before = copy();
     if (r.custom) {
       const x = data.tasks.find((y) => y.id === r.id);
       if (x) x.done = want ? Date.now() : 0;
@@ -352,18 +369,18 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
         const ov = await write(r, want);
         const it = cache?.items.find((i) => `${i.type}:${i.id}` === r.key);
         if (it) { it.ov = ov; put({ [CACHE]: cache }); }
-        note('');
       } catch {
+        // Refused, or no answer to read: Canvas may or may not have it, so the list asks Canvas again.
         el.checked = !want;
         el.disabled = false;
-        note(t("Couldn't save that to Canvas, so nothing changed. Try again in a moment."));
+        note(t("Canvas didn't confirm that, so your list is checking with Canvas again."));
         refresh(true);
         return;
       }
     }
+    // The burst where the box is now: the redraw moves a done item into the Done section.
     if (want && document.documentElement.getAttribute('data-gz-motion') === 'expressive') ctx.celebrate?.(el);
-    note(want ? t('{title} is done.', { title: r.title }) : t('{title} is back on your list.', { title: r.title }));
-    save();
+    save(before, want ? t('{title} is done.', { title: r.title }) : t('{title} is back on your list.', { title: r.title }));
   };
   const onClick = (e) => {
     const el = e.target.closest('[data-act]');
@@ -375,6 +392,9 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (act === 'all') { open.add(`group:${el.dataset.group}`); render(true); return; }
     if (!k) return;
     if (act === 'more') { if (open.has(k)) open.delete(k); else open.add(k); render(true); return; }
+    // What changes data only from the student's own click or key, never a script's.
+    if (!e.isTrusted) return;
+    const before = copy();
     const l = local(k);
     if (act === 'unon') delete l.on;
     else if (act === 'unstep') l.subs = (l.subs || []).filter((x) => x.id !== el.dataset.step);
@@ -387,37 +407,39 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       data.tasks = data.tasks.filter((x) => x !== gone);
       delete data.items[k];
       open.delete(k);
-      note(t('Deleted {title}.', { title: gone?.title || '' }));
-      save();
-      box.querySelector('[data-focus="add"]')?.focus();
+      save(before, t('Deleted {title}.', { title: gone?.title || '' })).then(() => box?.querySelector('[data-focus="add"]')?.focus());
       return;
     }
     tidy(k);
-    save();
+    save(before);
   };
   const onChange = (e) => {
     const el = e.target;
     const k = el.closest('[data-key]')?.dataset.key;
+    if (!k || !['done', 'step', 'on'].includes(el.dataset.act)) return;
+    // A change a script made (not the student's tick or pick) writes nothing, here or to Canvas: the list is redrawn as it was.
+    if (!e.isTrusted) { render(true); return; }
     if (el.dataset.act === 'done') { const r = rowOf(el); if (r) mark(r, el); return; }
-    if (!k) return;
+    const before = copy();
     const l = local(k);
     if (el.dataset.act === 'step') { const x = (l.subs || []).find((y) => y.id === el.dataset.step); if (x) x.done = el.checked; }
-    else if (el.dataset.act === 'on') { if (el.value) l.on = el.value; else delete l.on; }
-    else return;
+    else if (el.value && L.keyDay(el.value) !== null) l.on = el.value;
+    else delete l.on;
     tidy(k);
-    save();
+    save(before);
   };
   const onSubmit = (e) => {
     const f = e.target;
     e.preventDefault();
+    if (!e.isTrusted) return;
     const k = f.closest('[data-key]')?.dataset.key;
+    const before = copy();
     if (f.dataset.act === 'addStep' && k) {
       const title = f.querySelector('input').value.trim();
       if (!title) return;
       const l = local(k);
       l.subs = [...(l.subs || []), { id: uid(), title, done: false }];
-      save();
-      box.querySelector(`[data-focus="${CSS.escape(`${k} stepText`)}"]`)?.focus();
+      save(before).then(() => box?.querySelector(`[data-focus="${CSS.escape(`${k} stepText`)}"]`)?.focus());
     } else if (f.dataset.act === 'addSession' && k) {
       const [date, time] = (f.querySelector('input[type="datetime-local"]').value || '').split('T');
       const at = L.typed(date, time, who.tz);
@@ -425,18 +447,23 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (!at || !(min >= 5 && min <= 600)) return note(t('Pick a start and a length from 5 to 600 minutes.'));
       const l = local(k);
       l.sessions = [...(l.sessions || []), { at, min }];
-      save();
+      save(before);
     } else if (f.dataset.act === 'saveTask') {
       const v = Object.fromEntries(new FormData(f));
       const title = String(v.title || '').trim();
       if (!title) return;
-      const at = v.date && v.time ? L.typed(v.date, v.time, who.tz) : null;
-      const x = { id: form.id || uid(), title, cid: String(v.cid || ''), due: at ? { at } : v.date ? { day: v.date } : null, notes: String(v.notes || ''), done: form.done || 0, at: form.at || Date.now() };
+      const day = L.keyDay(String(v.date || '')) !== null ? v.date : '';
+      const at = day && v.time ? L.typed(day, v.time, who.tz) : null;
+      const x = { id: form.id || uid(), title, cid: String(v.cid || ''), due: at ? { at } : day ? { day } : null, notes: String(v.notes || ''), done: form.done || 0, at: form.at || Date.now() };
       data.tasks = form.id ? data.tasks.map((y) => (y.id === x.id ? x : y)) : [...data.tasks, x];
-      note(form.id ? t('Saved {title}.', { title }) : t('Added {title}.', { title }));
+      // The form stays open with what was typed if it couldn't be kept.
+      const was = form;
       form = null;
-      save();
-      box.querySelector('[data-focus="add"]')?.focus();
+      save(before, was.id ? t('Saved {title}.', { title }) : t('Added {title}.', { title })).then((kept) => {
+        if (!kept) form = { ...was, draft: Object.fromEntries([...new FormData(f)].map(([n, w]) => [n, String(w)])) };
+        if (!kept) render(true);
+        box?.querySelector(`[data-focus="${kept ? 'add' : 'form title'}"]`)?.focus();
+      });
     }
   };
   // Enter on an item's checkbox opens it, as on its title; Space ticks it (the browser's own).
@@ -501,7 +528,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     }
     if (box.nextElementSibling !== native) native.before(box);
     if (!started) started = start();
-    else if (who) { render(); refresh(); }
+    else if (who) render();
   };
   const off = () => {
     if (!box) return;

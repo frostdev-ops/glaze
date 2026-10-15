@@ -351,7 +351,7 @@
   };
   // Better To Do (features/todo.js)
   const todoHere = () => !ultra && links.length && settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
-  const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(true), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
+  const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
   // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in

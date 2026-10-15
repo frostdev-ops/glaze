@@ -515,7 +515,6 @@
   "To grade": "Para avaliar",
   "{graded} of {all} graded": "{graded} de {all} avaliadas",
   "{n} unread": "{n} não lidos",
-  "Couldn't save that to Canvas, so nothing changed. Try again in a moment.": "Não foi possível salvar isso no Canvas, então nada mudou. Tente de novo em instantes.",
   "{title} is done.": "{title} está feito.",
   "{title} is back on your list.": "{title} voltou para sua lista.",
   "Click again to delete": "Clique de novo para excluir",
@@ -531,4 +530,7 @@
   "Upcoming": "Em breve",
   "Clear date": "Limpar data",
   "Better To Do on Canvas: your To Do by day, with your own tasks and focus sessions.": "Better To Do no Canvas: suas tarefas por dia, com tarefas próprias e sessões de foco.",
+  "Couldn't save that on this device, so nothing changed.": "Não foi possível salvar isso neste dispositivo, então nada mudou.",
+  "Canvas didn't confirm that, so your list is checking with Canvas again.": "O Canvas não confirmou isso, então sua lista está consultando o Canvas de novo.",
+  "Couldn't store the Better To Do tasks in {file}, so nothing was imported.": "Não foi possível guardar as tarefas do Better To Do de {file}, então nada foi importado.",
 };

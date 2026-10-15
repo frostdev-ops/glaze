@@ -672,11 +672,16 @@ GZ_UI.load().then((s) => {
     if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {
       return hint(t('No Glaze settings found in {file}.', { file: file.name }), true);
     }
-    Object.assign(s, GZ_SANITIZE(raw));
-    save(Object.keys(s));
+    // All of it is cleaned before any of it is applied, and the tasks are stored first: a file that can't be taken
+    // whole changes nothing.
+    const next = GZ_SANITIZE(raw);
     if (raw.tasks && typeof raw.tasks === 'object') {
-      chrome.storage.local.set(Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])));
+      const tasks = Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)]));
+      const kept = await new Promise((res) => chrome.storage.local.set(tasks, () => res(!chrome.runtime.lastError)));
+      if (!kept) return hint(t("Couldn't store the Better To Do tasks in {file}, so nothing was imported.", { file: file.name }), true);
     }
+    Object.assign(s, next);
+    save(Object.keys(s));
     fill();
     hint(t('Imported {file}.', { file: file.name }));
   });

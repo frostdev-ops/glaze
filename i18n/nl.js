@@ -515,7 +515,6 @@
   "To grade": "Te beoordelen",
   "{graded} of {all} graded": "{graded} van {all} beoordeeld",
   "{n} unread": "{n} ongelezen",
-  "Couldn't save that to Canvas, so nothing changed. Try again in a moment.": "Dat kon niet in Canvas worden opgeslagen, dus er is niets veranderd. Probeer het zo nog eens.",
   "{title} is done.": "{title} is klaar.",
   "{title} is back on your list.": "{title} staat weer op je lijst.",
   "Click again to delete": "Klik nogmaals om te verwijderen",
@@ -531,4 +530,7 @@
   "Upcoming": "Binnenkort",
   "Clear date": "Datum wissen",
   "Better To Do on Canvas: your To Do by day, with your own tasks and focus sessions.": "Better To Do op Canvas: je taken per dag, met je eigen taken en focussessies.",
+  "Couldn't save that on this device, so nothing changed.": "Dat kon niet op dit apparaat worden opgeslagen, dus er is niets veranderd.",
+  "Canvas didn't confirm that, so your list is checking with Canvas again.": "Canvas heeft dat niet bevestigd, dus je lijst vraagt het Canvas opnieuw.",
+  "Couldn't store the Better To Do tasks in {file}, so nothing was imported.": "De Better To Do-taken uit {file} konden niet worden opgeslagen, dus er is niets geïmporteerd.",
 };

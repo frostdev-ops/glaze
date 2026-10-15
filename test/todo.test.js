@@ -251,3 +251,23 @@ test('its settings join GZ_SPEC from here, so the first content script carries o
   assert.deepEqual(D.GZ_SANITIZE({}).todo, { span: 'week', n: 7, unit: 'days', start: 'rolling', past: 'week', rel: false, urgent: true, teacher: true, progress: true, done: 'auto', group: true, sync: false });
   assert.deepEqual(D.GZ_SANITIZE({ todo: { span: 'custom', n: 90, unit: 'weeks', past: 'forever', sync: 'yes' } }).todo, { ...D.GZ_SANITIZE({}).todo, span: 'custom', unit: 'weeks' });
 });
+
+test('real calendar dates only; a skipped time moves forward; a redo stays open', () => {
+  // 2026-02-30 is no date; an object in a file is no date either, and nothing throws.
+  assert.equal(T.keyDay('2026-02-30'), null);
+  assert.equal(T.keyDay('2026-02-28'), day('2026-02-28'));
+  assert.equal(T.keyDay({ toString: null }), null);
+  const cleaned = T.clean({ tasks: [{ id: 'a', title: 'Feb 30', due: { day: '2026-02-30' } }, { id: 'b', title: 'Object', due: { day: { toString: null } } }],
+    items: { 'assignment:1': { on: '2026-13-01' } } });
+  assert.deepEqual(cleaned.tasks.map((x) => x.due), [null, null]);
+  assert.deepEqual(cleaned.items, {});
+  // 2:30 doesn't happen in New York on 8 March 2026: it is 3:30 (EDT), not 1:30 (EST). 1:30 on 1 November is the first one.
+  assert.equal(new Date(T.typed('2026-03-08', '02:30', NY)).toISOString(), '2026-03-08T07:30:00.000Z');
+  assert.equal(new Date(T.typed('2026-03-08', '01:30', NY)).toISOString(), '2026-03-08T06:30:00.000Z');
+  assert.equal(new Date(T.typed('2026-11-01', '01:30', NY)).toISOString(), '2026-11-01T05:30:00.000Z');
+  assert.equal(T.typed('2026-02-30', '10:00', NY), null);
+  // Graded, but a resubmission is asked for: still to do (Canvas keeps it open too).
+  const redo = T.slim(item('assignment', 30, '2026-10-16T18:00:00Z', { sub: sub({ submitted: true, graded: true, redo_request: true }) }));
+  assert.equal(T.isDone(redo, 'auto'), false);
+  assert.ok(keys(T.build({ items: [redo], o: O, now: NOW, tz: NY }).groups.flatMap(([, l]) => l)).includes('assignment:30'));
+});
