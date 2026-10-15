@@ -62,6 +62,13 @@ _Last updated: 2026-10-15_
   submission status, your planner marks) and, for teachers, the work waiting to be graded with its counts. Two
   minutes is how long that copy counts as fresh, not how long it is kept: it stays until the next fetch replaces it,
   or until Glaze is removed.
+- **Reminders and streak** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site
+  and signed-in user id: which reminders have been shown (so another tab doesn't show them again; while one tab is
+  showing one, a random id for that tab holds it for 30 seconds), the ones you
+  snoozed and the items you muted, each with a time (dropped after a month; mutes after three months), and, with the
+  streak on, the day your run started, your best, what a restore forgave and how many restores you used this month.
+  It's kept apart from Canvas's own read and done state, which Glaze never changes. Nothing sends it anywhere, and
+  Export settings leaves it out; your reminder choices (which kinds, how long before) are settings and sync with them.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
@@ -169,6 +176,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
   same window, and keeps the answer in that same copy (and the due list above), unless a newer one arrived meanwhile;
   the list then uses it too (a teacher's list asks only for its grading items). It asks again when you come back to
   the page after that, or change the To Do settings, and not within a minute of a failed ask. It never writes to Canvas.
+- **Reminders and streak** (Canvas, off by default). On any Canvas page while one is on, Glaze asks your own Canvas
+  site for your profile and course list (as Better To Do does) and uses Better To Do's copy of your planner items. Only
+  when that copy is missing or more than ten minutes old and neither the To Do list nor the card tasks are on the page
+  does it ask for your planner items itself, the same read-only request with the same window, keeping the answer in
+  that same copy. It asks again when you come back to the page after that, not within a minute of a failed ask, and
+  never on a timer. Reminders are drawn inside the Canvas page only: Glaze has no notifications permission and sends
+  nothing to any other place. It never writes to Canvas.
 - **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). This is the only change Glaze
   makes to any site. When you tick or untick an item, Glaze writes Canvas's own planner mark for it, as Canvas's List
   View checkbox does: one request to your own Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark
@@ -234,7 +248,7 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 
 ## Permissions
 
-- `storage` — to save the settings, GPA choices, course names, places, what-if scores, due list, Better To Do's tasks and plans,
+- `storage` — to save the settings, GPA choices, course names, places, what-if scores, due list, Better To Do's tasks and plans, reminder and streak state,
   typed-text backups, Looks history and favorites, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
