@@ -7,6 +7,8 @@ const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
 const hint = (msg) => { $('#hint').textContent = msg || ''; $('#hint').hidden = !msg; $('#hint').classList.toggle('err', !!msg); };
 const LEVELS = ['off', 'subtle', 'expressive'];
 const level = (l) => t(l[0].toUpperCase() + l.slice(1));
+// Auto light and dark, cycled from its tile; the schedule's times are set in the editor.
+const AUTO = [['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']];
 
 GZ_UI.load().then((s) => {
   const save = (keys) => GZ_UI.save(s, keys, hint);
@@ -29,10 +31,21 @@ GZ_UI.load().then((s) => {
     $('#motion').dataset.level = s.motion.level;
     $('#motion-name').textContent = level(s.motion.level);
     $('#motion').setAttribute('aria-label', t('Motion: {level}', { level: level(s.motion.level) }));
+    const mode = s.auto.on ? s.auto.mode : 'off';
+    const name = t(AUTO.find(([m]) => m === mode)[1]);
+    $('#auto-name').textContent = mode === 'schedule' ? `${name} · ${s.auto.from}–${s.auto.to}` : name;
+    $('#auto').setAttribute('aria-label', t('Auto light and dark: {mode}', { mode: $('#auto-name').textContent }));
     if (s.auto.on) hint(t('Auto light/dark is on. Picking a palette turns it off.'));
   };
 
   $('#enabled').addEventListener('click', () => { s.enabled = !s.enabled; save(['enabled']); render(); });
+  $('#auto').addEventListener('click', () => {
+    const next = AUTO[(AUTO.findIndex(([m]) => m === (s.auto.on ? s.auto.mode : 'off')) + 1) % AUTO.length][0];
+    s.auto = { ...s.auto, on: next !== 'off', mode: next === 'off' ? s.auto.mode : next };
+    if (!s.auto.on) hint();
+    save(['auto']);
+    render();
+  });
   $('#motion').addEventListener('click', () => {
     s.motion.level = LEVELS[(LEVELS.indexOf(s.motion.level) + 1) % LEVELS.length];
     save(['motion']);

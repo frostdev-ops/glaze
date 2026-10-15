@@ -232,6 +232,7 @@ GZ_UI.load().then((s) => {
     presetOptions();
     outputs();
     $('[data-key="auto.on"]').checked = s.auto.on;
+    $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
     document.body.classList.toggle('off', !s.enabled);
     // Redrawn lists and shown/hidden controls: match again.

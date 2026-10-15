@@ -770,6 +770,11 @@ html :is(body > .event-details, .ui-kyle-menu) { background-color: var(--gz-surf
 html[data-gz-dark-theme][data-gz-bg]:not([data-gz-bg="solid"]) .user_content { background-color: var(--gz-surface); }
 html[data-gz-dark-theme][data-gz-bg]:not([data-gz-bg="solid"]) #right-side { --gz-ground: var(--gz-surface); }
 html[data-gz-dark-theme] :is(.user_content, .user_content *)[data-gz-dark="highlight"] { color: #14181f !important; }
+/* An instructor's dark colour (navy, dark green) the sweep found unreadable: the same hue, lifted to a light tone (the
+   palette's ink where relative colours aren't supported). Text fill, so the element's own colour stays the source;
+   not passed down, as each child with text is tagged on its own. */
+html[data-gz-dark-theme] .user_content [data-gz-lift] { -webkit-text-fill-color: var(--gz-ink); -webkit-text-fill-color: oklch(from currentColor max(l, 0.78) c h); }
+html[data-gz-dark-theme] .user_content [data-gz-lift] :not([data-gz-lift]) { -webkit-text-fill-color: currentColor; }
 .user_content, .user_content :where(p, li, td, th, div, span) { line-height: var(--gz-leading); }
 .user_content :where(a) { color: var(--gz-accent); text-underline-offset: 0.2em; }
 .user_content :where(a):hover { color: var(--gz-accent-hi); }

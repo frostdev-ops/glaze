@@ -28,9 +28,10 @@ const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], [
 // Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
-// 'font-auto' (the same, or 'auto'). GZ_SANITIZE walks this.
+// 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM"). GZ_SANITIZE walks this.
 const GZ_SPEC = {
-  auto: { on: [false, 'bool'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
+  // mode: the device's light/dark, or dark from `from` until `to` (past midnight if earlier).
+  auto: { on: [false, 'bool'], mode: ['device', ['device', 'schedule']], from: ['20:00', 'time'], to: ['08:00', 'time'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
     // Text, headings and code. Headings on auto follow the text; code on auto is left as Ultra has it.
     font: ['system', 'font'], head: ['auto', 'font-auto'], mono: ['auto', 'font-auto'],
@@ -73,6 +74,8 @@ const GZ_SPEC = {
     // darkDocs: file previews inverted (switched from the floating button too); toggles: the floating
     // document buttons themselves.
     darkDocs: [false, 'bool'], toggles: [true, 'bool'],
+    // quizLight (Canvas): no Glaze on quizzes being taken and tool pages.
+    quizLight: [false, 'bool'],
   },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };
@@ -204,6 +207,7 @@ const cleanNicks = (raw, room) => {
 
 const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
+  if (rule === 'time') return /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : d;
   if (rule === 'name') return cleanName(v) || d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];
   if (rule === 'font' || rule === 'font-auto') {
@@ -321,10 +325,23 @@ const GZ_SANITIZE = (raw) => {
   return out;
 };
 
-// The palette to paint: the user's colors, or with auto on, the light/dark preset for the OS mode.
-const GZ_ACTIVE_COLORS = (s, prefersDark) => {
+// Dark by the wall clock (local): from `from` until `to`; equal times never.
+const hhmm = (v) => +v.slice(0, 2) * 60 + +v.slice(3);
+const GZ_SCHEDULE_DARK = (from, to, now) => {
+  const m = now.getHours() * 60 + now.getMinutes(), f = hhmm(from), t = hhmm(to);
+  return f < t ? m >= f && m < t : f > t && (m >= f || m < t);
+};
+// The next flip after `now`, or null: local dates, not now + n hours, so DST days keep the wall-clock time.
+const GZ_SCHEDULE_NEXT = (from, to, now) => {
+  if (from === to) return null;
+  const at = [from, to].flatMap((v) => [0, 1].map((d) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + d, 0, hhmm(v))));
+  return at.filter((d) => d > now).sort((a, b) => a - b)[0];
+};
+// The palette to paint: the user's colors, or with auto on, the light/dark preset for the OS mode or the schedule.
+const GZ_ACTIVE_COLORS = (s, prefersDark, now = new Date()) => {
   if (!s.auto.on) return s.colors;
-  return GZ_PRESET(prefersDark ? s.auto.dark : s.auto.light, s.presets) || s.colors;
+  const dark = s.auto.mode === 'schedule' ? GZ_SCHEDULE_DARK(s.auto.from, s.auto.to, now) : prefersDark;
+  return GZ_PRESET(dark ? s.auto.dark : s.auto.light, s.presets) || s.colors;
 };
 
 // ---- contrast ---------------------------------------------------------------------------------
@@ -504,5 +521,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }
