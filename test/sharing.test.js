@@ -48,8 +48,8 @@ test('sealing: a round trip, padded lengths, and any change to a sealed batch is
   const flip = (b64, i) => { const b = G.unb64(b64); b[i] ^= 1; return G.b64(b); };
   for (const i of [0, 11, 12, 40, G.unb64(s.op).length - 1]) await assert.rejects(G.open(k, 'op', { ...s, op: flip(s.op, i) }), undefined, `byte ${i}`);
   await assert.rejects(G.open(k, 'op', { ...s, sig: flip(s.sig, 3) }), /signature/);
-  await assert.rejects(G.open(k, 'snap', s), /signature/); // another kind
-  await assert.rejects(G.open(k, 'snap', await G.seal(k, 'snap', data, '5'), '6'), /signature/); // a snapshot relabelled
+  await assert.rejects(G.open(k, 'blob', s), /signature/); // another kind
+  await assert.rejects(G.open(k, 'op', await G.seal(k, 'op', data, '5'), '6'), /signature/); // a batch moved to another place in the log
   await assert.rejects(G.open(other, 'op', s), /signature/); // another session
   // Signed by this session's key but sealed under another session's id: the associated data doesn't match.
   await assert.rejects(G.open({ ...other, vk: k.vk }, 'op', s));
@@ -120,7 +120,10 @@ test('edit: deletions and restores are changes too, and a value too big to share
   assert.deepEqual(G.view(d), { x: { a: 1 } });
   await G.edit(d, AD, { x: { a: 1 }, y: { a: 2 } }, 1e12);
   assert.deepEqual(G.view(d), { x: { a: 1 }, y: { a: 2 } });
-  assert.deepEqual(d.pending.flat().map((o) => [o.e, o.f, o.v]), [['x', 'a', 1], ['y', 'a', 2], ['y', 'del', true], ['y', 'del', false]]);
+  // A restore sends its fields again; a deleted entity's fields aren't sent again with the whole state.
+  assert.deepEqual(d.pending.flat().map((o) => [o.e, o.f, o.v]), [['x', 'a', 1], ['y', 'a', 2], ['y', 'del', true], ['y', 'del', false], ['y', 'a', 2]]);
+  await G.edit(d, AD, { x: { a: 1 } }, 1e12);
+  assert.deepEqual(G.everything(d).flat().map((o) => [o.e, o.f]).sort(), [['x', 'a'], ['y', 'del']]);
   const big = { fields: ['t'], clean: (f, v) => v };
   const n = blank();
   assert.deepEqual(await G.edit(n, big, { a: { t: 'x'.repeat(G.LIMIT.op) }, b: { t: 'ok' } }, 1e12), { n: 1, big: ['a'] });
@@ -161,4 +164,46 @@ test('adapters: notes come in sanitized, a Look only as a code Glaze accepts', a
   assert.equal(await look.clean('code', 'glaze1:' + 'A'.repeat(50)), undefined);
   assert.equal(await look.clean('name', 'Frost'), 'Frost');
   assert.equal(await look.clean('name', { x: 1 }), undefined);
+});
+
+test('adapters: a notes file is a reference checked field by field', async () => {
+  const notes = G.ADAPTERS.notes;
+  const ref = { id: 'A'.repeat(22), h: 'B'.repeat(43), s: 1234, n: 'diagram.png', t: 'Image/PNG' };
+  assert.deepEqual(await notes.clean('file', { ...ref, extra: 1 }), { ...ref, t: 'image/png' });
+  for (const bad of [null, 'x', { ...ref, id: '../x' }, { ...ref, h: 'short' }, { ...ref, s: -1 }, { ...ref, s: (20 << 20) + 1 }, { ...ref, n: 'x'.repeat(201) }, { ...ref, t: 'text/html; x=1' }]) {
+    assert.equal(await notes.clean('file', bad), undefined, JSON.stringify(bad));
+  }
+});
+
+// The extension loads these as classic scripts in one page, with no require(): the adapters must find the codecs there
+// (lib/share.js declares GZ_SHARE as a top-level const, which isn't a property of globalThis).
+test('adapters work as classic scripts, without require()', async () => {
+  const vm = require('node:vm');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const ctx = vm.createContext({ crypto, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, URL, console });
+  // The worker's order (lib/background.js importScripts), then this file.
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/cards.js', 'lib/share.js', 'lib/doctext.js', 'lib/notes.js', 'lib/sharing.js']) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), ctx, { filename: f });
+  }
+  const code = await L.encode(D.GZ_SANITIZE({}));
+  assert.equal(await vm.runInContext('GZ_SHARING.ADAPTERS.look.clean', ctx)('code', code), code);
+  assert.equal(await vm.runInContext('GZ_SHARING.ADAPTERS.notes.clean', ctx)('html', '<p>hi<script>x</script></p>'), '<p>hi</p>');
+});
+
+test('keys for Export all: a new computer can rejoin, and the creator can still delete', async () => {
+  const st = G.create('notes', { server: 'https://share.example', expire: true });
+  const rec = G.exportKeys(st);
+  assert.deepEqual(Object.keys(rec).sort(), ['del', 'expire', 'seed', 'server', 'sid', 'type', 'v']);
+  const back = G.importKeys(JSON.parse(JSON.stringify(rec)));
+  assert.deepEqual([back.sid, back.seed, back.del, back.expire, back.type, back.made, back.cursor], [st.sid, st.seed, st.del, true, 'notes', true, 0]);
+  assert.notEqual(back.actor, st.actor); // a new device writes as itself
+  const reader = G.join(await G.session(st).link(false), false);
+  assert.deepEqual(Object.keys(G.exportKeys(reader)).sort(), ['pub', 'secret', 'server', 'sid', 'type', 'v']);
+  for (const bad of [null, { ...rec, v: 2 }, { ...rec, server: 'http://share.example' }, { ...rec, sid: 'x' }, { ...rec, type: 'nope' }, { ...rec, seed: 'x' },
+    { ...rec, del: 'x' }, { v: 1, type: null, server: 'https://share.example', sid: st.sid, secret: 'A'.repeat(43), pub: 'A'.repeat(43), del: 'A'.repeat(43) }]) {
+    assert.equal(G.importKeys(bad), null, JSON.stringify(bad));
+  }
+  assert.equal(G.SERVER, 'https://share.frostdev.io');
+  assert.equal(G.create('look').server, G.SERVER);
 });

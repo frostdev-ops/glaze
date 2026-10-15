@@ -1,52 +1,116 @@
 #!/usr/bin/env node
-// Glaze's share relay (spike S6). It keeps share sessions as sealed batches and rings the devices that follow them. It
-// can't read them: Glaze encrypts everything with a key from the share link's # part, which browsers never send. It
-// checks each batch's signature against the session's public key, so only edit links can write. No accounts, no
-// cookies, no request logs; client addresses live in memory only, for rate limits, and go once their limits refill.
+// Glaze's share relay (spike S6). It keeps share sessions as sealed batches and encrypted files, and rings the devices
+// that follow them. It can't read either: Glaze encrypts everything with a key from the share link's # part, which
+// browsers don't send. It checks every write's signature against the session's public key, so only edit links write,
+// and each batch is signed for its place in the log, so nothing can be replayed. No accounts, no cookies, no request
+// logs; client addresses live in memory only, for rate limits, and go once their limits refill.
 // Node's built-ins only (node:sqlite: Node 22.13 or later). One command, behind a TLS reverse proxy:
-//   node server/relay.js                   PORT (8787), HOST (127.0.0.1), DB (./share.db), TRUST_PROXY=1 behind a
-//                                          proxy (the client is the last X-Forwarded-For entry), MAX_BYTES (5 GiB)
-//   node server/relay.js --backup <file>   a consistent copy of the database, safe while the relay runs
-//   node server/relay.js --delete <id>     delete a session (an abuse report)
+//   node server/relay.js                   PORT (8787), HOST (127.0.0.1), DB (./share.db), BLOBS (./share-blobs),
+//                                          IP_HEADER (the header the proxy puts the client's address in; for
+//                                          X-Forwarded-For its last entry), MAX_BYTES (5 GiB of batches),
+//                                          MAX_BLOB_BYTES (20 GiB of files)
+//                                          Files go to Cloudflare R2 instead of BLOBS when R2_ACCOUNT_ID,
+//                                          R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET are set.
+//   node server/relay.js --backup <file>   a consistent copy of the database, safe while the relay runs (files aren't in it)
+//   node server/relay.js --delete <id>     delete a session and its files (an abuse report)
 'use strict';
 const http = require('node:http');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
-// A sealed batch, one session's batches and snapshot together, a request body, a catch-up page, sessions per socket,
-// sockets per client address, a frame from a client.
-const LIMIT = { op: 1 << 20, session: 50 << 20, body: 1500000, page: 4 << 20, sub: 200, sockets: 8, frame: 16384 };
+// A sealed batch; one session's batches together; a JSON body (a batch in base64); a catch-up page; an encrypted file
+// (a 20 MiB attachment, padded); one session's files together; sessions per socket; sockets per address; a frame from
+// a client; what a socket may have waiting to be sent before it counts as not reading.
+const LIMIT = { op: 4 << 20, session: 50 << 20, body: 5600000 + 4096, page: 4 << 20, blob: (20 << 20) + 4096 + 28, blobs: 500 << 20, sub: 200, sockets: 8, frame: 16384, backlog: 65536 };
 // Per client address (an IPv6 /64): [burst, refilled over ms]. bytes counts what is written, down what is read.
-const RATE = { create: [30, 3600e3], write: [240, 60e3], read: [600, 60e3], bytes: [100 << 20, 3600e3], down: [1 << 30, 3600e3] };
+const RATE = { create: [30, 3600e3], write: [240, 60e3], read: [600, 60e3], bytes: [500 << 20, 3600e3], down: [2 ** 31, 3600e3] };
 const SID = /^[\w-]{22}$/, KEY = /^[\w-]{43}$/, SIG = /^[\w-]{86}$/, B64 = /^[\w-]+$/;
 const DAY = 864e5;
 const PAGE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Glaze share</title>
 <style>body{font:17px/1.5 system-ui,sans-serif;max-width:34em;margin:3em auto;padding:0 1em;color:#222;background:#fff}@media(prefers-color-scheme:dark){body{color:#eee;background:#161616}}</style>
 <h1>A Glaze share link</h1><p>Someone shared notes, a Look or a list with you through Glaze. To open it, copy this page's address and
 paste it into Glaze under <b>Shared</b>. If Glaze is installed and set to use this server, it offers to open it here.</p>
-<p>What's shared is encrypted. Its key is the part of the address after <b>#</b>, which your browser never sends to this server.</p>`;
+<p>What's shared is encrypted. Its key is the part of the address after <b>#</b>, which browsers don't send to servers.
+This page runs no scripts. Your browser may keep the whole address, key included, in its history; pasting the link into
+Glaze instead of opening it avoids that.</p>`;
 
-const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 30, rate = RATE, limit = LIMIT } = {}) => {
+// ---- file stores: the relay's own disk, or an S3-compatible bucket (Cloudflare R2) ------------------------------------
+// AWS Signature Version 4 (header form), as R2 takes it. Exported for its test vector.
+const sigv4 = ({ method, url, headers = {}, body = '', keyId, secret, region, service = 's3', date = new Date() }) => {
+  const u = new URL(url);
+  const amz = date.toISOString().replace(/[-:]|\.\d{3}/g, '');
+  const hash = (x) => crypto.createHash('sha256').update(x).digest('hex');
+  const all = { ...Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), String(v).trim()])), host: u.host, 'x-amz-date': amz };
+  const names = Object.keys(all).sort();
+  const scope = `${amz.slice(0, 8)}/${region}/${service}/aws4_request`;
+  const canonical = [method, u.pathname, '', ...names.map((n) => `${n}:${all[n]}`), '', names.join(';'), all['x-amz-content-sha256'] || hash(body)].join('\n');
+  let k = crypto.createHmac('sha256', `AWS4${secret}`).update(amz.slice(0, 8)).digest();
+  for (const x of [region, service, 'aws4_request']) k = crypto.createHmac('sha256', k).update(x).digest();
+  const sig = crypto.createHmac('sha256', k).update(['AWS4-HMAC-SHA256', amz, scope, hash(canonical)].join('\n')).digest('hex');
+  delete all.host; // fetch sets it
+  return { ...all, authorization: `AWS4-HMAC-SHA256 Credential=${keyId}/${scope}, SignedHeaders=${names.join(';')}, Signature=${sig}` };
+};
+const s3Store = ({ endpoint, bucket, keyId, secret, region = 'auto' }) => {
+  const call = async (method, key, body = Buffer.alloc(0)) => {
+    const url = `${endpoint}/${bucket}/${key}`;
+    const headers = sigv4({ method, url, headers: { 'x-amz-content-sha256': crypto.createHash('sha256').update(body).digest('hex') }, keyId, secret, region });
+    const r = await fetch(url, { method, headers, body: method === 'PUT' ? body : undefined, signal: AbortSignal.timeout(60e3) });
+    if (!r.ok && !(method === 'DELETE' && r.status === 404) && !(method === 'GET' && r.status === 404)) throw new Error(`store ${method} ${r.status}`);
+    return r;
+  };
+  return {
+    put: async (key, bytes) => { await call('PUT', key, bytes); },
+    get: async (key) => { const r = await call('GET', key); return r.ok ? Buffer.from(await r.arrayBuffer()) : null; },
+    del: async (key) => { await call('DELETE', key); },
+  };
+};
+const diskStore = (dir) => {
+  const at = (key) => path.join(dir, ...key.split('/'));
+  return {
+    put: async (key, bytes) => {
+      await fs.promises.mkdir(path.dirname(at(key)), { recursive: true });
+      await fs.promises.writeFile(`${at(key)}.part`, bytes);
+      await fs.promises.rename(`${at(key)}.part`, at(key));
+    },
+    get: (key) => fs.promises.readFile(at(key)).catch((e) => (e.code === 'ENOENT' ? null : Promise.reject(e))),
+    del: async (key) => { await fs.promises.rm(at(key), { force: true }); await fs.promises.rmdir(path.dirname(at(key))).catch(() => {}); },
+  };
+};
+
+const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHeader = '', maxBytes = 5 * 2 ** 30, maxBlobBytes = 20 * 2 ** 30, expiryDays = 365, rate = RATE, limit = LIMIT } = {}) => {
   const db = new DatabaseSync(file);
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
-    CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, pub BLOB, del BLOB, day INTEGER NOT NULL, head INTEGER NOT NULL DEFAULT 0,
-      base INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0, snap BLOB, snap_sig BLOB, gone INTEGER) STRICT;
-    CREATE TABLE IF NOT EXISTS ops (sid TEXT NOT NULL, n INTEGER NOT NULL, op BLOB NOT NULL, sig BLOB NOT NULL, PRIMARY KEY (sid, n)) STRICT, WITHOUT ROWID;`);
+    CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, pub BLOB, del BLOB, expire INTEGER NOT NULL DEFAULT 0, touched INTEGER NOT NULL,
+      head INTEGER NOT NULL DEFAULT 0, base INTEGER NOT NULL DEFAULT 0, base_sig BLOB, bytes INTEGER NOT NULL DEFAULT 0,
+      blob_bytes INTEGER NOT NULL DEFAULT 0, gone INTEGER) STRICT;
+    CREATE TABLE IF NOT EXISTS ops (sid TEXT NOT NULL, n INTEGER NOT NULL, op BLOB NOT NULL, sig BLOB NOT NULL, PRIMARY KEY (sid, n)) STRICT, WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS blobs (sid TEXT NOT NULL, id TEXT NOT NULL, size INTEGER NOT NULL, PRIMARY KEY (sid, id)) STRICT, WITHOUT ROWID;`);
   const q = Object.fromEntries(Object.entries({
     get: 'SELECT * FROM sessions WHERE sid = ?',
-    make: 'INSERT INTO sessions (sid, pub, del, day) VALUES (?, ?, ?, ?)',
+    make: 'INSERT INTO sessions (sid, pub, del, expire, touched) VALUES (?, ?, ?, ?, ?)',
+    touch: 'UPDATE sessions SET touched = ? WHERE sid = ? AND touched < ?',
+    expiry: 'UPDATE sessions SET expire = ?, touched = ? WHERE sid = ?',
     add: 'INSERT INTO ops (sid, n, op, sig) VALUES (?, ?, ?, ?)',
     grow: 'UPDATE sessions SET head = ?, bytes = bytes + ? WHERE sid = ?',
     page: 'SELECT n, op, sig FROM ops WHERE sid = ? AND n > ? ORDER BY n LIMIT 1000',
     at: 'SELECT sig FROM ops WHERE sid = ? AND n = ?',
     upto: 'SELECT coalesce(sum(length(op)), 0) AS b FROM ops WHERE sid = ? AND n <= ?',
     drop: 'DELETE FROM ops WHERE sid = ? AND n <= ?',
-    snap: 'UPDATE sessions SET snap = ?, snap_sig = ?, base = ?, bytes = ? WHERE sid = ?',
-    gone: 'UPDATE sessions SET pub = NULL, del = NULL, snap = NULL, snap_sig = NULL, bytes = 0, gone = ? WHERE sid = ?',
-    total: 'SELECT coalesce(sum(bytes), 0) AS b FROM sessions',
+    trim: 'UPDATE sessions SET base = ?, base_sig = ?, bytes = bytes - ? WHERE sid = ?',
+    gone: 'UPDATE sessions SET pub = NULL, del = NULL, base_sig = NULL, bytes = 0, gone = ? WHERE sid = ?',
+    blob: 'SELECT size FROM blobs WHERE sid = ? AND id = ?',
+    addBlob: 'INSERT INTO blobs (sid, id, size) VALUES (?, ?, ?)',
+    growBlobs: 'UPDATE sessions SET blob_bytes = blob_bytes + ? WHERE sid = ?',
+    dropBlob: 'DELETE FROM blobs WHERE sid = ? AND id = ?',
+    orphans: 'SELECT b.sid, b.id FROM blobs b JOIN sessions s ON s.sid = b.sid WHERE s.gone IS NOT NULL LIMIT 1000',
+    old: 'SELECT sid FROM sessions WHERE expire = 1 AND gone IS NULL AND touched < ?',
+    total: 'SELECT coalesce(sum(bytes), 0) AS b, coalesce(sum(blob_bytes), 0) AS f FROM sessions',
   }).map(([k, sql]) => [k, db.prepare(sql)]));
   const tx = (f) => { db.exec('BEGIN IMMEDIATE'); try { const out = f(); db.exec('COMMIT'); return out; } catch (e) { db.exec('ROLLBACK'); throw e; } };
-  let total = Number(q.total.get().b);
+  const totals = q.total.get();
+  let total = Number(totals.b), blobTotal = Number(totals.f);
   const today = () => Math.floor(Date.now() / DAY);
 
   // ---- limits: token buckets per client address, in memory only --------------------------------------------------
@@ -59,12 +123,6 @@ const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 
     b[kind] = [left >= cost ? left - cost : left, now];
     return left >= cost;
   };
-  // Forget an address once every one of its buckets would be full again.
-  const sweep = setInterval(() => {
-    const now = Date.now();
-    for (const [ip, b] of buckets) if (Object.entries(b).every(([k, [, at]]) => now - at >= rate[k][1])) buckets.delete(ip);
-  }, 600e3);
-  sweep.unref();
   // IPv4 as is; IPv6 by its /64, which one subscriber usually holds whole.
   const keyOf = (ip) => {
     ip = ip.replace(/^::ffff:(?=\d+\.)/, '');
@@ -74,30 +132,23 @@ const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 
     const all = ip.includes('::') ? [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail] : head;
     return all.slice(0, 4).map((x) => parseInt(x, 16).toString(16)).join(':') + '::/64';
   };
-  const clientOf = (req) => {
-    const fwd = trustProxy && String(req.headers['x-forwarded-for'] || '').split(',').pop().trim();
-    return keyOf(fwd || req.socket.remoteAddress || '');
-  };
+  const clientOf = (req) => keyOf((ipHeader && String(req.headers[ipHeader] || '').split(',').pop().trim()) || req.socket.remoteAddress || '');
+  // A request target Node accepts can still be one URL refuses (`http://[`): that's a bad request, never a crash.
+  const target = (req) => { try { return new URL(req.url, 'http://relay'); } catch { return null; } };
 
   // ---- the live doorbell: a minimal WebSocket server (RFC 6455, text frames) --------------------------------------
   const subs = new Map(); // sid -> Set of sockets
   const perIp = new Map();
-  const frame = (op, data) => {
-    const n = data.length;
-    const head = n < 126 ? Buffer.from([0x80 | op, n]) : n < 65536 ? Buffer.from([0x80 | op, 126, n >> 8, n & 255]) : null;
-    return head ? Buffer.concat([head, data]) : null; // nothing sent here is near 64 KB
-  };
-  const say = (sock, m) => { if (!sock.destroyed) sock.write(frame(1, Buffer.from(JSON.stringify(m)))); };
-  const ring = (sid, m) => { for (const sock of subs.get(sid) || []) say(sock, { s: sid, ...m }); };
-  const heads = (sid) => { const r = q.get.get(sid); return !r ? null : r.gone ? { gone: 1 } : { n: r.head }; };
-  // A heartbeat to every socket: a dead connection shows itself, and it keeps a Chrome service worker awake while open.
   const all = new Set();
-  const heart = setInterval(() => { for (const sock of all) say(sock, {}); }, 25e3);
-  heart.unref();
+  const frame = (op, data) => Buffer.concat([data.length < 126 ? Buffer.from([0x80 | op, data.length]) : Buffer.from([0x80 | op, 126, data.length >> 8, data.length & 255]), data]);
+  // A socket that doesn't read what it's sent is cut off rather than buffered for.
+  const say = (sock, m) => { if (sock.destroyed) return; if (sock.writableLength > limit.backlog) sock.destroy(); else sock.write(frame(1, Buffer.from(JSON.stringify(m)))); };
+  const ring = (sid, m) => { for (const sock of subs.get(sid) || []) say(sock, { s: sid, ...m }); };
+  const unsub = (sock) => { for (const sid of sock.subs || []) { const set = subs.get(sid); set?.delete(sock); if (set && !set.size) subs.delete(sid); } sock.subs = new Set(); };
   const upgrade = (req, sock, early) => {
     const ip = clientOf(req);
     const key = req.headers['sec-websocket-key'];
-    if (new URL(req.url, 'http://x').pathname !== '/live' || String(req.headers.upgrade).toLowerCase() !== 'websocket' || typeof key !== 'string') return sock.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+    if (target(req)?.pathname !== '/live' || String(req.headers.upgrade).toLowerCase() !== 'websocket' || typeof key !== 'string') return sock.end('HTTP/1.1 400 Bad Request\r\n\r\n');
     if ((perIp.get(ip) || 0) >= limit.sockets || !take(ip, 'read')) return sock.end('HTTP/1.1 429 Too Many Requests\r\n\r\n');
     perIp.set(ip, (perIp.get(ip) || 0) + 1);
     all.add(sock);
@@ -108,7 +159,7 @@ const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 
     const bye = (code = 1000) => {
       if (done) return;
       done = true;
-      for (const sid of sock.subs) { subs.get(sid)?.delete(sock); if (!subs.get(sid)?.size) subs.delete(sid); }
+      unsub(sock);
       all.delete(sock);
       perIp.set(ip, perIp.get(ip) - 1);
       if (!perIp.get(ip)) perIp.delete(ip);
@@ -119,12 +170,12 @@ const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 
       try { m = JSON.parse(s); } catch { return bye(1003); }
       if (!take(ip, 'read')) return bye(1008);
       if (!Array.isArray(m?.sub) || m.sub.length > limit.sub || !m.sub.every((x) => typeof x === 'string' && SID.test(x))) return bye(1008);
-      for (const sid of sock.subs) subs.get(sid)?.delete(sock);
+      unsub(sock);
       sock.subs = new Set(m.sub);
       for (const sid of sock.subs) {
         (subs.get(sid) || subs.set(sid, new Set()).get(sid)).add(sock);
-        const h = heads(sid);
-        if (h) say(sock, { s: sid, ...h });
+        const r = q.get.get(sid);
+        if (r) say(sock, r.gone ? { s: sid, gone: 1 } : { s: sid, n: r.head });
       }
     };
     const onData = (d) => {
@@ -140,7 +191,7 @@ const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 
         buf = buf.subarray(at + 4 + len);
         if (op === 1) text(data.toString());
         else if (op === 8) bye();
-        else if (op === 9) sock.write(frame(10, data));
+        else if (op === 9) { if (sock.writableLength <= limit.backlog) sock.write(frame(10, data)); }
         else if (op !== 10) bye(1003);
       }
     };
@@ -150,6 +201,37 @@ const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 
     sock.on('close', () => bye());
   };
 
+  // ---- deletion and expiry ------------------------------------------------------------------------------------------
+  // A deleted session's batches go at once; its id stays (with the day) so it can't be made again. Its files go from
+  // the store one by one, each row only once its file is gone, so a store that's down is caught up with later.
+  let removing = Promise.resolve();
+  const removeFiles = () => (removing = removing.then(async () => {
+    for (const { sid, id } of q.orphans.all()) {
+      try { await store.del(`${sid}/${id}`); q.dropBlob.run(sid, id); } catch (e) { console.error('relay: file store:', e.message); return; }
+    }
+  }));
+  const remove = (sid) => {
+    const row = q.get.get(sid);
+    if (!row || row.gone) return false;
+    tx(() => { q.drop.run(sid, Number.MAX_SAFE_INTEGER); q.gone.run(today(), sid); });
+    total -= row.bytes;
+    blobTotal -= row.blob_bytes;
+    ring(sid, { gone: 1 });
+    removeFiles();
+    return true;
+  };
+  // Opt-in expiry: a session its creator asked to expire goes once nobody has read or written it for expiryDays.
+  const expire = () => { for (const { sid } of q.old.all(today() - expiryDays)) remove(sid); return removeFiles(); };
+  // Forget an address once every one of its buckets would be full again; run expiry; retry files left in the store.
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    for (const [ip, b] of buckets) if (Object.entries(b).every(([k, [, at]]) => now - at >= rate[k][1])) buckets.delete(ip);
+  }, 600e3);
+  const daily = setInterval(() => { expire().catch(() => {}); }, 6 * 3600e3);
+  // A heartbeat to every socket: a dead connection shows itself, and it keeps a Chrome service worker awake while open.
+  const heart = setInterval(() => { for (const sock of all) say(sock, {}); }, 25e3);
+  for (const t of [sweep, daily, heart]) t.unref();
+
   // ---- HTTP ---------------------------------------------------------------------------------------------------------
   const send = (res, status, body, type = 'application/json') => {
     res.writeHead(status, {
@@ -157,108 +239,137 @@ const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 
       ...(type.startsWith('text/html') && { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" }),
       ...(status === 429 && { 'retry-after': '60' }),
     });
-    res.end(typeof body === 'string' ? body : JSON.stringify(body));
+    res.end(Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body));
   };
-  const read = (req) => new Promise((resolve, reject) => {
+  const raw = (req, cap) => new Promise((resolve, reject) => {
     const parts = [];
     let size = 0;
-    req.on('data', (d) => { size += d.length; if (size > limit.body) { req.pause(); reject(Object.assign(new Error('big'), { status: 413 })); } else parts.push(d); });
-    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(parts).toString() || 'null')); } catch { reject(Object.assign(new Error('bad'), { status: 400 })); } });
+    req.on('data', (d) => { size += d.length; if (size > cap) { req.pause(); reject(Object.assign(new Error('big'), { status: 413 })); } else parts.push(d); });
+    req.on('end', () => resolve(Buffer.concat(parts)));
     req.on('error', reject);
   });
+  const json = (req) => raw(req, limit.body).then((b) => { try { return JSON.parse(b.toString() || 'null'); } catch { throw Object.assign(new Error('bad'), { status: 400 }); } });
   const bytes = (s) => (typeof s === 'string' && B64.test(s) ? Buffer.from(s, 'base64url') : null);
-  const sealed = (b) => { const op = bytes(b?.op), sig = SIG.test(b?.sig) ? Buffer.from(b.sig, 'base64url') : null; return op && sig && op.length >= 29 ? { op, sig } : null; };
-  const signed = (pub, sid, kind, extra, blob, sig) => {
+  const sigOf = (s) => (typeof s === 'string' && SIG.test(s) ? Buffer.from(s, 'base64url') : null);
+  // What a signature covers: Glaze's prefix, the session, the kind, its place (a batch's number, a trim's end, a file's
+  // id), then the bytes. The same function makes it in lib/sharing.js.
+  const signed = (pub, sid, kind, extra, data, sig) => {
     try {
       const key = crypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(pub).toString('base64url') }, format: 'jwk' });
-      return crypto.verify(null, Buffer.concat([Buffer.from(`gzs1|${sid}|${kind}|${extra}`), blob]), key, sig);
+      return crypto.verify(null, Buffer.concat([Buffer.from(`gzs1|${sid}|${kind}|${extra}`), data]), key, sig);
     } catch { return false; }
   };
+  const ROUTE = /^\/s\/([\w-]{22})(?:\/(trim|expiry)|\/b\/([\w-]{22}))?$/;
   const handle = async (req, res) => {
     const ip = clientOf(req);
-    const url = new URL(req.url, 'http://x');
-    const m = /^\/s\/([\w-]{22})(\/snap)?$/.exec(url.pathname);
+    const url = target(req);
+    if (!url) return send(res, 400, { error: 'bad' });
     const look = req.method === 'GET' || req.method === 'HEAD';
     if (look && (url.pathname === '/' || url.pathname === '/j')) return send(res, 200, PAGE, 'text/html; charset=utf-8');
     if (look && url.pathname === '/health') return send(res, 200, { ok: true });
     if (req.method === 'POST' && url.pathname === '/s') {
       if (!take(ip, 'create')) return send(res, 429, { error: 'rate' });
-      const b = await read(req);
+      const b = await json(req);
       if (!SID.test(b?.sid) || !KEY.test(b.pub) || !KEY.test(b.del)) return send(res, 400, { error: 'bad' });
       if (total >= maxBytes) return send(res, 507, { error: 'full' });
       if (q.get.get(b.sid)) return send(res, 409, { error: 'exists' });
-      q.make.run(b.sid, Buffer.from(b.pub, 'base64url'), Buffer.from(b.del, 'base64url'), today());
+      q.make.run(b.sid, Buffer.from(b.pub, 'base64url'), Buffer.from(b.del, 'base64url'), b.expire === true ? 1 : 0, today());
       return send(res, 201, {});
     }
-    const kind = !m ? null : req.method === 'GET' && !m[2] ? 'read' : req.method === 'POST' && !m[2] ? 'append' : req.method === 'PUT' && m[2] ? 'snap' : req.method === 'DELETE' && !m[2] ? 'delete' : null;
+    const m = ROUTE.exec(url.pathname);
+    const kind = !m ? null : m[3] ? { GET: 'getBlob', PUT: 'putBlob' }[req.method] : m[2] === 'trim' ? req.method === 'POST' && 'trim'
+      : m[2] === 'expiry' ? req.method === 'POST' && 'expiry' : { GET: 'read', POST: 'append', DELETE: 'delete' }[req.method];
     if (!kind) return send(res, m ? 405 : 404, { error: m ? 'method' : 'unknown' });
-    if (!take(ip, kind === 'read' ? 'read' : 'write')) return send(res, 429, { error: 'rate' });
+    if (!take(ip, kind === 'read' || kind === 'getBlob' ? 'read' : 'write')) return send(res, 429, { error: 'rate' });
     // The body first, then the session as it is once the body is in: other requests may have changed it meanwhile.
-    const b = kind === 'append' || kind === 'snap' ? await read(req) : null;
+    const b = kind === 'putBlob' ? await raw(req, limit.blob) : ['append', 'trim', 'expiry'].includes(kind) ? await json(req) : null;
     const sid = m[1];
     const row = q.get.get(sid);
     if (!row) return send(res, 404, { error: 'unknown' });
     if (row.gone) return send(res, 410, { error: 'gone' });
+    // The last day anyone used it, kept only for a session that can expire.
+    if (row.expire) q.touch.run(today(), sid, today());
 
     if (kind === 'read') {
       const after = Number(url.searchParams.get('after') || 0);
       if (!Number.isSafeInteger(after) || after < 0) return send(res, 400, { error: 'bad' });
-      // at: the signature of the batch the device read last, so it can tell a server restored from an older backup.
-      const at = after > row.base ? q.at.get(sid, after) : null;
-      const out = { head: row.head, base: row.base, at: at ? Buffer.from(at.sig).toString('base64url') : null, ops: [], more: false };
+      // at: the signature of batch `after` (of the last one trimmed, when that's where it is), so a device can tell a
+      // server restored from an older backup from the one it read.
+      const at = after > row.base ? q.at.get(sid, after)?.sig : after === row.base && after > 0 ? row.base_sig : null;
+      const out = { head: row.head, base: row.base, at: at ? Buffer.from(at).toString('base64url') : null, ops: [], more: false };
       let size = 0;
-      if (after < row.base && row.snap) { out.snap = { op: Buffer.from(row.snap).toString('base64url'), sig: Buffer.from(row.snap_sig).toString('base64url') }; size += row.snap.length; }
       const rows = q.page.all(sid, Math.max(after, row.base));
       for (const o of rows) {
         if (size + o.op.length > limit.page && out.ops.length) { out.more = true; break; }
         out.ops.push({ n: o.n, op: Buffer.from(o.op).toString('base64url'), sig: Buffer.from(o.sig).toString('base64url') });
         size += o.op.length;
       }
-      if (!out.more && rows.length === 1000 && out.ops.length === rows.length) out.more = true;
+      if (!out.more && rows.length === 1000) out.more = true;
       if (!take(ip, 'down', size)) return send(res, 429, { error: 'rate' });
       return send(res, 200, out);
     }
     if (kind === 'append') {
-      const s = sealed(b);
-      if (!s) return send(res, 400, { error: 'bad' });
-      if (s.op.length > limit.op) return send(res, 413, { error: 'big' });
-      if (!signed(row.pub, sid, 'op', '', s.op, s.sig)) return send(res, 403, { error: 'signature' });
-      if (!take(ip, 'bytes', s.op.length)) return send(res, 429, { error: 'rate' });
-      if (row.bytes + s.op.length > limit.session || total + s.op.length > maxBytes) return send(res, 507, { error: 'full' });
-      const n = row.head + 1;
-      tx(() => { q.add.run(sid, n, s.op, s.sig); q.grow.run(n, s.op.length, sid); });
-      total += s.op.length;
-      ring(sid, { n });
-      return send(res, 201, { n });
+      // Signed for one place in the log: the next one. A batch sent again, or for another place, isn't taken.
+      const op = bytes(b?.op), sig = sigOf(b?.sig);
+      if (!op || !sig || op.length < 29 || !Number.isSafeInteger(b.n)) return send(res, 400, { error: 'bad' });
+      if (op.length > limit.op) return send(res, 413, { error: 'big' });
+      if (b.n !== row.head + 1) return send(res, 409, { error: 'place', head: row.head });
+      if (!signed(row.pub, sid, 'op', String(b.n), op, sig)) return send(res, 403, { error: 'signature' });
+      if (!take(ip, 'bytes', op.length)) return send(res, 429, { error: 'rate' });
+      if (row.bytes + op.length > limit.session || total + op.length > maxBytes) return send(res, 507, { error: 'full' });
+      tx(() => { q.add.run(sid, b.n, op, sig); q.grow.run(b.n, op.length, sid); });
+      total += op.length;
+      ring(sid, { n: b.n });
+      return send(res, 201, { n: b.n });
     }
-    if (kind === 'snap') {
-      const s = sealed(b);
-      if (!s || !Number.isSafeInteger(b.upto)) return send(res, 400, { error: 'bad' });
-      if (b.upto <= row.base || b.upto > row.head) return send(res, 409, { error: 'stale' });
-      if (!signed(row.pub, sid, 'snap', String(b.upto), s.op, s.sig)) return send(res, 403, { error: 'signature' });
-      if (!take(ip, 'bytes', s.op.length)) return send(res, 429, { error: 'rate' });
-      const freed = Number(q.upto.get(sid, b.upto).b) + (row.snap?.length || 0);
-      const next = row.bytes - freed + s.op.length;
-      if (next > limit.session || total - row.bytes + next > maxBytes) return send(res, 507, { error: 'full' });
-      tx(() => { q.drop.run(sid, b.upto); q.snap.run(s.op, s.sig, b.upto, next, sid); });
-      total += next - row.bytes;
+    if (kind === 'trim') {
+      // An editor drops the batches up to `upto` after sending the whole state again past them. Signed over upto and
+      // the signature of batch upto, so it trims only the log it was made for.
+      const sig = sigOf(b?.sig);
+      if (!sig || !Number.isSafeInteger(b.upto)) return send(res, 400, { error: 'bad' });
+      const last = b.upto > row.base && b.upto <= row.head ? q.at.get(sid, b.upto)?.sig : null;
+      if (!last) return send(res, 409, { error: 'stale' });
+      if (!signed(row.pub, sid, 'trim', String(b.upto), Buffer.from(last), sig)) return send(res, 403, { error: 'signature' });
+      const freed = Number(q.upto.get(sid, b.upto).b);
+      tx(() => { q.drop.run(sid, b.upto); q.trim.run(b.upto, last, freed, sid); });
+      total -= freed;
       return send(res, 200, { base: b.upto });
     }
-    // delete: the creator's token, whose hash the session keeps
+    if (kind === 'putBlob') {
+      const sig = sigOf(req.headers['x-glaze-sig']);
+      if (!sig || b.length < 29) return send(res, 400, { error: 'bad' });
+      if (q.blob.get(sid, m[3])) return send(res, 409, { error: 'exists' });
+      if (!signed(row.pub, sid, 'blob', m[3], b, sig)) return send(res, 403, { error: 'signature' });
+      if (!take(ip, 'bytes', b.length)) return send(res, 429, { error: 'rate' });
+      if (row.blob_bytes + b.length > limit.blobs || blobTotal + b.length > maxBlobBytes) return send(res, 507, { error: 'full' });
+      // Counted before the store call, so two uploads at once can't both fit in the last room.
+      tx(() => { q.addBlob.run(sid, m[3], b.length); q.growBlobs.run(b.length, sid); });
+      blobTotal += b.length;
+      try { await store.put(`${sid}/${m[3]}`, b); } catch (e) {
+        tx(() => { q.dropBlob.run(sid, m[3]); q.growBlobs.run(-b.length, sid); });
+        blobTotal -= b.length;
+        throw e;
+      }
+      return send(res, 201, {});
+    }
+    if (kind === 'getBlob') {
+      const meta = q.blob.get(sid, m[3]);
+      if (!meta) return send(res, 404, { error: 'unknown' });
+      if (!take(ip, 'down', meta.size)) return send(res, 429, { error: 'rate' });
+      const data = await store.get(`${sid}/${m[3]}`);
+      return data ? send(res, 200, data, 'application/octet-stream') : send(res, 404, { error: 'unknown' });
+    }
+    // expiry and delete: the creator's token, whose hash the session keeps
     const token = bytes(/^Bearer ([\w-]{43})$/.exec(req.headers.authorization || '')?.[1]);
     const hash = token && crypto.createHash('sha256').update(token).digest();
     if (!hash || !crypto.timingSafeEqual(hash, Buffer.from(row.del))) return send(res, 403, { error: 'token' });
+    if (kind === 'expiry') {
+      if (typeof b?.on !== 'boolean') return send(res, 400, { error: 'bad' });
+      q.expiry.run(b.on ? 1 : 0, today(), sid);
+      return send(res, 200, { expire: b.on });
+    }
     remove(sid);
     return send(res, 204, '');
-  };
-  // Deleted for good: its batches and snapshot go; its id stays (with the day) so it can't be made again.
-  const remove = (sid) => {
-    const row = q.get.get(sid);
-    if (!row || row.gone) return false;
-    tx(() => { q.drop.run(sid, Number.MAX_SAFE_INTEGER); q.gone.run(today(), sid); });
-    total -= row.bytes;
-    ring(sid, { gone: 1 });
-    return true;
   };
 
   // A body over the cap is answered 413 and its connection closed, rather than read to the end.
@@ -267,30 +378,44 @@ const relay = ({ db: file = 'share.db', trustProxy = false, maxBytes = 5 * 2 ** 
     if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'server' }); else res.destroy();
     if (!e.status) console.error('relay:', e.message);
   }));
-  server.requestTimeout = 30e3;
+  server.requestTimeout = 60e3;
   server.on('upgrade', upgrade);
+  expire().catch(() => {});
   return {
-    server, db, remove,
+    server, db, remove, expire, subs,
     listen: (port, host) => new Promise((resolve) => server.listen(port, host, () => resolve(server.address()))),
     close: () => new Promise((resolve) => {
-      clearInterval(sweep); clearInterval(heart);
+      for (const t of [sweep, daily, heart]) clearInterval(t);
       for (const sock of all) sock.destroy();
-      server.close(() => { db.close(); resolve(); });
+      server.close(() => removing.then(() => { db.close(); resolve(); }));
       server.closeAllConnections();
     }),
   };
 };
 
+const fromEnv = (env) => ({
+  db: env.DB || 'share.db',
+  ipHeader: (env.IP_HEADER || '').toLowerCase(),
+  maxBytes: Number(env.MAX_BYTES) || undefined,
+  maxBlobBytes: Number(env.MAX_BLOB_BYTES) || undefined,
+  store: env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET
+    ? s3Store({ endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`, bucket: env.R2_BUCKET, keyId: env.R2_ACCESS_KEY_ID, secret: env.R2_SECRET_ACCESS_KEY })
+    : diskStore(env.BLOBS || 'share-blobs'),
+});
+
 if (require.main === module) {
   const [cmd, arg] = process.argv.slice(2);
-  const r = relay({ db: process.env.DB || 'share.db', trustProxy: process.env.TRUST_PROXY === '1', maxBytes: Number(process.env.MAX_BYTES) || undefined });
+  const r = relay(fromEnv(process.env));
   if (cmd === '--backup' && arg) { r.db.exec(`VACUUM INTO '${arg.replace(/'/g, "''")}'`); r.close(); }
-  else if (cmd === '--delete' && SID.test(arg || '')) { console.log(r.remove(arg) ? 'deleted' : 'no such session'); r.close(); }
-  else if (cmd) { console.error('usage: relay.js [--backup <file> | --delete <session id>]'); process.exitCode = 2; r.close(); }
+  else if (cmd === '--delete' && SID.test(arg || '')) {
+    const done = r.remove(arg);
+    // remove() starts the files' deletion; give it its turn before closing.
+    setImmediate(() => r.expire().finally(() => { console.log(done ? 'deleted' : 'no such session'); r.close(); }));
+  } else if (cmd) { console.error('usage: relay.js [--backup <file> | --delete <session id>]'); process.exitCode = 2; r.close(); }
   else {
     r.listen(Number(process.env.PORT) || 8787, process.env.HOST || '127.0.0.1').then((a) => console.log(`Glaze share relay on ${a.address}:${a.port}`));
     for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => r.close().then(() => process.exit(0)));
   }
 }
 
-module.exports = { relay, LIMIT, RATE };
+module.exports = { relay, LIMIT, RATE, sigv4, s3Store, diskStore, fromEnv };
