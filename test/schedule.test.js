@@ -163,19 +163,19 @@ const sweepWith = (palette) => {
     C, ultra: false, darkTheme: true, palette, accentInk: C.parse(palette['--gz-accent-ink']), innerHeight: 900,
     SKIP: /^(img|video|canvas|svg|iframe|picture|source|path|use|script|style|link|meta)$/i, FIELD: /^(input|textarea|select)$/i,
     getComputedStyle: (e) => e.cs, hasText: (e) => e.childNodes.some((n) => n.nodeType === 3 && n.textContent.trim()),
-    document: { documentElement: {} }, instBlue: () => false, tagBrand() {}, sweepColors: (e, c) => c,
+    document: { documentElement: { cs: { getPropertyValue: () => palette['--gz-ink'] } } }, instBlue: () => false, tagBrand() {}, sweepColors: (e, c) => c,
   });
   const from = source.indexOf('  const SWEEP_TAGS'), to = source.indexOf('  const sweepAll', from);
   vm.runInContext(`${source.slice(from, to)}; globalThis.api = { sweepEls, relift }`, ctx);
   return ctx;
 };
 const content = { style: {}, parentElement: null, classList: { contains: (n) => n === 'user_content' } };
-const textEl = (color, link = false) => {
+const textEl = (color, link = false, fill = '') => {
   const attrs = new Map();
   const e = {
     tagName: link ? 'A' : 'SPAN', isConnected: true, id: '', childNodes: [{ nodeType: 3, textContent: 'answer' }], parentElement: content,
-    style: { color }, classList: { contains: () => false }, getAttribute: () => null, getAnimations: () => [],
-    cs: { color, backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none', position: 'static', transitionDuration: '0s' },
+    style: { color, backgroundColor: fill }, classList: { contains: () => false }, getAttribute: () => null, getAnimations: () => [],
+    cs: { color, backgroundColor: fill ? 'rgb(255, 255, 0)' : 'rgba(0, 0, 0, 0)', backgroundImage: 'none', position: 'static', transitionDuration: '0s' },
     getAttributeNames: () => [...attrs.keys()], setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k),
     toggleAttribute: (k, on) => (on ? attrs.set(k, '') : attrs.delete(k)),
     closest: (sel) => (sel === '.user_content' ? content : sel === 'a' && link ? e : null), getBoundingClientRect: () => ({ height: 20, bottom: 30 }),
@@ -183,14 +183,16 @@ const textEl = (color, link = false) => {
   return { e, attrs };
 };
 
-test('instructor text: re-checked when one dark palette changes to another; links keep their colour', () => {
+test('instructor text: re-checked when one dark palette changes to another; dark authored links lifted too', () => {
   const midnight = D.GZ_PRESET('Midnight'), frost = D.GZ_PRESET('Frost');
   const ctx = sweepWith(midnight);
   const teal = textEl('#006e78'); // 3.0:1 on Midnight, 2.9:1 on Frost
   const navy = textEl('#000080');
-  const link = textEl('#000080', true);
-  ctx.api.sweepEls([teal.e, navy.e, link.e]);
-  assert.deepEqual([teal, navy, link].map((x) => x.attrs.has('data-gz-lift')), [false, true, false]);
+  const link = textEl('#000080', true); // an authored navy link: lifted like text
+  const accent = textEl(midnight['--gz-accent'], true); // a link in the palette's accent: left alone
+  const marked = textEl('#000080', false, '#ffff00'); // navy on an instructor's yellow: the highlight fix, not a lift
+  ctx.api.sweepEls([teal.e, navy.e, link.e, accent.e, marked.e]);
+  assert.deepEqual([teal, navy, link, accent, marked].map((x) => x.attrs.has('data-gz-lift')), [false, true, true, false, false]);
   ctx.palette = frost;
   ctx.api.relift();
   assert.equal(teal.attrs.has('data-gz-lift'), true);

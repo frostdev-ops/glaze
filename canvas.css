@@ -775,6 +775,8 @@ html[data-gz-dark-theme] :is(.user_content, .user_content *)[data-gz-dark="highl
    not passed down, as each child with text is tagged on its own. */
 html[data-gz-dark-theme] .user_content [data-gz-lift] { -webkit-text-fill-color: var(--gz-ink); -webkit-text-fill-color: oklch(from currentColor max(l, 0.78) c h); }
 html[data-gz-dark-theme] .user_content [data-gz-lift] :not([data-gz-lift]) { -webkit-text-fill-color: currentColor; }
+/* A lifted link keeps its underline, in the lifted shade. */
+html[data-gz-dark-theme] .user_content a[data-gz-lift] { text-decoration-color: oklch(from currentColor max(l, 0.78) c h); }
 .user_content, .user_content :where(p, li, td, th, div, span) { line-height: var(--gz-leading); }
 .user_content :where(a) { color: var(--gz-accent); text-underline-offset: 0.2em; }
 .user_content :where(a):hover { color: var(--gz-accent-hi); }

@@ -170,8 +170,8 @@
         const onFill = fill || (bg && bg.a >= 0.5 && C.saturated(bg)) || C.same(fg, accentInk);
         if (fg && fg.a >= 0.5 && !C.saturated(fg) && C.brightness(fg) < 0.35 && !onFill && (hasText(e) || (!ultra && FIELD.test(e.tagName)))) tags.push('data-gz-dark');
         if (!ultra && canvasInk.has(e)) tags.push('data-gz-dark');
-        // Instructor's dark colour (navy), not a link: canvas.css lifts it.
-        if (!ultra && fg?.a >= 0.5 && C.saturated(fg) && !onFill && hasText(e) && e.closest('.user_content') && !e.closest('a')) {
+        // Instructor's dark colour (navy), links too: canvas.css lifts it.
+        if (!ultra && fg?.a >= 0.5 && C.saturated(fg) && !onFill && hasText(e) && e.closest('.user_content')) {
           liftable.set(e, C.hex(fg));
           if (C.contrast(C.hex(fg), palette['--gz-surface']) < 3) tags.push('data-gz-lift');
         }
