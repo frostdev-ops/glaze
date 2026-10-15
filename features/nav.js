@@ -189,6 +189,7 @@ function GZ_ULTRA_RAIL(X) {
         const date = new Date(now), time = new Intl.DateTimeFormat(X.locale(), { hour: 'numeric', minute: '2-digit' }).format(date);
         const day = new Intl.DateTimeFormat(X.locale(), { weekday: 'short', month: 'short', day: 'numeric' }).format(date);
         setText(node.time, time); setText(node.detail, day); node.box.title = `${time} · ${day}`;
+        node.box.setAttribute('aria-label', `${X.t('Clock and date')} · ${time} · ${day}`);
       }
       if (w.id === 'next') {
         refreshNext();
@@ -214,7 +215,7 @@ function GZ_ULTRA_RAIL(X) {
         if (node.image.src !== src) node.image.src = src;
       }
     }
-    if (config.widgets.some((w) => w.on)) { const step = config.widgets.some((w) => w.on && w.id === 'timer') && local.widgetTimer?.end ? 1000 : 60000; clock = setTimeout(drawWidgets, step - now % step + 5); }
+    if (config.widgets.some((w) => w.on)) { const step = config.widgets.some((w) => w.on && w.id === 'timer') && local.widgetTimer?.end > now ? 1000 : 60000; clock = setTimeout(drawWidgets, step - now % step + 5); }
   };
   const mountWidgets = () => {
     const sig = JSON.stringify(config.widgets);

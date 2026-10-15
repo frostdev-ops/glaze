@@ -80,6 +80,13 @@ test('Next due keeps an earlier item with no content id and uses its course outl
   assert.match(detail.textContent, /^Earlier/); assert.equal(box.href, 'https://school.test/ultra/courses/_1_1/outline');
 });
 
+test('the compact clock accessible name includes the date even when its detail is visually hidden', () => {
+  const src = source('features/nav.js'), a = src.indexOf("      if (w.id === 'clock') {"), b = src.indexOf("      if (w.id === 'next')", a);
+  const attrs = new Map(), node = { box: { setAttribute: (k, v) => attrs.set(k, v) }, time: {}, detail: {} };
+  const c = vm.createContext({ w: { id: 'clock' }, now: 1000, node, X: { locale: () => 'en', t: (s) => s }, Intl: { DateTimeFormat: class { constructor(_, options) { this.value = options.hour ? '12:00' : 'Mon, Jan 1'; } format() { return this.value; } } }, setText: (el, value) => { el.textContent = value; } });
+  vm.runInContext(src.slice(a, b), c); assert.equal(attrs.get('aria-label'), 'Clock and date · 12:00 · Mon, Jan 1');
+});
+
 test('a refused completed timer advance is attempted only once for that stored state', () => {
   const src = source('features/nav.js'), a = src.indexOf("      if (w.id === 'timer' && W"), b = src.indexOf("      if (w.id === 'pet'", a);
   let attempts = 0;
