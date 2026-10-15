@@ -189,7 +189,9 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     cmd.all = pages();
 
     showCmd();
-    commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(); });
+    // Stickers, pointers and Look rotation (features/lookx.js) bring their own switches.
+    Promise.all([commands(), need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.cmds(), () => [])])
+      .then(([all, more]) => { if (cmd !== mine) return; cmd.all = [...all, ...more]; cmd.loading = false; showCmd(); });
     if (!ultra && ctx.settings().enhance.search) need('features/search.js', () => globalThis.GZ_SEARCH).then(() => GZ_SEARCH.attach(mine, showCmd), () => {});
   };
 
