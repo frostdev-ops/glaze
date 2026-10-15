@@ -302,10 +302,10 @@ input, textarea, select, .MuiInputBase-root, .MuiOutlinedInput-root, .MuiSelect-
 #site-wrap legend * { color: transparent !important; }
 /* MUI floating label: the notch cover is the label's ::before (an absolute block), which Ultra paints white. */
 #site-wrap label.MuiInputLabel-root { background: transparent !important; color: var(--gz-ink-muted) !important; padding: 0 4px !important; }
-/* Ultra hides the field border behind a shrunk label with a white block. A solid block reads as a
-   chip sitting on the border; this one is clear on top (whatever is behind shows) and field-coloured
-   below the line, so only the border disappears. */
-#site-wrap label.MuiInputLabel-root.MuiInputLabel-shrink, #site-wrap label.MuiInputLabel-root::before { background: linear-gradient(to bottom, transparent 0 46%, var(--gz-surface) 46%) !important; border-radius: 0; }
+/* Ultra hides the field border behind a shrunk label with a white block. Any block shows wherever the label sits off the
+   line (fonts and zoom move it), so there's none: the outline's own legend opens a real gap in the border instead. */
+#site-wrap label.MuiInputLabel-root.MuiInputLabel-shrink, #site-wrap label.MuiInputLabel-root::before { background: none !important; }
+#site-wrap .MuiFormControl-root:has(> label.MuiInputLabel-shrink) fieldset.MuiOutlinedInput-notchedOutline > legend { max-width: 100% !important; }
 .course-overview-management > div > div > div { background: transparent !important; }
 .course-overview-management label:has(input) { background: var(--gz-surface) !important; border: 1px solid var(--gz-line) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm) !important; transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
 .course-overview-management label:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-line-strong) !important; }
