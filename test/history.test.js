@@ -55,9 +55,12 @@ const worker = () => {
   const local = {};
   const sync = {};
   const timers = [];
+  // hold(): storage reads wait until the returned release() is called, as a slow write queue would.
+  let gate = Promise.resolve();
+  const hold = () => { let release; gate = new Promise((r) => { release = r; }); return release; };
   const opened = [];
   const area = (store) => ({
-    get: async (k) => (k === null ? structuredClone(store) : Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, structuredClone(store[x])]))),
+    get: async (k) => (await gate, k === null ? structuredClone(store) : Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, structuredClone(store[x])]))),
     set: async (v) => { Object.assign(store, structuredClone(v)); },
   });
   const context = vm.createContext({
@@ -77,7 +80,7 @@ const worker = () => {
   const send = (msg, sender) => on.message.forEach((f) => f(msg, sender));
   const change = (changes) => on.changed.forEach((f) => f(changes, 'sync'));
   const tick = () => new Promise(setImmediate);
-  return { send, change, tick, timers, local, sync, opened };
+  return { send, change, tick, timers, local, sync, opened, hold };
 };
 
 test('the gallery content script runs only on the gallery, and the background takes codes only from there', async () => {
@@ -164,3 +167,36 @@ test('Clear history wins over a recording that is waiting or already queued', as
   await settle();
   assert.equal(w.local.lookHistory.length, 2);
 });
+
+test('a burst that starts after Clear history, while older writes are still queued, keeps its own theme left', async () => {
+  const editor = { url: 'chrome-extension://x/options.html' };
+  const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setImmediate); };
+  const w = worker();
+  const burst = (name) => {
+    const was = G.GZ_SANITIZE(w.sync);
+    const now = wearing(name, was);
+    Object.assign(w.sync, now);
+    // What a Look writes, as GZ_UI.save sends it: one change with every theme key.
+    w.change(Object.fromEntries(H.KEYS.map((k) => [k, { oldValue: was[k], newValue: now[k] }])));
+    return now;
+  };
+  burst('Clear');
+  await settle();
+  const release = w.hold();
+  w.timers.shift()(); // a write under way, stuck on storage
+  await settle();
+  const terminal = burst('Terminal');
+  w.timers.shift()(); // queued behind it
+  w.send('clear-history', editor);
+  const library = burst('Library'); // a new burst, before the queue drains
+  release();
+  await settle();
+  assert.deepEqual(w.local.lookHistory, [], 'the clear came after the older writes');
+  w.timers.shift()();
+  await settle();
+  const list = w.local.lookHistory;
+  assert.equal(list.length, 2);
+  assert.ok(H.wearing(library, list[0]));
+  assert.ok(H.wearing(terminal, H.previous(list, library)), 'Previous Look is Terminal, not the defaults');
+});
+
