@@ -16,6 +16,24 @@ All notable changes to Glaze are documented here. The format follows
 - **Looks history and Previous Look:** the last 20 themes you wore, from the popup, the editor or Ctrl+K,
   with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
   kept on this device.
+- **Canvas course cards:** give each Dashboard card its own color, two-color gradient or picture (a link, or a
+  picture from your computer, scaled down and kept on it), with a picture filter (vivid, mono, noir, warm, cool,
+  faded, dreamy), focus point, zoom, and overlay color and strength. The list view's course banners follow. Free,
+  like everything in Glaze. Opened from the card's course menu (Card style and bookmarks).
+- **Course bookmarks:** up to eight links per course, each with a name and an icon from Glaze's own set, shown as
+  icons on its card. Add, edit, reorder and hide them; turn the icons off. Glaze asks the linked sites for nothing.
+- **Card layout and effects:** card width, space between cards, corners, picture height, condensed cards (the name on
+  the picture), Canvas's color over pictures on or off, hover effects (lift, glow, tilt, grow, shine), particles
+  (sparkles, snow, bubbles, confetti) and a pet (cat or bunny) on your first card. All of it moves only while motion
+  is on.
+- **Create button on cards** (off by default): message the class, or start a discussion where the course allows it.
+- **Contrast warnings for cards:** with condensed cards, the card editor shows how well white text reads on the card
+  (the measured ratio) and warns below 4.5:1. It never changes your colors.
+- **Font search:** typing in the font list filters it; a name that isn't in the list is tried on Google Fonts.
+- **Theme codes and Looks carry course cards:** how cards look, and up to eight card styles that take turns on the
+  cards without their own. Only linked pictures travel; a picture from your computer never leaves it. A code with
+  card settings needs this Glaze or newer; the Looks gallery's checker learns them with the next release. A code that
+  would be too long (many card pictures with long links) is refused when you copy it, with the reason.
 - **Scheduled dark mode:** auto light and dark can follow a schedule instead of the system, dark from one time
   until another (20:00 to 08:00 by default, past midnight too). It switches on time while a page is open, and a
   page opened after the switch starts in the right palette. Set it in the editor, the popup or Ctrl+K.

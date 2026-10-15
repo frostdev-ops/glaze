@@ -100,7 +100,7 @@ test('success means the file ran to its end: an injection that fails, throws or 
 });
 
 test('every loadable file ends on a value, which is how the worker knows it ran', () => {
-  for (const f of ['lib/zip.js', 'lib/drafts.js', 'i18n/de.js']) {
+  for (const f of ['lib/zip.js', 'lib/drafts.js', 'i18n/de.js', 'lib/cards.js']) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob });
     assert.ok(vm.runInContext(read(f), context), `${f}: no last value`);
   }
@@ -121,7 +121,7 @@ test('every loadable file exists, is left out of the first content script, and i
 });
 
 test('a file loaded twice into one frame keeps the first', () => {
-  for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS']]) {
+  for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS'], ['lib/cards.js', 'GZ_CARDS']]) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob });
     vm.runInContext('globalThis.globalThis = this;', context);
     vm.runInContext(read(file), context);

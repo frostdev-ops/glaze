@@ -417,7 +417,7 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 #application #section-tabs li a { padding-block: calc(8px * var(--gz-space)); }
 #application .ic-Table td { padding-block: calc(0.6em * var(--gz-space)); }
 #application .ic-Table th { padding-block: calc(0.6em * var(--gz-space)) calc(0.4em * var(--gz-space)); }
-@media (min-width: 768px) { #application .ic-DashboardCard { margin: calc(36px * var(--gz-space)) 0 0 calc(36px * var(--gz-space)); } }
+@media (min-width: 768px) { #application .ic-DashboardCard { margin: var(--gz-card-gap, calc(36px * var(--gz-space))) 0 0 var(--gz-card-gap, calc(36px * var(--gz-space))); } }
 /* Discussion and announcement rows draw their edges with box-shadows: a hairline under each, no frame. */
 #application .ic-item-row { background: transparent; box-shadow: inset 0 -1px 0 var(--gz-line); transition: background var(--gz-t) var(--gz-ease); }
 #application .ic-item-row:hover { background: var(--gz-row-hover); }
@@ -462,13 +462,13 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 
 /* ---- dashboard cards ---- */
 #application .ic-DashboardCard {
-  background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
-  overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter);
+  background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-card-r, var(--gz-radius)); box-shadow: var(--gz-rest-shadow);
+  overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter); width: var(--gz-card-w, 262px);
 }
 #application .ic-DashboardCard:hover { transform: var(--gz-lift); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-line-strong); }
 #application .ic-DashboardCard__header_content { background: transparent; border-color: transparent; }
 /* The hero is the course's colour, set inline; its box and edge are Canvas's, invisible on white, a frame here. */
-#application .ic-DashboardCard__header_hero { border-color: transparent; background-image: linear-gradient(transparent, transparent); }
+#application .ic-DashboardCard__header_hero { border-color: transparent; background-image: var(--gz-card-grad, linear-gradient(transparent, transparent)); }
 /* A hero the sweep read as paper (a mid grey) when this sheet was late: a tint of the accent, not the card's own fill. */
 #application .ic-DashboardCard__header_hero[data-gz-light] { background-color: color-mix(in srgb, var(--gz-accent) 30%, var(--gz-surface)) !important; opacity: 1; }
 #application .ic-DashboardCard__header-button-bg { background: color-mix(in srgb, var(--gz-surface-2) 70%, transparent) !important; backdrop-filter: blur(6px); }
@@ -673,10 +673,10 @@ html[data-gz-raw-courses] :is(.ic-DashboardCard, .planner-grouping)[style*="--gz
 #application .agenda-event__title[class*="group_"] { -webkit-text-fill-color: var(--gz-course); } /* its own color is the course's: the fill is what's left to change */
 #application .course-color-block::before { color: var(--gz-course); }
 /* Dashboard cards: the hero's color layer (an image card keeps its image under it) and the title. */
-#application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: var(--gz-course) !important; }
+#application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: var(--gz-card-c, var(--gz-course)) !important; }
 /* On a dark palette the hero is a whole slab of color, and the light grey the toning leans on turns it chalky: there it
    is Canvas's own color sunk toward the ground instead, so it keeps its hue and sits in the palette. */
-html[data-gz-dark-theme]:not([data-gz-raw-courses]) #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: color-mix(in oklab, var(--gz-course-raw) 62%, var(--gz-surface-2)) !important; }
+html[data-gz-dark-theme]:not([data-gz-raw-courses]) #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: var(--gz-card-c, color-mix(in oklab, var(--gz-course-raw) 62%, var(--gz-surface-2))) !important; }
 /* Only title lightness changes; the course hue and its hero colour stay Canvas's own. */
 #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) min(l, 0.48) c h) !important; }
 html[data-gz-dark-theme] #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) max(l, 0.72) c h) !important; }
@@ -692,6 +692,117 @@ html[data-gz-dark-theme] #application [class*="Grouping-styles__title"]::after {
 /* InstUI's pills (Missing, Late, Excused) print their state in its mid tone, 3.8:1 on a dark panel. The pill carries the colour
    too, so its text, which inherits it as currentColor, takes the same hue lifted to a lightness that reads. */
 html[data-gz-dark-theme] [class*="css-"][class*="-pill__text"] { color: oklch(from currentColor max(l, 0.72) c h); }
+
+/* ---- course cards: Glaze's sizes and effects (settings.card), and each card's own style ----
+   features/cards.js marks a card (or a list view group) with data-gz-card="solid|gradient|image" and its variables
+   (lib/cards.js paint): --gz-card-c, --gz-card-grad, or the picture's --gz-card-img, -pos, -zoom, -filter, and its
+   overlay's --gz-card-ov and -ov-a. A card without one is Canvas's own, toned as above. */
+#application :is(.ic-DashboardCard__header_hero, .ic-DashboardCard__header_image) { height: var(--gz-card-h, 146px); }
+/* No overlay: Canvas's own pictures show without their color wash. A card with its own style keeps its fill (its
+   picture's overlay is hidden below instead). */
+html[data-gz-card-plain] #application .ic-DashboardCard:not([data-gz-card]) .ic-DashboardCard__header_image > .ic-DashboardCard__header_hero { opacity: 0 !important; }
+/* A color or gradient covers the picture area; the card's name takes that color. */
+#application :is(.ic-DashboardCard, .planner-grouping):is([data-gz-card="solid"], [data-gz-card="gradient"]) { --gz-course: var(--gz-card-c); }
+#application .ic-DashboardCard[data-gz-card] .ic-DashboardCard__header_hero { opacity: 1 !important; position: relative; overflow: hidden; isolation: isolate; }
+/* A picture: over the hero's own fill (which it covers), with its overlay over it. Zoom grows from the focus. */
+:is(.ic-DashboardCard[data-gz-card="image"] .ic-DashboardCard__header_hero, .planner-grouping[data-gz-card="image"] [class*="Grouping-styles__hero"])::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--gz-card-img) var(--gz-card-pos) / cover no-repeat; transform: scale(var(--gz-card-zoom)); transform-origin: var(--gz-card-pos); filter: var(--gz-card-filter);
+}
+.ic-DashboardCard[data-gz-card="image"] .ic-DashboardCard__header_hero::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: var(--gz-card-ov); opacity: var(--gz-card-ov-a); }
+html[data-gz-card-plain] .ic-DashboardCard[data-gz-card="image"] .ic-DashboardCard__header_hero::after { display: none; }
+/* List view: the group's banner. */
+#application .planner-grouping[data-gz-card] [class*="Grouping-styles__hero"] { position: relative; isolation: isolate; overflow: hidden; }
+#application .planner-grouping[data-gz-card="image"] [class*="Grouping-styles__hero"] { background-image: none !important; }
+#application .planner-grouping[data-gz-card] [class*="Grouping-styles__overlay"] { background: var(--gz-card-grad, var(--gz-card-c)) !important; opacity: 1 !important; }
+#application .planner-grouping[data-gz-card="image"] [class*="Grouping-styles__overlay"] { background: var(--gz-card-ov) !important; opacity: var(--gz-card-ov-a) !important; }
+html[data-gz-card-plain] #application .planner-grouping:not([data-gz-card]) [class*="Grouping-styles__overlay"][class*="withImage"],
+html[data-gz-card-plain] #application .planner-grouping[data-gz-card="image"] [class*="Grouping-styles__overlay"] { opacity: 0 !important; }
+
+/* Condensed: the name sits on the picture in white, so the card is that much shorter (the editor measures how well it reads). */
+html[data-gz-card-condensed] #application .ic-DashboardCard__link { position: absolute; inset: 0 0 auto; height: var(--gz-card-h, 146px); display: flex; align-items: flex-end; }
+html[data-gz-card-condensed] #application .ic-DashboardCard__header_content { padding: 0.6rem 0.9rem; width: 100%; box-sizing: border-box; text-shadow: 0 1px 2px rgb(0 0 0 / 0.5); }
+html[data-gz-card-condensed] #application .ic-DashboardCard .ic-DashboardCard__header_content :is(.ic-DashboardCard__header-title span, .ic-DashboardCard__header-title) { color: #fff !important; }
+html[data-gz-card-condensed] #application .ic-DashboardCard .ic-DashboardCard__header_content :is(.ic-DashboardCard__header-subtitle, .ic-DashboardCard__header-term) { color: rgb(255 255 255 / 0.88); }
+
+/* Hover: lift is the theme's; the others replace it. Only with hover motion on, and never on a touch screen. */
+html[data-gz-card-hover="none"] #application .ic-DashboardCard:hover { transform: none; }
+@media (hover: hover) {
+  html[data-gz-card-hover="grow"]:not([data-gz-motion="off"], [data-gz-no-hover]) #application .ic-DashboardCard:hover { transform: scale(1.035); }
+  html[data-gz-card-hover="tilt"]:not([data-gz-motion="off"], [data-gz-no-hover]) #application .ic-DashboardCard:hover { transform: perspective(900px) rotateX(4deg) rotateY(-5deg) translateY(-3px); }
+  html[data-gz-card-hover="glow"]:not([data-gz-motion="off"], [data-gz-no-hover]) #application .ic-DashboardCard:hover {
+    box-shadow: 0 0 0 1px var(--gz-card-c, var(--gz-course, var(--gz-accent))), 0 10px 32px -8px color-mix(in srgb, var(--gz-card-c, var(--gz-course, var(--gz-accent))) 75%, transparent);
+  }
+  /* Shine: a band of light crosses the card once. */
+  html[data-gz-card-hover="shine"]:not([data-gz-motion="off"], [data-gz-no-hover]) #application .ic-DashboardCard:hover::after {
+    content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.28) 50%, transparent 65%) -150% 0 / 250% 100% no-repeat;
+    animation: gz-card-shine 0.9s var(--gz-ease) forwards;
+  }
+  /* Particles over the picture while the pointer is on the card: soft dots on a repeating tile, drifting. */
+  html:not([data-gz-card-particles="none"], [data-gz-motion="off"], [data-gz-no-hover]) #application .ic-DashboardCard:hover .ic-DashboardCard__header::after {
+    content: ""; position: absolute; inset: 0 0 auto; height: var(--gz-card-h, 146px); z-index: 1; pointer-events: none;
+    background-size: 90px 90px; animation: gz-card-fall 2.4s linear infinite; animation-play-state: var(--gz-ambient, running);
+  }
+  html[data-gz-card-particles="sparkles"] #application .ic-DashboardCard:hover .ic-DashboardCard__header::after {
+    background-image: radial-gradient(circle at 20% 30%, #fff 0 1.5px, transparent 2.5px), radial-gradient(circle at 70% 65%, var(--gz-accent-hi) 0 1.5px, transparent 2.5px), radial-gradient(circle at 45% 85%, #fff 0 1px, transparent 2px);
+    animation-name: gz-card-twinkle; animation-direction: alternate; animation-duration: 0.8s;
+  }
+  html[data-gz-card-particles="snow"] #application .ic-DashboardCard:hover .ic-DashboardCard__header::after {
+    background-image: radial-gradient(circle at 25% 20%, rgb(255 255 255 / 0.9) 0 2.5px, transparent 3.5px), radial-gradient(circle at 75% 60%, rgb(255 255 255 / 0.75) 0 1.8px, transparent 2.8px);
+  }
+  html[data-gz-card-particles="bubbles"] #application .ic-DashboardCard:hover .ic-DashboardCard__header::after {
+    background-image: radial-gradient(circle at 30% 40%, transparent 0 4px, rgb(255 255 255 / 0.7) 4.5px 5.5px, transparent 6px), radial-gradient(circle at 75% 80%, transparent 0 2.5px, rgb(255 255 255 / 0.6) 3px 3.8px, transparent 4.3px);
+    animation-name: gz-card-rise;
+  }
+  html[data-gz-card-particles="confetti"] #application .ic-DashboardCard:hover .ic-DashboardCard__header::after {
+    background-image: linear-gradient(30deg, transparent 40%, var(--gz-accent) 40% 60%, transparent 60%), linear-gradient(-40deg, transparent 42%, var(--gz-warn) 42% 58%, transparent 58%), linear-gradient(80deg, transparent 44%, var(--gz-ok) 44% 56%, transparent 56%);
+    background-size: 9px 5px, 7px 6px, 8px 4px; background-repeat: no-repeat; animation-name: gz-card-confetti;
+  }
+}
+@keyframes gz-card-shine { to { background-position: 150% 0; } }
+@keyframes gz-card-fall { from { background-position: 0 0, 30px 0; } to { background-position: 0 90px, 30px 90px; } }
+@keyframes gz-card-rise { from { background-position: 0 0, 30px 0; } to { background-position: 0 -90px, 30px -90px; } }
+@keyframes gz-card-twinkle { from { opacity: 0.25; } to { opacity: 1; } }
+@keyframes gz-card-confetti { from { background-position: 20px -10px, 60px -30px, 35px -50px; } to { background-position: 30px 150px, 50px 160px, 45px 150px; } }
+
+/* The pet (features/cards.js) sits on the first card's picture: it idles through frames 0-3, and on a hover plays its
+   stretch or hop (4-7) once. Frame 0 alone when motion is off. Sheets: 4×2 frames of 128 px, drawn at half size. */
+.gz-pet {
+  position: absolute; z-index: 2; right: 10px; top: calc(var(--gz-card-h, 146px) - 62px); width: 64px; height: 64px; pointer-events: none;
+  background: var(--gz-pet-sheet) 0 0 / 256px 128px no-repeat; filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+  animation: gz-pet-idle 2.46s step-end infinite; animation-play-state: var(--gz-ambient, running);
+}
+/* The stretch or hop only with hover motion on; Off (and reduced motion, which content.js makes Off) stills it. */
+@media (hover: hover) { html:not([data-gz-motion="off"], [data-gz-no-hover]) .ic-DashboardCard:hover > .gz-pet { animation: gz-pet-act 0.98s step-end 1; } }
+html[data-gz-motion="off"] .ic-DashboardCard > .gz-pet { animation: none !important; }
+html[data-gz-card-pet="none"] .gz-pet { display: none; }
+/* Condensed cards have the name low on the picture: the pet peeks in at the top instead, a little smaller. */
+html[data-gz-card-condensed] .gz-pet { top: 2px; right: calc(50% - 32px); scale: 0.75; transform-origin: top center; }
+@keyframes gz-pet-idle { 0% { background-position: 0 0; } 73.2% { background-position: -64px 0; } 82.9% { background-position: -128px 0; } 87.8% { background-position: -192px 0; } }
+@keyframes gz-pet-act { 0% { background-position: 0 -64px; } 16.3% { background-position: -64px -64px; } 34.7% { background-position: -128px -64px; } 77.6% { background-position: -192px -64px; } }
+
+/* Bookmarks: round glass buttons on the picture's top left, an icon each. */
+.gz-bm { position: absolute; z-index: 2; top: 8px; left: 8px; right: 112px; display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
+html:not([data-gz-card-icons]) .gz-bm { display: none; }
+/* Canvas marks links to other sites with an icon after them; a bookmark's own icon says enough. */
+.ic-DashboardCard :is(.gz-bm, .ic-DashboardCard__link) .external_link_icon { display: none; }
+#application .gz-bm a {
+  pointer-events: auto; display: grid; place-items: center; width: 28px; height: 28px; color: var(--gz-ink) !important;
+  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass));
+  border: 1px solid var(--gz-line-strong); border-radius: 999px; box-shadow: var(--gz-rest-shadow); transition: color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease);
+}
+#application .gz-bm a:is(:hover, :focus-visible) { color: var(--gz-accent) !important; border-color: var(--gz-accent); }
+#application .gz-bm a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+.gz-bm svg, .gz-mk svg, #gz-ce svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Create: a + beside the course menu's button, opening a short list of what can be started for the course. */
+html .gz-mk {
+  position: absolute; z-index: 2; right: 78px; top: 8px; display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer;
+  color: var(--gz-ink-muted); background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass));
+  border: 1px solid var(--gz-line-strong); border-radius: 999px; box-shadow: var(--gz-rest-shadow);
+}
+html .gz-mk:is(:hover, :focus-visible, [aria-expanded="true"]) { color: var(--gz-accent); border-color: var(--gz-accent); }
+html .gz-mk:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 
 /* ---- portals: the trays, popovers, menus, dialogs and tooltips mount on <body>, outside #application,
    so everything scoped to it misses them. The sweep has already made them dark; what is left is their edges,
@@ -1241,3 +1352,67 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 }
 .gz-draft button:first-of-type { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
 .gz-draft button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+
+/* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
+#gz-cm .gz-cm-more {
+  margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);
+  background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm);
+}
+#gz-cm .gz-cm-more:hover { border-color: var(--gz-accent); }
+#gz-ce {
+  box-sizing: border-box; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-tip-in);
+}
+#gz-ce::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-ce * { box-sizing: border-box; }
+#gz-ce .gz-ce-in { display: grid; gap: 0.75rem; padding: 1rem 1.1rem 1.1rem; }
+#gz-ce .gz-ce-head { display: flex; align-items: center; gap: 0.75rem; }
+#gz-ce h2 { flex: 1; min-width: 0; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-ce button, #gz-ce select, #gz-ce input:not([type="range"], [type="color"], [type="radio"], [type="checkbox"]) {
+  font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm);
+  padding: 0.35rem 0.6rem; margin: 0; height: auto; min-height: 2rem; box-shadow: none;
+}
+#gz-ce button { cursor: pointer; }
+#gz-ce button:hover:not(:disabled) { border-color: var(--gz-accent); }
+#gz-ce button:disabled { opacity: 0.45; cursor: default; }
+#gz-ce :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-ce input[type="color"] { width: 2.5rem; height: 2rem; padding: 2px; border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); background: var(--gz-surface-2); }
+#gz-ce input[type="range"] { accent-color: var(--gz-accent); }
+#gz-ce .gz-ce-x { min-height: 0; width: 2rem; height: 2rem; padding: 0; border-radius: 999px; font-size: 18px; line-height: 1; }
+#gz-ce .gz-ce-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--gz-line); }
+#gz-ce .gz-ce-tabs button { border: 0; border-radius: 0; background: transparent; color: var(--gz-ink-muted); padding: 0.4rem 0.8rem; box-shadow: inset 0 -2px 0 transparent; }
+#gz-ce .gz-ce-tabs button[aria-selected="true"] { color: var(--gz-accent); box-shadow: inset 0 -2px 0 var(--gz-accent); }
+#gz-ce .gz-ce-panel { display: grid; gap: 0.6rem; }
+#gz-ce [hidden] { display: none !important; }
+#gz-ce .gz-ce-kinds { display: flex; flex-wrap: wrap; border: 1px solid var(--gz-line-strong); border-radius: 999px; overflow: hidden; width: max-content; max-width: 100%; }
+#gz-ce .gz-ce-kinds label { display: flex; align-items: center; padding: 0.35rem 0.8rem; cursor: pointer; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-kinds input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+#gz-ce .gz-ce-kinds label:has(input:checked) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); }
+#gz-ce .gz-ce-kinds label:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
+#gz-ce .gz-ce-field { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) auto; align-items: center; gap: 0.6rem; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-field output { min-width: 3rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-field input[type="color"] { justify-self: start; }
+#gz-ce .gz-ce-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+#gz-ce .gz-ce-row > .gz-ce-field { flex: 1 1 auto; }
+#gz-ce .gz-ce-desc { margin: 0; font-size: 12px; color: var(--gz-ink-faint); }
+#gz-ce .gz-ce-note { margin: 0; padding: 0.45rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: color-mix(in srgb, var(--gz-err) 16%, var(--gz-surface)); }
+#gz-ce .gz-ce-contrast { margin: 0; padding: 0.45rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: color-mix(in srgb, var(--gz-ok) 14%, var(--gz-surface)); }
+#gz-ce .gz-ce-contrast.gz-ce-warn { background: color-mix(in srgb, var(--gz-warn) 20%, var(--gz-surface)); }
+#gz-ce .gz-ce-check { display: flex; align-items: center; gap: 0.4rem; color: var(--gz-ink-muted); white-space: nowrap; }
+#gz-ce .gz-ce-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+#gz-ce .gz-ce-links li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.5rem; border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); }
+#gz-ce .gz-ce-links li input[type="text"] { flex: 1 1 7rem; min-width: 0; }
+#gz-ce .gz-ce-links li input[translate="no"] { flex: 2 1 12rem; }
+#gz-ce .gz-ce-links li .gz-ce-check { margin-right: auto; }
+#gz-ce .gz-ce-links li button { min-height: 1.8rem; padding: 0 0.6rem; }
+#gz-ce .gz-ce-icon { display: grid; place-items: center; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-foot { display: flex; justify-content: space-between; gap: 0.6rem; padding-top: 0.25rem; border-top: 1px solid var(--gz-line); }
+#gz-ce .gz-ce-done { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
+#gz-mk {
+  position: fixed; z-index: 2147483002; display: grid; min-width: 12rem; padding: 0.3rem; font: 13px/1.4 var(--gz-font);
+  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-tip-in);
+}
+#gz-mk a { padding: 0.4rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); text-decoration: none; }
+#gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-accent); outline: none; }
+@media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
