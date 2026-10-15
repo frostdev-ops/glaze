@@ -249,8 +249,9 @@ animated backgrounds) are bundled. It makes requests in these cases:
 
 The extension's own links are opened only when you click them: the footer link to the project's GitHub page, "Open the
 gallery" in the editor (see below), and **Report a problem** (the editor, and What Glaze can do on Canvas), which opens a
-new issue on `github.com/frostdev-ops/glaze` with your Glaze version, browser, system and language filled in. Nothing is
-sent until you submit that issue yourself on GitHub, and you can change or delete any of it first. Web addresses in
+new issue on `github.com/frostdev-ops/glaze` with your Glaze version, browser, system and language filled in, and nothing
+about your school. That text is part of the link, so GitHub receives it when the page opens, with ordinary connection
+information; nothing is posted until you submit the issue yourself, and you can change or delete any of it first. Web addresses in
 your Dashboard notes are links too, opened in a new tab without telling the site where you came from.
 
 ## The Looks gallery

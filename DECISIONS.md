@@ -310,7 +310,7 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Quotes are original lines written for Glaze, translated like the rest of the UI | Public-domain quotes | Translations of public-domain quotes are often themselves under copyright; original lines have no source to check. |
 | Study buddy: Glaze's own Shiba (owner-approved, three expressions), sleepy while idle, happy after a finished focus block or a tick | another extension's Doge tile, a random caption per click | A tile that answers what you did, not only clicks. Only the three files it uses are packaged. |
 | What Glaze can do and its tour open only when asked (Ctrl+K, the Dashboard's button) | A first-run pop-up (another extension's spotlight) | Owner rule: nothing nags. Nothing about the tour is kept. |
-| Report a problem is a prefilled GitHub issue link: version, browser, system, language | An in-extension form with attachments (another extension) | No server, and nothing is sent until the student submits it on GitHub. |
+| Report a problem is a prefilled GitHub issue link: version, browser, system, language | An in-extension form with attachments (another extension) | No server. The prefill is in the link, so GitHub receives it when the page opens: it holds only what the browser says about itself, never the school; nothing is posted until the student submits it. |
 
 ## Moodle (W20, Oct 2026)
 
