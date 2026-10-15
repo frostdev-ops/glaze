@@ -26,8 +26,8 @@ class E {
   remove() {}
 }
 
-// ultra: Blackboard Ultra instead, its planner (lib/ultra.js) answering with ultra.items and recording what it was asked.
-const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC', ultra = null } = {}) => {
+// Ultra uses the real shared profile/planner helper; only its own-site transport is synthetic and counted.
+const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC', ultra = null, capi = async () => [] } = {}) => {
   const held = []; // replies the test lets through by hand (hold)
   const FakeDate = class extends Date {};
   FakeDate.now = () => clock.t;
@@ -37,12 +37,11 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
   const sent = [];
   const listeners = [];
   const c = {
-    console, URL, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
+    console, URL, URLSearchParams, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
     GZ_TODO: require('../lib/todo.js'), GZ_CLASSES: require('../lib/classes.js'),
-    GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, capi: async () => [], settings: () => ({ enhance: { notes: true, widgets: true } }), profile: async () => ({ id: '3', time_zone: tz }),
+    GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, capi, settings: () => ({ enhance: { notes: true, widgets: true } }), profile: async () => ({ id: '3', time_zone: tz }),
       ...(ultra && { site: 'ultra', capi: () => { throw new Error('not on Ultra'); }, profile: () => { throw new Error('not on Ultra'); } }) },
-    ...(ultra && { GZ_ULTRA: { read: ({ origin }) => ({ origin, me: async () => '_5_1' }), planner: async (r, range) => { ultra.asked.push({ origin: r.origin, ...range }); return { items: ultra.items, complete: true }; } } }),
     location: ultra ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     setTimeout: (f, ms) => { timers.set(++n, { f, ms }); return n; },
     clearTimeout: (id) => timers.delete(id),
@@ -59,6 +58,28 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
   };
   c.globalThis = c;
   vm.createContext(c);
+  if (ultra) {
+    ultra.requests = []; ultra.asked = []; ultra.pending = [];
+    c.GZ_PAGE = require('../lib/page.js'); c.GZ_COURSES = D.GZ_COURSES;
+    c.fetch = async (address, init) => {
+      const u = new URL(address), uid = ultra.uid || '_5_1';
+      assert.equal(u.origin, c.location.origin); assert.equal(init.credentials, 'same-origin');
+      ultra.requests.push(u.pathname);
+      let value;
+      if (u.pathname === '/learn/api/v1/users/me') value = { id: uid };
+      else if (u.pathname === `/learn/api/v1/users/${uid}/memberships`) value = { results: [] };
+      else if (u.pathname.endsWith('/todo/studentItems')) {
+        ultra.asked.push({ origin: u.origin, from: Date.parse(u.searchParams.get('since')), to: Date.parse(u.searchParams.get('until')) });
+        if (ultra.holdTodo) await new Promise((resolve) => ultra.pending.push(resolve));
+        if (ultra.failTodo) { ultra.failTodo--; throw new Error('planner unavailable'); }
+        value = { dueTodayItems: (ultra.items || []).map((i) => ({ column: { id: i.id, courseId: i.cid }, title: i.title, dueDate: new Date(i.at).toISOString() })) };
+      } else if (u.pathname.endsWith('/calendarItems')) value = { results: [] };
+      else if (u.pathname.endsWith('/gradebook/grades')) value = { results: (ultra.items || []).map((i) => ({ columnId: i.id, column: { contentId: i.content, dueDate: new Date(i.at).toISOString() }, submissionStatus: { status: i.sub?.submitted ? 'SUBMITTED' : 'UNOPENED' } })) };
+      else throw new Error(`unexpected Ultra API: ${u.pathname}`);
+      return { ok: true, text: async () => JSON.stringify(value) };
+    };
+    vm.runInContext(read('lib/ultra.js'), c);
+  }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
   const src = read('features/widgets.js').replace('  return { sync, hub: open, register, who: account };', '  return { sync, hub: open, register, who: account, probe: { WIDGETS, set: (w, s, m) => { W = w; o = s; me = m; } } };');
   assert.notEqual(src, read('features/widgets.js'));
@@ -259,7 +280,7 @@ test("Ultra: the agenda reads the day from Ultra's To Do and calendar (lib/ultra
   const text = (el) => [el.textContent || '', ...(el.children || []).map((c) => (typeof c === 'object' ? text(c) : String(c)))].join(' ');
   const now = Date.parse('2026-10-15T16:00:00Z');
   const ultra = { asked: [], items: [
-    { type: 'assignment', id: '_11_1', cid: '_7_1', course: 'Biology', title: 'Lab report', at: now + 36e5, url: '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_3_1', sub: { submitted: true }, ov: null, allDay: false },
+    { type: 'assignment', id: '_11_1', cid: '_7_1', content: '_3_1', course: 'Biology', title: 'Lab report', at: now + 36e5, url: '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_3_1', sub: { submitted: true }, ov: null, allDay: false },
     { type: 'quiz', id: '_12_1', cid: '_7_1', course: 'Biology', title: 'Next week', at: now + 7 * 864e5, url: '/ultra/courses/_7_1/outline', sub: null, ov: null, allDay: false },
   ] };
   const p = page({ clock: { t: now }, ultra });
@@ -270,7 +291,7 @@ test("Ultra: the agenda reads the day from Ultra's To Do and calendar (lib/ultra
   assert.match(text(list), /Lab report/);
   assert.doesNotMatch(text(list), /Next week/, "only the day's");
   const link = find(list, (e) => e.tagName === 'A');
-  assert.equal(link.href, '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_3_1');
+  assert.equal(link.href, 'https://school.blackboard.test/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_3_1');
   assert.ok(find(list, (e) => e.tagName === 'LI' && 'done' in e.dataset), 'handed in: done');
   assert.equal(ultra.asked.length, 1);
   assert.equal(ultra.asked[0].origin, 'https://school.blackboard.test', "this Ultra site's own");
@@ -281,6 +302,108 @@ test("Ultra: the agenda reads the day from Ultra's To Do and calendar (lib/ultra
   find(body, (e) => e.attrs?.['aria-label'] === 'Previous day').fire('click');
   for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
   assert.equal(ultra.asked.length, 2, 'the next day once, today from memory');
+});
+
+const agendaText = (el) => [el.textContent || '', ...(el.children || []).map((c) => (typeof c === 'object' ? agendaText(c) : String(c)))].join(' ');
+const loadAgenda = async (p) => {
+  const body = new E(), tile = p.ui.probe.WIDGETS.agenda(body);
+  for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+  return { body, tile };
+};
+const ultraDay = (p) => {
+  const L = p.c.GZ_TODO, tz = Intl.DateTimeFormat().resolvedOptions().timeZone, d = L.dayOf(p.clock.t, tz);
+  return [L.midnight(d, tz), L.midnight(d + 1, tz)];
+};
+const cachedDay = (p) => {
+  const [from, to] = ultraDay(p);
+  return { key: `todo:${p.c.location.origin}/_5_1`, at: p.clock.t, start: new Date(from).toISOString(), end: new Date(to).toISOString(),
+    items: [{ type: 'assignment', id: '_11_1', cid: '_7_1', title: 'Covered work', at: p.clock.t, url: `${p.c.location.origin}/ultra/courses/_7_1/outline` }] };
+};
+
+test('Ultra shared planner: an agenda reuses the profile and range already read by another consumer', async () => {
+  const ultra = { items: [] }, p = page({ ultra });
+  const range = ultraDay(p);
+  await p.c.GZ_ULTRA.page.planned(...range);
+  const { tile } = await loadAgenda(p);
+  assert.equal(ultra.requests.filter((s) => s.endsWith('/users/me')).length, 1, 'shared identity, no independent widget read');
+  assert.equal(ultra.requests.filter((s) => s.endsWith('/memberships')).length, 1);
+  assert.equal(ultra.asked.length, 1, 'the shared fresh range supplies the agenda');
+  tile.stop();
+});
+
+test('Ultra shared planner: two agendas join an in-flight range and keep absolute own-site links', async () => {
+  const now = Date.now(), ultra = { holdTodo: true, items: [{ id: '_11_1', cid: '_7_1', title: 'Shared work', at: now }] };
+  const p = page({ ultra, clock: { t: now } });
+  const a = await loadAgenda(p), b = await loadAgenda(p);
+  const count = ultra.pending.length;
+  ultra.holdTodo = false; for (const resolve of ultra.pending) resolve();
+  await settle();
+  assert.equal(count, 1, 'one planner transport while both tiles wait');
+  assert.match(agendaText(a.body), /Shared work/); assert.match(agendaText(b.body), /Shared work/);
+  assert.equal(find(a.body, (e) => e.tagName === 'A').href, `${p.c.location.origin}/ultra/courses/_7_1/outline`);
+  a.tile.stop(); b.tile.stop();
+});
+
+test('Ultra shared planner: covered To Do cache is account-scoped and fresh for less than ten minutes', async (t) => {
+  for (const kind of ['covered', 'account', 'origin', 'stale', 'uncovered']) await t.test(kind, async () => {
+    const ultra = { items: [] }, p = page({ ultra }), cache = cachedDay(p);
+    if (kind === 'account') cache.key = cache.key.replace('_5_1', '_6_1');
+    if (kind === 'origin') cache.key = cache.key.replace(p.c.location.origin, 'https://other.test');
+    if (kind === 'stale') cache.at -= 600000;
+    if (kind === 'uncovered') cache.end = new Date(ultraDay(p)[1] - 1).toISOString();
+    p.local.todoCache = cache;
+    const { body, tile } = await loadAgenda(p);
+    assert.equal(ultra.asked.length, kind === 'covered' ? 0 : 1);
+    assert.equal(/Covered work/.test(agendaText(body)), kind === 'covered');
+    tile.stop();
+  });
+});
+
+test('Ultra shared planner: memo age belongs to the shared read, and expires at two minutes', async () => {
+  const ultra = { items: [] }, clock = { t: Date.parse('2026-10-15T16:00:00Z') }, p = page({ ultra, clock });
+  await p.c.GZ_ULTRA.page.planned(...ultraDay(p));
+  clock.t += 119999;
+  const { body, tile } = await loadAgenda(p);
+  assert.equal(ultra.asked.length, 1, 'opening the agenda does not restart or duplicate another consumer’s memo');
+  clock.t++;
+  find(body, (e) => e.tagName === 'BUTTON' && e.textContent === 'Today').fire('click');
+  await settle();
+  assert.equal(ultra.asked.length, 2, 'shared range refreshes at its original expiry');
+  tile.stop();
+});
+
+test('Ultra shared planner: a failed range is retried, then a newer covered To Do copy takes precedence', async () => {
+  const ultra = { failTodo: 1, items: [] }, p = page({ ultra });
+  await assert.rejects(p.c.GZ_ULTRA.page.planned(...ultraDay(p)), /planner unavailable/);
+  const { body, tile } = await loadAgenda(p);
+  assert.equal(ultra.asked.length, 2, 'a failed shared promise is evicted');
+  assert.doesNotMatch(agendaText(body), /Couldn't load/);
+  const cache = cachedDay(p);
+  for (const f of [...p.listeners]) f({ todoCache: { newValue: cache } }, 'local');
+  await settle();
+  assert.match(agendaText(body), /Covered work/);
+  assert.equal(ultra.asked.length, 2, 'the fresh covered copy supersedes memo without another planner call');
+  tile.stop();
+});
+
+test('Canvas agenda retains its covered-cache, day memo and Canvas API path', async () => {
+  let calls = 0;
+  const clock = { t: Date.parse('2026-10-15T16:00:00Z') }, p = page({ clock, capi: async (url) => { assert.match(url, /^\/planner\/items\?/); calls++; return []; } });
+  const L = p.c.GZ_TODO, d = L.dayOf(clock.t, 'UTC');
+  const cache = { key: 'todo:https://canvas.test/3', at: clock.t, start: new Date(L.midnight(d, 'UTC')).toISOString(), end: new Date(L.midnight(d + 1, 'UTC')).toISOString(), items: [] };
+  p.local.todoCache = cache;
+  const { body, tile } = await loadAgenda(p);
+  assert.equal(calls, 0, 'covered Canvas copy');
+  for (const f of [...p.listeners]) f({ todoCache: { newValue: { ...cache, at: clock.t - 600000 } } }, 'local');
+  await settle(); assert.equal(calls, 1);
+  find(body, (e) => e.attrs?.['aria-label'] === 'Next day').fire('click');
+  await settle();
+  find(body, (e) => e.attrs?.['aria-label'] === 'Previous day').fire('click');
+  await settle(); assert.equal(calls, 2, 'today still from the Canvas day memo');
+  clock.t += 120000;
+  find(body, (e) => e.tagName === 'BUTTON' && e.textContent === 'Today').fire('click');
+  await settle(); assert.equal(calls, 3, 'Canvas memo keeps its two-minute freshness');
+  tile.stop();
 });
 
 // B7b with B7c: the timer's changes go through the worker's one queue (glaze:widgetTimer), which the nav's timer shares;
