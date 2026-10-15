@@ -177,24 +177,32 @@ const KEY = R.storeKey('https://canvas.test', '3');
 test('the worker: a reminder is leased to one tab, seen only once that tab showed it, and free again if it never did', async () => {
   const a = area();
   const id = `assignment:1@${NOW}`;
-  assert.deepEqual((await R.change({ key: KEY, op: 'claim', tab: 'a', ids: [id, 'nonsense'] }, a, NOW)).claimed, [id]);
+  const la = await R.change({ key: KEY, op: 'claim', tab: 'a', ids: [id, 'nonsense'] }, a, NOW);
+  assert.deepEqual([la.claimed, la.until], [[id], NOW + R.LEASE], 'a claim says when its lease ends');
+  assert.ok(la.lease);
   assert.deepEqual(a.box[KEY].seen, {}, 'not seen until shown');
   assert.deepEqual((await R.change({ key: KEY, op: 'claim', tab: 'b', ids: [id] }, a, NOW)).claimed, []);
   // Tab a closed (or went quiet) without showing it: once the lease runs out, b may.
   const later = NOW + R.LEASE + 1;
-  assert.deepEqual((await R.change({ key: KEY, op: 'claim', tab: 'b', ids: [id] }, a, later)).claimed, [id]);
-  await R.change({ key: KEY, op: 'confirm', tab: 'a', ids: [id] }, a, later);
-  assert.deepEqual(a.box[KEY].seen, {}, "a's late confirm doesn't take b's lease");
-  await R.change({ key: KEY, op: 'confirm', tab: 'b', ids: [id] }, a, later);
+  const lb = await R.change({ key: KEY, op: 'claim', tab: 'b', ids: [id] }, a, later);
+  assert.deepEqual(lb.claimed, [id]);
+  assert.deepEqual((await R.change({ key: KEY, op: 'confirm', tab: 'a', lease: la.lease, ids: [id] }, a, later)).confirmed, []);
+  assert.deepEqual(a.box[KEY].seen, {}, "a's stale lease confirms nothing");
+  assert.deepEqual((await R.change({ key: KEY, op: 'confirm', tab: 'b', lease: 'made-up', ids: [id] }, a, later)).confirmed, [], 'nor a lease it never had');
+  await R.change({ key: KEY, op: 'confirm', tab: 'b', lease: lb.lease, ids: [id] }, a, later);
   assert.deepEqual([a.box[KEY].seen, a.box[KEY].held], [{ [id]: later }, {}]);
   assert.deepEqual((await R.change({ key: KEY, op: 'claim', tab: 'a', ids: [id] }, a, later)).claimed, []);
   // What the page reckons: another tab's lease waits until it runs out; its own doesn't.
   const ev = [{ id, key: 'assignment:1', at: NOW - 1, until: NOW + 864e5 }];
-  const st = R.clean({ held: { [id]: { by: 'a', until: NOW + R.LEASE } } }, NOW);
+  const st = R.clean({ held: { [id]: { by: 'a', lease: 'x', until: NOW + R.LEASE } } }, NOW);
   assert.deepEqual([R.pending(ev, st, NOW, 'b').show.length, R.pending(ev, st, NOW, 'b').next], [0, NOW + R.LEASE]);
   assert.equal(R.pending(ev, st, NOW, 'a').show.length, 1);
+  // A confirm that comes after its lease ended still counts while no other claim has replaced the lease.
+  const id2 = `assignment:2@${NOW}`;
+  const l2 = await R.change({ key: KEY, op: 'claim', tab: 'a', ids: [id2] }, a, NOW);
+  assert.deepEqual((await R.change({ key: KEY, op: 'confirm', tab: 'a', lease: l2.lease, ids: [id2] }, a, NOW + R.LEASE + 5)).confirmed, [id2]);
   await R.change({ key: KEY, op: 'snooze', id, until: NOW + 36e5 }, a, NOW);
-  assert.deepEqual([a.box[KEY].seen, a.box[KEY].snooze], [{}, { [id]: NOW + 36e5 }]);
+  assert.deepEqual([a.box[KEY].seen[id], a.box[KEY].snooze], [undefined, { [id]: NOW + 36e5 }]);
   await R.change({ key: KEY, op: 'mute', item: 'assignment:1' }, a, NOW);
   assert.deepEqual(a.box[KEY].mute, { 'assignment:1': NOW });
   await R.change({ key: KEY, op: 'unmute', item: 'assignment:1' }, a, NOW);
