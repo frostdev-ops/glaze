@@ -329,6 +329,20 @@
   const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept } })
     .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
+  // Progress and new-content badges share this exact capped list; news can refresh after five minutes.
+  const canvasModuleLists = new Map();
+  const canvasModules = (cid) => {
+    let c = canvasModuleLists.get(cid);
+    if (!c || Date.now() - c.at >= 300000) {
+      c = { at: Date.now() };
+      c.p = capi(`/courses/${cid}/modules?include[]=items&per_page=100`).catch((e) => {
+        if (canvasModuleLists.get(cid) === c) canvasModuleLists.delete(cid);
+        throw e;
+      });
+      canvasModuleLists.set(cid, c);
+    }
+    return c.p;
+  };
   // The Canvas course this page is in (/courses/:id/...), or undefined.
   const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1];
   // One /users/me for everything that asks at once; asked again only if it failed.
@@ -1034,7 +1048,7 @@
     if (reqs?.cid !== cid) {
       const r = (reqs = { cid });
       // shortcut: hide incomplete module lists; follow Link and items_url if large-course progress is needed.
-      capi(`/courses/${cid}/modules?include[]=items&per_page=100`).then((mods) => {
+      canvasModules(cid).then((mods) => {
         r.progress = GZ_PAGE.canvasProgress(mods);
         if (reqs === r) renderProgress();
       }).catch(() => {});
@@ -1222,7 +1236,7 @@
     const key = canvasNewsKey(cid), kept = canvasNews[key]?.[kind], pending = `${key}/${kind}`;
     if (kept && Date.now() - kept.at < 300000 || canvasNewsPending.has(pending) || document.hidden) return kept;
     canvasNewsPending.add(pending);
-    const p = kind === 'items' ? capi(`/courses/${cid}/modules?include[]=items&per_page=100`).then(GZ_GRADES.canvasItems)
+    const p = kind === 'items' ? canvasModules(cid).then(GZ_GRADES.canvasItems)
       : fetch(`${location.origin}/courses/${cid}/grades`, { credentials: 'same-origin', headers: { accept: 'text/html' } })
         .then((r) => r.ok && new URL(r.url).origin === location.origin && new URL(r.url).pathname === `/courses/${cid}/grades` ? r.text() : Promise.reject())
         .then((text) => {
