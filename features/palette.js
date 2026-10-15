@@ -18,7 +18,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', gradescope: 'Gradescope in To Do', search: 'Search in your courses',
     remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak',
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
-    notes: 'Dashboard notes', widgets: 'Widgets', syllabus: 'Syllabus import' };
+    notes: 'Dashboard notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -69,6 +69,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       { label: t('Export calendar (.ics)'), hint: 'Glaze', group: 'Glaze', run: () => need('features/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => {}) },
       // Opens the GPA's past terms, trends and goal (features/grades.js), on the Dashboard.
       ...(ctx.settings().enhance.gpa ? [{ label: t('GPA: past terms, trends and goal'), hint: 'Glaze', group: 'Glaze', run: () => (location.pathname === '/' && globalThis.GZ_GRADES_UI ? GZ_GRADES_UI.open() : go('/#gz-gpa')()) }] : []),
+      // Insights (features/insights.js): this term in numbers, on any Canvas page.
+      ...(ctx.settings().enhance.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: () => need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.open(), () => {}) }] : []),
       ...glazeCmds(),
       // Every Canvas extra with its switch (features/widgets.js), whether or not the widgets are on.
       { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },

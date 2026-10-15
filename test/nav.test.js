@@ -129,7 +129,7 @@ test('late words start the sidebar once; ordinary mutation passes do not repeat 
   const chunk = source.slice(source.indexOf('  const flush = () => {'), source.indexOf('  // ---- page loads'));
   let ready = false, calls = 0;
   const ctx = { timer: 1, dirty: new Set(), full: false, wordsLate: true, document: { body: {} }, tip: null, tinted: null, looked: null, words: () => ready, outermost: () => [], tintKey: () => null, lookHere: () => null, syncNav: () => calls++ };
-  for (const name of ['sweepAll','sweepRoots','tagExtras','themeEditors','paintCourses','applySettings','placeScene','renderProgress','renderNew','keepPlace','renderCalc','watchDrafts','syncDownloads','syncDocTools','syncCourseMenu','syncTodo','syncCardTasks','syncRemind','syncWidgets','syncSyl']) ctx[name] = () => {};
+  for (const name of ['sweepAll','sweepRoots','tagExtras','themeEditors','paintCourses','applySettings','placeScene','renderProgress','renderNew','keepPlace','renderCalc','watchDrafts','syncDownloads','syncDocTools','syncCourseMenu','syncTodo','syncCardTasks','syncRemind','syncWidgets','syncSyl','syncInsights']) ctx[name] = () => {};
   const c = vm.createContext(ctx);
   vm.runInContext(chunk + '\nglobalThis.flushNow = flush;', c);
   c.flushNow(); assert.equal(calls, 0);
