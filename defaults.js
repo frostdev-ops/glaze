@@ -85,6 +85,8 @@ const GZ_SPEC = {
     // Reminders and the streak, each opt-in (lib/remind.js has the rest).
     remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], streak: [false, 'bool'],
   },
+  // features/lookx.js. cursor 'own': a picture kept on this device.
+  extras: { cursor: ['off', ['off', 'aqua', 'lilac', 'pearl', 'own']], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };
 

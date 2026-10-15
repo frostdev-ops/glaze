@@ -231,6 +231,7 @@ GZ_UI.load().then((s) => {
     renderContrast();
     renderMine();
     renderHistory();
+    renderExtras();
     renderBg();
     renderNav();
     presetOptions();
@@ -775,6 +776,53 @@ GZ_UI.load().then((s) => {
   });
   takeOffer();
 
+  // ---- Look rotation's list and your own pointer: kept on this computer (storage.local), lib/lookx.js ----
+  let rotateLooks = [];
+  const renderExtras = () => {
+    $('#rotate-at').hidden = s.extras.rotate !== 'daily';
+    $('#rotate-looks').hidden = s.extras.rotate === 'off';
+    $('#cursor-own').hidden = s.extras.cursor !== 'own';
+  };
+  const renderRotate = async () => {
+    const tick = (id, colors, name) => {
+      const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: rotateLooks.includes(id) });
+      c.setAttribute('aria-label', t('Rotate through {name}', { name }));
+      c.addEventListener('change', () => local.set({ rotateLooks: c.checked ? [...rotateLooks, id] : rotateLooks.filter((x) => x !== id) }));
+      return row(colors, name, '', c);
+    };
+    const favs = await Promise.all(favorites.map((f) => GZ_SHARE.decode(f.code).then((got) => tick(f.code, got.colors, f.name), () => null)));
+    $('#rotate-looks').replaceChildren(...GZ_LOOKS.map((L) => tick(L.name, L.colors, L.name)), ...favs.filter(Boolean));
+  };
+  const showCursor = () => local.get('cursorImg', (r) => { const i = $('#cursor-img'); i.hidden = !r?.cursorImg; if (r?.cursorImg) i.src = r.cursorImg; });
+  $('#cursor-pick').addEventListener('click', () => $('#cursor-file').click());
+  // Read and scaled here, kept as PNG: SVG and anything else the browser can't draw as a bitmap is refused.
+  $('#cursor-file').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    let bmp;
+    try { bmp = await createImageBitmap(f); } catch { return hint(t("That file isn't a picture Glaze can read."), true); }
+    const [w, h] = GZ_LX.fit(bmp.width, bmp.height, 32);
+    const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
+    c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    bmp.close();
+    local.set({ cursorImg: c.toDataURL('image/png') }, () => {
+      const err = chrome.runtime.lastError;
+      if (err) return hint(t('Not saved: {error}', { error: err.message }), true);
+      s.extras.cursor = 'own';
+      fill();
+      save(['extras']);
+      showCursor();
+    });
+  });
+  local.get('rotateLooks', (r) => { rotateLooks = Array.isArray(r?.rotateLooks) ? r.rotateLooks : []; renderRotate(); });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.rotateLooks) rotateLooks = Array.isArray(changes.rotateLooks.newValue) ? changes.rotateLooks.newValue : [];
+    if (changes.rotateLooks || changes.lookFavorites) renderRotate();
+  });
+  showCursor();
+
   // ---- backup ----
   // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
   // card styles and bookmarks go too; a picture kept on this computer stays here.
@@ -836,6 +884,9 @@ GZ_UI.load().then((s) => {
     save(Object.keys(s));
     // Card styles and bookmarks too, and the pictures kept for them on this computer.
     cardsOp({ reset: true, nav: GZ_DEFAULTS.nav }).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });
+    // Stickers, your sticker pictures and pointer, and Look rotation's list (lib/lookx.js): this computer's, gone too,
+    // through the worker's queue, so a tab's sticker change still on its way can't bring one back.
+    chrome.runtime.sendMessage({ type: 'glaze:stickers', reset: true }, (r) => { if (chrome.runtime.lastError || !r?.ok) hint(t('Not saved. Try again in a moment.'), true); });
     fill();
     hint(t('Everything is back to the defaults. Your presets are kept.'));
 

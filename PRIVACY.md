@@ -90,6 +90,14 @@ _Last updated: 2026-10-15_
   or switching the sidebar away from its local picture deletes the old one; Reset everything deletes them all.
   Sidebar pictures use a temporary blob URL while shown, rather than embedding their bytes in the page's
   inline styles or sessionStorage. Canvas page code can still read a picture displayed on its page.
+- **Stickers, your pointer picture and Look rotation**, in `chrome.storage.local`, on this device only: where you put
+  stickers on a page (the site's address and the page's path, with each sticker's position, size and angle), the
+  pictures you add as your own stickers (scaled down to at most 256 pixels, at most about 200 KB each and 4 MB in all),
+  your own pointer picture (scaled to 32 pixels), and which Looks rotation takes turns with and when it last changed.
+  None of it is synced, exported or put in a theme code; the pointer and rotation choices themselves sync with your
+  settings. Remove deletes a sticker, Delete your picture deletes a picture; Reset everything deletes all of it.
+  Your own pictures are shown on a page through temporary blob addresses, not written into it, though the LMS page's
+  own code can still read a picture shown on it.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
