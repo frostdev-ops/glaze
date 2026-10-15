@@ -32,7 +32,7 @@ const GZ_FONTS = (() => {
     readable('Andika'),
     readable('Readex Pro'),
     readable('Comic Neue'),
-    sans('Figtree'), sans('DM Sans'), sans('Outfit'), sans('Manrope'), sans('Plus Jakarta Sans'), sans('IBM Plex Sans'), sans('Nunito'), sans('Geist'),
+    sans('Figtree'), sans('DM Sans'), sans('Outfit'), sans('Manrope'), sans('Plus Jakarta Sans'), sans('IBM Plex Sans'), sans('Nunito'), sans('Geist'), sans('Fredoka'),
     serif('Literata'), serif('Source Serif 4'), serif('Merriweather'), serif('Lora'), serif('Newsreader'), serif('Fraunces'),
     mono('JetBrains Mono'), mono('Fira Code'), mono('IBM Plex Mono'), mono('Geist Mono'), mono('Atkinson Hyperlegible Mono', 'atkinson-mono'), mono('Cascadia Code'), mono('Space Mono'), mono('Victor Mono'),
     // Nerd Fonts: the patched families as released (big files: every icon glyph comes along).

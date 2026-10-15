@@ -219,12 +219,57 @@
     document.body.append(b);
     setTimeout(() => b.remove(), 900);
   };
+  // Canvas: a module item's "Mark as done" button (the page's own, or the newer assignment page's) and the
+  // planner's checkboxes (the dashboard's List View). Canvas flips either once its request succeeds, so a
+  // click is followed for five seconds and bursts there if it turns done; only a click starts one, so a page
+  // that loads done never does. A module item's icon on the Modules page only changes as that page loads.
+  const DONE_BY = '#mark-as-done-checkbox, #set-module-item-completion-button, input[data-testid="planner-item-completed-checkbox"]';
+  const isDone = (el) => (el.matches('input') ? el.checked : el.classList.contains('btn-success') || !!el.querySelector('svg[name="IconComplete"]'));
+  let following = null;
+  document.addEventListener('click', (e) => {
+    if (ultra || !e.isTrusted || html.getAttribute('data-gz-motion') !== 'expressive' || !(e.target instanceof Element)) return;
+    const box = e.target.closest('label')?.control;
+    const el = e.target.closest(DONE_BY) || (box?.matches(DONE_BY) && box);
+    // A label's click passes on to its checkbox: one follow. A checkbox clicked itself has already
+    // flipped when the click reaches it; through its label, or a button, flips after.
+    if (!el || el === following || (e.target === el && el.matches('input') ? !el.checked : isDone(el))) return;
+    following = el;
+    const at = Date.now();
+    const look = () => {
+      const now = el.isConnected ? el : el.id && document.getElementById(el.id); // React may draw it anew
+      if (now && isDone(now)) celebrate(now.labels?.[0] || now);
+      else if (Date.now() - at < 5000) return setTimeout(look, 150);
+      following = null;
+    };
+    setTimeout(look, 150);
+  }, true);
 
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
+  let canvasRecorded = false;
+  const canvasCourseKey = (id = canvasCourseId()) => id ? `canvas:${location.origin}/${id}` : null;
   const recordCourses = () => {
+    if (!ultra) {
+      if (canvasRecorded || window.top !== window) return;
+      canvasRecorded = true;
+      Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
+        const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
+          name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
+        }]));
+        // Preserve Blackboard and other schools; Canvas ids alone are only unique within their own host.
+        chrome.storage.local.get('seenCourses', (r) => {
+          const all = { ...r?.seenCourses, ...seen };
+          chrome.storage.local.set({ seenCourses: all });
+          courseList = all;
+          paintCourses();
+          syncCourseMenu();
+          reapply();
+        });
+      }).catch(() => { canvasRecorded = false; });
+      return;
+    }
     if (window.top !== window) return;
     try {
       chrome.storage.local.get('seenCoursesAt', (r) => {
@@ -233,7 +278,10 @@
           const seen = GZ_COURSES(ms);
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
-          try { chrome.storage.local.set({ seenCourses: seen, seenCoursesAt: Date.now(), courseSlots }); } catch { /* reloaded */ }
+          try { chrome.storage.local.get('seenCourses', (r) => {
+            const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([, c]) => c?.canvas));
+            chrome.storage.local.set({ seenCourses: { ...canvas, ...seen }, seenCoursesAt: Date.now(), courseSlots });
+          }); } catch { /* reloaded */ }
         });
       });
     } catch { /* extension reloaded under the tab */ }
@@ -281,6 +329,22 @@
   const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept } })
     .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
+  // Progress and new-content badges share this exact capped list; news can refresh after five minutes.
+  const canvasModuleLists = new Map();
+  const canvasModules = (cid) => {
+    let c = canvasModuleLists.get(cid);
+    if (!c || Date.now() - c.at >= 300000) {
+      c = { at: Date.now() };
+      c.p = capi(`/courses/${cid}/modules?include[]=items&per_page=100`).catch((e) => {
+        if (canvasModuleLists.get(cid) === c) canvasModuleLists.delete(cid);
+        throw e;
+      });
+      canvasModuleLists.set(cid, c);
+    }
+    return c.p;
+  };
+  // The Canvas course this page is in (/courses/:id/...), or undefined.
+  const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1];
   // One /users/me for everything that asks at once; asked again only if it failed.
   let meId = null;
   const me = () => (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meId = null; throw e; }));
@@ -394,8 +458,80 @@
   const onBook = () => { tagExtras([document.body]); renderNew(); renderCalc(); };
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
+  // The chip and urgency on a due date, drawn by CSS from these attributes.
+  const markDue = (el, state, chip) => {
+    if (state) el.setAttribute('data-gz-due', state);
+    else el.removeAttribute('data-gz-due');
+    if (chip) {
+      el.setAttribute('data-gz-countdown', chip.label);
+      if (chip.tone) el.setAttribute('data-gz-chip', chip.tone);
+      else el.removeAttribute('data-gz-chip');
+    } else {
+      el.removeAttribute('data-gz-countdown');
+      el.removeAttribute('data-gz-chip');
+    }
+  };
+  // Canvas: the same extras on Canvas's markup, from the whole page each pass (a few selectors).
+  // - Scores are read off the page, so a what-if score Canvas draws gets its bar too, and a course that restricts
+  //   quantitative data (letters only) gets none: the course Grades page's cells and group totals, the Grades page
+  //   of all courses, the Assignments index's "18/20 pts". The share goes beside points, never beside a percentage.
+  // - Due dates on the Assignments index and Modules take the date and where the work stands from the course's
+  //   assignments with the student's submission, asked once a page load (a module item names its assignment, quiz
+  //   or topic in its class). The To Do sidebar's (dashboard, course home) are read from its text: only how long is
+  //   left and never overdue, as Ultra's outside course content (an announcement's date there is when it was posted).
+  const CANVAS_SCORES = '#grades_summary td.assignment_score .score_holder, .student_grades td.percent, div.ig-row[id^="assignment_"] .score-display';
+  const CANVAS_DUE = 'div.ig-row[id^="assignment_"][data-item-id] .assignment-date-due, li.context_module_item .due_date_display';
+  let canvasWork = null;
+  const workIn = (cid) => {
+    if (canvasWork?.cid !== cid) {
+      const w = (canvasWork = { cid, by: null });
+      capi(`/courses/${cid}/assignments?include[]=submission&per_page=100`).then((list) => {
+        // ponytail: the first 100 assignments, no paging.
+        w.by = new Map((Array.isArray(list) ? list : []).flatMap((a) => [[`Assignment_${a.id}`, a], ...(a.quiz_id ? [[`Quiz_${a.quiz_id}`, a]] : []),
+          ...(a.discussion_topic?.id ? [[`DiscussionTopic_${a.discussion_topic.id}`, a]] : [])]));
+        if (observer && canvasWork === w) tagExtras([document.body]);
+      }, () => {});
+    }
+    return canvasWork.by;
+  };
+  const tagCanvasExtras = () => {
+    const { scores, urgency, inline } = settings.enhance;
+    if (!scores && !urgency && !inline) return;
+    const now = new Date();
+    const loc = locale();
+    if (scores || inline) {
+      for (const el of document.querySelectorAll(CANVAS_SCORES)) {
+        // The Grades page's cell keeps Canvas's own numbers in a hidden block beside the shown ones.
+        const shown = el.matches('.score_holder') ? el.querySelector(':scope > .tooltip') : el;
+        const sc = GZ_PAGE.canvasScore(shown?.textContent);
+        if (scores && sc && el.style.getPropertyValue('--gz-score') !== String(sc.ratio)) el.style.setProperty('--gz-score', sc.ratio);
+        if (scores && sc) el.setAttribute('data-gz-score', sc.band);
+        else el.removeAttribute('data-gz-score');
+        if (inline && sc?.max) shown.setAttribute('data-gz-pct', GZ_I18N.pct(Math.round(sc.ratio * 100), loc));
+        else shown?.removeAttribute('data-gz-pct');
+      }
+    }
+    if (!urgency && !inline) return;
+    const due = document.querySelectorAll(CANVAS_DUE);
+    const by = due.length && canvasCourseId() && workIn(canvasCourseId());
+    if (by) {
+      for (const el of due) {
+        const index = el.matches('.assignment-date-due');
+        const a = by.get(index ? `Assignment_${el.closest('.ig-row').dataset.itemId}` : el.closest('li').className.match(/\b(?:Assignment|Quiz|DiscussionTopic)_\d+\b/)?.[0]);
+        const state = urgency && a?.due_at && !GZ_PAGE.isDone(null, GZ_PAGE.canvasGrade(a)) && GZ_PAGE.due(new Date(a.due_at), now, loc);
+        markDue(el, state, inline && GZ_PAGE.canvasStatus(a, now, loc, index));
+      }
+    }
+    for (const el of document.querySelectorAll('[data-testid="ToDoSidebarItem__InformationRow"] > li')) {
+      const d = GZ_PAGE.canvasDate(el.textContent, loc, now);
+      const w = d?.timed && GZ_PAGE.when(d, now, loc);
+      const state = urgency && w && !w.past && GZ_PAGE.due(d.at, now, loc);
+      markDue(el, state, inline && w && !w.past && { label: w.rel, tone: '' });
+    }
+  };
   const tagExtras = (roots) => {
     tagCards();
+    if (!ultra) return tagCanvasExtras();
     const { scores, urgency, inline } = settings.enhance;
     if (!scores && !urgency && !inline) return;
     const now = new Date();
@@ -436,8 +572,6 @@
           // says "Past due" itself.
           let state = urgency && GZ_PAGE.due(at, now, loc);
           if (state && (GZ_PAGE.isDone(circle, grade) || (!item && !pageId && state === 'overdue'))) state = null;
-          if (state) el.setAttribute('data-gz-due', state);
-          else el.removeAttribute('data-gz-due');
           // The chip is drawn by CSS from these attributes: no element is added to Ultra's tree. In course
           // content it says where the work stands; elsewhere only how long is left, never how long ago.
           let chip = null;
@@ -446,14 +580,7 @@
             const w = GZ_PAGE.when(at, now, loc, true);
             if (w && !w.past) chip = { label: w.rel, tone: '' };
           }
-          if (chip) {
-            el.setAttribute('data-gz-countdown', chip.label);
-            if (chip.tone) el.setAttribute('data-gz-chip', chip.tone);
-            else el.removeAttribute('data-gz-chip');
-          } else {
-            el.removeAttribute('data-gz-countdown');
-            el.removeAttribute('data-gz-chip');
-          }
+          markDue(el, state, chip);
         }
       }
     }
@@ -465,8 +592,9 @@
     timer = 0;
     const roots = outermost(dirty);
     dirty.clear();
-    if (full) { full = false; sweepAll(); if (ultra) tagExtras([document.body]); } else { sweepRoots(roots); if (ultra) tagExtras(roots); }
-    if (!ultra) { tagCards(); themeEditors(); return placeScene(); } // Canvas: the sweep, the card grades, the editor frames and the scene; everything below is Ultra's
+    if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
+    // Both sites run the same list; a helper that isn't on Canvas yet returns at its top (`if (!ultra) return`).
+    themeEditors();
     if (tip && ultraTipShown()) hideTip();
     paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
@@ -549,11 +677,12 @@
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
     if (window.top === window) dueWeek();
-    if (!ultra) { liftCourses(); return tagCards(); } // Canvas: the sweep, the course colors, Due this week and the card grades; the rest is Ultra's extras and its /learn/api
+    if (!ultra) liftCourses();
     tagExtras([document.body]);
     watchDrafts();
     recordCourses();
     syncCourseMenu();
+    if (!ultra) { paintCourses(); renderProgress(); }
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -565,7 +694,7 @@
     full = false;
     cardsIO.disconnect();
     onScreen.clear();
-    clearTags(TAGS);
+    clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
   };
 
@@ -635,7 +764,22 @@
   // - hints, worked out at hover time: what a date means ("Due in 2 days"), a grade as a share,
   //   the full text of anything Ultra cut off with an ellipsis.
   // Where Ultra shows a tooltip of its own, Glaze's stands down.
-  const ULTRA_TIP = '.MuiTooltip-popper, .tooltip.opened, span.enhanced-tooltip, .ms-Tooltip, [role="tooltip"]:not(.gz-tip)';
+  // Canvas: the same, with its own words. Its titles are icon buttons' names too, but many only repeat a link's text
+  // (a module item's title), and those are left to the browser unless the text is cut short. Where Canvas draws a
+  // tooltip itself, Glaze's stands down: jQuery UI's (.ui-tooltip, over [data-tooltip], whose title is left to it),
+  // InstUI's ([role=tooltip], there at no size until shown) and the older pages' CSS ones (.tooltip_wrap, always
+  // there, made visible on hover). Hints read Canvas's dates (GZ_PAGE.canvasDate, or a <time>'s own) and scores
+  // (canvasScore), from the text a reader sees: not its screen-reader copy. A hint at or inside a titled element
+  // wins over the title, which on Canvas mostly repeats the text (a <time>'s, the Grades page's score cell's).
+  const ULTRA_TIP = `.MuiTooltip-popper, .tooltip.opened, span.enhanced-tooltip, .ms-Tooltip, [role="tooltip"]:not(.gz-tip)${ultra ? '' : ', .ui-tooltip, .tooltip_wrap'}`;
+  const SR_ONLY = '.screenreader-only, [class*="screenReaderContent"]';
+  const textOf = (el) => {
+    if (ultra || !el.querySelector(SR_ONLY)) return el.textContent;
+    const c = el.cloneNode(true);
+    for (const s of c.querySelectorAll(SR_ONLY)) s.remove();
+    return c.textContent;
+  };
+  const CANVAS_DUE_AT = '.assignment-date-due, .due_date_display, #grades_summary td.due';
   let tip = null;
   let tipFor = null;
   let tipTimer = 0;
@@ -650,9 +794,9 @@
     tip?.remove();
     tip = null;
   };
-  const ultraTipShown = () => [...document.querySelectorAll(ULTRA_TIP)].some((t) => t.offsetWidth > 0);
+  const ultraTipShown = () => [...document.querySelectorAll(ULTRA_TIP)].some((t) => t.offsetWidth > 0 && (ultra || t.checkVisibility({ visibilityProperty: true })));
   const showTip = (el, { title, sub }) => {
-    if (!el.isConnected || ultraTipShown()) return;
+    if (!el.isConnected || ultraTipShown()) { if (!ultra) hideTip(); return; }
     tip = document.createElement('div');
     tip.className = 'gz-tip';
     tip.setAttribute('role', 'tooltip');
@@ -683,12 +827,26 @@
         const sc = GZ_PAGE.score(got, max);
         if (sc) return [el, { title: t('{got} of {n} points', { got: parseFloat(got), n: parseFloat(max) }), sub: GZ_I18N.pct(Math.round(sc.ratio * 100), locale()) }];
       }
+      // InstUI cuts some titles (the To Do sidebar's) in script, so the rest isn't on the page: its link's label has it.
+      // Pointed at, or the link focused from the keyboard.
+      const cut = !ultra && (el.matches('[data-cid="TruncateText"]') ? el : el.matches('a[aria-label]') && el.querySelector('[data-cid="TruncateText"]'));
+      if (cut) {
+        const full = GZ_PAGE.uncut(cut.textContent, cut.closest('a[aria-label]')?.getAttribute('aria-label'));
+        if (full) return [cut, { title: full.slice(0, 300) }];
+      }
+      if (!ultra && el.matches('.score_holder > .tooltip, .score-display')) {
+        const sc = GZ_PAGE.canvasScore(el.textContent);
+        if (sc?.max) return [el, { title: t('{got} of {n} points', { got: sc.got, n: sc.max }), sub: GZ_I18N.pct(Math.round(sc.ratio * 100), locale()) }];
+      }
       // Month-view chips are always cut short: the whole title, and when it is due.
       if (el.matches('.fc-event')) return [el, { title: squash(el.querySelector('.fc-title')?.textContent || el.textContent) }];
-      const text = el.childElementCount <= 3 ? squash(el.textContent) : '';
+      const text = el.childElementCount <= 3 ? squash(textOf(el)) : '';
       if (text.length && text.length < 120) {
         const loc = locale();
-        const w = GZ_PAGE.when(text, new Date(), loc, dueLabelled(el) || (/^en\b/i.test(loc) && /\bdue\b/i.test(text)));
+        const now = new Date();
+        const isDue = (ultra ? dueLabelled(el) : !!el.closest(CANVAS_DUE_AT)) || (/^en\b/i.test(loc) && /\bdue\b/i.test(text));
+        const at = ultra ? text : el.matches('time[datetime]') ? new Date(el.dateTime) : GZ_PAGE.canvasDate(text, loc, now);
+        const w = GZ_PAGE.when(at, now, loc, isDue);
         if (w) return [el, w];
       }
       if (text && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow === 'ellipsis') {
@@ -698,24 +856,28 @@
     return null;
   };
   const onTip = (e) => {
-    if (!ultra || !settings.look.tooltips || !observer || !(e.target instanceof HTMLElement)) return;
-    const titled = e.target.closest('[title], [data-gz-title]');
+    if (!settings.look.tooltips || !observer || !(e.target instanceof HTMLElement)) return;
+    let titled = e.target.closest('[title], [data-gz-title]');
     if (titled && titled === tipFor) return;
-    const hinted = !titled && settings.look.hints ? hintFor(e.target) : null;
+    if (!ultra && titled?.matches('[data-tooltip]')) return hideTip();
+    let hinted = settings.look.hints && (!titled || !ultra) ? hintFor(e.target) : null;
+    if (hinted && titled && !titled.contains(hinted[0])) hinted = null;
     if (hinted && hinted[0] === tipFor) return;
+    // Canvas: a title that only repeats the text beside it, uncut.
+    if (!ultra && titled && !hinted && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
     hideTip();
-    if (titled) {
-      const text = titled.getAttribute('title')?.trim();
-      if (!text) return;
+    const text = titled?.getAttribute('title')?.trim();
+    if (titled && !text && !hinted) return;
+    if (text) {
       tipFor = titled;
       titled.dataset.gzTitle = text;
       titled.removeAttribute('title');
       if (!titled.hasAttribute('aria-label') && !titled.textContent.trim()) { titled.setAttribute('aria-label', text); titled.dataset.gzAria = '1'; }
-      tipTimer = setTimeout(() => showTip(titled, { title: text }), e.type === 'focusin' ? 150 : 350);
-    } else if (hinted) {
-      tipFor = hinted[0];
-      tipTimer = setTimeout(() => showTip(hinted[0], hinted[1]), e.type === 'focusin' ? 150 : 450);
     }
+    if (hinted) {
+      tipFor ||= hinted[0];
+      tipTimer = setTimeout(() => showTip(hinted[0], hinted[1]), e.type === 'focusin' ? 150 : 450);
+    } else if (text) tipTimer = setTimeout(() => showTip(titled, { title: text }), e.type === 'focusin' ? 150 : 350);
   };
   document.addEventListener('pointerover', onTip, true);
   document.addEventListener('focusin', onTip, true);
@@ -743,13 +905,57 @@
     peeks.set(key, { at: Date.now(), p });
     return p;
   };
+  // Canvas paginates these lists; cache complete answers, shared by previews and module downloads.
+  const canvasPeekList = async (path) => {
+    const out = [];
+    for (let page = 1; ; page++) {
+      const rows = await capi(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+      if (!Array.isArray(rows)) throw new Error('Invalid list');
+      out.push(...rows);
+      if (rows.length < 100) return out;
+    }
+  };
+  const canvasPeek = (path) => {
+    const key = `canvas:${path}`;
+    const hit = peeks.get(key);
+    if (hit && Date.now() - hit.at < 60000) return hit.p;
+    const p = canvasPeekList(path).catch((e) => { peeks.delete(key); throw e; });
+    peeks.set(key, { at: Date.now(), p });
+    return p;
+  };
+  const moduleItems = (cid, mid, fresh = false) => (fresh ? canvasPeekList : canvasPeek)(`/courses/${cid}/modules/${mid}/items?include[]=content_details`);
+  const canvasPeekFor = async (item) => {
+    const cid = canvasCourseId();
+    const mid = item.closest('.context_module[data-module-id]')?.dataset.moduleId;
+    if (mid) return (await moduleItems(cid, mid)).map((c) => ({ title: c.title,
+      state: c.content_details?.locked_for_user ? 'Locked' : c.completion_requirement?.completed ? 'Completed' : c.completion_requirement ? 'Todo' : 'None',
+      genericReadOnlyData: { dueDate: c.content_details?.due_at } }));
+    const url = new URL(item.href, location.origin);
+    if (url.origin !== location.origin || !url.pathname.startsWith(`/courses/${cid}/files/folder/`)) return null;
+    let path;
+    try { path = decodeURIComponent(url.pathname.split('/files/folder/')[1]).replace(/&#37;/g, '%').replace(/\/$/, ''); } catch { return null; }
+    const folders = await canvasPeek(`/courses/${cid}/folders`);
+    const folder = folders.find((f) => f.full_name.replace(/^[^/]+\/?/, '') === path);
+    if (!folder || folder.locked_for_user || folder.hidden_for_user) return null;
+    const [dirs, files] = await Promise.all([canvasPeek(`/folders/${folder.id}/folders`), canvasPeek(`/folders/${folder.id}/files`)]);
+    return [...dirs, ...files].filter((f) => !f.hidden_for_user).map((f) => ({ title: f.display_name || f.name, state: f.locked_for_user ? 'Locked' : 'None' }));
+  };
   let peek = null;
   let peekFor = null;
   let peekTimer = 0;
-  const hidePeek = () => { clearTimeout(peekTimer); peek?.remove(); peek = null; peekFor = null; };
-  const STATE = { Completed: 'done', Started: 'started' };
+  const hidePeek = () => {
+    clearTimeout(peekTimer);
+    if (!ultra && peekFor) {
+      const ids = (peekFor.getAttribute('aria-describedby') || '').split(/\s+/).filter((id) => id && id !== 'gz-peek');
+      if (ids.length) peekFor.setAttribute('aria-describedby', ids.join(' ')); else peekFor.removeAttribute('aria-describedby');
+    }
+    peek?.remove(); peek = null; peekFor = null;
+  };
+  const STATE = { Completed: 'done', Started: 'started', None: 'none', Locked: 'locked' };
   const showPeek = (item, list) => {
-    if (!list?.length || peekFor !== item || !item.isConnected) return;
+    if (!list?.length || peekFor !== item || !item.isConnected || !settings.enhance.previews || !observer) return;
+    const r = item.getBoundingClientRect();
+    if (!ultra && (r.bottom < 0 || r.top > innerHeight)) return;
     peek?.remove();
     peek = document.createElement('div');
     peek.id = 'gz-peek';
@@ -757,16 +963,16 @@
     const done = list.filter((c) => c.state === 'Completed').length;
     const head = document.createElement('div');
     head.className = 'gz-peek-head';
-    head.textContent = t('{n} items · {done} done', { n: list.length, done });
+    head.textContent = t(!ultra && list.every((c) => c.state === 'None' || c.state === 'Locked') ? '{n} items' : '{n} items · {done} done', { n: list.length, done });
     const ul = document.createElement('ul');
     const now = new Date();
     for (const c of list.slice(0, 8)) {
       const li = document.createElement('li');
       li.dataset.state = STATE[c.state] || 'todo';
-      const t = document.createElement('span');
-      t.className = 'gz-peek-title';
-      t.textContent = c.title;
-      li.append(t);
+      const title = document.createElement('span');
+      title.className = 'gz-peek-title';
+      title.textContent = c.title;
+      li.append(title);
       const due = c.genericReadOnlyData?.dueDate;
       if (due) {
         const d = document.createElement('span');
@@ -774,6 +980,7 @@
         d.textContent = GZ_PAGE.describe(new Date(due), true, now, locale()).rel;
         li.append(d);
       }
+      if (!ultra && c.state !== 'None') li.setAttribute('aria-label', `${c.title} · ${t(c.state === 'Completed' ? 'Done' : c.state === 'Locked' ? 'Locked' : 'Not complete')}${due ? ` · ${li.querySelector('.gz-peek-due').textContent}` : ''}`);
       ul.append(li);
     }
     peek.append(head, ul);
@@ -784,14 +991,23 @@
       peek.append(more);
     }
     document.body.append(peek);
-    const r = item.getBoundingClientRect();
+    if (!ultra) item.setAttribute('aria-describedby', `${item.getAttribute('aria-describedby') || ''} gz-peek`.trim());
     const w = peek.getBoundingClientRect();
     const right = r.right + 12 + w.width < innerWidth;
     peek.style.left = `${right ? r.right + 12 : Math.max(8, r.right - w.width)}px`;
     peek.style.top = `${Math.min(Math.max(8, right ? r.top : r.bottom + 8), innerHeight - w.height - 8)}px`;
   };
-  document.addEventListener('pointerover', (e) => {
-    if (!ultra || !settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
+  const onPeek = (e) => {
+    if (!settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
+    if (!ultra) {
+      const item = e.target.closest('.context_module .expand_module_link, a[href*="/files/folder/"]');
+      if (item === peekFor) return;
+      hidePeek();
+      if (!canvasCourseId() || !item || !item.getClientRects().length || (item.matches('.expand_module_link') && !item.closest('.context_module').classList.contains('collapsed_module'))) return;
+      peekFor = item;
+      peekTimer = setTimeout(() => canvasPeekFor(item).then((list) => showPeek(item, list)).catch(() => {}), e.type === 'focusin' ? 150 : 550);
+      return;
+    }
     const item = e.target.closest('.content-list-item[data-content-id]');
     if (item === peekFor) return;
     hidePeek();
@@ -801,14 +1017,48 @@
     peekFor = item;
     const fid = item.getAttribute('data-content-id');
     peekTimer = setTimeout(() => children(cid, fid).then((list) => showPeek(item, list)), 550);
+  };
+  document.addEventListener('pointerover', onPeek, { capture: true, passive: true });
+  document.addEventListener('focusin', (e) => { if (!ultra) onPeek(e); }, true);
+  document.addEventListener('pointerout', (e) => { if (!ultra && peekFor && !peekFor.contains(e.relatedTarget)) hidePeek(); }, true);
+  document.addEventListener('focusout', (e) => { if (!ultra && e.target === peekFor) hidePeek(); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hidePeek(); }, true);
+  for (const ev of ['pointerdown', 'wheel']) document.addEventListener(ev, hidePeek, { capture: true, passive: true });
+  document.addEventListener('scroll', () => {
+    // Tabbing to a header can scroll it into view after focusin; let its preview settle there.
+    const target = !ultra && peekFor === document.activeElement && peekFor;
+    hidePeek();
+    if (target) onPeek({ target, type: 'focusin' });
   }, { capture: true, passive: true });
-  for (const ev of ['pointerdown', 'scroll', 'wheel']) document.addEventListener(ev, hidePeek, { capture: true, passive: true });
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
   // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
   // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
+  // On Canvas the outline with a done state is Modules: the bar adds up the completion requirements the
+  // course sets, done or not as Canvas's own API has them for this student (asked once a page), above the
+  // Modules list, also on a course home that shows it. A course that sets none gets no bar: Canvas calls
+  // a module without requirements "completed", and it hides that itself, as nothing there was asked of you.
+  let reqs = null; // Canvas: { cid, progress: { done, total } | null }, null when the whole total isn't known
+  const canvasProgress = () => {
+    const old = document.getElementById('gz-progress');
+    const cid = canvasCourseId();
+    const list = observer && settings.enabled && settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
+    if (!list) return old?.remove();
+    if (reqs?.cid !== cid) {
+      const r = (reqs = { cid });
+      // shortcut: hide incomplete module lists; follow Link and items_url if large-course progress is needed.
+      canvasModules(cid).then((mods) => {
+        r.progress = GZ_PAGE.canvasProgress(mods);
+        if (reqs === r) renderProgress();
+      }).catch(() => {});
+      return;
+    }
+    if (!reqs.progress?.total) return old?.remove();
+    drawProgress(old, reqs.progress.done, reqs.progress.total, list);
+  };
   const renderProgress = () => {
+    if (!ultra) return canvasProgress();
     const old = document.getElementById('gz-progress');
     if (!settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
     const top = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
@@ -823,6 +1073,10 @@
       if (rs) { total += 1; if (rs.getAttribute('aria-checked') === 'true') done += 1; }
     }
     if (!total) return old?.remove();
+    drawProgress(old, done, total, top[0].parentElement);
+  };
+  // The bar, drawn before `before` (the list it adds up), or brought up to date.
+  const drawProgress = (old, done, total, before) => {
     const key = `${done}/${total} ${locale()}`;
     if (old?.dataset.v === key && old.isConnected) return;
     const bar = old || document.createElement('div');
@@ -837,7 +1091,7 @@
     num.textContent = GZ_I18N.pct(pct, locale());
     const track = document.createElement('i');
     bar.append(label, num, track);
-    if (!old) top[0].parentElement.before(bar);
+    if (!old) before.before(bar);
   };
 
   // ---- new grades (Extras) --------------------------------------------------------------------
@@ -904,6 +1158,7 @@
   const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
   for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, openNew, true);
   const renderNew = () => {
+    if (!ultra) return renderCanvasNew();
     const { newgrades, newcontent } = settings.enhance;
     if (!(newgrades || newcontent) || window.top !== window || !observer) return;
     if (!seen) return loadSeen();
@@ -947,6 +1202,110 @@
       }
     }
   };
+
+  // Canvas keeps unread grade dots itself. A passive HTML GET reads those exact dots, without running
+  // the grade page's scripts. The submissions API's include[]=read_state would mark submissions read.
+  // Keep only counts and module ids, scoped to this host AND signed-in user; five-minute cache across pages.
+  // shortcut: first 100 modules; Canvas omits items in oversized modules. Don't guess at their contents.
+  let canvasNews = null, canvasNewsLoad = null, canvasNewsUser = null;
+  const canvasNewsPending = new Set(), canvasNewsShown = new Map();
+  const canvasNewsKey = (cid) => `${location.origin}/${canvasNewsUser}/${cid}`;
+  const canvasNewsStore = `canvasNews:${location.origin}`;
+  // One origin's map is one write boundary; hold its lock until storage's set callback completes.
+  let canvasNewsWrite = Promise.resolve();
+  const saveCanvasNews = (key, patch) => {
+    const write = () => new Promise((done) => {
+      try { chrome.storage.local.get(canvasNewsStore, (r) => {
+        const record = GZ_GRADES.canvasNewsRecord(r ? r[canvasNewsStore]?.[key] : canvasNews[key], patch);
+        canvasNews[key] = record;
+        try { chrome.storage.local.set({ [canvasNewsStore]: { ...r?.[canvasNewsStore], [key]: record } }, done); } catch { done(); }
+      }); } catch { canvasNews[key] = GZ_GRADES.canvasNewsRecord(canvasNews[key], patch); done(); } // extension reloaded under the tab
+    });
+    // shortcut: without usable Web Locks, writes are ordered within this tab only.
+    return canvasNewsWrite = canvasNewsWrite.then(() => navigator.locks?.request ? navigator.locks.request(`glaze:${canvasNewsStore}`, write).catch(write) : write());
+  };
+  const loadCanvasNews = () => {
+    canvasNewsLoad ||= Promise.all([capi('/users/self').then((u) => u.id), new Promise((resolve) => {
+      try { chrome.storage.local.get(canvasNewsStore, (r) => resolve(r?.[canvasNewsStore] || {})); } catch { resolve({}); }
+    })]).then(([id, kept]) => {
+      if (!id) throw new Error('No Canvas user');
+      canvasNewsUser = String(id); canvasNews = kept; renderNew();
+    }).catch(() => { setTimeout(() => { canvasNewsLoad = null; }, 60000); });
+  };
+  const askCanvasNews = (cid, kind) => {
+    const key = canvasNewsKey(cid), kept = canvasNews[key]?.[kind], pending = `${key}/${kind}`;
+    if (kept && Date.now() - kept.at < 300000 || canvasNewsPending.has(pending) || document.hidden) return kept;
+    canvasNewsPending.add(pending);
+    const p = kind === 'items' ? canvasModules(cid).then(GZ_GRADES.canvasItems)
+      : fetch(`${location.origin}/courses/${cid}/grades`, { credentials: 'same-origin', headers: { accept: 'text/html' } })
+        .then((r) => r.ok && new URL(r.url).origin === location.origin && new URL(r.url).pathname === `/courses/${cid}/grades` ? r.text() : Promise.reject())
+        .then((text) => {
+          const doc = new DOMParser().parseFromString(text, 'text/html');
+          // Restricted and upgraded React grade pages have no server-rendered table: fail closed.
+          return doc.querySelector('#grades_summary') ? doc.querySelectorAll('#grades_summary .unread_dot.grade_dot').length : null;
+        });
+    const at = kind === 'items' ? canvasModuleLists.get(cid).at : null;
+    p.then((value) => saveCanvasNews(key, { [kind]: { at: at ?? Date.now(), value } }), () => saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } })).finally(() => {
+      canvasNewsPending.delete(pending);
+      if (observer && settings.enhance[kind === 'items' ? 'newcontent' : 'newgrades']) renderNew();
+    });
+    return kept;
+  };
+  const canvasNewsBadge = (host, cid, n, kind) => {
+    let pill = host.querySelector(`:scope > .gz-new[data-kind="${kind}"]`);
+    if (!n) return pill?.remove();
+    if (!pill) {
+      pill = document.createElement('a'); pill.className = 'gz-new'; pill.dataset.kind = kind;
+      pill.href = `/courses/${cid}/${kind === 'grades' ? 'grades' : 'modules'}`;
+      host.append(pill);
+    }
+    const text = t(kind === 'items' ? '{n} new items' : '{n} new', { n });
+    if (pill.textContent !== text) pill.textContent = text;
+    const label = t(KIND[kind], { n });
+    if (pill.getAttribute('aria-label') !== label) pill.setAttribute('aria-label', label);
+  };
+  const renderCanvasNew = () => {
+    const { newgrades, newcontent } = settings.enhance;
+    if (!(newgrades || newcontent) || !observer || document.hidden || window.top !== window) return;
+    const cid = canvasCourseId(), modules = cid && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.querySelector('#context_modules');
+    const grades = newgrades && cid && /^\/courses\/\d+\/grades\/?$/.test(location.pathname);
+    const cards = location.pathname === '/' && document.querySelectorAll('.ic-DashboardCard');
+    if (!(newcontent && modules || grades || cards?.length)) return;
+    if (!canvasNews) return loadCanvasNews();
+    // Native page scripts can mark grades read; refresh the passive count when the student returns.
+    if (grades && canvasNews[canvasNewsKey(cid)]?.grades?.at) saveCanvasNews(canvasNewsKey(cid), { grades: { at: 0, value: null } });
+    if (newcontent && modules) {
+      const key = canvasNewsKey(cid), items = askCanvasNews(cid, 'items')?.value;
+      if (items) {
+        const rows = [...document.querySelectorAll('.context_module_item[id^="context_module_item_"]')];
+        const looked = new Set(rows.filter((r) => r.getClientRects().length).map((r) => r.id.slice(20)));
+        const was = canvasNews[key]?.seen;
+        const { ids, seen: now } = GZ_GRADES.newItems(items, was, looked);
+        const shown = canvasNewsShown.get(key) || new Set();
+        for (const id of ids) shown.add(id);
+        canvasNewsShown.set(key, shown);
+        if (now !== was) saveCanvasNews(key, { seen: now });
+        for (const row of rows) {
+          const title = row.querySelector('.ig-title');
+          if (title) cardBadge(title, cid, shown.has(row.id.slice(20)) ? 1 : 0, 'item');
+        }
+      }
+    }
+    let n = 0;
+    for (const card of cards || []) {
+      const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1];
+      const host = card.querySelector('.ic-DashboardCard__header');
+      if (!id || !host) continue;
+      cardsInView.observe(host);
+      if (!inView.has(host) || n++ >= 12) continue;
+      if (newgrades) canvasNewsBadge(host, id, askCanvasNews(id, 'grades')?.value, 'grades');
+      if (newcontent && canvasNews[canvasNewsKey(id)]?.seen) {
+        const items = askCanvasNews(id, 'items')?.value;
+        canvasNewsBadge(host, id, GZ_GRADES.newItems(items, canvasNews[canvasNewsKey(id)].seen).ids.size, 'items');
+      }
+    }
+  };
+  document.addEventListener('visibilitychange', () => { if (!ultra && !document.hidden) renderNew(); });
 
   // ---- new content (Extras) -------------------------------------------------------------------
   // "New" on course items added (or made visible) since the course's content was last looked at here,
@@ -1032,10 +1391,51 @@
   const savePlace = () => {
     const p = place;
     if (!p?.loaded) return;
-    const v = { open: [...p.open], top: p.top };
+    const v = { open: [...(p.open || [])], top: p.top };
     const now = Date.now();
     try { sessionStorage.setItem(tabPlace(p.cid), JSON.stringify(GZ_PAGE.place(null, p.cid, v, now)[p.cid])); } catch { /* blocked or full */ }
-    local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, v, now) })));
+    local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, { ...v, item: r?.coursePlace?.[p.cid]?.item }, now) })));
+  };
+  // Canvas keeps which modules you collapsed itself (per student, on its server), so here it's how far down
+  // the Modules list you were, measured from the list's top so a course home showing it agrees with the
+  // Modules page, and the item you opened last, marked when you come back. Every page change is a full
+  // load on Canvas; Back may bring a page back as it was (bfcache), and that is left alone.
+  const MODULES = 'context_modules_sortable_container';
+  const listTop = (list, sc) => list.getBoundingClientRect().top + sc.scrollTop - (sc === document.scrollingElement ? 0 : sc.getBoundingClientRect().top);
+  let noted = false; // this page's module item recorded
+  let acted = false; // anything done on this page yet (Canvas: before the list is even there, it ends the restore too)
+  // Put back until it holds there a second running (a module Canvas collapses once the student's progress
+  // arrives moves the list), with the same rules as above: anything you do first ends it; ten seconds at most.
+  const canvasBack = () => {
+    const p = place;
+    const list = p?.back && p.top && document.getElementById(MODULES);
+    if (!list) { if (p) p.back = null; return; }
+    const sc = scrollerOf(list);
+    const want = listTop(list, sc) + p.top;
+    const there = Math.abs(sc.scrollTop - want) < 2;
+    p.back.steady = there ? (p.back.steady || 0) + 1 : 0;
+    if (p.back.steady >= 5 || Date.now() - p.back.at > 10000) { p.back = null; return; }
+    if (!there) sc.scrollTop = want;
+    setTimeout(canvasBack, 200);
+  };
+  const canvasPlace = () => {
+    const cid = window.top === window && observer && canvasCourseKey();
+    if (!cid) return;
+    // An item opened from Modules, or with its Next and Previous buttons, carries its module item id.
+    const item = new URLSearchParams(location.search).get('module_item_id');
+    if (item && !noted) {
+      noted = true;
+      local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, cid, { open: [], top: r?.coursePlace?.[cid]?.top, item }, Date.now()) })));
+    }
+    if (place || !/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) || !document.getElementById(MODULES)) return;
+    const p = (place = { cid, top: 0, back: !acted && { at: Date.now() } });
+    local((s) => s.get('coursePlace', (r) => {
+      const was = r?.coursePlace?.[cid];
+      p.top = +was?.top || 0;
+      p.loaded = true;
+      if (was?.item) document.getElementById(`context_module_item_${was.item}`)?.setAttribute('data-gz-last', '');
+      canvasBack();
+    }));
   };
   const backTo = () => {
     const p = place;
@@ -1073,6 +1473,7 @@
   };
   const keepPlace = () => {
     if (!settings.enhance.place) { place = null; return; }
+    if (!ultra) return canvasPlace();
     const cid = window.top === window && observer && courseId();
     const rows = cid ? outlineRows(cid) : [];
     if (!rows.length) { if (place) place.away = true; return; }
@@ -1108,7 +1509,7 @@
     if (changed) savePlace();
   };
   document.addEventListener('click', (e) => { if (e.isTrusted && e.target instanceof Element) tapped = { id: e.target.closest(ROWS)?.dataset.contentId, at: Date.now() }; }, true);
-  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (e.isTrusted && place) place.back = null; }, { capture: true, passive: true });
+  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (!e.isTrusted) return; acted = true; if (place) place.back = null; }, { capture: true, passive: true });
   // How far down, read at most every half second while scrolling; not while being put back, or once the
   // outline is gone (a page shrinking under it scrolls it too).
   let placeTimer = 0;
@@ -1116,6 +1517,13 @@
     if (!place || place.back || placeTimer) return;
     placeTimer = setTimeout(() => {
       placeTimer = 0;
+      if (!ultra) {
+        const list = place?.loaded && !place.back && document.getElementById(MODULES);
+        const sc = list && scrollerOf(list);
+        const top = list && Math.max(0, Math.round(sc.scrollTop - listTop(list, sc)));
+        if (list && top !== place.top) { place.top = top; savePlace(); }
+        return;
+      }
       const rows = place && !place.back && !place.away ? outlineRows(place.cid) : [];
       const top = rows.length && scrollerOf(rows[0]).scrollTop;
       if (rows.length && top !== place.top) { place.top = top; savePlace(); }
@@ -1135,6 +1543,8 @@
   const asPct = (p) => (p == null ? '–' : GZ_I18N.pct(Math.floor(p * 100 + 1e-9) / 100, locale()));
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const renderCalc = () => {
+    // Canvas already saves what-if scores and offers Show Saved / Revert. Theme its own controls in canvas.css.
+    if (!ultra) return;
     const old = document.getElementById('gz-calc');
     const cid = courseId();
     const host = settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview');
@@ -1217,8 +1627,30 @@
   // types it in through the browser's own editing, so Quill and Ultra take it as your edit.
   const EDITOR = '.ql-editor[contenteditable="true"]';
   const BBID = /_\d+_\d+/;
+  // shortcut: new messages to individual users in uniquely named courses; add stable thread/group ids before expanding.
+  const CANVAS_DRAFT = '#compose-message-modal textarea[data-testid="message-body"]';
+  let inboxAccount = null;
+  let inboxLoading = false;
+  let inboxRetry = 0;
+  let inboxWrites = new WeakMap();
+  const inboxPending = new Map();
+  const inboxSending = new Set();
+  const barKeys = new WeakMap();
+  const draftText = (ed) => ultra ? ed.textContent : ed.value;
+  const inboxIdentity = (ed) => {
+    const modal = ed.closest('#compose-message-modal');
+    const subject = modal?.querySelector('input[data-testid="subject-input"]')?.value;
+    const name = modal?.querySelector('input[data-testid="course-select-modal"]')?.value;
+    const courses = inboxAccount?.courses.filter((c) => c.name === name) || [];
+    const tags = [...(modal?.querySelectorAll('[data-testid="address-book-tag"]') || [])];
+    const to = tags.map((tag) => GZ_DRAFTS.canvasRecipient(tag.id));
+    if (courses.length !== 1 || !tags.length || to.some((id) => !id)) return null;
+    const m = { origin: location.origin, user: inboxAccount.user, course: String(courses[0].id), to, subject };
+    return GZ_DRAFTS.canvasKey(m) ? m : null;
+  };
   // The nearest Blackboard id above the editor (a reply's post, say), and the editor's own id.
   const draftKey = (ed) => {
+    if (!ultra) return GZ_DRAFTS.canvasKey(inboxIdentity(ed));
     let near = '';
     for (let p = ed.parentElement, i = 0; p && !near && i < 15; p = p.parentElement, i++) {
       for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
@@ -1230,21 +1662,55 @@
   const saveTimers = new Map(); // editor -> timer
   const offered = new WeakSet();
   const bars = new Map(); // bar -> editor
+  // The modal can unmount before the debounce runs; retain the input's validated destination and body.
+  const captureInboxDraft = (ed) => {
+    const canvas = inboxIdentity(ed);
+    const key = GZ_DRAFTS.canvasKey(canvas);
+    if (!key) { inboxPending.delete(ed); return; }
+    const d = { html: ed.value, text: ed.value, at: Date.now(), canvas };
+    inboxPending.set(ed, { key, d });
+  };
   const saveDraft = (ed) => {
+    if (!ultra) {
+      clearTimeout(saveTimers.get(ed));
+      saveTimers.delete(ed);
+      const pending = inboxPending.get(ed);
+      inboxPending.delete(ed);
+      if (!pending || !settings.enhance.drafts || !observer) return;
+      const { key, d } = pending;
+      if (ed.isConnected && draftKey(ed) !== key) return;
+      if (typed.get(key)?.at > d.at) return;
+      // Issue the storage request now: an async read's callback can disappear during navigation.
+      if (!GZ_DRAFTS.worth(d.text)) { typed.delete(key); local((s) => s.remove(key)); }
+      else { typed.set(key, { ed, ...d, gone: 0 }); local((s) => s.set({ [key]: d })); }
+      return;
+    }
     saveTimers.delete(ed);
-    if (!ed.isConnected || !settings.enhance.drafts) return;
-    const key = draftKey(ed);
-    const text = ed.textContent;
+    if (!ed.isConnected || !settings.enhance.drafts || (!ultra && !observer)) return;
+    const key = ultra ? draftKey(ed) : inboxWrites.get(ed);
+    if (!key || key !== draftKey(ed)) return;
+    const text = draftText(ed);
     // Too short, or cleared: drop the copy, but only one written here. A copy still on offer stays
     // until something worth keeping replaces it.
-    if (!GZ_DRAFTS.worth(text)) { if (typed.delete(key)) local((s) => s.remove(key)); return; }
-    typed.set(key, { ed, text, gone: 0 });
-    local((s) => s.set({ [key]: { html: ed.innerHTML, text, at: Date.now() } }));
+    if (!GZ_DRAFTS.worth(text)) { if (typed.delete(key) || !ultra) local((s) => s.remove(key)); return; }
+    const d = { html: ultra ? ed.innerHTML : text, text, at: Date.now(), ...(!ultra && { canvas: inboxIdentity(ed) }) };
+    typed.set(key, { ed, ...d, gone: 0 });
+    local((s) => s.set({ [key]: d }));
   };
   // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
   const onWrite = (e) => {
-    const ed = ultra && settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(EDITOR);
-    if (!ed) return;
+    if (!ultra && e.type !== 'input') return;
+    const ed = settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(ultra ? EDITOR : CANVAS_DRAFT);
+    if (!ed) {
+      // Controlled inputs can change value without a DOM mutation, so destination edits also run the pass.
+      if (!ultra && settings.enhance.drafts && observer && e.target.closest?.('#compose-message-modal')) watchInboxDrafts();
+      return;
+    }
+    if (!ultra) {
+      inboxWrites.set(ed, draftKey(ed));
+      captureInboxDraft(ed);
+      for (const [bar, editor] of bars) if (editor === ed) { bar.remove(); bars.delete(bar); }
+    }
     clearTimeout(saveTimers.get(ed));
     saveTimers.set(ed, setTimeout(() => saveDraft(ed), 1000));
   };
@@ -1274,27 +1740,68 @@
       return b;
     };
     bar.append(msg, button(t('Restore'), () => {
+      if (!ultra) {
+        if (draftKey(ed) !== key || draftText(ed).trim() || !settings.enhance.drafts || !observer) return;
+        // React's controlled textarea reads the native setter + input, rather than a visible-only DOM edit.
+        local((s) => s.get(key, (r) => {
+          if (r?.[key]?.at !== d.at || r[key].text !== d.text) { inboxWrites.delete(ed); return; }
+          if (!ed.isConnected || draftKey(ed) !== key || draftText(ed).trim() || !settings.enhance.drafts || !observer) return;
+          Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ed, d.text);
+          ed.dispatchEvent(new Event('input', { bubbles: true }));
+          ed.focus();
+        }));
+        return;
+      }
       ed.focus();
       const r = document.createRange();
       r.selectNodeContents(ed);
       getSelection().removeAllRanges();
       getSelection().addRange(r);
       document.execCommand('insertHTML', false, d.html);
-    }), button(t('Dismiss'), () => local((s) => s.remove(key))));
-    (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed).before(bar);
+    }), button(t('Dismiss'), () => ultra ? local((s) => s.remove(key)) : forgetInboxDraft(key, d)));
+    (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed.closest('[data-cid="TextArea"]') || ed).before(bar);
     bars.set(bar, ed);
+    barKeys.set(bar, key);
   };
-  const dropBars = () => { for (const bar of bars.keys()) bar.remove(); bars.clear(); };
+  const dropBars = () => {
+    for (const bar of bars.keys()) bar.remove();
+    bars.clear();
+    if (!ultra) {
+      inboxWrites = new WeakMap();
+      for (const ed of inboxPending.keys()) { clearTimeout(saveTimers.get(ed)); saveTimers.delete(ed); }
+      inboxPending.clear();
+    }
+  };
+  const forgetInboxDraft = (key, d) => local((s) => s.get(key, (r) => { if (r?.[key]?.at === d.at && r[key].text === d.text) s.remove(key); }));
+  const inboxPosted = async (d) => {
+    // Only after Send/close or a recovery offer, never sweep-poll the inbox. Detail GET must not mark mail read.
+    try {
+      const list = await capi('/conversations?scope=sent&per_page=20');
+      const c = list.find((c) => c.subject === d.canvas.subject && c.context_code === `course_${d.canvas.course}` && Date.parse(c.last_authored_message_at) >= d.at - 1000);
+      return !!c && GZ_DRAFTS.sent(d, await capi(`/conversations/${c.id}?auto_mark_as_read=false`));
+    } catch { return false; } // Offline or no exact match: keep the copy.
+  };
   const offerDraft = (ed) => {
     const key = draftKey(ed);
-    local((s) => s.get(key, (r) => {
+    if (!key) return;
+    local((s) => s.get(key, async (r) => {
       const d = r?.[key];
-      if (!d?.html || !settings.enhance.drafts || !observer || !ed.isConnected || ed.textContent.trim()) return;
-      if (GZ_DRAFTS.posted(d.text, pageText())) s.remove(key);
-      else restoreBar(ed, key, d);
+      if (!ultra && (GZ_DRAFTS.canvasKey(d?.canvas) !== key || typeof d?.text !== 'string' || GZ_DRAFTS.stale({ [key]: d }, Date.now()).length)) return;
+      if (!d?.html || !settings.enhance.drafts || !observer || !ed.isConnected || draftKey(ed) !== key || draftText(ed).trim()) return;
+      const posted = ultra ? GZ_DRAFTS.posted(d.text, pageText()) : await inboxPosted(d);
+      if (posted) { if (ultra) s.remove(key); else forgetInboxDraft(key, d); }
+      else if (settings.enhance.drafts && observer && ed.isConnected && draftKey(ed) === key && !draftText(ed).trim()) {
+        if (ultra) restoreBar(ed, key, d);
+        else local((s) => s.get(key, (r) => {
+          if (r?.[key]?.at === d.at && r[key].text === d.text && settings.enhance.drafts && observer && ed.isConnected
+            && draftKey(ed) === key && !draftText(ed).trim() && ![...bars.values()].includes(ed)) restoreBar(ed, key, d);
+        }));
+      }
     }));
   };
   const watchDrafts = () => {
+    // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
+    if (!ultra) { watchInboxDrafts(); return; }
     if (!settings.enhance.drafts) return;
     const now = Date.now();
     let page = null;
@@ -1317,6 +1824,37 @@
       if (!ed.textContent.trim()) setTimeout(() => offerDraft(ed), 800);
     }
   };
+  const watchInboxDrafts = () => {
+    if (!settings.enhance.drafts || !/^\/conversations\/?$/.test(location.pathname)) return;
+    const ed = document.querySelector(CANVAS_DRAFT);
+    if (ed && !inboxAccount && !inboxLoading && Date.now() >= inboxRetry) {
+      inboxLoading = true;
+      Promise.all([capi('/users/self/profile'), canvasCourses()]).then(([user, courses]) => {
+        inboxAccount = { user: String(user.id), courses };
+      }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
+    }
+    for (const ed of inboxPending.keys()) if (!ed.isConnected) saveDraft(ed);
+    for (const [key, d] of typed) if (!d.ed.isConnected) {
+      typed.delete(key);
+      if (inboxSending.delete(key)) setTimeout(() => { if (observer && settings.enhance.drafts) inboxPosted(d).then((sent) => { if (sent) forgetInboxDraft(key, d); }); }, 1000);
+    }
+    for (const [bar, editor] of bars) {
+      if (!bar.isConnected || !editor.isConnected || draftKey(editor) !== barKeys.get(bar)) { bar.remove(); bars.delete(bar); }
+      else bar.hidden = !!draftText(editor).trim();
+    }
+    // Identity changes are common in compose: offer only after the exact course, recipients and subject return.
+    const key = ed && draftKey(ed);
+    if (key && !ed.value.trim() && ![...bars.values()].includes(ed) && inboxWrites.get(ed) !== key) {
+      inboxWrites.set(ed, key);
+      setTimeout(() => { if (draftKey(ed) === key) offerDraft(ed); }, 800);
+    }
+  };
+  document.addEventListener('click', (e) => {
+    if (ultra || !settings.enhance.drafts || !observer || !e.target.closest?.('#send-message-button')) return;
+    const ed = document.querySelector(CANVAS_DRAFT);
+    const key = ed && draftKey(ed);
+    if (key) { inboxWrites.set(ed, key); captureInboxDraft(ed); saveDraft(ed); inboxSending.add(key); }
+  }, true);
   // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
   const tidyDrafts = () => {
     if (window.top !== window) return;
@@ -1327,8 +1865,42 @@
   // A button on each folder and learning module in course content saves the files inside, subfolders
   // included, as one zip named after it. Listed with the content API, fetched from the site you are on
   // (Blackboard redirects the bytes to its file CDN, which allows it), zipped here, saved through a blob
-  // link. Items you haven't opened are left out: downloading is never what marks them viewed.
+  // link. Items with unmet view requirements are left out. Canvas authorizes signed URLs only on a click;
+  // credential-free background reads have no student file_access_user, protecting other module references
+  // to the same attachment too. Neither passive previews nor downloads mark those references viewed.
   const MAX_ZIP = 250 * 2 ** 20; // ponytail: the whole zip is built in memory; stream to disk if folders outgrow it
+  const canvasBytes = (signal) => {
+    const port = chrome.runtime.connect({ name: 'canvas-zip' });
+    let pending = null, closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true; clearInterval(ping); signal.removeEventListener('abort', close); port.disconnect();
+      pending?.reject(signal.reason || new DOMException('Aborted', 'AbortError')); pending = null;
+    };
+    // Active messages, rather than an idle open port, keep an MV3 worker alive during slow streams.
+    const ping = setInterval(() => { if (!closed) port.postMessage({ type: 'ping' }); }, 15000);
+    signal.addEventListener('abort', close, { once: true });
+    port.onDisconnect.addListener(() => { void chrome.runtime.lastError; if (!closed) { pending?.resolve(null); pending = null; close(); } });
+    port.onMessage.addListener((m) => {
+      if (!pending) return;
+      if (m.type === 'chunk') {
+        const raw = atob(m.data), data = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+        pending.chunks.push(data); pending.size += data.length;
+        port.postMessage({ type: 'ack' });
+      } else if (m.type === 'done') {
+        const data = new Uint8Array(pending.size); let at = 0;
+        for (const c of pending.chunks) { data.set(c, at); at += c.length; }
+        pending.resolve(data); pending = null;
+      } else if (m.type === 'error') {
+        if (m.code === 'limit') pending.reject(Object.assign(new Error('limit'), { limit: true })); else pending.resolve(null);
+        pending = null;
+      }
+    });
+    return { close, read: (url) => new Promise((resolve, reject) => {
+      if (closed || signal.aborted) return reject(signal.reason || new DOMException('Aborted', 'AbortError'));
+      pending = { resolve, reject, chunks: [], size: 0 }; port.postMessage({ type: 'file', url });
+    }) };
+  };
   const jobs = new Map(); // folder id -> { ctl, label, pct, done }
   const paintDl = (fid) => {
     const b = document.getElementById(`gz-dl-${fid}`);
@@ -1342,9 +1914,10 @@
     b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
   };
   const download = async (fid, title) => {
-    const cid = courseId();
+    const cid = ultra ? courseId() : canvasCourseId();
     const ctl = new AbortController();
     const job = { ctl, label: t('Finding files · Cancel'), pct: 0 };
+    const bridge = ultra ? null : canvasBytes(ctl.signal);
     jobs.set(fid, job);
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
@@ -1353,6 +1926,7 @@
     const found = [];
     const seen = new Set();
     let skipped = 0;
+    let unavailable = 0;
     // A folder or module is a directory; an Ultra document is a folder too (isBbPage), whose blocks hold its files.
     // ponytail: first 200 children of each folder.
     const walk = async (id, dir) => {
@@ -1368,24 +1942,42 @@
     const mb = (n) => new Intl.NumberFormat(GZ_I18N.locale(locale()), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(n / 2 ** 20);
     const tooBig = (label) => Object.assign(new Error(label), { said: true });
     try {
-      await walk(fid, '');
+      if (ultra) await walk(fid, '');
+      else {
+        const items = await moduleItems(cid, fid, true); // Refresh requirements at the click; a preview can be a minute old.
+        skipped = GZ_ZIP.canvasUnopened(items).size;
+        for (const id of GZ_ZIP.canvasFiles(items)) {
+          ctl.signal.throwIfAborted();
+          const f = await capi(`/files/${id}`).catch(() => null);
+          ctl.signal.throwIfAborted();
+          const signed = f && !f.locked_for_user && !f.hidden_for_user ? await capi(`/files/${id}/public_url`).catch(() => null) : null;
+          ctl.signal.throwIfAborted();
+          const url = GZ_ZIP.canvasURL({ ...f, url: signed?.public_url }, location.origin);
+          if (!url) { unavailable++; continue; }
+          found.push({ name: f.display_name || f.filename, size: f.size, url, dir: '' });
+        }
+      }
       const known = found.reduce((n, f) => n + (f.size || 0), 0);
       if (known > MAX_ZIP) throw tooBig(t('Too big: {size}, over {max}', { size: mb(known), max: mb(MAX_ZIP) }));
       const out = [];
       const taken = new Set();
       let bytes = 0;
-      let failed = 0;
+      let failed = unavailable;
       for (const [i, f] of found.entries()) {
         say(t('{i} of {n} · Cancel', { i: i + 1, n: found.length }), (i / found.length) * 100);
-        const r = await fetch(f.url, { credentials: 'same-origin', signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
-        if (!r?.ok) { failed += 1; continue; }
-        const data = new Uint8Array(await r.arrayBuffer());
+        let data;
+        if (ultra) {
+          const r = await fetch(f.url, { credentials: 'same-origin', signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
+          if (!r?.ok) { failed += 1; continue; }
+          data = new Uint8Array(await r.arrayBuffer());
+        } else data = await bridge.read(f.url);
+        if (!data) { failed += 1; continue; }
         bytes += data.length;
         if (bytes > MAX_ZIP) throw tooBig(t('Too big: over {max}', { max: mb(MAX_ZIP) }));
         out.push({ name: GZ_ZIP.unique(f.dir + GZ_ZIP.safeName(f.name), taken), data });
       }
       const left = skipped ? ` · ${t('{n} unopened left out', { n: skipped })}` : '';
-      if (!out.length) return say((found.length ? t('Download failed') : t(skipped ? 'No files you have opened' : 'No files')) + left);
+      if (!out.length) return say((found.length || unavailable ? t('Download failed') : t(skipped ? 'No files you have opened' : 'No files')) + left);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob(GZ_ZIP.zip(out), { type: 'application/zip' }));
       a.download = `${GZ_ZIP.safeName(title)}.zip`;
@@ -1393,14 +1985,50 @@
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
       say(t('Saved {n} files', { n: out.length }) + left + (failed ? ` · ${t('{n} failed', { n: failed })}` : ''));
     } catch (e) {
-      say(ctl.signal.aborted ? t('Cancelled') : e.said ? e.message : t('Download failed'));
+      say(ctl.signal.aborted ? t('Cancelled') : e.limit ? t('Too big: over {max}', { max: mb(MAX_ZIP) }) : e.said ? e.message : t('Download failed'));
     } finally {
+      bridge?.close();
       job.done = true;
       paintDl(fid);
       setTimeout(() => { if (jobs.get(fid) === job) { jobs.delete(fid); paintDl(fid); } }, 6000);
     }
   };
+  let canvasDlChecked = new WeakMap();
   const syncDownloads = () => {
+    if (!settings.enhance.previews || (peekFor && !peekFor.isConnected)) hidePeek();
+    if (!ultra) {
+      const cid = canvasCourseId();
+      if (!settings.enhance.download || typeof chrome.runtime.connect !== 'function' || !cid || !/^\/courses\/\d+(?:\/modules)?\/?$/.test(location.pathname)) {
+        for (const j of jobs.values()) j.ctl.abort();
+        for (const b of document.querySelectorAll('.gz-dl')) b.remove();
+        for (const item of document.querySelectorAll('.context_module')) canvasDlChecked.delete(item);
+        return;
+      }
+      for (const item of document.querySelectorAll('.context_module[data-module-id]')) {
+        const fid = item.dataset.moduleId;
+        if (!/^\d+$/.test(fid)) continue;
+        const header = item.querySelector('.ig-header');
+        if (!header || Date.now() - (canvasDlChecked.get(item) || 0) < 60000) continue;
+        canvasDlChecked.set(item, Date.now());
+        // A collapsed or paginated module need not have its File rows in the DOM yet.
+        moduleItems(cid, fid).then((list) => {
+          if (!observer || !settings.enhance.download || !item.isConnected || canvasCourseId() !== cid) { canvasDlChecked.delete(item); return; }
+          const old = document.getElementById(`gz-dl-${fid}`);
+          if (!list.some((c) => c.type === 'File')) return old?.remove();
+          if (old) return;
+          const b = document.createElement('button');
+          b.type = 'button'; b.id = `gz-dl-${fid}`; b.className = 'gz-dl'; b.title = t("Download all: save this folder's files as one zip. Items you haven't opened are left out, so this never marks them viewed.");
+          b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!e.isTrusted) return;
+            const j = jobs.get(fid);
+            if (j && !j.done) j.ctl.abort(); else download(fid, item.querySelector('.name')?.textContent.trim());
+          });
+          header.append(b); paintDl(fid);
+        }).catch(() => {});
+      }
+      return;
+    }
     const on = settings.enhance.download && courseId();
     if (!on) { for (const b of document.querySelectorAll('.gz-dl')) b.remove(); return; }
     for (const item of document.querySelectorAll('.content-list-item[data-content-id]')) {
@@ -1432,14 +2060,17 @@
   // on screen (dark palettes only), focus mode on a course document. Dark documents invert the
   // preview's frame (extras.css), which works whatever its origin; where a frame is same-origin, its
   // images and videos are turned back.
-  const PREVIEWS = '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe';
+  const PREVIEWS = ultra ? '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe' : '#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe';
+  const DOC = ultra ? '#site-wrap .document-content-root' : '#wiki_page_show .show-content, #assignment_show .description';
   const UNFLIP = 'img, video, picture, canvas { filter: invert(1) hue-rotate(180deg); }';
   const framesShown = new Set();
   const framesSeen = new WeakSet();
   let docTools = null;
   let focusAt = null; // the document focus mode is on for
+  let focusPath = '';
   let readBar = null;
   const unflip = (f) => {
+    if (!ultra) return; // Canvas viewers may contain annotations: invert the frame, never reach inside.
     try {
       const d = f.contentDocument;
       const old = d?.getElementById('gz-unflip');
@@ -1471,14 +2102,18 @@
   };
   const onRead = () => {
     if (!readBar) return;
-    const sc = focusAt.parentElement; // Ultra's scroller around the document
+    let sc = ultra ? focusAt.parentElement : document.scrollingElement;
+    if (!ultra) for (let p = focusAt.parentElement; p; p = p.parentElement) {
+      if (/auto|scroll/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) { sc = p; break; }
+    }
     // On <html>, outside the observed body: a style write on the bar would wake the sweep every scroll.
     setVar('--gz-read', GZ_PAGE.readShare(sc.scrollTop, sc.scrollHeight, sc.clientHeight));
   };
   const setFocus = (on) => {
-    const doc = on && document.querySelector('#site-wrap .document-content-root');
+    const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
     if ((doc || null) === focusAt) return;
     focusAt = doc || null;
+    focusPath = focusAt ? location.pathname : '';
     html.toggleAttribute('data-gz-focus', !!focusAt);
     readBar?.remove();
     readBar = null;
@@ -1490,6 +2125,7 @@
       onRead();
     }
     syncDocTools();
+    if (!ultra) docTools?.querySelector('[data-gz="focus"]')?.focus({ preventScroll: true });
   };
   const setDark = (on) => {
     settings = { ...settings, enhance: { ...settings.enhance, darkDocs: on } };
@@ -1498,15 +2134,17 @@
     try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
-    const on = ultra && window.top === window && observer && settings.enhance.toggles;
-    const doc = on && document.querySelector('#site-wrap .document-content-root');
-    if (focusAt && focusAt !== doc) setFocus(false);
+    const on = window.top === window && observer && settings.enhance.toggles;
+    const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
+    if (focusAt && (focusAt !== doc || focusPath !== location.pathname)) setFocus(false);
+    if (!ultra && keysBox && keysBox.dataset.path !== location.pathname) closeKeys();
     for (const f of document.querySelectorAll(PREVIEWS)) {
       if (!framesSeen.has(f)) { framesSeen.add(f); frameIO.observe(f); f.addEventListener('load', () => unflip(f)); }
       unflip(f);
     }
     for (const f of framesShown) if (!f.isConnected) { framesShown.delete(f); frameIO.unobserve(f); }
-    const dark = on && darkTheme && framesShown.size > 0;
+    const visible = [...framesShown].find((f) => f.isConnected && f.getClientRects().length);
+    const dark = on && darkTheme && !!visible;
     if (!doc && !dark) {
       docTools?.remove();
       docTools = null;
@@ -1523,8 +2161,13 @@
       docTools.append(time, docButton('dark', t('Dark documents'), () => setDark(!settings.enhance.darkDocs)), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
       document.body.append(docTools);
     }
+    if (!ultra) {
+      // In the reading flow (including a modal's flow), so neither content nor Canvas controls sit under it.
+      const before = doc || visible?.closest('#doc_preview, .ef-file-preview-stretch, .file_preview') || visible;
+      if (before && docTools.nextElementSibling !== before) before.before(docTools);
+    }
     const [time, darkB, focusB] = docTools.children;
-    const mins = focusAt && GZ_PAGE.readMinutes(focusAt.querySelector('.bbml-editor')?.textContent);
+    const mins = focusAt && GZ_PAGE.readMinutes(ultra ? focusAt.querySelector('.bbml-editor')?.textContent : focusAt.textContent);
     time.hidden = !mins;
     // Only on change: a text write is itself a mutation the observer would hand back.
     const read = mins && t('{n} min read', { n: mins });
@@ -1543,7 +2186,7 @@
   // Esc leaves focus mode, and Ultra doesn't also act on it. An open menu or dialog gets its Esc as
   // usual. Focus inside a preview's frame keeps the key there; the button still works.
   addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !focusAt || (e.target instanceof Element && e.target.closest('[role="menu"], [role="dialog"], [role="listbox"]'))) return;
+    if (e.key !== 'Escape' || !focusAt || (!ultra && typing(e.target)) || (e.target instanceof Element && e.target.closest('[role="menu"], [role="dialog"], [role="listbox"]'))) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     setFocus(false);
@@ -1552,13 +2195,15 @@
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them. Never while typing, never with
   // a modifier, top frame only.
-  const GO = { c: ['/ultra/course', 'Courses'], a: ['/ultra/calendar', 'Calendar'], g: ['/ultra/grades', 'Grades'], m: ['/ultra/messages', 'Messages'], s: ['/ultra/stream', 'Activity stream'] };
+  const GO = ultra ? { c: ['/ultra/course', 'Courses'], a: ['/ultra/calendar', 'Calendar'], g: ['/ultra/grades', 'Grades'], m: ['/ultra/messages', 'Messages'], s: ['/ultra/stream', 'Activity stream'] } : { d: ['/', 'Dashboard'], c: ['/courses', 'Courses'], a: ['/calendar', 'Calendar'], g: ['/grades', 'Grades'], m: ['/conversations', 'Inbox'] };
   let gAt = 0;
   let keysBox = null;
-  const closeKeys = () => { keysBox?.remove(); keysBox = null; };
+  let keysBack = null;
+  const closeKeys = () => { keysBox?.remove(); keysBox = null; if (!ultra && keysBack?.isConnected) keysBack.focus({ preventScroll: true }); keysBack = null; };
   const openKeys = () => {
     keysBox = document.createElement('div');
     keysBox.id = 'gz-keys';
+    keysBox.dataset.path = location.pathname;
     keysBox.setAttribute('role', 'dialog');
     keysBox.setAttribute('aria-label', t('Keyboard shortcuts'));
     const h = document.createElement('h2');
@@ -1572,21 +2217,36 @@
       dl.append(dt, dd);
     };
     for (const [k, [, label]] of Object.entries(GO)) row(['g', k], t(label));
-    row(['/'], t('Search'));
+    if (ultra) row(['/'], t('Search'));
     if (settings.enhance.palette) row([/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl', 'K'], t('Go to anything'));
-    row(['?'], t('Show or hide this list'));
+    row(ultra ? ['?'] : ['g', '?'], t('Show or hide this list'));
     const panel = document.createElement('div');
     panel.className = 'gz-keys-panel';
     panel.append(h, dl);
+    if (!ultra) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = t('Dismiss'); b.addEventListener('click', closeKeys); panel.append(b);
+      keysBox.setAttribute('aria-modal', 'true');
+      keysBox.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); b.focus(); } });
+      keysBack = document.activeElement;
+    }
     keysBox.append(panel);
     keysBox.addEventListener('click', (e) => { if (e.target === keysBox) closeKeys(); });
     document.body.append(keysBox);
+    if (!ultra) keysBox.querySelector('button').focus();
   };
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
-  if (ultra && window.top === window) {
+  if (window.top === window) {
     document.addEventListener('keydown', (e) => {
-      if (!settings.enhance.keys || !observer || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
+      if (!ultra && e.key === 'Escape' && keysBox && !typing(e.target)) { e.preventDefault(); closeKeys(); return; }
+      if (!ultra && e.key === 'Shift') return; // g then Shift+? must keep its prefix.
+      if (!settings.enhance.keys || !observer || e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || (!ultra && (e.defaultPrevented || e.repeat || !GZ_PAGE.canvasKeys(location.pathname) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')))) { gAt = 0; return; }
       if (e.key === 'Escape' && keysBox) { closeKeys(); return; }
+      if (!ultra && Date.now() - gAt < 1200 && e.key === '?') {
+        e.preventDefault(); e.stopImmediatePropagation(); gAt = 0;
+        if (keysBox) closeKeys(); else openKeys();
+        return;
+      }
       if (Date.now() - gAt < 1200 && GO[e.key]) {
         e.preventDefault();
         gAt = 0;
@@ -1594,6 +2254,7 @@
         return;
       }
       gAt = e.key === 'g' ? Date.now() : 0;
+      if (!ultra) return; // Canvas owns both / and its global ? help dialog.
       if (e.key === '/') {
         // By Ultra's ids (courses-overview-filter-search, search-button…), which no language changes.
         const target = [...document.querySelectorAll('input[type="search"], :is(input, button)[id*="search" i]')].find((el) => el.offsetWidth > 0);
@@ -1618,9 +2279,10 @@
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
     previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu' };
-  // Canvas's global navigation, and the one extra there is to switch (the palette itself isn't listed, as on Ultra).
-  const CANVAS_TOOLS = [['/', 'Dashboard'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
-  const CANVAS_EXTRAS = { overall: 'Grades on course cards' };
+  // Canvas's global navigation, and the same switches plus the card grades; not the calculator, as Canvas has its own what-if.
+  const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
+  const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards' };
+  delete CANVAS_EXTRAS.calc;
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -1655,7 +2317,7 @@
   };
   // On Canvas: its pages, this course's tabs, your courses and what is due. Each is a plain page load.
   const canvasCommands = async () => {
-    const cid = location.pathname.match(/^\/courses\/([^/]+)/)?.[1];
+    const cid = canvasCourseId();
     const [courses, tabs, due] = await Promise.all([canvasCourses(), cid ? capi(`/courses/${cid}/tabs`).catch(() => []) : [], dueWeek()]);
     return [
       ...tabs.filter((x) => x.label && !x.hidden).map((x) => ({ label: x.label, hint: t('This course'), group: 'Go to', run: go(x.html_url) })),
@@ -1782,6 +2444,7 @@
       // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
       if (cmd) { e.preventDefault(); e.stopPropagation(); closeCmd(); return; }
       if (typing(e.target)) return;
+      if (!ultra && e.target.closest?.('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       e.preventDefault();
       e.stopPropagation();
       openCmd();
@@ -1833,7 +2496,7 @@
   // A full-width bar, top frame only. theme.css shrinks the app by --gz-footer-h so the bar sits
   // below everything rather than over it.
   const syncFooter = () => {
-    const want = ultra && links.length && settings.footer && window.top === window && document.body;
+    const want = links.length && settings.footer && window.top === window && document.body;
     const have = document.getElementById('gz-footer');
     if (want && !have) {
       const f = document.createElement('footer');
@@ -1937,6 +2600,46 @@
     return GZ_CAL_COURSE(el.textContent, el.className.match?.(/course-color-(\d+)/)?.[1], calItems, courseList);
   };
   const paintCourses = () => {
+    if (!ultra) {
+      if (!observer || !settings.enabled) return;
+      const changed = {};
+      // A native color edit repaints the hero before a new API request would see it.
+      for (const card of document.querySelectorAll('.ic-DashboardCard')) {
+        const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1];
+        const c = courseList[canvasCourseKey(id)];
+        const raw = C.parse(card.querySelector('.ic-DashboardCard__header_hero')?.style.backgroundColor || '');
+        if (c && raw && c.color !== C.hex(raw)) { c.color = C.hex(raw); changed[canvasCourseKey(id)] = c; }
+      }
+      if (Object.keys(changed).length) try { chrome.storage.local.get('seenCourses', (r) => chrome.storage.local.set({ seenCourses: { ...r?.seenCourses, ...changed } })); } catch { /* reloaded */ }
+      const cid = canvasCourseKey();
+      const targets = new Map();
+      if (cid) for (const el of document.querySelectorAll('#breadcrumbs li:nth-child(2), #section-tabs')) targets.set(el, cid);
+      // Calendar and dashboard colors are native; Grades links and Inbox course labels have no color.
+      if (location.pathname === '/grades') for (const el of document.querySelectorAll('#content a[href*="/courses/"]')) {
+        targets.set(el, canvasCourseKey(el.getAttribute('href').match(/\/courses\/(\d+)/)?.[1]));
+      }
+      if (location.pathname === '/conversations') {
+        const list = Object.entries(courseList).filter(([id, c]) => id.startsWith(`canvas:${location.origin}/`) && c.color);
+        // MessageDetailItem’s second header field is the native context label, not the message body.
+        // Canvas supplies only its name; ambiguous names keep Canvas’s own styling.
+        for (const el of document.querySelectorAll('[data-testid^="message-detail-item-"] > :nth-child(2) > :first-child > :nth-child(2) > span')) {
+          if (el.children.length) continue;
+          const matches = list.filter(([, c]) => [c.name, c.code].includes(el.textContent.trim()));
+          if (matches.length === 1) targets.set(el, matches[0][0]);
+        }
+      }
+      for (const el of document.querySelectorAll('[data-gz-course-color]')) if (!targets.has(el) || !courseList[targets.get(el)]?.color) {
+        el.removeAttribute('data-gz-course-color');
+        el.style.removeProperty('--gz-course-raw');
+      }
+      for (const [el, id] of targets) {
+        const color = courseList[id]?.color;
+        if (!color) continue;
+        if (el.style.getPropertyValue('--gz-course-raw') !== color) el.style.setProperty('--gz-course-raw', color);
+        if (!el.hasAttribute('data-gz-course-color')) el.setAttribute('data-gz-course-color', '');
+      }
+      return;
+    }
     if (isPreview) return;
     const colors = courseColors();
     for (const el of document.querySelectorAll('[class*="course-color-"]')) {
@@ -1951,6 +2654,11 @@
   const varText = (v) => Object.entries(v).map(([k, x]) => `${k}:${x}`).join(';');
   // The course tinting the page now, as { key, slot, vars }, or null.
   const tintOf = () => {
+    if (!ultra) {
+      const id = canvasCourseKey();
+      const color = courseList[id]?.color;
+      return color && settings.courses.tint && settings.courses.tinted.includes(id) && chrome.runtime?.id ? { key: `${id};${color}`, color } : null;
+    }
     const cid = courseId();
     const sec = document.querySelector(COURSE);
     const slot = sec?.className.match(/course-color-(\d+)/)?.[1];
@@ -1987,7 +2695,7 @@
   // A course given a look of its own wears it on its pages (GZ_COURSE_LOOK); flush() re-checks. Once
   // Glaze is reloaded or updated under the tab, this script is cut off from storage (no runtime id) and
   // would keep switching to looks since removed: it wears none until the page loads again.
-  const lookHere = () => (chrome.runtime?.id && settings.courses.looks[courseId()]) || null;
+  const lookHere = () => (chrome.runtime?.id && settings.courses.looks[ultra ? courseId() : canvasCourseKey()]) || null;
   let looked = null; // the course look painted now
   let worn = settings; // the settings painted now: the student's, or a course's look over them
 
@@ -2118,13 +2826,13 @@
 
   // -- the button on each card --
   const syncCourseMenu = () => {
-    const on = ultra && !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
-    for (const card of document.querySelectorAll(CARD)) {
-      const cid = card.dataset.courseId || card.id.slice(19);
+    const on = !!observer && settings.enhance.coursemenu && window.top === window && !isPreview;
+    for (const card of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard')) {
+      const cid = ultra ? (card.dataset.courseId || card.id.slice(19)) : canvasCourseKey(card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/(\d+)/)?.[1]);
       let b = card.querySelector(':scope > .gz-cm-btn');
       if (b && (!on || b.dataset.cid !== cid || !courseList[cid])) { b.remove(); b = null; }
       if (!on || !courseList[cid]) continue;
-      const label = t('Colour and look for {name}', { name: nickOf(cid) || courseList[cid].name });
+      const label = t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name: nickOf(cid) || courseList[cid].name });
       if (!b) {
         // Inside Ultra's card, positioned over its corner (extras.css); document-level capture listeners take
         // its events, below.
@@ -2148,7 +2856,7 @@
     }
     if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false, true);
     if (menu) paintMenu();
-    syncNames();
+    if (ultra) syncNames();
   };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
@@ -2166,6 +2874,9 @@
   const paintMenu = (m = menu) => {
     const { cid } = m;
     const c = settings.courses;
+    m.tint.checked = GZ_COURSE_TINTED(c, cid, courseList);
+    for (const b of m.looks) b.setAttribute('aria-pressed', String((c.looks[cid] || '') === b.dataset.look));
+    if (!ultra) return;
     const cur = courseColors()[cid];
     if (!cur) return;
     // The color the cards show for it now (a pick as is, else Ultra's toned): the custom picker starts there.
@@ -2176,8 +2887,6 @@
     // The nickname as kept, unless the student is changing it: another tab's save shows here, and isn't undone.
     if (!m.edited && m.nick.value !== (c.names[cid] || '')) m.nick.value = c.names[cid] || '';
     m.reset.hidden = !cur.picked;
-    m.tint.checked = GZ_COURSE_TINTED(c, cid, courseList);
-    for (const b of m.looks) b.setAttribute('aria-pressed', String((c.looks[cid] || '') === b.dataset.look));
   };
   const placeMenu = () => {
     if (!menu) return;
@@ -2225,7 +2934,7 @@
     if (!closeMenu(false)) return;
     const name = nickOf(cid) || real;
     const box = make('div', { id: 'gz-cm' });
-    for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t('Colour and look for {name}', { name })]]) box.setAttribute(k, v);
+    for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name })]]) box.setAttribute(k, v);
     const cap = (text, id) => make('div', { className: 'gz-cm-cap', id, textContent: text });
     const group = (labelledby, ...kids) => {
       const g = make('div', {}, ...kids);
@@ -2245,7 +2954,7 @@
     // Colors: Ultra's ten as Glaze tones them (the very colors its cards show: a pick is used as is, so a swatch picked
     // is what its card then shows), and the theme's accent. Ultra's ten cover the hues except red and grey, which the
     // custom picker is for. Then Reset, back to Blackboard's own.
-    const sw = swatches().map(([label, hex]) => {
+    const sw = (ultra ? swatches() : []).map(([label, hex]) => {
       const b = make('button', { type: 'button', className: 'gz-cm-sw', title: t(label) });
       b.setAttribute('aria-label', t(label));
       b.dataset.hex = hex;
@@ -2288,10 +2997,12 @@
     const lookGrid = group('gz-cm-look', ...looks);
     lookGrid.className = 'gz-cm-looks';
 
-    box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
+    if (ultra) box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
       make('div', { className: 'gz-cm-colorhead' }, cap(t('Colors'), 'gz-cm-colors'), reset), grid,
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')),
       cap(t('Look'), 'gz-cm-look'), lookGrid);
+    else box.append(note, make('p', { className: 'gz-cm-note', textContent: t('Change the colour and nickname in Canvas’s own card menu.') }),
+      make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid);
     document.body.append(box);
     menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
     btn.setAttribute('aria-expanded', 'true');
@@ -2299,7 +3010,7 @@
     rove(grid, sw.find((b) => b.getAttribute('aria-pressed') === 'true') || sw[0]);
     rove(lookGrid, looks.find((b) => b.getAttribute('aria-pressed') === 'true') || looks[0]);
     placeMenu();
-    grid.querySelector('[tabindex="0"]').focus({ preventScroll: true });
+    (ultra ? grid.querySelector('[tabindex="0"]') : tint).focus({ preventScroll: true });
   };
 
   // The button is taken at the document, in the capture phase, as the cards' counts are (openNew): Ultra's card
@@ -2391,12 +3102,12 @@
 
   const applySettings = () => {
     looked = lookHere();
-    const s = (worn = looked ? GZ_COURSE_LOOK(settings, courseId()) : settings);
+    const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey()) : settings);
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);
     // Course colors and tint read Ultra's color slots (course-color-N, the course list recordCourses keeps):
-    // none on Canvas for now (its own course colors are toned by canvas.css from data-gz-raw-courses; liftCourses).
+    // Canvas uses its native color directly for tint; its dashboard/calendar toning stays in canvas.css.
     // `colors` is the palette painted: the base one, tinted inside a picked course.
     let colors = base;
     if (ultra) {
@@ -2414,6 +3125,14 @@
       tinted = course ? on.key : null;
       colors = course ? GZ_TINT(base, course, s.courses.strength / 100) : base;
       if (course) for (const [v] of GZ_COLORS) setVar(v, colors[v]);
+      paintCourses();
+    } else {
+      const on = tintOf();
+      tinted = on?.key || null;
+      if (on) {
+        colors = GZ_TINT(base, on.color, s.courses.strength / 100);
+        for (const [v] of GZ_COLORS) setVar(v, colors[v]);
+      }
       paintCourses();
     }
     palette = colors;
@@ -2441,6 +3160,7 @@
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
     const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
     setAttr('data-gz-bg', kind);
+    setAttr('data-gz-scene', kind === 'scene' && s.bg.scene);
     // A scene's gradient fallback (until it draws, or without WebGL) takes its dim from intensity.
     const look = kind === 'scene' && GZ_SCENE_LOOK(s.bg.intensity);
     setVar('--gz-bg-dim', `${look ? Math.round(look.dim * 100) : s.bg.dim}%`);
@@ -2461,19 +3181,16 @@
     const was = enhanced;
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
-    // The attributes above are set on Canvas too (canvas.css may read them); the work they switch on is Ultra's,
-    // but for the card grades.
-    if (ultra) {
-      if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-      if (observer) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
-      if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
-      if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
-      if (observer) renderNew();
-      if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
-    } else if (observer && s.enhance.overall && !was.overall) tagCards();
+    if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
+    if (observer) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
+    if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
+    if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
+    if (observer) renderNew();
+    if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
+    if (!s.enhance.keys) { gAt = 0; closeKeys(); }
     syncFooter();
     // The light/dark tags only apply to a dark theme: re-sweep when that flips.
     if (dark !== darkTheme) {
@@ -2555,9 +3272,11 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       });
     }
     applySettings();
-    onBody(() => {
+    onBody(async () => {
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
+      if (!ultra) await ready;
+      if (!settings.enabled || !links.length) return;
       syncFooter();
       startSweep();
       syncScene();
@@ -2566,6 +3285,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   const disable = () => {
     hideTip();
     hidePeek();
+    if (!ultra) { for (const j of jobs.values()) j.ctl.abort(); canvasDlChecked = new WeakMap(); }
     closeKeys();
     closeCmd();
     for (const id of ['gz-progress', 'gz-calc']) document.getElementById(id)?.remove();
@@ -2602,13 +3322,13 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   if (!ultra) try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
   // Theme on before storage answers: most people leave it on, and this way the first paint is
   // already themed. If it turns out to be off, it comes straight back off.
-  enable();
-  load().then((s) => {
+  const ready = load().then((s) => {
     settings = s;
-    if (ultra) tidyDrafts();
+    tidyDrafts();
     if (!s.enabled) disable();
     else if (links.length) applySettings();
   });
+  enable();
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
   // save landing late can't undo an edit that is further along.
   if (isPreview) {

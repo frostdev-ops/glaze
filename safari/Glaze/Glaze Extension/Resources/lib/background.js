@@ -1,3 +1,5 @@
+importScripts('download.js');
+
 // The command palette's "Glaze settings": a content script can't open the editor itself.
 // openOptionsPage reuses an open editor tab; when Chrome refuses it, a new tab (as the popup does).
 chrome.runtime.onMessage.addListener((m) => {
@@ -33,5 +35,74 @@ chrome.runtime.onMessage.addListener((m, { tab, frameId, url }) => {
     const { canvas = [] } = await chrome.storage.local.get('canvas');
     if (!canvas.includes(id)) await chrome.storage.local.set({ canvas: [...canvas, id] });
     await ensure();
+  });
+});
+
+// Safari wakes its containing app for a silent update check; Chrome never enters this gate.
+if (new URL(chrome.runtime.getURL('')).protocol === 'safari-web-extension:') {
+  (async () => {
+    const now = Date.now();
+    const { safariUpdateCheckAt = 0 } = await chrome.storage.local.get('safariUpdateCheckAt');
+    if (now - safariUpdateCheckAt < 24 * 60 * 60 * 1000) return;
+    // Record the attempt first, so native or network failures cannot cause repeated wakeups.
+    await chrome.storage.local.set({ safariUpdateCheckAt: now });
+    await chrome.runtime.sendNativeMessage('io.frostdev.Glaze', { type: 'check-updates' });
+  })().catch(() => {});
+}
+
+// Signed URLs come only from the active content script's Canvas API; bytes never pass through the page.
+// Acknowledgements bound Chrome's JSON message queue; disconnect aborts both fetch and reader.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'canvas-zip') return;
+  let origin;
+  try {
+    if (!GZ_DOWNLOAD.sender(port.sender, chrome.runtime.id)) return port.disconnect();
+    origin = new URL(port.sender.url);
+  } catch { return port.disconnect(); }
+  // Production has HTTPS hosts only. The explicit localhost permission exists only in scratch builds.
+  const dev = origin.hostname === 'localhost' && chrome.runtime.getManifest().host_permissions.includes('http://localhost/*') ? origin.origin : '';
+  if (!GZ_DOWNLOAD.url(origin.href, dev)) return port.disconnect();
+  const ready = chrome.storage.local.get('canvas').then(({ canvas = [] }) => {
+    return !!dev || origin.hostname === 'instructure.com' || origin.hostname.endsWith('.instructure.com') || canvas.includes(`${origin.protocol}//${origin.hostname}/*`);
+  }).catch(() => false);
+  const ctl = new AbortController();
+  let used = 0, busy = false, ack = null, stall = 0;
+  // An idle connection is not a download: fail a stalled fetch/stream after 45 seconds.
+  const fresh = () => { clearTimeout(stall); stall = setTimeout(() => { ctl.abort(); ack?.(); port.disconnect(); }, 45000); };
+  const send = (m) => { if (!ctl.signal.aborted) port.postMessage(m); };
+  port.onDisconnect.addListener(() => { clearTimeout(stall); ctl.abort(); ack?.(); });
+  port.onMessage.addListener((m) => {
+    if (m?.type === 'ping') { send({ type: 'ping' }); return; }
+    if (m?.type === 'ack') { ack?.(); ack = null; return; }
+    if (m?.type !== 'file' || busy) return;
+    busy = true;
+    (async () => {
+      if (!await ready) throw new Error('sender');
+      fresh();
+      const url = GZ_DOWNLOAD.url(m.url, dev);
+      if (!url) throw new Error('url');
+      const r = await fetch(url, { credentials: 'omit', redirect: 'follow', cache: 'no-store', signal: ctl.signal });
+      if (!r.ok || !GZ_DOWNLOAD.url(r.url, dev)) throw new Error('response');
+      GZ_DOWNLOAD.bytes(used, Number(r.headers.get('content-length') || 0));
+      const reader = r.body?.getReader();
+      if (reader) try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          fresh();
+          used = GZ_DOWNLOAD.bytes(used, value.length);
+          for (let at = 0; at < value.length; at += 65536) {
+            const frame = value.subarray(at, at + 65536);
+            let raw = '';
+            for (let i = 0; i < frame.length; i += 16384) raw += String.fromCharCode(...frame.subarray(i, i + 16384));
+            await new Promise((resolve) => { ack = resolve; send({ type: 'chunk', data: btoa(raw) }); });
+            ctl.signal.throwIfAborted();
+          }
+        }
+      } finally { await reader.cancel().catch(() => {}); }
+      send({ type: 'done' });
+    })().catch((e) => {
+      send({ type: 'error', code: ['limit', 'url', 'sender', 'response'].includes(e.message) ? e.message : 'network' });
+    }).finally(() => { clearTimeout(stall); busy = false; });
   });
 });

@@ -2,11 +2,12 @@
   "manifest_version": 3,
   "name": "Glaze",
   "version": "2.1.4",
-  "description": "Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras on Ultra.",
+  "description": "Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras.",
   "default_locale": "en",
   "permissions": [
     "storage",
-    "scripting"
+    "scripting",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://*/*"
