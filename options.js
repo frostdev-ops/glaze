@@ -110,6 +110,7 @@ $('#news-close').addEventListener('click', () => { $('#news').hidden = true; fin
 
 GZ_UI.load().then((s) => {
   const frame = $('#preview');
+  let navItems = GZ_NAV.clean();
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
@@ -124,6 +125,7 @@ GZ_UI.load().then((s) => {
     }
     frame.contentWindow?.postMessage({ gzPreview: offer || s }, location.origin);
     renderNav();
+    frame.contentWindow?.postMessage({ gzNavPreview: navItems }, location.origin);
   };
   frame.addEventListener('load', preview);
 
@@ -146,7 +148,7 @@ GZ_UI.load().then((s) => {
   };
   addEventListener('pagehide', flush);
 
-  const get = (path) => path.split('.').reduce((o, k) => o[k], s);
+  const get = (path) => path.startsWith('nav.') && Object.hasOwn(GZ_NAV.dimensions(s.nav), path.slice(4)) ? GZ_NAV.dimensions(s.nav)[path.slice(4)] : path.split('.').reduce((o, k) => o[k], s);
   const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); };
   const group = (path) => path.split('.')[0];
 
@@ -236,6 +238,7 @@ GZ_UI.load().then((s) => {
     renderNav();
     presetOptions();
     outputs();
+    for (const el of $$('#ultra-nav-editor input[type="range"][data-key]')) el.value = get(el.dataset.key);
     $('[data-key="auto.on"]').checked = s.auto.on;
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
@@ -385,6 +388,86 @@ GZ_UI.load().then((s) => {
     GZ_BG_COLORS(s.bg.colors, activeColors()).forEach((c, i) => { bgPickers[i].value = c; });
   };
 
+  // Ultra's item settings use a separate capped sync item; appearance still uses the shared nav patch queue.
+  const N = GZ_NAV;
+  const nativeNames = { profile: 'Profile', 'institution-page': 'Dashboard', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades', tools: 'Tools', logout: 'Sign out' };
+  const widgetNames = { clock: 'Clock and date', next: 'Next due', timer: 'Focus timer', pet: 'Pet habitat' };
+  const iconNames = ['Link', 'Book', 'Video', 'Chat', 'Document', 'Calendar', 'Folder', 'Code', 'Star', 'Globe'];
+  const node = (tag, props = {}, ...kids) => { const el = Object.assign(document.createElement(tag), props); el.append(...kids); return el; };
+  const navButton = (text, run, label = text) => { const b = node('button', { type: 'button', textContent: t(text) }); b.setAttribute('aria-label', t(label)); b.addEventListener('click', run); return b; };
+  let editingLink = '', navLogoPick = 0;
+  const showNavPreview = () => frame.contentWindow?.postMessage({ gzNavPreview: navItems }, location.origin);
+  const writeNavItems = async (next, focus) => {
+    next = N.clean(next);
+    const r = await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:nav', nav: {}, items: next }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
+    if (!r?.ok) { hint(t('Not saved. Try again in a moment.'), true); return false; }
+    navItems = N.clean(r.items); renderNavItems(); showNavPreview(); hint(t('Saved'));
+    if (focus) $('#nav-items').querySelector(`[data-id="${focus}"] button:not([disabled])`)?.focus();
+    return true;
+  };
+  const move = (list, at, by) => { const out = [...list]; const [x] = out.splice(at, 1); out.splice(at + by, 0, x); return out; };
+  const renderNavItems = () => {
+    const focused = document.activeElement, focusRow = focused?.closest('#nav-items li, #nav-widgets li'), focusAt = focusRow ? [...focusRow.querySelectorAll('button, input, select')].indexOf(focused) : -1, focusId = focusRow?.dataset.id;
+    const order = N.sequence(N.NATIVE, navItems);
+    $('#nav-items').replaceChildren(...order.map((id, at) => {
+      const link = navItems.links.find((l) => l.id === id), name = link ? link.n : t(nativeNames[id]);
+      const li = node('li', { }, node('span', { textContent: name })); li.dataset.id = id;
+      const up = navButton('Move up', () => writeNavItems({ ...navItems, order: move(order, at, -1) }, id)); up.disabled = at === 0;
+      const down = navButton('Move down', () => writeNavItems({ ...navItems, order: move(order, at, 1) }, id)); down.disabled = at === order.length - 1;
+      up.setAttribute('aria-label', `${t('Move up')} · ${name}`); down.setAttribute('aria-label', `${t('Move down')} · ${name}`);
+      li.append(up, down);
+      if (link) {
+        li.append(navButton('Edit', () => { editingLink = id; $('#nav-link-name').value = link.n; $('#nav-link-url').value = link.u; $('#nav-link-icon').value = link.i; $('#nav-link-tab').checked = link.tab; $('#nav-link-save').textContent = t('Save link'); $('#nav-link-name').focus(); }), navButton('Remove link', () => writeNavItems({ ...navItems, links: navItems.links.filter((l) => l.id !== id), order: navItems.order.filter((k) => k !== id) })));
+      } else {
+        const hidden = navItems.hidden.includes(id);
+        const b = navButton(hidden ? 'Show' : 'Hide', () => writeNavItems({ ...navItems, hidden: hidden ? navItems.hidden.filter((k) => k !== id) : [...navItems.hidden, id] }, id));
+        b.setAttribute('aria-pressed', String(hidden)); b.setAttribute('aria-label', `${t(hidden ? 'Show' : 'Hide')} · ${name}`); li.append(b);
+      }
+      return li;
+    }));
+    $('#nav-widgets').replaceChildren(...navItems.widgets.map((w, at) => {
+      const input = node('input', { type: 'checkbox', checked: w.on });
+      input.addEventListener('change', () => writeNavItems({ ...navItems, widgets: navItems.widgets.map((x) => x.id === w.id ? { ...x, on: input.checked } : x) }));
+      const position = node('select'); position.setAttribute('aria-label', t(widgetNames[w.id]));
+      position.append(new Option(t('Top'), 'top'), new Option(t('Bottom'), 'bottom')); position.value = w.at;
+      position.addEventListener('change', () => writeNavItems({ ...navItems, widgets: navItems.widgets.map((x) => x.id === w.id ? { ...x, at: position.value } : x) }));
+      const up = navButton('Move up', () => writeNavItems({ ...navItems, widgets: move(navItems.widgets, at, -1) })); up.disabled = at === 0;
+      const down = navButton('Move down', () => writeNavItems({ ...navItems, widgets: move(navItems.widgets, at, 1) })); down.disabled = at === navItems.widgets.length - 1;
+      const row = node('li', {}, node('label', {}, input, t(widgetNames[w.id])), position, up, down); row.dataset.id = `widget-${w.id}`; return row;
+    }));
+    if (focusId) { const row = document.querySelector(`.nav-editor-list [data-id="${focusId}"]`); const controls = row?.querySelectorAll('button, input, select'); (controls?.[focusAt]?.disabled ? row.querySelector('button:not([disabled]), input, select') : controls?.[focusAt])?.focus(); }
+  };
+  const cancelLink = () => { editingLink = ''; $('#nav-link-name').value = ''; $('#nav-link-url').value = ''; $('#nav-link-tab').checked = false; $('#nav-link-save').textContent = t('Add link'); };
+  N.ICONS.forEach((id, at) => $('#nav-link-icon').append(new Option(t(iconNames[at]), id)));
+  $('#nav-link-save').addEventListener('click', async () => {
+    const id = editingLink || Array.from(crypto.getRandomValues(new Uint8Array(12)), (v) => 'abcdefghijklmnopqrstuvwxyz0123456789'[v % 36]).join('');
+    const l = N.link({ id, n: $('#nav-link-name').value, u: $('#nav-link-url').value.trim(), i: $('#nav-link-icon').value, tab: $('#nav-link-tab').checked });
+    if (!l) return hint(t('Use an http:// or https:// link and a name.'), true);
+    if (!editingLink && navItems.links.length >= 8) return hint(t('You can keep up to 8 navigation links.'), true);
+    if (await writeNavItems({ ...navItems, links: editingLink ? navItems.links.map((x) => x.id === id ? l : x) : [...navItems.links, l] })) { cancelLink(); $('#nav-link-name').focus(); }
+  });
+  $('#nav-link-cancel').addEventListener('click', () => { cancelLink(); $('#nav-link-name').focus(); });
+  $('#nav-link-editor').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); cancelLink(); $('#nav-link-name').focus(); } });
+  $('#nav-logo-pick').addEventListener('click', () => $('#nav-logo-file').click());
+  $('#nav-logo-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0], rev = ++navLogoPick; e.target.value = ''; if (!file) return;
+    let logoImage;
+    try { logoImage = await GZ_CARDS.picture(file); } catch { return hint(t("That file isn't a picture Glaze can read."), true); }
+    if (rev !== navLogoPick) return;
+    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:nav', nav: {}, logoImage }, (x) => res(chrome.runtime.lastError ? null : x)));
+    if (rev !== navLogoPick) return;
+    if (!r?.ok) return hint(t(r?.error === 'cap' ? "That picture is too big to keep. Try a smaller one, or remove another card's picture." : 'Not saved. Try again in a moment.'), true);
+    Object.assign(s.nav, r.nav); fill(); hint(t('Saved'));
+  });
+  $('#nav-reset').addEventListener('click', async () => {
+    navLogoPick++; cancelLink(); if (!await writeNavItems(N.clean())) return;
+    for (const k of Object.keys(N.SPEC)) { s.nav[k] = GZ_DEFAULTS.nav[k]; pendingNav.add(k); }
+    for (const k of ['labels', 'size', 'collapsed', 'logo']) { s.nav[k] = GZ_DEFAULTS.nav[k]; pendingNav.add(k); }
+    fill(); save(['nav']);
+  });
+  chrome.storage.sync.get('navItems', (r) => { navItems = N.clean(r?.navItems); renderNavItems(); showNavPreview(); });
+  chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && changes.navItems) { navItems = N.clean(changes.navItems.newValue); renderNavItems(); showNavPreview(); } });
+
   let navPick = 0, navReview = 0, navRendered = '', navImage = null;
   const navAverages = new Map();
   const renderNav = () => {
@@ -404,6 +487,7 @@ GZ_UI.load().then((s) => {
     for (const el of $$('#sidebar [data-nav-kinds]')) el.hidden = !el.dataset.navKinds.split(' ').includes(n.k);
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
+    $('#nav-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
     const note = $('#nav-contrast');
     note.classList.remove('err');
     if (n.k === 'default') { if (note.textContent) note.textContent = ''; return; }
@@ -475,10 +559,11 @@ GZ_UI.load().then((s) => {
   // ---- generic controls: data-key is the settings path; radios use it as their name ----
   for (const el of $$('[data-key]')) {
     const key = el.dataset.key;
+    if (key === 'nav.size') el.addEventListener('change', () => { s.nav.detailed = false; pendingNav.add('detailed'); });
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
     if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'enhance.coursemenu') renderCourses(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
-      el.addEventListener('input', () => { set(key, +el.value); refresh(); save([group(key)], true); });
+      el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });
       el.addEventListener('change', () => save([group(key)]));
     } else el.addEventListener('change', () => {
       // A cleared time keeps the last one: the schedule never holds an empty end.
@@ -952,10 +1037,10 @@ GZ_UI.load().then((s) => {
   // ---- backup ----
   // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
   // card styles and bookmarks go too; a picture kept on this computer stays here.
-  $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks'], (r) => chrome.storage.local.get(null, (all) => {
+  $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks', 'navItems'], (r) => chrome.storage.local.get(null, (all) => {
     const tasks = Object.fromEntries(Object.entries(all || {}).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
-    const nav = { ...s.nav, i: '', ...(s.nav.i && { k: 'default', u: '' }) };
-    const blob = new Blob([JSON.stringify({ ...s, nav, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), ucards: GZ_CARDS.styles(r?.ucards), ulinks: GZ_CARDS.links(r?.ulinks), tasks }, null, 2)], { type: 'application/json' });
+    const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
+    const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), ucards: GZ_CARDS.styles(r?.ucards), ulinks: GZ_CARDS.links(r?.ulinks), tasks }, null, 2)], { type: 'application/json' });
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -974,11 +1059,11 @@ GZ_UI.load().then((s) => {
     // (GZ_TODO.restore, 'glaze:todo'): a file that can't be taken whole changes nothing, imports and every tab's
     // To Do edits take turns, and success is said only once both stores have it.
     const next = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
-    next.nav.i = ''; // A backup never names a picture on another device.
+    next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
     flush(); // an edit still waiting goes out first, so it can't land on top of the import
-    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, settings: { version: 2, ...next } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
+    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, settings: { version: 2, ...next, navItems: N.clean(raw.navItems) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
     if (!r.ok) {
       // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
       if (r.undone === false) {
@@ -988,6 +1073,7 @@ GZ_UI.load().then((s) => {
       return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
     }
     Object.assign(s, next);
+    navItems = N.clean(raw.navItems); renderNavItems(); showNavPreview();
     const ultraStyled = !(raw.ucards || raw.ulinks) || await cardsOp({ ultra: true, replace: { cards: raw.ucards, links: raw.ulinks } });
     const styled = await cardsOp({ nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) });
     fill();
@@ -1008,6 +1094,7 @@ GZ_UI.load().then((s) => {
     b.textContent = t('Reset everything');
     Object.assign(s, GZ_SANITIZE({ presets: s.presets }), { card: GZ_CARDS.settings() });
     pendingNav.clear();
+    writeNavItems(N.clean());
     save(Object.keys(s));
     // Card styles and bookmarks too, and the pictures kept for them on this computer.
     cardsOp({ reset: true, nav: GZ_DEFAULTS.nav }).then(async (ok) => await cardsOp({ ultra: true, reset: true }) && ok).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });

@@ -39,7 +39,7 @@ test('each site loads the shared core and its own part, and no other site\'s', (
   const core = FIRST_SCRIPT.moodle;
   assert.equal(core.at(-1), 'content.js');
   assert.ok(!core.some((f) => /^content-/.test(f)), 'Moodle has no part');
-  assert.deepEqual(FIRST_SCRIPT.ultra, [...core.slice(0, -1), 'content-ultra.js', 'content.js']);
+  assert.deepEqual(FIRST_SCRIPT.ultra, [...core.slice(0, -1), 'lib/nav.js', 'content-ultra.js', 'content.js']);
   assert.deepEqual(FIRST_SCRIPT.canvas, [...core.slice(0, -1), 'content-canvas.js', 'content.js']);
 });
 

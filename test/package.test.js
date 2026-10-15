@@ -39,7 +39,7 @@ test('every web-accessible resource is in the package, and only the art the exte
   }
   // The art the extension uses, and nothing else from assets/art (never its contact sheet or README): the pets, the
   // sticker folders holding Look stickers and the pet game's buddy looks, plus the pointer sets.
-  assert.deepEqual(roots.filter((p) => p.startsWith('assets/')).sort(), ['assets/art/cursors', 'assets/art/pets', 'assets/art/stickers']);
+  assert.deepEqual(roots.filter((p) => p.startsWith('assets/')).sort(), ['assets/art/cursors', 'assets/art/pets', 'assets/art/stickers', 'assets/logo-dark.svg', 'assets/logo.svg']);
   const L = require('../lib/lookx.js');
   const files = (dir) => fs.readdirSync(path.join(root, dir), { recursive: true }).filter((f) => !fs.statSync(path.join(root, dir, f)).isDirectory() && !f.endsWith('.DS_Store')).map((f) => `${dir}/${f}`).sort();
   const P = require('../lib/pet.js');
