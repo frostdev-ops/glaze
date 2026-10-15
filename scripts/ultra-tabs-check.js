@@ -171,10 +171,11 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         let sc = main;
         while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
         sc = sc === document.body ? document.scrollingElement : sc;
+        const range = sc.scrollHeight - sc.clientHeight;
         sc.scrollTop = n;
-        return { tag: sc.localName, cls: sc.className, client: sc.clientHeight, height: sc.scrollHeight, requested: n, actual: sc.scrollTop };
+        return { tag: sc.localName, cls: sc.className, client: sc.clientHeight, height: sc.scrollHeight, range, requested: n, actual: sc.scrollTop };
         }, top);
-        ok(measured.actual === top, `native routed scroller accepts its saved position (${JSON.stringify(measured)})`);
+        ok(measured.range > top && measured.actual === top, `native routed scroller accepts its saved position (${JSON.stringify(measured)})`);
       };
       const saved = (route, top, cid = '_101_1') => opts.evaluate(async ({ route, top, cid }) => {
         const until = performance.now() + 4000;
