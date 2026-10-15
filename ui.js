@@ -91,7 +91,7 @@ const GZ_UI = (() => {
     Object.assign(s, GZ_LOOK_APPLY(s, L));
     // Course cards only as far as the look names them.
     if (L.card) s.card = GZ_CARDS.settings({ ...s.card, ...L.card });
-    return ['colors', 'preset', 'auto', 'look', 'bg', ...(L.card ? ['card'] : []), ...(L.nav ? ['nav'] : [])];
+    return ['colors', 'preset', 'auto', 'look', 'bg', ...(L.card ? ['card'] : [])];
   };
 
   // A theme's name in the history and favorites: the Look it is, else its palette's name.

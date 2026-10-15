@@ -717,6 +717,6 @@
   "Sidebar contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.": "Seitenleistenkontrast: {ratio}:1. Text sollte 4,5:1 erreichen, Symbole 3:1.",
   "Image contrast uses an average; check the whole picture.": "Der Bildkontrast nutzt einen Durchschnitt; prüfe das ganze Bild.",
   "Its sidebar picture loads from {host}.": "Das Seitenleistenbild wird von {host} geladen.",
-  "Settings imported, but picture cleanup failed. Try again in a moment.": "Einstellungen importiert, aber die Bildbereinigung ist fehlgeschlagen. Versuch es gleich noch einmal.",
+  "Some settings could not be imported. Try again in a moment.": "Einige Einstellungen konnten nicht importiert werden. Versuch es gleich noch einmal.",
   "Expand global navigation": "Globale Navigation ausklappen",
 };

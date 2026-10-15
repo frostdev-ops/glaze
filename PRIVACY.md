@@ -75,9 +75,8 @@ _Last updated: 2026-10-15_
   scaled down to at most 960 pixels and kept as WebP (JPEG in Safari), at most about 400 KB each and 4 MB in all.
   They are never synced, exported or put in a theme code. Choosing another picture, removing the card's style,
   or switching the sidebar away from its local picture deletes the old one; Reset everything deletes them all.
-  The sidebar also caches its current local picture in the Canvas tab’s
-  `sessionStorage` for its next page’s first paint; it is cleared when the picture is removed or Glaze is disabled.
-  Like the picture displayed in the page, that cache is readable by the Canvas page itself.
+  Sidebar pictures use a temporary blob URL while shown, rather than embedding their bytes in the page's
+  inline styles or sessionStorage. Canvas page code can still read a picture displayed on its page.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 

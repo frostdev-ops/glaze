@@ -104,7 +104,6 @@ const CTX = { t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, ca
 test('every loadable file ends on a value, which is how the worker knows it ran', () => {
   for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'i18n/de.js', 'lib/cards.js']) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX });
-    if (f === 'lib/cards.js') for (const dep of ['lib/color.js', 'lib/fonts.js', 'defaults.js']) vm.runInContext(read(dep), context);
     assert.ok(vm.runInContext(read(f), context), `${f}: no last value`);
   }
 });
@@ -127,7 +126,6 @@ test('a file loaded twice into one frame keeps the first', () => {
   for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS'], ['lib/gradecalc.js', 'GZ_GRADECALC'], ['features/grades.js', 'GZ_GRADES_UI'], ['lib/cards.js', 'GZ_CARDS']]) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX });
     vm.runInContext('globalThis.globalThis = this;', context);
-    if (file === 'lib/cards.js') for (const dep of ['lib/color.js', 'lib/fonts.js', 'defaults.js']) vm.runInContext(read(dep), context);
     vm.runInContext(read(file), context);
     const first = vm.runInContext(name, context);
     vm.runInContext(read(file), context);

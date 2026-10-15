@@ -90,7 +90,7 @@ const tab = (env) => {
   });
   context.globalThis = context;
   context.GZ_CTX = { need: () => Promise.resolve(), t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), capi: () => Promise.resolve({}), locale: () => 'en' };
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/cards.js', 'features/cards.js']) vm.runInContext(read(f), context, { filename: f });
+  for (const f of ['lib/color.js', 'lib/cards.js', 'features/cards.js']) vm.runInContext(read(f), context, { filename: f });
   const ui = vm.runInContext('GZ_CARD_UI', context);
   const dialog = () => body.children.find((e) => e.tagName === 'DIALOG');
   const find = (pred) => all(dialog()).find(pred);
@@ -258,7 +258,7 @@ test('the background worker takes card writes from this extension only, one at a
   assert.ok((await send(navMessage)).ok, 'a Canvas command can style the rail');
   assert.equal(store.sync.nav.c, '#112233');
   const popup = { id: 'glaze', url: 'chrome-extension://x/popup.html' };
-  assert.ok((await send(navMessage, popup)).ok, 'Looks in the popup may carry a sidebar style');
+  assert.deepEqual(await send(navMessage, popup), nope, 'the popup has no sidebar writer');
   assert.deepEqual(await send({ ...navMessage, image: 'data:image/png;base64,AAAA' }, popup), nope, 'the popup cannot upload');
   assert.deepEqual(await send({ type: 'glaze:cards', key: B, style: null }, editor), { ok: true, id: null }, 'the editor page');
   const image = `data:image/webp;base64,${'N'.repeat(300000)}`;
@@ -324,7 +324,7 @@ test('card and nav pictures share one cap and queue, retain each other, and roll
   await env.worker({ reset: true });
   assert.deepEqual(pics(env.store.local), [`cardImg:${nav.id}`], 'card-only reset retains the rail picture');
   env.failLocalRemove = true;
-  assert.equal((await env.worker({ nav: { k: 'solid' } })).ok, false, 'failed cleanup is reported');
+  assert.deepEqual((({ ok, cleanup }) => ({ ok, cleanup }))(await env.worker({ nav: { k: 'solid' } })), { ok: true, cleanup: false }, 'a successful style save is not reported as failed cleanup');
   env.failLocalRemove = false;
   await env.worker({ nav: { k: 'default' } });
   assert.deepEqual(pics(env.store.local), []);

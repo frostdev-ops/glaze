@@ -29,20 +29,6 @@ const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], [
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
 // 'font-auto' (the same, or 'auto') or 'time' (local "HH:MM"). GZ_SANITIZE walks this.
-// Cards and the Canvas rail paint the same kinds of style, including their image filters.
-const GZ_STYLE_FILTERS = {
-  none: '', vivid: 'saturate(1.6) contrast(1.08)', mono: 'grayscale(1)', noir: 'grayscale(1) contrast(1.45) brightness(0.85)',
-  warm: 'sepia(0.35) saturate(1.35) hue-rotate(-10deg)', cool: 'saturate(0.8) hue-rotate(12deg) brightness(1.05)',
-  faded: 'contrast(0.78) saturate(0.7) brightness(1.12)', dreamy: 'blur(1.5px) saturate(1.25) brightness(1.08)',
-};
-const GZ_STYLE_PAINT = (s, src, scope = 'card') => {
-  if (!s || !['solid', 'gradient', 'image'].includes(s.k) || (s.k === 'image' && !src)) return null;
-  const values = s.k === 'solid' ? { c: s.c } : s.k === 'gradient'
-    ? { c: s.c, grad: `linear-gradient(${s.a ?? 135}deg, ${s.c}, ${s.d})` }
-    : { img: `url("${src}")`, pos: `${s.x ?? 50}% ${s.y ?? 50}%`, zoom: String((s.z ?? 100) / 100),
-      filter: (Object.hasOwn(GZ_STYLE_FILTERS, s.f) && GZ_STYLE_FILTERS[s.f]) || 'none', ov: s.c || 'var(--gz-course)', 'ov-a': String((s.o ?? 60) / 100) };
-  return { kind: s.k, vars: Object.fromEntries(Object.entries(values).map(([k, v]) => [`--gz-${scope}-${k}`, v])) };
-};
 const GZ_SPEC = {
   auto: { on: [false, 'bool'], mode: ['device', ['device', 'schedule']], from: ['20:00', 'time'], to: ['08:00', 'time'], light: ['Paper', 'name'], dark: ['Frost', 'name'] },
   look: {
@@ -70,7 +56,7 @@ const GZ_SPEC = {
   },
   nav: {
     k: ['default', ['default', 'solid', 'gradient', 'image']], c: ['#243447', 'hex'], d: ['#57748c', 'hex'], a: [135, [0, 360]],
-    u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', Object.keys(GZ_STYLE_FILTERS)], ink: ['#ffffff', 'hex'],
+    u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', ['none', 'vivid', 'mono', 'noir', 'warm', 'cool', 'faded', 'dreamy']], ink: ['#ffffff', 'hex'],
     logo: [true, 'bool'], labels: ['normal', ['normal', 'small', 'icons']], size: ['medium', ['small', 'medium', 'large']], collapsed: [false, 'bool'],
   },
   motion: {
@@ -298,13 +284,12 @@ const GZ_LOOK_APPLY = (s, L) => ({
   auto: { ...s.auto, on: false },
   look: { ...GZ_DEFAULTS.look, tooltips: s.look.tooltips, hints: s.look.hints, ...L.look },
   bg: { ...GZ_DEFAULTS.bg, image: s.bg.image, ...L.bg },
-  ...(L.nav && { nav: GZ_SANITIZE({ nav: { ...L.nav, i: '' } }).nav }),
 });
 // Whether `s` is wearing look L as it was applied.
 const GZ_LOOK_ON = (s, L) => {
   const want = GZ_LOOK_APPLY(s, L);
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  return !s.auto.on && same(s.colors, want.colors) && Object.keys(want.look).every((k) => same(s.look[k], want.look[k])) && Object.keys(want.bg).every((k) => same(s.bg[k], want.bg[k])) && (!want.nav || same(s.nav, want.nav));
+  return !s.auto.on && same(s.colors, want.colors) && Object.keys(want.look).every((k) => same(s.look[k], want.look[k])) && Object.keys(want.bg).every((k) => same(s.bg[k], want.bg[k]));
 };
 // The settings to paint on course `cid`'s pages: its own look (courses.looks) over `s`, or `s` itself.
 const GZ_COURSE_LOOK = (s, cid) => {
@@ -541,5 +526,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_STYLE_FILTERS, GZ_STYLE_PAINT, GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }

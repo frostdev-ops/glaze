@@ -717,6 +717,6 @@
   "Sidebar contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.": "Contraste de la barra lateral: {ratio}:1. El texto debería alcanzar 4,5:1 y los iconos 3:1.",
   "Image contrast uses an average; check the whole picture.": "El contraste de la imagen usa un promedio; revisa toda la imagen.",
   "Its sidebar picture loads from {host}.": "Su imagen lateral se carga desde {host}.",
-  "Settings imported, but picture cleanup failed. Try again in a moment.": "Se importaron los ajustes, pero no se pudieron limpiar las imágenes. Inténtalo de nuevo en un momento.",
+  "Some settings could not be imported. Try again in a moment.": "No se pudieron importar algunos ajustes. Inténtalo de nuevo en un momento.",
   "Expand global navigation": "Expandir la navegación global",
 };

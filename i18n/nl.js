@@ -717,6 +717,6 @@
   "Sidebar contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.": "Zijbalkcontrast: {ratio}:1. Tekst hoort 4,5:1 te halen; pictogrammen 3:1.",
   "Image contrast uses an average; check the whole picture.": "Afbeeldingscontrast gebruikt een gemiddelde; controleer de hele afbeelding.",
   "Its sidebar picture loads from {host}.": "De zijbalkafbeelding wordt geladen van {host}.",
-  "Settings imported, but picture cleanup failed. Try again in a moment.": "Instellingen geïmporteerd, maar het opruimen van afbeeldingen is mislukt. Probeer het zo opnieuw.",
+  "Some settings could not be imported. Try again in a moment.": "Sommige instellingen konden niet worden geïmporteerd. Probeer het zo opnieuw.",
   "Expand global navigation": "Globale navigatie uitklappen",
 };

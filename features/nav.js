@@ -1,8 +1,10 @@
-// Canvas's rail uses CSS at first paint. Only local pictures and the collapsed native toggle need more code.
+// Canvas's rail uses CSS at first paint.
+// shortcut: cold local pictures start with their fill; revisit if their first paint must block.
 var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const X = globalThis.GZ_CTX;
   let reading = '', loaded = null, toggle = null;
   const titled = new Map();
+  const forget = () => { if (loaded) URL.revokeObjectURL(loaded.src); loaded = null; };
   const sync = () => {
     const n = X.nav();
     const on = X.on() && X.settings().enabled;
@@ -28,19 +30,22 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
       toggle = null;
     }
     if (!on || !n.i) {
-      reading = ''; loaded = null;
-      try { sessionStorage.removeItem('gz-nav-picture'); } catch { /* blocked */ }
+      reading = ''; forget();
       return;
     }
     if (reading === n.i) { if (loaded?.id === n.i) X.repaintNav(loaded.src); return; }
     reading = n.i;
+    forget();
     X.local((area) => area.get(`cardImg:${n.i}`, (r) => {
       if (!X.on() || X.nav().i !== n.i || reading !== n.i) return;
       const src = r?.[`cardImg:${n.i}`];
       if (typeof src !== 'string' || src.length > 400000 || !/^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/.test(src)) return;
-      loaded = { id: n.i, src };
-      try { sessionStorage.setItem('gz-nav-picture', JSON.stringify({ id: n.i, src })); } catch { /* full */ }
-      X.repaintNav(src);
+      const [type, bytes] = src.split(',');
+      let decoded;
+      try { decoded = Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0)); } catch { return; }
+      const blob = new Blob([decoded], { type: type.slice(5, type.indexOf(';')) });
+      loaded = { id: n.i, src: URL.createObjectURL(blob) };
+      X.repaintNav(loaded.src);
     }));
   };
   document.addEventListener('click', (e) => {

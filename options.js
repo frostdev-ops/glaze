@@ -384,10 +384,14 @@ GZ_UI.load().then((s) => {
     GZ_BG_COLORS(s.bg.colors, activeColors()).forEach((c, i) => { bgPickers[i].value = c; });
   };
 
-  let navPick = 0, navReview = 0;
+  let navPick = 0, navReview = 0, navRendered = '', navImage = null;
   const navAverages = new Map();
   const renderNav = () => {
-    const n = { ...(offer || s).nav }, rev = ++navReview;
+    const n = { ...(offer || s).nav };
+    const signature = JSON.stringify([n, n.k === 'default' ? activeColors(offer || s) : null]);
+    if (signature === navRendered) return;
+    navRendered = signature;
+    const rev = ++navReview;
     const pv = $('#nav-preview');
     const paint = (src = '') => {
       if (rev !== navReview) return;
@@ -400,21 +404,22 @@ GZ_UI.load().then((s) => {
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
     const note = $('#nav-contrast');
-    note.textContent = '';
     note.classList.remove('err');
-    if (n.k === 'default') return;
+    if (n.k === 'default') { if (note.textContent) note.textContent = ''; return; }
     const show = (avg) => {
       if (rev !== navReview) return;
       const ratio = GZ_CARDS.contrast(n, { avg, ink: n.ink });
       note.classList.toggle('err', ratio !== null && ratio < 4.5);
-      note.textContent = ratio === null ? t('Image contrast cannot be measured. Check that every label is readable.')
+      let text = ratio === null ? t('Image contrast cannot be measured. Check that every label is readable.')
         : t(ratio < 4.5 ? 'Low sidebar contrast: {ratio}:1. Choose different text or background colors.' : 'Sidebar contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.', { ratio: GZ_I18N.num(+ratio.toFixed(2), GZ_I18N.ui()) });
-      if (n.k === 'image' && ratio !== null) note.textContent += ' ' + t('Image contrast uses an average; check the whole picture.');
+      if (n.k === 'image' && ratio !== null) text += ' ' + t('Image contrast uses an average; check the whole picture.');
+      if (note.textContent !== text) note.textContent = text;
     };
     if (n.k !== 'image') return show(null);
     show(null);
     const key = `${n.i || n.u}|${n.f}`;
-    const src = n.i ? new Promise((res) => chrome.storage.local.get(`cardImg:${n.i}`, (r) => res(r?.[`cardImg:${n.i}`]))) : Promise.resolve(n.u);
+    if (n.i && navImage?.id !== n.i) navImage = { id: n.i, src: new Promise((res) => chrome.storage.local.get(`cardImg:${n.i}`, (r) => res(r?.[`cardImg:${n.i}`]))) };
+    const src = n.i ? navImage.src : Promise.resolve(n.u);
     src.then((u) => { if (u) paint(u); });
     if (!navAverages.has(key)) {
       if (navAverages.size >= 8) navAverages.delete(navAverages.keys().next().value);
@@ -619,7 +624,7 @@ GZ_UI.load().then((s) => {
     let got;
     try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
     from = gallery;
-    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: { ...s.nav, ...got.nav, ...(Object.keys(got.nav).length && { i: '' }) } });
+    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav) });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
     offer.auto = { ...s.auto, on: false };
     offer.card = GZ_CARDS.settings({ ...s.card, ...got.card });
@@ -647,7 +652,7 @@ GZ_UI.load().then((s) => {
       const cardHosts = [...new Set(got.cards.filter((c) => c.u).map((c) => new URL(c.u).hostname))];
       if (got.cards.length) notes.push(t('Brings {n} course card styles for your Canvas Dashboard.', { n: got.cards.length }));
       if (cardHosts.length) notes.push(t('Its card pictures load from {hosts}.', { hosts: and(cardHosts) }));
-      if (got.nav.k === 'image' && got.nav.u) notes.push(t('Its sidebar picture loads from {host}.', { host: new URL(got.nav.u).hostname }));
+      if (offer.nav.k === 'image' && offer.nav.u) notes.push(t('Its sidebar picture loads from {host}.', { host: new URL(offer.nav.u).hostname }));
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
@@ -811,7 +816,7 @@ GZ_UI.load().then((s) => {
     Object.assign(s, next);
     const styled = await cardsOp({ nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) });
     fill();
-    if (!styled) return hint(t('Settings imported, but picture cleanup failed. Try again in a moment.'), true);
+    if (!styled) return hint(t('Some settings could not be imported. Try again in a moment.'), true);
     hint(t('Imported {file}.', { file: file.name }));
   });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
