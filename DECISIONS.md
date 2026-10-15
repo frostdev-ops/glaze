@@ -295,6 +295,23 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Search in the command palette asks each course's REST lists with `search_term` (pages, assignments, discussions, announcements, modules, files: six GETs a course), six at a time, the course you're in and this term's first, and stops at 24 results | One GraphQL query over `allCourses` (another extension's `SearchByTerm`: top 3 pages and assignments per course) | Canvas's GraphQL `Course` has pages, assignments and discussions connections with a search filter but no files (local Canvas source, `app/graphql/types/course_type.rb`); the query is a POST that needs the CSRF token; and one query for every course, past ones included, can't be ordered, cut short or cancelled per course. GETs are cached per course, kind and term for five minutes in memory. |
 | Content results go after the palette's matches that contain the query as typed, each arrival below the last; its looser matches (letters in order) are held back until the search is done, then added at the end. The keyboard's choice stays on the same item | Appending them after everything; inserting them above the loose matches; ranking them in with the rest | Arrivals would otherwise land under a dozen weak matches, and inserting or re-ranking moves rows under a still pointer, so a click hits something else (Codex W6 review). |
 
+## Dashboard notes, widgets and What Glaze can do (W7, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Two switches, `enhance.notes` and `enhance.widgets`; every other widget setting is its own sync item (`widgets`), added to `GZ_SPEC` by `lib/widgets.js` | All in `GZ_SPEC` from the start | The first content script carries only the two switches and the loader hook (+937 bytes); the rest loads with `features/widgets.js`. |
+| Layout, the timer and the music link in `storage.local` (`widgetLayout`, `widgetTimer`) | Sync | Where a floating widget sits depends on this screen; the timer is per device. A floating position is kept as a fraction of the room the window leaves, so a smaller window still shows it. |
+| Notes are written through the background worker (`glaze:notes`), newest typing wins; an emptied note stays as `{ text: '', at }` | Direct `storage.local` writes; deleting an emptied note | Two tabs typing into the same note: the later keystroke wins whichever write lands last. A deleted note would let an older text, arriving late, bring it back (what-if's Clear all keeps its time for the same reason). |
+| Tile size is the notes' size (small, medium, large) | A separate notes size (another extension) | One control instead of two that mean the same. |
+| Music asks the provider for nothing until Load player, on every page | Loading the saved player on page load | Owner rule: the provider is contacted only when the student plays. The player can't follow you across page loads; the timer can. another extension also sends the typed link to PostHog; Glaze sends it nowhere. |
+| YouTube and YouTube Music embed from youtube-nocookie.com with `strict-origin`; Spotify and Apple Music with no referrer | No referrer for all | YouTube's player refuses to play without a referrer (error 153). The origin is all it gets. |
+| Timer: the break starts itself; past the break it waits for Start; nothing rings for a phase that ended while the page was away | Looping work and break | Nothing nags. A chime for something that ended an hour ago is noise. |
+| The chime is synthesized by Web Audio | A bundled sound file | No asset, no licence, a few lines. It plays only in the tab where Start was pressed (browsers need a click to allow sound). |
+| Quotes are original lines written for Glaze, translated like the rest of the UI | Public-domain quotes | Translations of public-domain quotes are often themselves under copyright; original lines have no source to check. |
+| Study buddy: Glaze's own Shiba (owner-approved, three expressions), sleepy while idle, happy after a finished focus block or a tick | another extension's Doge tile, a random caption per click | A tile that answers what you did, not only clicks. Only the three files it uses are packaged. |
+| What Glaze can do and its tour open only when asked (Ctrl+K, the Dashboard's button) | A first-run pop-up (another extension's spotlight) | Owner rule: nothing nags. Nothing about the tour is kept. |
+| Report a problem is a prefilled GitHub issue link: version, browser, system, language | An in-extension form with attachments (another extension) | No server. The prefill is in the link, so GitHub receives it when the page opens: it holds only what the browser says about itself, never the school; nothing is posted until the student submits it. |
+
 ## Moodle (W20, Oct 2026)
 
 | Decision | Considered | Why |
@@ -317,3 +334,15 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Marks in `storage.local` per Canvas site, user and file, written whole on every edit | IndexedDB in the frame; a broker queue | The frame's IndexedDB is canvadocs' origin, readable by its scripts and cleared with its site data. One key per file is small (strokes simplified, a tenth of a unit); two tabs on one file is last-write-wins, and the other tab reloads on the change. |
 | Strokes in the page's own unrotated frame (1000 units wide), drawn through an SVG matrix for the view's rotation; the pointer read back through `getScreenCTM()` | Pixel canvases per zoom | Zoom and re-render cost nothing (a viewBox), CSS transforms are handled by the browser, and export is plain numbers. Rotation is counted from the viewer's rotate button; a viewer that turns pages with CSS turns the layer with them. |
 | Stroke eraser (a touched stroke goes) and undoable Clear page, no confirm | Pixel eraser; a confirm dialog | Simple and exact; undo makes the dialog unnecessary. |
+
+## Canvas global navigation (W8)
+
+| Choice | Alternative | Why |
+| --- | --- | --- |
+| Style Canvas's existing rail, with first-paint variables and attributes | Replace its navigation | Canvas keeps its links, trays, labels, permissions and keyboard behavior. Ultra is unchanged. |
+| Reuse the card painter, contrast reader, picture encoder and background queue | A second picture store or write queue | Sidebar and course pictures share the 960 px / 400 KB each / 4 MB total limits; either editor preserves pictures still referenced by the other. |
+| Keep the live local sidebar picture as a temporary blob URL | A data URL in page styles or sessionStorage | The chosen fill paints first, then the on-demand module loads the picture. Blob URLs are revoked on replacement/disable. Page code can read a displayed picture, as PRIVACY states. |
+| Theme codes and exports carry only sidebar image URLs | Export local pictures or their identifiers | A file stays on its device. Only appearance fields travel, when a custom background is chosen; layout, logo and collapse preferences stay the student's. Built-in Looks leave the sidebar alone. The gallery's pinned decoder needs an update with the next release before it accepts the new `n` group. |
+| Compact labels stay in the native accessible name; titles use the existing tooltip | Draw another tooltip inside the narrow rail | The hint stays readable outside the scrollable rail and works with focus as well as hover. Turning Glaze's tooltips off retains native titles and accessible names. |
+
+Canvas's experimental `#instui-sidenav` layout is not covered by W8; revisit the selectors when that navigation feature ships. Long, scrollable rails may reveal the solid fill below a scrolled image layer; no institution navigation plugins were runtime tested.

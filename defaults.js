@@ -54,6 +54,11 @@ const GZ_SPEC = {
     style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
     scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins']], intensity: [50, [0, 100]],
   },
+  nav: {
+    k: ['default', ['default', 'solid', 'gradient', 'image']], c: ['#243447', 'hex'], d: ['#57748c', 'hex'], a: [135, [0, 360]],
+    u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', ['none', 'vivid', 'mono', 'noir', 'warm', 'cool', 'faded', 'dreamy']], ink: ['#ffffff', 'hex'],
+    logo: [true, 'bool'], labels: ['normal', ['normal', 'small', 'icons']], size: ['medium', ['small', 'medium', 'large']], collapsed: [false, 'bool'],
+  },
   motion: {
     level: ['subtle', ['off', 'subtle', 'expressive']],
     followSystem: [true, 'bool'],
@@ -66,13 +71,13 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [false, 'bool'], cardTasks: [false, 'bool'], search: [true, 'bool'],
+    notes: [false, 'bool'], widgets: [false, 'bool'], // and lib/widgets.js
     // place: a course's content reopens where you left it (open folders, scroll).
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
     coursemenu: [true, 'bool'],
-    // docPages: documents in a dark palette, as they are, dimmed or inverted (darkDocs up to 2.2, a switch that inverted);
-    // switched from the floating button too. toggles: the floating document buttons themselves. Canvas's document
-    // viewer (features/docviewer.js): docTheme its palette, docInk the pen and highlighter.
+    // docPages: previews in a dark palette, plain, dimmed or inverted (the floating button too); toggles: the floating
+    // document buttons. Canvas's document viewer: docTheme its palette, docInk the pen.
     docPages: ['plain', ['plain', 'dim', 'dark']], toggles: [true, 'bool'], docTheme: [true, 'bool'], docInk: [false, 'bool'],
     quizLight: [false, 'bool'],
     // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
@@ -80,6 +85,8 @@ const GZ_SPEC = {
     // Reminders and the streak, each opt-in (lib/remind.js has the rest).
     remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], streak: [false, 'bool'],
   },
+  // features/lookx.js. cursor 'own': a picture kept on this device.
+  extras: { cursor: ['off', ['off', 'aqua', 'lilac', 'pearl', 'own']], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
 };
 
@@ -210,6 +217,8 @@ const cleanNicks = (raw, room) => {
 
 const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
+  if (rule === 'hex') return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : d;
+  if (rule === 'picture') return typeof v === 'string' && /^[a-z0-9]{12}$/.test(v) ? v : d;
   if (rule === 'time') return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : d;
   if (rule === 'name') return cleanName(v) || d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];
@@ -303,7 +312,7 @@ const GZ_SANITIZE = (raw) => {
     const src = isObj(raw[g]) ? raw[g] : {};
     out[g] = Object.fromEntries(Object.entries(keys).map(([k, [d, rule]]) => [k, cleanValue(src[k], d, rule)]));
   }
-  // Dark documents was a switch that inverted them.
+  // 2.2's darkDocs inverted.
   if (isObj(raw.enhance) && raw.enhance.docPages === undefined && raw.enhance.darkDocs === true) out.enhance.docPages = 'dark';
   // 1.0 had only the three motion switches: all off meant "no motion".
   if (!raw.version && isObj(raw.motion) && raw.motion.level === undefined) {

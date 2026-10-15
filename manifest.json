@@ -107,7 +107,10 @@
         "canvas.css",
         "moodle.css",
         "fonts/*.woff2",
-        "assets/art/pets/*/sprites.webp"
+        "assets/art/pets/*/sprites.webp",
+        "assets/art/stickers/*/*.webp",
+        "assets/art/cursors/*/*.png",
+        "features/lookx.css"
       ],
       "matches": [
         "https://*/*"

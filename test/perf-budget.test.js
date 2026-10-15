@@ -14,9 +14,10 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // A ratchet: the measured size plus about 2%. W0 measured 457,988 bytes in 14 files; W0b moved the five translation files,
 // lib/zip.js and lib/drafts.js to on-demand loading (lib/background.js 'glaze:load'): 290,457 bytes in 7, under the
 // plan's 300 KB. Wave 1 and 2 hooks took it to 295,451; W0c moved the palette, the keys, the course menu's popover, the
-// folder previews and Download all to features/*.js: 248,536. New features load on demand too. When a cut lands, lower
-// the baseline to the new total.
-const FIRST_SCRIPT_BASELINE = 248536;
+// folder previews and Download all to features/*.js: 248,536. Wave 2 and W12 hooks took it to 253,374; W0d moved the
+// draft backup, Ultra's what-if calculator, the document buttons and your place in a course: 223,687. New features load
+// on demand too. When a cut lands, lower the baseline to the new total.
+const FIRST_SCRIPT_BASELINE = 223687;
 
 test('the first content script on Canvas and Ultra stays within its budget', () => {
   const files = m.content_scripts[0].js;
@@ -113,7 +114,9 @@ const STYLE_READS = [
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.
   ['content.js', "querySelectorAll('*')", 2],
   ['content.js', 'getComputedStyle(e)', 2],
-  ['content.js', 'getComputedStyle(p)', 4], // a highlight's fill above an element; a scroller above one element (2); a course slot's probe
+  ['content.js', 'getComputedStyle(p)', 2], // a highlight's fill above an element; a course slot's probe
+  ['features/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode
+  ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
   ['content.js', 'getComputedStyle(document.documentElement)', 1], // the palette's ink, once per highlighted element
   // One element, on its first hover or focus; one element under the pointer, to see if its text is cut short.
   ['content.js', 'getComputedStyle(el)', 2],

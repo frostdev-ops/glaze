@@ -138,7 +138,7 @@
     </div>
     <nav aria-label="Sections">
       <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
-      <a href="#motion">Motion</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
+      <a href="#motion">Motion</a><a href="#sidebar">Canvas sidebar</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
     </nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
@@ -157,6 +157,22 @@
           <h3>Looks</h3>
           <p class="desc">A palette, fonts, shape and background that go together, in one click.</p>
           <div class="looks" id="looks"></div>
+        </div>
+        <div class="group">
+          <h3>Look rotation</h3>
+          <p class="desc" id="rotate-note">Wears the next of the Looks you tick on a timer, kept on this computer. None ticked: every built-in Look. Your history keeps each one.</p>
+          <div class="row">
+            <select data-key="extras.rotate" aria-label="Look rotation" aria-describedby="rotate-note">
+              <option value="off">Off</option>
+              <option value="6h">Every 6 hours</option>
+              <option value="12h">Every 12 hours</option>
+              <option value="24h">Every 24 hours</option>
+              <option value="week">Every week</option>
+              <option value="daily">Every day at a set time</option>
+            </select>
+            <label id="rotate-at">At <input type="time" data-key="extras.at" required></label>
+          </div>
+          <ul class="saved" id="rotate-looks" aria-label="Looks to rotate through"></ul>
         </div>
         <div class="swatches" id="presets"></div>
         <div class="tokens" id="colors"></div>
@@ -223,6 +239,23 @@
         <label class="check"><input type="checkbox" data-key="look.hints"><span>Hover hints</span>
           <span class="desc">Hover a date to see how far off it is ("Due in 2 days"), a grade to see its percentage, or cut-off text to read all of it.</span></label>
         <label class="check"><input type="checkbox" data-key="footer"><span>Show the Glaze footer bar</span></label>
+        <div class="group">
+          <h3>Pointer</h3>
+          <div class="row">
+            <select data-key="extras.cursor" aria-label="Pointer" aria-describedby="cursor-note">
+              <option value="off">Standard</option>
+              <option value="aqua">Aqua</option>
+              <option value="lilac">Lilac</option>
+              <option value="pearl">Pearl</option>
+              <option value="own">Your own picture</option>
+            </select>
+            <span class="row" id="cursor-own"><button type="button" id="cursor-pick">Choose a picture…</button><img id="cursor-img" alt="" width="32" height="32" hidden><input type="file" id="cursor-file" accept="image/png,image/jpeg" hidden></span>
+          </div>
+          <p class="desc" id="cursor-note">On your course pages. A picture of your own (PNG or JPEG) is scaled to 32 pixels and kept on this computer; its top-left corner is the tip. Text fields keep the usual text cursor.</p>
+          <h3>Stickers</h3>
+          <label class="check"><input type="checkbox" data-key="extras.stickers"><span>Show stickers</span>
+            <span class="desc">Put stickers on any course page from the command palette (Ctrl+K): Place stickers on this page. They are kept on this computer, and never shown on a quiz you are taking.</span></label>
+        </div>
       </section>
 
       <section id="background">
@@ -293,6 +326,31 @@
           <label class="check"><input type="checkbox" data-key="motion.hover"><span>Hover lift and press</span></label>
           <label class="check"><input type="checkbox" data-key="motion.transitions"><span>Colour and border transitions</span></label>
         </div>
+      </section>
+
+      <section id="sidebar">
+        <h2>Canvas sidebar</h2>
+        <p class="desc">Style Canvas's own global navigation. Links and the site's navigation still work as usual.</p>
+        <div id="nav-preview" aria-hidden="true"><span>Dashboard</span><span>Courses</span><span>Calendar</span></div>
+        <label class="field"><span>Sidebar background</span><select data-key="nav.k"><option value="default">Palette default</option><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image">Picture</option></select></label>
+        <div class="row" data-nav-kinds="solid gradient image">
+          <label><span>First color</span> <input type="color" data-key="nav.c"></label>
+          <label data-nav-kinds="gradient"><span>Second color</span> <input type="color" data-key="nav.d"></label>
+        </div>
+        <label class="field" data-nav-kinds="gradient"><span>Angle</span><input type="range" data-key="nav.a" min="0" max="360" step="1"><output data-for="nav.a" data-format="deg"></output></label>
+        <div class="group" data-nav-kinds="image">
+          <label class="field wide"><span>Sidebar picture link</span><input id="nav-url" type="url" translate="no" placeholder="https://…" spellcheck="false" maxlength="2048"></label>
+          <div class="row"><button type="button" id="nav-pick">Choose a picture</button><input id="nav-file" type="file" accept="image/*" hidden><span id="nav-picture-note" class="desc"></span></div>
+          <p class="desc">A file stays on this device. A linked picture loads from its host when the sidebar is shown.</p>
+          <label class="field"><span>Image filter</span><select data-key="nav.f"><option value="none">None</option><option value="vivid">Vivid</option><option value="mono">Mono</option><option value="noir">Noir</option><option value="warm">Warm</option><option value="cool">Cool</option><option value="faded">Faded</option><option value="dreamy">Dreamy</option></select></label>
+          <label class="field"><span>Overlay opacity</span><input type="range" data-key="nav.o" min="0" max="100" step="1"><output data-for="nav.o" data-format="pct100"></output></label>
+        </div>
+        <label class="field" data-nav-kinds="solid gradient image"><span>Sidebar text and icons</span><input type="color" data-key="nav.ink"></label>
+        <p id="nav-contrast" class="desc" role="status" aria-live="polite"></p>
+        <label class="check"><input type="checkbox" data-key="nav.logo"><span>Show the institution logo</span></label>
+        <label class="field"><span>Sidebar labels</span><select data-key="nav.labels"><option value="normal">Normal labels</option><option value="small">Small labels</option><option value="icons">Icons only</option></select></label>
+        <label class="field"><span>Sidebar size</span><select data-key="nav.size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+        <label class="check"><input type="checkbox" data-key="nav.collapsed"><span>Collapse the sidebar</span><span class="desc">Every link stays in the rail. Point at it or focus it to read its label.</span></label>
       </section>
 
       <section id="courses">
@@ -459,6 +517,34 @@
           <label class="check"><input type="checkbox" data-key="todo.cardCross"><span>Cross out done tasks</span>
             <span class="desc">Done items stay on the card, crossed out, until their due date passes. Off: they leave it.</span></label>
         </div>
+        <div class="group" id="widgets">
+          <h3>Notes and widgets</h3>
+          <label class="check"><input type="checkbox" data-key="enhance.notes"><span>Dashboard notes</span>
+            <span class="desc">On Canvas's Dashboard: a box for your own notes, small, medium or large. Saved as you type, on this device only, for each Canvas site and account. Web addresses in them become links.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.widgets"><span>Widgets</span>
+            <span class="desc">On Canvas's Dashboard: an agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. Edit widgets to add, order and size them; any of them can float over every Canvas page, where you drag it or move it with the arrow keys.</span></label>
+          <div class="row">
+            <label class="field"><span>Focus minutes</span><input type="range" data-key="widgets.work" min="1" max="120" step="1"><output data-for="widgets.work"></output></label>
+            <label class="field"><span>Break minutes</span><input type="range" data-key="widgets.rest" min="1" max="60" step="1"><output data-for="widgets.rest"></output></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="widgets.sound"><span>Chime when the timer ends</span>
+            <span class="desc">A soft chime made by your browser, in the tab where you pressed Start.</span></label>
+          <div class="row">
+            <label>Quotes <select data-key="widgets.quotes"><option value="all">All</option><option value="focus">Focus</option><option value="calm">Calm</option><option value="courage">Courage</option></select></label>
+            <label>New quote <select data-key="widgets.quoteMode"><option value="cycle">Every few seconds</option><option value="daily">Once a day</option></select></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Seconds per quote</span><input type="range" data-key="widgets.quoteEvery" min="10" max="600" step="5"><output data-for="widgets.quoteEvery"></output></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Breathe in (seconds)</span><input type="range" data-key="widgets.inhale" min="2" max="10" step="1"><output data-for="widgets.inhale"></output></label>
+            <label class="field"><span>Hold (seconds)</span><input type="range" data-key="widgets.hold" min="0" max="10" step="1"><output data-for="widgets.hold"></output></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Breathe out (seconds)</span><input type="range" data-key="widgets.exhale" min="2" max="12" step="1"><output data-for="widgets.exhale"></output></label>
+            <label class="field"><span>Breaths</span><input type="range" data-key="widgets.cycles" min="1" max="30" step="1"><output data-for="widgets.cycles"></output></label>
+          </div>
+        </div>
         <div class="group" id="remind">
           <h3>Reminders and streak</h3>
           <p class="desc">Each is off until you turn it on. Reminders show only on Canvas pages, in the tab you're looking at: a small note in the corner, never a browser notification. They stay on this device and change nothing in Canvas. The bell in the To Do header and Ctrl+K "Reminders" list what's coming up.</p>
@@ -532,6 +618,11 @@
         </div>
         <p class="desc">Exports are a JSON file with your palette, presets, options, any course nicknames you set, and your Better To Do tasks and plans. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
         <p class="desc">Card styles and bookmarks go in the export too. Pictures kept for cards stay on this computer.</p>
+        <div class="group">
+          <h3>Report a problem</h3>
+          <p class="desc" id="report-note">Opens a new issue on Glaze's GitHub page with your Glaze version, browser, system and language filled in, and nothing about your school. GitHub receives that text when the page opens; nothing is posted until you add what happened and submit it.</p>
+          <div class="row"><a class="button" id="report-link" href="https://github.com/frostdev-ops/glaze/issues/new" target="_blank" rel="noopener" aria-describedby="report-note">Report a problem</a></div>
+        </div>
       </section>
     </main>
 
@@ -546,9 +637,11 @@
   <script src="lib/cards.js"></script>
   <script src="lib/share.js"></script>
   <script src="lib/history.js"></script>
+  <script src="lib/lookx.js"></script>
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
   <script src="lib/todo.js"></script>
+  <script src="lib/widgets.js"></script>
   <script src="lib/remind.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>

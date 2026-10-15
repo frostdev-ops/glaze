@@ -28,3 +28,21 @@ test('every manifest content script and stylesheet is in the package', () => {
   const roots = packaged();
   for (const cs of m.content_scripts) for (const f of [...(cs.js || []), ...(cs.css || [])]) assert.ok(inPackage(f, roots), `${f} is left out`);
 });
+
+test('every web-accessible resource is in the package, and only the art the extension uses', () => {
+  const m = JSON.parse(read('manifest.json'));
+  const roots = packaged();
+  for (const r of m.web_accessible_resources.flatMap((w) => w.resources)) {
+    // A pattern is covered by a packaged folder its fixed part is in.
+    assert.ok(inPackage(r.split('*')[0].replace(/\/$/, ''), roots) || inPackage(r, roots), `${r} is web-accessible but package.sh leaves it out`);
+    if (!r.includes('*')) assert.ok(fs.existsSync(path.join(root, r)), `${r} doesn't exist`);
+  }
+  // The art the extension uses, and nothing else from assets/art (never its contact sheet or README): the pets, the
+  // sticker folders holding exactly lib/lookx.js's stickers (the study buddy's three among them), the pointer sets.
+  assert.deepEqual(roots.filter((p) => p.startsWith('assets/')).sort(), ['assets/art/cursors', 'assets/art/pets', 'assets/art/stickers']);
+  const L = require('../lib/lookx.js');
+  const files = (dir) => fs.readdirSync(path.join(root, dir), { recursive: true }).filter((f) => !fs.statSync(path.join(root, dir, f)).isDirectory() && !f.endsWith('.DS_Store')).map((f) => `${dir}/${f}`).sort();
+  assert.deepEqual(files('assets/art/stickers'), [...L.BUNDLED.keys()].map(L.file).sort());
+  assert.ok(['', '-happy', '-sleepy'].every((s) => L.BUNDLED.has(`critters/study-buddy${s}`)));
+  assert.deepEqual(files('assets/art/cursors'), Object.keys(L.CURSORS).flatMap((c) => [`assets/art/cursors/${c}/default.png`, `assets/art/cursors/${c}/pointer.png`]).sort());
+});

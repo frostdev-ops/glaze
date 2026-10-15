@@ -123,18 +123,20 @@ GZ_UI.load().then((s) => {
       sec.querySelector('.pv-course').textContent = first.name;
     }
     frame.contentWindow?.postMessage({ gzPreview: offer || s }, location.origin);
+    renderNav();
   };
   frame.addEventListener('load', preview);
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
-  const pending = new Set();
+  const pending = new Set(), pendingNav = new Set();
   let timer = 0;
   const flush = () => {
     clearTimeout(timer);
     timer = 0;
     if (!pending.size) return;
-    GZ_UI.save(s, [...pending], (err) => hint(err || t('Saved'), !!err));
-    pending.clear();
+    const navPatch = pendingNav.size ? Object.fromEntries([...pendingNav].map((k) => [k, s.nav[k]])) : undefined;
+    GZ_UI.save(s, [...pending], (err) => hint(err || t('Saved'), !!err), navPatch);
+    pending.clear(); pendingNav.clear();
   };
   const save = (keys, soon = false) => {
     for (const k of keys) pending.add(k);
@@ -145,7 +147,7 @@ GZ_UI.load().then((s) => {
   addEventListener('pagehide', flush);
 
   const get = (path) => path.split('.').reduce((o, k) => o[k], s);
-  const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; };
+  const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); };
   const group = (path) => path.split('.')[0];
 
   // ---- palette ----
@@ -229,7 +231,9 @@ GZ_UI.load().then((s) => {
     renderContrast();
     renderMine();
     renderHistory();
+    renderExtras();
     renderBg();
+    renderNav();
     presetOptions();
     outputs();
     $('[data-key="auto.on"]').checked = s.auto.on;
@@ -353,7 +357,7 @@ GZ_UI.load().then((s) => {
 
   // ---- background colors: a ready-made set or three pickers. None stored means the palette's, so
   // they follow palette changes until one is picked. ----
-  const activeColors = () => GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
+  const activeColors = (v = s) => GZ_ACTIVE_COLORS(v, matchMedia('(prefers-color-scheme: dark)').matches);
   const bgPickers = [1, 2, 3].map((n) => {
     const input = Object.assign(document.createElement('input'), { type: 'color' });
     input.setAttribute('aria-label', t('Background color {n}', { n }));
@@ -381,6 +385,79 @@ GZ_UI.load().then((s) => {
     GZ_BG_COLORS(s.bg.colors, activeColors()).forEach((c, i) => { bgPickers[i].value = c; });
   };
 
+  let navPick = 0, navReview = 0, navRendered = '', navImage = null;
+  const navAverages = new Map();
+  const renderNav = () => {
+    const n = { ...(offer || s).nav };
+    const signature = JSON.stringify([n, n.k === 'default' ? activeColors(offer || s) : null]);
+    if (signature === navRendered) return;
+    navRendered = signature;
+    const rev = ++navReview;
+    const pv = $('#nav-preview');
+    const paint = (src = '') => {
+      if (rev !== navReview) return;
+      const p = GZ_CARDS.paint(n, src, 'nav');
+      pv.dataset.kind = p?.kind || 'default';
+      pv.style.cssText = Object.entries({ ...p?.vars, '--gz-nav-c': n.k === 'default' ? activeColors(offer || s)['--gz-surface-2'] : n.c, '--gz-nav-ink': n.k === 'default' ? activeColors(offer || s)['--gz-ink'] : n.ink }).map(([k, v]) => `${k}:${v}`).join(';');
+    };
+    paint(n.u);
+    for (const el of $$('#sidebar [data-nav-kinds]')) el.hidden = !el.dataset.navKinds.split(' ').includes(n.k);
+    $('#nav-url').value = n.u;
+    $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
+    const note = $('#nav-contrast');
+    note.classList.remove('err');
+    if (n.k === 'default') { if (note.textContent) note.textContent = ''; return; }
+    const show = (avg) => {
+      if (rev !== navReview) return;
+      const ratio = GZ_CARDS.contrast(n, { avg, ink: n.ink });
+      note.classList.toggle('err', ratio !== null && ratio < 4.5);
+      let text = ratio === null ? t('Image contrast cannot be measured. Check that every label is readable.')
+        : t(ratio < 4.5 ? 'Low sidebar contrast: {ratio}:1. Choose different text or background colors.' : 'Sidebar contrast: {ratio}:1. Text should reach 4.5:1; icons 3:1.', { ratio: GZ_I18N.num(+ratio.toFixed(2), GZ_I18N.ui()) });
+      if (n.k === 'image' && ratio !== null) text += ' ' + t('Image contrast uses an average; check the whole picture.');
+      if (note.textContent !== text) note.textContent = text;
+    };
+    if (n.k !== 'image') return show(null);
+    show(null);
+    const key = `${n.i || n.u}|${n.f}`;
+    if (n.i && navImage?.id !== n.i) navImage = { id: n.i, src: new Promise((res) => chrome.storage.local.get(`cardImg:${n.i}`, (r) => res(r?.[`cardImg:${n.i}`]))) };
+    const src = n.i ? navImage.src : Promise.resolve(n.u);
+    src.then((u) => { if (u) paint(u); });
+    if (!navAverages.has(key)) {
+      if (navAverages.size >= 8) navAverages.delete(navAverages.keys().next().value);
+      navAverages.set(key, src.then((u) => u ? GZ_CARDS.average(u, n.f) : null));
+    }
+    navAverages.get(key).then(show, () => show(null));
+  };
+  $('#nav-pick').addEventListener('click', () => $('#nav-file').click());
+  $('#nav-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0], rev = ++navPick;
+    e.target.value = '';
+    if (!file) return;
+    let image;
+    try { image = await GZ_CARDS.picture(file); }
+    catch (err) { if (rev === navPick) hint(t(err.message === 'cap' ? "That picture is too big to keep. Try a smaller one, or remove another card's picture." : "That file isn't a picture Glaze can read."), true); return; }
+    if (rev !== navPick) return;
+    const r = await new Promise((res) => {
+      try { chrome.runtime.sendMessage({ type: 'glaze:nav', nav: { k: 'image', u: '', i: '' }, image }, (x) => res(chrome.runtime.lastError ? null : x)); }
+      catch { res(null); }
+    });
+    if (rev !== navPick) return;
+    if (!r?.ok) return hint(t(r?.error === 'cap' ? "That picture is too big to keep. Try a smaller one, or remove another card's picture." : 'Not saved. Try again in a moment.'), true);
+    Object.assign(s.nav, { k: 'image', u: '', i: r.id });
+    fill();
+    hint(t('Saved'));
+  });
+  $('#nav-url').addEventListener('change', (e) => {
+    const raw = e.target.value.trim();
+    let u;
+    try { u = raw && new URL(raw); } catch { /* invalid */ }
+    if (raw && u?.protocol !== 'https:') return hint(t('Use an https:// link to an image.'), true);
+    navPick++;
+    Object.assign(s.nav, { u: u ? u.href : '', i: '', k: 'image' });
+    for (const k of ['u', 'i', 'k']) pendingNav.add(k);
+    fill(); save(['nav']);
+  });
+
   // ---- declutter tabs: a list of slugs, so one checkbox each ----
   const tabBoxes = GZ_TABS.map(([slug, label]) => {
     const row = document.createElement('label');
@@ -398,6 +475,7 @@ GZ_UI.load().then((s) => {
   // ---- generic controls: data-key is the settings path; radios use it as their name ----
   for (const el of $$('[data-key]')) {
     const key = el.dataset.key;
+    if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
     if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'enhance.coursemenu') renderCourses(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { set(key, +el.value); refresh(); save([group(key)], true); });
@@ -547,7 +625,7 @@ GZ_UI.load().then((s) => {
     let got;
     try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
     from = gallery;
-    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg } });
+    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav) });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
     offer.auto = { ...s.auto, on: false };
     offer.card = GZ_CARDS.settings({ ...s.card, ...got.card });
@@ -557,7 +635,7 @@ GZ_UI.load().then((s) => {
     const what = $('#share-what');
     what.replaceChildren();
     if (from) what.append(Object.assign(document.createElement('b'), { textContent: from.author ? t('{name} by @{author}.', from) : `${from.name}.`, translate: false }), ' ');
-    if (!Object.keys(got.look).length && !Object.keys(got.bg).length) {
+    if (!Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !got.cards.length) {
       // A palette alone (the gallery has those) leaves the rest as it is.
       what.append(t("{palette}. Your fonts and background stay as they are. It's showing in the preview.", { palette }));
     } else {
@@ -575,6 +653,7 @@ GZ_UI.load().then((s) => {
       const cardHosts = [...new Set(got.cards.filter((c) => c.u).map((c) => new URL(c.u).hostname))];
       if (got.cards.length) notes.push(t('Brings {n} course card styles for your Canvas Dashboard.', { n: got.cards.length }));
       if (cardHosts.length) notes.push(t('Its card pictures load from {hosts}.', { hosts: and(cardHosts) }));
+      if (offer.nav.k === 'image' && offer.nav.u) notes.push(t('Its sidebar picture loads from {host}.', { host: new URL(offer.nav.u).hostname }));
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
@@ -588,13 +667,15 @@ GZ_UI.load().then((s) => {
   $('#share-apply').addEventListener('click', () => {
     for (const k of GZ_HISTORY.KEYS) s[k] = offer[k];
     s.card = offer.card;
+    s.nav = offer.nav;
+    pendingNav.clear();
     // A theme's card styles take turns on the cards without their own (lib/cards.js).
     const set = offer.cardSet;
     if (set.length) cardsOp({ set });
     $('#share-code').value = '';
     endOffer();
     fill();
-    save([...GZ_HISTORY.KEYS, 'card']);
+    save([...GZ_HISTORY.KEYS, 'card', 'nav']);
     hint(t('Theme applied.'));
   });
 
@@ -695,12 +776,60 @@ GZ_UI.load().then((s) => {
   });
   takeOffer();
 
+  // ---- Look rotation's list and your own pointer: kept on this computer (storage.local), lib/lookx.js ----
+  let rotateLooks = [];
+  const renderExtras = () => {
+    $('#rotate-at').hidden = s.extras.rotate !== 'daily';
+    $('#rotate-looks').hidden = s.extras.rotate === 'off';
+    $('#cursor-own').hidden = s.extras.cursor !== 'own';
+  };
+  const renderRotate = async () => {
+    const tick = (id, colors, name) => {
+      const c = Object.assign(document.createElement('input'), { type: 'checkbox', checked: rotateLooks.includes(id) });
+      c.setAttribute('aria-label', t('Rotate through {name}', { name }));
+      c.addEventListener('change', () => local.set({ rotateLooks: c.checked ? [...rotateLooks, id] : rotateLooks.filter((x) => x !== id) }));
+      return row(colors, name, '', c);
+    };
+    const favs = await Promise.all(favorites.map((f) => GZ_SHARE.decode(f.code).then((got) => tick(f.code, got.colors, f.name), () => null)));
+    $('#rotate-looks').replaceChildren(...GZ_LOOKS.map((L) => tick(L.name, L.colors, L.name)), ...favs.filter(Boolean));
+  };
+  const showCursor = () => local.get('cursorImg', (r) => { const i = $('#cursor-img'); i.hidden = !r?.cursorImg; if (r?.cursorImg) i.src = r.cursorImg; });
+  $('#cursor-pick').addEventListener('click', () => $('#cursor-file').click());
+  // Read and scaled here, kept as PNG: SVG and anything else the browser can't draw as a bitmap is refused.
+  $('#cursor-file').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    let bmp;
+    try { bmp = await createImageBitmap(f); } catch { return hint(t("That file isn't a picture Glaze can read."), true); }
+    const [w, h] = GZ_LX.fit(bmp.width, bmp.height, 32);
+    const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
+    c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    bmp.close();
+    local.set({ cursorImg: c.toDataURL('image/png') }, () => {
+      const err = chrome.runtime.lastError;
+      if (err) return hint(t('Not saved: {error}', { error: err.message }), true);
+      s.extras.cursor = 'own';
+      fill();
+      save(['extras']);
+      showCursor();
+    });
+  });
+  local.get('rotateLooks', (r) => { rotateLooks = Array.isArray(r?.rotateLooks) ? r.rotateLooks : []; renderRotate(); });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.rotateLooks) rotateLooks = Array.isArray(changes.rotateLooks.newValue) ? changes.rotateLooks.newValue : [];
+    if (changes.rotateLooks || changes.lookFavorites) renderRotate();
+  });
+  showCursor();
+
   // ---- backup ----
   // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
   // card styles and bookmarks go too; a picture kept on this computer stays here.
   $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links'], (r) => chrome.storage.local.get(null, (all) => {
     const tasks = Object.fromEntries(Object.entries(all || {}).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
-    const blob = new Blob([JSON.stringify({ ...s, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), tasks }, null, 2)], { type: 'application/json' });
+    const nav = { ...s.nav, i: '', ...(s.nav.i && { k: 'default', u: '' }) };
+    const blob = new Blob([JSON.stringify({ ...s, nav, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), tasks }, null, 2)], { type: 'application/json' });
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -719,6 +848,7 @@ GZ_UI.load().then((s) => {
     // (GZ_TODO.restore, 'glaze:todo'): a file that can't be taken whole changes nothing, imports and every tab's
     // To Do edits take turns, and success is said only once both stores have it.
     const next = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
+    next.nav.i = ''; // A backup never names a picture on another device.
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
     flush(); // an edit still waiting goes out first, so it can't land on top of the import
@@ -732,8 +862,9 @@ GZ_UI.load().then((s) => {
       return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
     }
     Object.assign(s, next);
-    if (raw.cards || raw.links) cardsOp({ replace: { cards: raw.cards, links: raw.links } });
+    const styled = await cardsOp({ nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) });
     fill();
+    if (!styled) return hint(t('Some settings could not be imported. Try again in a moment.'), true);
     hint(t('Imported {file}.', { file: file.name }));
   });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
@@ -749,13 +880,20 @@ GZ_UI.load().then((s) => {
     armed = 0;
     b.textContent = t('Reset everything');
     Object.assign(s, GZ_SANITIZE({ presets: s.presets }), { card: GZ_CARDS.settings() });
+    pendingNav.clear();
     save(Object.keys(s));
     // Card styles and bookmarks too, and the pictures kept for them on this computer.
-    cardsOp({ reset: true }).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });
+    cardsOp({ reset: true, nav: GZ_DEFAULTS.nav }).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });
+    // Stickers, your sticker pictures and pointer, and Look rotation's list (lib/lookx.js): this computer's, gone too,
+    // through the worker's queue, so a tab's sticker change still on its way can't bring one back.
+    chrome.runtime.sendMessage({ type: 'glaze:stickers', reset: true }, (r) => { if (chrome.runtime.lastError || !r?.ok) hint(t('Not saved. Try again in a moment.'), true); });
     fill();
     hint(t('Everything is back to the defaults. Your presets are kept.'));
 
   });
+
+  // Report a problem: a GitHub issue filled in here with the version, browser and system (lib/widgets.js feedback).
+  $('#report-link').href = GZ_WIDGETS.feedback({ version: chrome.runtime.getManifest().version, ua: navigator.userAgent, lang: navigator.language });
 
   fill();
 });

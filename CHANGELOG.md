@@ -8,11 +8,25 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Canvas sidebar:** style Canvas's native global navigation with a solid color, two-color gradient or picture
+  (an https link or local file), filters and an overlay. Choose text and icon colors, normal/small/icon-only labels,
+  three sizes, logo visibility and a collapsed rail. Native links keep their labels and keyboard access. The
+  editor warns below 4.5:1 and previews the background; colors are never corrected automatically. Theme codes
+  can carry sidebar appearance, with linked pictures only; layout preferences stay yours. Codes with sidebar settings need
+  this Glaze or newer; the gallery checker needs its next vendor update. Canvas only.
 - **Looks gallery:** free Looks and palettes shared openly at frostdev.io/glaze/looks, with no accounts,
   likes or tracking. **Use this Look in Glaze** there opens the editor with the Look in its preview;
   nothing changes until you choose Use this theme. A code made of a palette alone changes only your colors.
 - **Favorites:** save a gallery Look or any theme code from its preview, and preview it again later.
   Kept on this device.
+- **Stickers:** 51 stickers in four packs (study, cozy autumn, space and sky, critters), or your own pictures, on any
+  course page. Ctrl+K, Place stickers on this page: drag to move, drag the corner to resize, turn a little, remove;
+  every step works from the keyboard too, and a list shows all the stickers on the page. They never take a click
+  from the page, and never show on a quiz you are taking. Free, unlimited, kept on this device.
+- **Pointers:** three pointer sets (Aqua, Lilac, Pearl), each with its own hand for links and buttons, or a PNG or
+  JPEG of your own scaled to 32 pixels. Text fields keep the usual text cursor. Course pages only.
+- **Look rotation** (off by default): wears the next of the Looks and favorites you choose every 6, 12 or 24 hours,
+  every week, or every day at a set time. One timer to the next change, run on this device; Ctrl+K has Next Look now.
 - **Looks history and Previous Look:** the last 20 themes you wore, from the popup, the editor or Ctrl+K,
   with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
   kept on this device.
@@ -70,6 +84,26 @@ All notable changes to Glaze are documented here. The format follows
   timeframe, past-due window and done rules, ticks and Canvas marks included, and shares its planner copy: the
   planner is asked once, whether or not the list is on. Every card style and the card grade fit
   beside it. Ctrl+K turns it on or off.
+- **Dashboard notes (Canvas, off by default; Extras, Notes and widgets):** a notes box on the Dashboard, small, medium
+  or large, saved as you type on this device for each Canvas site and account. Web addresses become links; click the
+  text to edit it. A note typed later in another tab wins.
+- **Widgets (Canvas, off by default):** a grid under the Dashboard's heading. Edit widgets adds, removes, orders (arrows,
+  arrow keys or drag) and sizes them; any widget can float over every Canvas page instead, dragged by its heading or
+  moved with the arrow keys, snapping to the window's edges, and stays where you put it.
+  - Agenda: one day's due work, "do on" plans and focus sessions, with previous and next day and back to today.
+  - Focus timer: work and break lengths, start, pause, resume, reset; the break starts by itself and the timer keeps
+    running across pages and tabs. An optional soft chime made by the browser, no sound file.
+  - Quote: original lines written for Glaze in all six languages (focus, calm, courage), every few seconds or once a
+    day, with previous, next and pause.
+  - Music: a Spotify, YouTube, Apple Music or YouTube Music link. Nothing is asked of the player until you press Load
+    player; YouTube plays from youtube-nocookie.com. The link stays on this device.
+  - Breathe: in, hold and out for the lengths you set, for a number of breaths; with motion off, words and a count.
+  - Study buddy: a Shiba who dozes while nothing's going on, wakes for the timer or a pat, and is happy for a while
+    after a finished focus block or an item ticked off. Click it for a word of encouragement.
+- **What Glaze can do:** every Canvas extra in one panel with its switch, from Ctrl+K or the Dashboard, with an
+  optional tour of the page and **Report a problem**. Nothing opens by itself.
+- **Report a problem:** opens a new GitHub issue with your Glaze version, browser, system and language filled in, and
+  nothing about your school. GitHub receives that text when the page opens; nothing is posted until you submit it. In the editor under Share and back up, and in What Glaze can do.
 - **Reminders and streak (Canvas, every part off by default; Extras, Reminders and streak):** each its own opt-in:
   - Due-date reminders at any of 15 minutes, 1 hour, 3 hours, 1 day and 2 days before (several at once, free); a day
     before means the same time the day before, in your Canvas time zone, across daylight-saving changes.
@@ -124,6 +158,9 @@ All notable changes to Glaze are documented here. The format follows
 - **Pages load less code until you use a feature:** the command palette, keyboard shortcuts, the course menu's
   popover, folder previews and Download all's buttons now load the first time you use them (or, for Download all, on
   a course page with folders), so every other page starts with about 46 KB less. They work as before.
+- **And about 30 KB less again:** draft backup, Blackboard's what-if calculator, the document buttons (focus mode,
+  reading time, dark file previews) and remembering your place in a course now load only on the pages where they
+  appear. They work as before.
 
 ### Fixed
 

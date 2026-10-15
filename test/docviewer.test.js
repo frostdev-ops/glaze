@@ -1,5 +1,5 @@
-// The DocViewer: its manifest entry, its budget, and what the Canvas page tells a canvadocs frame (content.js's
-// "DocViewer" block, run in a VM with stand-ins, as test/ondemand.test.js does). The frame's side and the drawing run in
+// The DocViewer: its manifest entry, its budget, and what the Canvas page tells a canvadocs frame (features/docs.js,
+// run in a VM with stand-ins, and content.js's hook). The frame's side and the drawing run in
 // a headless browser against test/fixtures/canvas-docviewer.html (scripts/docviewer-check.js); the math is test/ink.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -27,33 +27,45 @@ test('the DocViewer script stays within its budget', () => {
   assert.ok(total <= Math.round(DOCVIEWER_BASELINE * 1.02), `${total} bytes in ${entry.js.join(', ')}: over ${DOCVIEWER_BASELINE} + 2%`);
 });
 
-const source = fs.readFileSync(path.join(root, 'content.js'), 'utf8');
-const block = (from, to) => {
-  const a = source.indexOf(from), b = source.indexOf(to, a);
-  assert.ok(a > 0 && b > a, `markers ${from} … ${to}`);
-  return source.slice(a, b);
-};
-const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', words = true } = {}) => {
+// features/docs.js answers; content.js only hands it the message (and loads it for that).
+const page = ({ src, href = 'https://school.instructure.com/courses/1/modules' } = {}) => {
   const sent = [];
-  const listeners = [];
   const frame = { closed: false, postMessage: (msg, origin) => sent.push({ msg, origin }) };
   const iframe = { src, contentWindow: frame };
   const later = new Set();
+  const settings = { enhance: { docTheme: true, docPages: 'dim', docInk: true, toggles: true } };
   const ctx = vm.createContext({
-    ultra: false, moodle: false, links: [1], darkTheme: true, URL, URLSearchParams, JSON, Object, String, Array,
-    location: new URL(href),
-    settings: { enhance: { docTheme: true, docPages: 'dim', docInk: true } },
+    URL, URLSearchParams, JSON, Object, String, Array, location: new URL(href), window: {}, IntersectionObserver: class { observe() {} },
     GZ_COLORS: [['--gz-surface'], ['--gz-ink']],
-    html: { style: { getPropertyValue: (v) => ({ '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa' })[v] } },
-    document: { getElementsByTagName: () => [iframe] },
-    addEventListener: (type, f) => listeners.push([type, f]),
-    t: (w) => ({ Pen: 'Stift' })[w] || w,
-    words: () => words, wordsIn: later,
+    document: {
+      documentElement: { style: { getPropertyValue: (v) => ({ '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa' })[v] }, matches: () => false, removeAttribute() {} },
+      getElementsByTagName: () => [iframe], querySelector: () => null, querySelectorAll: () => [], addEventListener() {},
+    },
   });
-  vm.runInContext(`${block('  // ---- DocViewer (Canvas)', '  const frameIO')}; globalThis.tellDocs = tellDocs;`, ctx);
-  const ask = (data, origin = 'https://canvadocs.instructure.com', source = frame) => listeners.find(([t]) => t === 'message')[1]({ data, origin, source });
-  return { sent, ask, frame, ctx, later };
+  ctx.globalThis = ctx;
+  ctx.GZ_CTX = { site: 'canvas', t: (w) => ({ Pen: 'Stift' })[w] || w, on: () => true, darkTheme: () => true, settings: () => settings, wordsIn: later, PREVIEWS: 'iframe', DOC: '.doc' };
+  vm.runInContext(fs.readFileSync(path.join(root, 'features/docs.js'), 'utf8'), ctx);
+  const ask = (data, origin = 'https://canvadocs.instructure.com', source = frame) => ctx.GZ_DOCS.ask({ data, origin, source });
+  return { sent, ask, frame, docs: ctx.GZ_DOCS, later, settings };
 };
+
+test('content.js loads features/docs.js for a canvadocs frame\'s question only, and hands it the message', async () => {
+  const src = fs.readFileSync(path.join(root, 'content.js'), 'utf8');
+  const line = src.split('\n').find((l) => l.includes("e.data?.gz === 'docs?'"));
+  const asked = [];
+  let listener;
+  const ctx = vm.createContext({ ultra: false, moodle: false, addEventListener: (t, f) => { if (t === 'message') listener = f; },
+    need: (file) => { asked.push(file); return Promise.resolve(); }, globalThis: {} });
+  ctx.GZ_DOCS = { ask: (e) => asked.push(e.origin) };
+  vm.runInContext(line, ctx);
+  for (const origin of ['https://evil.example', 'https://canvadocs.instructure.com.evil.example', 'http://canvadocs.instructure.com']) listener({ data: { gz: 'docs?' }, origin });
+  listener({ data: { gz: 'other' }, origin: 'https://canvadocs.instructure.com' });
+  assert.deepEqual(asked, []);
+  listener({ data: { gz: 'docs?' }, origin: 'https://canvadocs.instructure.com' });
+  await new Promise(setImmediate);
+  assert.deepEqual(asked, ['features/docs.js', 'https://canvadocs.instructure.com']);
+});
+
 const BLOB = encodeURIComponent(JSON.stringify({ user_id: 170000000000042, attachment_id: 21, type: 'canvadoc' }));
 
 test('a canvadocs frame of this page is told the palette, the switches, the file and whose, at its own origin', () => {
@@ -95,14 +107,18 @@ test('a malformed blob or ids are not passed on', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(sent[0].msg.words)), {});
 });
 
-test('the frame is told again when settings change and when the words arrive, until it is gone', () => {
-  const { sent, ask, frame, ctx, later } = page({ src: `/api/v1/canvadoc_session?blob=${BLOB}`, words: false });
+test('the frame is told again when anything it was told changes and when the words arrive, until it is gone', () => {
+  const { sent, ask, frame, docs, later, settings } = page({ src: `/api/v1/canvadoc_session?blob=${BLOB}` });
   ask({ gz: 'docs?' });
   assert.equal(later.size, 1, 'waits for the words');
-  for (const f of later) f();
-  ctx.tellDocs();
-  assert.equal(sent.length, 3);
+  docs.sync();
+  assert.equal(sent.length, 1, 'nothing changed: not told again');
+  settings.enhance = { ...settings.enhance, docPages: 'dark' };
+  docs.sync();
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1].msg.pages, 'dark');
   frame.closed = true;
-  ctx.tellDocs();
-  assert.equal(sent.length, 3);
+  settings.enhance = { ...settings.enhance, docPages: 'plain' };
+  docs.sync();
+  assert.equal(sent.length, 2);
 });

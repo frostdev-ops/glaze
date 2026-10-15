@@ -340,6 +340,36 @@ test('an acknowledgement past the lease and its grace is not taken as one, and n
   assert.equal(a.ops('claim').length, claims);
 });
 
+test('snoozed for an hour on the same page: it comes back once, after the hour', async () => {
+  const w = world(2 * 36e5);
+  const a = w.tab();
+  a.ui.sync(true);
+  await settle();
+  const first = a.toast();
+  const id = first.dataset.id;
+  assert.ok(id);
+  // The student's own click on "Snooze 1 hour".
+  const target = { closest: (sel) => (sel === '[data-act]' ? { dataset: { act: 'snooze' } } : { dataset: { id } }) };
+  a.document.body.children[0].on.click({ target, isTrusted: true });
+  await settle();
+  assert.equal(a.toast(), null);
+  assert.equal(w.box[KEY].snooze[id] > 0, true);
+  // Within the hour: nothing. After it: the same reminder, drawn once more.
+  a.live().at(-1).f();
+  await settle();
+  assert.equal(a.toast(), null);
+  w.skew = 36e5 + 1;
+  a.live().at(-1).f();
+  await settle();
+  const again = a.toast();
+  assert.ok(again && again !== first);
+  assert.equal(again.dataset.id, id);
+  a.docOn.visibilitychange();
+  await settle();
+  assert.equal(a.toast(), again, 'once');
+  assert.equal(a.ops('claim').length, 2);
+});
+
 test('a worker that never keeps the acknowledgement gets five retries, a lease apart, and then none from this page', async () => {
   const w = world(2 * 36e5);
   const a = w.tab();
