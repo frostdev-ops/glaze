@@ -127,6 +127,23 @@ test('once enough is found nothing more is asked, in this term or any other, and
   assert.equal(cut.length, 10);
 });
 
+test('results come in priority order, not arrival: a slow answer from the course you\'re in still comes first and isn\'t crowded out', async () => {
+  const waiting = [];
+  const get = (p) => { const r = later(); waiting.push({ p, r }); return r; };
+  const got = [];
+  const answer = (pred, n) => { for (const w of waiting.filter((x) => !x.done && pred(x.p))) { w.done = true; w.r.resolve(Array.from({ length: n }, (_, i) => ({ page_id: String(i + 1), id: String(i + 1), url: `p${i}`, title: `lab ${i}`, name: `lab ${i}`, display_name: `lab ${i}` }))); } };
+  const done = S.search({ term: 'lab', courses: ['1', '2', '3', '4'].map((id) => course(id)), get, onBatch: (rs) => got.push(...rs), limit: 8, conc: 6 });
+  // Course 1's pages are slow; everything else answers at once, with plenty.
+  for (let round = 0; round < 6; round++) { answer((p) => !p.startsWith('/courses/1/pages'), 4); await settle(); }
+  assert.equal(got.length, 0, 'nothing is given while the first answer is still out');
+  answer(() => true, 4);
+  await settle();
+  for (let round = 0; round < 6; round++) { answer(() => true, 4); await settle(); }
+  assert.equal(await done, 8);
+  assert.deepEqual(got.slice(0, 4).map((r) => `${r.course} ${r.kind}`), Array(4).fill('C1 Page'), 'the first course\'s pages first');
+  assert.equal(got.length, 8);
+});
+
 test('a kind that fails (files hidden from students) is skipped, and not kept', async () => {
   const kept = S.cache();
   const cv = canvas((p) => { if (p.includes('/files?')) throw new Error('401'); return p.includes('/modules?') ? [{ id: '3', name: 'Unit 3' }] : []; });
@@ -165,20 +182,23 @@ test('an abort stops it: nothing more is asked, nothing more is given, and nothi
 });
 
 // features/search.js in the palette, with a stand-in page: typing, the pause, cancelling, the order things arrive in.
-const palette = () => {
+// `stored` is storage.sync as the attach reads it; `loading` holds lib/seek.js back; `cmd` and `show` can be content.js's own.
+const palette = ({ stored = {}, loading = null, cmd = { input: { value: '' }, list: {}, shown: [] }, show = null } = {}) => {
   const timers = [];
   const listeners = {};
   const live = { className: '', textContent: '', attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };
-  const cmd = { box: { isConnected: true }, input: { value: '', addEventListener: (e, f) => { listeners[e] = f; } }, list: { after: (x) => { cmd.live = x; } } };
+  Object.assign(cmd, { box: { isConnected: true } });
+  cmd.input.addEventListener = (e, f) => { listeners[e] = f; };
+  cmd.list.after = (x) => { cmd.live = x; };
   const shows = [];
   const requests = [];
   const settings = { enhance: { search: true } };
   const changed = [];
   const ctx = vm.createContext({
-    chrome: { storage: { onChanged: { addListener: (f) => changed.push(f) } } },
+    chrome: { runtime: {}, storage: { onChanged: { addListener: (f) => changed.push(f) }, sync: { get: (keys, f) => setImmediate(() => f(stored)) } } },
     GZ_CTX: {
       on: () => true, settings: () => settings,
-      t: (k, v) => k.replace('{n}', v?.n), need: () => Promise.resolve(), canvasCourseId: () => '2',
+      t: (k, v) => k.replace('{n}', v?.n), need: () => loading || Promise.resolve(), canvasCourseId: () => '2',
       canvasCourses: () => Promise.resolve([{ id: '1', course_code: 'ENG', term: {} }, { id: '2', course_code: 'BIO', term: {} }]),
     },
     document: { createElement: () => live },
@@ -190,7 +210,7 @@ const palette = () => {
       return r;
     },
     setTimeout: (f, ms) => { const x = { f, ms }; timers.push(x); return x; }, clearTimeout: (x) => { if (x) x.f = null; },
-    AbortController, DOMException, Promise, URL, Date,
+    AbortController, DOMException, Promise, URL, Date, setImmediate,
   });
   vm.runInContext('globalThis.globalThis = this;', ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../lib/seek.js'), 'utf8'), ctx);
@@ -200,7 +220,7 @@ const palette = () => {
   const answer = (pred, body) => { for (const q of requests.filter((x) => !x.done && pred(x.url))) { q.done = true; q.r.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(body)) }); } };
   const answerAll = (body = []) => answer(() => true, body);
   const change = (ch) => { for (const f of changed) f(ch, 'sync'); };
-  return { ctx, cmd, shows, requests, type, tick, answer, answerAll, timers, settings, change, attach: () => ctx.GZ_SEARCH.attach(cmd, (keep) => shows.push(keep === true ? 'keep' : 'reset')) };
+  return { ctx, cmd, shows, requests, type, tick, answer, answerAll, timers, settings, change, attach: () => ctx.GZ_SEARCH.attach(cmd, (keep) => { shows.push(keep === true ? 'keep' : 'reset'); show?.(keep); }) };
 };
 const pump = async (p, rounds = 10) => { for (let i = 0; i < rounds; i++) { p.answerAll(); await settle(); } };
 
@@ -279,8 +299,7 @@ test('palette: turned off while it is open, nothing more is asked, and what was 
   assert.ok(out.every((q) => q.signal.aborted), 'in flight, cancelled');
   assert.equal(p.cmd.found, null);
   assert.equal(p.cmd.seeking, false);
-  // Then content.js has it too: typing asks for nothing.
-  p.settings.enhance.search = false;
+  // content.js's settings still say on (stale): typing asks for nothing all the same.
   p.type('lab');
   p.tick();
   await settle();
@@ -288,21 +307,44 @@ test('palette: turned off while it is open, nothing more is asked, and what was 
   assert.equal(p.requests.length, out.length, 'no new requests');
   assert.equal(p.cmd.found, null);
   // Off between the keystroke and the pause: the search doesn't start.
-  p.settings.enhance.search = true;
+  p.change({ enhance: { newValue: { search: true } } });
   p.type('labs');
-  p.settings.enhance.search = false;
+  p.change({ enabled: { newValue: false } });
   p.tick();
   await settle();
   await settle();
   assert.equal(p.requests.length, out.length);
   assert.equal(p.cmd.seeking, false);
   // Back on: searching again.
-  p.settings.enhance.search = true;
+  p.change({ enabled: { newValue: true } });
   p.type('lab report');
   p.tick();
   await settle();
   await settle();
   assert.ok(p.requests.length > out.length);
+});
+
+test('palette: turned off while the search code is still loading, or before it loaded at all, it never starts', async () => {
+  // The change comes while lib/seek.js loads; content.js's settings haven't caught up (still on).
+  const loading = later();
+  const p = palette({ loading, stored: { enhance: { search: true } } });
+  p.cmd.input.value = 'lab';
+  const attached = p.attach();
+  p.change({ enhance: { newValue: { search: false } } });
+  loading.resolve();
+  await attached;
+  p.tick();
+  for (let i = 0; i < 4; i++) await settle();
+  assert.equal(p.requests.length, 0);
+  assert.ok(!p.cmd.found);
+  // Turned off before this file was even here: storage, read on attach, says so.
+  const q = palette({ stored: { enhance: { search: false } } });
+  q.cmd.input.value = 'lab';
+  await q.attach();
+  q.tick();
+  for (let i = 0; i < 4; i++) await settle();
+  assert.equal(q.requests.length, 0);
+  assert.ok(!q.cmd.found);
 });
 
 // content.js's palette list (showCmd), sliced from the source with a stand-in DOM: where search results go.
@@ -361,4 +403,21 @@ test('palette: the keyboard choice stays on the same item as results arrive', ()
   p.show(true);
   assert.equal(p.cmd.shown[p.cmd.active].label, chosen);
   assert.equal(p.cmd.list.children[p.cmd.active].attrs['aria-selected'], 'true');
+});
+
+test('palette: when search starts on a query typed while it loaded, the rows on screen stay put and "Searching…" goes below them', async () => {
+  const r = rows();
+  r.cmd.all = [cmdOf('Lab local'), cmdOf('Learning about biology')];
+  r.cmd.input.value = 'lab';
+  r.show();
+  const before = r.text();
+  assert.deepEqual(before, ['Lab local', 'Learning about biology'], 'a loose match is on screen');
+  const p = palette({ cmd: r.cmd, show: r.show });
+  await p.attach();
+  assert.deepEqual(r.text(), [...before, '(Searching your courses…)']);
+  p.tick();
+  for (let i = 0; i < 3; i++) await settle();
+  p.answer((u) => u.includes('/courses/2/pages?'), [{ page_id: '9', url: 'x', title: 'Lab report' }]);
+  await pump(p, 20);
+  assert.deepEqual(r.text().slice(0, 3), [...before, 'Lab report'], 'arrivals below, nothing above moved');
 });

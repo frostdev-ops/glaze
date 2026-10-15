@@ -2500,13 +2500,15 @@
       : [...cmd.all.filter((c) => c.group !== 'In this course' && c.group !== 'Glaze'), ...cmd.all.filter((c) => c.group === 'In this course').slice(0, 8)];
     // Searching your courses too (features/search.js): what has the query as typed, then what it finds, each arrival below
     // the last, so no row moves under the pointer; the looser matches (its letters in order) follow once it's done.
-    // Its "Searching…" row is where the next ones go.
+    // Its "Searching…" row is where the next ones go. cmd.head: rows that were on screen when it started (they stay
+    // first until the next keystroke).
     let at = -1;
+    if (keep !== true) cmd.head = null;
     if (q.trim() && cmd.found) {
       const near = (c) => `${c.hint} ${c.label}`.toLowerCase().includes(q.trim().toLowerCase());
-      const close = cmd.shown.filter(near);
+      const close = cmd.head || cmd.shown.filter(near);
       at = close.length + cmd.found.length;
-      cmd.shown = [...close, ...cmd.found, ...(cmd.seeking ? [] : cmd.shown.filter((c) => !near(c)))];
+      cmd.shown = [...close, ...cmd.found, ...(cmd.seeking ? [] : cmd.shown.filter((c) => !close.includes(c)))];
     }
     cmd.active = Math.max(0, was ? cmd.shown.indexOf(was) : 0);
     cmd.list.replaceChildren(...cmd.shown.map((c, i) => {
