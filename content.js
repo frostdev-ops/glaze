@@ -734,7 +734,7 @@
   };
   const ultraTipShown = () => [...document.querySelectorAll(ULTRA_TIP)].some((t) => t.offsetWidth > 0 && (ultra || t.checkVisibility({ visibilityProperty: true })));
   const showTip = (el, { title, sub }) => {
-    if (!el.isConnected || ultraTipShown()) return;
+    if (!el.isConnected || ultraTipShown()) { if (!ultra) hideTip(); return; }
     tip = document.createElement('div');
     tip.className = 'gz-tip';
     tip.setAttribute('role', 'tooltip');

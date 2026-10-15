@@ -354,7 +354,10 @@ test('Canvas dates as its English formats write them', () => {
   // when() takes it as it is: an untimed date counts in days.
   assert.equal(P.when(P.canvasDate('Oct 13 at 11:59pm', 'en', now), now, 'en', true).title, 'Due in 2 days');
   assert.equal(P.when(P.canvasDate('Oct 12', 'en', now), now, 'en').title, 'Tomorrow');
-  // Another language: CLDR, as read() reads it.
+  // Other locales: CLDR, as read() reads it; British English is day-first and 24-hour.
+  for (const loc of ['en', 'en-US']) assert.deepEqual(P.canvasDate('Oct 16 at 11:59pm', loc, now), { at: new Date(2026, 9, 16, 23, 59), timed: true });
+  assert.deepEqual(P.canvasDate('16 Oct at 23:59', 'en-GB', now), { at: new Date(2026, 9, 16, 23, 59), timed: true });
+  assert.deepEqual(P.canvasDate('16 Oct', 'en-GB', now), { at: new Date(2026, 9, 16), timed: false });
   assert.equal(P.canvasDate('16. Okt. um 23:59', 'de', now).at.toString(), new Date(2026, 9, 16, 23, 59).toString());
 });
 
@@ -380,8 +383,10 @@ test('Canvas due-date chips: where the work stands, without repeating the Assign
   assert.deepEqual(s(a(past, { workflow_state: 'submitted', submitted_at: '2026-10-03', late: true })), { label: 'Submitted late', tone: 'late' });
   assert.deepEqual(s(a(past, { workflow_state: 'graded', score: 18, grade: '18' })), { label: 'Graded · 18/20', tone: 'graded-hi' });
   assert.deepEqual(s(a(past, { workflow_state: 'graded', score: 15, grade: 'C' }, { grading_type: 'letter_grade' })), { label: 'Graded · C', tone: 'graded-mid' });
-  // A course that hides numbers: its letter, no band from the score.
-  assert.deepEqual(s(a(past, { workflow_state: 'graded', score: 18, grade: 'A-' }, { restrict_quantitative_data: true })), { label: 'Graded · A-', tone: 'done' });
+  // Restricted REST data still has raw numeric grades; Canvas owns their letter conversion.
+  for (const [grading_type, grade] of [['points', '18'], ['percent', '90%'], ['letter_grade', 'A-']]) {
+    assert.deepEqual(s(a(past, { workflow_state: 'graded', score: 18, grade }, { grading_type, restrict_quantitative_data: true })), { label: 'Graded', tone: 'done' });
+  }
   // Graded but not posted: Canvas sends no grade, so it reads as waiting.
   assert.deepEqual(s(a(past, { workflow_state: 'graded', submitted_at: '2026-10-01', grade: null })), { label: 'Submitted', tone: 'done' });
   assert.deepEqual(s(a(past, { excused: true })), { label: 'Excused', tone: 'muted' });
