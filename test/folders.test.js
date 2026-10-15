@@ -78,3 +78,19 @@ test('B9 is default-on, Ultra-only, on-demand and has no request or page-storage
   assert.match(core, /GZ_FOLDER_UI\.sync\(!!top\(\)\?\.hideFolders, meId\)/);
   assert.doesNotMatch(fs.readFileSync(require.resolve('../content.js'), 'utf8'), /GZ_FOLDER|hideFolders/);
 });
+test('the byte cap bounds both imported records and new single-folder writes', async () => {
+  const a = storage(), raw = {};
+  const ids = Array.from({ length: F.MAX_IDS }, (_, i) => `_${String(i).padStart(18, '0')}_123456789012345678`);
+  for (let i = 0; i < 30; i++) raw[F.key('https://bb.example.edu', '_7_1', `_${i}_1`)] = { ids, show: false };
+  const imported = F.backup(raw);
+  assert.ok(Object.keys(imported).length < 30);
+  assert.ok(new TextEncoder().encode(JSON.stringify(imported)).length <= F.MAX_BYTES);
+  Object.assign(a.store, imported);
+  const next = F.key('https://bb.example.edu', '_7_1', '_99_1');
+  const before = structuredClone(a.store);
+  // Existing records already consume nearly the whole allowance; one equally sized record cannot fit.
+  a.store[next] = { ids, show: false };
+  assert.equal((await F.change({ key: next, show: true }, a)).error, 'cap');
+  assert.deepEqual(a.store[next], { ids, show: false });
+  for (const k of Object.keys(before)) assert.deepEqual(a.store[k], before[k]);
+});
