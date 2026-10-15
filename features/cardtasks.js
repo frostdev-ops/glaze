@@ -15,6 +15,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   let tz, uid = '', key = '', o = null, data = null, cache = null;
   let on = false, starting = null, asking = null, failed = 0, listed = false;
   let gs = null; // Gradescope's items for this site (lib/todo.js gradescope)
+  let asked = null; // Gradescope's one-time question, while it's on the page
 
   const get = (keys) => new Promise((res) => { try { chrome.storage.local.get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
   const readPrefs = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } })
@@ -103,6 +104,16 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       if (rows.length) box.setAttribute('aria-label', t('Tasks for {course}', { course }));
       if (was) was.replaceWith(box); else head.after(box);
     }
+    // Gradescope's one-time question (lib/todo.js gradescope question), one quiet line above the first card's tasks,
+    // unless Better To Do on this page asks it already (one question a page); drawn again only when what it asks
+    // changes, so a pass never moves focus off it.
+    const q = document.getElementById('gz-todo') ? null : gs?.question(uid, t, 'gz-ct-ask') ?? null;
+    const first = q && document.querySelector('.ic-DashboardCard > .gz-ct');
+    if (!first) { asked?.remove(); asked = null; } else if (asked?.dataset.ask !== q.dataset.ask || !asked.isConnected || asked.nextElementSibling !== first) {
+      asked?.remove();
+      asked = q;
+      first.before(q);
+    }
   };
 
   const onStore = (ch, area) => {
@@ -133,7 +144,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   // If it can't start (no profile), the cards stay as Canvas has them, and it tries again after a minute.
   const sync = (want) => {
     on = !!want;
-    if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); return; }
+    if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); asked?.remove(); asked = null; return; }
     const list = !!document.getElementById('gz-todo');
     // Started: whether the list is here now counts as seen, so its going later is noticed whenever it goes.
     if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); refresh(); }, () => { setTimeout(() => { starting = null; }, 60000); });

@@ -277,7 +277,8 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const { b, evs } = reckon(now);
     const titles = new Map([...b.groups.flatMap(([, l]) => l), ...b.done, ...b.graded].map((r) => [r.key, r.title]));
     const was = hub.contains(document.activeElement) ? document.activeElement.dataset.focus : null;
-    const parts = [make('div', { className: 'gz-rm-top' }, make('h2', { id: 'gz-rm-title', textContent: t('Reminders') }), button('×', 'close', t('Close')))];
+    const parts = [make('div', { className: 'gz-rm-top' }, make('h2', { id: 'gz-rm-title', textContent: t('Reminders') }), button('×', 'close', t('Close'))),
+      gs?.question(who.uid, t, 'gz-rm-gs')]; // Gradescope's one-time question (lib/todo.js gradescope), when there is one
     if (en().streak && run) {
       const month = T.dayKey(T.dayOf(now, who.tz)).slice(0, 7);
       const n = R.left(st, month);

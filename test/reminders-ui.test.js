@@ -31,6 +31,8 @@ class E {
   querySelectorAll() { return []; }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; }
   focus() {}
+  get firstChild() { return this.children[0] || null; }
+  showModal() {}
   get text() { return [this.textContent || '', ...this.children.map((c) => (typeof c === 'object' ? c.text : String(c)))].join(' ').trim(); }
 }
 
@@ -48,7 +50,10 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
   w.release = () => { for (const f of w.waiting.splice(0)) f(); };
   const Clock = class extends Date { static now() { return w.now(); } };
   // A tab's own hold: its answers wait for its release(). failConfirm: the worker can't keep its acknowledgements.
-  w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {}, cards = false, hold = false } = {}) => {
+  // gs: a stored Gradescope record (lib/gradescope.js), with enhance.gradescope on.
+  w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {}, cards = false, hold = false, gs = null } = {}) => {
+    if (gs) box.gradescope = structuredClone(gs);
+    const changed = [];
     const own = { hold, waiting: [], failConfirm: false };
     const timers = [];
     const docOn = {};
@@ -71,13 +76,19 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
       GZ_CTX: {
         t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', need: async () => {},
         profile: async () => ({ id: 3, time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '25', name: 'Biology' }],
-        settings: () => ({ enhance: { remind: true, remindExam: false, remindPlan: false, streak: false, todo: false, cardTasks: false, ...enhance } }),
+        settings: () => ({ enhance: { remind: true, remindExam: false, remindPlan: false, streak: false, todo: false, cardTasks: false, gradescope: !!gs, ...enhance } }),
       },
       chrome: {
         runtime: {
           lastError: null,
           sendMessage: (m, cb) => {
             sent.push(m);
+            if (m.type === 'glaze:gradescope') {
+              return c.GZ_GRADESCOPE.change(structuredClone(m), area).then((r) => {
+                if (r.ok) for (const f of changed) f({ gradescope: { newValue: structuredClone(box.gradescope) } }, 'local');
+                cb?.(r);
+              });
+            }
             if (m.type !== 'glaze:remind') return cb?.(null);
             const run = () => (m.op === 'confirm' && own.failConfirm ? { ok: false, error: 'write' } : R.change(m, area, w.now()));
             // The worker's queue moves on; only this answer's delivery waits.
@@ -85,11 +96,17 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
             turn.then((r) => (w.hold || own.hold ? new Promise((y) => (own.hold ? own.waiting : w.waiting).push(() => y(r))) : r)).then(cb);
           },
         },
-        storage: { local: { get: (ks, cb) => area.local.get(ks).then(cb) }, sync: { get: (ks, cb) => cb({}) }, onChanged: { addListener() {} } },
+        storage: { local: { get: (ks, cb) => area.local.get(ks).then(cb) }, sync: { get: (ks, cb) => cb({}) }, onChanged: { addListener: (f) => changed.push(f) } },
       },
     };
     c.globalThis = c;
     vm.createContext(c);
+    if (gs) {
+      // lib/todo.js's Gradescope parts use the page's own globals (GZ_CTX, document): here it runs in the page's VM.
+      delete c.GZ_TODO;
+      c.GZ_SPEC = D.GZ_SPEC;
+      for (const f of ['lib/todo.js', 'lib/gradescope.js']) vm.runInContext(read(f), c);
+    }
     const ui = vm.runInContext(read('features/reminders.js'), c);
     const toast = () => body.children[0]?.children[0] || null;
     const ops = (op) => sent.filter((m) => m.op === op);
@@ -396,4 +413,63 @@ test('a worker that never keeps the acknowledgement gets five retries, a lease a
   assert.equal(a.ops('claim').length, 1);
   assert.equal(a.toast(), card);
   assert.deepEqual(w.box[KEY].seen, {});
+});
+
+// Gradescope (lib/gradescope.js): the one-time question is asked in the hub too, quietly, never as a toast; one answer.
+const GS_ID = '0123456789abcdef01234567';
+const gsRecord = (bind = {}) => ({
+  acct: { id: GS_ID, name: 'Sam' }, map: { 77: { to: `canvas:${ORIGIN}/25`, name: 'BIO' } }, bind,
+  courses: { 77: { at: NOW, bad: 0, rows: [{ id: '501', title: 'Gradescope lab', due: NOW + 1.5 * 36e5, late: null, sub: false, graded: false, score: null, points: null, lateSub: false }] } },
+});
+const hubOf = (t) => t.document.body.children.find((x) => x.id === 'gz-rm');
+const askIn = (hub) => hub?.children[0]?.children.find((x) => typeof x === 'object' && String(x.className).split(' ').includes('gz-gs-ask'));
+
+test('Gradescope: the hub asks once whether to show it, the answer is kept for this Canvas account, and no toast ever asks', async () => {
+  const w = world(30 * 864e5); // nothing of Canvas's due soon
+  const a = w.tab({ gs: gsRecord() });
+  a.ui.sync(true);
+  await settle();
+  a.ui.sync(true);
+  await settle();
+  assert.equal(a.toast(), null, 'no toast: not for the question, nor for work not yet shown');
+  a.ui.cmds()[0].run();
+  await settle();
+  const ask = askIn(hubOf(a));
+  assert.ok(ask, 'asked in the hub');
+  assert.equal(ask.children[0].textContent, 'Show Gradescope work from Sam here?');
+  ask.children[1].on.click({ isTrusted: false, preventDefault() {}, stopPropagation() {} });
+  await settle();
+  assert.equal(w.box.gradescope.bind[`${ORIGIN}/3`], undefined, "a script's click answers nothing");
+  ask.children[1].on.click({ isTrusted: true, preventDefault() {}, stopPropagation() {} });
+  await settle();
+  assert.deepEqual(w.box.gradescope.bind[`${ORIGIN}/3`], { id: GS_ID, show: true });
+  assert.equal(askIn(hubOf(a)), undefined, 'answered: the line goes');
+  // Now the Gradescope work is reminded of like the rest: due in an hour and a half, its three-hour reminder is claimed.
+  const gsClaims = (t) => t.ops('claim').flatMap((m) => m.ids).filter((id) => id.startsWith('gradescope:501@'));
+  assert.ok(gsClaims(a).length > 0);
+  // Answered (here or anywhere) means no question in another tab's hub either.
+  const b = w.tab({ gs: w.box.gradescope });
+  b.ui.sync(true);
+  await settle();
+  b.ui.sync(true);
+  await settle();
+  b.ui.cmds()[0].run();
+  await settle();
+  assert.equal(askIn(hubOf(b)), undefined);
+});
+
+test('Gradescope: "Not here" in the hub hides it everywhere, and nothing from it is reminded of', async () => {
+  const w = world(30 * 864e5);
+  const a = w.tab({ gs: gsRecord() });
+  a.ui.sync(true);
+  await settle();
+  a.ui.sync(true);
+  await settle();
+  a.ui.cmds()[0].run();
+  await settle();
+  askIn(hubOf(a)).children[2].on.click({ isTrusted: true, preventDefault() {}, stopPropagation() {} });
+  await settle();
+  assert.deepEqual(w.box.gradescope.bind[`${ORIGIN}/3`], { id: GS_ID, show: false });
+  assert.equal(askIn(hubOf(a)), undefined);
+  assert.deepEqual(a.ops('claim').flatMap((m) => m.ids).filter((id) => id.startsWith('gradescope:')), [], 'never reminded of');
 });

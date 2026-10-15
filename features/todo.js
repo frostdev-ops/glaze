@@ -339,15 +339,6 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     f.setAttribute('aria-label', x.id ? t('Edit task') : t('Add task'));
     return f;
   };
-  // Gradescope (lib/gradescope.js): before any of a Gradescope account's work shows for this Canvas account, it's asked
-  // once, here, quietly; either answer is kept, and "Not here" means nothing from that account shows or is read for it.
-  const gsQuestion = (name) => {
-    const yes = small('gsYes', t('Show'));
-    const no = small('gsNo', t('Not here'));
-    yes.dataset.focus = 'gs yes';
-    no.dataset.focus = 'gs no';
-    return make('p', { className: 'gz-todo-gs' }, make('span', { textContent: name ? t('Show Gradescope work from {name} here?', { name }) : t('Show your Gradescope work here?') }), yes, no);
-  };
   const render = (force = false) => {
     if (!box || !L || !who) return;
     const now = Date.now();
@@ -373,8 +364,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
       ...(globalThis.GZ_REMIND_UI?.head() || []), add); // the streak and reminders (features/reminders.js), when on
     const parts = [form && taskForm()];
-    const gsAsk = gs.ask(who.uid);
-    if (gsAsk !== null) parts.unshift(gsQuestion(gsAsk));
+    parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
     if (!cache) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Loading…') }));
     else if (!out.groups.length && !out.grading.length) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Nothing to do. Enjoy it.') }));
     for (const [kind, rows] of out.groups) parts.push(section(kind, t(LABEL[kind]), rows, now));
@@ -437,7 +427,6 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (act === 'add') { form = form ? null : { cid: ctx.canvasCourseId() || '' }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
     if (act === 'cancel') { form = null; render(true); box.querySelector('[data-focus="add"]')?.focus(); return; }
     if (act === 'all') { open.add(`group:${el.dataset.group}`); render(true); return; }
-    if (act === 'gsYes' || act === 'gsNo') { if (human(e)) gs?.answer(who.uid, act === 'gsYes'); return; }
     if (!k) return;
     if (act === 'more') { if (open.has(k)) open.delete(k); else open.add(k); render(true); return; }
     if (act === 'edit') { form = { ...data.tasks.find((x) => `task:${x.id}` === k) }; render(true); box.querySelector('[data-focus="form title"]')?.focus(); return; }

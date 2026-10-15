@@ -928,7 +928,7 @@
   "Show your Gradescope work here?": "Afficher ici tes devoirs Gradescope ?",
   "Gradescope account: {name}": "Compte Gradescope : {name}",
   "Ask on Canvas again": "Redemander sur Canvas",
-  "Each Canvas account is asked once, in Better To Do, before Gradescope work shows there.": "Chaque compte Canvas est interrogé une fois, dans Better To Do, avant que des devoirs Gradescope y apparaissent.",
+  "Each Canvas account is asked once, before any Gradescope work shows for it: in Better To Do, above the course cards' tasks or in the reminders hub. One answer counts everywhere.": "Chaque compte Canvas est interrogé une fois, avant que des devoirs Gradescope s'y affichent : dans Better To Do, au-dessus des tâches des cartes de cours ou dans le centre des rappels. Une réponse vaut partout.",
   // W12: stickers, pointers and Look rotation.
   "Look rotation": "Rotation des looks",
   "Wears the next of the Looks you tick on a timer, kept on this computer. None ticked: every built-in Look. Your history keeps each one.": "Porte le look coché suivant selon un horaire, sur cet ordinateur. Aucun coché : tous les looks intégrés. Ton historique garde chacun.",

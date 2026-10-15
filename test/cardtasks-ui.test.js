@@ -29,7 +29,11 @@ class E {
   }
   after(x) { const p = this.parent; p.children.splice(p.children.indexOf(this) + 1, 0, x); x.parent = p; p.writes = (p.writes || 0) + 1; }
   replaceWith(x) { const p = this.parent; p.children[p.children.indexOf(this)] = x; x.parent = p; p.writes = (p.writes || 0) + 1; }
-  remove() { const p = this.parent; if (p) p.children.splice(p.children.indexOf(this), 1); }
+  remove() { const p = this.parent; if (p) p.children.splice(p.children.indexOf(this), 1); this.parent = null; }
+  before(x) { const p = this.parent; p.children.splice(p.children.indexOf(this), 0, x); x.parent = p; }
+  get isConnected() { return !!this.parent; }
+  get nextElementSibling() { const l = this.parent?.children || []; return l[l.indexOf(this) + 1] || null; }
+  addEventListener(t, f) { (this.on ||= {})[t] = f; }
 }
 const cardFor = (cid) => {
   const el = new E();
@@ -44,12 +48,13 @@ const cardFor = (cid) => {
 };
 const item = (id, at) => ({ plannable_type: 'assignment', plannable_id: id, course_id: 25, plannable_date: new Date(at).toISOString(), html_url: `/courses/25/assignments/${id}`, plannable: { title: `A${id}` }, submissions: { submitted: false } });
 
-const feature = ({ stored = {}, list = false, hold = false } = {}) => {
+// gs: a stored Gradescope record (lib/gradescope.js), with enhance.gradescope on.
+const feature = ({ stored = {}, list = false, hold = false, gs = null } = {}) => {
   const state = { list, race: null }; // race: another context's newer answer, committed just before the cards' write
   const held = [];
   const f0 = { fetched: false };
   const calls = [];
-  const store = JSON.parse(JSON.stringify(stored));
+  const store = JSON.parse(JSON.stringify(gs ? { ...stored, gradescope: gs } : stored));
   const listeners = [];
   const cards = [cardFor('25')];
   const c = {
@@ -60,7 +65,9 @@ const feature = ({ stored = {}, list = false, hold = false } = {}) => {
       canvasCourses: async () => [{ id: '25', name: 'Biology', enrollments: [{ type: 'StudentEnrollment' }] }],
       capi: async (u) => { calls.push(u); return { id: '3', time_zone: 'America/New_York' }; },
       profile() { return this.capi('/users/self/profile'); },
+      settings: () => ({ enhance: { gradescope: !!gs } }),
     },
+    navigator: {},
     GZ_TODO: T,
     location: { origin: 'https://canvas.test', pathname: '/' },
     fetch: async (u) => {
@@ -75,6 +82,13 @@ const feature = ({ stored = {}, list = false, hold = false } = {}) => {
         sendMessage: (m, cb) => {
           if (m.cache && state.race) { store.todoCache = state.race; state.race = null; }
           const local = { get: async (k) => Object.fromEntries(k.filter((x) => x in store).map((x) => [x, store[x]])), set: async (v) => { Object.assign(store, JSON.parse(JSON.stringify(v))); return true; } };
+          // The worker's 'glaze:gradescope' too, telling every listener what changed, as storage does.
+          if (m.type === 'glaze:gradescope') {
+            return c.GZ_GRADESCOPE.change(JSON.parse(JSON.stringify(m)), { local }).then((r) => {
+              if (r.ok) for (const f of listeners) f({ gradescope: { newValue: store.gradescope } }, 'local');
+              cb?.(JSON.parse(JSON.stringify(r)));
+            });
+          }
           T.change(JSON.parse(JSON.stringify(m)), { local }).then((r) => cb(JSON.parse(JSON.stringify(r))));
         },
       },
@@ -89,11 +103,18 @@ const feature = ({ stored = {}, list = false, hold = false } = {}) => {
       getElementById: (id) => (id === 'gz-todo' && state.list ? {} : null),
       querySelectorAll: (sel) => (sel === '.ic-DashboardCard' ? cards : cards.flatMap((x) => x.children.filter((y) => y.className === 'gz-ct'))),
       createElement: (tag) => new E(tag),
+      querySelector: (sel) => (sel === '.ic-DashboardCard > .gz-ct' ? cards[0].children.find((y) => y.className === 'gz-ct') || null : null),
     },
     addEventListener() {},
   };
   c.globalThis = c;
   vm.createContext(c);
+  if (gs) {
+    // lib/todo.js's Gradescope parts use the page's own globals (GZ_CTX, document): here it runs in the page's VM.
+    delete c.GZ_TODO;
+    c.GZ_SPEC = D.GZ_SPEC;
+    for (const f of ['lib/todo.js', 'lib/gradescope.js']) vm.runInContext(read(f), c);
+  }
   vm.runInContext(read('features/cardtasks.js'), c);
   return { m: c.GZ_CARD_TASKS, calls, store, cards, listeners, state, held };
 };
@@ -204,4 +225,92 @@ test('a stale answer at startup with the list on the page: when the list goes, t
   await settle();
   assert.equal(planner(f.calls), 1);
   assert.deepEqual(titles(f.cards[0]), ['A1', 'A2']);
+});
+
+// Gradescope (lib/gradescope.js): a Gradescope account's work shows for a Canvas account only once it says yes, and the
+// question is asked quietly wherever the work would show: here, one line above the first card's tasks.
+const GS_ID = '0123456789abcdef01234567';
+const gsRecord = (bind = {}) => ({
+  acct: { id: GS_ID, name: 'Sam' }, map: { 77: { to: 'canvas:https://canvas.test/25', name: 'BIO' } }, bind,
+  courses: { 77: { at: NOW, bad: 0, rows: [{ id: '501', title: 'G1', due: NOW + 1.5 * 864e5, late: null, sub: false, graded: false, score: null, points: null, lateSub: false }] } },
+});
+const click = (button, isTrusted = true) => button.on.click({ isTrusted, preventDefault() {}, stopPropagation() {} });
+const askLine = (card) => card.children.find((x) => x.className?.split(' ').includes('gz-ct-ask'));
+
+test('Gradescope: the one-time question sits above the first card\'s tasks; the student\'s answer is the one answer', async () => {
+  const f = feature({ gs: gsRecord() });
+  f.m.sync(true);
+  await settle();
+  f.m.sync(true); // the Gradescope file is in: the next pass draws with it
+  await settle();
+  const card = f.cards[0];
+  const ask = askLine(card);
+  assert.ok(ask, 'asked');
+  assert.equal(card.children.indexOf(ask) + 1, card.children.indexOf(box(card)), 'right above the tasks');
+  assert.equal(ask.dataset.ask, 'Sam');
+  assert.equal(ask.children[0].textContent, 'Show Gradescope work from Sam here?');
+  assert.deepEqual(titles(card), ['A1', 'A2'], 'nothing from Gradescope before the answer');
+  // A pass over the same page leaves the line as it is (focus stays on it).
+  f.m.sync(true);
+  await settle();
+  assert.equal(askLine(card), ask);
+  // A script's click answers nothing.
+  click(ask.children[1], false);
+  await settle();
+  assert.equal(f.store.gradescope.bind['https://canvas.test/3'], undefined);
+  // The student's: kept for this Canvas account (site and user), the line goes and the work shows.
+  click(ask.children[1]);
+  await settle();
+  assert.deepEqual(f.store.gradescope.bind['https://canvas.test/3'], { id: GS_ID, show: true });
+  assert.equal(askLine(card), undefined);
+  assert.deepEqual(titles(card), ['A1', 'G1', 'A2']);
+});
+
+test('Gradescope: answered anywhere (here, Better To Do, the reminders hub) is answered everywhere; "Not here" hides it', async () => {
+  // Answered yes elsewhere: no question, the work shows.
+  const yes = feature({ gs: gsRecord({ 'https://canvas.test/3': { id: GS_ID, show: true } }) });
+  yes.m.sync(true);
+  await settle();
+  yes.m.sync(true);
+  await settle();
+  assert.equal(askLine(yes.cards[0]), undefined);
+  assert.deepEqual(titles(yes.cards[0]), ['A1', 'G1', 'A2']);
+  // Answered "Not here" elsewhere: no question, nothing shows.
+  const no = feature({ gs: gsRecord({ 'https://canvas.test/3': { id: GS_ID, show: false } }) });
+  no.m.sync(true);
+  await settle();
+  no.m.sync(true);
+  await settle();
+  assert.equal(askLine(no.cards[0]), undefined);
+  assert.deepEqual(titles(no.cards[0]), ['A1', 'A2']);
+  // "Not here" from this line: the same.
+  const here = feature({ gs: gsRecord() });
+  here.m.sync(true);
+  await settle();
+  here.m.sync(true);
+  await settle();
+  click(askLine(here.cards[0]).children[2]);
+  await settle();
+  assert.deepEqual(here.store.gradescope.bind['https://canvas.test/3'], { id: GS_ID, show: false });
+  assert.equal(askLine(here.cards[0]), undefined);
+  assert.deepEqual(titles(here.cards[0]), ['A1', 'A2']);
+  // Another Canvas user's answer is theirs: this one is still asked.
+  const other = feature({ gs: gsRecord({ 'https://canvas.test/999': { id: GS_ID, show: true } }) });
+  other.m.sync(true);
+  await settle();
+  other.m.sync(true);
+  await settle();
+  assert.ok(askLine(other.cards[0]));
+  // Better To Do on the page asks it there: one question a page.
+  other.state.list = true;
+  other.m.sync(true);
+  await settle();
+  assert.equal(askLine(other.cards[0]), undefined);
+  other.state.list = false;
+  other.m.sync(true);
+  await settle();
+  assert.ok(askLine(other.cards[0]));
+  // Off: no line.
+  other.m.sync(false);
+  assert.equal(askLine(other.cards[0]), undefined);
 });

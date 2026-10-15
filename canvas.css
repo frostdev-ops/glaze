@@ -1497,7 +1497,11 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 #gz-todo .gz-todo-count { font-size: 0.75rem; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
 #gz-todo .gz-todo-say:empty { display: none; }
 #gz-todo .gz-todo-say { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
-#gz-todo .gz-todo-gs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; margin: 0.5rem 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
+.gz-gs-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.5rem; margin: 0.5rem 0; font: 0.8rem/1.35 var(--gz-font); color: var(--gz-ink-muted); }
+.gz-gs-ask button { font: inherit; font-weight: 600; color: var(--gz-accent); background: none; border: 0; padding: 0.1rem 0.3rem; border-radius: var(--gz-radius-sm); cursor: pointer; }
+.gz-gs-ask button:hover { text-decoration: underline; }
+.gz-gs-ask button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
+#application .ic-DashboardCard > .gz-ct-ask { margin: 0; padding: 0.4rem 0.6rem 0; }
 #gz-todo .gz-todo-empty { margin: 0.75rem 0; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-group { margin-top: calc(0.9rem * var(--gz-space)); }
 #right-side #gz-todo :is(h3, summary) {

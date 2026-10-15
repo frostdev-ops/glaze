@@ -69,7 +69,8 @@ _Last updated: 2026-10-15_
   due dates, whether you handed it in, the score if graded, whether it was late), the time they were read and how many
   rows couldn't be read; whether you said "Don't ask again" on Gradescope; and, with the daily check on, when each
   course was last tried; and, per Canvas account (site and Canvas user id), your one-time answer to "Show Gradescope
-  work from … here?". Nothing from Gradescope shows for a Canvas account until it says yes there, so two people sharing
+  work from … here?" (asked with one line in Better To Do, the course cards or the reminders hub; one answer for all
+  three). Nothing from Gradescope shows for a Canvas account until it says yes there, so two people sharing
   a browser don't see each other's; signing in to another Gradescope account starts the Gradescope data afresh. It
   shows only on the Canvas site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
