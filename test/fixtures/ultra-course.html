@@ -1,0 +1,311 @@
+<!doctype html>
+<!--
+  A synthetic Blackboard Ultra single-page-app shell, for headless tests of Glaze's course tabs. Everything in it is
+  invented. Its structure comes from parity/spikes/B8.md (a course opens as a panel over the base page; the sticky
+  two-row course bar; the tool links) and its class names from test/fixtures/ultra-courses.html and preview.html.
+
+  How a harness serves it (see scripts/ultra-cards-check.js for the Playwright route pattern):
+    https://bb.school.test/ultra/**   every path, any method GET: this file, text/html (like Ultra's shell)
+    https://cdn.school.test/ultra/uiv4001.0.0-rel.37_abc/app.css   the CSS below, text/css
+    everything else: abort. This page makes no other request (no fetch, no images, no fonts).
+
+  app.css (stand-in for Ultra's own cross-origin stylesheet; two harmless rules):
+    .course-content-container{min-height:100vh}
+    .panel-wrap{overscroll-behavior:contain}
+
+  Routes (an SPA: a click on a[href^="/ultra/"] or a popstate re-renders; nothing reloads):
+    /ultra/course | stream | calendar | grades | institution-page     base pages (anything else: "Page not found")
+    /ultra/courses/<cid>/<tool>[/...]    a course panel over the base page; <cid> is _101_1 ... _105_1
+        tools: outline, calendar, announcements, engagement, grades, messages, groups/enrollments, achievements
+    /ultra/courses/<cid>/outline/edit/document/_9001_1?courseId=<cid>&view=content   second panel on top
+    /ultra/courses/<cid>/outline/assessment/_9002_1/overview?courseId=<cid>         second panel (Start attempt)
+    /ultra/courses/<cid>/outline/discussion/_9003_1                                   second panel
+
+  Timing, as Ultra's async views: a different course (or base page -> course) replaces .course-content-container at
+  once with the bar and a .spinner in .route-view-container, and the page replaces the spinner 350 ms later. Same
+  course, another tool: bar and panel stay, a NEW .route-view-container with a spinner replaces the old one, 200 ms.
+  Opening/closing a second panel inside the same course is immediate. Leaving to a base page removes the course.
+
+  The page has a <base> on another origin, so history.pushState needs ABSOLUTE urls (location.origin + path): a bare
+  "/ultra/..." resolves against the base and throws a SecurityError. Route from outside with
+    history.pushState(null, '', location.origin + '/ultra/courses/_102_1/grades'); dispatchEvent(new PopStateEvent('popstate'))
+  Page flags: window.__renders (render() calls), __attempts (Start attempt clicks), __assessmentViews (assessment
+  panels built), __signedOut (Sign Out clicked).
+-->
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blackboard Learn</title>
+<base href="https://cdn.school.test/ultra/uiv4001.0.0-rel.37_abc/">
+<link rel="stylesheet" href="https://cdn.school.test/ultra/uiv4001.0.0-rel.37_abc/app.css">
+<style>
+  /* Layout only. Canvas / CanvasText are the browser's own neutral colours; Glaze supplies the look. */
+  body { margin: 0; font: 14px/1.4 sans-serif; }
+  svg { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+  /* Shell: the window is fixed; the base page and each panel scroll inside it. */
+  #site-wrap { position: relative; height: 100vh; overflow: hidden; }
+  .MuiDrawer-paper { position: fixed; top: 0; bottom: 0; left: 0; width: 220px; box-sizing: border-box; overflow-y: auto; }
+  .MuiDrawer-paper ul { list-style: none; margin: 0; padding: 8px 0; }
+  .MuiDrawer-paper .MuiListItemButton-root { display: flex; align-items: center; gap: 12px; padding: 10px 16px; color: inherit; text-decoration: none; }
+  #main-content { height: 100%; margin-left: 220px; overflow-y: auto; }
+  #main-content-inner { padding: 16px; }
+  .course-list { display: flex; flex-wrap: wrap; gap: 16px; }
+  .element-card { width: 262px; box-sizing: border-box; border: 1px solid; }
+  .course-banner { height: 80px; }
+  .element-details { padding: 8px 12px; }
+  .course-title { margin: 4px 0; }
+
+  /* Panels: the course, and the page opened from it. The panel itself is the scroller. */
+  .panel-wrap { position: absolute; top: 0; right: 0; bottom: 0; left: 220px; overflow-y: auto; background: Canvas; color: CanvasText; }
+  .panel-wrap:not(.hide-in-background) { z-index: 20; }
+  .panel-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid; }
+  .panel-header h1 { margin: 0; font-size: 20px; }
+  .panel-header a { font-size: 24px; line-height: 1; color: inherit; text-decoration: none; }
+  .panel-body { padding: 16px; max-width: 720px; }
+
+  /* The course's top bar: two rows of 47px (94px), sticky inside the panel. */
+  .bb-course-navigation { position: sticky; top: 0; z-index: 10; background: Canvas; }
+  bb-course-navigation, course-page-header { display: block; }
+  course-page-header > header { display: flex; align-items: center; gap: 12px; height: 47px; padding: 0 16px; box-sizing: border-box; }
+  [data-analytics-id="course.header.home"] { display: grid; place-items: center; width: 32px; height: 32px; color: inherit; }
+  .makeStylescourseName-0-2-9 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .MuiBadge-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; }
+  .makeStylestoolbar-0-2-11 { height: 47px; box-sizing: border-box; border-bottom: 1px solid; }
+  .makeStylesscrollArea-0-2-12 { overflow-x: auto; scrollbar-width: none; }
+  .bb-ui-navigation-list-horizontal { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0 16px; }
+  .bb-ui-navigation-list-horizontal a { display: flex; align-items: center; height: 46px; padding: 0 12px; box-sizing: border-box; white-space: nowrap; color: inherit; text-decoration: none; }
+  .bb-ui-navigation-list-horizontal a[aria-current="page"] { border-bottom: 2px solid; }
+
+  /* The tool's page. */
+  .course > .route-view-container { padding: 16px; }
+  .spinner { width: 24px; height: 24px; margin: 24px auto; box-sizing: border-box; border: 3px solid; border-top-color: transparent; border-radius: 50%; }
+  .content-list-item, .tool-row { padding: 12px 16px; border-bottom: 1px solid; }
+  .content-list-item { min-height: 76px; box-sizing: border-box; }
+  .tool-row { min-height: 44px; box-sizing: border-box; }
+  .content-list-item .itemContainer > div { display: flex; gap: 12px; align-items: flex-start; }
+  .content-list-item h3 { margin: 0; font-size: 16px; }
+
+  @media (max-width: 767.98px) {
+    .MuiDrawer-paper { transform: translateX(-100%); }
+    #main-content { margin-left: 0; }
+    .panel-wrap { left: 0; }
+  }
+</style>
+</head>
+<body>
+<div id="site-wrap">
+  <div class="MuiPaper-root MuiDrawer-paper"><nav class="makeStylesnavigation-0-2-5" aria-label="Base navigation"><ul>
+    <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/institution-page"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 10 12 4l9 6M5 10v9M19 10v9M9 19v-6M15 19v-6M3 19h18"/></svg><span>Institution Page</span></a></li>
+    <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/stream"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Activity Stream</span></a></li>
+    <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/course"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg><span>Courses</span></a></li>
+    <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/calendar"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v15H4zM4 10h16M8 3v4M16 3v4"/></svg><span>Calendar</span></a></li>
+    <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/grades"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Grades</span></a></li>
+    <li><a class="MuiButtonBase-root MuiListItemButton-root" href="#"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10 4H5v16h5M15 8l4 4-4 4M19 12H9"/></svg><span>Sign Out</span></a></li>
+  </ul></nav></div>
+  <main id="main-content"><div id="main-content-inner"></div></main>
+</div>
+<script>
+(() => {
+  'use strict';
+  window.__attempts = 0; window.__assessmentViews = 0; window.__renders = 0;
+
+  // Invented data. [js-course-<id>-tool class, route path, label], as B8.md lists the tools.
+  const COURSES = [
+    { id: '_101_1', name: 'Computer Science I', code: 'FA26-CS101-01', color: 2 },
+    { id: '_102_1', name: 'Spanish 110', code: 'FA26-SPAN110-02', color: 3 },
+    { id: '_103_1', name: 'Calculus II', code: 'FA26-MATH201-01', color: 5 },
+    { id: '_104_1', name: 'World History', code: 'FA26-HIST150-01', color: 7 },
+    { id: '_105_1', name: 'Biology Lab', code: 'FA26-BIO120-01', color: 9 },
+  ];
+  const TOOLS = [
+    ['outline', 'outline', 'Content'], ['calendar', 'calendar', 'Calendar'], ['announcement', 'announcements', 'Announcements'],
+    ['discussion', 'engagement', 'Discussions'], ['grades', 'grades', 'Gradebook'], ['messages', 'messages', 'Messages'],
+    ['groupsStudent', 'groups/enrollments', 'Groups'], ['achievements', 'achievements', 'Achievements'],
+  ];
+  const BASE = { course: 'Courses', stream: 'Activity Stream', calendar: 'Calendar', grades: 'Grades', 'institution-page': 'Institution Page' };
+  const TITLES = { document: 'Course Syllabus', assessment: 'Quiz 1: Foundations', discussion: 'Discussion: Introductions' };
+  const LABELS = { module: 'Learning Module', document: 'Document', assessment: 'Assessment', discussion: 'Discussion' };
+  const ICONS = {
+    module: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/>',
+    document: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+    assessment: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+    discussion: '<path d="M4 5h16v10H9l-5 4z"/>',
+  };
+  // Outline items 3, 5 and 7 open a second panel; the rest are plain.
+  const OPENS = {
+    3: ['document', '_9001_1', (c) => `/ultra/courses/${c}/outline/edit/document/_9001_1?courseId=${c}&amp;view=content`],
+    5: ['assessment', '_9002_1', (c) => `/ultra/courses/${c}/outline/assessment/_9002_1/overview?courseId=${c}`],
+    7: ['discussion', '_9003_1', (c) => `/ultra/courses/${c}/outline/discussion/_9003_1`],
+  };
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const el = (cls, html) => Object.assign(document.createElement('div'), { className: cls, innerHTML: html });
+  const site = $('#site-wrap'), inner = $('#main-content-inner');
+  const SPINNER = '<div class="spinner" role="progressbar" aria-label="Loading"></div>';
+
+  // ---- markup ----------------------------------------------------------------------------------------------
+  const icon = (kind) => `<svg class="MuiSvgIcon-root" aria-label="${LABELS[kind]}" viewBox="0 0 24 24">${ICONS[kind]}</svg>`;
+
+  function coursesPage() {
+    return `<section class="base-courses-container route-view-container"><div class="black-panel-header base-header"><h1 id="main-heading">Courses</h1></div><div class="course-list">`
+      + COURSES.map((c) => `<article id="course-list-course-${c.id}" class="element-card course-element-card course-color-${c.color}" data-course-id="${c.id}"><div class="course-banner"></div><div class="element-details summary"><div class="course-id">${c.code}</div><a href="/ultra/courses/${c.id}/outline"><h4 id="course-name-${c.id}" class="course-title"><span class="js-course-title-element">${c.name}</span></h4></a><div class="course-status">Open</div></div></article>`).join('')
+      + '</div></section>';
+  }
+
+  function barHtml(c, tool) {
+    const tools = TOOLS.map(([id, path, label]) => `<li><a class="MuiButtonBase-root MuiListItemButton-root js-course-${id}-tool"${id === tool ? ' aria-current="page"' : ''} href="/ultra/courses/${c.id}/${path}">${label}</a></li>`).join('');
+    return `<div class="bb-course-navigation"><bb-course-navigation>`
+      + `<course-page-header><header>`
+      + `<a class="MuiButtonBase-root" data-analytics-id="course.header.home" href="/ultra/course" aria-label="Home"><svg class="MuiSvgIcon-root" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg></a>`
+      + `<button class="MuiButtonBase-root MuiButton-root" type="button" aria-haspopup="menu">Courses ▾</button>`
+      + `<span class="makeStylescourseName-0-2-9">${c.code}</span><span class="MuiBadge-badge">OPEN</span>`
+      + `</header></course-page-header>`
+      + `<div class="makeStylestoolbar-0-2-11"><div class="js-course-navigation"><div class="makeStylesscrollArea-0-2-12"><nav aria-label="Course"><ul class="MuiList-root bb-ui-navigation-list-horizontal">${tools}</ul></nav></div></div></div>`
+      + `</bb-course-navigation></div>`;
+  }
+
+  function outlineItems(c) {
+    const kinds = ['module', 'document', 'assessment', 'discussion'];
+    let html = '';
+    for (let n = 1; n <= 40; n++) {
+      const open = OPENS[n], kind = open ? open[0] : kinds[n % 4];
+      const id = open ? open[1] : `_${2000 + n}_1`;
+      const title = open ? TITLES[kind] : `${LABELS[kind]} ${n}`;
+      html += `<div class="root content-list-item" data-content-id="${id}"><div class="itemContainer"><div>${icon(kind)}<div class="item-body">`
+        + `<h3>${open ? `<a href="${open[2](c.id)}">${title}</a>` : title}</h3><div class="js-description">${c.name}: a short description of item ${n}.</div></div></div></div></div>`;
+    }
+    return html;
+  }
+
+  function pageHtml(c, tool) {
+    if (tool === 'outline') {
+      return `<section class="course-outline-content"><main class="course-main-content"><div role="region" aria-label="Course Content" class="outline-column">`
+        + `<header class="outline-header"><h2>Course Content</h2></header><div class="makeStylescontentList-0-2-14">${outlineItems(c)}</div></div></main></section>`;
+    }
+    const t = TOOLS.find((x) => x[0] === tool);
+    if (!t) return '<h2>Page not found</h2>';
+    return `<h2>${t[2]}</h2>` + Array.from({ length: 30 }, (_, i) => `<div class="tool-row">${t[2]} item ${i + 1} for ${c.name}</div>`).join('');
+  }
+
+  function secondPanel(c, kind) {
+    const paras = Array.from({ length: 6 }, (_, i) => `<p>Paragraph ${i + 1} of ${TITLES[kind]}, written for ${c.name}. It holds invented text only.</p>`).join('');
+    if (kind === 'assessment') window.__assessmentViews++;
+    const extra = kind === 'assessment' ? '<button class="js-start-attempt MuiButton-root" type="button">Start attempt</button>' : '';
+    return el('panel-wrap modern', `<div class="panel-header"><a href="/ultra/courses/${c.id}/outline" aria-label="Close">×</a><h1>${TITLES[kind]}</h1></div><div class="panel-body">${paras}${extra}</div>`);
+  }
+
+  // ---- routing ---------------------------------------------------------------------------------------------
+  function parse(path) {
+    const seg = path.split('/').filter(Boolean).slice(1); // drop "ultra"
+    const course = seg[0] === 'courses' && COURSES.find((c) => c.id === seg[1]);
+    if (!course) return { base: seg[0] || 'stream' };
+    const t = seg[2] ? TOOLS.find((x) => x[1].split('/')[0] === seg[2]) : TOOLS[0];
+    const tool = t && t[0];
+    let nested = null;
+    if (tool === 'outline') {
+      if (seg[3] === 'edit' && seg[4] === 'document' && seg[5]) nested = { kind: 'document', id: seg[5] };
+      else if (seg[3] === 'assessment' && seg[4]) nested = { kind: 'assessment', id: seg[4] };
+      else if (seg[3] === 'discussion' && seg[4]) nested = { kind: 'discussion', id: seg[4] };
+    }
+    return { course, tool, nested };
+  }
+
+  // The open course: its container, its tool, the second panel's key, a token that cancels stale timers.
+  const S = { c: null, box: null, tool: null, route: null, key: '', loading: false, tok: 0 };
+  let shownBase = null;
+
+  function drawBase(key) {
+    if (shownBase === key && inner.firstChild) return;
+    shownBase = key;
+    const title = BASE[key] || 'Page not found';
+    inner.innerHTML = key === 'course' ? coursesPage()
+      : `<section class="base-page"><div class="base-header"><h1 id="main-heading">${title}</h1></div><p>${title} (synthetic page).</p></section>`;
+    for (const a of site.querySelectorAll('.MuiDrawer-paper a')) {
+      const on = a.getAttribute('href') === '/ultra/' + key;
+      a.classList.toggle('Mui-selected', on);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    }
+  }
+
+  function closeNested() {
+    S.key = '';
+    const p = S.box && $(':scope > .panel-wrap:not(.hide-in-background)', S.box);
+    if (p) p.remove();
+  }
+
+  function closeCourse() {
+    if (S.box) S.box.remove();
+    Object.assign(S, { c: null, box: null, tool: null, route: null, key: '', loading: false, tok: S.tok + 1 });
+  }
+
+  // Put a fresh route view with a spinner in the course, and swap the page in after ms.
+  function load(ms) {
+    const my = ++S.tok, sec = $('section.course', S.box);
+    const old = $(':scope > .route-view-container', sec);
+    if (old) old.remove();
+    const rv = el('route-view-container', SPINNER);
+    sec.append(rv);
+    S.loading = true;
+    setTimeout(() => {
+      if (my !== S.tok) return;
+      rv.innerHTML = pageHtml(S.c, S.tool);
+      S.loading = false;
+      sync();
+    }, ms);
+  }
+
+  // Make the second panel match the route (no spinner).
+  function sync() {
+    if (S.loading) return;
+    const n = S.route.nested, key = n ? n.kind + ':' + n.id : '';
+    if (key === S.key) return;
+    closeNested();
+    S.key = key;
+    if (n) S.box.append(secondPanel(S.c, n.kind));
+  }
+
+  function openCourse(r) {
+    closeCourse();
+    S.c = r.course; S.tool = r.tool; S.route = r;
+    S.box = el('course-content-container', `<div class="panel-wrap hide-in-background modern"><section class="course course-color-${r.course.color}" bb-course-membership-markups="${r.course.id}">${barHtml(r.course, r.tool)}</section></div>`);
+    site.append(S.box);
+    load(350);
+  }
+
+  function render() {
+    window.__renders++;
+    const r = parse(location.pathname);
+    if (!r.course) { closeCourse(); drawBase(r.base); return; }
+    if (!inner.firstChild) drawBase('course'); // deep link: Ultra has a base page under the panel too
+    if (S.c !== r.course) { openCourse(r); return; }
+    S.route = r;
+    if (S.tool === r.tool) { sync(); return; }
+    S.tool = r.tool;
+    closeNested();
+    for (const a of S.box.querySelectorAll('.bb-ui-navigation-list-horizontal a')) {
+      if (a.classList.contains(`js-course-${r.tool}-tool`)) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    }
+    load(200);
+  }
+
+  // A framework's link handling: bubbling phase on the document, left clicks without modifiers, not already handled.
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (e.defaultPrevented || !(t instanceof Element)) return;
+    if (t.closest('.js-start-attempt')) { window.__attempts++; return; }
+    const a = t.closest('a[href]');
+    if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const href = a.getAttribute('href');
+    if (href === '#') { e.preventDefault(); window.__signedOut = true; return; }
+    if (!href.startsWith('/ultra/') || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+    e.preventDefault();
+    if (href === location.pathname + location.search) return; // same url: ignored, as Angular's router does
+    history.pushState(null, '', location.origin + href); // not a bare path: the <base> is on another origin
+    render();
+  });
+  window.addEventListener('popstate', render);
+  render();
+})();
+</script>
+</body></html>

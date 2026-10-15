@@ -72,10 +72,9 @@ const GZ_SPEC = {
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
     notes: [false, 'bool'], widgets: [false, 'bool'], pet: [false, 'bool'],
-    // place: reopen course content at its saved folders and scroll.
-    place: [true, 'bool'],
-    // coursemenu: the button on each course card that opens a popover for its color, tint and look.
-    coursemenu: [true, 'bool'],
+    // place: reopen course content at its saved folders and scroll. coursemenu: each course card's button for its color,
+    // tint and look. tabs: Ultra's course tabs (lib/coursetabs.js).
+    place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'],
     // docPages: previews in a dark palette, plain, dimmed or inverted (the floating button too); toggles: the floating
     // document buttons. Canvas's document viewer: docTheme its palette, docInk the pen.
     docPages: ['plain', ['plain', 'dim', 'dark']], toggles: [true, 'bool'], docTheme: [true, 'bool'], docInk: [false, 'bool'],

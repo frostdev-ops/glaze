@@ -54,7 +54,7 @@
   // Canvas wears canvas.css, not theme.css and extras.css (Ultra's markup). motion.css holds the motion knobs any
   // sheet's animations read. features/apps.css: Glaze's own apps (notes, widgets) on Ultra and Canvas, not Moodle.
   const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css']];
-  // What only one site does: its part puts its own over these ("the site's own part", below). They're Moodle's: nothing.
+  // What only one site does: its part puts its own over these (the site's part, below). Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, still: no, stop: no, renderProgress: no,
     renderNew: no, renderCalc: no, openNew: no, paintCourses: no, tintOf: no, courseColor: no, paintNav: no, syncNav: no, nickOf: () => '', syncNames: no,
@@ -107,7 +107,7 @@
     }
     return colors;
   };
-  // A field's own text is its value, not a text node; on Canvas an InstUI field in a modal (a portal, outside #application) keeps Canvas's dark ink.
+  // A field's text is its value, not a text node; on Canvas an InstUI field in a modal (a portal, outside #application) keeps its dark ink.
   const FIELD = /^(input|textarea|select)$/i;
   const SWEEP_TAGS = ['data-gz-light', 'data-gz-dark', 'data-gz-fixed-bottom', 'data-gz-vh', 'data-gz-brand-bg', 'data-gz-brand-fg', 'data-gz-lift'];
   const sweepEls = (els) => {
@@ -721,7 +721,7 @@
     }
     pill.dataset.cid = cid;
   };
-  // Ultra's pills (X.openNew); registered here, on every site as before, so they still come before the other listeners.
+  // Ultra's pills (X.openNew), registered here on every site so they still come before the other listeners.
   for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, (e) => X.openNew(e), true);
 
   // ---- new content (Extras) -------------------------------------------------------------------
@@ -999,7 +999,7 @@
     });
   } catch { /* extension reloaded under the tab */ }
   // Each course's color on the page's own elements of it is the site part's: Ultra's slots, Canvas's breadcrumb and
-  // course tabs (X.paintCourses).
+  // tabs (X.paintCourses).
   const varText = (v) => Object.entries(v).map(([k, x]) => `${k}:${x}`).join(';');
   // The course tinting the page now, as { key, color } (Canvas, Moodle: the course list's color), Ultra's as { key, slot,
   // vars } (X.tintOf), or null.
@@ -1366,8 +1366,8 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
   if (!partIn) takePart();
 
-  // The helpers a file loaded by need() may use (features/*.js): this frame's, read through one name. The part's are
-  // asked of it when called, so a part that comes late still answers.
+  // The helpers a file loaded by need() may use (features/*.js): this frame's, through one name. The part's are asked
+  // of it when called, so a part that comes late still answers.
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer,
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf,
@@ -1376,7 +1376,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
     canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked,
-    ...Object.fromEntries(['canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
+    ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.

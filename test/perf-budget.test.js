@@ -135,6 +135,8 @@ const STYLE_READS = [
   ['content-ultra.js', 'getComputedStyle(p)', 1], // a course slot's probe
   ['features/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode
   ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
+  ['features/coursetabs.js', 'getComputedStyle(p)', 1], // the scroller above the course tabs, once a tab switch lands
+  ['features/coursetabs.js', 'getComputedStyle(list)', 1], // the tab strip's direction, once per arrow key
   ['features/insights.js', 'getComputedStyle(box)', 1], // Insights' dialog, once per saved picture, for its colors
   ['content.js', 'getComputedStyle(document.documentElement)', 1], // the palette's ink, once per highlighted element
   // One element, on its first hover or focus; one element under the pointer, to see if its text is cut short.

@@ -21,7 +21,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
     notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
   // Ultra's: its own, and the planning switches, which work on both sites.
-  const ULTRA_EXTRAS = { ...EXTRAS, pet: 'Pet habitat', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
+  const ULTRA_EXTRAS = { ...EXTRAS, pet: 'Pet habitat', tabs: 'Course tabs', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
