@@ -59,7 +59,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
   };
   const sync = () => {
     tellDocs();
-    const on = window.top === window && ctx.on() && ctx.settings().enhance.toggles;
+    const on = ctx.solo && ctx.on() && ctx.settings().enhance.toggles;
     const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
     if (focusAt && (focusAt !== doc || focusPath !== location.pathname)) setFocus(false);
     for (const f of document.querySelectorAll(PREVIEWS)) {
