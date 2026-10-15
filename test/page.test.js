@@ -307,6 +307,11 @@ test('reading time and progress for focus mode', () => {
   assert.equal(P.readShare(0, 800, 800), 1); // fits on screen: nothing left to scroll
 });
 
+test('Canvas navigation keys stand down on native keyboard and editor routes', () => {
+  for (const p of ['/', '/courses', '/calendar', '/conversations', '/grades', '/courses/25', '/courses/25/pages/welcome', '/courses/25/assignments/169']) assert.equal(P.canvasKeys(p), true, p);
+  for (const p of ['/courses/25/discussion_topics/3', '/courses/25/files', '/courses/25/grades', '/courses/25/gradebook', '/courses/25/quizzes/8/take', '/courses/25/pages/new', '/courses/25/pages/welcome/edit', '/courses/25/assignments/new', '/accounts/1', '/unknown']) assert.equal(P.canvasKeys(p), false, p);
+});
+
 test('folder completion in every language Ultra writes it', () => {
   // Ultra's own templates (its locale bundles), each in its language's order.
   const lines = ['3 of 7 completed', '3 de 7 completados', '3 éléments terminés sur 7', '3 von 7 abgeschlossen', '3 de 7 concluídos',

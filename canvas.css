@@ -20,6 +20,62 @@
    The sweep only runs on a dark palette. On a light one Canvas's white is already the surface, so every frame
    and fill that should be the ground, a card or a band is set explicitly, not left to the sweep. */
 
+/* Declutter only named navigation/decorative surfaces, never account alerts or instructor-authored content.
+   Canvas has no standard faculty block, course Calendar/Messages/Groups/Achievements tabs; those switches
+   have no safe equivalent. Discussion and Grades map to Canvas's own course links. */
+html[data-gz-hide-help] #global_nav_help_link,
+html[data-gz-hide-tab-announcements] #section-tabs li:has(> a.announcements),
+html[data-gz-hide-tab-engagement] #section-tabs li:has(> a.discussions),
+html[data-gz-hide-tab-grades] #section-tabs li:has(> a.grades) { display: none !important; }
+/* Dashboard course cover art is decorative; keep its title, color and menu. */
+html[data-gz-hide-banner] .ic-DashboardCard__header_image { background-image: none !important; }
+
+/* Canvas document tools stay in the reading flow, including inside its file preview dialog. */
+#gz-doc-tools {
+  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: flex-end;
+  gap: 0.5rem; min-height: 3.25rem; padding: 0.375rem 0; box-sizing: border-box;
+  color: var(--gz-ink); background: var(--gz-panel); font-family: var(--gz-font);
+}
+#gz-doc-tools button {
+  display: grid; place-items: center; width: 2.5rem; height: 2.5rem; padding: 0; cursor: pointer;
+  color: var(--gz-ink-muted); background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: 999px;
+}
+#gz-doc-tools button:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
+#gz-doc-tools button[aria-pressed="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); }
+#gz-doc-tools [hidden] { display: none; }
+#gz-doc-tools svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gz-doc-time { font-size: 11px; color: var(--gz-ink-muted); }
+html[data-gz-dark-theme][data-gz-enhance-darkDocs] :is(#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe) { filter: invert(0.9) hue-rotate(180deg); }
+.ef-file-preview-stretch:has(> #gz-doc-tools) { display: flex; flex-direction: column; }
+.ef-file-preview-stretch > #gz-doc-tools { flex-shrink: 0; }
+.ef-file-preview-stretch:has(> #gz-doc-tools) > iframe { flex: 1; min-height: 0; }
+/* Hide only navigation chrome; retain breadcrumbs, page actions and Previous/Next. The pressed Focus
+   button remains in the sticky reading toolbar, keyboard reachable, and Escape restores navigation. */
+html[data-gz-focus] :is(#header, #left-side, #right-side-wrapper, #mobile-header) { display: none !important; }
+html[data-gz-focus] :is(#wrapper, #main, #content-wrapper) { margin-inline: 0 !important; }
+html[data-gz-focus] #not_right_side { width: 100% !important; padding-right: 0 !important; }
+html[data-gz-focus] #content { max-width: 54rem; margin-inline: auto; }
+#gz-read { position: fixed; inset: 0 0 auto; height: 3px; z-index: 1000; pointer-events: none; background: var(--gz-accent); transform: scaleX(var(--gz-read, 0)); transform-origin: left; }
+
+/* A normal-flow footer reserves its own height, even on pages with internal scrolling. */
+#gz-footer {
+  position: relative; z-index: 1; display: flex; justify-content: center; align-items: center;
+  min-height: 2rem; box-sizing: border-box; padding: 0.5rem 1rem; background: var(--gz-surface-2);
+  border-top: 1px solid var(--gz-line); font: 500 11px/1 ui-sans-serif, system-ui, sans-serif;
+}
+#gz-footer a { color: var(--gz-ink-faint); text-decoration: none; }
+#gz-footer a:hover { color: var(--gz-accent); }
+
+/* Canvas owns ?, so Glaze's optional list uses g then ? on audited pages. */
+#gz-keys { position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center; background: color-mix(in srgb, var(--gz-surface-2) 75%, transparent); }
+#gz-keys .gz-keys-panel { width: min(360px, calc(100vw - 32px)); box-sizing: border-box; padding: 1.25rem; color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
+#gz-keys h2 { margin: 0 0 0.6rem; font-size: 15px; }
+#gz-keys dl { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; }
+#gz-keys dt { display: flex; gap: 0.25rem; }
+#gz-keys dd { margin: 0; }
+#gz-keys kbd { padding: 0.1rem 0.4rem; font-size: 12px; background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 4px; }
+#gz-keys button { padding: 0.4rem 0.75rem; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); cursor: pointer; }
+
 /* Bundled faces, as in theme.css (which Canvas doesn't load): the fonts Inter and Atkinson Hyperlegible, and the
    Clear look's. Relative URLs resolve against this sheet's own chrome-extension:// URL; fonts/ is web-accessible. */
 @font-face { font-family: "Glaze Inter"; src: url("fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }

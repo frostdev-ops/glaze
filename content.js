@@ -1443,14 +1443,17 @@
   // on screen (dark palettes only), focus mode on a course document. Dark documents invert the
   // preview's frame (extras.css), which works whatever its origin; where a frame is same-origin, its
   // images and videos are turned back.
-  const PREVIEWS = '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe';
+  const PREVIEWS = ultra ? '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe' : '#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe';
+  const DOC = ultra ? '#site-wrap .document-content-root' : '#wiki_page_show .show-content, #assignment_show .description';
   const UNFLIP = 'img, video, picture, canvas { filter: invert(1) hue-rotate(180deg); }';
   const framesShown = new Set();
   const framesSeen = new WeakSet();
   let docTools = null;
   let focusAt = null; // the document focus mode is on for
+  let focusPath = '';
   let readBar = null;
   const unflip = (f) => {
+    if (!ultra) return; // Canvas viewers may contain annotations: invert the frame, never reach inside.
     try {
       const d = f.contentDocument;
       const old = d?.getElementById('gz-unflip');
@@ -1482,14 +1485,18 @@
   };
   const onRead = () => {
     if (!readBar) return;
-    const sc = focusAt.parentElement; // Ultra's scroller around the document
+    let sc = ultra ? focusAt.parentElement : document.scrollingElement;
+    if (!ultra) for (let p = focusAt.parentElement; p; p = p.parentElement) {
+      if (/auto|scroll/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) { sc = p; break; }
+    }
     // On <html>, outside the observed body: a style write on the bar would wake the sweep every scroll.
     setVar('--gz-read', GZ_PAGE.readShare(sc.scrollTop, sc.scrollHeight, sc.clientHeight));
   };
   const setFocus = (on) => {
-    const doc = on && document.querySelector('#site-wrap .document-content-root');
+    const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
     if ((doc || null) === focusAt) return;
     focusAt = doc || null;
+    focusPath = focusAt ? location.pathname : '';
     html.toggleAttribute('data-gz-focus', !!focusAt);
     readBar?.remove();
     readBar = null;
@@ -1501,6 +1508,7 @@
       onRead();
     }
     syncDocTools();
+    if (!ultra) docTools?.querySelector('[data-gz="focus"]')?.focus({ preventScroll: true });
   };
   const setDark = (on) => {
     settings = { ...settings, enhance: { ...settings.enhance, darkDocs: on } };
@@ -1509,15 +1517,17 @@
     try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
-    const on = ultra && window.top === window && observer && settings.enhance.toggles;
-    const doc = on && document.querySelector('#site-wrap .document-content-root');
-    if (focusAt && focusAt !== doc) setFocus(false);
+    const on = window.top === window && observer && settings.enhance.toggles;
+    const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
+    if (focusAt && (focusAt !== doc || focusPath !== location.pathname)) setFocus(false);
+    if (!ultra && keysBox && keysBox.dataset.path !== location.pathname) closeKeys();
     for (const f of document.querySelectorAll(PREVIEWS)) {
       if (!framesSeen.has(f)) { framesSeen.add(f); frameIO.observe(f); f.addEventListener('load', () => unflip(f)); }
       unflip(f);
     }
     for (const f of framesShown) if (!f.isConnected) { framesShown.delete(f); frameIO.unobserve(f); }
-    const dark = on && darkTheme && framesShown.size > 0;
+    const visible = [...framesShown].find((f) => f.isConnected && f.getClientRects().length);
+    const dark = on && darkTheme && !!visible;
     if (!doc && !dark) {
       docTools?.remove();
       docTools = null;
@@ -1534,8 +1544,13 @@
       docTools.append(time, docButton('dark', t('Dark documents'), () => setDark(!settings.enhance.darkDocs)), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
       document.body.append(docTools);
     }
+    if (!ultra) {
+      // In the reading flow (including a modal's flow), so neither content nor Canvas controls sit under it.
+      const before = doc || visible?.closest('#doc_preview, .ef-file-preview-stretch, .file_preview') || visible;
+      if (before && docTools.nextElementSibling !== before) before.before(docTools);
+    }
     const [time, darkB, focusB] = docTools.children;
-    const mins = focusAt && GZ_PAGE.readMinutes(focusAt.querySelector('.bbml-editor')?.textContent);
+    const mins = focusAt && GZ_PAGE.readMinutes(ultra ? focusAt.querySelector('.bbml-editor')?.textContent : focusAt.textContent);
     time.hidden = !mins;
     // Only on change: a text write is itself a mutation the observer would hand back.
     const read = mins && t('{n} min read', { n: mins });
@@ -1554,7 +1569,7 @@
   // Esc leaves focus mode, and Ultra doesn't also act on it. An open menu or dialog gets its Esc as
   // usual. Focus inside a preview's frame keeps the key there; the button still works.
   addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !focusAt || (e.target instanceof Element && e.target.closest('[role="menu"], [role="dialog"], [role="listbox"]'))) return;
+    if (e.key !== 'Escape' || !focusAt || (!ultra && typing(e.target)) || (e.target instanceof Element && e.target.closest('[role="menu"], [role="dialog"], [role="listbox"]'))) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     setFocus(false);
@@ -1563,13 +1578,15 @@
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them. Never while typing, never with
   // a modifier, top frame only.
-  const GO = { c: ['/ultra/course', 'Courses'], a: ['/ultra/calendar', 'Calendar'], g: ['/ultra/grades', 'Grades'], m: ['/ultra/messages', 'Messages'], s: ['/ultra/stream', 'Activity stream'] };
+  const GO = ultra ? { c: ['/ultra/course', 'Courses'], a: ['/ultra/calendar', 'Calendar'], g: ['/ultra/grades', 'Grades'], m: ['/ultra/messages', 'Messages'], s: ['/ultra/stream', 'Activity stream'] } : { d: ['/', 'Dashboard'], c: ['/courses', 'Courses'], a: ['/calendar', 'Calendar'], g: ['/grades', 'Grades'], m: ['/conversations', 'Inbox'] };
   let gAt = 0;
   let keysBox = null;
-  const closeKeys = () => { keysBox?.remove(); keysBox = null; };
+  let keysBack = null;
+  const closeKeys = () => { keysBox?.remove(); keysBox = null; if (!ultra && keysBack?.isConnected) keysBack.focus({ preventScroll: true }); keysBack = null; };
   const openKeys = () => {
     keysBox = document.createElement('div');
     keysBox.id = 'gz-keys';
+    keysBox.dataset.path = location.pathname;
     keysBox.setAttribute('role', 'dialog');
     keysBox.setAttribute('aria-label', t('Keyboard shortcuts'));
     const h = document.createElement('h2');
@@ -1583,21 +1600,36 @@
       dl.append(dt, dd);
     };
     for (const [k, [, label]] of Object.entries(GO)) row(['g', k], t(label));
-    row(['/'], t('Search'));
+    if (ultra) row(['/'], t('Search'));
     if (settings.enhance.palette) row([/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl', 'K'], t('Go to anything'));
-    row(['?'], t('Show or hide this list'));
+    row(ultra ? ['?'] : ['g', '?'], t('Show or hide this list'));
     const panel = document.createElement('div');
     panel.className = 'gz-keys-panel';
     panel.append(h, dl);
+    if (!ultra) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = t('Dismiss'); b.addEventListener('click', closeKeys); panel.append(b);
+      keysBox.setAttribute('aria-modal', 'true');
+      keysBox.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); b.focus(); } });
+      keysBack = document.activeElement;
+    }
     keysBox.append(panel);
     keysBox.addEventListener('click', (e) => { if (e.target === keysBox) closeKeys(); });
     document.body.append(keysBox);
+    if (!ultra) keysBox.querySelector('button').focus();
   };
   const typing = (el) => el instanceof Element && (el.isContentEditable || !!el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
-  if (ultra && window.top === window) {
+  if (window.top === window) {
     document.addEventListener('keydown', (e) => {
-      if (!settings.enhance.keys || !observer || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
+      if (!ultra && e.key === 'Escape' && keysBox && !typing(e.target)) { e.preventDefault(); closeKeys(); return; }
+      if (!ultra && e.key === 'Shift') return; // g then Shift+? must keep its prefix.
+      if (!settings.enhance.keys || !observer || e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || (!ultra && (e.defaultPrevented || e.repeat || !GZ_PAGE.canvasKeys(location.pathname) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')))) { gAt = 0; return; }
       if (e.key === 'Escape' && keysBox) { closeKeys(); return; }
+      if (!ultra && Date.now() - gAt < 1200 && e.key === '?') {
+        e.preventDefault(); e.stopImmediatePropagation(); gAt = 0;
+        if (keysBox) closeKeys(); else openKeys();
+        return;
+      }
       if (Date.now() - gAt < 1200 && GO[e.key]) {
         e.preventDefault();
         gAt = 0;
@@ -1605,6 +1637,7 @@
         return;
       }
       gAt = e.key === 'g' ? Date.now() : 0;
+      if (!ultra) return; // Canvas owns both / and its global ? help dialog.
       if (e.key === '/') {
         // By Ultra's ids (courses-overview-filter-search, search-button…), which no language changes.
         const target = [...document.querySelectorAll('input[type="search"], :is(input, button)[id*="search" i]')].find((el) => el.offsetWidth > 0);
@@ -1844,7 +1877,7 @@
   // A full-width bar, top frame only. theme.css shrinks the app by --gz-footer-h so the bar sits
   // below everything rather than over it.
   const syncFooter = () => {
-    const want = ultra && links.length && settings.footer && window.top === window && document.body;
+    const want = links.length && settings.footer && window.top === window && document.body;
     const have = document.getElementById('gz-footer');
     if (want && !have) {
       const f = document.createElement('footer');
@@ -2483,6 +2516,7 @@
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
+    if (!s.enhance.keys) { gAt = 0; closeKeys(); }
     syncFooter();
     // The light/dark tags only apply to a dark theme: re-sweep when that flips.
     if (dark !== darkTheme) {
