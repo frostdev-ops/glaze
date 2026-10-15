@@ -1244,7 +1244,8 @@
           // Restricted and upgraded React grade pages have no server-rendered table: fail closed.
           return doc.querySelector('#grades_summary') ? doc.querySelectorAll('#grades_summary .unread_dot.grade_dot').length : null;
         });
-    p.then((value) => saveCanvasNews(key, { [kind]: { at: Date.now(), value } }), () => saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } })).finally(() => {
+    const at = kind === 'items' ? canvasModuleLists.get(cid).at : null;
+    p.then((value) => saveCanvasNews(key, { [kind]: { at: at ?? Date.now(), value } }), () => saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } })).finally(() => {
       canvasNewsPending.delete(pending);
       if (observer && settings.enhance[kind === 'items' ? 'newcontent' : 'newgrades']) renderNew();
     });
