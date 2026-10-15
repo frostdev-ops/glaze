@@ -274,6 +274,11 @@ All notable changes to Glaze are documented here. The format follows
 - **Canvas:** quiz preview notices use the palette.
 - **Canvas, dark palettes:** an instructor's text in a dark colour (navy, dark green, deep red) is lifted to a
   light shade of the same colour.
+- **Blackboard, folder previews and Download all:** Glaze no longer receives or keeps the launch credentials (`key`
+  and `secret`) Blackboard includes for some course tool links in its content answers. Both ask only for the fields
+  they use, and folder previews keep only each item's title, state and due date. They were never stored, logged or
+  sent, but folder previews held them in memory for the page's life. Download all now reads a File item's file
+  through Blackboard's public content API, and whether an item is a document from the course's public content list.
 
 ## [2.2.0] — 2026-10-15
 

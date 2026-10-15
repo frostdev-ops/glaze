@@ -205,9 +205,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
   calendar entries (six weeks back, ten ahead), as the calendar itself does, to tell which course an entry
   belongs to and paint it in that course's colour. The answer is kept in memory only.
 - **Folder previews** (an Extra, on by default; switch it off under Extras). Hovering a folder asks your own Blackboard site for the
-  folder's contents, using the same internal address Blackboard's own page uses. The request goes to the
-  site you are on, with your existing session, and the answer is kept in memory for a minute. Nothing is
-  sent anywhere else.
+  folder's contents, using the same internal address Blackboard's own page uses, for each item's title,
+  state and due date only. The request goes to the site you are on, with your existing session, and those
+  three are kept in memory for a minute. Nothing is sent anywhere else. Blackboard can include a course
+  tool's launch credentials in that answer; Glaze asks for them to be left out and never keeps them.
 - **Due-date status** (the "Due-date status and percentages" Extra, on by default, and due-date urgency).
   To show beside a due date whether you've submitted the work or had it graded, Glaze asks your own
   Blackboard site's gradebook for your grades in the course you're viewing, using the same internal
@@ -370,9 +371,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
   most once a minute per course, to the site you are on, with your existing session. The answer is kept
   in memory only. Nothing is stored or sent anywhere else.
 - **Download all** (an Extra, on by default). When you click "Download all" on a folder, Glaze asks your
-  own Blackboard site for the folder's contents, the same way folder previews do, then fetches the files in
-  items you've already opened from that site, which hands them over from Blackboard's own file storage, as
-  when you open them yourself. The zip is made in your browser and saved to your device. Nothing is sent
+  own Blackboard site for the folder's contents (the same way folder previews do, leaving out tool
+  credentials), and for a file item, its file through Blackboard's public content address. It then fetches the
+  files in items you've already opened from that site, which hands them over from Blackboard's own file
+  storage, as when you open them yourself. The zip is made in your browser and saved to your device. Nothing is sent
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.

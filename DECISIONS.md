@@ -446,3 +446,10 @@ Canvas's experimental `#instui-sidenav` layout is not covered by W8; revisit the
 | The sanitizer bounds its work, not only what it keeps: no frame is tracked past 48 levels (deeper markup keeps its text), at most 300,000 tags and 40,000 nodes | Bounding only the output | Nested tags past the depth limit still cost a scan each, so 16,000 nested divs (80 KB) took 241 ms for a 529-byte result; now 5 ms (Codex W19a review). |
 | Canvas links are picked from the course's files, pages and modules (read-only GETs, paged on this site only, redirects refused, aborted when the picker or the view closes) and stored as link and title | Copying the file into the note | The file stays Canvas's; the note keeps working as the course changes. |
 | Recordings, transcription and smart notes are left out, with nothing built for them | Disabled buttons | Owner decisions 6–8 (S2) and W18 are pending; a greyed-out feature would nag. |
+
+## Blackboard Ultra data layer (B1, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Ultra's private content API is asked with a top-level `fields` list that leaves out `contentDetail` (folder previews: id, title, state, due date; Download all: id, title, handler, state, body), and previews keep only those | `@view=Summary`; nested `fields` such as `contentDetail.resource/x-bb-folder.isBbPage`; dropping the fields after the answer arrives | An LTI link with its own credentials carries the tool's `secret` and `key` in `contentDetail`. B0 found every other form returns them, a nested projection included. Projecting after the fact would still hold them while the answer is read. |
+| Download all reads a File item's file from the public API's attachments, and whether an item is an Ultra document from the course's public content list (`contentHandler.isBbPage`), asking the public API for that one item when the list doesn't have it | A narrower `contentDetail` projection naming only the file handler | B0 saw that kind of projection drop fields it named; any `contentDetail` request is one Ultra change away from carrying the credentials again. |

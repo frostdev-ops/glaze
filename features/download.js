@@ -10,7 +10,7 @@
 var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
   const ctx = globalThis.GZ_CTX;
   const ultra = ctx.site === 'ultra';
-  const { t, locale, need, capi, canvasCourseId, courseId, toggleOf, moduleItems } = ctx;
+  const { t, locale, need, capi, canvasCourseId, courseId, courseItems, toggleOf, moduleItems } = ctx;
   const MAX_ZIP = 250 * 2 ** 20; // ponytail: the whole zip is built in memory; stream to disk if folders outgrow it
   const canvasBytes = (signal) => {
     const port = chrome.runtime.connect({ name: 'canvas-zip' });
@@ -64,30 +64,32 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     jobs.set(fid, job);
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
-    const list = (id) => fetch(`${location.origin}/learn/api/v1/courses/${cid}/contents/${id}/children?limit=200`, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: ctl.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status)))).then((j) => j.results || []);
+    // Only the fields used: never an item's contentDetail, where an LTI link keeps its tool's secret and key.
+    const get = (path) => fetch(`${location.origin}/learn/api/${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: ctl.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
+    const list = (id) => get(`v1/courses/${cid}/contents/${id}/children?limit=200&fields=${GZ_ULTRA.FILES_FIELDS}`).then((j) => j.results || []);
     const found = [];
-    const seen = new Set();
     let skipped = 0;
     let unavailable = 0;
-    // A folder or module is a directory; an Ultra document is a folder too (isBbPage), whose blocks hold its files.
-    // ponytail: first 200 children of each folder.
-    const walk = async (id, dir) => {
-      for (const c of await list(id)) {
-        const page = c.contentDetail?.[c.contentHandler]?.isBbPage;
-        if (/folder|lesson/.test(c.contentHandler) && !page) { await walk(c.id, `${dir}${GZ_ZIP.safeName(c.title)}/`); continue; }
-        const fs = (page ? (await list(c.id)).flatMap((k) => GZ_PAGE.files(k, location.origin)) : GZ_PAGE.files(c, location.origin)).filter((f) => !seen.has(f.url));
-        if (!fs.length) continue;
-        if (c.state !== 'Started' && c.state !== 'Completed') { skipped += 1; continue; }
-        for (const f of fs) { seen.add(f.url); found.push({ ...f, dir }); }
-      }
+    // Whether an item is an Ultra document, from the course's public content list (its first 200 items), else asked.
+    const pages = ultra ? courseItems(cid).p.then((l) => new Map(l.map((i) => [i.id, !!i.contentHandler?.isBbPage]))) : null;
+    const isPage = async (c) => {
+      const m = await pages;
+      if (m.has(c.id)) return m.get(c.id);
+      return /folder|document/.test(c.contentHandler) && !!(await get(`public/v1/courses/${cid}/contents/${c.id}?fields=id,contentHandler.isBbPage`)).contentHandler?.isBbPage;
     };
+    const attachments = (id) => get(`public/v1/courses/${cid}/contents/${id}/attachments?fields=id,fileName`)
+      .then((j) => GZ_ULTRA.attachments(location.origin, cid, id, j.results), (e) => { if (ctl.signal.aborted) throw e; return null; });
     const mb = (n) => new Intl.NumberFormat(GZ_I18N.locale(locale()), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(n / 2 ** 20);
     const tooBig = (label) => Object.assign(new Error(label), { said: true });
     try {
       await need('lib/zip.js', () => globalThis.GZ_ZIP);
-      if (ultra) await walk(fid, '');
-      else {
+      if (ultra) {
+        await need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+        const r = await GZ_ULTRA.files({ root: fid, list, isPage, attachments, origin: location.origin, safeName: GZ_ZIP.safeName });
+        found.push(...r.found);
+        ({ skipped, failed: unavailable } = r);
+      } else {
         const items = await moduleItems(cid, fid, true); // Refresh requirements at the click; a preview can be a minute old.
         skipped = GZ_ZIP.canvasUnopened(items).size;
         for (const id of GZ_ZIP.canvasFiles(items)) {
