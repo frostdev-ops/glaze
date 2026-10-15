@@ -30,7 +30,7 @@ function showGuide(update) {
   document.body.classList.add('updated');
   document.querySelector('.guide h1').textContent = `Glaze is updated to ${update.to}`;
   document.querySelector('.guide header .note').textContent =
-    `Updated from ${update.from}. Reload your Blackboard tabs to get the new version.`;
+    `Updated from ${update.from}. Reload your Blackboard and Canvas tabs to get the new version.`;
 }
 
 function useSettingsName() {

@@ -57,7 +57,7 @@ the frosted-glass blur needs Safari 18.
    (your own `~/Applications` if you aren't an administrator) and reopens from there. Dragging it into
    **Applications** works too. (A `.zip` of the same app is there too.)
 2. Glaze opens Safari's Extensions settings and shows an illustrated guide: tick Glaze, then allow it
-   on your Blackboard site. The guide ticks off the first step as soon as Safari turns Glaze on.
+   on your Blackboard or Canvas site. The guide ticks off the first step as soon as Safari turns Glaze on.
 
 The downloaded Mac app checks `https://frostdev.io/projects/glaze/appcast.xml` about once a day
 while Glaze is in use and downloads updates from GitHub. Sparkle system profiling is disabled.
