@@ -92,6 +92,7 @@ with a one-minute backoff after a failed read.
 The bundled logo, sizes and Dashboard naming apply on the initial path; custom local pixels use that logo until ready. Optional order/hiding, links and widgets settle after
 their on-demand module arrives. A collapsed rail expands over the page on hover (optional), keyboard focus or its touch
 control; leaving it or tapping outside closes that temporary overlay without changing the saved collapsed preference.
+The native fixed drawer keeps main content at the top, including with custom nav backgrounds; the expand control also centers in right-to-left layouts.
 Narrow modal drawers keep Ultra's native width.
 
 ## Install
