@@ -124,3 +124,21 @@ test('what-if scores: kept while their item waits for a grade, for the last 20 c
   all = R.storeScores(all, '_5_1', new Map());
   assert.ok(!('_5_1' in all), 'cleared: nothing stored for the course');
 });
+
+test('Canvas new items: only available module content, with stable string ids', () => {
+  const modules = [
+    { items: [{ id: 1, type: 'Page' }, { id: 2, type: 'SubHeader' }, { id: 3, type: 'File', published: false }] },
+    { state: 'locked', items: [{ id: 4, type: 'Page' }] },
+    { published: false, items: [{ id: 5, type: 'Assignment' }] },
+  ];
+  const items = R.canvasItems(modules);
+  assert.deepEqual(items, [{ id: '1' }]);
+  const first = R.newItems(items);
+  assert.deepEqual(first.seen, ['1']);
+  assert.equal(first.ids.size, 0);
+  modules[1].state = 'unlocked';
+  const next = R.newItems(R.canvasItems(modules), first.seen);
+  assert.deepEqual([...next.ids], ['4'], 'newly accessible content counts as new');
+  assert.equal(R.canvasItems([...modules, { items_count: 200 }]), null, 'oversized modules cannot seed a false empty baseline');
+  assert.equal(R.canvasItems(null), null, 'failure preserves the visit baseline');
+});
