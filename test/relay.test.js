@@ -9,8 +9,9 @@ const http = require('node:http');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 const G = require('../lib/sharing.js');
-const { relay, LIMIT, RATE, sigv4, s3Store, diskStore } = require('../server/relay.js');
+const { relay, backup, LIMIT, RATE, sigv4, s3Store, diskStore } = require('../server/relay.js');
 
 const memory = () => { const m = new Map(); return { m, put: async (k, b) => { m.set(k, Buffer.from(b)); }, get: async (k) => m.get(k) || null, del: async (k) => { m.delete(k); } }; };
 const up = async (opts = {}, port = 0) => {
@@ -359,12 +360,12 @@ test('sync has a budget: a relay that never finishes, keeps changing its story, 
 
 test('a relay restored from an older backup heals, even from a member who only read the state after a trim', async (t) => {
   const dir = tmp(t);
-  const db = path.join(dir, 'share.db'), backup = path.join(dir, 'backup.db');
+  const db = path.join(dir, 'share.db'), copy = path.join(dir, 'backup.db');
   let r = await up({ db });
   const a = make(r);
   a.local = { n1: { title: 'Before the backup', html: '' } };
   await a.pump();
-  r.db.exec(`VACUUM INTO '${backup}'`);
+  await backup(db, copy); // while the relay serves, as the owner's nightly job does
   a.local.n2 = { title: 'After the backup', html: '<p>lost by the server</p>' };
   await a.pump();
   assert.equal(await a.s.compact(true), true);
@@ -376,10 +377,13 @@ test('a relay restored from an older backup heals, even from a member who only r
   await d.pump();
   const port = r.port;
   await r.close();
-  fs.copyFileSync(backup, db);
+  fs.copyFileSync(copy, db);
   for (const x of ['-wal', '-shm']) fs.rmSync(db + x, { force: true });
+  // The copy carries no lease, so the restored relay starts at once rather than wait one out.
+  const t0 = Date.now();
   r = await up({ db }, port);
   t.after(() => r.close());
+  assert.ok(Date.now() - t0 < 2000, `started after ${Date.now() - t0} ms`);
   // Only d comes back (a is gone for good). A kept-alive connection to the old process may fail once.
   await d.pump().catch(() => d.pump());
   const fresh = await join(await a.s.link(false));
@@ -482,8 +486,7 @@ test('keys from Export all bring a share back on a new computer, delete rights i
 });
 
 // A store whose first put waits until the test lets it go (a slow R2 or disk write), then works or fails.
-const slow = () => {
-  const s = memory();
+const slow = (s = memory()) => {
   const put = s.put;
   let go, first = true;
   s.started = new Promise((resolve) => { s.start = resolve; });
@@ -535,15 +538,135 @@ test('a failed upload frees its room; one left by a relay that stopped mid-uploa
   assert.equal(await upload, 500);
   assert.equal(blobRows(r, a.st.sid), 0);
   await a.s.put(new Uint8Array(4000)); // the room the failed one held is back
-  // A relay that stops between counting an upload and storing it leaves a pending row (and maybe the object).
+  // A relay that dies between counting an upload and storing it leaves a pending row it owned (and maybe the object).
   const port = r.port;
-  r.db.prepare('INSERT INTO blobs (sid, id, size, at) VALUES (?, ?, ?, ?)').run(a.st.sid, 'P'.repeat(22), 100, Date.now());
+  r.db.prepare('INSERT INTO blobs (sid, id, size, at, owner) VALUES (?, ?, ?, ?, ?)').run(a.st.sid, 'P'.repeat(22), 100, Date.now(), 'a-relay-that-died');
   store.m.set(`${a.st.sid}/${'P'.repeat(22)}`, Buffer.alloc(100));
   await r.close();
   r = await up({ db, store, maxBlobBytes: 5000 }, port);
   t.after(() => r.close());
   await r.expire();
   assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [1, 1]);
+});
+
+// The relay's own command line, as the owner runs it beside a serving relay (a separate process).
+const cli = (args, env) => new Promise((resolve) => {
+  const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '..', 'server', 'relay.js'), ...args], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  p.stdout.on('data', (d) => { out += d; });
+  p.stderr.on('data', (d) => { out += d; });
+  p.on('close', (code) => resolve({ code, out: out.trim() }));
+});
+
+test('a backup taken while an upload is in flight leaves it alone, and the room adds up whatever happens next', async (t) => {
+  // The upload then: is stored; or its share is deleted before it ends, and it's stored or fails. Room for one file only.
+  for (const [then, fail] of [['stored', false], ['deleted', false], ['deleted', true]]) {
+    const dir = tmp(t);
+    const db = path.join(dir, 'share.db'), blobs = path.join(dir, 'blobs');
+    const store = slow(diskStore(blobs));
+    const r = await up({ db, store, maxBlobBytes: 5000 });
+    t.after(() => r.close());
+    const a = make(r);
+    a.local = { n1: { title: 'x', html: '' } };
+    await a.pump();
+    const bytes = new Uint8Array(4000).fill(7); // 4,124 bytes sealed
+    const upload = a.s.put(bytes).then((ref) => ref, (e) => e.status ?? e.message);
+    await store.started;
+    // The owner's nightly backup runs now, in its own process.
+    assert.equal((await cli(['--backup', path.join(dir, 'backup.db')], { DB: db, BLOBS: blobs })).code, 0);
+    assert.equal(blobRows(r, a.st.sid), 1, `${then} ${fail}: the pending upload is still on the books`);
+    if (then === 'deleted') assert.equal((await fetch(`${r.url}/s/${a.st.sid}`, { method: 'DELETE', headers: { authorization: `Bearer ${a.st.del}` } })).status, 204);
+    store.release(fail);
+    const got = await upload;
+    await r.expire();
+    if (then === 'stored') {
+      assert.equal(typeof got, 'object', `upload: ${got}`);
+      assert.deepEqual(Buffer.from(await a.s.get(got)), Buffer.from(bytes));
+      assert.equal(r.db.prepare('SELECT at FROM blobs WHERE sid = ? AND id = ?').get(a.st.sid, got.id).at, null);
+    } else {
+      assert.equal(got, 410);
+      assert.deepEqual([blobRows(r, a.st.sid), fs.existsSync(blobs) ? fs.readdirSync(blobs, { recursive: true }).length : 0], [0, 0], `${then} ${fail}`);
+      // Nothing left on the books either: the next share's file fits in the room.
+      const c = make(r);
+      await c.s.put(new Uint8Array(4000));
+    }
+    assert.deepEqual(r.db.prepare('SELECT blob FROM totals').get().blob, r.db.prepare('SELECT coalesce(sum(size), 0) AS s FROM blobs').get().s);
+    // The backup is a usable database.
+    const { DatabaseSync } = require('node:sqlite');
+    const copy = new DatabaseSync(path.join(dir, 'backup.db'), { readOnly: true });
+    assert.equal(copy.prepare('SELECT count(*) AS c FROM sessions').get().c, 1);
+    copy.close();
+  }
+});
+
+test('a share deleted by --delete in its own process frees its room for the serving relay at once', async (t) => {
+  const dir = tmp(t);
+  const db = path.join(dir, 'share.db'), blobs = path.join(dir, 'blobs');
+  const r = await up({ db, store: diskStore(blobs), maxBlobBytes: 5000 });
+  t.after(() => r.close());
+  const a = make(r), b = make(r);
+  await a.s.put(new Uint8Array(4000));
+  await assert.rejects(b.s.put(new Uint8Array(4000)), (e) => e.status === 507);
+  assert.deepEqual(await cli(['--delete', a.st.sid], { DB: db, BLOBS: blobs }), { code: 0, out: 'deleted' });
+  await b.s.put(new Uint8Array(4000)); // no restart needed
+  assert.equal(fs.existsSync(path.join(blobs, a.st.sid)), false);
+});
+
+test('one serving relay per database: a second waits out the lease and refuses; a dead one\'s uploads are reclaimed', async (t) => {
+  const dir = tmp(t);
+  const db = path.join(dir, 'share.db');
+  const store = memory();
+  const first = await up({ db, store, lease: 300 });
+  // A second relay on the same database, while the first renews its lease.
+  const second = relay({ db, store: memory(), lease: 300 });
+  const t0 = Date.now();
+  await assert.rejects(second.listen(0, '127.0.0.1'), /another relay is serving this database/);
+  assert.ok(Date.now() - t0 >= 800, `gave up after ${Date.now() - t0} ms`);
+  await second.close();
+  await first.close(); // gives the lease back: the next one starts at once
+  const third = await up({ db, store, lease: 300 });
+  await third.close();
+  // A relay that died holding the lease, with an upload pending: the next waits out its lease, then reclaims the upload.
+  const a = G.create('notes', { server: 'http://127.0.0.1:1' });
+  const d0 = new (require('node:sqlite').DatabaseSync)(db);
+  d0.prepare('INSERT INTO sessions (sid, pub, del, touched) VALUES (?, ?, ?, 0)').run(a.sid, Buffer.alloc(32), Buffer.alloc(32));
+  d0.prepare('INSERT INTO blobs (sid, id, size, at, owner) VALUES (?, ?, 100, ?, ?)').run(a.sid, 'D'.repeat(22), Date.now(), 'dead');
+  d0.prepare('INSERT OR REPLACE INTO lease (id, boot, seen) VALUES (1, ?, ?)').run('dead', Date.now());
+  d0.close();
+  store.m.set(`${a.sid}/${'D'.repeat(22)}`, Buffer.alloc(100));
+  const t1 = Date.now();
+  const fourth = await up({ db, store, lease: 300 });
+  t.after(() => fourth.close());
+  assert.ok(Date.now() - t1 >= 250, `took over after ${Date.now() - t1} ms`);
+  await fourth.expire();
+  assert.deepEqual([store.m.size, blobRows(fourth, a.sid)], [0, 0]);
+});
+
+test('--delete in its own process beside a serving relay: an upload to that share ends 410 and leaves nothing; others are untouched', async (t) => {
+  for (const same of [true, false]) {
+    const dir = tmp(t);
+    const db = path.join(dir, 'share.db'), blobs = path.join(dir, 'blobs');
+    const store = slow(diskStore(blobs));
+    const r = await up({ db, store });
+    t.after(() => r.close());
+    const doomed = make(r), other = make(r);
+    for (const d of [doomed, other]) { d.local = { n1: { title: 'x', html: '' } }; await d.pump(); }
+    const target = same ? doomed : other;
+    const upload = target.s.put(new Uint8Array(3000)).then((ref) => ref, (e) => e.status ?? e.message);
+    await store.started;
+    assert.deepEqual(await cli(['--delete', doomed.st.sid], { DB: db, BLOBS: blobs }), { code: 0, out: 'deleted' });
+    store.release();
+    const got = await upload;
+    await r.expire();
+    if (same) {
+      assert.equal(got, 410);
+      assert.deepEqual([blobRows(r, doomed.st.sid), fs.existsSync(path.join(blobs, doomed.st.sid)) && fs.readdirSync(path.join(blobs, doomed.st.sid)).length], [0, false]);
+    } else {
+      assert.equal(typeof got, 'object', `upload: ${got}`);
+      assert.equal(r.db.prepare('SELECT at FROM blobs WHERE sid = ? AND id = ?').get(other.st.sid, got.id).at, null);
+      assert.equal((await other.s.get(got)).length, 3000);
+    }
+  }
 });
 
 test('a deleted share\'s files stop counting, also after a restart, and after a store that was down recovers', async (t) => {
