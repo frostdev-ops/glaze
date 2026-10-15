@@ -44,7 +44,7 @@ const all = (el) => [el, ...el.children.flatMap(all)];
 
 // One computer: the storage every tab shares, and the background worker's queue (lib/background.js).
 const computer = () => {
-  const env = { store: { sync: {}, local: {} }, size: 1000, failSync: false, peak: 0, turn: K.queue() };
+  const env = { store: { sync: {}, local: {} }, size: 1000, failSync: false, failLocalRemove: false, peak: 0, turn: K.queue() };
   const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
   const area = (name) => ({
     get: (keys) => later(() => { const s = env.store[name]; return structuredClone(Object.fromEntries((keys === null ? Object.keys(s) : [].concat(keys)).filter((k) => k in s).map((k) => [k, s[k]]))); }),
@@ -54,7 +54,7 @@ const computer = () => {
       env.peak = Math.max(env.peak, Object.entries(env.store.local).filter(([k]) => k.startsWith('cardImg:')).reduce((n, [, v]) => n + v.length, 0));
       return true;
     }),
-    remove: (keys) => later(() => { if (name === 'sync' && env.failSync) return false; for (const k of [].concat(keys)) delete env.store[name][k]; return true; }),
+    remove: (keys) => later(() => { if (name === 'sync' && env.failSync) return false; if (name === 'local' && env.failLocalRemove) return false; for (const k of [].concat(keys)) delete env.store[name][k]; return true; }),
   });
   env.worker = (m) => env.turn(() => K.change(m, { sync: area('sync'), local: area('local') }));
   return env;
@@ -267,6 +267,17 @@ test('a reset whose styles could not be removed keeps the pictures they use, and
   assert.deepEqual(await env.worker({ reset: true }), { ok: false, error: 'write' });
   assert.ok('cardImg:aaaaaaaaaaaa' in env.store.local, 'the saved style still has its picture');
   env.failSync = false;
+  assert.deepEqual(await env.worker({ reset: true }), { ok: true });
+  assert.deepEqual([env.store.sync, pics(env.store.local)], [{}, []]);
+});
+
+test('a reset whose pictures could not be deleted says so, and a retry finishes it', async () => {
+  const env = computer();
+  env.store.sync.cards = { [A]: { k: 'image', i: 'aaaaaaaaaaaa' } };
+  env.store.local['cardImg:aaaaaaaaaaaa'] = 'data:image/webp;base64,AAAA';
+  env.failLocalRemove = true;
+  assert.deepEqual(await env.worker({ reset: true }), { ok: false, error: 'write' });
+  env.failLocalRemove = false;
   assert.deepEqual(await env.worker({ reset: true }), { ok: true });
   assert.deepEqual([env.store.sync, pics(env.store.local)], [{}, []]);
 });

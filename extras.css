@@ -143,6 +143,8 @@ html[data-gz-enhance-overall] #site-wrap [data-gz-grade]::after {
 #site-wrap [data-gz-chip="later"], #site-wrap [data-gz-chip="muted"] { --gz-chip: var(--gz-ink-muted); }
 /* A course card's overall grade, beside its status, in the same chip and bands. */
 html[data-gz-enhance-overall] #site-wrap [data-gz-grade]::after { content: attr(data-gz-grade); }
+/* Card grades only on hover: shown while the card is pointed at or holds focus. */
+html[data-gz-enhance-gradeHover] #site-wrap :is(article.course-element-card, a[class*="courseCard"]):not(:hover, :focus-within) [data-gz-grade]::after { opacity: 0; }
 html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
   content: attr(data-gz-pct);
   margin-left: 0.45em; padding-left: 0.45em; border-left: 1px solid color-mix(in srgb, currentColor 30%, transparent);

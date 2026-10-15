@@ -364,7 +364,10 @@
         <label class="check"><input type="checkbox" data-key="enhance.inline"><span>Due-date status and percentages</span>
           <span class="desc">Beside each due date in course content, where the work stands: "in 2 days · Unopened", "Submitted", "Graded · 18/20". Elsewhere, how long is left. And the percentage inside every grade.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.overall"><span>Grades on course cards</span>
-          <span class="desc">Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.</span></label>
+          <span class="desc">Each course on the Courses page shows your overall grade, in its score band's color, when your instructor shares it.</span>
+          <span class="desc">On Canvas: on the Dashboard's cards. Click the grade to open the course's grades.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.gradeHover"><span>Card grades only on hover</span>
+          <span class="desc">Grades on course cards, and the GPA, stay hidden until you point at them.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.previews"><span>Folder previews</span>
           <span class="desc">Hover a closed folder in course content to see what is inside, what is done and what is due.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.place"><span>Remember your place</span>
@@ -381,7 +384,16 @@
           <span class="desc">On Canvas: new items in Modules and a count on Dashboard cards.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.calc"><span>What-if calculator</span>
           <span class="desc">On a course's gradebook: try scores for work not graded yet, or set a target and see what you'd need. Uses the course's own weights, and says so when it can't.</span>
-          <span class="desc">On Canvas: Canvas's own what-if scores, which it keeps for you.</span></label>
+          <span class="desc">On Canvas: above a course's grades, by Canvas's own rules (weights, dropped scores, excused work, grading periods). Change real scores, leave work out, add pretend assignments. Kept on this device until the real grade arrives; Canvas never sees them.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.gpa"><span>Grade point average</span>
+          <span class="desc">On Canvas's Dashboard: your GPA for each term and across your current courses, from your current grades. Set each course's credits, level and grading scale under it.</span></label>
+        <div class="group">
+          <label class="check"><input type="checkbox" data-key="enhance.gpaPlus"><span>Plus/minus grade points</span>
+            <span class="desc">A− counts 3.7, B+ 3.3 and so on, instead of 4 for any A.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.gpaWeighted"><span>Weighted grade points</span>
+            <span class="desc">Honors courses add 0.5 and AP or IB courses 1, up to 5.0.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.gpaAfter"><span>Grade point average below the cards</span></label>
+        </div>
         <label class="check"><input type="checkbox" data-key="enhance.palette"><span>Command palette</span>
           <span class="desc">Ctrl+K (⌘K on a Mac) to jump to a course, an item in this course, a page or a Glaze setting.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.coursemenu"><span>Course menu</span>
