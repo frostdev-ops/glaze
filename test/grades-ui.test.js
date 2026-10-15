@@ -22,7 +22,8 @@ const matches = (el, sel) => sel.split(',').some((one) => {
   const own = String(el.className || '').split(/\s+/);
   if (classes && !classes.slice(1).split('.').every((c) => own.includes(c))) return false;
   if (attr) {
-    const v = attr.startsWith('data-') ? el.dataset[attr.slice(5)] : el.getAttribute(attr);
+    // An attribute, or the property a real element reflects it as (type, value).
+    const v = attr.startsWith('data-') ? el.dataset[attr.slice(5)] : el.getAttribute(attr) ?? (typeof el[attr] === 'string' ? el[attr] : null);
     if (v == null || (op && (op === '=' ? v !== value : !v.includes(value)))) return false;
   }
   return true;
@@ -990,6 +991,26 @@ test('Ultra syllabus import after moving to another course saves under that cour
   await settle(20);
   assert.match(p.store.data[`syllabus:${UO}/_900_1/_102_1`]?.prof?.name || '', /Course Two/);
   assert.equal(p.store.data[`syllabus:${UO}/_900_1/_101_1`], undefined, 'nothing under the course the page showed before');
+});
+
+test("Ultra syllabus import: a date ticked for To Do becomes the student's own task, under the Ultra account (B2's todo key)", async () => {
+  const p = sylPage();
+  p.state.settings.enhance.todo = true;
+  p.S.sync(true);
+  await settle(12);
+  byText(p.doc.getElementById('gz-syl'), 'Import a syllabus').fire('click');
+  await settle(12);
+  await pasteAndRead(p, 'Instructor: Dr. Ada\nMidterm exam: October 28, 2026');
+  const task = find(p.dlg(), (e) => /\bgz-syl-task\b/.test(e.className));
+  assert.ok(task, 'offered while Better To Do is on');
+  task.checked = true;
+  byText(p.dlg(), 'Save').fire('click');
+  await settle(20);
+  assert.doesNotMatch(p.dlg()?.textContent || '', /could not be added to To Do/);
+  const todo = JSON.stringify(p.store.data[`todo:${UO}/_900_1`] || null);
+  assert.match(todo, /Midterm exam/);
+  assert.match(todo, /2026-10-28/);
+  assert.match(todo, /syl-_101_1-/, 'the task id names the course');
 });
 
 test('Ultra syllabus import: a review left open while the page moved to another course is not saved', async () => {

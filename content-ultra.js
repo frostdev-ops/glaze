@@ -372,17 +372,13 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
-  // ---- grades (Extras) -------------------------------------------------------------------------
-  // features/grades.js, as on Canvas: the what-if calculator on a course's Grades, the GPA on the Grades page. Syllabus
-  // import on a course's outline (features/syllabus.js); Insights' button on the Courses page (features/insights.js).
-  const loadIf = (want, file, name, run) => (globalThis[name] || (I.observer && want)) && need(file, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
-  const renderCalc = () => {
-    const e = I.settings.enhance;
-    loadIf((e.calc && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname)) || (e.gpa && /^\/ultra\/grades\/?$/.test(location.pathname)), 'features/grades.js', 'GZ_GRADES_UI', (g) => g.render());
-  };
-  const sylHere = () => window.top === window && I.settings.enhance.syllabus && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname);
-  const syncSyl = () => loadIf(sylHere(), 'features/syllabus.js', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
-  const syncInsights = () => loadIf(I.settings.enhance.insights && location.pathname === '/ultra/course', 'features/insights.js', 'GZ_INSIGHTS_UI', (s) => s.sync());
+  // ---- grades (Extras): features/grades.js (what-if, GPA), syllabus.js (outline), insights.js (Courses) ----
+  const loadIf = (want, f, name, run) => (globalThis[name] || (I.observer && want)) && need(`features/${f}.js`, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
+  const onPath = (re) => re.test(location.pathname);
+  const renderCalc = () => { const e = I.settings.enhance; loadIf((e.calc && onPath(/^\/ultra\/courses\/_\d+_\d+\/grades/)) || (e.gpa && onPath(/^\/ultra\/grades\/?$/)), 'grades', 'GZ_GRADES_UI', (g) => g.render()); };
+  const sylHere = () => window.top === window && I.settings.enhance.syllabus && onPath(/^\/ultra\/courses\/_\d+_\d+\/outline/);
+  const syncSyl = () => loadIf(sylHere(), 'syllabus', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
+  const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
   // ---- code on demand ------------------------------------------------------------------------------
   // Dashboard notes and widgets (features/widgets.js): Glaze's panel on the Courses page, floating tiles anywhere. The
