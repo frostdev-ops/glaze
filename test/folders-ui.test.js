@@ -251,3 +251,9 @@ test('feedback survives its own storage event but drops late success after a lif
   e.path('/ultra/profile'); e.ui.sync(false, e.identity); release(); await settle();
   assert.equal(e.document.getElementById('gz-folder-status'), null); assert.equal(e.timers.size, 0);
 });
+test('feedback counts use singular wording for one hidden folder', async () => {
+  const e = fixture(); e.ui.sync(true, e.identity); await settle(); await e.click(eye(e.parent));
+  const toggle = e.document.getElementById('gz-folders-toggle'), status = e.document.getElementById('gz-folder-status');
+  await e.click(toggle); assert.equal(status.textContent, 'Showing 1 hidden folder.');
+  await e.click(toggle); assert.equal(status.textContent, 'Hiding 1 folder.');
+});

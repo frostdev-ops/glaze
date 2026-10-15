@@ -64,7 +64,13 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
       const focusBack = restore && document.activeElement === source;
       dismiss();
       const message = document.createElement('span');
-      message.textContent = op.show !== undefined ? t(op.show ? 'Showing {n} hidden folders.' : 'Hiding {n} folders.', { n: data.ids.length }) : t(op.hidden ? 'Folder hidden.' : 'Folder shown.');
+      const count = data.ids.length;
+      let text = op.hidden ? 'Folder hidden.' : 'Folder shown.';
+      if (op.show !== undefined) {
+        text = op.show ? 'Showing {n} hidden folders.' : 'Hiding {n} folders.';
+        if (count === 1) text = op.show ? 'Showing 1 hidden folder.' : 'Hiding 1 folder.';
+      }
+      message.textContent = t(text, { n: count });
       status.append(message);
       if (op.hidden) {
         const token = notice = { k, g, id: op.id, a }, undo = button(); undo.id = 'gz-folder-undo'; undo.textContent = t('Undo');

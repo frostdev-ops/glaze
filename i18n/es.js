@@ -1632,4 +1632,6 @@
   "Folder shown.": "Carpeta visible.",
   "Showing {n} hidden folders.": "Mostrando {n} carpetas ocultas.",
   "Hiding {n} folders.": "Ocultando {n} carpetas.",
+  "Showing 1 hidden folder.": "Mostrando 1 carpeta oculta.",
+  "Hiding 1 folder.": "Ocultando 1 carpeta.",
 };

@@ -1632,4 +1632,6 @@
   "Folder shown.": "Dossier affiché.",
   "Showing {n} hidden folders.": "Affichage de {n} dossiers masqués.",
   "Hiding {n} folders.": "Masquage de {n} dossiers.",
+  "Showing 1 hidden folder.": "Affichage de 1 dossier masqué.",
+  "Hiding 1 folder.": "Masquage de 1 dossier.",
 };

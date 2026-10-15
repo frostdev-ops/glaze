@@ -1632,4 +1632,6 @@
   "Folder shown.": "Map getoond.",
   "Showing {n} hidden folders.": "{n} verborgen mappen worden getoond.",
   "Hiding {n} folders.": "{n} mappen worden verborgen.",
+  "Showing 1 hidden folder.": "1 verborgen map wordt getoond.",
+  "Hiding 1 folder.": "1 map wordt verborgen.",
 };
