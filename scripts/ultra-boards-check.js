@@ -185,7 +185,10 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await page.mouse.move(645 + 60, 307 + 5, { steps: 2 });
     await page.mouse.up();
     let n = await rect(tile('notes'));
-    ok((n.left - 200) % 16 === 0 && n.top % 16 === 0, `a drag lands on the grid (${n.left - 200}, ${n.top})`);
+    // On the grid, or lined up with another widget (its edges, centre, or a gap beside it), whichever was within reach.
+    const lines = await page.evaluate(() => [...document.querySelectorAll('#gz-room section.gz-w:not([data-tile="notes"])')].flatMap((e) => { const r = e.getBoundingClientRect(); return [r.top, r.bottom, r.bottom + 16, r.top - 16, (r.top + r.bottom) / 2]; }));
+    const lined = (v, h) => [v, v + h, v + h / 2].some((x) => lines.some((l) => Math.abs(l - x) < 1));
+    ok((n.left - 200) % 16 === 0 && (n.top % 16 === 0 || lined(n.top, n.bottom - n.top)), `a drag lands on the grid, or lined up with another widget (${n.left - 200}, ${n.top})`);
     // The timer beside it: its top lines up with the notes' top, with a guide while it moves.
     const t0 = await rect(tile('timer')), tg = await grab('timer');
     await page.mouse.move(tg.left + 60, tg.top + 5);
