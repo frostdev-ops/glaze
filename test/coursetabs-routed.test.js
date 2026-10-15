@@ -17,6 +17,15 @@ test('routed documents and assignments are kept exactly, query and all', () => {
   assert.equal(L.target({ ...kept, cid: '_72_1' }), '/ultra/courses/_72_1/outline', 'never another course\'s page');
 });
 
+test('an assignment overview without a main counts its routed body as the content', () => {
+  const routedMain = vm.runInNewContext(part('  const routedMain = ', '  // A URL or header change') + '\nroutedMain;', {});
+  const body = { id: 'body' }, main = { id: 'main' };
+  const page = (hasMain) => ({ querySelector: (sel) => (sel.includes('main') ? (hasMain ? main : null) : sel === '.routed-page-body' ? body : null) });
+  assert.equal(routedMain(page(true)), main);
+  assert.equal(routedMain(page(false)), body, 'section.assessment-overview-modern-panel > learning-module-panel-view.routed-page-body');
+  assert.equal(routedMain(null), null);
+});
+
 test('the strip goes before/after the full routed header without moving native content', () => {
   for (const at of ['above', 'between', 'below']) {
     const strip = {}, hd = {}, page = { firstElementChild: hd };

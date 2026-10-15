@@ -67,7 +67,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const routed = () => [...document.querySelectorAll('.routed-page.bb-offcanvas-container:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)')]
     .filter((e) => shown(e) && !e.querySelector('.bb-course-navigation')).pop() || null;
   const routedHeader = (page) => page.querySelector('[class*="panelHeaderContainerRoot"], .panel-header, header') || page.querySelector('h1');
-  const routedMain = (page) => page?.querySelector('main[class*="contentGridArea"], main, [role="main"]');
+  // An assignment's overview has no main: its body (learning-module-panel-view.routed-page-body) holds the content.
+  const routedMain = (page) => page && (page.querySelector('main[class*="contentGridArea"], main, [role="main"]') || page.querySelector('.routed-page-body'));
   // A URL or header change cannot prove that Ultra replaced the outgoing content. Require a populated main and a
   // changed main/content node; otherwise the existing bounded full-load fallback keeps the old copy safe.
   const view = () => {
