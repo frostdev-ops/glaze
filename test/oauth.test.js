@@ -25,3 +25,19 @@ test('the redirect yields its code only for our state, from the query or the fra
   // An error from someone else's flow is not ours to report.
   assert.deepEqual(err(`${r}?error=access_denied&state=other`), ['state', 'state']);
 });
+
+test('the redirect check fails closed', () => {
+  const r = 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/';
+  const err = (url, state) => { try { O.code(url, state); } catch (e) { return e.error; } };
+  // No pending request (lost or never started): nothing is accepted, even a callback with no state either.
+  for (const pending of [undefined, null, '', 0, {}]) {
+    assert.equal(err(`${r}?code=c0de`, pending), 'state');
+    assert.equal(err(`${r}?code=c0de&state=`, pending), 'state');
+  }
+  // A repeated parameter is ambiguous, whatever the copies say.
+  assert.equal(err(`${r}?code=c0de&state=s1&state=s1`, 's1'), 'state');
+  assert.equal(err(`${r}?code=c0de&state=s1&state=evil`, 's1'), 'state');
+  assert.equal(err(`${r}?state=evil&state=s1&code=c0de`, 's1'), 'state');
+  assert.equal(err(`${r}?code=c0de&code=other&state=s1`, 's1'), 'state');
+  assert.equal(err(`${r}#code=c0de&state=s1&error=access_denied&error=x`, 's1'), 'state');
+});
