@@ -400,7 +400,7 @@ you import) are bundled. It makes requests in these cases:
   loads nothing from anywhere: a picture from another site, pasted into a note, becomes a link to it instead. Links in
   notes open in a new tab without telling the site where you came from. Nothing about your notes is sent anywhere.
   On Blackboard Ultra, it asks your own Ultra site who is signed in and for your course list, and **Blackboard link**
-  lists a course's content items from Blackboard's public contents API (each kept to its title, folder and link):
+  lists a course's content items you can open now from Blackboard's public contents API (each kept to its title, folder and link):
   read-only GETs that never follow a redirect and stop when you close the picker. Only the link and title you pick go
   in the note. Glaze also keeps the address of each Ultra site it has started on (storage.local `ultra`), so only those
   sites' pages may save notes.

@@ -772,7 +772,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     pick?.abort();
     el.ed.querySelector('.gz-nt-pick')?.remove();
     const ctl = (pick = new AbortController());
-    let items = [];
+    let items = [], partial = false;
     const course = make('select', {}, ...courseOpts().map(([id, name]) => make('option', { value: id, textContent: name, selected: id === (cur.course || courseHere()) })));
     const kind = make('select', {}, ...[['file', t('Files')], ['page', t('Pages')], ['module', t('Modules')]].map(([v, text]) => make('option', { value: v, textContent: text })));
     const filter = make('input', { type: 'search', placeholder: t('Filter'), autocomplete: 'off' });
@@ -794,7 +794,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
         b.append(make('span', { textContent: l.title }), l.group && make('small', { textContent: l.group }));
         return make('li', {}, b);
       }));
-      status.textContent = items.length ? t('Found: {n}', { n: GZ_I18N.num(rows.length, ctx.locale()) }) : status.textContent;
+      status.textContent = items.length ? [t('Found: {n}', { n: GZ_I18N.num(rows.length, ctx.locale()) }), partial && t("Some of this course's content couldn't be listed.")].filter(Boolean).join(' ') : status.textContent;
     };
     const load = async () => {
       const cid = course.value, k = kind.value, my = gen;
@@ -807,10 +807,13 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
           : `/courses/${cid}/modules?include[]=items&per_page=50`;
         // Ultra: the course's content items, whatever the Kind, through lib/ultra.js's reader (the public contents API, kept to
         // titles, parents and links; GET on this site, redirects refused, stopped with the picker).
-        const got = ultra ? N.ultraLinks(await (await reader({ signal: ctl.signal })).contents(cid), location.origin) : N.canvasLinks(k, await getAll(path, ctl.signal), location.origin, cid);
+        // Only what the student may open now (search's rule), and said when not all of it could be read.
+        const u = ultra && await (await reader({ signal: ctl.signal })).contents(cid);
+        const got = ultra ? N.ultraLinks(u.items, location.origin) : N.canvasLinks(k, await getAll(path, ctl.signal), location.origin, cid);
         if (ctl.signal.aborted || my !== gen || course.value !== cid || kind.value !== k) return;
         items = got;
-        status.textContent = items.length ? '' : t('Nothing here you can open.');
+        partial = ultra && !u.complete;
+        status.textContent = items.length ? '' : [t('Nothing here you can open.'), partial && t("Some of this course's content couldn't be listed.")].filter(Boolean).join(' ');
         show();
       } catch {
         if (!ctl.signal.aborted && course.value === cid && kind.value === k) status.textContent = t(ultra ? "Couldn't read that from Blackboard." : "Couldn't read that from Canvas.");

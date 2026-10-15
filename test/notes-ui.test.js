@@ -148,7 +148,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     const p = new URL(url).pathname;
     const body = p.endsWith('/users/me') ? { id: '_5_1' }
       : p.endsWith('/memberships') ? { results: [{ courseId: '_7_1', course: { id: '_7_1', name: 'Biology' } }, { courseId: '_9_1', course: { id: '_9_1', name: 'History' } }] }
-        : { results: p.includes('/_7_1/contents') ? items : [] };
+        : { results: p.includes('/_7_1/contents') ? items : [], ...(p.endsWith('/contents') && env.contentsPaging && { paging: env.contentsPaging }) };
     if (p.endsWith('/contents')) await env.contentsHold;
     return { ok: true, status: 200, text: async () => JSON.stringify(body) };
   };
@@ -585,10 +585,12 @@ test("a switch change whose read fails takes the button away and closes the view
 
 test("Ultra: Course notes at the end of a course outline's right column, the Ultra account's notes, and links from the course's content", async () => {
   const items = [
-    { id: '_1_1', title: 'Week 1', links: [{ rel: 'alternate', href: '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_1_1' }] },
-    { id: '_2_1', parentId: '_1_1', title: 'Lab sheet', links: [{ rel: 'alternate', href: `${ULTRA}/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_2_1&parentId=_1_1` }] },
-    { id: '_3_1', parentId: '_1_1', title: 'Elsewhere', links: [{ rel: 'alternate', href: 'https://evil.example/ultra/x' }] },
-    { id: '_4_1', title: 'No link' },
+    { availability: { available: 'Yes', adaptiveRelease: {} }, id: '_1_1', title: 'Week 1', links: [{ rel: 'alternate', href: '/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_1_1' }] },
+    { availability: { available: 'Yes', adaptiveRelease: {} }, id: '_2_1', parentId: '_1_1', title: 'Lab sheet', links: [{ rel: 'alternate', href: `${ULTRA}/ultra/redirect?redirectType=nautilus&courseId=_7_1&contentId=_2_1&parentId=_1_1` }] },
+    { availability: { available: 'Yes', adaptiveRelease: {} }, id: '_3_1', parentId: '_1_1', title: 'Elsewhere', links: [{ rel: 'alternate', href: 'https://evil.example/ultra/x' }] },
+    { availability: { available: 'Yes', adaptiveRelease: {} }, id: '_4_1', title: 'No link' },
+    // Codex B5 fix verification #7: not released yet, so not listed.
+    { id: '_5_1', title: 'Answer key', availability: { available: 'Yes', adaptiveRelease: { start: '2999-01-01T00:00:00Z' } }, links: [{ rel: 'alternate', href: '/ultra/redirect?x=5' }] },
   ];
   const P = page({ ultra: true, items });
   const inserted = [];
@@ -627,7 +629,8 @@ test("Ultra: Course notes at the end of a course outline's right column, the Ult
   }
   const contents = P.fetched.filter((x) => x.url.includes('/contents'));
   assert.equal(contents.length, 1);
-  assert.match(contents[0].url, /\/learn\/api\/public\/v1\/courses\/_7_1\/contents\?.*fields=id,parentId,title,availability,links$/);
+  assert.equal(new URL(contents[0].url).searchParams.get('fields'), 'id,parentId,title,availability,links');
+  assert.match(contents[0].url, /\/learn\/api\/public\/v1\/courses\/_7_1\/contents\?/);
   assert.equal(contents[0].init.signal.aborted, true, 'the picker closed when a link was picked: its signal is aborted');
   // A picker closed while its read is on its way: the read is aborted, and nothing is listed.
   let release;
@@ -640,6 +643,17 @@ test("Ultra: Course notes at the end of a course outline's right column, the Ult
   release();
   await settle();
   assert.equal(P.box().querySelector('.gz-nt-pick'), null);
+  // Codex B5 fix verification, finding 2: a next page that would leave the public list isn't asked, and the picker says
+  // the list is incomplete.
+  P.contentsHold = null;
+  P.contentsPaging = { nextPage: '/learn/api/v1/courses/_7_1/contents' };
+  const before = P.fetched.length;
+  P.fire(P.button('Blackboard link'), 'click');
+  await settle();
+  assert.deepEqual(P.fetched.slice(before).map((x) => new URL(x.url).pathname), ['/learn/api/public/v1/courses/_7_1/contents'], 'never the private contents');
+  const third = P.box().querySelector('.gz-nt-pick');
+  assert.equal(third.querySelectorAll('.gz-nt-picks button').length, 2);
+  assert.match(third.querySelector('.gz-nt-count').textContent, /Found: 2 Some of this course's content couldn't be listed\./);
   // Ultra moves to another page without loading one: the button goes, the open notes stay; Notes off closes them.
   P.run("location.pathname = '/ultra/course'");
   P.ui.sync(true);
