@@ -1867,4 +1867,11 @@
   "Viewport": "Ansichtsgröße",
   "On this device": "Auf diesem Gerät",
   "Preview could not load. Try reloading settings.": "Die Vorschau konnte nicht geladen werden. Lade die Einstellungen erneut.",
+  "Course card": "Kurskarte",
+  "+ Course cards": "+ Kurskarten",
+  "+ Course card": "+ Kurskarte",
+  "Up to {n} course cards per board.": "Bis zu {n} Kurskarten pro Pinnwand.",
+  "Ultra's search, filters and term picker stay in its course list.": "Suche, Filter und Semesterauswahl von Ultra bleiben in dessen Kursliste.",
+  "Show course cards": "Kurskarten anzeigen",
+  "Show Ultra’s course list": "Kursliste von Ultra anzeigen",
 };

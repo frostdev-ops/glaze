@@ -410,3 +410,34 @@ test("change: the worker's side reads what is stored, applies the change, and st
 test('global floats taller than the available room use the bounded scrolling stack', () => {
   assert.equal(W.floating([{ id: 'notes', x: 0, y: 0 }], { notes: { w: 288, h: 240 } }, 900, 200).stack, true);
 });
+
+test('course tiles are site-scoped, bounded and confined to Ultra boards', () => {
+  const key = (n, host = 'bb.test') => `course:https://${host}/_${n}_1`;
+  assert.deepEqual(W.course(key(1)), { origin: 'https://bb.test', id: '_1_1' });
+  for (const bad of ['course:1', 'course:https://bb.test/1', key(1) + '?x', key(1) + '#x', 'course:https://a@bb.test/_1_1', 'course:http://bb.test/_1_1', 'course:https://bb.test:443/_1_1']) assert.equal(W.course(bad), null, bad);
+  const rows = Array.from({ length: 80 }, (_, n) => ({ id: key(n), on: true, term: '<img>'.repeat(100), extra: 'gone' }));
+  const l = W.layout({ todo: true, tiles: rows, boards: { courses: rows, dash: [{ id: key(1, 'other.test'), on: true }], pages: rows } });
+  assert.equal(l.boards.courses.filter((x) => W.course(x.id)).length, W.COURSE_MAX);
+  assert.ok(!l.tiles.some((x) => W.course(x.id)) && !l.boards.pages.some((x) => W.course(x.id)));
+  assert.equal(l.boards.courses[0].term.length, 120);
+  assert.equal(l.boards.courses[0].extra, undefined);
+  assert.equal(l.boards.dash[0].id, key(1, 'other.test'));
+  const one = W.apply(W.layout({}), { ops: [{ s: 'courses', id: key(1), set: { on: true, term: 'Fall' } }, { s: 'dash', id: key(1), set: { on: true } }, { s: 'pages', id: key(2), set: { on: true } }] });
+  const two = W.apply(one, { ops: [{ s: 'courses', id: key(1), remove: true }] });
+  assert.ok(!two.boards.courses.some((x) => W.course(x.id)));
+  assert.ok(two.boards.dash.some((x) => x.id === key(1)), 'separate layouts');
+  assert.ok(!two.boards.pages.some((x) => W.course(x.id)));
+  assert.equal(W.apply(l, { ops: [{ s: 'courses', id: key(100), set: { on: true } }] }).boards.courses.filter((x) => W.course(x.id)).length, 48);
+});
+
+test('fresh course cards start in the native list area, grouped by term and clear of the right column', () => {
+  const ids = [1, 2, 3].map((n) => `course:https://bb.test/_${n}_1`);
+  const ts = [{ id: 'notes', x: null }, ...ids.map((id, i) => ({ id, x: null, term: i < 2 ? 'Fall' : 'Spring' }))];
+  const dims = Object.fromEntries(ts.map((x) => [x.id, { w: 288, h: 200 }]));
+  const r = W.arrange(ts, dims, 1100, { col: { right: 10, top: 80 }, courseArea: { left: 30, top: 150, width: 650 } });
+  assert.equal(r.at.notes.left, 802);
+  assert.equal(r.at[ids[0]].left, 30); assert.equal(r.at[ids[0]].top, 150);
+  assert.equal(r.at[ids[1]].top, 150);
+  assert.ok(r.at[ids[2]].top >= 366, 'new term on a new row');
+  assert.ok(ids.every((id) => r.at[id].left + 288 < r.at.notes.left));
+});

@@ -103,10 +103,12 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
   });
   const errors = [];
   try {
+    const requests = [];
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
       if (u.origin !== O || route.request().method() !== 'GET') return route.abort();
+      if (u.pathname.startsWith('/learn/api/')) requests.push(u.pathname + u.search);
       if (u.pathname.startsWith('/learn/api/')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(api(u)) });
       const page = { '/ultra/course': COURSES, '/ultra/institution-page': INSTITUTION, '/ultra': STREAM, '/ultra/': STREAM, '/ultra/stream': STREAM, '/ultra/courses/_101_1/outline': OUTLINE }[u.pathname];
       return page ? route.fulfill({ contentType: 'text/html', body: page }) : route.fulfill({ status: 404, body: '' });
@@ -123,6 +125,15 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     page.on('pageerror', (e) => errors.push(String(e)));
     page.on('console', (msg) => { if (msg.type() === 'error' && !/ERR_NAME_NOT_RESOLVED|ERR_FAILED|404/.test(msg.text())) errors.push(msg.text()); });
     const shot = async (name) => { await page.evaluate(() => getSelection().removeAllRanges()); await page.waitForTimeout(400); await page.screenshot({ path: path.join(out, `${name}.png`), fullPage: true }); };
+    const until = async (read, check, message) => {
+      const end = Date.now() + 10000;
+      while (Date.now() < end) { const value = await read(); if (check(value)) return value; await page.waitForTimeout(50); }
+      throw new Error(message);
+    };
+    const stable = async () => {
+      let last = '', same = 0;
+      await until(() => page.evaluate(() => JSON.stringify([...document.querySelectorAll('section.gz-w')].map((e) => [e.dataset.tile, ...['x', 'y', 'width', 'height'].map((k) => Math.round(e.getBoundingClientRect()[k]))]))), (value) => { same = value === last ? same + 1 : 0; last = value; return same >= 5; }, 'widget geometry did not settle');
+    };
     const rect = (sel) => page.evaluate((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return r && { left: r.left, top: r.top + scrollY, right: r.right, bottom: r.bottom + scrollY, width: r.width }; }, sel);
     const tile = (id) => `section.gz-w[data-tile="${id}"]`;
     // Narrow shots are one tall window: Glaze's Ultra theme scrolls the page inside main, which a full-page shot misses.
@@ -134,6 +145,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     };
     const notes = { [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
 
+    if (!process.env.B10_ONLY) {
     // ---- light: both boards as they start, wide and narrow ---------------------------------------------------------
     await store(settingsFor('Paper'), notes);
     for (const width of [1280, 375]) {
@@ -198,6 +210,8 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     ok(guides >= 1, `a guide shows on the line it meets (${guides})`);
     await shot('courses-drag-guide-light-1280');
     await page.mouse.up();
+    await until(layout, (l) => l?.boards?.courses?.find((x) => x.id === 'timer')?.x !== null, 'timer drag not saved');
+    await stable();
     const tm = await rect(tile('timer'));
     ok(Math.abs(tm.top - n.top) < 1 && Math.abs(tm.left - (n.right + 16)) < 1, 'it snaps beside the other tile, tops lined up');
     // Alt: exactly where it's let go.
@@ -365,8 +379,10 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await opts.evaluate((l) => chrome.storage.local.set({ widgetLayout: l }), old);
     await page.goto(`${O}/ultra/courses/_101_1/outline`);
     await page.waitForSelector(tile('music'), { timeout: 15000 });
+    await stable();
+    const floatTop = await page.evaluate(() => Math.max(0, ...[...document.querySelectorAll('div.bb-course-navigation, [data-gz-keep-clear]')].map((e) => e.getBoundingClientRect().bottom)) + 12);
     const mus = await page.evaluate(() => document.querySelector('section.gz-w[data-tile="music"]').getBoundingClientRect().toJSON());
-    ok(Math.abs(mus.left - (200 + 12)) <= 1 && Math.abs(mus.top - (94 + 12)) <= 1, `an old float still floats, at its place in the room (${Math.round(mus.left)}, ${Math.round(mus.top)})`);
+    ok(Math.abs(mus.left - (200 + 12)) <= 1 && Math.abs(mus.top - floatTop) <= 1, `an old float still floats, at its place in the room (${Math.round(mus.left)}, ${Math.round(mus.top)})`);
     await store(settingsFor('Frost'));
     await page.reload();
     await page.waitForSelector(tile('music'), { timeout: 15000 });
@@ -426,6 +442,68 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await fresh.waitForTimeout(1500);
     ok(new URL(fresh.url()).pathname === '/ultra/institution-page', 'a reload of the Dashboard stays (no loop)');
     await fresh.close();
+    }
+    // ---- B10: course cards use the boards, never React's nodes or a new reader ---------------------------------
+    const base = require('../lib/widgets.js').layout({ todo: true });
+    for (const board of ['courses', 'dash', 'pages']) for (const x of base.boards[board]) x.on = false;
+    const courseTile = 'section.gz-w[data-tile^="course:"]';
+    for (const preset of ['Paper', 'Frost']) for (const width of [1280, 375]) {
+      await store(settingsFor(preset, { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: false } }), { ...notes, widgetLayout: base });
+      await page.setViewportSize({ width, height: width < 768 ? 2400 : 1400 });
+      await page.goto(`${O}/ultra/course`);
+      await page.waitForSelector('#gz-toolbar .gz-dash-edit');
+      ok(!(await layout()).boards.courses.some((x) => x.id.startsWith('course:')), `B10 ${preset} ${width}: opt-in, native list stays`);
+      await page.click('#gz-toolbar .gz-dash-edit');
+      await page.waitForSelector('.gz-course-add');
+      await stable();
+      const count = requests.length;
+      const native = await page.locator('article.course-element-card').count();
+      await page.click('.gz-course-add');
+      await page.waitForSelector(`${courseTile} .gz-course-card`);
+      await stable();
+      ok(await page.locator(courseTile).count() >= native, `B10 ${preset} ${width}: each loaded course is a tile`);
+      ok(await page.evaluate(() => document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display === 'none'), 'B10: native list steps aside');
+      ok(await page.locator('article.course-element-card').count() === native, 'B10: React keeps all its nodes');
+      const geometry = await page.locator(courseTile).evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, term: e.querySelector('.gz-course-term').textContent }; }));
+      ok(geometry.every((a) => a.l >= 0 && a.r <= width && geometry.every((b) => a === b || a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t)), `B10 ${preset} ${width}: cards fit without overlap`);
+      ok(requests.length === count, `B10 ${preset} ${width}: adding cards starts no requests (${requests.length - count})`);
+      await shot(`b10-courses-${preset.toLowerCase()}-${width}`);
+      await page.click('.gz-course-native');
+      ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: native filters remain reachable');
+      await page.click('.gz-course-native');
+      const key = await page.locator(courseTile).first().getAttribute('data-tile');
+      const first = page.locator(tile(key));
+      await first.locator('.gz-w-fold').click();
+      ok(await first.locator('.gz-w-body').isHidden(), 'B10: fold works');
+      await first.locator('.gz-w-fold').click();
+      if (width === 1280) {
+        const before = await first.boundingBox();
+        await first.locator('.gz-w-grip').focus(); await page.keyboard.press('ArrowDown');
+        await until(layout, (l) => l.boards.courses.find((x) => x.id === key)?.y !== null, 'course move not saved');
+        await stable();
+        const after = await first.boundingBox();
+        ok(Math.abs(after.y - before.y - 16) < 1, 'B10: keyboard movement uses the shared grip');
+      }
+      await first.locator('.gz-w-size').selectOption('m');
+      await until(layout, (l) => l.boards.courses.find((x) => x.id === key)?.size === 'm', 'course size not saved');
+      await page.reload(); await page.waitForSelector(`${courseTile}[data-size="m"]`); await stable();
+      ok(await page.locator(`${courseTile}[data-size="m"]`).count() === 1, 'B10: size survives reload');
+      // Same-origin in-app navigation; modified clicks are left as native link behaviour.
+      const route = await page.locator(`${courseTile} .course-title`).first().getAttribute('href');
+      await page.evaluate(() => { window.__b10SameDocument = true; });
+      await page.locator(`${courseTile} .course-title`).first().click();
+      ok(page.url() === route && await page.evaluate(() => window.__b10SameDocument === true), 'B10: course link opens in-app');
+      await page.goto(`${O}/ultra/institution-page`); await page.waitForSelector('#gz-dash .gz-dash-edit');
+      await page.click('#gz-dash .gz-dash-edit'); await page.waitForSelector('.gz-course-pick');
+      await page.click('.gz-course-add'); await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+      ok(await page.locator(courseTile).count() === 1, 'B10: Dashboard adds one chosen course');
+      ok((await layout()).boards.courses.filter((x) => x.id.startsWith('course:')).length > 1, 'B10: Dashboard keeps the Courses layout');
+      await shot(`b10-dash-${preset.toLowerCase()}-${width}`);
+      await page.goto(`${O}/ultra/course`); await page.waitForSelector(courseTile);
+      await page.click('#gz-toolbar .gz-dash-edit');
+      while (await page.locator(courseTile).count()) await page.locator(`${courseTile} button[aria-label^="Remove "]`).first().click();
+      ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: removing every card restores Ultra');
+    }
     ok(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 5).join(' | ')}` : ''}`);
   } finally {
     await ctx.close();

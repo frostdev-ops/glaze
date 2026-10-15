@@ -187,3 +187,17 @@ test('default Dashboard alone does not load widgets on course routes; an explici
   await settle();
   assert.equal(asks(r), 1, 'a float enabled in another tab becomes available');
 }));
+
+test('Ultra course cards peek at existing promises and books without starting a reader', async () => {
+  const p = page({ site: 'ultra', preload: true, raw: { enabled: false } });
+  await p.done;
+  let requests = 0;
+  p.c.fetch = async (u) => { requests++; return { ok: true, url: u, text: async () => JSON.stringify(u.endsWith('/users/me') ? { id: '_900_1' } : { results: [] }), headers: { get: () => null } }; };
+  const cold = p.c.GZ_CTX.canvasPeek();
+  assert.equal(cold.me, null); assert.equal(cold.courses, null); assert.equal(cold.books.size, 0); assert.equal(requests, 0);
+  const me = p.c.GZ_CTX.me(), courses = p.c.GZ_CTX.myCourses(), book = p.c.GZ_CTX.bookFor('_101_1');
+  await Promise.all([me, courses, book.pending]);
+  const count = requests, warm = p.c.GZ_CTX.canvasPeek();
+  assert.equal(warm.me, me); assert.equal(warm.courses, courses); assert.equal(warm.books.get('_101_1'), book);
+  assert.equal(p.c.GZ_CTX.canvasPeek().books, warm.books); assert.equal(requests, count);
+});

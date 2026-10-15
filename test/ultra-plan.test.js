@@ -246,3 +246,12 @@ test('landing worker validates top frame, recorded Ultra site, current master/da
     assert.deepEqual(await broken.send(msg, page), { first: false }, `session ${k} throws`);
   }
 });
+
+test('course tile writes belong to the recorded Ultra origin and to board surfaces only', async () => {
+  const w = worker(); w.store.local.ultra = [o];
+  const sender = { id: 'glaze', tab: { id: 7 }, frameId: 0, url: `${o}/ultra/course` };
+  const msg = (origin, s = 'courses') => ({ type: 'glaze:widgetLayout', ops: [{ s, id: `course:${origin}/_101_1`, set: { on: true } }] });
+  assert.equal((await w.send(msg(o), sender)).ok, true);
+  for (const m of [msg('https://other.test'), msg(o, 'pages'), msg(o, 'canvas'), msg(o + '/bad')]) assert.equal((await w.send(m, sender)).ok, false);
+  assert.equal((await w.send(msg(o), { ...sender, url: `${o}/course` })).ok, false);
+});

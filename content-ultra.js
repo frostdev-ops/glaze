@@ -695,7 +695,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
     syncTodo, syncCardTasks, syncRemind, syncWidgets,
-    ctx: { me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
+    ctx: { canvasPeek: () => ({ me: meId, courses: memberships, books }), me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
   };
 });
 
