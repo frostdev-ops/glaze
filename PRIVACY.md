@@ -35,8 +35,9 @@ _Last updated: 2026-10-15_
   for up to 100 courses, the course id with the assignment ids and scores you typed (and the real grade each
   was typed against), the ids of work you left out, your pretend assignments (the name you gave, points and
   score) and a what-if grade per course for the GPA. A score goes once its real grade arrives or changes,
-  and the calculator says so; "Clear this course" and "Clear all courses" delete them, and the time of the last
-  Clear all is kept per site and user so a change from another open tab can't bring them back. Nothing of this
+  and the calculator says so. "Clear this course" deletes a course's scores and pretend assignments, "Clear all
+  courses" everything, and the time of the last Clear all is kept per site and user so a change from another open
+  tab can't bring them back. Nothing of this
   is sent to Canvas or anywhere else.
 - **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
   time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner),

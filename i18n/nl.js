@@ -687,4 +687,5 @@
   "Globe": "Wereldbol",
   "Your changes are still here. Close again to leave without them.": "Je wijzigingen staan er nog. Sluit nogmaals om zonder ze te vertrekken.",
   "This theme is too long for a code: its card pictures have long links. Shorten them, or remove some card styles.": "Dit thema is te lang voor een code: de kaartafbeeldingen hebben lange links. Maak ze korter of verwijder enkele kaartstijlen.",
+  "Not cleared. Try again in a moment.": "Niet gewist. Probeer het zo meteen opnieuw.",
 };

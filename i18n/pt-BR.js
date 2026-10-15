@@ -687,4 +687,5 @@
   "Globe": "Globo",
   "Your changes are still here. Close again to leave without them.": "Suas alterações continuam aqui. Feche de novo para sair sem elas.",
   "This theme is too long for a code: its card pictures have long links. Shorten them, or remove some card styles.": "Este tema é longo demais para um código: as imagens dos cartões têm links longos. Encurte-os ou remova alguns estilos de cartão.",
+  "Not cleared. Try again in a moment.": "Não foi limpo. Tente de novo daqui a pouco.",
 };
