@@ -1274,4 +1274,5 @@
   "Your class schedule": "Tu horario de clases",
   "Some of this changed in another tab first. This is what is kept now.": "Parte de esto cambió antes en otra pestaña. Esto es lo que queda guardado ahora.",
   "Choose a date first.": "Elige primero una fecha.",
+  "Not saved: too many course settings are stored. Clear a course you no longer need.": "No se guardó: hay demasiados ajustes de cursos guardados. Borra los de un curso que ya no necesites.",
 };

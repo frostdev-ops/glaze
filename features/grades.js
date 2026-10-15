@@ -448,7 +448,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const savePrefs = (key, f) => {
       D.prefs = C.cleanGpa(D.prefs);
       try {
-        Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:gpa', key, patch: { [f]: D.prefs[key]?.[f] ?? null } })).then((r) => { note.textContent = r?.ok ? '' : t('Not saved. Try again in a moment.'); }, () => { note.textContent = t('Not saved. Try again in a moment.'); });
+        Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:gpa', key, patch: { [f]: D.prefs[key]?.[f] ?? null } })).then((r) => { note.textContent = r?.ok ? '' : r?.error === 'full' ? t('Not saved: too many course settings are stored. Clear a course you no longer need.') : t('Not saved. Try again in a moment.'); }, () => { note.textContent = t('Not saved. Try again in a moment.'); });
       } catch { /* reloaded */ }
       figures();
     };
