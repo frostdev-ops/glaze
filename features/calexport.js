@@ -80,7 +80,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     // Ultra: what it couldn't read whole (complete: false) is said beside the saved file.
     const iso = (ms) => new Date(ms).toISOString();
     let whole = true;
-    const ask = (a, b) => (ultra ? ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.due(a, b)).then((x) => { whole &&= x.complete; return x.items; })
+    const ask = (a, b) => (ultra ? ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => { if (!alive()) throw new Error('stopped'); return GZ_ULTRA.page.due(a, b); }).then((x) => { whole &&= x.complete; return x.items; })
       : pages(`/api/v1/planner/items?start_date=${iso(a)}&end_date=${iso(b)}&per_page=100`).then((x) => x.map(L.slim)));
     let items = o.icsDue || o.icsPlan ? await ask(r.from, r.to + 56 * DAY) : [];
     if (o.icsPlan) {

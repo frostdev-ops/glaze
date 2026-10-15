@@ -82,7 +82,9 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const { start, end } = T.fetchRange(todoO, now, who.tz);
     let c, due;
     if (ultra) {
-      const u = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.due(Date.parse(start), Date.parse(end)));
+      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      if (!on) throw new Error('off'); // turned off while it loaded: nothing is read
+      const u = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
       c = { key: todoKey, at: now, start, end, teach: todoO.teacher, progress: todoO.progress, items: u.items, complete: u.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
@@ -116,7 +118,8 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   // The list over the next eight days and the past month, as Better To Do counts it (lib/todo.js build).
   const reckon = (now) => {
     gs ||= T.gradescope(() => { if (on) arm(); });
-    const b = T.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], data, o: { ...todoO, span: 'custom', unit: 'days', n: 8, start: 'rolling', past: 'month', group: false }, now, tz: who.tz, cids, sync: todoO.sync });
+    // Ultra has no planner to tick in: its ticks are this device's, as Better To Do's there.
+    const b = T.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], data, o: { ...todoO, span: 'custom', unit: 'days', n: 8, start: 'rolling', past: 'month', group: false }, now, tz: who.tz, cids, sync: !ultra && todoO.sync });
     const extra = [...sources.values()].flatMap((f) => { try { return f() || []; } catch { return []; } });
     return { b, evs: R.events({ rows: b.groups.flatMap(([, l]) => l), cats: { due: en().remind, exam: en().remindExam, plan: en().remindPlan }, o, tz: who.tz, extra }) };
   };

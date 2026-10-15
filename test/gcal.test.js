@@ -660,3 +660,43 @@ withMock('review (P1, late await): Glaze turned off while the broker reads Bette
   assert.deepEqual({ r, enabled: w.store.sync.enabled, localOn: w.store.local[key].items['assignment:1'].on }, { r: { ok: false, error: 'stopped' }, enabled: false, localOn: '2026-10-17' });
   assert.equal(mock.calendars.get(cal).events.get(on).start.date, '2026-10-21', 'and Google keeps the move for when Glaze is back on');
 });
+
+// Codex B2 (finding 4): a batch the page couldn't read whole (Ultra's calendar cut short: whole: false) is no proof that
+// what's missing from it is gone. Its future events stay; a whole batch later deletes them as before.
+withMock('review (B2): a partial batch deletes nothing for being missing from it; a whole one does', async (mock) => {
+  const e = env(mock);
+  const { cal } = await G.connect(e);
+  const st = G.fresh();
+  await run(e, cal, st);
+  assert.equal(mock.live(cal).length, 5);
+  const some = EVENTS.slice(0, 1);
+  await G.sync(e, cal, st, { src: SRC, events: some, from: FROM, first: FIRST, whole: false });
+  assert.equal(mock.live(cal).length, 5, 'nothing deleted after a partial read');
+  assert.ok(!mock.log.some(([m]) => m === 'DELETE'));
+  await G.sync(e, cal, st, { src: SRC, events: some, from: FROM, first: FIRST, whole: true });
+  assert.deepEqual(mock.live(cal).map((x) => x.summary), ['Lab 1']);
+});
+
+test('review (B2): the page tells the worker whether its batch was read whole, and the worker accepts only a yes or no', async () => {
+  const sent = [];
+  const run1 = (whole) => new Promise((done) => {
+    const c = vm.createContext({
+      window: {}, setTimeout: (f) => { if (sent.length) return; setTimeout(f, 0); }, clearTimeout,
+      location: { origin: 'https://bb.example.edu' }, Date,
+      chrome: {
+        storage: { local: { get: async () => ({ gcal: { cal: 'c_1@group.calendar.google.com', last: {} } }) }, onChanged: { addListener() {} } },
+        runtime: { sendMessage: async (m) => { sent.push(m); done(); return { ok: true }; } },
+      },
+      GZ_CTX: { site: 'ultra', on: () => true, settings: () => ({ enabled: true }), profile: async () => ({ id: '_900_1' }), need: async () => {} },
+      GZ_CAL_UI: { compose: async () => ({ events: [], from: FROM, first: FIRST, consent: '[]', recheck: async () => true, ...(whole !== undefined && { whole }) }) },
+    });
+    c.window.top = c.window;
+    c.globalThis = c;
+    vm.runInContext(read('features/gcal.js'), c);
+  });
+  await run1(false);
+  await run1(true);
+  await run1(undefined); // a Canvas page's compose has no whole: its reads are whole
+  assert.deepEqual(sent.map((m) => [m.src, m.whole]), [['https://bb.example.edu/_900_1', false], ['https://bb.example.edu/_900_1', true], ['https://bb.example.edu/_900_1', true]]);
+  assert.match(read('lib/background.js'), /\(m\.whole !== undefined && typeof m\.whole !== 'boolean'\)\) return \{ ok: false, error: 'sender' \}/);
+});

@@ -98,7 +98,11 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const now = Date.now();
     if (ultra) {
       const { start, end } = L.fetchRange(o(), now, who.tz);
-      const r = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.due(Date.parse(start), Date.parse(end)));
+      // Asked only while this list is still the one on the page (off() moves gen on: the switch, Glaze off, another page).
+      const g = gen;
+      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      if (g !== gen || !box) throw new Error('stale');
+      const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
       // complete: false, the calendar couldn't be read whole: the list says some work may be missing.
       return [{ key, at: now, start, end, teach: o().teacher, progress: o().progress, items: r.items, complete: r.complete, grading: [], sums: {} }, undefined];
     }
@@ -383,7 +387,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
     if (cache?.complete === false) parts.push(make('p', { className: 'gz-todo-hint', textContent: t('Blackboard sent only part of your calendar, so some work may be missing.') }));
     if (!cache) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Loading…') }));
-    else if (!out.groups.length && !out.grading.length) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Nothing to do. Enjoy it.') }));
+    // Never "nothing to do" when Ultra couldn't send everything (said above).
+    else if (!out.groups.length && !out.grading.length && cache.complete !== false) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Nothing to do. Enjoy it.') }));
     for (const [kind, rows] of out.groups) parts.push(section(kind, t(LABEL[kind]), rows, now));
     if (out.grading.length) {
       const c = o().progress ? L.graded(out.grading, cache?.sums) : null;

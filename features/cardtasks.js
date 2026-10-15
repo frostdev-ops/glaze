@@ -60,8 +60,10 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     const { start, end } = L.fetchRange(o, now, tz);
     let c, due;
     if (ultra) {
-      // Ultra: no teachers' grading, and no popup list from here (content.js keeps Ultra's own).
-      const r = await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page.due(Date.parse(start), Date.parse(end)));
+      // Ultra: no teachers' grading, and no popup list from here (content.js keeps Ultra's own). Read only while still on.
+      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      if (!on) throw new Error('off');
+      const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
       c = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
@@ -94,13 +96,16 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       const was = el.querySelector(':scope > .gz-ct');
       if (!head || !cid || !cache) { was?.remove(); continue; }
       gs ||= L.gradescope(paint);
-      const rows = L.card(L.build({ items: [...(cache.items || []), ...gs(now, uid)], data, o, now, tz, course: cid, sync: o.sync }), o.cardN, o.cardCross, tz).map((r) => {
+      // Ultra has no planner to tick in: its ticks are this device's, as Better To Do's there.
+      const rows = L.card(L.build({ items: [...(cache.items || []), ...gs(now, uid)], data, o, now, tz, course: cid, sync: !ultra && o.sync }), o.cardN, o.cardCross, tz).map((r) => {
         // Undated work planned for a day (a "do on" day or a focus session) reads as planned for that day.
         const w = L.label(r.at === null ? { allDay: true, day: r.plan } : r, now, tz, lang);
         const text = o.rel ? w.rel : w.abs;
         return { ...r, when: r.at === null ? t('Planned for {when}', { when: text }) : r.type === 'planner_note' ? text : t(r.past ? 'Was due {when}' : 'Due {when}', { when: text }), other: o.rel ? w.abs : w.rel };
       });
-      const sig = JSON.stringify([o.cardStatus, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
+      // Ultra couldn't send everything: said, and never "Nothing due".
+      const part = cache.complete === false && t('Blackboard sent only part of your calendar, so some work may be missing.');
+      const sig = JSON.stringify([o.cardStatus, part, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
       if (was?.dataset.sig === sig) continue;
       const course = nameOf(el);
       const box = rows.length
@@ -113,8 +118,8 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
           if (r.done) li.dataset.done = '';
           if (r.past) li.dataset.past = '';
           return li;
-        }))
-        : make('p', { textContent: t('Nothing due') });
+        }), part && make('li', { className: 'gz-ct-part', textContent: part }))
+        : make('p', { textContent: part || t('Nothing due') });
       box.className = 'gz-ct';
       box.dataset.sig = sig;
       if (ultra) for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) box.addEventListener(ev, keep);
