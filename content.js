@@ -414,6 +414,8 @@
   // Throttle, not debounce: Ultra never stops mutating (ripples, popper repositioning), and a
   // debounce that restarts on every record would put the sweep off indefinitely.
   const schedule = (records) => {
+    // Cut off by a reload of Glaze: stop watching, and every GZ_CTX.on() feature stops too.
+    if (!chrome.runtime?.id) { observer?.disconnect(); observer = null; return; }
     X.lift();
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {

@@ -64,7 +64,7 @@ const computer = () => {
 const tab = (env, site = 'canvas') => {
   const bitmaps = [];
   const chrome = {
-    runtime: { lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => { env.worker(m).then(cb, () => cb({ ok: false, error: 'write' })); } },
+    runtime: { id: 'x', lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => { env.worker(m).then(cb, () => cb({ ok: false, error: 'write' })); } },
     storage: {
       onChanged: { addListener() {} },
       ...Object.fromEntries(['sync', 'local'].map((name) => [name, {
@@ -367,4 +367,11 @@ test('Ultra paints its isolated styles on new cards and opens the same editor fr
   assert.equal(find((e) => e.type === 'radio' && e.value === 'gradient').checked, true);
   document.documentElement.removeAttribute('data-gz-motion'); await ui.paint();
   assert.equal(card.hasAttribute('data-gz-card'), false);
+});
+
+test('a card pass after Glaze was reloaded under the tab does nothing (no extension context)', async () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../features/cards.js'), 'utf8');
+  assert.match(src, /const paint = async \(\) => \{\n\s+if \(!chrome\.runtime\?\.id\) return;/);
+  const core = require('fs').readFileSync(require('path').join(__dirname, '../content.js'), 'utf8');
+  assert.match(core, /if \(!chrome\.runtime\?\.id\) \{ observer\?\.disconnect\(\); observer = null; return; \}/, 'the main watcher stops itself');
 });
