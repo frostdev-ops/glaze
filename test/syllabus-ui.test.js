@@ -70,6 +70,28 @@ test('two courses\' scales saved at once both reach the GPA', async () => {
   assert.equal(w.sync.gpaCourses[`canvas:${ORIGIN}/25`], undefined, 'taken away');
 });
 
+test('a GPA change that would push another course out of the full synced item is refused, never truncated', async () => {
+  // Codex's witness: the synced item close to its 8 KB cap, then one course given a long scale.
+  const C = require('../lib/gradecalc.js');
+  const raw = {};
+  for (let i = 0; i < 100; i++) {
+    const k = `canvas:${ORIGIN}/${10000 + i}`;
+    raw[k] = i ? { c: 4, l: 0.5, x: 1, s: 'A 90, B 80, C 70' } : { c: 4 };
+    if (new TextEncoder().encode(`gpaCourses${JSON.stringify(raw)}`).length > 7965) { delete raw[k]; break; }
+  }
+  const keys = Object.keys(raw);
+  const long = 'A+ 97.55, A 93.25, A- 90.75, B+ 87.25, B 83.55, B- 80.25, C+ 77.55, C 73.25, C- 70.55, D+ 67.25, D 63.55, D- 60.25, F 0.5';
+  const r = C.patchGpa(raw, keys[0], { s: long });
+  assert.deepEqual([r.ok, r.error], [false, 'full']);
+  assert.deepEqual(Object.keys(r.prefs), keys, 'every course still there');
+  const w = worker();
+  w.sync.gpaCourses = structuredClone(raw);
+  assert.deepEqual(await w.send({ type: 'glaze:gpa', key: keys[0], patch: { s: long } }), { ok: false, error: 'full' });
+  assert.deepEqual(w.sync.gpaCourses, raw, 'nothing written');
+  assert.equal((await w.send({ type: 'glaze:gpa', key: keys[0], patch: { c: 5 } })).ok, true, 'a change that fits still goes through');
+  assert.equal(Object.keys(w.sync.gpaCourses).length, keys.length);
+});
+
 test('the GPA table and syllabus import share that one writer: a credits change and a scale for the same course both stay', async () => {
   const w = worker();
   const key = `canvas:${ORIGIN}/25`;
@@ -107,6 +129,7 @@ const page = () => {
   const body = new El('body');
   const state = { settings: { enabled: true, enhance: { syllabus: true } }, on: true, cid: '25' };
   const held = [];
+  const open = { now: false };
   const ctx = vm.createContext({
     Intl, Date, JSON, Promise, Math, Number, String, Object, Array, Error,
     document: { body, activeElement: null, createElement: (t) => new El(t), getElementById: () => null, querySelector: () => null },
@@ -117,11 +140,16 @@ const page = () => {
       t: (k) => k, locale: () => 'en', settings: () => state.settings, on: () => state.on, canvasCourseId: () => state.cid,
       profile: () => Promise.resolve({ id: 3 }), canvasCourses: () => Promise.resolve([{ id: '25' }]),
       // The code asked for arrives when the test lets it.
-      need: (file, ready) => (ready() ? Promise.resolve() : new Promise((res) => held.push(() => { vm.runInContext(read(file), ctx); res(); }))),
+      need: (file, ready) => {
+        if (ready()) return Promise.resolve();
+        const load = (res) => { vm.runInContext(read(file), ctx); res(); };
+        return new Promise((res) => (open.now ? load(res) : held.push(() => load(res))));
+      },
     },
   });
   vm.runInContext(read('features/syllabus.js'), ctx);
-  return { UI: ctx.GZ_SYL_UI, body, state, release: () => { while (held.length) held.shift()(); } };
+  // Lets what's held through, and everything asked for after it.
+  return { UI: ctx.GZ_SYL_UI, body, state, release: () => { open.now = true; while (held.length) held.shift()(); } };
 };
 
 test('the dialog doesn\'t open when the feature was turned off while its code was on its way', async () => {

@@ -37,6 +37,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   // ---- who and what -----------------------------------------------------------------------------------------------
   const start = async () => {
+    // W14's day and time reader first: the extractor reads class times with it.
+    await need('lib/classes.js', () => globalThis.GZ_CLASSES);
     await need('lib/syllabus.js', () => globalThis.GZ_SYLLABUS);
     L = globalThis.GZ_SYLLABUS;
     const cid = X.canvasCourseId();
@@ -141,7 +143,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const extract = (text) => {
     const c = who.course;
     const startAt = Date.parse(c?.term?.start_at || c?.start_at || '');
-    return L.extract(text, { start: Number.isFinite(startAt) ? startAt : Date.now(), md: monthFirst() });
+    return L.extract(text, { start: Number.isFinite(startAt) ? startAt : Date.now(), md: monthFirst(), hint: locale() });
   };
 
   // ---- the dialog -------------------------------------------------------------------------------------------------
@@ -307,7 +309,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
       if (!res?.ok) { say.textContent = t('Not saved. Try again in a moment.'); return; }
       rec = L.tidy(res.rec);
       const notes = [];
-      if (useScale.checked && sc.length && !await gpaScale(C, sc)) notes.push(t('The scale could not be given to your GPA.'));
+      const scaleSaid = useScale.checked && sc.length ? await gpaScale(C, sc) : '';
+      if (scaleSaid) notes.push(scaleSaid);
       const tasks = ds.filter((d) => d.task);
       if (tasks.length && !await addTasks(tasks)) notes.push(t('The dates could not be added to To Do.'));
       if (notes.length) { say.textContent = `${t('Saved.')} ${notes.join(' ')}`; return; }
@@ -335,7 +338,11 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   // The scale becomes the course's own in the GPA's synced choices (gpaCourses), set by the worker for this course alone
   // on what is stored then ('glaze:gpa', which the GPA table uses too), so two courses saved at once both keep theirs.
-  const gpaScale = async (C, sc) => !!(await send({ type: 'glaze:gpa', key: `canvas:${location.origin}/${who.cid}`, patch: { s: C.schemeText(sc) } }))?.ok;
+  // → '' when it's in, else the words to show.
+  const gpaScale = async (C, sc) => {
+    const r = await send({ type: 'glaze:gpa', key: `canvas:${location.origin}/${who.cid}`, patch: { s: C.schemeText(sc) } });
+    return r?.ok ? '' : r?.error === 'full' ? t('Not saved: too many course settings are stored. Clear a course you no longer need.') : t('The scale could not be given to your GPA.');
+  };
   // Dates become the student's own To Do tasks (lib/todo.js importTask), one id per date and title, so saving again updates
   // them and keeps whether they're done and their steps.
   const addTasks = async (list) => {

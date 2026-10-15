@@ -260,42 +260,21 @@ test('dates fall in the course\'s term: the year after for a term that crosses N
   assert.deepEqual(days('Midterms: Oct 12 and Nov 16', FALL), ['2026-10-12', '2026-11-16']);
 });
 
-test('times: 12- and 24-hour clocks, meridiems inferred the way class times run', () => {
-  const t = (s) => { const r = S.times(s); return r && `${r.start}-${r.end}`; };
-  assert.equal(t('9:00-9:50 AM'), '09:00-09:50');
-  assert.equal(t('11:00-12:15pm'), '11:00-12:15');
-  assert.equal(t('1-3pm'), '13:00-15:00');
-  assert.equal(t('12:30-1:45'), '12:30-13:45');
-  assert.equal(t('8:00-9:30'), '08:00-09:30');
-  assert.equal(t('14h00-15h30'), '14:00-15:30');
-  assert.equal(t('13.45-15.30 uur'), '13:45-15:30');
-  assert.equal(t('9 a 11 h'), '09:00-11:00');
-  assert.equal(t('10-11'), null, 'two numbers alone');
-  assert.equal(t('A 90.00-92.99'), null, 'a grade range');
-  assert.equal(t('3:00-2:00 PM'), null, 'ends before it starts');
-});
-
-test('days: names, abbreviations and letters in the six languages', () => {
-  const d = (s) => S.days(s)?.days.join(' ') || '';
-  assert.equal(d('MWF'), 'MO WE FR');
-  assert.equal(d('T/R'), 'TU TH');
-  assert.equal(d('TTh'), 'TU TH');
-  assert.equal(d('Tuesdays and Thursdays'), 'TU TH');
-  assert.equal(d('Mon-Fri'), 'MO TU WE TH FR');
-  assert.equal(d('Mo, Mi und Fr'), 'MO WE FR');
-  assert.equal(d('lunes a jueves'), 'MO TU WE TH');
-  assert.equal(d('L-X'), 'MO WE');
-  assert.equal(d('mardi et jeudi'), 'TU TH');
-  assert.equal(d('ma en wo'), 'MO WE');
-  assert.equal(d('terça e quinta'), 'TU TH');
-  assert.equal(d('nothing here'), '');
-});
-
-test('meetings() gives W14\'s shape: label, days, start, end, location', () => {
-  const [m] = S.meetings('Lecture: MWF 9:00-9:50 AM, Room 101\nOffice hours: Mon 2-3pm');
-  assert.deepEqual(Object.keys(m).sort(), ['conf', 'days', 'end', 'label', 'location', 'src', 'start']);
-  assert.equal(S.meetings('Lecture: MWF 9:00-9:50 AM\nOffice hours: Mon 2-3pm').length, 1, 'office hours are not class times');
-  assert.deepEqual(S.meetings('Midterm review: Monday, October 5, 6-8pm'), [], 'a dated session is an event, not a weekly class');
+// Day and time reading itself is W14's (lib/classes.js meetings, tested in test/classes.test.js); these check how the
+// syllabus uses it: labels, places, office hours apart, dated sessions left out, the text's language, guesses marked.
+test('class times come from lib/classes.js, with the line\'s label and place', () => {
+  const r = S.extract('Lecture: MWF 9:00-9:50 AM, Room 101\nOffice hours: Mon 2-3pm\nMidterm review: Monday, October 5, 6-8pm\nDiscussion: TR 2pm');
+  assert.deepEqual(r.meetings.map((m) => [m.label, m.days.join(' '), m.start, m.end, m.location, m.conf]), [
+    ['Lecture', 'MO WE FR', '09:00', '09:50', 'Room 101', 'sure'],
+    ['Discussion', 'TU TH', '14:00', '15:15', '', 'check'], // no end written: W14's 75 minutes, marked to check
+  ]);
+  assert.deepEqual(r.hours.map((m) => `${m.days.join(' ')} ${m.start}-${m.end}`), ['MO 14:00-15:00'], 'office hours are not class times');
+  // Spanish letters (L-X) read as Monday and Wednesday once the text is Spanish; "ma en do" as Dutch Monday and Thursday.
+  assert.deepEqual(S.extract('Programa\nClases: martes y jueves 9:00-10:30\nTutorías: L-X 10:00-11:30').hours.map((m) => m.days.join(' ')), ['MO WE']);
+  // One Dutch line alone doesn't say it's Dutch ("do" is also German and Spanish): W14 reads only "do" then. With the
+  // page's language as the hint, both days.
+  assert.deepEqual(S.extract('Hoorcollege: ma en do 13.45-15.30 uur, zaal 2', { hint: 'nl' }).meetings.map((m) => [m.days.join(' '), m.location]), [['MO TH', 'zaal 2']]);
+  assert.equal(S.extract('Vorlesung: Di 10-12 Uhr', { hint: 'de' }).meetings[0]?.days.join(' '), 'TU', 'the page\'s language as the hint');
 });
 
 test('what the review screen writes: weights as text, and the record kept', () => {
