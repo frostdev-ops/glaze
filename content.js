@@ -962,20 +962,23 @@
   let canvasNews = null, canvasNewsLoad = null, canvasNewsUser = null;
   const canvasNewsPending = new Set(), canvasNewsShown = new Map();
   const canvasNewsKey = (cid) => `${location.origin}/${canvasNewsUser}/${cid}`;
-  // Serialize this tab's get/set pairs so simultaneous grades/items saves don't drop each other.
+  const canvasNewsStore = `canvasNews:${location.origin}`;
+  // One origin's map is one write boundary; hold its lock until storage's set callback completes.
   let canvasNewsWrite = Promise.resolve();
   const saveCanvasNews = (key, patch) => {
-    return canvasNewsWrite = canvasNewsWrite.then(() => new Promise((done) => {
-      try { chrome.storage.local.get('canvasNews', (r) => {
-        const record = GZ_GRADES.canvasNewsRecord(r ? r.canvasNews?.[key] : canvasNews[key], patch);
+    const write = () => new Promise((done) => {
+      try { chrome.storage.local.get(canvasNewsStore, (r) => {
+        const record = GZ_GRADES.canvasNewsRecord(r ? r[canvasNewsStore]?.[key] : canvasNews[key], patch);
         canvasNews[key] = record;
-        try { chrome.storage.local.set({ canvasNews: { ...r?.canvasNews, [key]: record } }, done); } catch { done(); }
+        try { chrome.storage.local.set({ [canvasNewsStore]: { ...r?.[canvasNewsStore], [key]: record } }, done); } catch { done(); }
       }); } catch { canvasNews[key] = GZ_GRADES.canvasNewsRecord(canvasNews[key], patch); done(); } // extension reloaded under the tab
-    }));
+    });
+    // shortcut: without usable Web Locks, writes are ordered within this tab only.
+    return canvasNewsWrite = canvasNewsWrite.then(() => navigator.locks?.request ? navigator.locks.request(`glaze:${canvasNewsStore}`, write).catch(write) : write());
   };
   const loadCanvasNews = () => {
     canvasNewsLoad ||= Promise.all([capi('/users/self').then((u) => u.id), new Promise((resolve) => {
-      try { chrome.storage.local.get('canvasNews', (r) => resolve(r?.canvasNews || {})); } catch { resolve({}); }
+      try { chrome.storage.local.get(canvasNewsStore, (r) => resolve(r?.[canvasNewsStore] || {})); } catch { resolve({}); }
     })]).then(([id, kept]) => {
       if (!id) throw new Error('No Canvas user');
       canvasNewsUser = String(id); canvasNews = kept; renderNew();
