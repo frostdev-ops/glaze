@@ -1,17 +1,21 @@
-// The card editor's storage flows (features/cards.js), run in a VM with a small stand-in DOM and storage: saving,
-// closing after a failed save, local pictures (caps and clean-up), and a picture that is ready only after the editor
-// has moved on. The page itself (painting, layout, focus) is checked in a browser, not here.
+// The card editor's storage flows (features/cards.js, through the background worker's lib/cards.js change), run in
+// VMs with a small stand-in DOM and storage: saving, closing after a failed save, local pictures (caps and clean-up),
+// pictures that are ready only after the editor moved on or a newer one was picked, and two tabs saving at once.
+// The page itself (painting, layout, focus) is checked in a browser, not here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const K = require('../lib/cards.js');
 
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const A = 'canvas:https://school.instructure.com/25';
 const B = 'canvas:https://school.instructure.com/26';
+const C = 'canvas:https://other.instructure.com/27';
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+const pics = (local) => Object.keys(local).filter((k) => k.startsWith('cardImg:'));
 
 class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, listeners: {}, dataset: {}, hidden: false, parent: null, textContent: '' }); }
@@ -32,40 +36,48 @@ class El {
   showModal() { this.open = true; }
   close() { this.open = false; }
   get lastElementChild() { return this.children.at(-1) || null; }
-  getContext() { return { drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(256) }) }; }
-  toDataURL() { return `data:image/webp;base64,${'A'.repeat(this.ctx.size)}`; }
+  // A canvas: draws a stand-in bitmap, and its picture is that bitmap's letter, `size` times.
+  getContext() { return { drawImage: (b) => { this.letter = b.letter; }, getImageData: () => ({ data: new Uint8ClampedArray(256) }) }; }
+  toDataURL() { return `data:image/webp;base64,${(this.letter || 'A').repeat(this.env.size)}`; }
 }
 const all = (el) => [el, ...el.children.flatMap(all)];
 
-const load = () => {
-  const store = { sync: {}, local: {} };
-  const ctx = { size: 1000, failSync: false, bitmaps: [] };
+// One computer: the storage every tab shares, and the background worker's queue (lib/background.js).
+const computer = () => {
+  const env = { store: { sync: {}, local: {} }, size: 1000, failSync: false, peak: 0, turn: K.queue() };
+  const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
+  const area = (name) => ({
+    get: (keys) => later(() => { const s = env.store[name]; return structuredClone(Object.fromEntries((keys === null ? Object.keys(s) : [].concat(keys)).filter((k) => k in s).map((k) => [k, s[k]]))); }),
+    set: (patch) => later(() => {
+      if (name === 'sync' && env.failSync) return false;
+      Object.assign(env.store[name], structuredClone(patch));
+      env.peak = Math.max(env.peak, Object.entries(env.store.local).filter(([k]) => k.startsWith('cardImg:')).reduce((n, [, v]) => n + v.length, 0));
+      return true;
+    }),
+    remove: (keys) => later(() => { for (const k of [].concat(keys)) delete env.store[name][k]; }),
+  });
+  env.worker = (m) => env.turn(() => K.change(m, { sync: area('sync'), local: area('local') }));
+  return env;
+};
+
+// One tab on that computer, with the editor loaded.
+const tab = (env) => {
+  const bitmaps = [];
   const chrome = {
-    runtime: { lastError: undefined, getURL: (p) => `chrome-extension://x/${p}` },
+    runtime: { lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => { env.worker(m).then(cb, () => cb({ ok: false, error: 'write' })); } },
     storage: {
       onChanged: { addListener() {} },
-      ...Object.fromEntries(['sync', 'local'].map((area) => [area, {
-        get(keys, cb) {
-          const s = store[area];
-          const ks = keys === null ? Object.keys(s) : [].concat(keys);
-          setTimeout(() => cb(structuredClone(Object.fromEntries(ks.filter((k) => k in s).map((k) => [k, s[k]])))));
-        },
-        set(patch, cb) {
-          setTimeout(() => {
-            if (area === 'sync' && ctx.failSync) chrome.runtime.lastError = { message: 'QUOTA_BYTES_PER_ITEM quota exceeded' };
-            else Object.assign(store[area], structuredClone(patch));
-            cb?.();
-            chrome.runtime.lastError = undefined;
-          });
-        },
-        remove(keys, cb) { for (const k of [].concat(keys)) delete store[area][k]; setTimeout(() => cb?.()); },
+      ...Object.fromEntries(['sync', 'local'].map((name) => [name, {
+        get(keys, cb) { const s = env.store[name]; const ks = keys === null ? Object.keys(s) : [].concat(keys); setTimeout(() => cb(structuredClone(Object.fromEntries(ks.filter((k) => k in s).map((k) => [k, s[k]]))))); },
+        set(patch, cb) { setTimeout(() => { Object.assign(env.store[name], structuredClone(patch)); cb?.(); }); },
+        remove(keys, cb) { for (const k of [].concat(keys)) delete env.store[name][k]; setTimeout(() => cb?.()); },
       }])),
     },
   };
   const body = new El('body');
   const document = {
     documentElement: new El('html'), body,
-    createElement: (t) => { const e = new El(t); if (t === 'canvas') e.ctx = ctx; return e; },
+    createElement: (t) => { const e = new El(t); e.env = env; return e; },
     createElementNS: (ns, t) => new El(t),
     querySelectorAll: () => [], getElementById: () => null, addEventListener() {},
   };
@@ -73,7 +85,7 @@ const load = () => {
     chrome, document, window: { top: {} }, setTimeout, clearTimeout, crypto: globalThis.crypto, structuredClone, URL, TextEncoder, Promise,
     MutationObserver: class { observe() {} },
     Option: class extends El { constructor(text, value) { super('option'); Object.assign(this, { text, value }); } },
-    createImageBitmap: () => new Promise((resolve) => ctx.bitmaps.push(() => resolve({ width: 4000, height: 2000, close() {} }))),
+    createImageBitmap: (f) => new Promise((resolve) => bitmaps.push(() => resolve({ width: 4000, height: 2000, letter: f.letter || 'A', close() {} }))),
     GZ_I18N: { num: (n) => String(n) },
   });
   context.globalThis = context;
@@ -82,19 +94,20 @@ const load = () => {
   const ui = vm.runInContext('GZ_CARD_UI', context);
   const dialog = () => body.children.find((e) => e.tagName === 'DIALOG');
   const find = (pred) => all(dialog()).find(pred);
-  const picture = async (file = {}) => {
+  const picture = (file = {}) => {
     const input = find((e) => e.type === 'file');
     input.files = [file];
     return input.fire('change');
   };
-  return { store, ctx, ui, dialog, find, picture };
+  return { ui, dialog, find, picture, bitmaps };
 };
+const load = () => { const env = computer(); return { env, store: env.store, ...tab(env) }; };
 
 test('closing after a failed save keeps the editor and the draft, and says so', async () => {
-  const { store, ctx, ui, dialog, find } = load();
+  const { env, store, ui, dialog, find } = load();
   store.sync.cards = { [A]: { k: 'solid', c: '#111111' } };
   await ui.open(A);
-  ctx.failSync = true;
+  env.failSync = true;
   const solid = find((e) => e.type === 'color');
   solid.value = '#ff0000';
   await solid.fire('input');
@@ -105,7 +118,7 @@ test('closing after a failed save keeps the editor and the draft, and says so', 
   assert.match(find((e) => e.className === 'gz-ce-note').textContent, /Close again/);
   assert.equal(store.sync.cards[A].c, '#111111', 'nothing was saved');
   // Storage works again: closing saves the draft that was kept.
-  ctx.failSync = false;
+  env.failSync = false;
   await done.fire('click');
   await tick(20);
   assert.equal(dialog(), undefined);
@@ -113,47 +126,132 @@ test('closing after a failed save keeps the editor and the draft, and says so', 
 });
 
 test('a picture that is ready after the editor moved to another course is dropped, not given to it', async () => {
-  const { store, ctx, ui, dialog, picture } = load();
+  const { store, ui, dialog, picture, bitmaps } = load();
   store.sync.cards = { [B]: { k: 'solid', c: '#222222' } };
   await ui.open(A);
   const pending = picture();
   await tick(5);
   await ui.open(B);
-  ctx.bitmaps.shift()();
+  bitmaps.shift()();
   await pending;
   await tick(20);
   assert.deepEqual(store.sync.cards, { [B]: { k: 'solid', c: '#222222' } });
-  assert.deepEqual(Object.keys(store.local).filter((k) => k.startsWith('cardImg:')), [], 'and nothing is kept for it');
+  assert.deepEqual(pics(store.local), [], 'and nothing is kept for it');
   assert.ok(dialog()?.open);
 });
 
+test('of two picks in one editor, the later one wins, whichever finishes first', async () => {
+  const { store, ui, picture, bitmaps } = load();
+  await ui.open(A);
+  const first = picture({ letter: 'F' });
+  await tick(5);
+  const second = picture({ letter: 'S' });
+  await tick(5);
+  bitmaps[1]();
+  await second;
+  await tick(20);
+  bitmaps[0]();
+  await first;
+  await tick(20);
+  assert.deepEqual(pics(store.local), [`cardImg:${store.sync.cards[A].i}`], 'one picture, the one the style uses');
+  assert.match(store.local[`cardImg:${store.sync.cards[A].i}`], /base64,S+$/, 'the later pick');
+});
+
 test('a replaced picture is deleted once the new one is saved, and every stored picture counts toward the cap', async () => {
-  const { store, ctx, ui, picture } = load();
+  const { store, ui, picture, bitmaps } = load();
   for (let n = 0; n < 3; n++) {
     await ui.open(A);
     const p = picture();
     await tick(5);
-    ctx.bitmaps.shift()();
+    bitmaps.shift()();
     await p;
     await tick(20);
   }
-  const imgs = Object.keys(store.local).filter((k) => k.startsWith('cardImg:'));
-  assert.equal(imgs.length, 1, `one picture left, not ${imgs.length}`);
-  assert.equal(`cardImg:${store.sync.cards[A].i}`, imgs[0]);
+  assert.deepEqual(pics(store.local), [`cardImg:${store.sync.cards[A].i}`], 'one picture left');
 
   // Another course's picture that no index lists still counts.
-  const { store: s2, ctx: c2, ui: u2, find } = load();
+  const { env, store: s2, ui: u2, find, picture: pick2, bitmaps: b2 } = load();
   s2.sync.cards = { [B]: { k: 'image', i: 'bbbbbbbbbbbb' } };
   s2.local['cardImg:bbbbbbbbbbbb'] = `data:image/webp;base64,${'B'.repeat(3800000)}`;
-  c2.size = 300000;
+  env.size = 300000;
   await u2.open(A);
-  const input = find((e) => e.type === 'file');
-  input.files = [{}];
-  const p = input.fire('change');
+  const p = pick2();
   await tick(5);
-  c2.bitmaps.shift()();
+  b2.shift()();
   await p;
   await tick(20);
   assert.equal(s2.sync.cards[A], undefined, 'over the total cap: refused');
   assert.match(find((e) => e.className === 'gz-ce-note').textContent, /too big/);
+});
+
+test('two tabs picking at once can never pass the cap together, and neither loses the other’s course', async () => {
+  const env = computer();
+  env.store.sync.cards = { [C]: { k: 'image', i: 'cccccccccccc' } };
+  env.store.local['cardImg:cccccccccccc'] = `data:image/webp;base64,${'C'.repeat(3491977)}`; // 3,492,000 characters
+  env.size = 300000; // 300,023 characters each
+  const one = tab(env), two = tab(env);
+  await one.ui.open(A);
+  await two.ui.open(B);
+  const p1 = one.picture({ letter: 'O' }), p2 = two.picture({ letter: 'T' });
+  await tick(5);
+  one.bitmaps.shift()();
+  two.bitmaps.shift()();
+  await Promise.all([p1, p2]);
+  await tick(30);
+  assert.ok(env.peak <= K.IMG_TOTAL, `peaked at ${env.peak}`);
+  assert.equal(pics(env.store.local).length, 2, 'the old picture and one new one');
+  assert.equal([env.store.sync.cards[A], env.store.sync.cards[B]].filter(Boolean).length, 1, 'one tab got its picture; the other was told it was too big');
+  // Every stored style's picture is still there.
+  for (const s of Object.values(env.store.sync.cards)) if (s.i) assert.ok(`cardImg:${s.i}` in env.store.local, s.i);
+});
+
+test('the background worker takes card writes from this extension only, one at a time', async () => {
+  const m = require('../manifest.json');
+  const store = { sync: {}, local: { 'cardImg:cccccccccccc': `data:image/webp;base64,${'C'.repeat(3491977)}` } };
+  store.sync.cards = { [C]: { k: 'image', i: 'cccccccccccc' } };
+  const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
+  const area = (s) => ({
+    get: (k) => later(() => structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]])))),
+    set: (v) => later(() => { Object.assign(s, structuredClone(v)); }),
+    remove: (k) => later(() => { for (const x of [].concat(k)) delete s[x]; }),
+  });
+  const listeners = [];
+  const context = vm.createContext({
+    URL, console, TextEncoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    chrome: {
+      runtime: {
+        id: 'glaze', getURL: () => 'chrome-extension://x/', getManifest: () => m,
+        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
+      },
+      storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
+    },
+  });
+  vm.runInContext(read('lib/background.js'), context);
+  const send = (msg, id = 'glaze') => new Promise((res) => {
+    let kept = false;
+    for (const f of listeners) if (f(msg, { id, tab: {} }, res) === true) kept = true;
+    if (!kept) res('ignored');
+  });
+  const image = `data:image/webp;base64,${'N'.repeat(300000)}`;
+  assert.equal(await send({ type: 'glaze:cards', key: A, style: { k: 'solid', c: '#123456' } }, 'other'), 'ignored');
+  const [a, b] = await Promise.all([send({ type: 'glaze:cards', key: A, style: {}, image }), send({ type: 'glaze:cards', key: B, style: {}, image })]);
+  assert.deepEqual([a.ok, b.ok, b.error], [true, false, 'cap']);
+  assert.equal(store.sync.cards[A].i, a.id);
+  assert.equal(pics(store.local).length, 2);
+});
+
+test('two tabs saving different courses at the same moment keep both', async () => {
+  const env = computer();
+  const one = tab(env), two = tab(env);
+  await one.ui.open(A);
+  await two.ui.open(B);
+  for (const [t, c] of [[one, '#aa0000'], [two, '#00aa00']]) {
+    const i = t.find((e) => e.type === 'color');
+    i.value = c;
+    await i.fire('input');
+  }
+  await Promise.all([one.find((e) => e.className === 'gz-ce-done').fire('click'), two.find((e) => e.className === 'gz-ce-done').fire('click')]);
+  await tick(30);
+  assert.deepEqual(env.store.sync.cards, { [A]: { k: 'solid', c: '#aa0000' }, [B]: { k: 'solid', c: '#00aa00' } });
 });

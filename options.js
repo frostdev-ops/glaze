@@ -514,11 +514,9 @@ GZ_UI.load().then((s) => {
     $('#card-set-note').textContent = n ? t('{n} card styles from a theme take turns on the cards that have no style of their own.', { n }) : '';
   };
   chrome.storage.sync.get('cards', (r) => renderCardSet(r?.cards));
-  $('#card-set-clear').addEventListener('click', () => chrome.storage.sync.get('cards', (r) => {
-    const cards = GZ_CARDS.styles(r?.cards);
-    delete cards['*'];
-    chrome.storage.sync.set({ cards }, () => hint(chrome.runtime.lastError ? t('Not saved: {error}', { error: chrome.runtime.lastError.message }) : t('Saved')));
-  }));
+  // Card writes go through the background worker, one at a time with every Canvas tab's (lib/cards.js change).
+  const cardsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:cards', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)));
+  $('#card-set-clear').addEventListener('click', async () => { const ok = await cardsOp({ set: [] }); hint(ok ? t('Saved') : t('Not saved. Try again in a moment.'), !ok); });
 
   // Another surface (the popup, another options tab) changed something: take it, unless it is
   // only our own save coming back.
@@ -592,7 +590,7 @@ GZ_UI.load().then((s) => {
     s.card = offer.card;
     // A theme's card styles take turns on the cards without their own (lib/cards.js).
     const set = offer.cardSet;
-    if (set.length) chrome.storage.sync.get('cards', (r) => chrome.storage.sync.set({ cards: GZ_CARDS.styles({ ...r?.cards, '*': set }) }));
+    if (set.length) cardsOp({ set });
     $('#share-code').value = '';
     endOffer();
     fill();
@@ -717,7 +715,7 @@ GZ_UI.load().then((s) => {
     }
     Object.assign(s, GZ_SANITIZE(raw), { card: GZ_CARDS.settings(raw.card) });
     save(Object.keys(s));
-    if (raw.cards || raw.links) chrome.storage.sync.set({ cards: GZ_CARDS.styles(raw.cards), links: GZ_CARDS.links(raw.links) });
+    if (raw.cards || raw.links) cardsOp({ replace: { cards: raw.cards, links: raw.links } });
     fill();
     hint(t('Imported {file}.', { file: file.name }));
   });
@@ -736,8 +734,7 @@ GZ_UI.load().then((s) => {
     Object.assign(s, GZ_SANITIZE({ presets: s.presets }), { card: GZ_CARDS.settings() });
     save(Object.keys(s));
     // Card styles and bookmarks too, and the pictures kept for them on this computer.
-    chrome.storage.sync.remove(['cards', 'links']);
-    chrome.storage.local.get(null, (r) => chrome.storage.local.remove(Object.keys(r || {}).filter((k) => k.startsWith('cardImg:'))));
+    cardsOp({ reset: true });
     fill();
     hint(t('Everything is back to the defaults. Your presets are kept.'));
 

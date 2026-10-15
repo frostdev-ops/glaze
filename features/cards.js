@@ -193,31 +193,27 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(commit, soon ? 500 : 0);
   };
-  // Over what is stored now (another tab may have saved since), refused if the item would not fit in sync storage.
-  // False, with the reason in the dialog, when it isn't saved.
-  const commit = async (e = ed) => {
-    clearTimeout(saveTimer);
-    if (!e) return true;
-    const { key, style } = e;
-    const links = e.links.map(K.link).filter(Boolean);
-    const r = await get('sync', ['cards', 'links']);
-    const cards = { ...K.styles(r.cards) };
-    const all = { ...K.links(r.links) };
-    if (style) cards[key] = style; else delete cards[key];
-    if (links.length) all[key] = links; else delete all[key];
-    if (K.bytes('cards', cards) > K.ITEM_MAX || K.bytes('links', all) > K.ITEM_MAX) { say(t('Too much to sync. Remove a style or a bookmark from another course.')); return false; }
-    const patch = {};
-    if (JSON.stringify(cards) !== JSON.stringify(K.styles(r.cards))) patch.cards = cards;
-    if (JSON.stringify(all) !== JSON.stringify(K.links(r.links))) patch.links = all;
-    if (Object.keys(patch).length && !await set('sync', patch)) { say(t('Not saved. Try again in a moment.')); return false; }
-    if (patch.cards) await tidy(cards);
-    return true;
+  // Saving goes through the background worker (lib/cards.js change), one change at a time for every tab and site,
+  // applied to what is stored then. An editor's own saves also go in order (e.chain), each sending the draft as it is
+  // when its turn comes, so a save started before a new picture can't follow it with the old one.
+  const SAID = {
+    sync: 'Too much to sync. Remove a style or a bookmark from another course.',
+    cap: "That picture is too big to keep. Try a smaller one, or remove another card's picture.",
+    write: 'Not saved. Try again in a moment.',
   };
-  // A picture kept on this device goes with the last style that used it (a replaced one, once the new one is saved).
-  // Found by storage's own keys, so none is missed; the open editor's picture, not saved yet, stays.
-  const tidy = async (cards) => {
-    const gone = K.orphans(cards, K.kept(await get('local', null))).filter((id) => id !== ed?.style?.i);
-    if (gone.length) await new Promise((res) => { try { chrome.storage.local.remove(gone.map((id) => `cardImg:${id}`), res); } catch { res(); } });
+  const send = (op) => new Promise((res) => {
+    try { chrome.runtime.sendMessage({ type: 'glaze:cards', ...op }, (r) => res(chrome.runtime.lastError || !r ? { ok: false, error: 'write' } : r)); } catch { res({ ok: false, error: 'write' }); }
+  });
+  const turn = (e, fn) => (e.chain = (e.chain || Promise.resolve()).then(fn, fn));
+  // True once saved; false, with the reason in the dialog, when it isn't.
+  const commit = (e = ed) => {
+    clearTimeout(saveTimer);
+    if (!e) return Promise.resolve(true);
+    return turn(e, async () => {
+      const r = await send({ key: e.key, style: e.style, links: e.links.map(K.link).filter(Boolean) });
+      if (!r.ok && ed === e) say(t(SAID[r.error] || SAID.write));
+      return r.ok;
+    });
   };
 
   const KINDS = [['', 'Canvas color'], ['solid', 'Color'], ['gradient', 'Gradient'], ['image', 'Picture']];
@@ -507,9 +503,11 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   // A picture from this computer: scaled down (lib/cards.js fit), kept as WebP (JPEG where the browser can't write
   // WebP), within the per-picture and total caps (every picture on this device counts, the one it replaces too), in
   // storage.local. It belongs to the editor it was chosen in (`mine`): if that has closed or moved to another course
-  // by the time the picture is ready, it is dropped. The replaced picture goes once the new style is saved (tidy).
+  // by the time the picture is ready, it is dropped. The replaced picture goes once the new style is saved (lib/cards.js change).
   const addPicture = async (f, base, mine) => {
-    const here = () => ed === mine;
+    // Only the latest pick in this editor may be kept: an earlier one that finishes later is dropped.
+    const rev = (mine.pick = (mine.pick || 0) + 1);
+    const here = () => ed === mine && mine.pick === rev;
     let bmp;
     try { bmp = await createImageBitmap(f); } catch { if (here()) say(t("That file isn't a picture Glaze can read.")); return; }
     if (!here()) { bmp.close?.(); return; }
@@ -519,20 +517,21 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     bmp.close?.();
     let url = c.toDataURL('image/webp', 0.82);
     if (!url.startsWith('data:image/webp')) url = c.toDataURL('image/jpeg', 0.85);
-    const others = K.kept(await get('local', null));
-    if (!here()) return;
-    if (!K.room(url.length, others)) { say(t("That picture is too big to keep. Try a smaller one, or remove another card's picture.")); return; }
-    const id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
-    if (!await set('local', { [`cardImg:${id}`]: url })) { if (here()) say(t('Not saved. Try again in a moment.')); return; }
-    // Moved on while it was written: nothing uses it.
-    if (!here()) { try { chrome.storage.local.remove(`cardImg:${id}`); } catch { /* reloaded */ } return; }
-    if (data) data.imgs[`cardImg:${id}`] = url;
-    const s = { ...base, k: 'image', i: id };
-    delete s.u;
-    mine.leave = false;
-    mine.style = K.style(s);
-    paint();
-    await commit(mine);
+    if (url.length > K.IMG_MAX) { say(t(SAID.cap)); return; }
+    await turn(mine, async () => {
+      if (!here()) return;
+      const s = { ...base, k: 'image' };
+      delete s.u;
+      delete s.i;
+      const r = await send({ key: mine.key, style: s, links: mine.links.map(K.link).filter(Boolean), image: url });
+      if (!r.ok) { if (ed === mine) say(t(SAID[r.error] || SAID.write)); return; }
+      if (data) data.imgs[`cardImg:${r.id}`] = url;
+      // The draft takes the saved picture, unless a newer pick has started since.
+      if (mine.pick !== rev) return;
+      mine.leave = false;
+      mine.style = K.style({ ...s, i: r.id });
+      paint();
+    });
   };
 
   // A picture's average color, through its filter, for the contrast line; null when its site doesn't allow reading it.
