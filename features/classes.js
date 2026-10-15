@@ -11,6 +11,9 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   const MAX = 5 << 20; // bytes read from a file or link
   let C = null, key = '', tz, courses = [], store = { courses: [] };
   let box = null, opener = null, view = null; // view: what's drawn ('list', 'import' or 'review'), redrawn on a change
+  // Each drawing of the dialog (a view, or the dialog opened again) is a new generation: an answer that comes back after
+  // it moved on (a file or link still being read, a write the worker hadn't answered) changes nothing on screen.
+  let gen = 0;
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false && k !== '')); return e; };
   // A click a person made (not a page script's): every button here saves, deletes or moves on.
@@ -27,6 +30,17 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
   };
   const lang = () => GZ_I18N.locale(ctx.locale());
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:classes', key, ...m }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
+  // A write through the worker, stamped with when the student asked for it (lib/classes.js change weighs it by that), then
+  // the list, if the dialog is still where it was asked from.
+  const write = async (m, said) => {
+    const g = gen;
+    const r = await send({ ...m, at: Date.now() });
+    if (r?.ok) store = C.clean(r.data);
+    if (g !== gen) return;
+    if (!r?.ok) return say(t("Couldn't save. Try again in a moment."), true);
+    list('.gz-cl-import');
+    say(r.stale ? t('Some of this changed in another tab first. This is what is kept now.') : said);
+  };
   const ORDER = [1, 2, 3, 4, 5, 6, 0];
   const dayName = (d, style = 'short') => new Intl.DateTimeFormat(lang(), { weekday: style, timeZone: 'UTC' }).format(Date.UTC(2026, 0, 4 + d)); // 4 Jan 2026 was a Sunday
   // "9:00 – 9:50 AM", as the page's language writes a range of times.
@@ -43,7 +57,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     view = 'list';
     const confirmAll = make('div', { className: 'gz-cl-row', hidden: true },
       make('span', { textContent: t('Delete every class in your schedule on this site?') }),
-      button(t('Delete all'), async () => { const r = await send({ op: 'clear' }); if (r?.ok) { store = C.clean(r.data); list('.gz-cl-import'); say(t('Deleted.')); } else say(t("Couldn't save. Try again in a moment."), true); }, { className: 'gz-cl-danger' }),
+      button(t('Delete all'), () => write({ op: 'clear' }, t('Deleted.')), { className: 'gz-cl-danger' }),
       button(t('Cancel'), () => { confirmAll.hidden = true; all.focus(); }));
     const all = button(t('Delete all'), () => { confirmAll.hidden = false; confirmAll.querySelector('button').focus(); });
     const items = store.courses.map((c) => {
@@ -53,10 +67,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
         ...c.periods.map((p) => make('span', { className: 'gz-cl-faint', textContent: describe(p) }))),
       make('div', { className: 'gz-cl-row' },
         button(t('Edit'), () => review([{ id: c.id, code: c.code, name: c.name, periods: c.periods.map((p) => ({ ...p, unsure: [] })) }], { edit: true }), { 'aria-label': t('Edit {name}', { name: c.name }) }),
-        button(t('Delete'), async () => {
-          const r = await send({ op: 'drop', id: c.id });
-          if (r?.ok) { store = C.clean(r.data); list('.gz-cl-import'); say(t('Deleted {name}.', { name: c.name })); } else say(t("Couldn't save. Try again in a moment."), true);
-        }, { 'aria-label': t('Delete {name}', { name: c.name }) })));
+        button(t('Delete'), () => write({ op: 'drop', id: c.id }, t('Deleted {name}.', { name: c.name })), { 'aria-label': t('Delete {name}', { name: c.name }) })));
     });
     draw(t('Class schedule'),
       make('p', { className: 'gz-cl-faint', textContent: t('Your classes, shown in the agenda and, if you turn them on, as class reminders. Read and kept on this device; nothing is sent anywhere.') }),
@@ -103,12 +114,14 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       if (!file.files[0] && !text.value.trim() && !link.value.trim()) return say(t('Choose a file, paste your schedule or give a calendar link.'), true);
       go.disabled = true;
       say(t('Reading…'));
+      const g = gen;
       try {
         const r = await read(file.files[0], text.value, link.value.trim());
+        if (g !== gen) return;
         if (!r.entries.length) { go.disabled = false; return say(t("Glaze didn't find any classes there. Check that days and times are in it, or add your classes yourself."), true); }
         const found = r.entries.map((e) => ({ ...e, id: C.match(e, courses) }));
         review(found, { ignored: r.ignored });
-      } catch (e) { go.disabled = false; say(e?.message || t("Couldn't read that."), true); }
+      } catch (e) { if (g === gen) { go.disabled = false; say(e?.message || t("Couldn't read that."), true); } }
     }, { className: 'gz-cl-main-btn' });
     draw(t('Import a schedule'),
       make('p', { className: 'gz-cl-faint', textContent: t('Glaze reads it on this device and shows you what it found before anything is saved.') }),
@@ -136,12 +149,8 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
       }
       if (!out.length) return say(t('Nothing to save: keep at least one class.'), true);
       save.disabled = true;
-      const r = await send({ op: opts.edit ? 'put' : 'add', courses: out });
+      await write({ op: opts.edit ? 'put' : 'add', courses: out }, t('Saved.'));
       save.disabled = false;
-      if (!r?.ok) return say(t("Couldn't save. Try again in a moment."), true);
-      store = C.clean(r.data);
-      list('.gz-cl-import');
-      say(t('Saved.'));
     }, { className: 'gz-cl-main-btn' });
     draw(opts.edit ? t('Edit class') : opts.manual ? t('Add a class') : t('Check what Glaze found'),
       !opts.edit && !opts.manual && make('p', { className: 'gz-cl-faint', textContent: t('Nothing is saved until you choose Save. Fields marked "Check this" were a guess.') }),
@@ -217,11 +226,16 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     const drawSkip = () => chips.replaceChildren(...[...skip].sort().map((k) => make('li', {}, make('span', { textContent: dateText(k) }),
       button('×', () => { skip.delete(k); drawSkip(); add.focus(); }, { 'aria-label': t('Remove {date}', { date: dateText(k) }) }))));
     const more = make('input', { type: 'date' });
-    const add = button(t('Add'), () => { if (C.keyOf(C.dayNum(more.value)) === more.value) { skip.add(more.value); more.value = ''; drawSkip(); } more.focus(); });
+    // Only a whole date ("2026-11-26"); an empty or half-typed field adds nothing and says so.
+    const add = button(t('Add'), () => {
+      if (C.date(more.value)) { skip.add(more.value); more.value = ''; drawSkip(); say(''); }
+      else say(t('Choose a date first.'), true);
+      more.focus();
+    });
     drawSkip();
     const el = make('div', { className: 'gz-cl-period' }, dayBox,
       make('div', { className: 'gz-cl-row' }, field(t('Starts'), start, u.has('time')), field(t('Ends'), end, u.has('time') || u.has('end')), field(t('Place'), loc, u.has('loc'))),
-      make('div', { className: 'gz-cl-row' }, field(t('First day'), from), field(t('Last day'), to)),
+      make('div', { className: 'gz-cl-row' }, field(t('First day'), from), field(t('Last day'), to, u.has('to'))),
       make('div', { className: 'gz-cl-skip' }, make('span', { textContent: t('No class on') }), chips, field(t('Date'), more), add),
       button(t('Remove this time'), remove, { className: 'gz-cl-quiet' }));
     let bad = null;
@@ -241,6 +255,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
 
   // ---- the dialog ------------------------------------------------------------------------------------------------
   const draw = (title, ...parts) => {
+    gen++;
     const close = button('×', () => box.close(), { className: 'gz-cl-close', 'aria-label': t('Close') });
     box.firstChild.replaceChildren(make('div', { className: 'gz-cl-top' }, make('h2', { id: 'gz-cl-title', textContent: title }), close),
       ...parts, make('p', { className: 'gz-cl-say', role: 'status' }));

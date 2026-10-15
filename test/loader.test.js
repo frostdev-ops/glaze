@@ -106,7 +106,8 @@ const page = () => ({ document: { addEventListener() {}, documentElement: {} }, 
 // Moved out of the first content script in W0c: the palette, the keys, the course menu, the previews and Download all.
 // W0d: the draft backup, Ultra's what-if calculator, the document buttons and your place in a course.
 const W0C = [['features/palette.js', 'GZ_CMD'], ['features/keys.js', 'GZ_KEYS'], ['features/coursemenu.js', 'GZ_COURSE_MENU'], ['features/previews.js', 'GZ_PEEK'], ['features/download.js', 'GZ_DOWNLOAD'],
-  ['features/drafts.js', 'GZ_DRAFT_UI'], ['features/whatif.js', 'GZ_WHATIF'], ['features/docs.js', 'GZ_DOCS'], ['features/place.js', 'GZ_PLACE']];
+  ['features/drafts.js', 'GZ_DRAFT_UI'], ['features/whatif.js', 'GZ_WHATIF'], ['features/docs.js', 'GZ_DOCS'], ['features/place.js', 'GZ_PLACE'],
+  ['lib/gpa.js', 'GZ_GPA'], ['features/gpaterms.js', 'GZ_GPA_TERMS'], ['lib/doctext.js', 'GZ_DOCTEXT']];
 test('every loadable file ends on a value, which is how the worker knows it ran', () => {
   for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'i18n/de.js', 'lib/cards.js', 'lib/seek.js', 'features/search.js', 'lib/widgets.js', 'features/widgets.js', 'lib/classes.js', 'features/classes.js', 'lib/ics.js', 'lib/doctext.js', ...W0C.map(([f]) => f)]) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX, GZ_SPEC: {}, ...page() });

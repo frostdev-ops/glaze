@@ -360,9 +360,11 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const add = small('add', t('Add task'));
     add.dataset.focus = 'add';
     add.setAttribute('aria-expanded', String(!!form));
+    const ics = small('ics', t('Export calendar (.ics)'), t('Export'));
+    ics.dataset.focus = 'ics';
     head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }),
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
-      ...(globalThis.GZ_REMIND_UI?.head() || []), add); // the streak and reminders (features/reminders.js), when on
+      ...(globalThis.GZ_REMIND_UI?.head() || []), ics, add); // the streak and reminders (features/reminders.js), when on
     const parts = [form && taskForm()];
     parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
     if (!cache) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Loading…') }));
@@ -426,6 +428,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const k = el.closest('[data-key]')?.dataset.key;
     if (act === 'add') { form = form ? null : { cid: ctx.canvasCourseId() || '' }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
     if (act === 'cancel') { form = null; render(true); box.querySelector('[data-focus="add"]')?.focus(); return; }
+    if (act === 'ics') { ctx.need('features/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => note(t("Couldn't make the calendar. Try again in a moment."))); return; }
     if (act === 'all') { open.add(`group:${el.dataset.group}`); render(true); return; }
     if (!k) return;
     if (act === 'more') { if (open.has(k)) open.delete(k); else open.add(k); render(true); return; }

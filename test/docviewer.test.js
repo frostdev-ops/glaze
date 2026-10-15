@@ -132,6 +132,16 @@ test('Canvas is asked who you are only while annotations are on, and once', asyn
   assert.equal(ctx.profiles, 1);
 });
 
+test('with Glaze off, Canvas isn\'t asked who you are, even with annotations on', async () => {
+  const { ask, ctx, docs, sent } = page({ src: 'https://canvadocs.instructure.com/1/sessions/x/view' });
+  ctx.GZ_CTX.on = () => false;
+  ask({ gz: 'docs?' });
+  docs.sync();
+  await new Promise(setImmediate);
+  assert.equal(ctx.profiles, undefined);
+  assert.equal(sent.at(-1).msg.on, false);
+});
+
 test('nobody else is answered: other origins, other windows, other messages', () => {
   const { sent, ask } = page({ src: `/api/v1/canvadoc_session?blob=${BLOB}` });
   ask({ gz: 'docs?' }, 'https://evil.example');

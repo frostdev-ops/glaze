@@ -476,7 +476,7 @@ test('Gradescope: "Not here" in the hub hides it everywhere, and nothing from it
 });
 
 test('class start (W14): a class in the class schedule reminds its lead time before, only with its own switch on', async () => {
-  const w = world(30 * 864e5); // nothing due soon
+  const w = world(30 * 864e5, { cacheAge: 36e5 }); // nothing due soon, and Better To Do's copy is an hour old
   const tz = 'America/New_York';
   const at = Date.now() + 8 * 6e4;
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', weekday: 'short', hour: 'numeric', minute: 'numeric' }).formatToParts(at).map((x) => [x.type, x.value]));
@@ -491,4 +491,7 @@ test('class start (W14): a class in the class schedule reminds its lead time bef
   await settle();
   assert.match(on.toast()?.text || '', /Class in .*Biology/);
   assert.equal(on.ops('confirm').length, 1);
+  // Class reminders alone ask Canvas for nothing (Codex W14 review): not the planner, however old its copy.
+  assert.deepEqual(on.fetched, []);
+  assert.ok(off.fetched.length > 0, 'due-date reminders do ask, with the copy that old');
 });

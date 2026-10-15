@@ -91,9 +91,11 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const e = en(), p = location.pathname;
     return (e.todo && /^\/(courses\/\d+\/?)?$/.test(p)) || (e.cardTasks && p === '/' && !!document.querySelector('.ic-DashboardCard'));
   };
+  // Class reminders alone (the class schedule kept on this device) never ask Canvas for the planner.
+  const planner = () => en().remind || en().remindExam || en().remindPlan || en().streak;
   const refresh = () => {
     const now = Date.now();
-    if (!on || !T || asking || now - failed < 6e4 || (cache && now - cache.at < OLD) || theyAsk()) return;
+    if (!on || !T || asking || !planner() || now - failed < 6e4 || (cache && now - cache.at < OLD) || theyAsk()) return;
     asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; });
   };
 

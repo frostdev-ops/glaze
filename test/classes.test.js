@@ -253,6 +253,27 @@ test('HTML and Word files go through lib/doctext.js to the same reader', async (
   ]);
 });
 
+// Codex W14 review: the date reader compared every date with every other one (2,000 dates: ~2M comparisons; 8,000:
+// ~32M). Every step is linear now, and the text has caps. Measured on an M5 Pro: 60,000 dates took the old reader
+// 2,920 ms and take 42 ms now; 20,000 meetings on one line 3,428 ms and 143 ms. The budgets leave room for a busy machine.
+test('big or hostile input stays fast: thousands of dates, times and days on one line, and a capped paste', () => {
+  const time = (f) => { const t0 = performance.now(); const r = f(); return [r, performance.now() - t0]; };
+  const dates = '08/24/2026 '.repeat(60000); // 660 KB of dates, under the 1 MB cap
+  const [r1, ms1] = time(() => C.fromText(dates, { now: NOW }));
+  assert.ok(ms1 < 1000, `60,000 dates: ${Math.round(ms1)} ms`);
+  assert.deepEqual(r1.entries, []);
+  const [, ms2] = time(() => C.meetings('MWF 9:00-9:50am Room 1 '.repeat(20000))); // one 460 KB line straight to meetings()
+  assert.ok(ms2 < 1000, `20,000 meetings on a line: ${Math.round(ms2)} ms`);
+  const [, ms3] = time(() => C.meetings('M T W R F 9 - '.repeat(6000)));
+  assert.ok(ms3 < 1500, `days and bare numbers: ${Math.round(ms3)} ms`);
+  const lines = Array.from({ length: 30000 }, (_, i) => `CS ${100 + (i % 900)} Course ${i} MWF 9:00-9:50am Room ${i} Aug 24 - Dec 11, 2026`).join('\n'); // ~2.2 MB
+  const [r4, ms4] = time(() => C.fromText(lines, { now: NOW }));
+  assert.ok(ms4 < 4000, `a 2 MB paste: ${Math.round(ms4)} ms`);
+  assert.equal(r4.truncated, true);
+  assert.ok(r4.entries.length <= 100);
+  assert.ok(r4.entries.every((e) => e.periods.length <= 20));
+});
+
 // ---- .ics -----------------------------------------------------------------------------------------------------------
 const ICS = (body, extra = '') => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\n${extra}${body}END:VCALENDAR\r\n`;
 const VEV = (p) => `BEGIN:VEVENT\r\n${Object.entries(p).map(([k, v]) => `${k}:${v}`).join('\r\n')}\r\nEND:VEVENT\r\n`;
@@ -277,15 +298,42 @@ test('.ics: weekly classes, a moved and a cancelled meeting, in the student\'s z
   assert.equal(C.hhmm(chi.entries[0].periods[0].start), '08:00');
 });
 
-test('.ics: an export of separate events (no RRULE) still makes weekly periods; an open-ended rule has no end', () => {
+test('.ics: an export of separate events (no RRULE) still makes weekly periods; an open-ended rule ends with the window, marked', () => {
   const ev = [];
   for (const d of ['20260901', '20260903', '20260908', '20260910', '20260915', '20260917']) ev.push(VEV({ UID: `s${d}@x`, SUMMARY: 'Organic Chemistry', DTSTART: `${d}T130000`, DTEND: `${d}T141500`, LOCATION: 'Chem 101' }));
   ev.push(VEV({ UID: 'open@x', SUMMARY: 'Choir', DTSTART: '20260902T180000', DTEND: '20260902T193000', RRULE: 'FREQ=WEEKLY' }));
   const r = C.fromIcs(ICS(ev.join(''), 'X-WR-TIMEZONE:Europe/Berlin\r\n'), { now: NOW, tz: 'Europe/Berlin' });
   assert.deepEqual(summary(r), [
     ['', 'Organic Chemistry', [['24', '13:00', '14:15', 'Chem 101', '2026-09-01', '2026-09-17']]],
-    ['', 'Choir', [['3', '18:00', '19:30', '', '2026-09-02', '']]],
+    ['', 'Choir', [['3', '18:00', '19:30', '', '2026-09-02', '2027-08-04']]], // the last meeting before now + 300 days
   ]);
+  assert.deepEqual(r.entries[1].periods[0].unsure, ['to']);
+});
+
+// Codex W14 review: a converted period may only claim meetings the calendar has. An open-ended rule read in another zone
+// splits at the daylight-saving changes, and an every-other-week rule is weekly with weeks off; past the window they were
+// worked out for, neither may run on unbounded.
+test('.ics: open-ended rules never claim a meeting the calendar lacks (another zone, every other week)', () => {
+  const cases = [
+    ['America/Phoenix', VEV({ UID: 'tz@x', SUMMARY: 'Seminar', 'DTSTART;TZID=America/New_York': '20260824T090000', 'DTEND;TZID=America/New_York': '20260824T095000', RRULE: 'FREQ=WEEKLY;BYDAY=MO' })],
+    ['America/New_York', VEV({ UID: 'i2@x', SUMMARY: 'Lab', 'DTSTART;TZID=America/New_York': '20260824T140000', 'DTEND;TZID=America/New_York': '20260824T165000', RRULE: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO' })],
+  ];
+  for (const [tz, ev] of cases) {
+    const text = ICS(ev);
+    const r = C.fromIcs(text, { now: NOW, tz });
+    const store = C.clean({ courses: r.entries.map((e, i) => ({ id: `o-${i}`, name: e.name, periods: e.periods })) });
+    // Every meeting the calendar has, as day and start in the student's zone.
+    const want = new Set(I.expand(I.parse(text, { tz }), Date.UTC(2026, 7, 1), Date.UTC(2028, 0, 1)).map((o) => { const x = T.inputs(o.start, tz); return `${x.date} ${x.time}`; }));
+    let seen = 0;
+    for (let n = C.dayNum('2026-08-01'); n < C.dayNum('2028-01-01'); n++) {
+      for (const x of C.onDay(store, n)) { assert.ok(want.has(`${C.keyOf(n)} ${C.hhmm(x.start)}`), `${tz}: ${C.keyOf(n)} ${C.hhmm(x.start)} isn't in the calendar`); seen++; }
+    }
+    assert.ok(seen > 15, `${tz}: ${seen} meetings`);
+    // The day DST began in New York: one class, at 06:00 in Phoenix.
+    if (tz === 'America/Phoenix') assert.deepEqual(C.onDay(store, C.dayNum('2027-03-15')).map((x) => C.hhmm(x.start)), ['06:00']);
+    // The end Glaze chose for a rule without one is marked for the student to check.
+    assert.ok(r.entries[0].periods.every((p) => p.to && p.unsure.includes('to')));
+  }
 });
 
 test('.ics: the real Canvas feed fixture holds deadlines and one-off events, not classes', () => {
@@ -327,33 +375,71 @@ test('clean: what is kept is checked, whatever is stored', () => {
     { id: '12', periods: [] },
   ] };
   assert.deepEqual(C.clean(raw), { courses: [
-    { id: '11', code: 'BIO 1100', name: 'Biology', periods: [{ days: [2, 4], start: 810, end: 885, loc: 'Room  1', from: '2026-08-24', to: '2026-12-11', skip: ['2026-11-26'] }] },
-    { id: 'o-choir', code: '', name: 'Choir', periods: [{ days: [3], start: 1080, end: 1170, loc: '', from: '', to: '', skip: [] }] },
-  ] });
-  assert.deepEqual(C.clean(null), { courses: [] });
-  assert.deepEqual(C.clean({ courses: 'x' }), { courses: [] });
+    { id: '11', code: 'BIO 1100', name: 'Biology', at: 0, periods: [{ days: [2, 4], start: 810, end: 885, loc: 'Room  1', from: '2026-08-24', to: '2026-12-11', skip: ['2026-11-26'] }] },
+    { id: 'o-choir', code: '', name: 'Choir', at: 0, periods: [{ days: [3], start: 1080, end: 1170, loc: '', from: '', to: '', skip: [] }] },
+  ], cleared: 0, gone: {} });
+  assert.deepEqual(C.clean(null), { courses: [], cleared: 0, gone: {} });
+  assert.deepEqual(C.clean({ courses: 'x', cleared: -1, gone: { 'bad id': 5, 11: 'x' } }), { courses: [], cleared: 0, gone: {} });
+  // A deletion older than the last Delete all is covered by it and goes.
+  assert.deepEqual(C.clean({ cleared: 50, gone: { 11: 40, 12: 60 } }).gone, { 12: 60 });
   assert.equal(C.otherId('Spanish Conversation Club!'), 'o-spanish-conversation-club');
 });
 
 test('the worker\'s writes: add joins periods, put replaces a course, drop and clear remove', async () => {
   const a = area();
+  let at = 1000;
+  const w = (m) => C.change({ key: KEY, at: at++, ...m }, a);
   const bio = { id: '11', code: 'BIO 1100', name: 'Biology', periods: [P([2, 4], 810, 885)] };
-  assert.equal((await C.change({ key: KEY, op: 'add', courses: [bio] }, a)).ok, true);
+  assert.equal((await w({ op: 'add', courses: [bio] })).ok, true);
   // The same period again is kept once; a new one joins it.
-  await C.change({ key: KEY, op: 'add', courses: [{ ...bio, periods: [P([2, 4], 810, 885), P([5], 600, 650)] }] }, a);
+  await w({ op: 'add', courses: [{ ...bio, periods: [P([2, 4], 810, 885), P([5], 600, 650)] }] });
   assert.equal(a.box[KEY].courses[0].periods.length, 2);
-  await C.change({ key: KEY, op: 'put', courses: [{ ...bio, periods: [P([1], 480, 530)] }] }, a);
+  await w({ op: 'put', courses: [{ ...bio, periods: [P([1], 480, 530)] }] });
   assert.deepEqual(a.box[KEY].courses[0].periods.map((p) => p.days), [[1]]);
-  await C.change({ key: KEY, op: 'add', courses: [{ id: 'o-choir', name: 'Choir', periods: [P([3], 1080, 1170)] }] }, a);
-  await C.change({ key: KEY, op: 'drop', id: '11' }, a);
+  await w({ op: 'add', courses: [{ id: 'o-choir', name: 'Choir', periods: [P([3], 1080, 1170)] }] });
+  await w({ op: 'drop', id: '11' });
   assert.deepEqual(a.box[KEY].courses.map((c) => c.id), ['o-choir']);
-  const r = await C.change({ key: KEY, op: 'clear' }, a);
-  assert.deepEqual([r.ok, KEY in a.box], [true, false]);
-  assert.deepEqual(await C.change({ key: 'classes:https://canvas.test/abc', op: 'clear' }, a), { ok: false, error: 'bad' });
-  assert.deepEqual(await C.change({ key: KEY, op: 'nuke' }, a), { ok: false, error: 'bad' });
+  const r = await w({ op: 'clear' });
+  assert.deepEqual([r.ok, a.box[KEY].courses], [true, []]);
+  assert.deepEqual(await C.change({ key: 'classes:https://canvas.test/abc', op: 'clear', at }, a), { ok: false, error: 'bad' });
+  assert.deepEqual(await w({ op: 'nuke' }), { ok: false, error: 'bad' });
+  assert.deepEqual(await C.change({ key: KEY, op: 'clear' }, a), { ok: false, error: 'bad' }, 'every write says when it was made');
   const failing = area();
   failing.local.set = async () => false;
-  assert.deepEqual(await C.change({ key: KEY, op: 'add', courses: [bio] }, failing), { ok: false, error: 'write' });
+  assert.deepEqual(await C.change({ key: KEY, op: 'add', courses: [bio], at }, failing), { ok: false, error: 'write' });
+});
+
+// Codex W14 review: writes from other tabs, or ones that arrive late, can't bring back what a later Delete took away or
+// overwrite a later save.
+test('the worker\'s writes: an older save after Delete all, a deletion or a newer save is left out', async () => {
+  const bio = { id: '11', code: 'BIO 1100', name: 'Biology', periods: [P([2, 4], 810, 885)] };
+  const choir = { id: 'o-choir', name: 'Choir', periods: [P([3], 1080, 1170)] };
+  const a = area();
+  await C.change({ key: KEY, op: 'add', courses: [bio, choir], at: 100 }, a);
+  // An old tab's edit, made before Delete all in another tab, arrives after it.
+  await C.change({ key: KEY, op: 'clear', at: 200 }, a);
+  const late = await C.change({ key: KEY, op: 'put', courses: [{ ...bio, periods: [P([1], 480, 530)] }], at: 150 }, a);
+  assert.deepEqual([late.ok, late.stale, a.box[KEY].courses], [true, true, []]);
+  // An edit made after Delete all of a course that's no longer kept: nothing to edit.
+  assert.equal((await C.change({ key: KEY, op: 'put', courses: [bio], at: 250 }, a)).stale, true);
+  assert.deepEqual(a.box[KEY].courses, []);
+  // A save made after Delete all stays.
+  await C.change({ key: KEY, op: 'add', courses: [bio, choir], at: 300 }, a);
+  assert.deepEqual(a.box[KEY].courses.map((c) => c.id), ['11', 'o-choir']);
+  // Deleted at 400; an add made at 350 arriving later doesn't bring it back, one made at 450 does.
+  await C.change({ key: KEY, op: 'drop', id: '11', at: 400 }, a);
+  await C.change({ key: KEY, op: 'add', courses: [bio], at: 350 }, a);
+  assert.deepEqual(a.box[KEY].courses.map((c) => c.id), ['o-choir']);
+  await C.change({ key: KEY, op: 'add', courses: [bio], at: 450 }, a);
+  assert.deepEqual(a.box[KEY].courses.map((c) => c.id), ['o-choir', '11']);
+  // A newer edit isn't overwritten by an older one, and an older deletion doesn't remove it.
+  await C.change({ key: KEY, op: 'put', courses: [{ ...choir, periods: [P([5], 1080, 1170)] }], at: 600 }, a);
+  await C.change({ key: KEY, op: 'put', courses: [{ ...choir, periods: [P([1], 1080, 1170)] }], at: 550 }, a);
+  await C.change({ key: KEY, op: 'drop', id: 'o-choir', at: 580 }, a);
+  assert.deepEqual(a.box[KEY].courses.find((c) => c.id === 'o-choir').periods[0].days, [5]);
+  // A Delete all made before a course's last save leaves that course.
+  await C.change({ key: KEY, op: 'clear', at: 590 }, a);
+  assert.deepEqual(a.box[KEY].courses.map((c) => c.id), ['o-choir']);
 });
 
 test('the worker allows a page its own site\'s schedules only', () => {

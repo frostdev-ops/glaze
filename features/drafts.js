@@ -11,7 +11,6 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const ultra = ctx.site === 'ultra';
   const { t, locale, capi, profile, canvasCourses, local } = ctx;
   const EDITOR = ctx.draftEditor; // Ultra's Quill editors, or Canvas's Inbox compose body
-  const BBID = /_\d+_\d+/;
   let inboxAccount = null;
   let inboxLoading = false;
   let inboxRetry = 0;
@@ -31,15 +30,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   };
   const inboxIdentity = (ed) => identityOf(ctx.draftAt(ed));
   // Ultra: the nearest Blackboard id above the editor (a reply's post, say), and the editor's own id.
-  const keyOf = (s) => {
-    if (!ultra) return GZ_DRAFTS.canvasKey(identityOf(s));
-    let near = '';
-    for (const p of s.up) {
-      for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
-      if (near) break;
-    }
-    return `draft:${s.path}#${near}/${s.ed.id}`;
-  };
+  // A snapshot's own values only, never its elements (Ultra may reuse them for another post).
+  const keyOf = (s) => (ultra ? `draft:${s.path}#${s.near}/${s.id}` : GZ_DRAFTS.canvasKey(identityOf(s)));
   const draftKey = (ed) => keyOf(ctx.draftAt(ed));
   const typed = new Map(); // key -> { ed, text, gone }: written here, watched until it posts
   const saveTimers = new Map(); // editor -> timer
@@ -91,7 +83,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       inboxAccount = { user: String(user.id), courses };
       const eds = [...accountWaiting];
       accountWaiting.clear();
-      for (const [ed, at] of eds) if (ed.isConnected) write({ type: 'input', target: ed }); else keep(at);
+      for (const [, at] of eds) take(at);
     }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
   };
   // An editor gone (compose closed, the page changed) before its copy could be made: the copy is made from what was read
@@ -110,6 +102,12 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     if (!key) return;
     inboxPending.set(s.ed, { key, d: { html: s.text, text: s.text, at: s.at, canvas } });
     saveDraft(s.ed);
+  };
+  // What was written while this file or the account loaded: taken up as just written if its editor is still there for
+  // the same post (Ultra may reuse an editor and its wrapper for another), else kept from what was read then.
+  const take = (s) => {
+    const now = s.ed.isConnected && ctx.draftAt(s.ed);
+    if (now && now.id === s.id && now.near === s.near && now.path === s.path) write({ type: 'input', target: s.ed }); else keep(s);
   };
   // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
   const write = (e) => {
@@ -267,7 +265,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     const key = ed && draftKey(ed);
     if (key) { inboxWrites.set(ed, key); captureInboxDraft(ed); saveDraft(ed); inboxSending.add(key); }
   }, true);
-  return { write, watch, drop, keep };
+  return { write, watch, drop, take };
 })();
 
 GZ_DRAFT_UI;
