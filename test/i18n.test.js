@@ -147,7 +147,7 @@ test('the manifest description is localized and fits the stores', () => {
 
 test('no catalogue lists the same English key twice', () => {
   for (const f of files) {
-    const keys = [...read(`i18n/${f}`).matchAll(/^\s*'((?:[^'\\]|\\.)+)'\s*:/gm)].map((m) => m[1]);
+    const keys = [...read(`i18n/${f}`).matchAll(/^\s*(['"])((?:(?!\1)[^\\]|\\.)+)\1\s*:/gm)].map((m) => m[2].replace(/\\(.)/g, '$1'));
     const dup = keys.filter((k, i) => keys.indexOf(k) !== i);
     assert.deepEqual(dup, [], `${f} repeats ${dup.join(', ')}`);
   }
