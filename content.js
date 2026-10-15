@@ -1232,6 +1232,7 @@
   let inboxLoading = false;
   let inboxRetry = 0;
   let inboxWrites = new WeakMap();
+  const inboxPending = new Map();
   const inboxSending = new Set();
   const barKeys = new WeakMap();
   const draftText = (ed) => ultra ? ed.textContent : ed.value;
@@ -1260,7 +1261,29 @@
   const saveTimers = new Map(); // editor -> timer
   const offered = new WeakSet();
   const bars = new Map(); // bar -> editor
+  // The modal can unmount before the debounce runs; retain the input's validated destination and body.
+  const captureInboxDraft = (ed) => {
+    const canvas = inboxIdentity(ed);
+    const key = GZ_DRAFTS.canvasKey(canvas);
+    if (!key) { inboxPending.delete(ed); return; }
+    const d = { html: ed.value, text: ed.value, at: Date.now(), canvas };
+    inboxPending.set(ed, { key, d });
+  };
   const saveDraft = (ed) => {
+    if (!ultra) {
+      clearTimeout(saveTimers.get(ed));
+      saveTimers.delete(ed);
+      const pending = inboxPending.get(ed);
+      inboxPending.delete(ed);
+      if (!pending || !settings.enhance.drafts || !observer) return;
+      const { key, d } = pending;
+      if (ed.isConnected && draftKey(ed) !== key) return;
+      if (typed.get(key)?.at > d.at) return;
+      // Issue the storage request now: an async read's callback can disappear during navigation.
+      if (!GZ_DRAFTS.worth(d.text)) { typed.delete(key); local((s) => s.remove(key)); }
+      else { typed.set(key, { ed, ...d, gone: 0 }); local((s) => s.set({ [key]: d })); }
+      return;
+    }
     saveTimers.delete(ed);
     if (!ed.isConnected || !settings.enhance.drafts || (!ultra && !observer)) return;
     const key = ultra ? draftKey(ed) : inboxWrites.get(ed);
@@ -1284,6 +1307,7 @@
     }
     if (!ultra) {
       inboxWrites.set(ed, draftKey(ed));
+      captureInboxDraft(ed);
       for (const [bar, editor] of bars) if (editor === ed) { bar.remove(); bars.delete(bar); }
     }
     clearTimeout(saveTimers.get(ed));
@@ -1338,7 +1362,15 @@
     bars.set(bar, ed);
     barKeys.set(bar, key);
   };
-  const dropBars = () => { for (const bar of bars.keys()) bar.remove(); bars.clear(); if (!ultra) inboxWrites = new WeakMap(); };
+  const dropBars = () => {
+    for (const bar of bars.keys()) bar.remove();
+    bars.clear();
+    if (!ultra) {
+      inboxWrites = new WeakMap();
+      for (const ed of inboxPending.keys()) { clearTimeout(saveTimers.get(ed)); saveTimers.delete(ed); }
+      inboxPending.clear();
+    }
+  };
   const forgetInboxDraft = (key, d) => local((s) => s.get(key, (r) => { if (r?.[key]?.at === d.at && r[key].text === d.text) s.remove(key); }));
   const inboxPosted = async (d) => {
     // Only after Send/close or a recovery offer, never sweep-poll the inbox. Detail GET must not mark mail read.
@@ -1400,6 +1432,7 @@
         inboxAccount = { user: String(user.id), courses };
       }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
     }
+    for (const ed of inboxPending.keys()) if (!ed.isConnected) saveDraft(ed);
     for (const [key, d] of typed) if (!d.ed.isConnected) {
       typed.delete(key);
       if (inboxSending.delete(key)) setTimeout(() => { if (observer && settings.enhance.drafts) inboxPosted(d).then((sent) => { if (sent) forgetInboxDraft(key, d); }); }, 1000);
@@ -1419,7 +1452,7 @@
     if (ultra || !settings.enhance.drafts || !observer || !e.target.closest?.('#send-message-button')) return;
     const ed = document.querySelector(CANVAS_DRAFT);
     const key = ed && draftKey(ed);
-    if (key) { inboxWrites.set(ed, key); saveDraft(ed); inboxSending.add(key); }
+    if (key) { inboxWrites.set(ed, key); captureInboxDraft(ed); saveDraft(ed); inboxSending.add(key); }
   }, true);
   // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
   const tidyDrafts = () => {
