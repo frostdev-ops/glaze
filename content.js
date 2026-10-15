@@ -225,6 +225,7 @@
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device.
   const recordCourses = () => {
+    if (!ultra) return;
     if (window.top !== window) return;
     try {
       chrome.storage.local.get('seenCoursesAt', (r) => {
@@ -281,6 +282,8 @@
   const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept } })
     .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
+  // The Canvas course this page is in (/courses/:id/...), or undefined.
+  const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1];
   // One /users/me for everything that asks at once; asked again only if it failed.
   let meId = null;
   const me = () => (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meId = null; throw e; }));
@@ -396,6 +399,7 @@
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagExtras = (roots) => {
     tagCards();
+    if (!ultra) return;
     const { scores, urgency, inline } = settings.enhance;
     if (!scores && !urgency && !inline) return;
     const now = new Date();
@@ -465,8 +469,9 @@
     timer = 0;
     const roots = outermost(dirty);
     dirty.clear();
-    if (full) { full = false; sweepAll(); if (ultra) tagExtras([document.body]); } else { sweepRoots(roots); if (ultra) tagExtras(roots); }
-    if (!ultra) { tagCards(); themeEditors(); return placeScene(); } // Canvas: the sweep, the card grades, the editor frames and the scene; everything below is Ultra's
+    if (full) { full = false; sweepAll(); tagExtras([document.body]); } else { sweepRoots(roots); tagExtras(roots); }
+    // Both sites run the same list; a helper that isn't on Canvas yet returns at its top (`if (!ultra) return`).
+    themeEditors();
     if (tip && ultraTipShown()) hideTip();
     paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked) applySettings();
@@ -549,7 +554,7 @@
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
     if (window.top === window) dueWeek();
-    if (!ultra) { liftCourses(); return tagCards(); } // Canvas: the sweep, the course colors, Due this week and the card grades; the rest is Ultra's extras and its /learn/api
+    if (!ultra) liftCourses();
     tagExtras([document.body]);
     watchDrafts();
     recordCourses();
@@ -809,6 +814,7 @@
   // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
   // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
   const renderProgress = () => {
+    if (!ultra) return;
     const old = document.getElementById('gz-progress');
     if (!settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
     const top = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
@@ -904,6 +910,7 @@
   const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
   for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, openNew, true);
   const renderNew = () => {
+    if (!ultra) return;
     const { newgrades, newcontent } = settings.enhance;
     if (!(newgrades || newcontent) || window.top !== window || !observer) return;
     if (!seen) return loadSeen();
@@ -1072,6 +1079,7 @@
     setTimeout(backTo, 200);
   };
   const keepPlace = () => {
+    if (!ultra) return;
     if (!settings.enhance.place) { place = null; return; }
     const cid = window.top === window && observer && courseId();
     const rows = cid ? outlineRows(cid) : [];
@@ -1135,6 +1143,7 @@
   const asPct = (p) => (p == null ? '–' : GZ_I18N.pct(Math.floor(p * 100 + 1e-9) / 100, locale()));
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const renderCalc = () => {
+    if (!ultra) return;
     const old = document.getElementById('gz-calc');
     const cid = courseId();
     const host = settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview');
@@ -1295,6 +1304,7 @@
     }));
   };
   const watchDrafts = () => {
+    if (!ultra) return;
     if (!settings.enhance.drafts) return;
     const now = Date.now();
     let page = null;
@@ -1401,6 +1411,7 @@
     }
   };
   const syncDownloads = () => {
+    if (!ultra) return;
     const on = settings.enhance.download && courseId();
     if (!on) { for (const b of document.querySelectorAll('.gz-dl')) b.remove(); return; }
     for (const item of document.querySelectorAll('.content-list-item[data-content-id]')) {
@@ -1655,7 +1666,7 @@
   };
   // On Canvas: its pages, this course's tabs, your courses and what is due. Each is a plain page load.
   const canvasCommands = async () => {
-    const cid = location.pathname.match(/^\/courses\/([^/]+)/)?.[1];
+    const cid = canvasCourseId();
     const [courses, tabs, due] = await Promise.all([canvasCourses(), cid ? capi(`/courses/${cid}/tabs`).catch(() => []) : [], dueWeek()]);
     return [
       ...tabs.filter((x) => x.label && !x.hidden).map((x) => ({ label: x.label, hint: t('This course'), group: 'Go to', run: go(x.html_url) })),
@@ -1937,6 +1948,7 @@
     return GZ_CAL_COURSE(el.textContent, el.className.match?.(/course-color-(\d+)/)?.[1], calItems, courseList);
   };
   const paintCourses = () => {
+    if (!ultra) return;
     if (isPreview) return;
     const colors = courseColors();
     for (const el of document.querySelectorAll('[class*="course-color-"]')) {
@@ -2462,16 +2474,12 @@
     const was = enhanced;
     enhanced = s.enhance;
     for (const k of Object.keys(s.enhance)) setAttr(`data-gz-enhance-${k}`, s.enhance[k]);
-    // The attributes above are set on Canvas too (canvas.css may read them); the work they switch on is Ultra's,
-    // but for the card grades.
-    if (ultra) {
-      if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-      if (observer) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
-      if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
-      if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
-      if (observer) renderNew();
-      if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
-    } else if (observer && s.enhance.overall && !was.overall) tagCards();
+    if (observer && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
+    if (observer) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
+    if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
+    if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
+    if (observer) renderNew();
+    if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
