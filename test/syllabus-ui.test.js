@@ -116,7 +116,7 @@ class El {
   remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this); this.parentNode = null; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   addEventListener(type, f) { (this.on[type] ||= []).push(f); }
-  fire(type) { for (const f of this.on[type] || []) f({ type, isTrusted: true, preventDefault() {} }); }
+  fire(type, isTrusted = true) { for (const f of this.on[type] || []) f({ type, isTrusted, preventDefault() {} }); }
   get all() { return [this, ...this.children.flatMap((c) => c.all)]; }
   focus() {}
   showModal() { this.open = true; }
@@ -208,4 +208,23 @@ test('a second Read it calls the first read off, Stop reading calls off the newe
   reads[2].resolve({ text: 'Instructor: Dr. Amara Okafor', ocr: null });
   await settle();
   assert.equal(reviewed, 1, 'a read left alone does');
+});
+
+test('a file is read only on the student\'s own click of Read it, never a script\'s', async () => {
+  const reads = [];
+  const p = page({ GZ_IMPORT: { read: (file, opts) => { reads.push(opts); return new Promise(() => {}); }, note: () => '', doubt: () => false } });
+  const opening = p.UI.open();
+  await settle();
+  p.release();
+  await opening;
+  await settle();
+  const dlg = p.body.children[0];
+  const button = (text) => dlg.all.find((e) => e.tagName === 'BUTTON' && e.text === text);
+  dlg.all.find((e) => e.id === 'gz-syl-file').files = [{ name: 'made-by-the-page.pdf' }];
+  button('Read it').fire('click', false);
+  await settle();
+  assert.equal(reads.length, 0, 'a script\'s click reads nothing');
+  button('Read it').fire('click');
+  await settle();
+  assert.equal(reads.length, 1, 'the student\'s click reads it');
 });
