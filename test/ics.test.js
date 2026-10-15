@@ -30,7 +30,8 @@ test('Google export: weekly MWF class across the DST change, EXDATEs, a moved an
   const lec = cal.events.find((e) => e.summary === 'BIO 1100 Lecture' && !e.recurrenceId);
   assert.equal(lec.description, "Lecture, then questions.\nBring the lab manual; it's on the bookstore list.");
   assert.equal(lec.location, 'Science Hall 214, Northfield University');
-  assert.deepEqual(lec.rrule, { freq: 'WEEKLY', interval: 1, count: null, until: at('2026-12-12T04:59:59Z'), byday: ['FR', 'MO', 'WE'], wkst: 'SU', unsupported: false });
+  assert.deepEqual(lec.rrule, { freq: 'WEEKLY', interval: 1, count: null, until: at('2026-12-12T04:59:59Z'), byday: ['FR', 'MO', 'WE'], wkst: 'SU' });
+  assert.deepEqual(lec.unsupported, []);
   assert.equal(lec.exdates.length, 3);
 
   const occ = I.expand(cal, ...FALL).filter((o) => o.event.uid === lec.uid);
@@ -139,7 +140,7 @@ test('rules this reader can\'t follow are flagged and give only their first occu
     + 'BEGIN:VEVENT\nUID:ny\nDTSTART;VALUE=DATE:20270101\nRRULE:FREQ=YEARLY;COUNT=3\nEND:VEVENT\n'
     + 'BEGIN:VEVENT\nUID:d\nDTSTART:20270104T080000Z\nRRULE:FREQ=DAILY;INTERVAL=2;BYDAY=MO,TU,WE,TH,FR;UNTIL=20270110T080000Z\nEND:VEVENT\nEND:VCALENDAR');
   const occ = I.expand(cal, at('2026-01-01'), at('2031-01-01'));
-  assert.equal(cal.events[0].rrule.unsupported, true);
+  assert.deepEqual(cal.events[0].unsupported, ['RRULE BYMONTH', 'RRULE BYDAY']);
   assert.deepEqual(occ.filter((o) => o.event.uid === 'mlk').map((o) => o.start), ['2027-01-18']);
   assert.deepEqual(occ.filter((o) => o.event.uid === 'ny').map((o) => o.start), ['2027-01-01', '2028-01-01', '2029-01-01']);
   // Every other day from Mon Jan 4, weekdays only, through Sun Jan 10: Jan 4, 6, 8.
@@ -163,7 +164,7 @@ test('write: CRLF, escaping, folding at 75 octets without splitting characters, 
   assert.ok(out.endsWith('\r\n') && !/[^\r]\n/.test(out), 'CRLF only');
   for (const l of out.split('\r\n')) assert.ok(Buffer.byteLength(l) <= 75, `${Buffer.byteLength(l)} octets: ${l}`);
   assert.ok(!out.includes('�'));
-  assert.match(out, /^UID:localhost_3000-assignment-183@glaze$/m);
+  assert.match(out, /^UID:localhost%3A3000\/assignment\/183@glaze$/m);
   assert.match(out, /^SUMMARY:Essay\\, draft\\; final$/m);
   assert.match(out, /^DTSTART:20261020T035900Z$/m);
   assert.match(out, /^DTSTART:20260824T090000$/m);
@@ -185,4 +186,106 @@ test('write: CRLF, escaping, folding at 75 octets without splitting characters, 
   assert.equal(iso(cls.at(-1).start), '2026-12-11T15:00:00Z');
   assert.deepEqual([back.events[2].start, back.events[2].end, back.events[2].summary], ['2026-09-25', '2026-09-26', 'Midterm\n1']);
   assert.throws(() => I.write({ events: [{ summary: 'no uid', start: now }] }), RangeError);
+});
+
+// Regression tests from the S4 review. Each failed (or hung) on the first version of lib/ics.js.
+const cal1 = (...lines) => ['BEGIN:VCALENDAR', ...lines, 'END:VCALENDAR'].join('\r\n');
+const ev = (...lines) => ['BEGIN:VEVENT', ...lines, 'END:VEVENT'].join('\r\n');
+const NY = (local) => `DTSTART;TZID=America/New_York:${local}`;
+const local = (ms) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/New_York', dateStyle: 'short', timeStyle: 'short' }).format(ms);
+
+test('review: a huge INTERVAL is flagged instead of looping forever, and work is bounded', () => {
+  const cal = I.parse(cal1(ev('UID:big', 'DTSTART:20261001T090000Z', 'RRULE:FREQ=MONTHLY;INTERVAL=2147483647;COUNT=2')));
+  assert.ok(cal.events[0].unsupported.includes('RRULE INTERVAL'));
+  assert.equal(I.expand(cal, at('2026-01-01'), at('2100-01-01')).length, 1);
+  // A shared step budget cuts a long expansion short and says so.
+  const daily = I.parse(cal1(ev('UID:d', 'DTSTART:20000101T090000Z', 'RRULE:FREQ=DAILY')));
+  const occ = I.expand(daily, at('2026-01-01'), at('2027-01-01'), { limits: { steps: 100 } });
+  assert.equal(occ.truncated, true);
+  assert.equal(I.expand(daily, at('2026-01-01'), at('2026-01-03')).truncated, undefined);
+  assert.throws(() => I.expand(daily, NaN, at('2026-01-01')), RangeError);
+  assert.throws(() => I.expand(daily, at('2027-01-01'), at('2026-01-01')), RangeError);
+  // Input caps: bytes, and events kept.
+  assert.throws(() => I.parse('x'.repeat(100), { limits: { bytes: 50 } }), RangeError);
+  const three = I.parse(cal1(ev('UID:1', 'DTSTART:20261001'), ev('UID:2', 'DTSTART:20261002'), ev('UID:3', 'DTSTART:20261003')), { limits: { events: 2 } });
+  assert.deepEqual([three.events.length, three.truncated], [2, true]);
+});
+
+test('review: generated times inside a DST gap are skipped and not counted', () => {
+  // Sundays at 02:30 New York from March 1, 2026; March 8 has no 02:30.
+  const cal = I.parse(cal1(ev('UID:g', NY('20260301T023000'), 'DURATION:PT1H', 'RRULE:FREQ=WEEKLY;COUNT=3')));
+  assert.deepEqual(I.expand(cal, at('2026-02-01'), at('2026-05-01')).map((o) => local(o.start)),
+    ['2026-03-01 02:30', '2026-03-15 02:30', '2026-03-22 02:30']);
+});
+
+test('review: DTEND and hour durations are exact, day durations are nominal', () => {
+  const two = I.parse(cal1(ev('UID:p', NY('20260308T013000'), 'DURATION:PT2H'))).events[0];
+  assert.equal(two.end - two.start, 2 * 3600e3, 'PT2H is two elapsed hours across the gap');
+  const day = I.parse(cal1(ev('UID:q', NY('20260307T120000'), 'DURATION:P1D'))).events[0];
+  assert.equal(local(day.end), '2026-03-08 12:00', 'P1D is the same time next day');
+  const wk = I.parse(cal1(ev('UID:w', NY('20260301T013000'), 'DTEND;TZID=America/New_York:20260301T033000', 'RRULE:FREQ=WEEKLY;COUNT=3')));
+  assert.deepEqual(I.expand(wk, at('2026-02-01'), at('2026-05-01')).map((o) => (o.end - o.start) / 3600e3), [2, 2, 2]);
+});
+
+test('review: UNTIL keeps its full value and must match DTSTART; bad integers are refused', () => {
+  const daily = (start, until) => I.write({ events: [{ uid: 'u', start, rrule: { freq: 'DAILY', until } }] }, { now: 0 });
+  assert.match(daily('2026-09-28T09:00', '2026-10-02T08:00'), /^RRULE:FREQ=DAILY;UNTIL=20261002T080000$/m);
+  const back = I.parse(daily('2026-09-28T09:00', '2026-10-02T08:00'), { tz: 'UTC' });
+  assert.equal(I.expand(back, at('2026-09-01'), at('2026-11-01')).length, 4, 'Sep 28 to Oct 1, not Oct 2');
+  assert.match(daily('2026-09-28', '2026-10-02'), /UNTIL=20261002$/m);
+  assert.match(daily(at('2026-09-28T09:00:00Z'), at('2026-10-02T09:00:00Z')), /UNTIL=20261002T090000Z$/m);
+  assert.throws(() => daily('2026-09-28', at('2026-10-02T00:00:00Z')), RangeError);
+  assert.throws(() => daily('2026-09-28T09:00', at('2026-10-02T00:00:00Z')), RangeError);
+  assert.throws(() => daily(at('2026-09-28T09:00:00Z'), '2026-10-02'), RangeError);
+  const counted = (count, interval) => I.write({ events: [{ uid: 'u', start: '2026-09-28', rrule: { freq: 'DAILY', count, interval } }] }, { now: 0 });
+  assert.match(counted(2 ** 32 + 1), /COUNT=4294967297$/m, 'no 32-bit wrap');
+  assert.throws(() => counted(0), RangeError);
+  assert.throws(() => counted(3, 1.5), RangeError);
+  assert.throws(() => I.write({ events: [{ uid: 'u', start: '2026-09-28', rrule: { freq: 'DAILY', byday: ['XX'] } }] }), RangeError);
+});
+
+test('review: impossible dates are refused, not moved to another day; DTEND has DTSTART\'s form and comes later', () => {
+  const cal = I.parse(cal1(ev('UID:feb', 'DTSTART;VALUE=DATE:20260230'), ev('UID:hour', 'DTSTART:20261001T250000Z'), ev('UID:fine', 'DTSTART:20261001')));
+  assert.deepEqual(cal.events.map((e) => e.uid), ['fine']);
+  assert.deepEqual(cal.problems, [{ uid: 'feb', reason: 'impossible DTSTART' }, { uid: 'hour', reason: 'impossible DTSTART' }]);
+  const w = (start, end) => I.write({ events: [{ uid: 'u', start, end }] }, { now: 0 });
+  assert.throws(() => w('2026-02-30T09:00'), RangeError);
+  assert.throws(() => w(1e100), RangeError);
+  assert.throws(() => w(NaN), RangeError);
+  assert.throws(() => w('2026-09-28', '2026-09-28T10:00'), RangeError);
+  assert.throws(() => w(at('2026-09-28T10:00:00Z'), at('2026-09-28T09:00:00Z')), RangeError);
+  assert.throws(() => w('2026-09-28', '2026-09-28'), RangeError);
+  assert.doesNotMatch(w(at('2026-09-28T10:00:00Z'), at('2026-09-28T10:00:00Z')), /DTEND/, 'a deadline has no DTEND');
+  assert.match(w('0099-01-05', '0099-01-06'), /DTSTART;VALUE=DATE:00990105/);
+});
+
+test('review: a TZID named like an object property falls back instead of crashing', () => {
+  for (const id of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const cal = I.parse(cal1(ev('UID:z', `DTSTART;TZID=${id}:20261001T090000`)), { tz: 'Asia/Tokyo' });
+    assert.deepEqual([cal.events[0].tz, iso(cal.events[0].start)], ['Asia/Tokyo', '2026-10-01T00:00:00Z'], id);
+  }
+});
+
+test('review: RDATE adds occurrences; what is not followed is reported', () => {
+  const cal = I.parse(cal1(
+    ev('UID:r', 'DTSTART:20261001T090000Z', 'RRULE:FREQ=WEEKLY;COUNT=2', 'RDATE:20261002T090000Z'),
+    ev('UID:only', 'DTSTART;VALUE=DATE:20261005', 'RDATE;VALUE=DATE:20261007,20261009'),
+    ev('UID:per', 'DTSTART:20261001T090000Z', 'RDATE;VALUE=PERIOD:20261003T090000Z/PT1H'),
+    ev('UID:fut', 'DTSTART:20261003T090000Z', 'RECURRENCE-ID;RANGE=THISANDFUTURE:20261001T090000Z')));
+  const occ = I.expand(cal, at('2026-09-01'), at('2026-12-01'));
+  assert.deepEqual(occ.filter((o) => o.event.uid === 'r').map((o) => iso(o.start).slice(0, 10)), ['2026-10-01', '2026-10-02', '2026-10-08']);
+  assert.deepEqual(occ.filter((o) => o.event.uid === 'only').map((o) => o.start), ['2026-10-05', '2026-10-07', '2026-10-09']);
+  assert.deepEqual(cal.events.find((e) => e.uid === 'per').unsupported, ['RDATE PERIOD']);
+  assert.deepEqual(cal.events.find((e) => e.uid === 'fut').unsupported, ['RANGE=THISANDFUTURE']);
+  assert.deepEqual(cal.events[0].unsupported, []);
+});
+
+test('review: generated UIDs keep different items apart; supplied UIDs are TEXT-escaped both ways', () => {
+  assert.notEqual(I.uid('class', 'BIO 1100', 'MWF'), I.uid('class', 'BIO_1100', 'MWF'));
+  assert.notEqual(I.uid('a-b', 'c'), I.uid('a', 'b-c'));
+  assert.notEqual(I.uid('a/b', 'c'), I.uid('a', 'b/c'));
+  assert.equal(I.parse(cal1(ev('UID:a\\,b', 'DTSTART:20261001'))).events[0].uid, 'a,b');
+  const out = I.write({ events: [{ uid: 'a,b;c\\d', start: '2026-10-01' }] }, { now: 0 });
+  assert.match(out, /^UID:a\\,b\\;c\\\\d$/m);
+  assert.equal(I.parse(out).events[0].uid, 'a,b;c\\d');
 });
