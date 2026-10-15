@@ -7,6 +7,7 @@ const os = require('node:os');
 const vm = require('node:vm');
 const G = require('../lib/sharing.js');
 const S = require('../lib/sessions.js');
+const R = require('../lib/relay.js');
 const N = require('../lib/notes.js');
 const T = require('../lib/todo.js');
 const { relay, diskStore } = require('../server/relay.js');
@@ -60,13 +61,13 @@ test('optional switch: list/export/import are offline; permission, key reads and
   assert.throws(() => S.make({ local: d.local, sync: d.settings, db: d.db, notes: d.notes, relay: 'https://evil.invalid' }), /bad/);
   await d.send('list'); assert.deepEqual((await d.send('exportKeys')).keys, []); assert.equal(d.requests.length, 0);
   const key = G.exportKeys(G.create('collection'));
-  await d.send('importKeys', { keys: [key] }).catch(() => {}); // another origin is refused even for a backup
+  await d.send('importKeys', { keys: [key] }); // Restoring another origin is offline and does not grant consent.
   assert.equal(d.requests.length, 0);
   await assert.rejects(d.send('create', { kind: 'notes', title: 'x', key: NK, ids: [crypto.randomUUID()] }), /missing/);
-  assert.equal(d.local.data.shareOn, undefined);
+  assert.equal(d.local.data.shareOn, false);
   d.permission(false);
   await assert.rejects(d.send('create', { kind: 'look', title: 'x' }), /permission/);
-  assert.equal(d.local.data.shareOn, undefined);
+  assert.equal(d.local.data.shareOn, false);
   const get = d.local.get; d.local.get = async () => { throw new Error('read failed'); };
   await assert.rejects(d.send('list'), /read failed/); d.local.get = get;
   d.db.all = async () => { throw new Error('disk failed'); };
@@ -264,10 +265,10 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.ok(!require('../manifest.json').web_accessible_resources.some((e) => e.resources.some((p) => p.startsWith('sharing/'))));
   const ui = read('sharing/sessions.js');
   assert.match(ui, /const human = \(e\) => e\.isTrusted/);
-  assert.match(ui, /if \(!human\(e\) \|\| busy\) return;[\s\S]*?const p = permission\(\)/);
+  assert.match(ui, /if \(!human\(e\) \|\| busy \|\| !state\) return;/);
   assert.match(ui, /if \(!e\.isTrusted\) return;/);
-  // The required https://*/* already covers the relay; Chrome flags (and drops) an optional entry for it as redundant.
-  assert.equal(require('../manifest.json').optional_host_permissions, undefined);
+  // Required HTTPS access covers the default/custom relay; optional hosts are only for explicit local testing.
+  assert.deepEqual(require('../manifest.json').optional_host_permissions, ['http://localhost/*', 'http://127.0.0.1/*']);
   assert.ok(require('../manifest.json').host_permissions.includes('https://*/*'));
 });
 
@@ -287,10 +288,69 @@ test('session worker accepts only exact extension pages; an LMS or another exten
     const r = await send('exportKeys', url, id);
     assert.equal(r.error, 'sender');
   }
-  for (const extra of [{ frameId: 2 }, { origin: 'https://school.instructure.com' }]) assert.equal((await send('exportKeys', 'chrome-extension://glaze/sharing/sessions.html', 'glaze', extra)).error, 'sender');
+  for (const op of ['exportKeys', 'relaySave', 'relayTest']) for (const extra of [{ frameId: 2 }, { origin: 'https://school.instructure.com' }]) assert.equal((await send(op, 'chrome-extension://glaze/sharing/sessions.html', 'glaze', extra)).error, 'sender');
   assert.equal((await send('unknown', 'chrome-extension://glaze/sharing/sessions.html')).error, 'sender');
   assert.equal((await send('exportKeys', 'chrome-extension://glaze/sharing/sessions.html', 'glaze', { origin: 'chrome-extension://glaze' }, { payload: 'x'.repeat(33 << 20) })).error, 'sender');
   assert.ok(!imported.includes('sharing.js'), 'refused callers do not even load the crypto dependency');
+});
+
+test('E1 editor relay caller is limited to the exact extension top frame and two relay operations', async () => {
+  const listeners = [], handled = [], area = localArea();
+  const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
+    GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(m.op); return { ok: true }; } }) },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
+  vm.runInContext(read('lib/background.js'), ctx);
+  const editor = { id: 'glaze', url: 'chrome-extension://glaze/options.html#sharing/relay', origin: 'chrome-extension://glaze', frameId: 0 };
+  const send = (op, sender = editor) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op, server: 'http://127.0.0.1:8787' }, sender, resolve) === true) return; });
+  for (const sender of [{ ...editor, frameId: 1 }, { ...editor, origin: 'https://school.instructure.com' }, { ...editor, id: 'other' },
+    { ...editor, url: 'chrome-extension://glaze/preview.html' }, { ...editor, url: 'https://school.instructure.com/options.html' },
+    { ...editor, url: 'chrome-extension://glaze/options.html.evil' }, { ...editor, url: 'chrome-extension://other/options.html' }]) {
+    for (const op of ['relaySave', 'relayTest']) assert.equal((await send(op, sender)).error, 'sender');
+  }
+  for (const op of ['create', 'join', 'resume', 'list', 'unknown']) assert.equal((await send(op)).error, 'sender');
+  assert.deepEqual(handled, []);
+  for (const op of ['relaySave', 'relayTest']) assert.equal((await send(op)).ok, true);
+  assert.deepEqual(handled, ['relaySave', 'relayTest']);
+});
+
+test('E1 synced relay changes refresh an open Sessions page without scheduling network work', async () => {
+  const changes = [], messages = [], connections = [], area = localArea(); let network = 0;
+  const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
+    GZ_SESSIONS: { make: () => ({ connect: () => () => {}, changed: () => network++ }) },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => connections.push(fn) } },
+      storage: { local: area, sync: area, onChanged: { addListener: (fn) => changes.push(fn) } } } });
+  vm.runInContext(read('lib/background.js'), ctx);
+  for (const connect of connections) connect({ name: 'glaze:sessions', sender: { id: 'glaze', url: 'chrome-extension://glaze/sharing/sessions.html', origin: 'chrome-extension://glaze', frameId: 0 },
+    onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, postMessage: (message) => messages.push(message), disconnect() {} });
+  await new Promise(setImmediate);
+  for (const fn of changes) fn({ shareRelay: { newValue: 'https://new-relay.example.edu' } }, 'sync');
+  assert.equal(messages.length, 1); assert.equal(messages[0].changed, true); assert.equal(network, 0);
+});
+
+test('E1 editor nickname writes sanitize one course against current stored preferences', async () => {
+  const listeners = [], area = localArea({ courses: { ...require('../defaults.js').GZ_SANITIZE().courses, colors: { '_2_1': '#123456' }, names: { '_2_1': 'Keep me' } } });
+  const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
+  vm.runInContext(read('lib/background.js'), ctx);
+  const sender = { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 };
+  const send = (name, extra = {}) => new Promise((resolve) => {
+    for (const f of listeners) if (f({ type: 'glaze:courseName', id: '_1_1', name }, { ...sender, ...extra }, resolve) === true) return;
+    resolve({ ok: false, error: 'unhandled' });
+  });
+  assert.equal((await send('  New\n name  ')).ok, true);
+  assert.equal(area.data.courses.names._1_1, 'New name'); assert.equal(area.data.courses.names._2_1, 'Keep me'); assert.equal(area.data.courses.colors._2_1, '#123456');
+  assert.equal((await send('denied', { frameId: 1 })).error, 'sender');
+  assert.equal((await send('denied', { url: 'chrome-extension://glaze/preview.html' })).error, 'sender');
+  for (const extra of [{ origin: 'https://school.instructure.com' }, { id: 'other' }, { url: 'chrome-extension://glaze/options.html.evil' }, { url: 'https://school.instructure.com/options.html' }]) assert.equal((await send('denied', extra)).error, 'sender');
+  assert.equal((await send('')).ok, true); assert.equal(area.data.courses.names._1_1, undefined); assert.equal(area.data.courses.names._2_1, 'Keep me');
 });
 
 test('Pause interrupts a running sync before waiting for the shared storage queue', async () => {
@@ -307,10 +367,12 @@ test('Pause interrupts a running sync before waiting for the shared storage queu
   const send = (op) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op }, { id: 'glaze', url: 'chrome-extension://glaze/sharing/sessions.html', origin: 'chrome-extension://glaze', frameId: 0 }, resolve) === true) return; });
   const pending = send('sync'); await ready;
   const queued = send('sync');
+  const queuedHealth = send('relayTest');
   const paused = send('pause');
   try { await new Promise(setImmediate); assert.ok(stopped > 0, 'Pause must abort before its queued mutation can run'); }
   finally { release(); await pending; await paused; }
   assert.equal((await queued).error, 'off', 'an old queued sync cannot restart after Pause');
+  assert.equal((await queuedHealth).error, 'off', 'an old queued connection test cannot start after Pause');
   assert.equal(syncs, 1);
 });
 
@@ -370,4 +432,149 @@ test('disk relay: selected-note sharing stays selected; only an explicit folder 
   await N.run({ key: NK, op: 'meta', id: next, folder, at: Date.now() + 1 }, { local: a.local }, a.notes);
   await sync(a, whole.sid);
   assert.match((await a.send('read', whole)).view[next].html, /Explicit folder member/);
+});
+
+test('E1 relay origins and invites are bounded, canonical and origin-only', () => {
+  for (const [input, expected] of [[' https://Relay.Example.edu:443/ ', 'https://relay.example.edu'], ['https://relay.example.edu:8443', 'https://relay.example.edu:8443'], ['http://localhost:8787', 'http://localhost:8787'], ['http://127.0.0.1:8787/', 'http://127.0.0.1:8787']]) assert.equal(R.normalize(input), expected);
+  for (const input of [null, {}, 'x', '//relay.example.edu', 'http://relay.example.edu', 'http://localhost.evil', 'http://[::1]', 'file:///tmp/relay', 'https://user:pass@relay.example.edu', 'https://relay.example.edu/path', 'https://relay.example.edu/?q=1', 'https://relay.example.edu/#key', 'https://' + 'a'.repeat(513)]) assert.equal(R.normalize(input), null, String(input));
+  for (const server of ['https://relay.example.edu', 'http://127.0.0.1:8787']) {
+    const edit = G.link(server, { sid: G.b64(new Uint8Array(16)), seed: new Uint8Array(32) }, true);
+    assert.equal(R.invite(edit), server);
+    assert.equal(R.invite(edit.replace('/j#', '/prefix/j#')), null);
+    assert.equal(R.invite(edit.replace('/j#', '/j?q=1#')), null);
+    assert.equal(R.invite(edit + 'x'), null);
+  }
+});
+
+test('E1 saving a relay is offline and rejects invalid input without changing the preference', async () => {
+  const local = localArea(), settings = localArea(), calls = [];
+  const worker = S.make({ local, sync: settings, db: database(), notes: notesDB(), permission: async () => { calls.push('permission'); return true; }, fetch: async () => { calls.push('fetch'); throw new Error('must stay offline'); } });
+  try {
+    await worker.handle({ op: 'relaySave', server: ' https://Relay.Example.edu:443/ ' });
+    assert.equal(settings.data.shareRelay, 'https://relay.example.edu');
+    assert.equal((await worker.handle({ op: 'list' })).relay, 'https://relay.example.edu');
+    await assert.rejects(worker.handle({ op: 'relaySave', server: 'https://user:pass@relay.example.edu/path' }), /bad/);
+    assert.equal(settings.data.shareRelay, 'https://relay.example.edu');
+    assert.deepEqual(calls, []); assert.equal(local.data.shareOn, undefined); assert.equal(local.data.shareHosts, undefined);
+  } finally { worker.stop(); }
+});
+
+test('E1 custom Join and imported-key Resume require host confirmation before permission or network', async () => {
+  const local = localArea(), db = database(), calls = [], server = 'https://relay.example.edu';
+  const key = G.exportKeys(G.create('collection', { server }));
+  const link = G.link(server, { sid: key.sid, seed: G.unb64(key.seed) }, true);
+  const worker = S.make({ local, sync: localArea(), db, notes: notesDB(), permission: async (s) => { calls.push(['permission', s]); return false; }, fetch: async () => { calls.push(['fetch']); throw new Error('blocked'); } });
+  try {
+    await assert.rejects(worker.handle({ op: 'join', link }), /confirmation/);
+    await assert.rejects(worker.handle({ op: 'join', link, confirmServer: 'https://another.example.edu' }), /confirmation/);
+    assert.deepEqual(calls, []); assert.equal((await db.all('sessions')).length, 0);
+    await local.set({ shareHosts: [server] });
+    await worker.handle({ op: 'relaySave', server });
+    await assert.rejects(worker.handle({ op: 'join', link }), /confirmation/, 'a selected, previously approved custom server still needs Join confirmation');
+    const defaultKey = G.create('collection');
+    const defaultLink = G.link(G.SERVER, { sid: defaultKey.sid, seed: G.unb64(defaultKey.seed) }, true);
+    await assert.rejects(worker.handle({ op: 'join', link: defaultLink }), /confirmation/, 'the built-in host also needs confirmation when it differs from the selected relay');
+    assert.deepEqual(calls, []);
+    await local.set({ shareHosts: [] });
+    await worker.handle({ op: 'importKeys', keys: [key] });
+    assert.equal(local.data.shareOn, false); assert.deepEqual(calls, []);
+    await assert.rejects(worker.handle({ op: 'resume' }), /confirmation/);
+    assert.deepEqual(calls, []);
+    await assert.rejects(worker.handle({ op: 'resume', confirmServers: [server] }), /permission/);
+    assert.deepEqual(calls, [['permission', server]]); assert.equal(local.data.shareOn, false);
+    assert.equal((await worker.handle({ op: 'exportKeys' })).keys[0].server, server);
+  } finally { worker.stop(); }
+});
+
+test('E1 health checks are bounded, explicit, credential-free HTTP with no redirects and no sharing side effects', async () => {
+  const local = localArea(), settings = localArea(), requests = [];
+  let response = () => new Response('{"ok":true}'), permit = true;
+  const worker = S.make({ local, sync: settings, db: database(), notes: notesDB(), healthTimeout: 15,
+    permission: async () => permit, fetch: async (url, init) => { requests.push({ url, init }); return response(init); } });
+  const checkHealth = () => worker.handle({ op: 'relayTest', server: 'http://127.0.0.1:8787' });
+  try {
+    assert.equal((await checkHealth()).result, 'connected');
+    const request = requests[0];
+    assert.equal(request.url, 'http://127.0.0.1:8787/health');
+    for (const [key, value] of Object.entries({ method: 'GET', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', cache: 'no-store' })) assert.equal(request.init[key], value);
+    assert.equal(request.init.headers, undefined);
+    response = () => new Response('unavailable', { status: 503 });
+    assert.deepEqual(await checkHealth(), { ok: true, result: 'http', status: 503 });
+    response = () => new Response('{"ok":false}'); assert.equal((await checkHealth()).result, 'invalid');
+    response = () => new Response('not json'); assert.equal((await checkHealth()).result, 'invalid');
+    response = () => new Response('x'.repeat(1025)); assert.equal((await checkHealth()).result, 'invalid');
+    response = () => new Response('{"ok":true}', { headers: { 'content-length': '1025' } }); assert.equal((await checkHealth()).result, 'invalid');
+    response = () => { throw new Error('redirect refused'); }; assert.equal((await checkHealth()).result, 'network');
+    response = (init) => new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+    assert.equal((await checkHealth()).result, 'timeout');
+    permit = false; const before = requests.length;
+    await assert.rejects(checkHealth(), /permission/); assert.equal(requests.length, before);
+    for (const server of [null, 'http://remote.example.edu', 'https://relay.example.edu/path']) await assert.rejects(worker.handle({ op: 'relayTest', server }), /bad/);
+    assert.equal(requests.length, before);
+    assert.deepEqual(settings.data, {}); assert.equal(local.data.shareOn, undefined); assert.equal(local.data.shareHosts, undefined);
+  } finally { worker.stop(); }
+});
+
+test('E1 Pause cancels a health check and a queued permission read cannot start it afterward', async () => {
+  let permit, enter, requests = 0;
+  const ready = new Promise((r) => { enter = r; }), gate = new Promise((r) => { permit = r; });
+  const worker = S.make({ local: localArea(), sync: localArea(), db: database(), notes: notesDB(),
+    permission: async () => { enter(); return gate; }, fetch: async () => { requests++; return new Response('{"ok":true}'); } });
+  try {
+    const pending = worker.handle({ op: 'relayTest', server: G.SERVER }); await ready;
+    await worker.handle({ op: 'pause' }); permit(true);
+    await assert.rejects(pending, /off/); assert.equal(requests, 0);
+  } finally { permit(true); worker.stop(); }
+  let started;
+  const fetching = new Promise((r) => { started = r; });
+  const other = S.make({ local: localArea(), sync: localArea(), db: database(), notes: notesDB(), permission: async () => true,
+    fetch: async (url, init) => { started(); return new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })); } });
+  try {
+    const pending = other.handle({ op: 'relayTest', server: G.SERVER }); await fetching;
+    await other.handle({ op: 'pause' }); assert.equal((await pending).result, 'cancelled');
+  } finally { other.stop(); }
+});
+
+test('E1 disk relays: new-session preference never repoints old sessions, keys or grouped live sockets', async (t) => {
+  const first = await start(t), second = await start(t), d = device(first.url);
+  t.after(() => d.worker.stop());
+  const one = await d.send('create', { kind: 'look', title: 'First' });
+  assert.equal((await d.send('relayTest', { server: first.url })).result, 'connected');
+  const before = d.requests.length;
+  await d.send('relaySave', { server: second.url });
+  assert.equal(d.requests.length, before);
+  const two = await d.send('create', { kind: 'look', title: 'Second', server: second.url });
+  assert.equal((await session(d, one.sid)).st.server, first.url);
+  assert.equal((await session(d, two.sid)).st.server, second.url);
+  await d.send('relaySave', { server: first.url });
+  const saved = (await d.send('exportKeys')).keys;
+  assert.deepEqual(saved.map((s) => s.server).sort(), [first.url, second.url].sort());
+  const sockets = [];
+  class Socket { constructor(url) { this.url = url; this.closed = false; sockets.push(this); } close() { this.closed = true; this.onclose?.(); } }
+  const restarted = S.make({ local: d.local, sync: d.settings, db: d.db, notes: d.notes, relay: first.url, dev: true, permission: async () => true,
+    fetch: (url, init) => { assert.equal(init.credentials, 'omit'); assert.equal(init.redirect, 'error'); return fetch(url, init); }, WebSocket: Socket });
+  t.after(() => restarted.stop());
+  const close = restarted.connect();
+  try {
+    for (let n = 0; n < 100 && sockets.length < 2; n++) await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(sockets.map((s) => s.url).sort(), [first.url, second.url].map((s) => s.replace(/^http/, 'ws') + '/live').sort());
+    assert.equal((await session(d, one.sid)).st.server, first.url);
+    assert.equal((await session(d, two.sid)).st.server, second.url);
+  } finally { close(); }
+  assert.ok(sockets.every((s) => s.closed));
+  const joined = device(first.url);
+  t.after(() => joined.worker.stop());
+  const invite = (await d.send('link', { sid: two.sid })).link;
+  await assert.rejects(joined.send('join', { link: invite }), /confirmation/);
+  assert.equal(joined.requests.length, 0);
+  const accepted = await joined.send('join', { link: invite, confirmServer: second.url });
+  assert.equal((await session(joined, accepted.sid)).st.server, second.url);
+  assert.ok(joined.requests.every((url) => url.startsWith(second.url + '/')));
+  const restored = device(first.url);
+  t.after(() => restored.worker.stop());
+  await restored.send('importKeys', { keys: saved });
+  assert.equal(restored.requests.length, 0);
+  await assert.rejects(restored.send('resume'), /confirmation/);
+  await restored.send('resume', { confirmServers: [second.url] });
+  assert.equal((await restored.send('list')).sessions.length, 2);
 });

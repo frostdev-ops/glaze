@@ -18,6 +18,10 @@
       "https://www.googleapis.com/auth/calendar.app.created"
     ]
   },
+  "optional_host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "host_permissions": [
     "https://*/*"
   ],
