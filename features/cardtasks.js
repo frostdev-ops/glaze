@@ -97,7 +97,10 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       if (!head || !cid || !cache) { was?.remove(); continue; }
       gs ||= L.gradescope(paint);
       // Ultra has no planner to tick in: its ticks are this device's, as Better To Do's there.
-      const rows = L.card(L.build({ items: [...(cache.items || []), ...gs(now, uid)], data, o, now, tz, course: cid, sync: !ultra && o.sync }), o.cardN, o.cardCross, tz).map((r) => {
+      // All of the course's rows are counted; o.cardN are shown, then "and N more" (the card grows to fit, never scrolls).
+      const all = L.card(L.build({ items: [...(cache.items || []), ...gs(now, uid)], data, o, now, tz, course: cid, sync: !ultra && o.sync }), Infinity, o.cardCross, tz);
+      const more = all.length - o.cardN;
+      const rows = all.slice(0, o.cardN).map((r) => {
         // Undated work planned for a day (a "do on" day or a focus session) reads as planned for that day.
         const w = L.label(r.at === null ? { allDay: true, day: r.plan } : r, now, tz, lang);
         const text = o.rel ? w.rel : w.abs;
@@ -105,7 +108,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       });
       // Ultra couldn't send everything: said, and never "Nothing due".
       const part = cache.complete === false && t('Blackboard sent only part of your calendar, so some work may be missing.');
-      const sig = JSON.stringify([o.cardStatus, part, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
+      const sig = JSON.stringify([o.cardStatus, part, more, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
       if (was?.dataset.sig === sig) continue;
       const course = nameOf(el);
       const box = rows.length
@@ -118,7 +121,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
           if (r.done) li.dataset.done = '';
           if (r.past) li.dataset.past = '';
           return li;
-        }), part && make('li', { className: 'gz-ct-part', textContent: part }))
+        }), more > 0 && make('li', { className: 'gz-ct-part', textContent: t('and {n} more', { n: more }) }), part && make('li', { className: 'gz-ct-part', textContent: part }))
         : make('p', { textContent: part || t('Nothing due') });
       box.className = 'gz-ct';
       box.dataset.sig = sig;

@@ -609,3 +609,16 @@ kept on the device only. Where it sits was agreed with B5 (Dashboard panel) in t
 | Google Calendar sync also runs from Ultra pages, behind the same build switch (off). A batch the page couldn't read whole (`whole: false`) still writes what it has but deletes nothing for being missing from it; the worker accepts only a boolean there | Canvas only; not syncing a partial batch at all | The page side and the worker accept an Ultra page for its own account; tested against the mock. A partial read is no proof an event is gone (Codex B2 4), and skipping the whole batch would hold back the work it did read. |
 | Ultra's own calendar feed ("Share calendar") is never read or made by Glaze | Reading it for the class schedule | Its GET may create a bearer token server-side (B0). A student can paste it into the class schedule import, which reads links on the page's own site only. |
 | content-ultra.js asks each planning switch again when its file lands (`load(on, …)` takes the test, not its answer), and the list, cards and reminders check they're still on after lib/ultra.js loads, before reading | Trusting the answer from when the file was asked for | A switch turned off, or Glaze turned off, while the file was on its way must not bring the list back or read (Codex B2 1), as Canvas's part already does. |
+
+## Ultra course cards fit their tasks (B7a, Oct 2026)
+
+Evidence: `parity/spikes/B7.md` (Ultra's card is a fixed-height flex column, 284px, with `overflow: visible`) and the
+owner's screenshot. Checked by `scripts/ultra-cards-check.js` on `test/fixtures/ultra-courses.html`.
+
+| Decision | Considered | Why |
+|---|---|---|
+| A card with Glaze's list (`:has(> .gz-ct)`) gets `height: auto` and Ultra's 284px as a least height; the list stretches to the card's width (Ultra's `align-items: start` let it grow as wide as its longest title) | A scrolling list inside Ultra's height; JS that measures | The grid row is sized by content, so the card growing moves the next term down; CSS only, no first-script growth. |
+| A card shows `todo.cardN` rows, then "and N more" (the catalogues' existing string) | A fixed cap of 3; a scrolling box | The student's own setting stays the cap; the count says what's left without a box inside a card. |
+| Glaze's banner height sets the card's least height (banner + Ultra's 156px of details), not a fixed one | Ultra's fixed 284px | A short banner left a tall, empty card; a tall one clipped the details. |
+| Card groups on the Courses page are exempt from the `data-gz-vh` clamp | Changing content.js's sweep | A group that was exactly one window high when swept was clamped and stopped growing; the clamp is meant for Ultra's 100vh route containers. CSS keeps it Ultra-only and out of the shared first script. |
+| The card gap also applies to `.course-org-list > div` (this school's card groups); the width rule's `.course-columns` flex is left as is | Rewriting the width mode for the new DOM | `.multi-column-view .course-columns` no longer matches (it's the same element). The groups' own display isn't known (cross-origin stylesheet), so only the gap, harmless on a block, is added; the width mode still sizes the cards. |

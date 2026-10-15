@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- A synthetic Ultra Courses page (/ultra/course), built from parity/spikes/B7.md: invented courses, Ultra's structure.
+     Ultra's own stylesheet is cross-origin, so the few rules that matter here are copied as B7.md measured them:
+     a one-column grid of term headings and card groups, each card a fixed-height (284px) flex column. -->
+<html lang="en"><head><base href="//ultra-cdn.invalid/ultra/uiv4001.0.0-rel/"><meta charset="utf-8"><title>Courses</title>
+<style>
+  body { margin: 0; font: 14px/1.4 sans-serif; }
+  .course-columns { display: block; padding: 16px; }
+  .course-org-list { display: grid; }
+  .course-card-term-name { margin: 0; padding: 12px 0; font-size: 18px; height: 23px; }
+  [class*="-group"] { display: flex; flex-wrap: wrap; gap: 16px; padding-bottom: 16px; }
+  bb-base-course-card { display: contents; }
+  article.element-card { display: flex; flex-direction: column; align-items: start; height: 284px; width: 262px; overflow: visible; position: relative; border: 1px solid #ccc; box-sizing: border-box; }
+  .course-banner { height: 128px; width: 100%; flex: none; background: #4a7; }
+  .element-details { flex: 1 1 auto; width: 100%; padding: 8px 12px; box-sizing: border-box; display: flex; flex-direction: column; }
+  .element-details .open { margin-top: auto; }
+</style></head>
+<body><div id="site-wrap"><main id="main-content"><div class="courses-panel"><div class="base-courses"><div class="course-list">
+<section id="course-columns-allTerms" class="course-columns multi-column-view"><div class="course-org-list"></div></section>
+</div></div></div></main></div>
+<script>
+  // Two terms after Favorites, three cards each; ids and names invented.
+  const list = document.querySelector('.course-org-list');
+  let n = 0;
+  for (const [term, cls] of [['Favorites', 'favorites-group term-_1_1'], ['Fall 2026', 'term-group term-_2_1'], ['Spring 2027', 'term-group term-_3_1 last-item']]) {
+    const h = Object.assign(document.createElement('h2'), { className: 'course-card-term-name', textContent: term });
+    const g = Object.assign(document.createElement('div'), { className: cls });
+    for (let i = 0; i < 3; i++, n++) {
+      const id = `_${100 + n}_1`;
+      g.insertAdjacentHTML('beforeend', `<bb-base-course-card><article id="course-list-course-${id}" data-course-id="${id}" class="element-card course-element-card">
+        <div class="course-banner"></div>
+        <div class="element-details summary"><div class="course-id">2026${n}0001</div>
+          <h4 class="course-title"><span class="js-course-title-element">Sample Course ${n + 1}</span></h4>
+          <div class="course-status">Overall grade: 91%</div><div class="open">Open</div></div></article></bb-base-course-card>`);
+    }
+    list.append(h, g);
+  }
+</script>
+</body></html>
