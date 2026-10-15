@@ -361,6 +361,9 @@
   // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
   const cardsHere = () => !ultra && !moodle && links.length && settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
+  // Dashboard notes and widgets, floating ones on every page (features/widgets.js); the palette opens its hub.
+  const widgetsHere = () => !ultra && !moodle && links.length && window.top === window && (settings.enhance.widgets || (settings.enhance.notes && location.pathname === '/'));
+  const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
   const remindHere = () => !ultra && !moodle && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'streak'].some((k) => settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
@@ -706,6 +709,7 @@
     syncCourseMenu();
     syncTodo();
     syncCardTasks();
+    syncWidgets();
     syncRemind();
   };
   // ---- page loads ------------------------------------------------------------------------------
@@ -2576,7 +2580,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncNav(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); syncRemind(); syncWidgets(); syncNav(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -2699,6 +2703,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     armFlip();
     syncTodo();
     syncCardTasks();
+    syncWidgets();
     syncRemind();
     themeEditors();
     syncPageFade();

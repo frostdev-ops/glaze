@@ -841,5 +841,8 @@ GZ_UI.load().then((s) => {
 
   });
 
+  // Report a problem: a GitHub issue filled in here with the version, browser and system (lib/widgets.js feedback).
+  $('#report-link').href = GZ_WIDGETS.feedback({ version: chrome.runtime.getManifest().version, ua: navigator.userAgent, lang: navigator.language });
+
   fill();
 });

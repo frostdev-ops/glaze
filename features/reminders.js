@@ -222,7 +222,20 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const id = ev.target.closest('[data-id]')?.dataset.id;
     if (act === 'hide') hide();
     else if (act === 'hub') { hide(); openHub(); }
-    else if (act === 'snooze' && id && human(ev)) { hide(); send({ op: 'snooze', id, until: Date.now() + H }).then((r) => { if (r?.data) st = R.clean(r.data); arm(); }); }
+    else if (act === 'snooze' && id && human(ev)) {
+      hide();
+      send({ op: 'snooze', id, until: Date.now() + H }).then((r) => {
+        if (r?.ok) {
+          // Snoozed on purpose: this page may draw it again when the hour is up, and no pending acknowledgement
+          // marks it seen meanwhile.
+          drawn.delete(id);
+          const left = unacked?.ids.filter((x) => x !== id);
+          if (unacked) unacked = left.length ? { ...unacked, ids: left } : null;
+          st = R.clean(r.data);
+        }
+        arm();
+      });
+    }
   };
 
   // ---- the To Do header: the streak and the way into the hub ---------------------------------------------------------
