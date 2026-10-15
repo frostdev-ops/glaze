@@ -1328,5 +1328,6 @@
   "In a course with grading periods, each period starts afresh: First, Now and Change are this period's, as Canvas's current grade is.": "In einem Kurs mit Bewertungszeiträumen beginnt jeder Zeitraum neu: Erste, Jetzt und Veränderung gelten für diesen Zeitraum, wie die aktuelle Note in Canvas.",
   "a new grading period": "ein neuer Bewertungszeitraum",
   "Some work couldn't be counted, so these figures leave it out: {names}.": "Einige Arbeiten konnten nicht gezählt werden, diese Zahlen lassen sie aus: {names}.",
+  "Some work couldn't be counted, so these figures leave it out.": "Einige Arbeiten konnten nicht gezählt werden, diese Zahlen lassen sie aus.",
   "Courses not counted: {n}": "Nicht gezählte Kurse: {n}",
 };

@@ -1328,5 +1328,6 @@
   "In a course with grading periods, each period starts afresh: First, Now and Change are this period's, as Canvas's current grade is.": "In een cursus met beoordelingsperiodes begint elke periode opnieuw: Eerste, Nu en Verandering gelden voor deze periode, zoals het huidige cijfer in Canvas.",
   "a new grading period": "een nieuwe beoordelingsperiode",
   "Some work couldn't be counted, so these figures leave it out: {names}.": "Sommig werk kon niet worden geteld, deze cijfers laten het weg: {names}.",
+  "Some work couldn't be counted, so these figures leave it out.": "Sommig werk kon niet worden geteld, deze cijfers laten het weg.",
   "Courses not counted: {n}": "Niet getelde cursussen: {n}",
 };

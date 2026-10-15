@@ -37,19 +37,26 @@ const page = ({ kept = {} } = {}) => {
   const S = { enabled: true, enhance: { insights: true, streak: false } };
   const fetches = [], sent = [];
   const course = { id: '1', name: 'BIO', enrollments: [{ type: 'student' }], term: { id: 5, name: 'Fall', start_at: '2026-08-24T04:00:00Z', end_at: '2027-12-19T05:00:00Z' } };
-  const doc = { body: new El('body'), activeElement: null, createElement: (t) => new El(t), createElementNS: (ns, t) => new El(t) };
+  const drawn = []; // text the summary picture draws
+  const canvas = () => Object.assign(new El('canvas'), {
+    getContext: () => ({ fillText: (s) => drawn.push(s), measureText: () => ({ width: 0 }), fillRect() {}, beginPath() {}, roundRect() {}, fill() {} }),
+    toBlob: (cb) => cb(null),
+  });
+  const doc = { body: new El('body'), activeElement: null, createElement: (t) => (t === 'canvas' ? canvas() : new El(t)), createElementNS: (ns, t) => new El(t) };
   const context = vm.createContext({
     GZ_CTX: { t: (k) => k, locale: () => 'en', on: () => true, settings: () => S, need: () => Promise.resolve(),
       profile: async () => ({ id: '3', time_zone: 'America/New_York' }), canvasCourses: async () => [course] },
     GZ_TODO: require('../lib/todo.js'), GZ_GRADECALC: require('../lib/gradecalc.js'), GZ_INSIGHTS: require('../lib/insights.js'), GZ_I18N: require('../lib/i18n.js'),
     chrome: { runtime: { sendMessage: async (m) => { sent.push(m); return { ok: true }; } }, storage: { local: { get: (k, cb) => cb(kept) } } },
     document: doc, location: { origin: ORIGIN, pathname: '/' }, window: {}, navigator: {}, URL, Date, Promise, JSON, setTimeout,
+    getComputedStyle: () => ({ getPropertyValue: () => '', fontFamily: '' }),
     fetch: (url, init) => { const r = later(); fetches.push({ url, init, r }); return r; },
   });
   context.window.top = context.window;
   const ui = vm.runInContext(source, context);
   const say = () => doc.body.children[0]?.querySelector('.gz-ins-say')?.textContent;
-  return { S, ui, fetches, sent, say };
+  const find = (text, el = doc.body) => el.textContent === text ? el : el.children.filter((c) => c instanceof El).map((c) => find(text, c)).find(Boolean);
+  return { S, ui, fetches, sent, say, drawn, find };
 };
 const reply = (body, link) => ({ ok: true, text: async () => JSON.stringify(body), headers: { get: (h) => (h === 'link' && link ? link : null) } });
 const GROUPS = [{ id: 1, assignments: [{ id: 7, name: 'Lab', points_possible: 10, published: true, due_at: '2026-09-10T20:00:00Z', submission: { score: 9, workflow_state: 'graded', submitted_at: '2026-09-09T20:00:00Z' } }] }];
@@ -103,4 +110,18 @@ test('a redirect fails the load: the saved summary stays, shown and kept, and th
   assert.equal(p.say(), "Couldn't read your courses. Try again in a moment.");
   assert.ok(p.ui && p.fetches[0].init.redirect === 'error');
   assert.ok(!p.sent.some((m) => m.op === 'put'), 'the saved summary is not replaced');
+});
+
+test('the saved picture of a summary that left work out says so, as the dialog does', async () => {
+  const key = `insights:${ORIGIN}/3`;
+  const rec = (cut) => ({ term: '5', name: 'Fall', at: Date.now(), cl: 0, courses: [{ id: '1', name: 'BIO', cut, items: [], trend: [] }] });
+  for (const [cut, says] of [[1, true], [0, false]]) {
+    const p = page({ kept: { [key]: rec(cut) } });
+    p.ui.open();
+    await settle();
+    assert.equal(p.fetches.length, 0, 'fresh: drawn from what is saved');
+    for (const f of p.find('Save as picture').listeners.click) f({ isTrusted: true });
+    assert.ok(p.drawn.includes('Your term in numbers'));
+    assert.equal(p.drawn.includes("Some work couldn't be counted, so these figures leave it out."), says);
+  }
 });
