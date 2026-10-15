@@ -94,8 +94,8 @@ All notable changes to Glaze are documented here. The format follows
     after a finished focus block or an item ticked off. Click it for a word of encouragement.
 - **What Glaze can do:** every Canvas extra in one panel with its switch, from Ctrl+K or the Dashboard, with an
   optional tour of the page and **Report a problem**. Nothing opens by itself.
-- **Report a problem:** opens a new GitHub issue with your Glaze version, browser and system filled in, and nothing
-  else, for you to finish and send. In the editor under Share and back up, and in What Glaze can do.
+- **Report a problem:** opens a new GitHub issue with your Glaze version, browser, system and language filled in, and
+  nothing about your school. GitHub receives that text when the page opens; nothing is posted until you submit it. In the editor under Share and back up, and in What Glaze can do.
 - **Reminders and streak (Canvas, every part off by default; Extras, Reminders and streak):** each its own opt-in:
   - Due-date reminders at any of 15 minutes, 1 hour, 3 hours, 1 day and 2 days before (several at once, free); a day
     before means the same time the day before, in your Canvas time zone, across daylight-saving changes.
