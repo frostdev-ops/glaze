@@ -139,9 +139,13 @@ test('every loadable file exists, is left out of the first content script, and i
   for (const f of asked) assert.ok(list.includes(f), `content.js needs ${f}, which LOADABLE doesn't list`);
   // content.js asks for a missing part by the site's name.
   assert.match(read('content.js'), /need\(`content-\$\{site\}\.js`/);
-  // The options preview runs content.js from a page, not as a content script: it has them as <script> tags, with Ultra's part.
-  for (const f of ['lib/zip.js', 'lib/drafts.js', 'content-ultra.js']) assert.ok(read('preview.html').includes(`<script src="${f}"></script>`), `preview.html: ${f}`);
-  assert.ok(read('preview.html').indexOf('content-ultra.js') < read('preview.html').indexOf('src="content.js"'), 'the part before content.js');
+  // Only the Ultra preview loads its real runtime; Canvas/Moodle use the bootstrap's site-specific painters.
+  for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/editor-preview.js']) assert.ok(read('preview.html').includes(`<script src="${f}"></script>`), `preview.html: ${f}`);
+  const bootstrap = read('lib/editor-preview.js').split("if (site === 'ultra') {")[1]?.split('} else {')[0];
+  const files = JSON.parse(bootstrap?.match(/for \(const file of (\[[^\]]+\])\) await load\(file\)/)?.[1].replace(/'/g, '"') || '[]');
+  assert.ok(files.includes('content-ultra.js') && files.includes('content.js'), 'Ultra runtime is loaded');
+  assert.ok(files.indexOf('content-ultra.js') < files.indexOf('content.js'), 'the part before content.js');
+  for (const f of files) assert.ok(fs.existsSync(path.join(root, f)), `preview runtime: ${f}`);
 });
 
 // A loaded file's `var GZ_X` shares the frame's global scope with the first script's `const`s: the same name there

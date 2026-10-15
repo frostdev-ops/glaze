@@ -4,7 +4,7 @@
   const t = (k, v) => GZ_I18N.t(k, v, GZ_I18N.ui());
   const $ = (s) => document.querySelector(s);
   const human = (e) => e.isTrusted && (navigator.userActivation?.isActive ?? true);
-  let state, busy = false, dead = false;
+  let state, busy = false, dead = false, relayLoaded = false;
   const say = (k, err = false) => { $('#status').textContent = t(k); $('#status').classList.toggle('error', err); };
   const send = async (op, rest = {}) => {
     const r = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op, ...rest });
@@ -23,7 +23,19 @@
     const b = make('button', t(key), { type: 'button' });
     b.addEventListener('click', (e) => { if (human(e)) act(f, options); }); return b;
   };
-  const permission = () => chrome.permissions.request({ origins: ['https://share.frostdev.io/*'] });
+  const permission = async (servers) => {
+    const origins = [];
+    for (const server of new Set(servers)) {
+      if (GZ_RELAY.normalize(server) !== server) return false;
+      if (!await chrome.permissions.contains({ origins: [server + '/*'] })) origins.push(server + '/*');
+    }
+    return !origins.length || chrome.permissions.request({ origins });
+  };
+  const confirmHost = (server) => (server === state.defaultRelay && server === state.relay) || confirm(server === state.defaultRelay
+    ? t('This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?', { host: new URL(server).host, selected: new URL(state.relay).host })
+    : t('This share is hosted on {host}, not frostdev.io. Connect to this server? Glaze cannot vouch for its operator.', { host: new URL(server).host }));
+  const relayValue = () => $('#relay-kind').value === 'default' ? state.defaultRelay : GZ_RELAY.normalize($('#relay-url').value);
+  const relayStatus = (text, err = false) => { $('#relay-status').textContent = text; $('#relay-status').classList.toggle('error', err); };
   const names = { pending: 'Changes saved locally, waiting to send', live: 'Up to date', offline: 'Offline — local copy kept', gone: 'Deleted on the relay — local copy kept', incomplete: 'More changes remain. Sync again.' };
   const sources = () => {
     const kind = $('#kind').value;
@@ -40,11 +52,17 @@
   };
   const render = () => {
     $('#connection').textContent = t(state.on ? 'Sharing is on while a shared surface is open.' : 'Sharing is paused. Create, join or resume to connect.');
-    $('#resume').hidden = state.on;
+    $('#resume').hidden = state.on && state.sessions.every((s) => s.server === state.defaultRelay || state.hosts.includes(s.server));
     $('#pause').hidden = !state.on;
+    $('#create-relay').textContent = t('New sessions will use {server}.', { server: state.relay });
+    if (!relayLoaded) {
+      $('#relay-kind').value = state.relay === state.defaultRelay ? 'default' : 'custom';
+      $('#relay-url').value = state.relay === state.defaultRelay ? '' : state.relay;
+      $('#relay-custom').hidden = $('#relay-kind').value !== 'custom'; relayLoaded = true;
+    }
     $('#sessions').replaceChildren(...state.sessions.map((s) => {
       const el = make('article');
-      el.append(make('h3', s.title), make('p', t(state.on ? names[s.status] || names.offline : 'Paused — local copy kept')), make('small', t(s.edit ? 'Edit access' : 'View access')));
+      el.append(make('h3', s.title), make('p', t(state.on ? names[s.status] || names.offline : 'Paused — local copy kept')), make('small', t(s.edit ? 'Edit access' : 'View access')), make('small', t('Hosted on {server}', { server: s.server })));
       const items = make('ul'); for (const x of s.items) items.append(make('li', x.title)); el.append(items);
       el.append(make('p', t('Editing devices, last seen. Names are self-chosen; view-only devices cannot announce themselves.')));
       const members = make('ul'); for (const m of s.members) members.append(make('li', `${m.name} · ${new Date(m.at).toLocaleString()}`)); el.append(members);
@@ -84,26 +102,55 @@
   const load = async () => { state = await send('list'); if (!dead) { render(); if (!$('#sources').children.length) sources(); } };
   $('#kind').addEventListener('change', (e) => { if (human(e)) sources(); });
   $('#pause').addEventListener('click', (e) => { if (human(e)) act(() => send('pause'), { interrupt: true }); });
-  $('#resume').addEventListener('click', (e) => { if (!human(e) || busy) return; const p = permission(); act(async () => { if (await p) await send('resume'); }); });
+  $('#resume').addEventListener('click', (e) => {
+    if (!human(e) || busy || !state) return;
+    const servers = [...new Set(state.sessions.filter((s) => s.status !== 'gone').map((s) => s.server))];
+    const unconfirmed = servers.filter((s) => s !== state.defaultRelay && !state.hosts.includes(s));
+    if (!unconfirmed.every(confirmHost)) return;
+    const p = permission(servers); act(async () => { if (await p) await send('resume', { confirmServers: unconfirmed }); });
+  });
+  $('#relay-kind').addEventListener('change', () => { $('#relay-custom').hidden = $('#relay-kind').value !== 'custom'; relayStatus(''); });
+  $('#relay-url').addEventListener('input', () => relayStatus(''));
+  $('#relay-save').addEventListener('click', (e) => {
+    if (!human(e) || busy || !state) return;
+    const server = relayValue();
+    if (!server) return relayStatus(t('Enter an HTTPS origin, or HTTP localhost or 127.0.0.1, without a path, query, fragment or credentials.'), true);
+    act(async () => { await send('relaySave', { server }); if ($('#relay-kind').value === 'custom') $('#relay-url').value = server; relayStatus(t('Relay saved for new sessions. Existing sessions keep their own server.')); });
+  });
+  $('#relay-test').addEventListener('click', (e) => {
+    if (!human(e) || busy || !state) return;
+    const server = relayValue();
+    if (!server) return relayStatus(t('Enter an HTTPS origin, or HTTP localhost or 127.0.0.1, without a path, query, fragment or credentials.'), true);
+    const p = permission([server]);
+    relayStatus(t('Testing {server}…', { server }));
+    act(async () => {
+      if (!await p) return relayStatus(t('Host permission was not granted. No connection was made.'), true);
+      const r = await send('relayTest', { server });
+      const messages = { connected: 'Connected to {server}.', timeout: 'Connection to {server} timed out.', http: 'The relay returned HTTP {status}.', invalid: 'The server did not return a valid Glaze health response.', cancelled: 'Connection test cancelled.', network: 'Could not connect. Check the URL, TLS and relay availability; redirects are refused.' };
+      relayStatus(t(messages[r.result], { server, status: r.status }), r.result !== 'connected');
+    }, { reload: false });
+  });
   $('#refresh').addEventListener('click', (e) => { if (human(e)) act(async () => { for (const s of state.sessions) await send('sync', { sid: s.sid }); }); });
   $('#create').addEventListener('click', (e) => {
-    if (!human(e) || busy) return;
+    if (!human(e) || busy || !state) return;
     const chosen = [...$('#sources').querySelectorAll('input:checked')].map((x) => x.source);
     const kind = $('#kind').value, title = $('#title').value.trim();
     if (!title || (kind !== 'look' && (!chosen.length || !chosen.every((x) => x.key === chosen[0].key)))) return say('Choose a name and items from one local account.', true);
-    const p = permission();
+    const server = state.relay, p = permission([server]);
     act(async () => {
       if (!await p) return;
-      await send('create', { kind, title, key: chosen[0]?.key, folder: chosen[0]?.folder, ids: chosen.flatMap((x) => x.ids || []), name: $('#name').value, expire: $('#expire').checked });
+      await send('create', { kind, title, server, key: chosen[0]?.key, folder: chosen[0]?.folder, ids: chosen.flatMap((x) => x.ids || []), name: $('#name').value, expire: $('#expire').checked });
       say('Session saved locally. Share an invite when it is up to date.');
     });
   });
   $('#join').addEventListener('click', (e) => {
-    if (!human(e) || busy) return;
+    if (!human(e) || busy || !state) return;
     // The key exists only in this extension-owned input until the trusted Join click, then in the worker.
     const link = $('#invite').value.trim(); $('#invite').value = '';
-    if (!/^https:\/\/share\.frostdev\.io\/j#1\.[er]\.[\w-]+$/.test(link)) return say('Paste an invite for https://share.frostdev.io.', true);
-    const p = permission(); act(async () => { if (await p) await send('join', { link, name: $('#name').value }); });
+    const server = GZ_RELAY.invite(link);
+    if (!server) return say('Paste a valid Glaze invite link using HTTPS, or HTTP localhost or 127.0.0.1.', true);
+    if (!confirmHost(server)) return;
+    const p = permission([server]); act(async () => { if (await p) await send('join', { link, confirmServer: server, name: $('#name').value }); });
   });
   const query = new URLSearchParams(location.search), key = query.get('notes');
   if (key && GZ_NOTES.KEY.test(key)) {
