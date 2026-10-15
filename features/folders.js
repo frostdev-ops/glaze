@@ -23,7 +23,8 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
       const badge = document.createElement('span'); badge.className = 'gz-folder-badge'; badge.id = `gz-folder-badge-${id}`;
       mark = { row, id, badge, attr: null }; marks.set(el, mark);
     }
-    if (mark.badge.textContent !== t('Hidden')) mark.badge.textContent = t('Hidden');
+    const badgeText = ` ${t('Hidden')}`;
+    if (mark.badge.textContent !== badgeText) mark.badge.textContent = badgeText;
     if (mark.badge.parentElement !== el) el.append(mark.badge);
     const attr = el.getAttribute('aria-labelledby')?.trim() ? 'aria-labelledby' : el.getAttribute('aria-label')?.trim() ? 'aria-label' : null;
     if (mark.attr !== attr) { restoreName(el, mark); mark.attr = attr; mark.applied = undefined; }

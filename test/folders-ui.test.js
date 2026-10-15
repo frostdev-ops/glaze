@@ -169,7 +169,7 @@ test('feedback toggles its action and restores live native accessible names with
   assert.match(toggle.querySelector('.gz-folders-toggle-icon').innerHTML, /m3 3 18 18/);
   assert.equal(parent.getAttribute('aria-label'), 'Native parent · Hidden');
   assert.equal(child.getAttribute('aria-labelledby'), '  native-title native-detail   gz-folder-badge-_102_1');
-  assert.equal(module.textContent, 'ModuleHidden'); assert.equal(e.parent.querySelector('h3'), heading);
+  assert.equal(module.textContent, 'Module Hidden'); assert.equal(e.parent.querySelector('h3'), heading);
   assert.equal(parent.children[0], wrapper, 'the native title wrapper is preserved');
   wrapper.append(parent.querySelector('.gz-folder-badge')); e.redraw();
   assert.equal(wrapper.textContent, 'Parent', 'a wrapped owned badge is moved back beside the title');
