@@ -362,6 +362,24 @@ All notable changes to Glaze are documented here. The format follows
     and plans, from your own Blackboard.
   - Ctrl+K gains the GPA, Insights and, in a course, Import a syllabus.
 
+- **Course tabs on Blackboard Ultra (on by default).** Each course you open gets a tab, as pages do in a browser: in a
+  strip above the course's sticky top bar (or between its two rows, or below it, in the editor), at the header of an
+  item opened over the course (a document, a discussion), and above pages outside a course.
+  - A tab goes back to where you were in its course: the tool, the page and how far down. A test, attempt, assessment,
+    discussion or message is never reopened: an allowlist of the course's tools, its documents and folders decides,
+    and anything else opens at its tool.
+  - Close (its ×, the middle button, Delete), pin (pinned tabs go first and never close on their own) and reorder (drag,
+    or Shift with an arrow key). Past the cap (8 by default) the least recently used unpinned tab closes, and the strip
+    says which. A real tablist for the keyboard and screen readers; no browser shortcut is taken.
+  - Switching shows an inert copy of the course as you last saw it at once, then fades to Blackboard's live page. The
+    copies hold only what you already saw (no scripts, frames, fields or media), stay in memory (the page, then the
+    worker's `storage.session` across reloads), are never written to disk, and go when the browser closes, when the
+    tabs or Glaze are turned off, when another account turns up on the site, or on sign-out. Nothing is fetched or
+    opened in the background.
+  - The tab buttons' shape, size and width, the course's name or code, a colour dot or an icon, and a tint or more of
+    each course's own colour (Course colors'), in the editor's Course tabs section with a live preview. Ctrl+K turns the
+    tabs on or off.
+
 ### Changed
 
 - **Blackboard's what-if calculator is the Canvas one now.** Scores you typed in the old one move over the first time
