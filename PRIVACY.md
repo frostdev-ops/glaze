@@ -209,8 +209,8 @@ animated backgrounds) are bundled. It makes requests in these cases:
   `https://www.gradescope.com/courses/<id>` (a read-only GET from that page, with your existing Gradescope session).
   With "Also check Gradescope once a day from Canvas" on (off by default), a Canvas page showing your To Do, card tasks
   or reminders also has Glaze's background worker GET each of that site's placed courses' Gradescope page, at most
-  once a day per course, whether or not it worked (signed out, Gradescope sends its sign-in page, which counts as no
-  answer); the request carries your Gradescope cookies, as visiting the page would, and the page is read on the Canvas
+  once a day per course, whether or not it worked (signed out, Gradescope redirects to its sign-in page; Glaze never
+  follows a redirect from Gradescope, here or on Gradescope's own pages, and keeps what it read before); the request carries your Gradescope cookies, as visiting the page would, and the page is read on the Canvas
   page and kept on this device as above. Nothing read on Gradescope is sent to Canvas or anywhere else, and Glaze never
   writes to Gradescope. To suggest a Canvas course on Gradescope, Glaze uses the course names it already keeps on this
   device (above); the bar on Gradescope sits in a closed shadow root, so Gradescope's own scripts can't read that list.

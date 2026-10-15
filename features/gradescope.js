@@ -37,8 +37,8 @@
       try {
         if (own) p = G.parse(document, gid);
         else {
-          const r = await fetch(`/courses/${gid}`, { credentials: 'same-origin', cache: 'no-store' });
-          // Signed out, Gradescope answers with its sign-in page: no table, and what's kept stays.
+          // Signed out, Gradescope redirects to its sign-in page: refused before it's followed, and what's kept stays.
+          const r = await fetch(`/courses/${gid}`, { credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
           if (r.ok && new URL(r.url).pathname.replace(/\/$/, '') === `/courses/${gid}`) p = G.parse(new DOMParser().parseFromString(await r.text(), 'text/html'), gid);
         }
       } catch { /* the network: kept as it was */ }

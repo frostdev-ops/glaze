@@ -195,7 +195,12 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   let answer = null;
   const context = vm.createContext({
     URL, console, TextEncoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
-    fetch: async (url, init) => { fetched.push([url, init.credentials]); return answer; },
+    fetch: async (url, init) => {
+      fetched.push([url, init.credentials, init.redirect]);
+      if (answer.redirectTo && init.redirect === 'error') throw new TypeError('Failed to fetch'); // as the browser does, before any second request
+      if (answer.redirectTo) fetched.push([answer.redirectTo, init.credentials, 'followed']);
+      return answer.redirectTo ? { ok: true, url: answer.redirectTo, text: async () => 'Log In' } : answer;
+    },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
       runtime: {
@@ -242,10 +247,11 @@ test('the worker: who may write, the script on Gradescope only while on, and the
   store.sync.todo = { gsDaily: true };
   store.local.gradescope.courses = {}; // never read
   assert.deepEqual(await send(page, other), nope);
-  answer = { ok: true, url: 'https://www.gradescope.com/login', text: async () => 'Log In' };
+  // Signed out, Gradescope redirects to its sign-in page: the redirect isn't followed, and it counts as tried today.
+  answer = { redirectTo: 'https://www.gradescope.com/login' };
   assert.deepEqual(await send(page, canvas), { ok: false, error: 'signed out' });
   assert.deepEqual(await send(page, canvas), { ok: false, error: 'soon' }, 'tried today: not again');
-  assert.deepEqual(fetched, [['https://www.gradescope.com/courses/42', 'include']]);
+  assert.deepEqual(fetched, [['https://www.gradescope.com/courses/42', 'include', 'error']], 'one request, the redirect not followed');
   store.local.gsTried = {};
   answer = { ok: true, url: 'https://www.gradescope.com/courses/42', text: async () => '<table id="assignments-student-table"></table>' };
   const r = await send(page, canvas);
@@ -276,25 +282,33 @@ test('on Gradescope: the script starts only with Glaze on and its switch on', as
   const path = require('node:path');
   const vm = require('node:vm');
   const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-  const run = async (sync) => {
-    const fetched = [], drawn = [];
+  const run = async (sync, redirect = false) => {
+    const fetched = [], drawn = [], sent = [];
     const local = { seenCourses: {}, gradescope: { map: { 42: { to: 'canvas:https://c.test/7', name: 'X' } } } };
     const get = (s) => ({ get: (k, cb) => cb(Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))) });
     const node = () => ({ prepend: (x) => drawn.push(x) });
     const context = vm.createContext({
       URL, console, Promise, Date, setTimeout, crypto: globalThis.crypto, navigator: { language: 'en' }, location: { pathname: '/' },
       DOMParser: class { parseFromString() { return { querySelector: () => null, querySelectorAll: () => [] }; } },
-      fetch: async (u) => { fetched.push(u); return { ok: true, url: `https://www.gradescope.com${u}`, text: async () => '' }; },
+      fetch: async (u, init) => {
+        fetched.push(u);
+        if (init?.redirect !== 'error') fetched.push(`redirect: ${init?.redirect}`);
+        if (redirect && init?.redirect === 'error') throw new TypeError('Failed to fetch');
+        return { ok: true, url: `https://www.gradescope.com${redirect ? '/login' : u}`, text: async () => '' };
+      },
       document: { querySelector: () => null, querySelectorAll: () => [], body: node(), createElement: () => ({}) },
-      chrome: { i18n: { getUILanguage: () => 'en' }, runtime: { sendMessage: (m, cb) => cb({ ok: true }) }, storage: { sync: get(sync), local: get(local) } },
+      chrome: { i18n: { getUILanguage: () => 'en' }, runtime: { sendMessage: (m, cb) => { sent.push(m.op); cb({ ok: true }); } }, storage: { sync: get(sync), local: get(local) } },
     });
     context.window = context;
     context.window.top = context;
     for (const f of ['lib/i18n.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
     await new Promise((r) => setTimeout(r, 20));
-    return { fetched, drawn };
+    return { fetched, drawn, sent };
   };
-  assert.deepEqual((await run({ enhance: { gradescope: true } })).fetched, ['/courses/42'], 'on: a visit reads the placed course');
-  assert.deepEqual(await run({ enabled: false, enhance: { gradescope: true } }), { fetched: [], drawn: [] }, 'Glaze off: nothing');
-  assert.deepEqual(await run({ enhance: { gradescope: false } }), { fetched: [], drawn: [] }, 'its switch off: nothing');
+  assert.deepEqual((await run({ enhance: { gradescope: true } })).fetched, ['/courses/42'], 'on: a visit reads the placed course, redirects refused');
+  // Signed out (a redirect to the sign-in page): not followed, nothing kept, so the rows already kept stay.
+  const out = await run({ enhance: { gradescope: true } }, true);
+  assert.deepEqual([out.fetched, out.sent.filter((op) => op === 'rows')], [['/courses/42'], []]);
+  assert.deepEqual(await run({ enabled: false, enhance: { gradescope: true } }), { fetched: [], drawn: [], sent: [] }, 'Glaze off: nothing');
+  assert.deepEqual(await run({ enhance: { gradescope: false } }), { fetched: [], drawn: [], sent: [] }, 'its switch off: nothing');
 });
