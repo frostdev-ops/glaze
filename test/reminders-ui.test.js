@@ -316,3 +316,54 @@ test("an acknowledgement that wasn't kept is sent again, and the toast isn't dra
   assert.equal(a.toast(), card, 'the same toast, not announced again');
   assert.equal(Object.keys(w.box[KEY].seen).length, 1);
 });
+
+test('an acknowledgement past the lease and its grace is not taken as one, and nothing this page drew is drawn again', async () => {
+  const w = world(2 * 36e5);
+  const a = w.tab();
+  a.own.failConfirm = true;
+  a.ui.sync(true);
+  await settle();
+  const card = a.toast();
+  assert.match(card?.text || '', /Lab report/);
+  // The worker comes back after the lease and its grace have gone: a confirm under the old lease keeps nothing.
+  a.own.failConfirm = false;
+  w.skew = 2 * R.LEASE + 1;
+  a.live().at(-1).f();
+  await settle();
+  assert.equal(a.toast(), card, 'drawn once');
+  assert.equal(Object.keys(w.box[KEY].seen).length, 1, 'acknowledged under a new, quiet lease');
+  // Passes after that draw nothing and claim nothing.
+  const claims = a.ops('claim').length;
+  a.docOn.visibilitychange();
+  await settle();
+  assert.equal(a.toast(), card);
+  assert.equal(a.ops('claim').length, claims);
+});
+
+test('a worker that never keeps the acknowledgement gets five retries, a lease apart, and then none from this page', async () => {
+  const w = world(2 * 36e5);
+  const a = w.tab();
+  a.own.failConfirm = true;
+  a.ui.sync(true);
+  await settle();
+  const card = a.toast();
+  assert.equal(a.ops('confirm').length, 1);
+  for (let i = 1; i <= 5; i++) {
+    const t = a.live().at(-1);
+    assert.ok(t && t.ms >= R.LEASE - 1000, `retry ${i} waits a lease`);
+    w.skew = i * (R.LEASE + 1);
+    t.f();
+    await settle();
+    assert.equal(a.ops('confirm').length, 1 + i);
+  }
+  // Given up: no more confirms, no claim, no second toast, whatever wakes the page however much later.
+  w.skew = 8 * (R.LEASE + 1);
+  a.docOn.visibilitychange();
+  await settle();
+  for (const t of a.live()) t.f();
+  await settle();
+  assert.equal(a.ops('confirm').length, 6);
+  assert.equal(a.ops('claim').length, 1);
+  assert.equal(a.toast(), card);
+  assert.deepEqual(w.box[KEY].seen, {});
+});
