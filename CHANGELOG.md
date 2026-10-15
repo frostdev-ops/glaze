@@ -70,6 +70,13 @@ All notable changes to Glaze are documented here. The format follows
   timeframe, past-due window and done rules, ticks and Canvas marks included, and shares its planner copy: the
   planner is asked once, whether or not the list is on. Every card style and the card grade fit
   beside it. Ctrl+K turns it on or off.
+- **Search in your courses (Canvas, on by default; Extras, under Command palette):** from two typed characters, the
+  Ctrl+K palette also finds pages, assignments, discussions, announcements, modules and files in your active courses
+  by title, each labelled with its type and course: the course you're in first, then this term's, then the rest (which
+  are skipped once enough is found). Results join the list as they arrive without moving what's under the cursor, and
+  screen readers hear the count when the search is done. It waits for a 150 ms pause, cancels what's still running on
+  the next keystroke, asks six lists at a time, and keeps answers in memory for five minutes. Read-only, to your own
+  Canvas only.
 
 ### Changed
 

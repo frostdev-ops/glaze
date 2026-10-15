@@ -2411,7 +2411,7 @@
   // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
-    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards' };
+    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', search: 'Search in your courses' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -2485,17 +2485,29 @@
   let cmd = null; // { box, input, list, all, shown, active, back }
   const closeCmd = () => {
     if (!cmd) return;
+    cmd.stop?.();
     cmd.box.remove();
     if (cmd.back?.isConnected) cmd.back.focus({ preventScroll: true });
     cmd = null;
   };
-  const showCmd = () => {
+  // keep (search's arrivals): the choice stays on the same thing.
+  const showCmd = (keep) => {
     const q = cmd.input.value;
+    const was = keep === true && cmd.shown[cmd.active];
     // Empty: every page and course, then this course's first items, then Glaze. Typed: the best 40.
     cmd.shown = q.trim()
-      ? cmd.all.map((c) => [c, Math.max(GZ_PAGE.fuzzy(q, c.label), GZ_PAGE.fuzzy(q, `${c.hint} ${c.label}`) - 2)]).filter(([, s]) => s >= 0).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([c]) => c)
+      ? cmd.all.map((c) => [c, Math.max(GZ_PAGE.fuzzy(q, c.label), GZ_PAGE.fuzzy(q, `${c.hint} ${c.label}`) - 2)]).filter(([, s]) => s >= 0).sort((a, b) => b[1] - a[1]).slice(0, cmd.found ? 12 : 40).map(([c]) => c)
       : [...cmd.all.filter((c) => c.group !== 'In this course' && c.group !== 'Glaze'), ...cmd.all.filter((c) => c.group === 'In this course').slice(0, 8)];
-    cmd.active = 0;
+    // Searching your courses too (features/search.js): what it finds goes after what has the query as typed and before the
+    // looser matches (its letters in order), which arrivals push down. Its "Searching…" row is where the next ones go.
+    let at = -1;
+    if (q.trim() && cmd.found) {
+      const near = (c) => `${c.hint} ${c.label}`.toLowerCase().includes(q.trim().toLowerCase());
+      const close = cmd.shown.filter(near);
+      at = close.length + cmd.found.length;
+      cmd.shown = [...close, ...cmd.found, ...cmd.shown.filter((c) => !near(c))];
+    }
+    cmd.active = Math.max(0, was ? cmd.shown.indexOf(was) : 0);
     cmd.list.replaceChildren(...cmd.shown.map((c, i) => {
       const li = document.createElement('li');
       li.id = `gz-cmd-${i}`;
@@ -2509,7 +2521,7 @@
       li.addEventListener('click', () => runCmd(i));
       return li;
     }));
-    if (!cmd.shown.length) cmd.list.append(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: t(cmd.loading ? 'Loading…' : 'Nothing matches.') }));
+    if (cmd.seeking || !cmd.shown.length) cmd.list.insertBefore(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: t(cmd.seeking ? 'Searching your courses…' : cmd.loading ? 'Loading…' : 'Nothing matches.') }), cmd.list.children[at] || null);
     mark();
   };
   const mark = () => {
@@ -2568,6 +2580,7 @@
 
     showCmd();
     commands().then((all) => { if (cmd !== mine) return; cmd.all = all; cmd.loading = false; showCmd(); });
+    if (!ultra && settings.enhance.search) need('features/search.js', () => globalThis.GZ_SEARCH).then(() => GZ_SEARCH.attach(mine, showCmd), () => {});
   };
   if (window.top === window) {
     document.addEventListener('keydown', (e) => {
