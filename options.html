@@ -38,6 +38,14 @@
   .field output { font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); text-align: right; font-size: 12px; }
   .field.wide { grid-template-columns: 9.5rem minmax(0, 1fr); }
   .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  /* Google Calendar sync: the link code, and the Disconnect question. */
+  .gcal { display: grid; gap: 0.6rem; }
+  .gcal input[type="text"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .gcal .err:empty { display: none; }
+  .gcal .err { color: var(--gz-err); }
+  #gcal-bye { color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: 14px; padding: 1.1rem 1.25rem; max-width: 30rem; }
+  #gcal-bye::backdrop { background: rgb(0 0 0 / 0.45); }
+  #gcal-bye form { display: grid; gap: 0.9rem; }
   .row input[type="text"], .row input[type="url"] { flex: 1; min-width: 12rem; }
   .group { display: grid; gap: 0.6rem; padding-top: 1rem; border-top: 1px solid var(--gz-line); }
   .desc { margin: 0; color: var(--gz-ink-faint); font-size: 12px; }
@@ -548,6 +556,36 @@
             <label>Range <select data-key="todo.icsRange"><option value="2w">Next 2 weeks</option><option value="4w">Next 4 weeks</option><option value="8w">Next 8 weeks</option><option value="16w">Next 16 weeks</option><option value="term">This term</option></select></label>
           </div>
         </div>
+        <div class="group" id="gcal">
+          <h3>Google Calendar sync</h3>
+          <p class="desc">Keeps a calendar named Glaze in your Google account up to date with Canvas: the events Export calendar (.ics) would save, with the choices above. Off until you connect. Chrome signs you in with Google; Glaze asks only to manage calendars it makes, and touches nothing else in your Google Calendar. There's no Glaze server: your calendar goes only between this browser and Google.</p>
+          <p class="desc" id="gcal-other" hidden>Google Calendar sync works in Google Chrome. In this browser, save your calendar with Export calendar (.ics) and import the file into your calendar.</p>
+          <div id="gcal-off" class="gcal" hidden>
+            <div class="row"><button type="button" class="primary" id="gcal-connect">Connect Google Calendar</button></div>
+            <p class="desc" id="gcal-code-note">Syncing on another computer already? Paste its link code instead, so both keep the same Glaze calendar.</p>
+            <div class="row">
+              <input type="text" id="gcal-code" spellcheck="false" autocomplete="off" aria-label="Link code" aria-describedby="gcal-code-note">
+              <button type="button" id="gcal-link">Link calendar</button>
+            </div>
+          </div>
+          <div id="gcal-on" class="gcal" hidden>
+            <p class="desc" id="gcal-who"></p>
+            <p class="desc" id="gcal-when"></p>
+            <p class="desc err" id="gcal-error"></p>
+            <div class="row">
+              <button type="button" id="gcal-reconnect" hidden>Reconnect</button>
+              <button type="button" id="gcal-share" aria-expanded="false" aria-controls="gcal-pair">Link another device</button>
+              <button type="button" id="gcal-disconnect">Disconnect</button>
+            </div>
+            <div id="gcal-pair" hidden>
+              <p class="desc" id="gcal-pair-note">On your other computer, open Glaze's settings and paste this code under Google Calendar sync. It's also the calendar's ID in Google Calendar's settings.</p>
+              <div class="row">
+                <input type="text" id="gcal-id" readonly spellcheck="false" aria-label="Link code" aria-describedby="gcal-pair-note">
+                <button type="button" id="gcal-copy">Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="group" id="widgets">
           <h3>Notes and widgets</h3>
           <label class="check"><input type="checkbox" data-key="enhance.notes"><span>Notes</span>
@@ -667,6 +705,15 @@
     </aside>
   </div>
 
+  <!-- Google Calendar sync's Disconnect question, outside the sections so settings search never hides it. -->
+  <dialog id="gcal-bye" aria-labelledby="gcal-bye-title" aria-describedby="gcal-bye-note">
+    <form method="dialog">
+      <h3 id="gcal-bye-title">Disconnect Google Calendar?</h3>
+      <p class="desc" id="gcal-bye-note">Glaze stops syncing, forgets its Google sign-in on this device and asks Google to remove its access.</p>
+      <label class="check"><input type="checkbox" id="gcal-drop"><span>Also delete the Glaze calendar and its events from Google Calendar</span></label>
+      <div class="row"><button value="cancel" autofocus>Cancel</button><button value="ok" class="primary">Disconnect</button></div>
+    </form>
+  </dialog>
   <script src="lib/color.js"></script>
   <script src="lib/fonts.js"></script>
   <script src="defaults.js"></script>

@@ -72,6 +72,27 @@ All notable changes to Glaze are documented here. The format follows
   term. Import it into Google Calendar, Outlook or Apple Calendar; stable event identifiers mean a newer file updates
   the same events where the calendar supports it. Made on the device, downloaded by the browser (no new permission);
   the choices are remembered and also in the options page. No subscribe link: that would need a server.
+- **Google Calendar sync** (Chrome, off until you connect; Glaze's settings, Google Calendar sync): a calendar named
+  Glaze in your Google account, kept up to date with the same events and choices as Export calendar (.ics).
+  - Chrome's own Google sign-in (`chrome.identity.getAuthToken`, an optional `identity` permission asked for on your
+    click, with no install warning) and one scope, `calendar.app.created`: Glaze can manage only calendars it makes,
+    and never sees your others. No Glaze server; requests go only to `www.googleapis.com` and, to revoke access,
+    `oauth2.googleapis.com`, without cookies and without following redirects.
+  - Incremental: events keep stable IDs (a hash of the Canvas account and the event's identifier), only what changed
+    is written, past events stay as history, and changes made in Google come back through Google's sync cursor.
+    Requests are spaced out, at most 150 writes a run, with exponential backoff on 429, rate-limit 403s and 5xx, and a
+    fresh token after a 401.
+  - Deadlines, tasks, Gradescope work and classes mirror Canvas: an edit in Google is written over, a deletion
+    stays. A "do on" day or focus session moved or deleted in Google moves or clears the plan in Better To Do, unless
+    you changed it here since. No reminders on the events; they show you as free.
+  - It runs from Canvas pages: on open if the last sync was 15 minutes ago or more, every 15 minutes while one stays
+    open, and 10 seconds after your plans, schedule or choices change. No `alarms` permission.
+  - **Link another device**: a code (the calendar's ID) to paste on another computer, so both keep one calendar
+    without Glaze listing your calendars.
+  - **Disconnect**: optionally deletes the Glaze calendar (asked first), revokes Glaze's access, has Chrome forget
+    its tokens, removes the permission and deletes what Glaze kept for it.
+  - Edge, Brave and Safari show a note pointing to the export. `scripts/dev-gcal.sh` builds an unpacked copy with the
+    store's public key, for testing with the real OAuth client; the store package never carries it.
 - **Past terms, GPA trends and a GPA goal** (Canvas, with the GPA on): add earlier terms by hand or import them from a
   transcript's text, a web page or a Word file, read on this device and always shown for review first (the transcript's
   own term GPA is checked against Glaze's). Plus/minus or whole-letter scales per term, credits, honors and AP;

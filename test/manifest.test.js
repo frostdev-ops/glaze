@@ -41,6 +41,8 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   fs.writeFileSync(file, JSON.stringify(input));
   const expected = structuredClone(input);
   delete expected.options_ui.open_in_tab;
+  delete expected.oauth2; // Safari has no identity API: Google Calendar sync is Chrome's
+  delete expected.optional_permissions;
   expected.description = 'Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras.';
   for (const entry of expected.web_accessible_resources) delete entry.use_dynamic_url;
   try {

@@ -9,6 +9,15 @@
     "scripting",
     "unlimitedStorage"
   ],
+  "optional_permissions": [
+    "identity"
+  ],
+  "oauth2": {
+    "client_id": "1071735898350-o14e1vjmrvkmrfl8bb8e8qbcpue5i5qq.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.app.created"
+    ]
+  },
   "host_permissions": [
     "https://*/*"
   ],
