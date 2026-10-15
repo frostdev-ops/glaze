@@ -623,3 +623,12 @@ owner's screenshot. Checked by `scripts/ultra-cards-check.js` on `test/fixtures/
 | Glaze's banner height sets the card's least height (banner + Ultra's 156px of details), not a fixed one | Ultra's fixed 284px | A short banner left a tall, empty card; a tall one clipped the details. |
 | Card groups on the Courses page are exempt from the `data-gz-vh` clamp | Changing content.js's sweep | A group that was exactly one window high when swept was clamped and stopped growing; the clamp is meant for Ultra's 100vh route containers. CSS keeps it Ultra-only and out of the shared first script. |
 | The card gap also applies to `.course-org-list > div` (this school's card groups); the width rule's `.course-columns` flex is left as is | Rewriting the width mode for the new DOM | `.multi-column-view .course-columns` no longer matches (it's the same element). The groups' own display isn't known (cross-origin stylesheet), so only the gap, harmless on a block, is added; the width mode still sizes the cards. |
+
+## Ultra folder visibility (B9)
+
+| Decision | Considered | Why |
+|---|---|---|
+| DOM attributes hide folders and learning modules; nested IDs remain independent | Remove native nodes or filter readers | Ultra keeps its unfold state; search, Download all, progress and new-item counts stay complete. |
+| Known cached identity only; no controls before it exists | Fetch a profile or share an anonymous key | B9 adds no requests and never mixes accounts. Existing course refresh/inline grade reads normally supply identity; fresh pages without those reads wait. Profile/sign-out navigation revokes the binding until a new identity read or reload. |
+| Single-ID operations through the existing worker queue; capped device records in Export all | Whole snapshots from tabs | Concurrent tabs retain each other’s edits; import validates account/course keys and shares settings rollback. |
+| Accept the exact 29-byte shared schema increase on Canvas/Moodle (owner-approved B9 exception) | A site-conditional schema or unrelated byte offsets | One sanitizer must preserve the setting in every editor/site. Heavy B9 code stays Ultra-only and on demand; the existing performance ratchets remain unchanged. |

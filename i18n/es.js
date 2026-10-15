@@ -1566,4 +1566,9 @@
   "Pet history couldn’t be updated. Existing progress was kept.": "No se pudo actualizar el historial de la mascota. Se conservó tu progreso.",
   "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Los XP de racha cuentan solo los días ya comprobados por Racha, hasta ayer. Las restauraciones añaden cada día una vez; desactivarla conserva los XP ganados.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Los XP de racha requieren activar Racha; los XP ganados se conservan al desactivarla.",
+  "Hide folders": "Ocultar carpetas",
+  "Hide folders and learning modules in Blackboard course outlines on this device.": "Oculta carpetas y módulos de aprendizaje en los esquemas de cursos de Blackboard en este dispositivo.",
+  "Hide folder: {title}": "Ocultar carpeta: {title}",
+  "Unhide folder: {title}": "Mostrar carpeta: {title}",
+  "Show hidden folders ({n})": "Mostrar carpetas ocultas ({n})",
 };

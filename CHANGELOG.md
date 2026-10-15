@@ -7,6 +7,7 @@ All notable changes to Glaze are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Blackboard Ultra: hide folders and learning modules locally, with a Show hidden folders count and per-account/course choices included in Export all.
 
 - **Planning on Blackboard Ultra.** Better To Do (on by default), tasks on course cards, reminders and the streak, Export
   calendar (.ics), the class schedule, Gradescope in To Do and Google Calendar sync now work on Blackboard Ultra too: the

@@ -1566,4 +1566,9 @@
   "Pet history couldn’t be updated. Existing progress was kept.": "Der Haustierverlauf konnte nicht aktualisiert werden. Dein Fortschritt bleibt erhalten.",
   "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Serien-EP zählen nur von der Serie bereits geprüfte Tage bis gestern. Wiederherstellungen zählen jeden Tag einmal; Ausschalten behält verdiente EP.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Serien-EP erfordern eine eingeschaltete Serie; verdiente EP bleiben beim Ausschalten erhalten.",
+  "Hide folders": "Ordner ausblenden",
+  "Hide folders and learning modules in Blackboard course outlines on this device.": "Ordner und Lernmodule in Blackboard-Kursübersichten auf diesem Gerät ausblenden.",
+  "Hide folder: {title}": "Ordner ausblenden: {title}",
+  "Unhide folder: {title}": "Ordner einblenden: {title}",
+  "Show hidden folders ({n})": "Ausgeblendete Ordner anzeigen ({n})",
 };

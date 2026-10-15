@@ -213,12 +213,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
   // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
   const renderProgress = () => {
+    if (top()?.hideFolders && /^\/ultra\/courses\/_\d+_\d+\/outline(?:\/|$)/.test(location.pathname)) need('lib/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('features/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(!!top()?.hideFolders, meId), () => {});
+    else globalThis.GZ_FOLDER_UI?.sync(false, meId);
     const old = document.getElementById('gz-progress');
     if (!I.settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
-    const top = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
+    const rows = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
     let done = 0;
     let total = 0;
-    for (const it of top) {
+    for (const it of rows) {
       // Some are done where Ultra puts its check in the line (all done) or a completed part in its chart.
       const msg = it.querySelector('.js-completion-status-message');
       const m = msg && GZ_PAGE.completion(msg.textContent, !!msg.querySelector('svg') || !!msg.parentElement.querySelector('.js-completion-chart [class*="chartLineCompleted"]'));
@@ -227,7 +229,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       if (rs) { total += 1; if (rs.getAttribute('aria-checked') === 'true') done += 1; }
     }
     if (!total) return old?.remove();
-    drawProgress(old, done, total, top[0].parentElement);
+    drawProgress(old, done, total, rows[0].parentElement);
   };
 
   // ---- new grades (Extras) --------------------------------------------------------------------
@@ -570,6 +572,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) I.setVar(`--gz-nav-${k}`, v);
   };
   const syncNav = () => {
+    globalThis.GZ_FOLDER_UI?.sync(!!top()?.hideFolders, meId);
     if (!isPreview && window.top !== window) return;
     if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
     else globalThis.GZ_NAV_UI?.sync();
@@ -577,7 +580,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
 
   return {
-    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
     syncTodo, syncCardTasks, syncRemind, syncWidgets,

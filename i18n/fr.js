@@ -1566,4 +1566,9 @@
   "Pet history couldn’t be updated. Existing progress was kept.": "L’historique du compagnon n’a pas pu être mis à jour. La progression a été conservée.",
   "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Les XP de série comptent seulement les jours déjà vérifiés par Série, jusqu’à hier. Les restaurations ajoutent chaque jour une seule fois ; la désactivation conserve les XP gagnés.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Les XP de série nécessitent d’activer Série ; les XP gagnés restent après la désactivation.",
+  "Hide folders": "Masquer les dossiers",
+  "Hide folders and learning modules in Blackboard course outlines on this device.": "Masquer les dossiers et modules pédagogiques dans les plans de cours Blackboard sur cet appareil.",
+  "Hide folder: {title}": "Masquer le dossier : {title}",
+  "Unhide folder: {title}": "Afficher le dossier : {title}",
+  "Show hidden folders ({n})": "Afficher les dossiers masqués ({n})",
 };

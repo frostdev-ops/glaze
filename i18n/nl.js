@@ -1566,4 +1566,9 @@
   "Pet history couldn’t be updated. Existing progress was kept.": "De huisdiergeschiedenis kon niet worden bijgewerkt. Je voortgang is bewaard.",
   "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Reeks-XP tellen alleen dagen die Reeks al heeft gecontroleerd, tot en met gisteren. Herstel telt elke dag eenmaal; uitschakelen behoudt verdiende XP.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Reeks-XP vereisen dat Reeks aanstaat; verdiende XP blijven behouden als het uitstaat.",
+  "Hide folders": "Mappen verbergen",
+  "Hide folders and learning modules in Blackboard course outlines on this device.": "Verberg mappen en leermodules in Blackboard-cursusoverzichten op dit apparaat.",
+  "Hide folder: {title}": "Map verbergen: {title}",
+  "Unhide folder: {title}": "Map tonen: {title}",
+  "Show hidden folders ({n})": "Verborgen mappen tonen ({n})",
 };

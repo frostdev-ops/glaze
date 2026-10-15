@@ -1566,4 +1566,9 @@
   "Pet history couldn’t be updated. Existing progress was kept.": "Não foi possível atualizar o histórico do mascote. Seu progresso foi mantido.",
   "Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.": "Os XP de sequência contam apenas os dias já verificados pela Sequência, até ontem. Restaurações adicionam cada dia uma vez; desativar mantém os XP ganhos.",
   "Streak XP requires Streak to be on; earned XP stays when it is off.": "Os XP de sequência exigem ativar Sequência; os XP ganhos permanecem ao desativar.",
+  "Hide folders": "Ocultar pastas",
+  "Hide folders and learning modules in Blackboard course outlines on this device.": "Oculte pastas e módulos de aprendizagem nos conteúdos dos cursos do Blackboard neste dispositivo.",
+  "Hide folder: {title}": "Ocultar pasta: {title}",
+  "Unhide folder: {title}": "Mostrar pasta: {title}",
+  "Show hidden folders ({n})": "Mostrar pastas ocultas ({n})",
 };
