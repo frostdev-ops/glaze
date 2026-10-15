@@ -55,7 +55,8 @@
   // motion.css comes along: it is mostly the motion knobs (--gz-t, --gz-enter…, set per level by
   // html[data-gz-motion] and the three switches) that any sheet's animations read, so canvas.css doesn't
   // redo them. Its Ultra-named rules (.route-view-container, .element-card…) match nothing in Canvas.
-  const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'];
+  // features/apps.css: Glaze's own apps, the same on Ultra and Canvas (the notes app, the widgets); Moodle has none.
+  const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'] : [`${site}.css`, 'motion.css', ...(site === 'canvas' ? ['features/apps.css'] : [])];
   // What only one site does: its part puts its own over these ("the site's own part", below). They're Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, still: no, stop: no, renderProgress: no,

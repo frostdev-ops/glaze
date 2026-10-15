@@ -98,14 +98,15 @@ _Last updated: 2026-10-15_
   shows only on the Canvas site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
-- **Dashboard notes and widgets** (Canvas, off by default), in `chrome.storage.local`, on this device only: your notes
-  (at most 20,000 characters) per Canvas site and signed-in user id, with when you last typed them, so a note typed later
+- **Dashboard notes and widgets** (Canvas and Blackboard Ultra, off by default), in `chrome.storage.local`, on this device only: your notes
+  (at most 20,000 characters) per site and signed-in user id, with when you last typed them, so a note typed later
   in another tab wins; an emptied note keeps only the time it was emptied, so an older copy can't bring it back. The widgets' layout (which are on, their order and size, where a
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
   it ends, so it keeps running from page to page. The widgets' settings (timer
   lengths, chime, quote choices, breathing lengths) are in `chrome.storage.sync` with your other settings (`widgets`).
-- **Notes** (Canvas, the notes app; the Notes switch, off by default), on this device only, per Canvas site and signed-in user id. The
-  library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name Canvas showed),
+  On Ultra, whether you folded Glaze's panel on the Courses page away (`panelShut`) is kept there too.
+- **Notes** (Canvas and Blackboard Ultra, the notes app; the Notes switch, off by default), on this device only, per site and signed-in user id. The
+  library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name the site showed),
   when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'
   names, courses and order. Each note's text and the pictures and attachments you add are in the extension's own
   IndexedDB, which only Glaze's background worker opens. Neither is in the school page's own storage (its
@@ -333,12 +334,19 @@ animated backgrounds) are bundled. It makes requests in these cases:
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
   day's planner items, a read-only GET, at most every two minutes per day you look at. Nothing is written to Canvas.
+  On Blackboard Ultra they sit in a panel on the Courses page and ask your own Ultra site for who is signed in
+  (`/users/me`, shared with the other extras) and, for a day the agenda shows, that day's To Do and calendar items with
+  your submissions for the courses that have something due (read-only GETs through Glaze's Ultra reader, never
+  following a redirect), at most every two minutes per day. Nothing is written to Blackboard.
 - **Notes** (Canvas, off by default). Glaze uses your profile and course list (as the other extras do). When you choose
   **Canvas link** in a note, it lists one course's files, pages or modules with their items from your own Canvas site:
   read-only GETs with your existing session, the next page asked for only on your own site, never following a redirect,
   and stopped when you close the picker or the view. Only the link and title you pick go in the note. Opening a note
   loads nothing from anywhere: a picture from another site, pasted into a note, becomes a link to it instead. Links in
   notes open in a new tab without telling the site where you came from. Nothing about your notes is sent anywhere.
+  On Blackboard Ultra, it uses who is signed in and your course list (as the other extras do), and **Blackboard link**
+  lists a course's content items from Blackboard's public contents API, the same read-only request the command palette
+  and the new-content badges share (titles, folders and links only); only the link and title you pick go in the note.
 - **Music widget** (Canvas, off by default). Glaze contacts no music service until you press **Load player**, on each
   page. Then your browser loads that service's player inside the widget, from **Spotify** (`open.spotify.com`),
   **YouTube** or **YouTube Music** (both from `www.youtube-nocookie.com`, YouTube's privacy-enhanced mode) or **Apple

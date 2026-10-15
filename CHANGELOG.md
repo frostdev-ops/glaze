@@ -8,6 +8,17 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Notes and widgets on Blackboard Ultra** (the same Notes and Widgets switches, off by default): Ultra has no
+  Dashboard, so they sit in Glaze's panel at the top of the Courses page's right column, above Ultra's own To Do. Its
+  heading folds it away (kept on this device); on a narrow window Ultra puts that column under the courses, and the
+  panel with it. The notes box, the agenda (that day's Ultra To Do and calendar items, with your submissions), the
+  focus timer, quote, music, breathing and study buddy work as on Canvas, and any of them can float over every Ultra
+  page. **What Glaze can do** lists the extras that work on Ultra, and the panel opens the reminders when they're on.
+  - The notes app on Ultra: Ctrl+K (Notes, New note, Course notes), the notes box, and **Course notes** at the end of
+    a course outline's right column. **Blackboard link** picks from the course's content items (link and title only).
+    Kept per Ultra site and account, with every safeguard Notes has on Canvas.
+  - Other files can add a tile the same way on both sites (`features/widgets.js`, `MORE` and `register`).
+
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
   notes on a course's home (there as soon as Notes is turned on), or a class reminder. It opens and acts only on your own
@@ -268,6 +279,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
+- **Notes:** a new, unsaved note's details line no longer shows the word "null".
 - **Dark palettes:** a page with a form holding a field named "id" no longer stops Glaze's pass that darkens
   what the stylesheet can't reach.
 - **Canvas, dark palettes:** text that was too faint is now readable:

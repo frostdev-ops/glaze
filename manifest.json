@@ -131,7 +131,8 @@
         "assets/art/pets/*/sprites.webp",
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
-        "features/lookx.css"
+        "features/lookx.css",
+        "features/apps.css"
       ],
       "matches": [
         "https://*/*"

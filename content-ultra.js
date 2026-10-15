@@ -371,6 +371,16 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
+  // ---- code on demand ------------------------------------------------------------------------------
+  // Dashboard notes and widgets (features/widgets.js): Glaze's panel on the Courses page, floating tiles anywhere. The
+  // notes app's Course notes on a course outline (features/notes.js): Ultra changes pages without loading them, so this
+  // pass places it, where Canvas has a hook the worker registers.
+  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || (I.settings.enhance.notes && /^\/ultra\/course\/?$/.test(location.pathname)));
+  const syncWidgets = () => {
+    if (widgetsHere()) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
+  };
+
   // ---- page changes ---------------------------------------------------------------------------
   // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
   // stall it for half a second). A click on the main menu or a course's tabs instead holds the old
@@ -545,7 +555,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
-    ctx: { myCourses, courseItems, bookFor, courseColor },
+    syncWidgets, ctx: { myCourses, courseItems, bookFor, courseColor, profile: () => me().then((id) => ({ id })) },
   };
 });
 
