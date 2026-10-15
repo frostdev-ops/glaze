@@ -28,10 +28,12 @@ if [ -n "${ASC_KEY_PATH:-}" ]; then
   auth="-allowProvisioningUpdates -authenticationKeyPath $ASC_KEY_PATH -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
 fi
 mkdir -p release
+# The archive is left unsigned and the export signs it for the App Store (cloud signing through the API key):
+# signing the archive itself needs a development profile, which Apple only makes once the team has a device.
 # shellcheck disable=SC2086
 if ! xcodebuild archive -project "$stage/Glaze/Glaze.xcodeproj" -scheme "Glaze iOS" -configuration Release \
   -archivePath "$stage/Glaze-iOS.xcarchive" -destination 'generic/platform=iOS' $auth \
-  CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$team" \
+  CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$team" CODE_SIGNING_ALLOWED=NO \
   MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" > release/ios-build.log 2>&1; then
   tail -n 60 release/ios-build.log >&2
   exit 1
