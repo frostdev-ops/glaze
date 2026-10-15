@@ -142,7 +142,9 @@ their separate, existing URL handling.
   was when you placed them) and which Dashboard tab you chose last (`dashTab`). With **Open Blackboard on the dashboard**
   on (`widgets.land`, off by default), Glaze's background page remembers which browser tabs already went on to the
   Dashboard (their tab number, in its session storage: in memory, never written to disk, gone when the browser closes or
-  the tab does), so it happens once in a tab; the school's site sees nothing of it.
+  the tab does), so it happens once in a tab; the school's site sees nothing of it. The claim accepts only a top-frame
+  page on a recorded Ultra site while the master, Dashboard and landing switches are on; failed session-storage reads or
+  writes leave the page where it is.
 - **Notes** (Canvas and Blackboard Ultra, the notes app; the Notes switch, off by default), on this device only, per site and signed-in user id. The
   library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name the site showed),
   when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'

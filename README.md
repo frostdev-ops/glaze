@@ -24,6 +24,7 @@ If Glaze is reloaded while an LMS tab stays open, its old extension API work sto
 ## Features
 
 - **Blackboard Ultra appearance** — the Courses page shares Canvas’s card editor and appearance settings: colors, gradients, pictures, crop, filters and overlay; grid sizing, condensed cards, hover effects, particles and pets. Open a course card's Glaze menu, then **Card style and bookmarks**. In Ultra list view, banner styles and corners apply; row dimensions and labels stay native. The global navigation shares Canvas's background, label and size controls, with contrast checks in the editor. Ultra's document viewer stays native pending a verified viewer origin and safe integration.
+- **Blackboard global widgets** — a widget you choose to float stays available across Blackboard pages, including the native Institution tab, with one copy. It keeps clear of either navigation rail, course tab strips and the footer; a small window gets a scrolling stack. The Dashboard's own layout stays separate.
 
 
 - **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system or a schedule (dark from 20:00 to 08:00, say). Keep quizzes light (off by default) leaves quizzes you're taking and external tools such as New Quizzes unthemed on Canvas.
