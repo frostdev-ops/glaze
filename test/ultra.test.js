@@ -25,6 +25,23 @@ test('private content is asked for without contentDetail, by both callers', () =
   }
 });
 
+test('metadata reads refuse redirects: previews and Download all ask through the reader; only file bytes may follow one', async () => {
+  // The only fetch left in either is Download all's file bytes, which Blackboard hands to its file CDN by a redirect.
+  assert.doesNotMatch(src('features/previews.js'), /\bfetch\(/);
+  assert.deepEqual(src('features/download.js').match(/\bfetch\([^,]+/g), ['fetch(f.url']);
+  assert.match(src('features/previews.js'), /GZ_ULTRA\.read\(\{ origin: location\.origin \}\)\.get\(`\/learn\/api\/v1\/courses\/\$\{cid\}\/contents\/\$\{fid\}\/children\?fields=/);
+  assert.match(src('features/download.js'), /const get = \(path\) => GZ_ULTRA\.read\(\{ origin: location\.origin, signal: ctl\.signal \}\)\.get\(/);
+  // A signed-out answer (a redirect, which fetch then refuses) fails the read, recoverably, with nothing else asked.
+  const asked = [];
+  const f = async (url, init) => { asked.push([url, init.redirect]); throw new TypeError('Failed to fetch'); };
+  const r = U.read({ origin: o, f });
+  for (const p of [`/learn/api/v1/courses/_1_1/contents/_2_1/children?fields=${U.PEEK_FIELDS}`, `/learn/api/v1/courses/_1_1/contents/_2_1/children?limit=200&fields=${U.FILES_FIELDS}`, '/learn/api/public/v1/courses/_1_1/contents/_3_1/attachments?fields=id,fileName']) {
+    await assert.rejects(r.get(p), TypeError);
+  }
+  assert.deepEqual(asked.map(([, x]) => x), ['error', 'error', 'error']);
+  assert.ok(asked.every(([u]) => u.startsWith(`${o}/learn/api/`)));
+});
+
 test("a folder preview keeps only an item's id, title, state and due date, never an LTI link's secret or key", () => {
   const raw = load('children').results;
   assert.ok(raw.some((i) => LTI.test(JSON.stringify(i))), 'the fixture carries them, as Ultra sends them unasked');
@@ -128,6 +145,10 @@ test('where work stands: a table of measured and synthetic rows ([I] rules, unkn
   delete draft.submissionStatus;
   const draftAfterOne = { ...clone(draft), firstAttemptId: '_810_1', submissionStatus: { status: 'SUBMITTED' } };
   const lti = book().find((r) => r.columnId === '_606_1'); // graded, no attempt (an LTI column)
+  const noDue = clone(graded);
+  delete noDue.column.dueDate;
+  const badDue = clone(graded);
+  badDue.column.dueDate = 'not a date';
   const nothing = book().find((r) => r.columnId === '_603_1'); // a row with nothing yet: no status at all
   const cases = [
     ['graded, handed in before the due date', graded, NOW, 'on-time', { submitted: true, graded: true }],
@@ -146,6 +167,8 @@ test('where work stands: a table of measured and synthetic rows ([I] rules, unkn
     ['a draft after a submitted attempt: handed in, time unknown', draftAfterOne, LATER, 'unknown', { submitted: true, draft: true }],
     ['graded with no attempt (LTI)', lti, NOW, 'unknown', { graded: true, submitted: false }],
     ['a row with nothing yet', nothing, NOW, 'open', { submitted: false }],
+    ['handed in, no due date: timeliness unknown', noDue, NOW, 'unknown', { submitted: true, graded: true }],
+    ['handed in, a due date that is no date: unknown', badDue, NOW, 'unknown', { submitted: true, graded: true }],
   ];
   for (const [name, row, now, state, flags, excepted] of cases) {
     const s = U.standing(row, now, excepted);
@@ -195,6 +218,10 @@ test('work for Insights: its item shape, unknown left undecided, and kept by its
   assert.equal(by['assignment:_612_1'].s, 'late');
   assert.equal(by['assignment:_613_1'].s, 'missing');
   assert.equal(by['assignment:_606_1'].s, ''); // graded LTI, time unknown: neither on time nor late
+  const noDue = status();
+  delete noDue[0].column.dueDate;
+  // Handed in, but never "on time" without a due date.
+  assert.deepEqual(U.work(noDue, LATER).map((i) => [i.k, i.s, i.d, !!i.a])[0], ['assignment:_611_1', '', 0, true]);
   assert.ok(by['discussion_topic:_605_1']);
   assert.ok(!w.some((i) => i.k.endsWith(':_600_1')), 'the overall column is not work');
   const kept = I.clean({ courses: [{ id: '_102_1', name: 'English', items: w }] });
@@ -231,12 +258,52 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   assert.deepEqual([U.grade(off).estimate, U.grade(off).overall], [true, 87]);
 });
 
-test('To Do is read in 14-day slices, the calendar in 56-day ones', () => {
+test('To Do is read in 14-day slices, the calendar in 56-day ones; a range that is not one is refused', () => {
   const s = U.slices(NOW, NOW + 30 * 864e5, 14);
-  assert.deepEqual(s.map(([a, b]) => (Date.parse(b) - Date.parse(a)) / 864e5), [14, 14, 2]);
-  assert.equal(s[0][0], new Date(NOW).toISOString());
-  assert.equal(s[2][1], new Date(NOW + 30 * 864e5).toISOString());
+  assert.deepEqual(s.map(([a, b]) => (b - a) / 864e5), [14, 14, 2]);
+  assert.equal(s[0][0], NOW);
+  assert.equal(s[2][1], NOW + 30 * 864e5);
   assert.deepEqual(U.slices(NOW, NOW, 14), []);
+  for (const [a, b, d] of [[NOW, NOW + 1, 0], [NOW, NOW + 1, -1], [NOW + 1, NOW, 14], [NaN, NOW, 14], [NOW, Infinity, 14], [NOW, NOW + 1, NaN]]) {
+    assert.throws(() => U.slices(a, b, d), RangeError);
+  }
+});
+
+// A stand-in calendar: perDay items a day in each window asked for, at most cap a page, with paging.count saying how
+// many there are and a nextPage that is never followed.
+const calendarSite = (perDay, cap = 200) => {
+  const asked = [];
+  const f = async (url) => {
+    const u = new URL(url);
+    const a = Date.parse(u.searchParams.get('since')), b = Date.parse(u.searchParams.get('until'));
+    asked.push([a, b]);
+    const n = Math.round(((b - a) / 864e5) * perDay);
+    const results = Array.from({ length: Math.min(n, cap) }, (_, i) => ({ itemSourceId: `_${(a / 1000) % 1e6 + i}_1`, itemSourceType: 'x.GradableItem', calendarId: '_1_1' }));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ results, paging: { count: n, nextPage: '/learn/api/v1/calendars/calendarItems?wider' } }) };
+  };
+  return { f, asked };
+};
+
+test("a full calendar page isn't taken as the whole window: it's split, within a bound, or marked incomplete", async () => {
+  const D = 864e5;
+  // Under the cap: one request for a 56-day slice, complete.
+  const quiet = calendarSite(1);
+  const q = await U.read({ origin: o, f: quiet.f }).calendar(NOW, NOW + 56 * D);
+  assert.deepEqual([q.items.length, q.complete, quiet.asked.length], [56, true, 1]);
+  // 250 in the window, 200 sent: asked again in halves, each of which answers whole.
+  const busy = calendarSite(250 / 56);
+  const b = await U.read({ origin: o, f: busy.f }).calendar(NOW, NOW + 56 * D);
+  assert.equal(b.complete, true);
+  assert.deepEqual(busy.asked, [[NOW, NOW + 56 * D], [NOW, NOW + 28 * D], [NOW + 28 * D, NOW + 56 * D]]);
+  // A count above what came back is not whole either, under the cap too.
+  const short = calendarSite(150 / 56, 100);
+  assert.equal((await U.read({ origin: o, f: short.f }).calendar(NOW, NOW + 56 * D)).complete, true);
+  assert.equal(short.asked.length, 3);
+  // Too busy to cover within the bound: what came back, marked incomplete, never more than 16 requests.
+  const flood = calendarSite(1e6);
+  const fl = await U.read({ origin: o, f: flood.f }).calendar(NOW, NOW + 56 * D);
+  assert.deepEqual([fl.complete, flood.asked.length], [false, 16]);
+  assert.ok(fl.items.length > 0);
 });
 
 // A stand-in Ultra: answers by path (the longest prefix of path and query that matches), records every request.
@@ -295,7 +362,8 @@ test('planner: everything due, one request at a time from this site, due-date ex
     '/learn/api/v1/courses/_101_1/gradebook/memberships/_301_1/exceptions': { results: [] },
     '/learn/api/v1/courses/_102_1/gradebook/memberships/_302_1/exceptions': { results: [{ columnId: '_613_1', dueDate: '2026-10-30T03:59:00.000Z' }] },
   });
-  const items = await U.planner(U.read({ origin: o, f }), { from: LATER - 14 * 864e5, to: LATER + 14 * 864e5, now: LATER });
+  const { items, complete } = await U.planner(U.read({ origin: o, f }), { from: LATER - 14 * 864e5, to: LATER + 14 * 864e5, now: LATER });
+  assert.equal(complete, true);
   const by = Object.fromEntries(items.map((i) => [i.id, i]));
   assert.deepEqual(Object.keys(by).sort(), ['_603_1', '_605_1', '_606_1', '_613_1']);
   assert.deepEqual([by._603_1.state, by._603_1.sub.missing], ['missing', true]); // past due, nothing handed in
@@ -306,4 +374,10 @@ test('planner: everything due, one request at a time from this site, due-date ex
   assert.equal(paths.filter((p) => p.endsWith('/studentItems')).length, 2, 'four weeks of To Do in two slices');
   assert.equal(asked.find(({ url }) => url.includes('/_302_1/exceptions')).url.split('columnId=')[1], '_613_1');
   assert.equal(asked.length, 9);
+});
+
+test("PRIVACY doesn't promise folder previews leave memory after a minute: the minute is only when they're asked again", () => {
+  const para = src('PRIVACY.md').match(/- \*\*Folder previews\*\*[\s\S]*?(?=\n- \*\*)/)[0];
+  assert.doesNotMatch(para, /kept in memory for a minute/);
+  assert.match(para, /until you leave or reload the page/);
 });

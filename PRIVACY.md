@@ -207,7 +207,8 @@ animated backgrounds) are bundled. It makes requests in these cases:
 - **Folder previews** (an Extra, on by default; switch it off under Extras). Hovering a folder asks your own Blackboard site for the
   folder's contents, using the same internal address Blackboard's own page uses, for each item's title,
   state and due date only. The request goes to the site you are on, with your existing session, and those
-  three are kept in memory for a minute. Nothing is sent anywhere else. Blackboard can include a course
+  three are kept in memory until you leave or reload the page (after a minute, hovering the folder again asks
+  afresh). Nothing is sent anywhere else. Blackboard can include a course
   tool's launch credentials in that answer; Glaze asks for them to be left out and never keeps them.
 - **Due-date status** (the "Due-date status and percentages" Extra, on by default, and due-date urgency).
   To show beside a due date whether you've submitted the work or had it graded, Glaze asks your own

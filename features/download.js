@@ -64,9 +64,9 @@ var GZ_DOWNLOAD = globalThis.GZ_DOWNLOAD || (() => {
     jobs.set(fid, job);
     const say = (label, pct = 0) => { Object.assign(job, { label, pct }); paintDl(fid); };
     say(job.label);
-    // Only the fields used: never an item's contentDetail, where an LTI link keeps its tool's secret and key.
-    const get = (path) => fetch(`${location.origin}/learn/api/${path}`, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: ctl.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
+    // Only the fields used: never an item's contentDetail, where an LTI link keeps its tool's secret and key. Through
+    // lib/ultra.js's reader: GET, this site, redirects refused (one means signed out).
+    const get = (path) => GZ_ULTRA.read({ origin: location.origin, signal: ctl.signal }).get(`/learn/api/${path}`);
     const list = (id) => get(`v1/courses/${cid}/contents/${id}/children?limit=200&fields=${GZ_ULTRA.FILES_FIELDS}`).then((j) => j.results || []);
     const found = [];
     let skipped = 0;
