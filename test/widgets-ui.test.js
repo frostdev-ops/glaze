@@ -26,7 +26,7 @@ class E {
   remove() {}
 }
 
-const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false } = {}) => {
+const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = false, tz = 'UTC' } = {}) => {
   const held = []; // replies the test lets through by hand (hold)
   const FakeDate = class extends Date {};
   FakeDate.now = () => clock.t;
@@ -38,7 +38,8 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
   const c = {
     console, URL, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String,
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' },
-    GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, settings: () => ({ enhance: { notes: true, widgets: true } }), profile: async () => ({ id: '3', time_zone: 'UTC' }) },
+    GZ_TODO: require('../lib/todo.js'), GZ_CLASSES: require('../lib/classes.js'),
+    GZ_CTX: { t: (k) => k, locale: () => 'en', need: async () => {}, capi: async () => [], settings: () => ({ enhance: { notes: true, widgets: true } }), profile: async () => ({ id: '3', time_zone: tz }) },
     location: { origin: 'https://canvas.test', pathname: '/' },
     setTimeout: (f, ms) => { timers.set(++n, { f, ms }); return n; },
     clearTimeout: (id) => timers.delete(id),
@@ -221,4 +222,32 @@ test('a newer note from another tab, stored while a save is on its way, is not u
   await settle();
   view.fire('click');
   assert.equal(text.value, 'D');
+});
+
+// Codex W14 review: the agenda shows a class on the day it happens for the student, by instant. A Thursday 23:00 class
+// kept in Phoenix is Friday 02:00 for a Canvas profile in New York; kept in New York, it stays on Thursday at 23:00.
+test('the agenda puts a class kept in another zone on the student\'s own day, at the student\'s clock time', async () => {
+  const text = (el) => [el.textContent || '', ...(el.children || []).map((c) => (typeof c === 'object' ? text(c) : String(c)))].join(' ');
+  const day = async (scheduleTz) => {
+    const p = page({
+      tz: 'America/New_York', clock: { t: Date.parse('2026-10-15T16:00:00Z') }, // Thursday noon in New York
+      local: { 'classes:https://canvas.test/3': { tz: scheduleTz, courses: [{ id: 'o-lab', name: 'Night lab', periods: [{ days: [4], start: 1380, end: 1430, loc: '', from: '', to: '', skip: [] }] }] } },
+    });
+    const body = new E();
+    p.ui.probe.WIDGETS.agenda(body);
+    for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+    const list = find(body, (e) => e.className === 'gz-w-agenda');
+    const thursday = text(list);
+    find(body, (e) => e.attrs?.['aria-label'] === 'Next day').fire('click');
+    for (let i = 0; i < 4; i++) { p.answer(); await settle(); }
+    return [thursday, text(list)];
+  };
+  const [phxThu, phxFri] = await day('America/Phoenix');
+  assert.doesNotMatch(phxThu, /Night lab/, 'not on Thursday in New York');
+  assert.match(phxFri, /Night lab/);
+  assert.match(phxFri, /2:00\s?(?:AM\s?)?–\s?2:50\s?AM/, 'at 02:00 New York time');
+  const [nyThu, nyFri] = await day('America/New_York');
+  assert.match(nyThu, /Night lab/);
+  assert.match(nyThu, /11:00\s?–\s?11:50\s?PM/);
+  assert.doesNotMatch(nyFri, /Night lab/);
 });
