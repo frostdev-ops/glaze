@@ -484,7 +484,7 @@ GZ_UI.load().then((s) => {
 
   // Ultra's item settings use a separate capped sync item; appearance still uses the shared nav patch queue.
   const N = GZ_NAV;
-  const nativeNames = { profile: 'Profile', 'institution-page': 'Dashboard', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades', tools: 'Tools', logout: 'Sign out' };
+  const nativeNames = { profile: 'Profile', 'institution-page': 'Dashboard', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades', tools: 'Tools', logout: 'Sign out', glaze: 'Glaze settings' };
   const widgetNames = { clock: 'Clock and date', next: 'Next due', timer: 'Focus timer', pet: 'Pet habitat' };
   const iconNames = ['Link', 'Book', 'Video', 'Chat', 'Document', 'Calendar', 'Folder', 'Code', 'Star', 'Globe'];
   const node = (tag, props = {}, ...kids) => { const el = Object.assign(document.createElement(tag), props); el.append(...kids); return el; };
