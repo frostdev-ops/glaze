@@ -338,23 +338,28 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       gpa();
     }, () => { D.schemes.set(id, false); D.v++; gpa(); });
   };
-  // Past terms and the goal (lib/gpa.js), as stored: asked for only when there are some or their view is open. A change
-  // from any tab redraws; this tab's own (already shown) doesn't.
+  // Past terms and the goal (lib/gpa.js), as stored: asked for only when there are some, a Remove all happened, or their
+  // view is open. A change from any tab redraws; this tab's own (already shown) doesn't. A read from before the last
+  // Remove all this page has seen (one held up while it came) is dropped; `fresh` is a read made to set things right.
   const gpaIn = () => X.need('lib/gpa.js', () => globalThis.GZ_GPA);
-  const pastIn = (raw) => (raw?.t?.length || raw?.g || D.hist ? gpaIn() : Promise.resolve()).then(() => {
+  const pastIn = (raw, fresh) => (raw?.t?.length || raw?.g || raw?.cl || D.hist ? gpaIn() : Promise.resolve()).then(() => {
     const rec = globalThis.GZ_GPA ? GZ_GPA.clean(raw) : { t: [] };
+    if (!fresh && (rec.cl || 0) < (D.past?.cl || 0)) return;
     if (JSON.stringify(rec) === JSON.stringify(D.past)) return;
     D.past = rec;
     D.refresh?.();
   }, () => {});
-  // One change to them (lib/gpa.js change), shown at once and kept by the service worker's queue ('glaze:gpaterms').
+  // One change to them (lib/gpa.js change), shown at once and kept by the service worker's queue ('glaze:gpaterms'),
+  // with the last Remove all this view knows of. One that isn't kept (refused as made on an older view, or not
+  // written) puts back what is stored.
   const savePast = (m) => {
     const at = Date.now();
-    D.past = GZ_GPA.change(D.past, { ...m, at });
+    const base = D.past?.cl || 0;
+    D.past = GZ_GPA.change(D.past, { ...m, at, base }) || D.past;
     D.refresh?.();
-    try {
-      return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:gpaterms', key: D.tkey, at, ...m })).then((r) => !!r?.ok, () => false);
-    } catch { return Promise.resolve(false); }
+    let sent;
+    try { sent = Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:gpaterms', key: D.tkey, at, base, ...m })).then((r) => !!r?.ok, () => false); } catch { sent = Promise.resolve(false); }
+    return sent.then((ok) => (ok ? ok : getArea('local', D.tkey).then((raw) => pastIn(raw, true)).then(() => false)));
   };
   // What a course's work left needs for `goal` (%), over the whole course and with its saved what-ifs: the calculator's
   // own answer (C.need), or null when the course's work can't be had.

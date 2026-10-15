@@ -1141,5 +1141,7 @@
   "Lowest percent": "Porcentaje mínimo",
   "Term": "Periodo",
   "This term's GPA": "GPA de este periodo",
+  "Glaze skipped these lines: {lines}. Add them by hand if they are courses.": "Glaze omitió estas líneas: {lines}. Añádelas a mano si son cursos.",
+  "These courses come to {credits} credits, a total your transcript doesn't show: check for a course Glaze missed.": "Estos cursos suman {credits} créditos, un total que tu expediente no muestra: revisa si Glaze se saltó algún curso.",
   "There's no way there with the work left in your courses.": "No hay forma de llegar con el trabajo que queda en tus cursos.",
 };

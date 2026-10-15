@@ -138,8 +138,24 @@ test('a transcript as text: terms, courses, credits either side of the grade, an
   assert.deepEqual(t[1].c, [{ n: 'MATH 2210A Calculus I', cr: 4, g: 'A' }, { n: 'HIST 150 World History', cr: 3, g: 'W' }, { n: 'CHEM 101 General Chemistry', cr: 4, g: 'B' }]);
   assert.equal(t[1].gpa, 3.5, 'the term GPA, not the cumulative one');
   // Courses before any term heading still come back, under a term without a name.
-  assert.deepEqual(G.parse('Intro to Psychology 3 A\nTerm totals 3 A'), [{ n: '', c: [{ n: 'Intro to Psychology', cr: 3, g: 'A' }], gpa: null }]);
+  assert.deepEqual(G.parse('Intro to Psychology 3 A\nTerm totals 3 A'), [{ n: '', c: [{ n: 'Intro to Psychology', cr: 3, g: 'A' }], gpa: null, printed: [3] }]);
   assert.deepEqual(G.parse('Nothing to see here\n2024 was a year'), []);
+});
+
+test('a course row is a course whatever its title says; the review checks the credits as well as the GPA', () => {
+  const t = G.parse(['Fall 2025', 'CIS301 Software Quality Assurance 3 A', 'CIS302 Databases 3 A', 'CIS 499 Senior project',
+    'Term GPA 4.00 Credits 6.00', 'Cum GPA 3.80 Cum Credits 60'].join('\n'));
+  assert.deepEqual(t[0].c.map((c) => c.n), ['CIS301 Software Quality Assurance', 'CIS302 Databases']);
+  assert.deepEqual(t[0].printed, [6], "the term's printed credits, not the cumulative ones nor the GPA");
+  assert.deepEqual(t[0].skipped, ['CIS 499 Senior project'], 'a coded line that is no course is listed');
+  assert.deepEqual(G.check(t[0]), { gpa: true, mine: 4, credits: true, all: 6 });
+  // One course missing: the GPA still matches, the credits don't, so the check says so.
+  assert.deepEqual(G.check({ ...t[0], c: t[0].c.slice(0, 1) }), { gpa: true, mine: 4, credits: false, all: 3 });
+  assert.equal(G.check({ ...t[0], printed: undefined }).credits, null, 'nothing printed, nothing to compare');
+  // Summary lines are still no courses.
+  const s = G.parse('Fall 2025\nBIO 101 Biology 3 A\nQuality Points 12.00 A\nTerm Totals 3.00 3.00 12.00')[0];
+  assert.deepEqual(s.c.map((c) => c.n), ['BIO 101 Biology']);
+  assert.deepEqual(s.printed, [3, 3, 12]);
 });
 
 test('a transcript as an HTML table, through lib/doctext.js', () => {
@@ -149,12 +165,22 @@ test('a transcript as an HTML table, through lib/doctext.js', () => {
   assert.deepEqual(t, [{ n: 'Fall 2024', gpa: null, c: [{ n: 'BIO 1100 Intro & Lab', cr: 4, g: 'A-' }, { n: 'PSY 101 Psychology', cr: 3, g: 'CR' }] }]);
 });
 
+test('an older change to a term, arriving after a newer one, does not undo it', () => {
+  const row = (cr) => ({ id: 'one', n: 'Fall 2024', c: [{ n: 'Bio', cr: 4, g: 'A' }, { n: 'Eng', cr, g: 'B' }] });
+  let rec = G.change(undefined, { op: 'term', term: row(3), at: 5 });
+  rec = G.change(rec, { op: 'term', term: row(4), at: 20 });
+  rec = G.change(rec, { op: 'term', term: { ...row(3), n: 'Fall 2024 (old tab)' }, at: 10 });
+  assert.deepEqual(rec.t, [{ ...row(4), at: 20 }], 'the newer credits stay');
+  assert.deepEqual(G.change(rec, { op: 'drop', id: 'one', at: 15 }).t.length, 1, 'nor does an older removal');
+  assert.deepEqual(G.change(rec, { op: 'drop', id: 'one', at: 25 }).t, []);
+});
+
 test('what is kept is cleaned, and changes go in one at a time', () => {
   const t1 = { id: 'one', n: '  Fall   2024 ', c: [{ n: 'Bio', cr: 4, g: 'A' }, { n: 'x', cr: -1, g: 'B', l: 2, x: 0 }, 'junk'], p: 1, extra: 1 };
   let rec = G.change(undefined, { op: 'term', term: t1, at: 10 });
-  assert.deepEqual(rec, { t: [{ id: 'one', n: 'Fall 2024', c: [{ n: 'Bio', cr: 4, g: 'A' }, { n: 'x', cr: 0, g: 'B' }] }] });
+  assert.deepEqual(rec, { t: [{ id: 'one', n: 'Fall 2024', c: [{ n: 'Bio', cr: 4, g: 'A' }, { n: 'x', cr: 0, g: 'B' }], at: 10 }] });
   rec = G.change(rec, { op: 'term', term: { id: 'one', n: 'Fall 2024', c: [], p: 0 }, at: 11 });
-  assert.deepEqual(rec.t, [{ id: 'one', n: 'Fall 2024', c: [], p: 0 }], 'replaced by id');
+  assert.deepEqual(rec.t, [{ id: 'one', n: 'Fall 2024', c: [], p: 0, at: 11 }], 'replaced by id');
   rec = G.change(rec, { op: 'add', terms: [{ id: 'two', n: 'fall 2024', c: [] }, { id: 'three', n: 'Spring 2025', c: [] }, { id: 'BAD!', n: 'x', c: [] }], at: 12 });
   assert.deepEqual(rec.t.map((t) => t.id), ['two', 'three'], 'an import replaces a term of the same name');
   rec = G.change(rec, { op: 'goal', goal: { k: 'cum', v: 3.456 }, at: 13 });
@@ -164,9 +190,12 @@ test('what is kept is cleaned, and changes go in one at a time', () => {
   assert.deepEqual(rec.t.map((t) => t.id), ['three']);
   rec = G.change(rec, { op: 'clear', at: 20 });
   assert.deepEqual(rec, { t: [], cl: 20 });
-  // A change made before the clear, arriving after it, is dropped.
-  assert.deepEqual(G.change(rec, { op: 'term', term: t1, at: 19 }), { t: [], cl: 20 });
-  assert.equal(G.change(rec, { op: 'term', term: t1, at: 21 }).t.length, 1);
+  // A change made before the clear, arriving after it, is refused; so is one made later on a view from before it
+  // (a page whose read was held up while the clear came: base is the last clear it knew of).
+  assert.equal(G.change(rec, { op: 'term', term: t1, at: 19, base: 20 }), null);
+  assert.equal(G.change(rec, { op: 'term', term: t1, at: 21 }), null, 'no base: a view from before any clear');
+  assert.equal(G.change(rec, { op: 'term', term: t1, at: 21, base: 0 }), null);
+  assert.equal(G.change(rec, { op: 'term', term: t1, at: 21, base: 20 }).t.length, 1, 'a view that saw the clear');
   // Caps: 40 terms, 40 rows, names cut.
   const many = G.clean({ t: Array.from({ length: 50 }, (_, i) => ({ id: `t${i}`, n: 'x'.repeat(200), c: Array.from({ length: 50 }, () => ({ n: 'c', cr: 3, g: 'A' })) })) });
   assert.equal(many.t.length, 40);

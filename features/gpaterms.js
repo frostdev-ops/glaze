@@ -23,7 +23,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   const docIn = () => X.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT);
   // What the view keeps between draws: terms in review, the import's text, a word for the student, the terms open, the
   // goal kind picked before a value, the courses' answers, and where focus goes next.
-  const V = { review: null, text: '', note: '', open: new Set(), importOpen: false, kind: 'cum', needs: new Map(), caps: new Map(), focus: null };
+  const V = { review: null, text: '', note: '', open: new Set(), importOpen: false, kind: 'cum', needs: new Map(), caps: new Map(), focus: null, gen: 0 };
   let body, api;
   const redraw = () => { if (body?.isConnected) draw(body, api); };
   const saved = (ok) => { if (!ok) { V.note = t('Not saved. Try again in a moment.'); redraw(); } };
@@ -181,7 +181,8 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   };
 
   // ---- importing a transcript --------------------------------------------------------------------------------------
-  // Read here, never sent anywhere; what it finds goes to review first.
+  // Read here, never sent anywhere; what it finds goes to review first. Each read (a file picked, Read it, Cancel) is a
+  // new generation: a file still being read when another read starts is dropped, not shown over it.
   const review = (text) => {
     const found = G().parse(text);
     V.note = found.length ? '' : t('Glaze found no terms or courses in that. Paste the part with your courses and grades, or add terms by hand.');
@@ -190,14 +191,16 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     redraw();
   };
   const readFile = async (file) => {
+    const gen = ++V.gen;
+    const show = (text) => { if (gen === V.gen) review(text); };
     try {
       const name = file.name.toLowerCase();
       if (/\.(pdf|png|jpe?g|gif|webp|heic|tiff?)$/.test(name) || /^(image\/|application\/pdf)/.test(file.type)) { V.note = t("PDF and photo transcripts can't be read yet: open it, copy its text and paste it here."); return redraw(); }
       if (file.size > 5e6) throw new Error('too large');
-      if (/\.docx$/.test(name)) { await docIn(); return review(await GZ_DOCTEXT.docx(new Uint8Array(await file.arrayBuffer()))); }
-      if (/\.html?$/.test(name) || file.type === 'text/html') { await docIn(); return review(GZ_DOCTEXT.html(await file.text())); }
-      return review(await file.text());
-    } catch { V.note = t("Glaze couldn't read that file."); V.focus = 'imp:file'; redraw(); }
+      if (/\.docx$/.test(name)) { await docIn(); return show(await GZ_DOCTEXT.docx(new Uint8Array(await file.arrayBuffer()))); }
+      if (/\.html?$/.test(name) || file.type === 'text/html') { await docIn(); return show(GZ_DOCTEXT.html(await file.text())); }
+      return show(await file.text());
+    } catch { if (gen === V.gen) { V.note = t("Glaze couldn't read that file."); V.focus = 'imp:file'; redraw(); } }
   };
   const importer = () => {
     const area = f(label(make('textarea', { rows: 5, value: V.text, placeholder: 'Fall 2024\nBIO 101  Introduction to Biology  4.0  A-' }), t("Your transcript's text")), 'imp:text');
@@ -213,7 +216,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     });
     const file = f(label(make('input', { type: 'file', accept: '.txt,.htm,.html,.docx,text/plain,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), t('A transcript file: text, a web page or Word')), 'imp:file');
     file.addEventListener('change', () => { if (file.files?.[0]) readFile(file.files[0]); });
-    const go = btn(t('Read it'), 'imp:go', () => review(V.text));
+    const go = btn(t('Read it'), 'imp:go', () => { V.gen++; review(V.text); });
     const box = make('details', { className: 'gz-gpa-more', open: !!V.text || !!V.importOpen }, make('summary', { textContent: t('Import from a transcript') }),
       note(t("Read on this device; nothing is uploaded. Text, web pages and Word files work. PDF and photo transcripts can't be read yet: copy the text and paste it here.")),
       area, make('div', { className: 'gz-gpa-actions' }, go, file));
@@ -223,21 +226,24 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   const reviewer = (past, w) => {
     const h = f(make('h4', { tabIndex: -1, textContent: t('Check what Glaze found, then add it') }), 'rev:h');
     const terms = V.review.map((term, i) => {
-      const s = stat(term, w);
+      // What the transcript printed for the term, checked: a matching GPA over different credits doesn't reassure.
+      const k = G().check(term, w);
       const lines = [];
       if (!term.n) lines.push(t('Give this term a name.'));
       if (past.t.some((x) => x.n && x.n.toLowerCase() === term.n.toLowerCase())) lines.push(t('This replaces your {name}.', { name: term.n }));
-      if (term.gpa != null && s.gpa != null) lines.push(t('Your transcript says {a}; Glaze makes it {b}.', { a: api.two(term.gpa), b: api.two(s.gpa) }) + (Math.abs(term.gpa - s.gpa) > 0.0051 ? ` ${t('Check the grades and credits.')}` : ''));
+      if (term.skipped?.length) lines.push(t('Glaze skipped these lines: {lines}. Add them by hand if they are courses.', { lines: term.skipped.slice(0, 5).join(' · ') }));
+      if (k.credits === false) lines.push(t("These courses come to {credits} credits, a total your transcript doesn't show: check for a course Glaze missed.", { credits: GZ_I18N.num(k.all, locale()) }));
+      if (k.gpa != null) lines.push(t('Your transcript says {a}; Glaze makes it {b}.', { a: api.two(term.gpa), b: api.two(k.mine) }) + (k.gpa === false || k.credits === false || term.skipped?.length ? ` ${t('Check the grades and credits.')}` : ''));
       return make('fieldset', { className: 'gz-gpa-term' }, make('legend', { textContent: term.n || t('Unnamed term') }), ...lines.map((x) => note(x)),
         editor(term, (x) => { V.review[i] = x; redraw(); }, () => { V.review.splice(i, 1); if (!V.review.length) V.review = null; V.focus = 'rev:h'; redraw(); }, w));
     });
     const add = btn(t('Add these terms'), 'rev:add', () => {
-      const terms = V.review.map(({ gpa, ...x }) => x);
+      const terms = V.review.map(({ gpa, printed, skipped, ...x }) => x);
       for (const x of terms) V.open.delete(x.id);
       Object.assign(V, { review: null, text: '', focus: 'hist' });
       api.save({ op: 'add', terms }).then(saved);
     });
-    const cancel = btn(t('Cancel'), 'rev:cancel', () => { Object.assign(V, { review: null, focus: 'imp:text' }); redraw(); });
+    const cancel = btn(t('Cancel'), 'rev:cancel', () => { Object.assign(V, { review: null, focus: 'imp:text', gen: V.gen + 1 }); redraw(); });
     return label(make('section', { className: 'gz-gpa-review' }, h, ...terms, make('div', { className: 'gz-gpa-actions' }, add, cancel)), t('Review'));
   };
 
