@@ -325,6 +325,18 @@ test('folder completion in every language Ultra writes it', () => {
   }
 });
 
+test('Canvas progress counts Complete One Item alternatives as one requirement', () => {
+  const item = (completed) => ({ completion_requirement: { type: 'must_mark_done', completed } });
+  assert.deepEqual(P.canvasProgress([{ requirement_type: 'one', items: [item(true), item(false)] }]), { done: 1, total: 1 });
+  assert.deepEqual(P.canvasProgress([
+    { requirement_type: 'all', items: [item(true), item(false), {}] },
+    { requirement_type: 'one', items: [item(false), item(false)] },
+    { requirement_type: 'one', items: [item(true), item(true)] },
+    { requirement_type: 'one', items: [{}] },
+    { items: [] },
+  ]), { done: 2, total: 4 });
+});
+
 test('your place in a course: the latest 30 courses, the last 100 open folders each', () => {
   const all = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`_${i}_1`, { open: [], top: 0, at: 1000 + i }]));
   all.junk = null;

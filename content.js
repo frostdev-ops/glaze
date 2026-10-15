@@ -852,8 +852,7 @@
       // ponytail: one page of 100 modules, and Canvas leaves a module's items out past its inline limit;
       // follow the Link header and items_url if a course ever has that many.
       capi(`/courses/${cid}/modules?include[]=items&per_page=100`).then((mods) => {
-        const cr = mods.flatMap((m) => m.items || []).map((i) => i.completion_requirement).filter(Boolean);
-        Object.assign(r, { total: cr.length, done: cr.filter((c) => c.completed).length });
+        Object.assign(r, GZ_PAGE.canvasProgress(mods));
         if (reqs === r) renderProgress();
       }).catch(() => {});
       return;
