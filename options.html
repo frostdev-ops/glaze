@@ -413,6 +413,34 @@
         <label class="check"><input type="checkbox" data-key="enhance.toggles"><span>Document buttons</span>
           <span class="desc">Round buttons at the bottom right of course documents: dark documents, and focus mode (the document alone, with a reading-progress line and reading time; Esc leaves it).</span>
           <span class="desc">On Canvas: a bar above pages, assignments and file previews.</span></label>
+        <div class="group" id="todo">
+          <h3>Better To Do</h3>
+          <label class="check"><input type="checkbox" data-key="enhance.todo"><span>Better To Do</span>
+            <span class="desc">On Canvas: Glaze's own To Do list in place of Canvas's, on the Dashboard and on a course's home page (that course only). Grouped by day, with what's past due, what's done and new announcements. Add your own tasks, steps, a day to do something on and timed focus sessions; they're kept on this device, and Export settings includes them.</span></label>
+          <div class="row">
+            <label>Timeframe <select data-key="todo.span"><option value="week">This week</option><option value="custom">Custom</option></select></label>
+            <label>Week starts <select data-key="todo.start"><option value="rolling">Today</option><option value="monday">Monday</option><option value="sunday">Sunday</option><option value="saturday">Saturday</option></select></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Custom timeframe</span><input type="range" data-key="todo.n" min="1" max="60" step="1"><output data-for="todo.n"></output></label>
+            <label><select data-key="todo.unit" aria-label="Custom timeframe unit"><option value="days">Days</option><option value="weeks">Weeks</option></select></label>
+          </div>
+          <div class="row">
+            <label>Past-due work <select data-key="todo.past"><option value="never">Hide</option><option value="3days">3 days</option><option value="week">A week</option><option value="month">A month</option><option value="always">Always</option></select></label>
+            <label>Done means <select data-key="todo.done"><option value="auto">Submitted, graded or ticked</option><option value="manual">Only what I tick</option></select></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="todo.group"><span>Group by day</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.rel"><span>Relative dates</span>
+            <span class="desc">"in 2 days" instead of "Thu 11:59 PM". The other shows when you hover.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.urgent"><span>Highlight what's urgent</span>
+            <span class="desc">Past due, or due within a day.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.teacher"><span>Grading, for teachers</span>
+            <span class="desc">If you teach or assist a course: work waiting for you to grade.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.progress"><span>Grading progress</span>
+            <span class="desc">How many handed-in submissions you've graded so far. Asks Canvas once per assignment.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.sync"><span>Tick off in Canvas too</span>
+            <span class="desc">Ticking an item marks it done in Canvas's own planner, as Canvas's List View does, so it shows done on your phone too. This is the only change Glaze makes in Canvas. Off: ticks stay on this device.</span></label>
+        </div>
         <div class="group">
           <h3>Declutter</h3>
           <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
@@ -458,7 +486,7 @@
           <label class="row"><button type="button" id="import-btn">Import settings…</button><input type="file" id="import" accept="application/json,.json" hidden></label>
           <button type="button" id="reset-all" class="danger">Reset everything</button>
         </div>
-        <p class="desc">Exports are a JSON file with your palette, presets, options and any course nicknames you set. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
+        <p class="desc">Exports are a JSON file with your palette, presets, options, any course nicknames you set, and your Better To Do tasks and plans. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
         <p class="desc">Card styles and bookmarks go in the export too. Pictures kept for cards stay on this computer.</p>
       </section>
     </main>
@@ -476,6 +504,7 @@
   <script src="lib/history.js"></script>
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
+  <script src="lib/todo.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>

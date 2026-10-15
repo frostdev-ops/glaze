@@ -696,13 +696,15 @@ GZ_UI.load().then((s) => {
   takeOffer();
 
   // ---- backup ----
-  $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links'], (r) => {
-    // Card styles and bookmarks go too; a picture kept on this computer stays here.
-    const blob = new Blob([JSON.stringify({ ...s, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links) }, null, 2)], { type: 'application/json' });
+  // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
+  // card styles and bookmarks go too; a picture kept on this computer stays here.
+  $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links'], (r) => chrome.storage.local.get(null, (all) => {
+    const tasks = Object.fromEntries(Object.entries(all || {}).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
+    const blob = new Blob([JSON.stringify({ ...s, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), tasks }, null, 2)], { type: 'application/json' });
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  }));
+  })));
   $('#import-btn').addEventListener('click', () => $('#import').click());
   $('#import').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -713,8 +715,23 @@ GZ_UI.load().then((s) => {
     if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {
       return hint(t('No Glaze settings found in {file}.', { file: file.name }), true);
     }
-    Object.assign(s, GZ_SANITIZE(raw), { card: GZ_CARDS.settings(raw.card) });
-    save(Object.keys(s));
+    // All of it is cleaned before any of it is applied, then stored whole by the background worker's write queue
+    // (GZ_TODO.restore, 'glaze:todo'): a file that can't be taken whole changes nothing, imports and every tab's
+    // To Do edits take turns, and success is said only once both stores have it.
+    const next = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
+    const tasks = raw.tasks && typeof raw.tasks === 'object'
+      ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
+    flush(); // an edit still waiting goes out first, so it can't land on top of the import
+    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, settings: { version: 2, ...next } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
+    if (!r.ok) {
+      // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
+      if (r.undone === false) {
+        GZ_UI.load().then((now) => { Object.assign(s, now); fill(); });
+        return hint(t("Couldn't import {file}, and undoing it failed too: your Better To Do tasks may be the imported ones. Your settings are as they were.", { file: file.name }), true);
+      }
+      return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
+    }
+    Object.assign(s, next);
     if (raw.cards || raw.links) cardsOp({ replace: { cards: raw.cards, links: raw.links } });
     fill();
     hint(t('Imported {file}.', { file: file.name }));

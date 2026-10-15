@@ -52,6 +52,19 @@ All notable changes to Glaze are documented here. The format follows
 - **Card grades:** click a grade on a Canvas Dashboard card to open that course's grades (with the keyboard, Tab to
   the card's grade link), or show card grades only when you point at the card.
 
+- **Better To Do (Canvas, off by default; turn it on under Extras):** Glaze's own To Do list in place of Canvas's,
+  on the Dashboard and on a course's home page (that course only). Grouped by day in your Canvas time zone (past due,
+  today, tomorrow, this week, later, no date), or one list by date; what's done, what's graded and announcements
+  (unread first) apart. Relative or exact dates, urgent items marked, and how long past-due work stays.
+  - A custom timeframe of any number of days or weeks, from today or from the start of your week. Free.
+  - Your own tasks (with a course, due date and notes), steps, a "do on" day and timed focus sessions on any item
+    (a planned item still shows under its due date until it's done),
+    kept on this device and included in Export settings.
+  - Done follows your submissions, or only what you tick. "Tick off in Canvas too" marks items done in Canvas's own
+    planner, as Canvas's List View does; Glaze's first and only write to Canvas: opt-in, only from your own tick, and a tick Canvas doesn't confirm goes back and is checked with Canvas again.
+  - For teachers: work waiting to be graded, and how much of it you've graded.
+  - Ctrl+K: turn it on or off, and Add task. Ticking off bursts in Expressive motion.
+
 ### Changed
 
 - **Lighter on every page:** Glaze loads about 38% less code on Canvas and Blackboard pages. Its words in your

@@ -179,6 +179,8 @@ const UNSEEN = [
   '.equation_image', '.course-color-block', '.subtitle',
   // Striped tables: the People and Pages lists, not captured.
   '.ic-Table--striped',
+  // A teacher's server-drawn To Do list (Better To Do hides it); the fixtures are the student's pages.
+  '.to-do-list',
 ];
 
 test('every class, id and attribute Glaze keys on appears in a fixture, or is listed as unseen with why', () => {

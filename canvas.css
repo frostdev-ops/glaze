@@ -1438,6 +1438,85 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 .gz-draft button:first-of-type { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
 .gz-draft button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 
+/* ---- Better To Do (features/todo.js): Glaze's list in place of Canvas's To Do in the right column (the React list, or
+   a teacher's server-drawn heading and list). Canvas's own is hidden only while Glaze's is on the page, right before it,
+   so it comes back the moment Glaze's goes. */
+#gz-todo ~ :is(.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list) { display: none !important; }
+#gz-todo { margin: 0 0 1.5rem; font-size: 0.875rem; color: var(--gz-ink); }
+#gz-todo:not(:first-child) { margin-top: 1rem; }
+#gz-todo :is(button, input, select, textarea) { font: inherit; }
+#gz-todo .gz-todo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; border-bottom: 1px solid var(--gz-line); padding-bottom: 0.5rem; }
+#right-side #gz-todo .gz-todo-head h2 { flex: 1 0 auto; margin: 0; padding: 0; border: 0; }
+#gz-todo .gz-todo-head > * { white-space: nowrap; }
+#gz-todo .gz-todo-count { font-size: 0.75rem; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
+#gz-todo .gz-todo-say:empty { display: none; }
+#gz-todo .gz-todo-say { margin: 0.5rem 0 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
+#gz-todo .gz-todo-empty { margin: 0.75rem 0; color: var(--gz-ink-muted); }
+#gz-todo .gz-todo-group { margin-top: calc(0.9rem * var(--gz-space)); }
+#right-side #gz-todo :is(h3, summary) {
+  display: flex; align-items: baseline; gap: 0.4rem; margin: 0 0 0.25rem; padding: 0; border: 0;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted);
+}
+#gz-todo summary { cursor: pointer; list-style-position: inside; }
+#gz-todo .gz-todo-group[data-kind="past"] h3 { color: var(--gz-err); }
+#gz-todo .gz-todo-n { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--gz-ink-faint); font-variant-numeric: tabular-nums; }
+#gz-todo :is(.gz-todo-list, .gz-todo-steps) { list-style: none; margin: 0; padding: 0; }
+#gz-todo .gz-todo-item {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 0.5rem; align-items: start;
+  margin: 0; padding: calc(0.45rem * var(--gz-space)) 0.35rem; border-radius: var(--gz-radius-sm); border-inline-start: 3px solid transparent;
+}
+#gz-todo .gz-todo-item:hover { background: var(--gz-band); }
+#gz-todo .gz-todo-item[data-urgent] { border-inline-start-color: var(--gz-warn); }
+#gz-todo .gz-todo-item[data-urgent="past"] { border-inline-start-color: var(--gz-err); }
+/* Glaze's words can be English on a right-to-left page: each bit of text takes its own direction. */
+#gz-todo :is(.gz-todo-count, .gz-todo-say, .gz-todo-title, .gz-todo-meta > *, .gz-todo-n) { unicode-bidi: plaintext; }
+#gz-todo .gz-todo-item:is(.gz-todo-news, .gz-todo-grade) { grid-template-columns: minmax(0, 1fr); }
+#gz-todo input[type="checkbox"] { width: 1.05rem; height: 1.05rem; margin: 0.1rem 0 0; accent-color: var(--gz-accent); cursor: pointer; }
+#gz-todo .gz-todo-title {
+  display: block; padding: 0; border: 0; background: none; text-align: start; cursor: pointer;
+  color: var(--gz-ink); font-weight: 600; overflow-wrap: anywhere; text-decoration: none;
+}
+#gz-todo a.gz-todo-title:hover { color: var(--gz-accent); text-decoration: underline; }
+#gz-todo .gz-todo-item[data-done] .gz-todo-title { color: var(--gz-ink-muted); text-decoration: line-through; text-decoration-color: var(--gz-ink-faint); }
+#gz-todo .gz-todo-news:not([data-unread]) .gz-todo-title { font-weight: 400; }
+#gz-todo .gz-todo-meta { display: flex; flex-wrap: wrap; gap: 0.15rem 0.45rem; margin-top: 0.1rem; font-size: 0.75rem; color: var(--gz-ink-muted); }
+#gz-todo .gz-todo-meta > :not(:first-child)::before { content: "·"; margin-inline-end: 0.45rem; color: var(--gz-ink-faint); }
+#gz-todo .gz-todo-meta > .gz-todo-chip::before, #gz-todo .gz-todo-meta > .gz-todo-chip + *::before { content: none; }
+#gz-todo .gz-todo-chip { padding: 0 0.45em; border-radius: 999px; font-weight: 600; color: var(--gz-accent); background: var(--gz-accent-soft); }
+#gz-todo .gz-todo-chip[data-tone="ok"] { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
+#gz-todo .gz-todo-chip[data-tone="warn"] { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
+#gz-todo .gz-todo-chip[data-tone="err"] { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
+html:not([data-gz-dark-theme]) #gz-todo .gz-todo-chip[data-tone] { color: color-mix(in srgb, currentColor 70%, var(--gz-ink)); }
+#gz-todo .gz-todo-plan { color: var(--gz-accent); }
+#gz-todo .gz-todo-more, #gz-todo .gz-todo-small {
+  padding: 0.05rem 0.5rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer;
+  color: var(--gz-ink-muted); line-height: 1.5;
+}
+#gz-todo .gz-todo-more:hover, #gz-todo .gz-todo-small:hover, #gz-todo .gz-todo-more[aria-expanded="true"] { color: var(--gz-accent); border-color: var(--gz-line-strong); }
+#gz-todo .gz-todo-head .gz-todo-small { color: var(--gz-accent); font-weight: 600; }
+#gz-todo .gz-todo-btn { padding: 0.25rem 0.9rem; border: 1px solid var(--gz-accent); border-radius: 999px; cursor: pointer; font-weight: 600; color: var(--gz-accent-ink); background: var(--gz-accent); }
+#gz-todo :is(button, input, select, textarea, a, summary):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-todo :is(.gz-todo-detail, .gz-todo-form) {
+  grid-column: 1 / -1; display: grid; gap: 0.45rem; margin: 0.45rem 0 0.2rem; padding: 0.65rem;
+  background: var(--gz-band); border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm);
+}
+#gz-todo .gz-todo-form { margin-top: 0.6rem; }
+#gz-todo .gz-todo-detail h4 { margin: 0.2rem 0 0; font-size: 0.75rem; font-weight: 700; color: var(--gz-ink-muted); }
+#gz-todo .gz-todo-note { margin: 0; white-space: pre-line; color: var(--gz-ink-muted); }
+#gz-todo .gz-todo-hint { margin: 0; font-size: 0.75rem; color: var(--gz-ink-faint); }
+#gz-todo .gz-todo-steps li { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; margin: 0; }
+#gz-todo .gz-todo-steps label { display: flex; align-items: center; gap: 0.4rem; margin: 0; }
+#gz-todo .gz-todo-steps .gz-todo-gone { color: var(--gz-ink-faint); text-decoration: line-through; }
+#gz-todo .gz-todo-row { display: flex; flex-wrap: wrap; align-items: end; gap: 0.4rem; margin: 0; }
+#gz-todo .gz-todo-field { display: grid; gap: 0.15rem; flex: 1 1 8rem; margin: 0; font-size: 0.75rem; color: var(--gz-ink-muted); }
+#gz-todo :is(.gz-todo-detail, .gz-todo-form) :is(input:not([type="checkbox"]), select, textarea) {
+  width: 100%; min-width: 0; box-sizing: border-box; margin: 0; padding: 0.25rem 0.4rem; height: auto;
+  color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm);
+}
+#gz-todo .gz-todo-row > input[type="text"] { flex: 1 1 8rem; width: auto; }
+#gz-todo .gz-todo-progress { display: grid; gap: 0.25rem; margin: 0 0 0.35rem; font-size: 0.75rem; color: var(--gz-ink-muted); }
+#gz-todo .gz-todo-progress i { height: 5px; border-radius: 999px; background: var(--gz-line); overflow: hidden; position: relative; }
+#gz-todo .gz-todo-progress i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--gz-pct); border-radius: inherit; background: linear-gradient(90deg, var(--gz-accent), var(--gz-ok)); }
 /* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
 #gz-cm .gz-cm-more {
   margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);

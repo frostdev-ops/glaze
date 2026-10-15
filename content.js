@@ -349,6 +349,9 @@
     }
     return loading.get(file);
   };
+  // Better To Do (features/todo.js)
+  const todoHere = () => !ultra && links.length && settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
+  const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
   // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
@@ -684,6 +687,7 @@
     syncDownloads();
     syncDocTools();
     syncCourseMenu();
+    syncTodo();
   };
   // ---- page loads ------------------------------------------------------------------------------
   // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
@@ -753,7 +757,7 @@
     sweepAll();
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
-    if (window.top === window) dueWeek();
+    if (window.top === window && !todoHere()) dueWeek();
     if (!ultra) liftCourses();
     recordCourses();
     if (!ultra) paintCourses();
@@ -2400,7 +2404,7 @@
   // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
-    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards' };
+    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -2443,6 +2447,7 @@
       ...pages(),
       ...courses.filter((c) => c.name).map((c) => ({ label: c.friendly_name || c.name, hint: c.course_code || t('Course'), group: 'Courses', run: go(`/courses/${c.id}`) })),
       ...dueCmds(due),
+      ...(globalThis.GZ_TODO_UI?.cmds() || []),
       ...glazeCmds(),
     ];
   };
@@ -3308,7 +3313,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -3429,6 +3434,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     for (const l of links) l.remove();
     links = [];
     armFlip();
+    syncTodo();
     themeEditors();
     syncPageFade();
     stopScene();
@@ -3439,7 +3445,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   };
 
   // The helpers a file loaded by need() may use (Wave 1's features/*.js): this frame's, read through one name.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, settings: () => settings, on: () => !!observer });
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, celebrate, settings: () => settings, on: () => !!observer });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.
