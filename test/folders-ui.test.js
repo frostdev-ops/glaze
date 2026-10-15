@@ -19,7 +19,7 @@ class E {
   get isConnected() { return this.tagName === 'html' || !!this.parentElement?.isConnected; }
   get previousElementSibling() { const a = this.parentElement?.children || []; return a[a.indexOf(this) - 1] || null; }
   get nextElementSibling() { const a = this.parentElement?.children || []; return a[a.indexOf(this) + 1] || null; }
-  matches(s) { return s === ROW ? !!this.dataset.contentId : s === '[data-gz-folder-hidden]' ? this.getAttribute('data-gz-folder-hidden') !== null : s[0] === '#' ? this.id === s.slice(1) : s[0] === '.' ? this.className === s.slice(1) : this.tagName === s; }
+  matches(s) { if (s.includes(', ')) return s.split(', ').some((x) => this.matches(x)); return s === ROW ? !!this.dataset.contentId : s === '[data-gz-folder-hidden]' ? this.getAttribute('data-gz-folder-hidden') !== null : s[0] === '#' ? this.id === s.slice(1) : s[0] === '.' ? this.className === s.slice(1) : this.tagName === s; }
   querySelectorAll(sel) { const all = this.children.flatMap((c) => [c, ...c.querySelectorAll('*')]); if (sel === '*') return all; return all.filter((c) => sel.split(', ').some((s) => c.matches(s))); }
   querySelector(sel) { return sel.startsWith(':scope > ') ? this.children.find((c) => c.matches(sel.slice(9))) || null : this.querySelectorAll(sel)[0] || null; }
   closest(sel) { return this.matches(sel) ? this : this.parentElement?.closest(sel) || null; }
@@ -72,6 +72,19 @@ test('nested folder and learning module controls hide, show, unhide and reapply 
   assert.equal(e.document.getElementById('gz-folders-toggle').textContent, 'Hide them again (1)');
   await e.click(eye(e.child)); assert.equal(e.document.getElementById('gz-folders-toggle'), null);
 });
+test('the eye sits beside its folder\'s title: after a heading, or after a nested folder\'s title, never at the row\'s end', async () => {
+  const e = fixture(); e.ui.sync(true, e.identity); await settle();
+  const h = e.parent.querySelector('h3');
+  assert.equal(eye(e.parent).previousElementSibling, h, 'after the heading');
+  // Ultra's nested folders have no heading: the title button sits in the row's title line.
+  const toggle = e.child.querySelector('#folder-title-_102_1'), line = e.child.children[0], ch = e.child.querySelector('h3');
+  const placed = eye(e.child);
+  line.append(toggle); ch.remove(); e.child.append(placed); // where it used to land: the row's end, below the folder
+  e.redraw();
+  assert.equal(eye(e.child).previousElementSibling, toggle, 'right after the title');
+  assert.equal(eye(e.child).parentElement, line);
+});
+
 test('setting, master/site stop and navigation restore native nodes; stale buttons cannot write', async () => {
   const e = fixture(); e.ui.sync(true, e.identity); await settle();
   const old = eye(e.parent); await e.click(old);
