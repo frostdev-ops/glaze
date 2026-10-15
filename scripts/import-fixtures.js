@@ -1,9 +1,9 @@
 // The PDF and picture fixtures for the import tests (W23, test/import.test.js), made headless from the HTML below with
 // Chrome's own print to PDF and screenshots, so they can be made again: a typed timetable, a syllabus and a transcript
 // (PDF), a syllabus in two columns, the transcript scanned (each page a picture in a PDF, no text layer), the timetable
-// as a screenshot (PNG, WebP) and as a phone photo (tilted, soft, JPEG), and behind a password (macOS's PDFKit, through
-// swift). The class schedule as it shows on the local Canvas comes from scripts/import-check.js. Every name, school and
-// grade here was made up for these tests.
+// as a screenshot (PNG, WebP) and as a phone photo (tilted, soft, JPEG), the syllabus as a screenshot, the transcript as
+// a phone photo, and the timetable behind a password (macOS's PDFKit, through swift). The class schedule as it shows on
+// the local Canvas comes from scripts/import-check.js. Every name, school and grade here was made up for these tests.
 //   NODE_PATH=/path/to/node_modules node scripts/import-fixtures.js   (needs playwright)
 //   CHROME=/path/to/chrome runs that browser instead of Chrome for Testing.
 const { chromium } = require('playwright');
@@ -99,8 +99,16 @@ ${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
       return c.toDataURL('image/webp', 0.9).split(',')[1];
     }, png);
     fs.writeFileSync(path.join(out, 'timetable.webp'), Buffer.from(webp, 'base64'));
-    await tab.setContent(TIMETABLE.replace('<body>', '<body style="background: #c9c4bb; padding: 40px"><div style="background: #f4f1ea; padding: 28px; transform: rotate(1.5deg); filter: blur(0.6px) brightness(0.96); box-shadow: 0 0 30px #8888">').replace('</body>', '</div></body>'));
+    const photo = (html) => html.replace('<body>', '<body style="background: #c9c4bb; padding: 40px"><div style="background: #f4f1ea; padding: 28px; transform: rotate(1.5deg); filter: blur(0.6px) brightness(0.96); box-shadow: 0 0 30px #8888">').replace('</body>', '</div></body>');
+    await tab.setContent(photo(TIMETABLE));
     await tab.screenshot({ path: path.join(out, 'timetable-photo.jpg'), type: 'jpeg', quality: 50, fullPage: true });
+    // The syllabus as a screenshot and the transcript as a phone photo (Retina-sharp, as phones take them).
+    await tab.setContent(SYLLABUS);
+    await tab.screenshot({ path: path.join(out, 'syllabus.png'), fullPage: true });
+    const sharp = await browser.newPage({ viewport: { width: 860, height: 600 }, deviceScaleFactor: 2 });
+    await sharp.setContent(photo(TRANSCRIPT));
+    await sharp.screenshot({ path: path.join(out, 'transcript-photo.jpg'), type: 'jpeg', quality: 60, fullPage: true });
+    await sharp.close();
 
     // The transcript scanned: its page as a picture, a little tilted and grey, printed into a PDF that has no text.
     const shots = [];

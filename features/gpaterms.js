@@ -213,7 +213,8 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     V.focus = found.length ? 'rev:h' : 'imp:text';
     redraw();
   };
-  // A PDF or picture is read while the GPA is open: closing it (the view gone from the page) or another read calls it off.
+  // A PDF or picture is read while "Past terms, trends and goal" is open: closing it (or the view gone from the page)
+  // or another read calls it off.
   const readFile = async (file) => {
     const gen = ++V.gen;
     V.reading?.ctl.abort();
@@ -222,7 +223,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     const show = (text, ocr) => { if (gen === V.gen) review(text, ocr); };
     // Only a PDF or picture says how far it has got: its first word draws the progress line and Stop reading.
     const prog = (s) => {
-      if (!body?.isConnected || gen !== V.gen) return ctl.abort();
+      if (!body?.isConnected || body.closest('details')?.open === false || gen !== V.gen) return ctl.abort();
       const first = !V.reading;
       V.reading = { ctl, say: s };
       const el = body.querySelector('[data-f="imp:prog"]');

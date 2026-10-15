@@ -121,11 +121,14 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     const run = async (pasted) => {
       const f = pasted || file.files[0];
       if (!f && !text.value.trim() && !link.value.trim()) return say(t('Choose a file, paste your schedule or give a calendar link.'), true);
+      // Read schedule is disabled while it reads, so the keyboard's place moves to Stop reading, and back after.
+      const kept = document.activeElement === go;
       go.disabled = true;
       say(t('Reading…'));
       const g = gen;
       const ctl = reading = new AbortController();
       stop.hidden = false;
+      if (kept) stop.focus();
       try {
         const r = await read(f, text.value, link.value.trim(), ctl.signal);
         if (g !== gen) return;
@@ -135,7 +138,12 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
         const found = r.entries.map((e) => ({ ...e, id: C.match(e, courses), periods: doubt(e) ? e.periods.map((p) => ({ ...p, unsure: [...new Set([...p.unsure, 'days', 'time', 'loc'])] })) : e.periods }));
         review(found, { ignored: r.ignored, ocr: r.ocr });
       } catch (e) { if (g === gen) { go.disabled = false; say(e?.cancelled ? t('Stopped.') : e?.message || t("Couldn't read that."), !e?.cancelled); } }
-      finally { if (reading === ctl) reading = null; stop.hidden = true; }
+      finally {
+        if (reading === ctl) reading = null;
+        const back = document.activeElement === stop;
+        stop.hidden = true;
+        if ((kept || back) && go.isConnected) go.focus();
+      }
     };
     const go = button(t('Read schedule'), () => run(), { className: 'gz-cl-main-btn' });
     text.addEventListener('paste', (e) => {
@@ -279,7 +287,7 @@ var GZ_CLASSES_UI = globalThis.GZ_CLASSES_UI || (() => {
     reading?.abort();
     const close = button('×', () => box.close(), { className: 'gz-cl-close', 'aria-label': t('Close') });
     box.firstChild.replaceChildren(make('div', { className: 'gz-cl-top' }, make('h2', { id: 'gz-cl-title', textContent: title }), close),
-      ...parts, make('p', { className: 'gz-cl-say', role: 'status' }));
+      ...parts.filter((p) => p != null && p !== false && p !== ''), make('p', { className: 'gz-cl-say', role: 'status' }));
   };
   const onStore = (ch, area) => {
     if (area !== 'local' || !ch[key] || !box) return;

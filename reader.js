@@ -59,7 +59,7 @@
     pdfjs.GlobalWorkerOptions.workerSrc = url('lib/pdfjs/pdf.worker.min.mjs');
     const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), wasmUrl: url('lib/pdfjs/'), enableXfa: false, disableFontFace: true, useSystemFonts: false, verbosity: 0 });
     let doc;
-    try { doc = await task.promise; } catch (e) { fail(e?.name === 'PasswordException' ? 'locked' : 'broken'); }
+    try { doc = await task.promise; } catch (e) { await task.destroy().catch(() => {}); fail(e?.name === 'PasswordException' ? 'locked' : 'broken'); }
     let ocr = null;
     try {
       if (doc.numPages > R.pages) fail('pages');

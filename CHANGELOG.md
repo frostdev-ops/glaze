@@ -8,6 +8,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **PDFs and photos in the imports** (class schedule, syllabus, transcript), read on your device: a PDF's own text
+  (tables kept as rows, two-column pages in order), and the text of a scanned PDF, a photo or a screenshot (PNG, JPEG,
+  WebP, HEIC where your browser opens it; or paste one into the import's text box) recognized by the Tesseract OCR engine,
+  bundled with its English, German, Spanish, French, Dutch and Portuguese models. Nothing is uploaded or downloaded for
+  it. A progress line and Stop reading while it works; closing the dialog stops it too. When the text came from a
+  picture, the review says so and marks "Check this" on what came from a line the engine wasn't sure of. Password-
+  protected and broken PDFs get a plain message. The extension grows by about 10 MB (the OCR models), and its pages may
+  now compile WebAssembly ('wasm-unsafe-eval' in its content security policy); no new permission.
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
   notes on a course's home (there as soon as Notes is turned on), or a class reminder. It opens and acts only on your own

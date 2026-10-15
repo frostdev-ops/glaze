@@ -60,6 +60,13 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   }
 });
 
+test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; the reader is the one page a site may frame, and loads only Glaze\'s files', () => {
+  assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" });
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html']);
+  const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
+  assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+});
+
 test('every content script file exists', () => {
   for (const f of m.content_scripts.flatMap((c) => c.js)) assert.ok(fs.existsSync(path.join(__dirname, '..', f)), f);
 });

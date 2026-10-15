@@ -33,10 +33,10 @@ test('the detector that runs on every other https page stays under 2 KB', () => 
 
 // ---- runtime work, read from the source -------------------------------------------------------------------------
 // Every first-party script Glaze ships, at any depth (features/, lib/, i18n/ and the root), whether it is in the
-// first content script, loaded on demand or in the extension's pages. Not the vendored three.js, nor the tools,
+// first content script, loaded on demand or in the extension's pages. Not the vendored three.js or OCR engine, nor the tools,
 // tests and app wrappers around the extension.
 const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'parity']);
-const VENDORED = new Set(['lib/three.min.js']);
+const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js']); // pdf.js is .mjs, not scanned
 const shipped = (dir = '') => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
   const rel = dir ? `${dir}/${e.name}` : e.name;
   if (e.name.startsWith('.')) return [];

@@ -28,6 +28,7 @@ var GZ_IMPORT = globalThis.GZ_IMPORT || (() => {
 
   // The reader in a hidden frame for one file. → { text, pages, ocr: { pages, conf, unsure } | null }
   const frame = (file, kind, signal, progress) => new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(Object.assign(new Error('cancelled'), { cancelled: true }));
     const src = chrome.runtime.getURL('reader.html');
     const f = Object.assign(document.createElement('iframe'), { tabIndex: -1, title: 'Glaze' });
     f.setAttribute('aria-hidden', 'true');

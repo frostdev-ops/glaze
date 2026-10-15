@@ -13,10 +13,6 @@ const vm = require('node:vm');
 const zlib = require('node:zlib');
 const { pathToFileURL } = require('node:url');
 const D = require('../lib/doctext.js');
-const C = require('../lib/classes.js');
-globalThis.GZ_CLASSES = C; // lib/syllabus.js reads class times with it
-const S = require('../lib/syllabus.js');
-const G = require('../lib/gpa.js');
 
 const root = path.join(__dirname, '..');
 const fixture = (f) => fs.readFileSync(path.join(__dirname, 'fixtures/import', f));
@@ -56,14 +52,16 @@ test('imageSize: from the header, before decoding', () => {
   assert.equal(D.imageSize(b(30, [0, [0xff, 0xd8, 0x00]])), null, 'a broken JPEG says nothing');
 });
 
-test('pgm: grey on white paper; a mostly dark picture turned around', () => {
+test('pgm: grey on white paper, a mostly dark picture turned around, a small one twice the size', () => {
   const px = (...rgba) => Uint8ClampedArray.from(rgba);
-  const body = (p) => [...p.subarray(p.length - 2)];
+  const head = (p) => new TextDecoder().decode(p.subarray(0, p.indexOf(10, p.indexOf(10, 3) + 1) + 1));
+  const row = (p) => [...p.subarray(head(p).length, head(p).length + 6)]; // the first of two rows, 3 pixels made 6
   const light = D.pgm(px(255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255), 3, 1);
-  assert.equal(new TextDecoder().decode(light.subarray(0, 11)), 'P5\n3 1\n255\n');
-  assert.deepEqual(body(light), [255, 0]);
-  assert.deepEqual(body(D.pgm(px(20, 20, 20, 255, 230, 230, 230, 255, 20, 20, 20, 255), 3, 1)), [25, 235], 'dark theme: light text becomes dark ink');
-  assert.deepEqual(body(D.pgm(px(0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 0), 3, 1)), [0, 255], 'transparent is paper');
+  assert.equal(head(light), 'P5\n6 2\n255\n');
+  assert.deepEqual(row(light), [255, 255, 255, 191, 64, 0]);
+  assert.deepEqual(row(D.pgm(px(20, 20, 20, 255, 230, 230, 230, 255, 20, 20, 20, 255), 3, 1)), [235, 183, 78, 78, 183, 235], 'dark theme: light text becomes dark ink');
+  assert.deepEqual(row(D.pgm(px(0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 0), 3, 1)), [255, 191, 64, 64, 191, 255], 'transparent is paper');
+  assert.equal(head(D.pgm(new Uint8ClampedArray(2000 * 4).fill(255), 2000, 1)), 'P5\n2000 1\n255\n', 'a big one as it is');
 });
 
 test('pdfText: runs in drawing order; a new line, a tab across a cell gap, a space across a word gap', () => {
@@ -260,75 +258,30 @@ const scanned = async (bytes, n) => {
   return D.pgm(rgba, w, h);
 };
 
-// ---- what each flow makes of it, scored --------------------------------------------------------------------------
-const FALL = Date.UTC(2026, 7, 24);
-// Class schedule: per class, its meeting (days, start, end) and its place. Extra classes are counted apart.
-const TIMETABLE = [['BIO 1100', '135', '09:00', '09:50', 'Science Hall 120'], ['BIO 1100L', '2', '14:00', '16:50', 'Science Hall 214'],
-  ['ENG 1100', '24', '11:00', '12:15', 'Humanities 302'], ['MATH 1350', '1234', '13:00', '13:50', 'Math Building 105'], ['HIST 2010', '13', '15:30', '16:45', 'Library 210']];
-const schedule = (text) => {
-  const r = C.fromText(text, { lang: 'en', now: Date.UTC(2026, 9, 15) });
-  let ok = 0;
-  for (const [code, days, start, end, loc] of TIMETABLE) {
-    const ps = r.entries.filter((e) => e.code === code || new RegExp(`\\b${code}\\b`).test(e.label)).flatMap((e) => e.periods);
-    if (ps.some((p) => p.days.join('') === days && C.hhmm(p.start) === start && C.hhmm(p.end) === end)) ok++;
-    if (ps.some((p) => p.loc === loc)) ok++;
-  }
-  const extra = r.entries.filter((e) => !TIMETABLE.some(([code]) => e.code === code || new RegExp(`\\b${code}\\b`).test(e.label))).length;
-  return { ok, of: TIMETABLE.length * 2, extra };
-};
-// Syllabus: professor, office, each office hour and class time, each letter of the scale, each weight, each date.
-const SYLLABI = {
-  bio: { name: 'Dr. Amara Okafor', email: 'aokafor@frostdale.edu', office: 'Science Hall 214', hours: ['TU TH 14:00-15:30'],
-    meetings: ['MO WE FR 09:00-09:50 | Science Hall 120', 'TU 14:00-16:50 | Science Hall 214'], scale: ['A 93', 'A- 90', 'B+ 87', 'B 83', 'B- 80', 'C 70', 'D 60', 'F 0'],
-    weights: ['Homework 20', 'Lab reports 25', 'Midterm exam 20', 'Final exam 35'], dates: ['2026-10-14 exam', '2026-11-20 due', '2026-12-15 exam'] },
-  hist: { name: 'Prof. Daniel Reyes', email: 'dreyes@frostdale.edu', office: 'Library 305', hours: ['MO 13:00-14:30'], meetings: ['MO WE 15:30-16:45 | Library 210'],
-    scale: ['A 94', 'A- 90', 'B+ 87', 'B 84', 'B- 80', 'C 70', 'D 60', 'F 0'], weights: ['Reading responses 15', 'Map quizzes 10', 'Midterm exam 25', 'Research paper 25', 'Final exam 25'],
-    dates: ['2026-09-16 exam', '2026-10-21 exam', '2026-11-18 due', '2026-12-14 exam'] },
-};
-const syllabus = (want) => (text) => {
-  const r = S.extract(text, { start: FALL, md: true, hint: 'en' });
-  const got = { hours: r.hours.map((m) => `${m.days.join(' ')} ${m.start}-${m.end}`), meetings: r.meetings.map((m) => `${m.days.join(' ')} ${m.start}-${m.end} | ${m.location}`),
-    scale: (r.scale.value || []).map(([l, v]) => `${l} ${v}`), weights: (r.weights.value || []).map((w) => `${w.name} ${w.weight}`), dates: r.dates.map((d) => `${d.day} ${d.kind}`) };
-  let ok = ['name', 'email', 'office'].filter((k) => r.prof[k].value === want[k]).length, of = 3;
-  for (const k of ['hours', 'meetings', 'scale', 'weights', 'dates']) { of += want[k].length; ok += want[k].filter((x) => got[k].includes(x)).length; }
-  return { ok, of, extra: Object.keys(got).reduce((n, k) => n + got[k].filter((x) => !want[k].includes(x)).length, 0) };
-};
-// Transcript: each term's name and GPA, each course's name, credits and grade.
-const TRANSCRIPT = [['Fall 2025', 3.48, [['BIO 1000 Foundations of Biology', 3, 'A-'], ['CHEM 1010 General Chemistry I', 4, 'B+'], ['ENG 1000 Academic Writing', 3, 'A'], ['MATH 1300 Precalculus', 3, 'B']]],
-  ['Spring 2026', 3.46, [['PSY 1010 Introduction to Psychology', 3, 'A'], ['CHEM 1020 General Chemistry II', 4, 'B'], ['COMM 1100 Public Speaking', 3, 'A-'], ['MATH 1340 Statistics', 3, 'B+'], ['ART 1050 Drawing I', 2, 'P']]],
-  ['Summer 2026', 4, [['HIST 1500 American History', 3, 'A']]]];
-const transcript = (text) => {
-  const terms = G.parse(text);
-  let ok = 0, of = 0;
-  for (const [name, gpa, rows] of TRANSCRIPT) {
-    const t = terms.find((x) => x.n === name);
-    of += 2 + rows.length * 3;
-    if (!t) continue;
-    ok += 1 + (t.gpa === gpa);
-    for (const [n, cr, g] of rows) {
-      const c = t.c.find((x) => x.n === n) || t.c.find((x) => x.n.split(' ').slice(0, 2).join(' ') === n.split(' ').slice(0, 2).join(' '));
-      if (c) ok += (c.n === n) + (c.cr === cr) + (c.g === g);
-    }
-  }
-  return { ok, of, extra: terms.reduce((n, t) => n + t.c.length, 0) - 10 };
-};
+// ---- what each flow makes of it, scored (scripts/import-truth.js) -------------------------------------------------
+const { SCORE } = require('../scripts/import-truth.js');
 
-// [fixture, how it is read, what reads it, lowest accuracy accepted]: the floor is what this code measured, so a change
-// that reads worse fails.
+// [fixture, how it is read, lowest accuracy accepted]: the floor is what this code measured, so a change that reads
+// worse fails.
 const ocr = ocrWorker();
 const ACCURACY = [
-  ['timetable.pdf', 'text layer', schedule, 1],
-  ['syllabus.pdf', 'text layer', syllabus(SYLLABI.bio), 1],
-  ['syllabus-2col.pdf', 'text layer, two columns', syllabus(SYLLABI.hist), 20 / 22], // B and F wrap onto the next line of their column
-  ['transcript.pdf', 'text layer', transcript, 1],
-  ['transcript-scan.pdf', 'no text layer: OCR of the page', transcript, 34 / 36], // "P" read as "r"; Chemistry "II" as "I!", mended
-  ['timetable.png', 'OCR, screenshot', schedule, 1],
-  ['timetable.webp', 'OCR, screenshot', schedule, 1],
+  ['timetable.pdf', 'text layer', 1],
+  ['syllabus.pdf', 'text layer', 1],
+  ['syllabus-2col.pdf', 'text layer, two columns', 20 / 22], // B and F wrap onto the next line of their column
+  ['transcript.pdf', 'text layer', 1],
+  ['transcript-scan.pdf', 'no text layer: OCR of the page', 34 / 36], // "P" read as "r"; Chemistry "II" as "I!", mended
+  ['timetable.png', 'OCR, screenshot', 1],
+  ['timetable.webp', 'OCR, screenshot', 1],
   // Tilted, soft and small: the meetings mostly come through, the places don't (the cells' gaps are lost), and
   // "BIO 1100L" reads as "BIO 1100.". The review marks every row of it; the student corrects there.
-  ['timetable-photo.jpg', 'OCR, phone photo', schedule, 0.4],
-  ['canvas-schedule-light.png', 'OCR, Canvas screenshot, light', schedule, 1],
-  ['canvas-schedule-dark.png', 'OCR, Canvas screenshot, dark', schedule, 1],
+  ['timetable-photo.jpg', 'OCR, phone photo', 0.4],
+  ['syllabus.png', 'OCR, screenshot', 20 / 21],
+  ['transcript-photo.jpg', 'OCR, phone photo, sharp', 1],
+  // The class schedule's own list on Canvas: a course on one line, its times on the next, buttons beside it. The times
+  // come through; BIO 1100L's and ENG 1100's headings carry OCR specks that make lib/classes.js file their times under
+  // the course above, and places without a word like "Hall" aren't recognised as places.
+  ['canvas-schedule-light.png', 'OCR, Canvas screenshot, light', 0.5],
+  ['canvas-schedule-dark.png', 'OCR, Canvas screenshot, dark', 0.3],
 ];
 
 test('the OCR worker starts on the bundled models only, and refuses a language it doesn\'t have', async () => {
@@ -347,7 +300,7 @@ test('PDFs: a locked one says so, a broken one fails, a scanned one has no text 
 
 test('extraction accuracy, per fixture', async (t) => {
   const table = [], low = [];
-  for (const [f, how, score, floor] of ACCURACY) {
+  for (const [f, how, floor] of ACCURACY) {
     if (!fs.existsSync(path.join(__dirname, 'fixtures/import', f))) { t.diagnostic(`${f}: missing (scripts/import-check.js makes it)`); continue; }
     const bytes = fixture(f);
     const at = Date.now();
@@ -361,7 +314,7 @@ test('extraction accuracy, per fixture', async (t) => {
       text = r.text;
       conf = ` OCR confidence ${r.conf}, unsure lines ${r.unsure.length},`;
     }
-    const s = score(text);
+    const s = SCORE[f](text);
     table.push(`${f} (${how}):${conf} ${s.ok}/${s.of} = ${Math.round((s.ok / s.of) * 100)}%, extra ${s.extra}, ${Date.now() - at} ms`);
     if (s.ok / s.of < floor - 1e-9) low.push(`${f}: ${s.ok}/${s.of}, below ${floor}\n${text}`);
   }
