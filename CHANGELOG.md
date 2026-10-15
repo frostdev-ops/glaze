@@ -7,6 +7,7 @@ All notable changes to Glaze are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Ultra navigation keeps its native fixed position with custom backgrounds, collapses the MUI rail to its intended width, and centers the expand control in right-to-left layouts.
 - Settings Back/Forward survives preview site changes. Precise navigation dimensions and Blackboard nicknames have usable editor controls; course edits repaint the preview, and open Share sessions pages follow relay preference saves without connecting.
 - Course tabs stay visible on Ultra's full routed documents and positively cached Assignment overviews, preserving
   their allowed URL context and content scroller. Unknown assessments and tests return to Course Content; tabs never
