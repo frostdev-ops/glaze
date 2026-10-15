@@ -479,7 +479,21 @@ test('GPA goal: a course not graded yet on a Pass/Fail scale adds no GPA credits
   const text = p.hist().textContent;
   assert.doesNotMatch(text, /Out of reach/);
   assert.match(text, /This term needs a GPA of 4\.00: about A in every course\./);
-  assert.doesNotMatch(text.slice(text.indexOf('Aim for')), /Art Studio/);
+  assert.match(text.slice(text.indexOf('Aim for')), /Art Studio–P60%\+Pass Art Studio \(reach P\)\./, 'not routed to a letter: a condition to pass');
+});
+
+test('GPA goal: a course with an F now on a Pass/Fail scale is a condition to pass, not left out of "met now"', async () => {
+  const sync = { gpaCourses: { [`canvas:${ORIGIN}/28`]: { s: 'P 60, F 0' } } };
+  const p = await goalPage([
+    { id: '27', name: 'Calculus I', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 95 }], term },
+    { id: '28', name: 'Art Studio', enrollments: [{ type: 'student', user_id: '3', computed_current_score: 40 }], term },
+  ], [], { k: 'term', v: 4 }, sync);
+  const text = p.hist().textContent;
+  assert.match(text, /Now, from Canvas2\.0062\.00/, 'the trend counts the F now: 2.00 over 6 credits');
+  assert.match(text, /This term needs a GPA of 4\.00/, 'passing leaves it out of the best case');
+  assert.doesNotMatch(text, /Your grades now get you there/);
+  assert.match(text, /One way there, from your grades now:/);
+  assert.match(text, /Art StudioFP60%\+Pass Art Studio \(reach P\)\./);
 });
 
 test('GPA: a read of past terms held up while another tab removed them all doesn\'t bring them back', async () => {

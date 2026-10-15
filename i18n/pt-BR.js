@@ -1203,6 +1203,8 @@
   "Lowest percent": "Porcentagem mínima",
   "Term": "Período",
   "This term's GPA": "GPA deste período",
+  "You'll reach it as long as you pass {names}.": "Você vai alcançar desde que passe em {names}.",
+  "Pass {name} (reach {letter}).": "Passe em {name} (alcance {letter}).",
   "Glaze skipped these lines: {lines}. Add them by hand if they are courses.": "O Glaze pulou estas linhas: {lines}. Adicione à mão se forem cursos.",
   "These courses come to {credits} credits, a total your transcript doesn't show: check for a course Glaze missed.": "Estes cursos somam {credits} créditos, um total que seu histórico não mostra: veja se o Glaze deixou passar algum curso.",
   "There's no way there with the work left in your courses.": "Não há como chegar lá com o trabalho que resta nos seus cursos.",
