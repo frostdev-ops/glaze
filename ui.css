@@ -119,6 +119,10 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
   button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: transparent; }
 }
 
+/* Gradescope courses and their Canvas course (options, Better To Do). */
+.gs-map { list-style: none; margin: 0.25rem 0 0.75rem; padding: 0; display: grid; gap: 0.4rem; }
+.gs-map li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; }
+.gs-map li > span:first-child { min-width: 10em; font-weight: 600; }
 #nav-contrast.err { color: var(--gz-warn); }
 #nav-preview { isolation: isolate; position: relative; display: grid; width: 100px; min-height: 156px; margin-block: 12px; padding: 8px; box-sizing: border-box; background: var(--gz-nav-c); color: var(--gz-nav-ink); border-radius: 8px; overflow: hidden; }
 #nav-preview span { padding: 8px 2px; text-align: center; font-size: 11px; }

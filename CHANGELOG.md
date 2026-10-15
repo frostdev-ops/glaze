@@ -124,6 +124,17 @@ All notable changes to Glaze are documented here. The format follows
   - One timer to the next reminder, set again when the page is shown and at most ten minutes long: no polling. It
     reuses Better To Do's planner copy. What's seen, snoozed, muted and the streak stay on this device, apart from
     Canvas's own read state, which Glaze never changes.
+- **Gradescope in To Do (off by default; Extras, under Better To Do):** your Gradescope assignments join Better To Do,
+  the course cards and reminders, each marked Gradescope and linking to it, with its status (submitted, graded with
+  the score, late, missing, nothing handed in). On gradescope.com a small bar asks once which Canvas course each
+  Gradescope course belongs to, with a guess by course code or name; Don't ask again means it, and the choice can be
+  changed in Glaze's settings. Glaze reads each course page signed in as you, whenever you visit Gradescope, and
+  optionally once a day from Canvas. Rows are read one by one: an odd row is skipped and counted, never the whole
+  course. Ticks stay on this device. Read only, and kept on this device; nothing runs on Gradescope while it or Glaze
+  is off. Each Canvas account is asked once, with one quiet line wherever its Gradescope work would show (Better To
+  Do, above the first course card's tasks, the reminders hub; never a popup or toast), and one answer counts
+  everywhere, so two people sharing a browser never see each other's; signing in to another Gradescope account starts
+  afresh.
 - **Moodle:** Glaze restyles Moodle (the Boost theme of Moodle 5, and 4.x where its markup is the same) on any
   school's domain, with the same palettes, Looks, fonts, backgrounds and motion: the Dashboard and My courses,
   course and activity pages, grades, the calendar, messages and the login page, in light and dark palettes.

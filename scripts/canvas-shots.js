@@ -18,6 +18,7 @@
 //                     local Canvas, {bio} and the others its course ids
 //   --local <json>     storage.local items saved before the pages load, such as stickers (lib/lookx.js):
 //                     '{"stk:{origin}/courses/{bio}":[{id:"a",s:"study/coffee",x:80,y:200,w:120,r:-6}]}'
+//                      {me} is the signed-in user's id there and in --sync
 //   --width, --height  viewport, 1440x900 by default;  --full  captures the whole page
 //   --user <who>       student (default), teacher or admin
 //   --html <dir>       also save each page's DOM as <dir>/canvas-<page>.html, a test fixture: script bodies
@@ -204,7 +205,8 @@ const lookup = async (context) => {
   const api = async (p) => (await context.request.get(`${BASE}/api/v1${p}`)).json();
   const courses = await api('/courses?per_page=50');
   if (!Array.isArray(courses)) die('Canvas did not list the courses; the login did not take.');
-  return { ids: Object.fromEntries(Object.entries(COURSES).map(([k, code]) => [k, courses.find((c) => c.course_code === code)?.id])), api };
+  const me = (await api('/users/self')).id; // {me}: the signed-in user's id
+  return { ids: { ...Object.fromEntries(Object.entries(COURSES).map(([k, code]) => [k, courses.find((c) => c.course_code === code)?.id])), me }, api };
 };
 const defaultPages = async ({ ids, api }) => {
   if (!ids.bio) die(`Canvas has no course ${COURSES.bio}; the default pages need it.`);

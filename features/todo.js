@@ -33,6 +33,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const open = new Set(); // rows with their details open, and "show more" groups
   const shut = new Set(['done', 'graded', 'read']); // sections closed until opened
   let form = null; // the add/edit form's task: { id?, cid, … } or null
+  let gs = null; // Gradescope's items for this site (lib/todo.js gradescope), once the list first draws
 
   // The list's own settings (storage.sync `todo`, in GZ_SPEC once lib/todo.js is in); content.js reads only the switch.
   let prefs = null;
@@ -217,6 +218,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       r.course && !ctx.canvasCourseId() && make('span', { textContent: r.course }),
       dueText(r, now),
       r.status && chip(t(r.status), TONE[r.status]),
+      r.gs?.points != null && make('span', { textContent: t('{got} of {n} points', { got: r.gs.score, n: r.gs.points }) }),
+      r.type === 'gradescope' && chip('Gradescope', 'gs'),
       plan && make('span', { className: 'gz-todo-plan', textContent: plan }),
       subs.length > 0 && make('span', { textContent: t('{done} of {n} steps', { done: subs.filter((x) => x.done).length, n: subs.length }) }));
     const more = make('button', { type: 'button', className: 'gz-todo-more', title: t('Plan it'), textContent: '⋯' });
@@ -346,7 +349,8 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const f = box.querySelector('.gz-todo-form');
     if (f && form) form.draft = Object.fromEntries([...new FormData(f)].map(([k, v]) => [k, String(v)]));
     const course = ctx.canvasCourseId() || '';
-    const out = L.build({ items: cache?.items || [], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: o().sync });
+    gs ||= L.gradescope(() => { drawn = ''; render(); });
+    const out = L.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: o().sync });
     firstIds = new Map();
     shown = new Map([...out.groups.flatMap(([, l]) => l), ...out.done, ...out.graded].map((r) => [r.key, r]));
     // The focused control, found again in the new tree by what it was for; if that went out of sight (a ticked item
@@ -360,6 +364,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
       ...(globalThis.GZ_REMIND_UI?.head() || []), add); // the streak and reminders (features/reminders.js), when on
     const parts = [form && taskForm()];
+    parts.unshift(gs.question(who.uid, t)); // Gradescope's one-time question, when there is one
     if (!cache) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Loading…') }));
     else if (!out.groups.length && !out.grading.length) parts.push(make('p', { className: 'gz-todo-empty', textContent: t('Nothing to do. Enjoy it.') }));
     for (const [kind, rows] of out.groups) parts.push(section(kind, t(LABEL[kind]), rows, now));
@@ -390,7 +395,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const want = el.checked;
     const said = want ? t('{title} is done.', { title: r.title }) : t('{title} is back on your list.', { title: r.title });
     const burst = () => { if (want && document.documentElement.getAttribute('data-gz-motion') === 'expressive') ctx.celebrate?.(el); };
-    if (r.custom || !o().sync) {
+    if (r.custom || r.type === 'gradescope' || !o().sync) {
       // The burst where the box is now: the redraw moves a done item into the Done section.
       burst();
       // A mark that agrees with Canvas is no mark (null): the item follows Canvas again (handed in later, say).

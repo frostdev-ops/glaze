@@ -45,7 +45,7 @@ const fromJs = (js) => {
   return out;
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/todo.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 const used = new Set([
   ...['options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
