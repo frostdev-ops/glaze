@@ -513,6 +513,19 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       while (await page.locator(courseTile).count()) await page.locator(`${courseTile} button[aria-label^="Remove "]`).first().click();
       ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: removing every card restores Ultra');
     }
+    // The accepted To Do resize change keeps its height independently beside the course-card layout fields.
+    const todoLayout = require('../lib/widgets.js').layout(base);
+    for (const board of ['courses', 'dash']) todoLayout.boards[board].find((x) => x.id === 'todo').on = true;
+    await store(settingsFor('Paper', { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: true } }), { widgetLayout: todoLayout });
+    await page.setViewportSize({ width: 1280, height: 1400 });
+    await page.goto(`${O}/ultra/institution-page`); await page.waitForSelector(`${tile('todo')} #gz-todo`);
+    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => getComputedStyle(e).resize === 'vertical' && getComputedStyle(e).overflowY === 'auto'), 'To Do: tile keeps the resize handle and inner scrolling');
+    await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => { e.style.height = '512px'; });
+    await until(layout, (l) => l.boards.dash.find((x) => x.id === 'todo')?.h === 512, 'To Do resize not saved');
+    await page.reload(); await page.waitForSelector(`${tile('todo')} #gz-todo`);
+    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => e.style.height === '512px'), 'To Do: resized height survives reload');
+    await page.goto(`${O}/ultra/course`); await page.waitForSelector(`${tile('todo')} #gz-todo`);
+    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => e.style.height === ''), 'To Do: Courses keeps its independent height');
     // A full board: unchanged passes must settle, and toggling Glaze must restore the native list exactly.
     await store(settingsFor('Paper', { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: false, cardTasks: false, overall: false, newgrades: false, newcontent: false } }), { widgetLayout: base });
     await page.setViewportSize({ width: 1280, height: 1400 });

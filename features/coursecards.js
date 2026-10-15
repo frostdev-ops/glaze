@@ -123,6 +123,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
         }, () => {});
       } else card.querySelector('.gz-ct')?.remove();
     };
+    if (!mounted.size && uid && L) read();
     mounted.add(update); update();
     ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
     return { update, wake: update, stop: () => { alive = false; mounted.delete(update); } };

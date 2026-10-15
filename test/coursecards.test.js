@@ -22,8 +22,9 @@ const page = () => {
   const c = { GZ_CTX: ctx, GZ_WIDGETS: W, GZ_SANITIZE: D.GZ_SANITIZE, GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_TODO: { clean: (v) => v || {}, gradescope: () => () => [] }, GZ_CARD_UI: { paint() {} }, GZ_CARD_TASKS: { render: (...args) => renders.push(args) }, document: doc, location: { origin: 'https://bb.test' }, chrome: { runtime: { id: 'x' }, storage: { local: { get: (keys, cb) => reads.push(() => cb(local)) }, sync: { get: (keys, cb) => cb({}) }, onChanged: { addListener: (f) => listeners.push(f) } } }, URL, console };
   const ui = vm.runInNewContext(fs.readFileSync(require.resolve('../features/coursecards.js'), 'utf8'), c);
   ui.sync();
-  const body = doc.createElement('div'), tile = ui.fill(body, { id: 'course:https://bb.test/_101_1', term: () => '' });
-  return { ui, body, tile, local, renders, waiting, reads, setPeek: (p) => { peek = p; ui.sync(); }, setColor: (v) => { color = v; tile.update(); }, answer: () => { while (reads.length) reads.shift()(); }, writes: () => writes, setEnabled: (v) => { enabled = v; }, settings, listeners };
+  const mount = (body = doc.createElement('div')) => ui.fill(body, { id: 'course:https://bb.test/_101_1', term: () => '' });
+  const body = doc.createElement('div'), tile = mount(body);
+  return { ui, body, tile, mount, local, renders, waiting, reads, setPeek: (p) => { peek = p; ui.sync(); }, setColor: (v) => { color = v; tile.update(); }, answer: () => { while (reads.length) reads.shift()(); }, writes: () => writes, setEnabled: (v) => { enabled = v; }, settings, listeners };
 };
 
 test('board cards retain the native slot and clear a removed per-course colour override', async () => {
@@ -53,4 +54,19 @@ test('board tasks use the known account cache and ignore old identity/storage an
   p.settings.enhance.cardTasks = false;
   while (p.waiting.length) p.waiting.shift()(); await settle();
   assert.equal(p.renders.length, 0, 'a pending module load cannot restore tasks after their switch is off');
+});
+
+test('the first remounted card rereads tasks changed while the board was absent, once per batch', async () => {
+  const p = page(), key = 'todo:https://bb.test/_8_1';
+  p.local.todoCache = { key, items: [{ title: 'Before leaving' }] };
+  p.setPeek({ me: Promise.resolve('_8_1'), courses: null, books: new Map() });
+  await settle(); p.answer(); await settle(); p.tile.stop();
+  p.local.todoCache = { key, items: [{ title: 'Changed on another page' }] };
+  p.listeners[0]({ todoCache: {} }, 'local');
+  assert.equal(p.reads.length, 0, 'no work while unmounted');
+  p.mount(); p.mount();
+  assert.equal(p.reads.length, 1, 'one stored-data refresh for the batch');
+  p.answer(); await settle();
+  while (p.waiting.length) p.waiting.shift()(); await settle();
+  assert.equal(p.renders.at(-1)[4].cache.items[0].title, 'Changed on another page');
 });
