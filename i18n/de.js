@@ -143,7 +143,7 @@
   'Export settings': 'Einstellungen exportieren',
   'Import settings…': 'Einstellungen importieren…',
   'Reset everything': 'Alles zurücksetzen',
-  'Exports are a JSON file with your palette, presets and options. Course names stay on this computer and are not exported.': 'Exporte sind eine JSON-Datei mit deiner Palette, deinen Vorlagen und Optionen. Kursnamen bleiben auf diesem Computer und werden nicht exportiert.',
+  'Exports are a JSON file with your palette, presets, options and any course nicknames you set. Course names from Blackboard or Canvas stay on this computer and are not exported.': 'Exporte sind eine JSON-Datei mit deiner Palette, deinen Vorlagen, Optionen und allen Spitznamen, die du für Kurse festgelegt hast. Kursnamen aus Blackboard oder Canvas bleiben auf diesem Computer und werden nicht exportiert.',
   'Search settings /': 'Einstellungen suchen  /',
   'Search settings': 'Einstellungen suchen',
   'Sections': 'Abschnitte',
