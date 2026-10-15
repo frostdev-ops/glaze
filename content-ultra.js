@@ -565,16 +565,28 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     I.setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
+    I.setAttr('data-gz-nav-brand', n.brand);
+    for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;
     I.setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
     for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) I.setVar(`--gz-nav-${k}`, v);
   };
   const syncNav = () => {
     if (!isPreview && window.top !== window) return;
-    if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
-    else globalThis.GZ_NAV_UI?.sync();
+    if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
+    else if (I.links.length) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
     if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
   };
+  // A host registered for another LMS may answer settings before Ultra's schema arrives.
+  if (!('brand' in I.settings.nav)) {
+    const nav = I.settings.nav;
+    Object.assign(nav, { ...GZ_DEFAULTS.nav, ...nav });
+    try { chrome.storage.sync.get('nav', (raw) => {
+      if (I.settings.nav !== nav || chrome.runtime.lastError) return;
+      Object.assign(nav, GZ_SANITIZE(raw).nav);
+      if (I.links.length) { paintNav(I.worn.nav); syncNav(); }
+    }); } catch { /* reloaded; keep defaults */ }
+  }
 
   return {
     paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },

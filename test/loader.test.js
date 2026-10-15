@@ -126,7 +126,7 @@ const firstScripts = () => {
   const canvas = entry('https://*.instructure.com/*');
   return [entry('https://*/ultra'), canvas, canvas.filter((f) => f !== 'content-canvas.js')];
 };
-const PARTS = ['content-ultra.js', 'content-canvas.js'];
+const PARTS = ['content-ultra.js', 'content-canvas.js', 'lib/nav.js']; // Ultra's first-paint schema travels with its part on other registered hosts.
 test('every loadable file exists, is left out of the first content script, and is what content.js asks for', () => {
   const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
   for (const f of list) {
@@ -171,7 +171,7 @@ test('each site\'s part returns only what content.js calls, and content.js calls
     const make = vm.runInContext(read(file), context);
     assert.equal(make, vm.runInContext(name, context));
     // content.js's helpers and state, as the part reads them as it is made: nothing is called yet.
-    const I = new Proxy({}, { get: (_, k) => (k === 'settings' ? { enhance: {}, courses: { names: {} } } : () => {}) });
+    const I = new Proxy({}, { get: (_, k) => (k === 'settings' ? { nav: { brand: 'glaze' }, enhance: {}, courses: { names: {} } } : () => {}) });
     const part = make(I);
     for (const k of Object.keys(part)) assert.ok(k in X, `${file} returns ${k}, which content.js has no default for`);
     for (const k of Object.keys(part.ctx)) assert.ok(keys.includes(k), `${file}'s ${k} isn't in GZ_CTX`);

@@ -67,6 +67,7 @@
         "lib/grades.js",
         "lib/fonts.js",
         "defaults.js",
+        "lib/nav.js",
         "content-ultra.js",
         "content.js"
       ],
@@ -144,7 +145,10 @@
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
         "features/lookx.css",
-        "features/apps.css"
+        "features/apps.css",
+        "assets/logo.svg",
+        "assets/logo-dark.svg",
+        "icons/icon.svg"
       ],
       "matches": [
         "https://*/*"

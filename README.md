@@ -58,6 +58,13 @@ domain, and on Canvas and Moodle, which Glaze recognizes on any school's domain.
 
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain. Moodle is recognized by the keywords line its core writes in every page's head, together with the page id and layout it puts on the page's body.
 
+Blackboard Ultra's base navigation supports both its newer MUI drawer and legacy rail. In the editor, choose a Glaze,
+school or device-only custom logo, set precise rail/icon/label sizes and spacing, and add up to eight http/https links
+with built-in icons. Native items can be reordered or hidden and restored with Reset navigation; the Institution page
+entry reads Dashboard with its original destination. Optional clock/date, cached next-due item, shared focus timer and
+pet-level widgets can be ordered at the top or bottom. Export all includes the navigation settings and links; local
+pictures remain on their device, and Look codes carry only the existing appearance fields.
+
 ## Install
 
 **Chrome:** install from the [Chrome Web Store](https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh).

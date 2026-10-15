@@ -611,6 +611,23 @@ kept on the device only. Where it sits was agreed with B5 (Dashboard panel) in t
 | Ultra's own calendar feed ("Share calendar") is never read or made by Glaze | Reading it for the class schedule | Its GET may create a bearer token server-side (B0). A student can paste it into the class schedule import, which reads links on the page's own site only. |
 | content-ultra.js asks each planning switch again when its file lands (`load(on, …)` takes the test, not its answer), and the list, cards and reminders check they're still on after lib/ultra.js loads, before reading | Trusting the answer from when the file was asked for | A switch turned off, or Glaze turned off, while the file was on its way must not bring the list back or read (Codex B2 1), as Canvas's part already does. |
 
+
+## Blackboard base navigation (B7c, Oct 2026)
+
+| Choice | Alternative | Why |
+| --- | --- | --- |
+| Match both `nav[class*="makeStylesnavigation"]` and legacy `#base_tools`, with href-based item identities | Generated class suffixes or text-based item matching | School builds and languages differ; missing anchors leave native links usable. |
+| Move the native DOM items and retain comment placeholders while enabled | CSS-only visual order or cloned links | Keyboard order matches visual order, original hrefs survive, and disable/reset restores original DOM positions/labels/visibility. |
+| An Ultra-only first-paint `lib/nav.js` extends the shared nav spec | Grow every site's initial defaults | Worker, editor, preview and Ultra use one schema; Canvas/Moodle first scripts do not grow and Canvas's existing nav preferences retain their meaning. |
+| Glaze wordmark/mark from packaged web-accessible SVGs, selected by initial CSS; device custom logo in protected `navLogo:` storage | Remote logo or card-picture namespace | Default logo needs no school-image flash or new destination; older card cleanup cannot delete custom logos. Native logo link remains. |
+| `navItems` is separately sanitized and capped, eight links with 512-character URLs and 40-character names | Expand the shared `nav` item with unbounded lists | Chrome's per-item 8 KB quota remains safe. Export all includes settings/links; Look codes keep their narrow appearance-only contract, and local image ids never travel. |
+| Initial local stylesheets also block rendering on Ultra, using the existing document-start guard and 1 s fail-open timer | Let the school's logo paint before Glaze's sheet | No logo swap while the local sheet arrives normally. Before the first settings answer, a page with Glaze stored off may briefly wait for that answer, at most the existing 1 s gate; once off is known the sheets/gate are removed. A sheet or storage read beyond this bound is not a no-flash guarantee. No switch is cached in site-readable storage. |
+| Rail widgets read existing local caches, and timer actions use fresh worker state in the existing queue | Fetch a profile/work or keep a second timer/progression record | No added LMS requests or activity tracking; paused/running timer state is shared with dashboard widgets. A missing same-origin due cache shows no upcoming work; unknown/stale account progress shows the default level. |
+
+Native icon restyling is omitted because the brief made it optional and native icon markup differs between builds.
+Custom links and Dashboard use Glaze's own inline SVGs. Custom device logos load on demand with the bundled logo as
+fallback; they are not a promise of custom pixels on a cold first paint. Actual school/browser/Safari-runtime checks
+remain the orchestrator's release pass; B7c evidence uses local synthetic pages only.
 ## Ultra course cards fit their tasks (B7a, Oct 2026)
 
 Evidence: `parity/spikes/B7.md` (Ultra's card is a fixed-height flex column, 284px, with `overflow: visible`) and the
