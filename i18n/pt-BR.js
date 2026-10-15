@@ -317,6 +317,7 @@
   'Was due {when}': 'Prazo encerrado {when}',
   'Due {when}': 'Entrega {when}',
   'Exempt': 'Dispensado',
+  'Excused': 'Dispensado',
   'Graded · {mark}': 'Avaliado · {mark}',
   'Graded': 'Avaliado',
   'Submitted late': 'Entregue com atraso',

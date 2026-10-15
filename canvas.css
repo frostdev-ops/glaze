@@ -876,6 +876,84 @@ html[data-gz-enhance-overall] .ic-DashboardCard [data-gz-grade]::after {
 .ic-DashboardCard [data-gz-chip="graded-mid"] { --gz-chip: var(--gz-warn); }
 .ic-DashboardCard [data-gz-chip="graded-lo"] { --gz-chip: var(--gz-err); }
 
+/* Tooltips (Look: tooltips and hints): Glaze's own tooltip, which takes over a title while it is pointed at and
+   carries the hints, in theme.css's tooltip language; Canvas's older CSS tooltips (the Grades page's "Click to test
+   a different score", its icons' names) in the same, with their caret gone. */
+.gz-tip {
+  position: fixed; z-index: 2147483002; max-width: 280px; padding: 0.35rem 0.6rem; pointer-events: none;
+  font: 500 12px/1.35 var(--gz-font); letter-spacing: 0.01em; white-space: normal; overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); color: var(--gz-ink); border: 1px solid var(--gz-line-strong);
+  border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); backdrop-filter: blur(var(--gz-glass)); animation: var(--gz-tip-in);
+}
+.gz-tip-sub { display: block; margin-top: 0.1rem; font-weight: 400; color: var(--gz-ink-muted); }
+html #application .tooltip .tooltip_wrap { background-image: none; opacity: 1; }
+html #application .tooltip .tooltip_wrap .tooltip_text {
+  background: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); color: var(--gz-ink); border: 1px solid var(--gz-line-strong);
+  border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); text-shadow: none;
+}
+
+/* Score bars: content.js reads each score Canvas lists (the Grades pages' cells, group totals and course
+   percentages, the Assignments index's points) into --gz-score (0-1) and a band. The course Grades page's bar
+   runs the cell's width, so rows compare at a glance. Important over the tables' transparent background shorthand. */
+html[data-gz-enhance-scores] #application [data-gz-score] {
+  background-image: linear-gradient(var(--gz-score-ink), var(--gz-score-ink)) !important;
+  background-size: calc(var(--gz-score) * 100%) 3px !important; background-position: left bottom !important; background-repeat: no-repeat !important;
+  padding-bottom: 5px;
+}
+html[data-gz-enhance-scores] #application .score-display[data-gz-score] { display: inline-block; }
+#application [data-gz-score="hi"] { --gz-score-ink: var(--gz-ok); }
+#application [data-gz-score="mid"] { --gz-score-ink: var(--gz-warn); }
+#application [data-gz-score="lo"] { --gz-score-ink: var(--gz-err); }
+
+/* Due-date urgency: content.js tags a due date (Assignments index, Modules, the To Do sidebar) that is overdue,
+   due today or within three days, unless the work is done. */
+html[data-gz-enhance-urgency] #application [data-gz-due] {
+  display: inline-block; padding: 0 0.5em; border-radius: 999px; font-weight: 600;
+  color: var(--gz-due) !important; background: color-mix(in srgb, var(--gz-due) 16%, transparent) !important;
+}
+html[data-gz-enhance-urgency] #application [data-gz-due] :where(*) { color: inherit; }
+/* The To Do sidebar is too narrow for a pill and its chip on one line: the date is coloured, the chip says the rest. */
+html[data-gz-enhance-urgency] #application .ToDoSidebarItem [data-gz-due] { padding: 0; background: none !important; }
+#application [data-gz-due="overdue"] { --gz-due: var(--gz-err); }
+#application [data-gz-due="today"] { --gz-due: var(--gz-warn); }
+#application [data-gz-due="soon"] { --gz-due: var(--gz-accent); }
+
+/* Due-date status and percentages: the chip beside a due date ("in 2 days", "Submitted late", "Graded · 18/20"),
+   and a score's share beside its points, drawn from the attributes content.js sets. */
+html[data-gz-enhance-inline] #application [data-gz-countdown]::after {
+  content: attr(data-gz-countdown);
+  display: inline-block; margin-left: 0.5em; padding: 0 0.5em; border-radius: 999px;
+  font-size: 0.85em; font-weight: 600; line-height: 1.6; vertical-align: 0.05em; white-space: nowrap;
+  color: var(--gz-chip, var(--gz-due, var(--gz-ink-muted)));
+  background: color-mix(in srgb, var(--gz-chip, var(--gz-due, var(--gz-ink-muted))) 14%, transparent);
+}
+/* A row's details sit side by side with no gap of their own. */
+html[data-gz-enhance-inline] #application .ig-details__item[data-gz-countdown]::after { margin-right: 0.4em; }
+#application [data-gz-chip="done"], #application [data-gz-chip="graded-hi"] { --gz-chip: var(--gz-ok); }
+#application [data-gz-chip="graded-mid"], #application [data-gz-chip="today"], #application [data-gz-chip="late"] { --gz-chip: var(--gz-warn); }
+#application [data-gz-chip="graded-lo"], #application [data-gz-chip="overdue"] { --gz-chip: var(--gz-err); }
+#application [data-gz-chip="soon"] { --gz-chip: var(--gz-accent); }
+#application [data-gz-chip="later"], #application [data-gz-chip="muted"] { --gz-chip: var(--gz-ink-muted); }
+html[data-gz-enhance-inline] #application [data-gz-pct]::after {
+  content: attr(data-gz-pct);
+  margin-left: 0.45em; padding-left: 0.45em; border-left: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  font-weight: 500; opacity: 0.8; white-space: nowrap;
+}
+
+/* Shorter descriptions: the Announcements list's previews (the only long text Canvas lists; its Recent Activity
+   lists titles) keep to three lines until the row is hovered or focused. Not on touch screens, which can't hover. */
+@media (hover: hover) {
+html[data-gz-enhance-clamp] #application .ic-announcement-row:not(:hover, :focus-within) .ic-announcement-row__content {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+}
+
+/* Reading width: what instructors write keeps to a comfortable measure (pages, an assignment's description, the
+   syllabus, discussion and announcement posts). Left-aligned, under the title, as Canvas sets them. */
+html[data-gz-enhance-reading] #application :is(#wiki_page_show .show-content, #assignment_show .description, #course_syllabus, .userMessage) {
+  max-width: 72ch; font-size: 1.04em;
+}
+
 /* Command palette (Ctrl+K). The shadow is the palette's depth when canvas.css gives one. */
 #gz-cmd {
   position: fixed; inset: 0; z-index: 2147483003; display: grid; justify-items: center; align-items: start; padding-top: min(14vh, 120px);

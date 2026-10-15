@@ -397,9 +397,80 @@
   const onBook = () => { tagExtras([document.body]); renderNew(); renderCalc(); };
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
+  // The chip and urgency on a due date, drawn by CSS from these attributes.
+  const markDue = (el, state, chip) => {
+    if (state) el.setAttribute('data-gz-due', state);
+    else el.removeAttribute('data-gz-due');
+    if (chip) {
+      el.setAttribute('data-gz-countdown', chip.label);
+      if (chip.tone) el.setAttribute('data-gz-chip', chip.tone);
+      else el.removeAttribute('data-gz-chip');
+    } else {
+      el.removeAttribute('data-gz-countdown');
+      el.removeAttribute('data-gz-chip');
+    }
+  };
+  // Canvas: the same extras on Canvas's markup, from the whole page each pass (a few selectors).
+  // - Scores are read off the page, so a what-if score Canvas draws gets its bar too, and a course that restricts
+  //   quantitative data (letters only) gets none: the course Grades page's cells and group totals, the Grades page
+  //   of all courses, the Assignments index's "18/20 pts". The share goes beside points, never beside a percentage.
+  // - Due dates on the Assignments index and Modules take the date and where the work stands from the course's
+  //   assignments with the student's submission, asked once a page load (a module item names its assignment, quiz
+  //   or topic in its class). The To Do sidebar's (dashboard, course home) are read from its text: only how long is
+  //   left and never overdue, as Ultra's outside course content (an announcement's date there is when it was posted).
+  const CANVAS_SCORES = '#grades_summary td.assignment_score .score_holder, .student_grades td.percent, div.ig-row[id^="assignment_"] .score-display';
+  const CANVAS_DUE = 'div.ig-row[id^="assignment_"][data-item-id] .assignment-date-due, li.context_module_item .due_date_display';
+  let canvasWork = null;
+  const workIn = (cid) => {
+    if (canvasWork?.cid !== cid) {
+      const w = (canvasWork = { cid, by: null });
+      capi(`/courses/${cid}/assignments?include[]=submission&per_page=100`).then((list) => {
+        // ponytail: the first 100 assignments, no paging.
+        w.by = new Map((Array.isArray(list) ? list : []).flatMap((a) => [[`Assignment_${a.id}`, a], ...(a.quiz_id ? [[`Quiz_${a.quiz_id}`, a]] : []),
+          ...(a.discussion_topic?.id ? [[`DiscussionTopic_${a.discussion_topic.id}`, a]] : [])]));
+        if (observer && canvasWork === w) tagExtras([document.body]);
+      }, () => {});
+    }
+    return canvasWork.by;
+  };
+  const tagCanvasExtras = () => {
+    const { scores, urgency, inline } = settings.enhance;
+    if (!scores && !urgency && !inline) return;
+    const now = new Date();
+    const loc = locale();
+    if (scores || inline) {
+      for (const el of document.querySelectorAll(CANVAS_SCORES)) {
+        // The Grades page's cell keeps Canvas's own numbers in a hidden block beside the shown ones.
+        const shown = el.matches('.score_holder') ? el.querySelector(':scope > .tooltip') : el;
+        const sc = GZ_PAGE.canvasScore(shown?.textContent);
+        if (scores && sc && el.style.getPropertyValue('--gz-score') !== String(sc.ratio)) el.style.setProperty('--gz-score', sc.ratio);
+        if (scores && sc) el.setAttribute('data-gz-score', sc.band);
+        else el.removeAttribute('data-gz-score');
+        if (inline && sc?.max) shown.setAttribute('data-gz-pct', GZ_I18N.pct(Math.round(sc.ratio * 100), loc));
+        else shown?.removeAttribute('data-gz-pct');
+      }
+    }
+    if (!urgency && !inline) return;
+    const due = document.querySelectorAll(CANVAS_DUE);
+    const by = due.length && canvasCourseId() && workIn(canvasCourseId());
+    if (by) {
+      for (const el of due) {
+        const index = el.matches('.assignment-date-due');
+        const a = by.get(index ? `Assignment_${el.closest('.ig-row').dataset.itemId}` : el.closest('li').className.match(/\b(?:Assignment|Quiz|DiscussionTopic)_\d+\b/)?.[0]);
+        const state = urgency && a?.due_at && !GZ_PAGE.isDone(null, GZ_PAGE.canvasGrade(a)) && GZ_PAGE.due(new Date(a.due_at), now, loc);
+        markDue(el, state, inline && GZ_PAGE.canvasStatus(a, now, loc, index));
+      }
+    }
+    for (const el of document.querySelectorAll('[data-testid="ToDoSidebarItem__InformationRow"] > li')) {
+      const d = GZ_PAGE.canvasDate(el.textContent, loc, now);
+      const w = d?.timed && GZ_PAGE.when(d, now, loc);
+      const state = urgency && w && !w.past && GZ_PAGE.due(d.at, now, loc);
+      markDue(el, state, inline && w && !w.past && { label: w.rel, tone: '' });
+    }
+  };
   const tagExtras = (roots) => {
     tagCards();
-    if (!ultra) return;
+    if (!ultra) return tagCanvasExtras();
     const { scores, urgency, inline } = settings.enhance;
     if (!scores && !urgency && !inline) return;
     const now = new Date();
@@ -440,8 +511,6 @@
           // says "Past due" itself.
           let state = urgency && GZ_PAGE.due(at, now, loc);
           if (state && (GZ_PAGE.isDone(circle, grade) || (!item && !pageId && state === 'overdue'))) state = null;
-          if (state) el.setAttribute('data-gz-due', state);
-          else el.removeAttribute('data-gz-due');
           // The chip is drawn by CSS from these attributes: no element is added to Ultra's tree. In course
           // content it says where the work stands; elsewhere only how long is left, never how long ago.
           let chip = null;
@@ -450,14 +519,7 @@
             const w = GZ_PAGE.when(at, now, loc, true);
             if (w && !w.past) chip = { label: w.rel, tone: '' };
           }
-          if (chip) {
-            el.setAttribute('data-gz-countdown', chip.label);
-            if (chip.tone) el.setAttribute('data-gz-chip', chip.tone);
-            else el.removeAttribute('data-gz-chip');
-          } else {
-            el.removeAttribute('data-gz-countdown');
-            el.removeAttribute('data-gz-chip');
-          }
+          markDue(el, state, chip);
         }
       }
     }
@@ -640,7 +702,22 @@
   // - hints, worked out at hover time: what a date means ("Due in 2 days"), a grade as a share,
   //   the full text of anything Ultra cut off with an ellipsis.
   // Where Ultra shows a tooltip of its own, Glaze's stands down.
-  const ULTRA_TIP = '.MuiTooltip-popper, .tooltip.opened, span.enhanced-tooltip, .ms-Tooltip, [role="tooltip"]:not(.gz-tip)';
+  // Canvas: the same, with its own words. Its titles are icon buttons' names too, but many only repeat a link's text
+  // (a module item's title), and those are left to the browser unless the text is cut short. Where Canvas draws a
+  // tooltip itself, Glaze's stands down: jQuery UI's (.ui-tooltip, over [data-tooltip], whose title is left to it),
+  // InstUI's ([role=tooltip], there at no size until shown) and the older pages' CSS ones (.tooltip_wrap, always
+  // there, made visible on hover). Hints read Canvas's dates (GZ_PAGE.canvasDate, or a <time>'s own) and scores
+  // (canvasScore), from the text a reader sees: not its screen-reader copy. A hint at or inside a titled element
+  // wins over the title, which on Canvas mostly repeats the text (a <time>'s, the Grades page's score cell's).
+  const ULTRA_TIP = `.MuiTooltip-popper, .tooltip.opened, span.enhanced-tooltip, .ms-Tooltip, [role="tooltip"]:not(.gz-tip)${ultra ? '' : ', .ui-tooltip, .tooltip_wrap'}`;
+  const SR_ONLY = '.screenreader-only, [class*="screenReaderContent"]';
+  const textOf = (el) => {
+    if (ultra || !el.querySelector(SR_ONLY)) return el.textContent;
+    const c = el.cloneNode(true);
+    for (const s of c.querySelectorAll(SR_ONLY)) s.remove();
+    return c.textContent;
+  };
+  const CANVAS_DUE_AT = '.assignment-date-due, .due_date_display, #grades_summary td.due';
   let tip = null;
   let tipFor = null;
   let tipTimer = 0;
@@ -655,7 +732,7 @@
     tip?.remove();
     tip = null;
   };
-  const ultraTipShown = () => [...document.querySelectorAll(ULTRA_TIP)].some((t) => t.offsetWidth > 0);
+  const ultraTipShown = () => [...document.querySelectorAll(ULTRA_TIP)].some((t) => t.offsetWidth > 0 && (ultra || t.checkVisibility({ visibilityProperty: true })));
   const showTip = (el, { title, sub }) => {
     if (!el.isConnected || ultraTipShown()) return;
     tip = document.createElement('div');
@@ -688,12 +765,19 @@
         const sc = GZ_PAGE.score(got, max);
         if (sc) return [el, { title: t('{got} of {n} points', { got: parseFloat(got), n: parseFloat(max) }), sub: GZ_I18N.pct(Math.round(sc.ratio * 100), locale()) }];
       }
+      if (!ultra && el.matches('.score_holder > .tooltip, .score-display')) {
+        const sc = GZ_PAGE.canvasScore(el.textContent);
+        if (sc?.max) return [el, { title: t('{got} of {n} points', { got: sc.got, n: sc.max }), sub: GZ_I18N.pct(Math.round(sc.ratio * 100), locale()) }];
+      }
       // Month-view chips are always cut short: the whole title, and when it is due.
       if (el.matches('.fc-event')) return [el, { title: squash(el.querySelector('.fc-title')?.textContent || el.textContent) }];
-      const text = el.childElementCount <= 3 ? squash(el.textContent) : '';
+      const text = el.childElementCount <= 3 ? squash(textOf(el)) : '';
       if (text.length && text.length < 120) {
         const loc = locale();
-        const w = GZ_PAGE.when(text, new Date(), loc, dueLabelled(el) || (/^en\b/i.test(loc) && /\bdue\b/i.test(text)));
+        const now = new Date();
+        const isDue = (ultra ? dueLabelled(el) : !!el.closest(CANVAS_DUE_AT)) || (/^en\b/i.test(loc) && /\bdue\b/i.test(text));
+        const at = ultra ? text : el.matches('time[datetime]') ? new Date(el.dateTime) : GZ_PAGE.canvasDate(text, loc, now);
+        const w = GZ_PAGE.when(at, now, loc, isDue);
         if (w) return [el, w];
       }
       if (text && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow === 'ellipsis') {
@@ -703,24 +787,28 @@
     return null;
   };
   const onTip = (e) => {
-    if (!ultra || !settings.look.tooltips || !observer || !(e.target instanceof HTMLElement)) return;
-    const titled = e.target.closest('[title], [data-gz-title]');
+    if (!settings.look.tooltips || !observer || !(e.target instanceof HTMLElement)) return;
+    let titled = e.target.closest('[title], [data-gz-title]');
     if (titled && titled === tipFor) return;
-    const hinted = !titled && settings.look.hints ? hintFor(e.target) : null;
+    if (!ultra && titled?.matches('[data-tooltip]')) return hideTip();
+    let hinted = settings.look.hints && (!titled || !ultra) ? hintFor(e.target) : null;
+    if (hinted && titled && !titled.contains(hinted[0])) hinted = null;
     if (hinted && hinted[0] === tipFor) return;
+    // Canvas: a title that only repeats the text beside it, uncut.
+    if (!ultra && titled && !hinted && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
     hideTip();
-    if (titled) {
-      const text = titled.getAttribute('title')?.trim();
-      if (!text) return;
+    const text = titled?.getAttribute('title')?.trim();
+    if (titled && !text && !hinted) return;
+    if (text) {
       tipFor = titled;
       titled.dataset.gzTitle = text;
       titled.removeAttribute('title');
       if (!titled.hasAttribute('aria-label') && !titled.textContent.trim()) { titled.setAttribute('aria-label', text); titled.dataset.gzAria = '1'; }
-      tipTimer = setTimeout(() => showTip(titled, { title: text }), e.type === 'focusin' ? 150 : 350);
-    } else if (hinted) {
-      tipFor = hinted[0];
-      tipTimer = setTimeout(() => showTip(hinted[0], hinted[1]), e.type === 'focusin' ? 150 : 450);
     }
+    if (hinted) {
+      tipFor ||= hinted[0];
+      tipTimer = setTimeout(() => showTip(hinted[0], hinted[1]), e.type === 'focusin' ? 150 : 450);
+    } else if (text) tipTimer = setTimeout(() => showTip(titled, { title: text }), e.type === 'focusin' ? 150 : 350);
   };
   document.addEventListener('pointerover', onTip, true);
   document.addEventListener('focusin', onTip, true);

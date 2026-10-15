@@ -338,3 +338,60 @@ test('your place in a course: the latest 30 courses, the last 100 open folders e
   assert.equal(out._5_1.at, 9999);
   assert.deepEqual(P.place(undefined, '_1_1', { open: ['_2_1'], top: -5 }, 1), { _1_1: { open: ['_2_1'], top: 0, at: 1 } });
 });
+
+test('Canvas dates as its English formats write them', () => {
+  const at = (s) => { const d = P.canvasDate(s, 'en', now); return d && [d.at.toString(), d.timed]; };
+  assert.deepEqual(at('Oct 16 at 11:59pm'), [new Date(2026, 9, 16, 23, 59).toString(), true]);
+  assert.deepEqual(at('Sep 26 by 11:59pm'), [new Date(2026, 8, 26, 23, 59).toString(), true]);
+  assert.deepEqual(at('Oct 2, 2025 at 9am'), [new Date(2025, 9, 2, 9, 0).toString(), true]);
+  assert.deepEqual(at('Posted on: Oct 14, 2026, 9:00 AM'), [new Date(2026, 9, 14, 9, 0).toString(), true]);
+  assert.deepEqual(at('Oct 16 at 12am'), [new Date(2026, 9, 16, 0, 0).toString(), true]);
+  assert.deepEqual(at('Oct 16 at 12pm'), [new Date(2026, 9, 16, 12, 0).toString(), true]);
+  assert.deepEqual(at('Sep 26'), [new Date(2026, 8, 26).toString(), false]);
+  // Its screen-reader copy and the visible one side by side: the first.
+  assert.deepEqual(at('Oct 19 at 11:59pmOct 19 at 11:59pm'), [new Date(2026, 9, 19, 23, 59).toString(), true]);
+  for (const s of ['10 points', 'Feb 30', 'Introduction to Biology', 'May I ask', '', undefined]) assert.equal(P.canvasDate(s, 'en', now), null, s);
+  // when() takes it as it is: an untimed date counts in days.
+  assert.equal(P.when(P.canvasDate('Oct 13 at 11:59pm', 'en', now), now, 'en', true).title, 'Due in 2 days');
+  assert.equal(P.when(P.canvasDate('Oct 12', 'en', now), now, 'en').title, 'Tomorrow');
+  // Another language: CLDR, as read() reads it.
+  assert.equal(P.canvasDate('16. Okt. um 23:59', 'de', now).at.toString(), new Date(2026, 9, 16, 23, 59).toString());
+});
+
+test('Canvas scores as its lists write them', () => {
+  assert.deepEqual(P.canvasScore('\n 18\n / 20'), { ratio: 0.9, band: 'hi', got: 18, max: 20 });
+  assert.deepEqual(P.canvasScore('9/10 pts'), { ratio: 0.9, band: 'hi', got: 9, max: 10 });
+  assert.equal(P.canvasScore('88.5% (B+)').max, null);
+  assert.equal(P.canvasScore('61%').band, 'lo');
+  assert.equal(P.canvasScore('18,5 / 20').got, 18.5);
+  for (const s of ['-/20 pts', '- / 20', 'B+', 'EX / 20', '', undefined]) assert.equal(P.canvasScore(s), null, s);
+});
+
+test('Canvas due-date chips: where the work stands, without repeating the Assignments index', () => {
+  const a = (due, submission = {}, more = {}) => ({ due_at: due && due.toISOString(), points_possible: 20, grading_type: 'points', submission: { workflow_state: 'unsubmitted', ...submission }, ...more });
+  const soon = new Date(2026, 9, 13, 23, 59);
+  const past = new Date(2026, 9, 1, 23, 59);
+  const s = (x, index) => P.canvasStatus(x, now, 'en', index);
+  assert.deepEqual(s(a(soon)), { label: 'in 2 days', tone: 'soon' });
+  assert.equal(s(a(past)), null); // nothing to hand in, or not missing: nothing said about the past
+  assert.deepEqual(s(a(past, { missing: true })), { label: 'Past due · Not submitted', tone: 'overdue' });
+  assert.deepEqual(s(a(past, { workflow_state: 'submitted', submitted_at: '2026-10-01' })), { label: 'Submitted', tone: 'done' });
+  assert.deepEqual(s(a(soon, { workflow_state: 'submitted', submitted_at: '2026-10-10' })), { label: 'Submitted · due in 2 days', tone: 'done' });
+  assert.deepEqual(s(a(past, { workflow_state: 'submitted', submitted_at: '2026-10-03', late: true })), { label: 'Submitted late', tone: 'late' });
+  assert.deepEqual(s(a(past, { workflow_state: 'graded', score: 18, grade: '18' })), { label: 'Graded · 18/20', tone: 'graded-hi' });
+  assert.deepEqual(s(a(past, { workflow_state: 'graded', score: 15, grade: 'C' }, { grading_type: 'letter_grade' })), { label: 'Graded · C', tone: 'graded-mid' });
+  // A course that hides numbers: its letter, no band from the score.
+  assert.deepEqual(s(a(past, { workflow_state: 'graded', score: 18, grade: 'A-' }, { restrict_quantitative_data: true })), { label: 'Graded · A-', tone: 'done' });
+  // Graded but not posted: Canvas sends no grade, so it reads as waiting.
+  assert.deepEqual(s(a(past, { workflow_state: 'graded', submitted_at: '2026-10-01', grade: null })), { label: 'Submitted', tone: 'done' });
+  assert.deepEqual(s(a(past, { excused: true })), { label: 'Excused', tone: 'muted' });
+  // The Assignments index writes the score, "Excused" and "Not Yet Graded" itself.
+  assert.equal(s(a(past, { workflow_state: 'graded', score: 18, grade: '18' }), true), null);
+  assert.equal(s(a(past, { excused: true }), true), null);
+  assert.equal(s(a(past, { workflow_state: 'submitted', submitted_at: '2026-10-01' }), true), null);
+  assert.equal(s(a(past, { workflow_state: 'submitted', submitted_at: '2026-10-03', late: true }), true).label, 'Submitted late');
+  assert.equal(s(a(soon, { workflow_state: 'submitted', submitted_at: '2026-10-10' }), true).label, 'Submitted · due in 2 days');
+  assert.equal(s(a(null)), null);
+  assert.equal(P.canvasStatus(undefined), null);
+  assert.equal(P.canvasStatus(a(past, { excused: true }), now, 'de').label, 'Entschuldigt');
+});
