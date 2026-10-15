@@ -146,7 +146,7 @@
     </div>
     <nav aria-label="Sections">
       <a href="#palette">Palette</a><a href="#look">Look</a><a href="#background">Background</a>
-      <a href="#motion">Motion</a><a href="#sidebar">Canvas sidebar</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
+      <a href="#motion">Motion</a><a href="#sidebar">Canvas and Blackboard navigation</a><a href="#courses">Courses</a><a href="#cards">Cards</a><a href="#extras">Extras</a><a href="#data">Share</a>
     </nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
@@ -337,8 +337,8 @@
       </section>
 
       <section id="sidebar">
-        <h2>Canvas sidebar</h2>
-        <p class="desc">Style Canvas's own global navigation. Links and the site's navigation still work as usual.</p>
+        <h2>Canvas and Blackboard navigation</h2>
+        <p class="desc">Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.</p>
         <div id="nav-preview" aria-hidden="true"><span>Dashboard</span><span>Courses</span><span>Calendar</span></div>
         <label class="field"><span>Sidebar background</span><select data-key="nav.k"><option value="default">Palette default</option><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image">Picture</option></select></label>
         <div class="row" data-nav-kinds="solid gradient image">
@@ -377,7 +377,7 @@
 
       <section id="cards">
         <h2>Course cards</h2>
-        <p class="desc" id="cards-note">Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.</p>
+        <p class="desc" id="cards-note">Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.</p>
         <label class="field"><span>Card width</span><input type="range" data-key="card.width" min="200" max="420" step="2"><output data-for="card.width" data-format="px"></output></label>
         <label class="field"><span>Space between cards</span><input type="range" data-key="card.gap" min="-1" max="72" step="1"><output data-for="card.gap" data-format="themepx"></output></label>
         <label class="field"><span>Card corners</span><input type="range" data-key="card.radius" min="-1" max="32" step="1"><output data-for="card.radius" data-format="themepx"></output></label>
@@ -451,11 +451,14 @@
           <span class="desc">On Canvas: new items in Modules and a count on Dashboard cards.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.calc"><span>What-if calculator</span>
           <span class="desc">On a course's gradebook: try scores for work not graded yet, or set a target and see what you'd need. Uses the course's own weights, and says so when it can't.</span>
-          <span class="desc">On Canvas: above a course's grades, by Canvas's own rules (weights, dropped scores, excused work, grading periods). Change real scores, leave work out, add pretend assignments. Kept on this device until the real grade arrives; Canvas never sees them.</span></label>
+          <span class="desc">On Canvas: above a course's grades, by Canvas's own rules (weights, dropped scores, excused work, grading periods). Change real scores, leave work out, add pretend assignments. Kept on this device until the real grade arrives; Canvas never sees them.</span>
+          <span class="desc">On Blackboard: under a course's overall grade, with the same changes, by the course's own overall-grade recipe where Blackboard gives one. Where it doesn't, the figures are an estimate from your share of the points, and say so.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.syllabus"><span>Syllabus import</span>
-          <span class="desc">On Canvas: read a course's syllabus (its Syllabus page, a Word, PowerPoint or web page file, or pasted text) on this device. You check every field before it's kept; then the professor, class times and dates show on the course home, the grading scale can go to your GPA and the dates to Better To Do.</span></label>
+          <span class="desc">On Canvas: read a course's syllabus (its Syllabus page, a Word, PowerPoint or web page file, or pasted text) on this device. You check every field before it's kept; then the professor, class times and dates show on the course home, the grading scale can go to your GPA and the dates to Better To Do.</span>
+          <span class="desc">On Blackboard, which has no syllabus page: on a course's outline, from a document in the course, a file or pasted text. The professor, class times and dates show there.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.gpa"><span>Grade point average</span>
-          <span class="desc">On Canvas's Dashboard: your GPA for each term and across your current courses, from your current grades. Set each course's credits, level and grading scale under it.</span></label>
+          <span class="desc">On Canvas's Dashboard: your GPA for each term and across your current courses, from your current grades. Set each course's credits, level and grading scale under it.</span>
+          <span class="desc">On Blackboard: on Grades, for this term's courses. Where Blackboard doesn't show a course's letter cut-offs, it uses a common scale until you give the course its own.</span></label>
         <div class="group">
           <label class="check"><input type="checkbox" data-key="enhance.gpaPlus"><span>Plus/minus grade points</span>
             <span class="desc">A− counts 3.7, B+ 3.3 and so on, instead of 4 for any A.</span></label>
@@ -464,7 +467,8 @@
           <label class="check"><input type="checkbox" data-key="enhance.gpaAfter"><span>Grade point average below the cards</span></label>
         </div>
         <label class="check"><input type="checkbox" data-key="enhance.insights"><span>Insights</span>
-          <span class="desc">On Canvas: an Insights button on the Dashboard (and in Ctrl+K) shows this term in numbers: how much you handed in on time, each course's grade over the term, the work due each week with the busiest weeks ahead, how often your Better To Do plans were kept, and a summary card you can save as a picture. Worked out on this device from your own Canvas; only a small summary for this term is kept, on this device, until you clear it.</span></label>
+          <span class="desc">On Canvas: an Insights button on the Dashboard (and in Ctrl+K) shows this term in numbers: how much you handed in on time, each course's grade over the term, the work due each week with the busiest weeks ahead, how often your Better To Do plans were kept, and a summary card you can save as a picture. Worked out on this device from your own Canvas; only a small summary for this term is kept, on this device, until you clear it.</span>
+          <span class="desc">On Blackboard: an Insights button on the Courses page (and in Ctrl+K), from your own Blackboard.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.palette"><span>Command palette</span>
           <span class="desc">Ctrl+K (⌘K on a Mac) to jump to a course, an item in this course, a page or a Glaze setting.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.search"><span>Search in your courses</span>
@@ -495,7 +499,7 @@
         <div class="group" id="todo">
           <h3>Better To Do</h3>
           <label class="check"><input type="checkbox" data-key="enhance.todo"><span>Better To Do</span>
-            <span class="desc">On Canvas: Glaze's own To Do list in place of Canvas's, on the Dashboard and on a course's home page (that course only). Grouped by day, with what's past due, what's done and new announcements. Add your own tasks, steps, a day to do something on and timed focus sessions; they're kept on this device, and Export settings includes them.</span></label>
+            <span class="desc">Glaze's own To Do list: on Canvas in place of Canvas's, on the Dashboard and on a course's home page (that course only); on Blackboard in place of the To Do on the Courses page, and beside a course's content (that course only). Grouped by day, with what's past due, what's done and, on Canvas, new announcements. Add your own tasks, steps, a day to do something on and timed focus sessions; they're kept on this device, and Export settings includes them.</span></label>
           <div class="row">
             <label>Timeframe <select data-key="todo.span"><option value="week">This week</option><option value="custom">Custom</option></select></label>
             <label>Week starts <select data-key="todo.start"><option value="rolling">Today</option><option value="monday">Monday</option><option value="sunday">Sunday</option><option value="saturday">Saturday</option></select></label>
@@ -518,9 +522,9 @@
           <label class="check"><input type="checkbox" data-key="todo.progress"><span>Grading progress</span>
             <span class="desc">How many handed-in submissions you've graded so far. Asks Canvas once per assignment.</span></label>
           <label class="check"><input type="checkbox" data-key="todo.sync"><span>Tick off in Canvas too</span>
-            <span class="desc">Ticking an item marks it done in Canvas's own planner, as Canvas's List View does, so it shows done on your phone too. This is the only change Glaze makes in Canvas. Off: ticks stay on this device.</span></label>
+            <span class="desc">Ticking an item marks it done in Canvas's own planner, as Canvas's List View does, so it shows done on your phone too. This is the only change Glaze makes in Canvas. Off: ticks stay on this device. On Blackboard, ticks always stay on this device.</span></label>
           <label class="check"><input type="checkbox" data-key="enhance.cardTasks"><span>Tasks on course cards</span>
-            <span class="desc">On Canvas's Dashboard: each course card lists that course's next items, soonest first, each a link. They follow the timeframe, past-due work and "Done means" above, whether or not Better To Do is on.</span></label>
+            <span class="desc">On Canvas's Dashboard and Blackboard's Courses page: each course card lists that course's next items, soonest first, each a link. They follow the timeframe, past-due work and "Done means" above, whether or not Better To Do is on.</span></label>
           <div class="row">
             <label class="field"><span>Tasks per card</span><input type="range" data-key="todo.cardN" min="1" max="10" step="1"><output data-for="todo.cardN"></output></label>
           </div>
@@ -529,36 +533,36 @@
           <label class="check"><input type="checkbox" data-key="todo.cardCross"><span>Cross out done tasks</span>
             <span class="desc">Done items stay on the card, crossed out, until their due date passes. Off: they leave it.</span></label>
           <label class="check"><input type="checkbox" data-key="enhance.gradescope"><span>Gradescope in To Do</span>
-            <span class="desc">Assignments from your Gradescope courses join Better To Do, the course cards and reminders, marked Gradescope, with a link to each. On gradescope.com Glaze asks once which Canvas course each Gradescope course belongs to, then reads your assignments whenever you visit, signed in as you. It only reads, and what it reads stays on this device.</span></label>
-          <label class="check"><input type="checkbox" data-key="todo.gsDaily"><span>Also check Gradescope once a day from Canvas</span>
-            <span class="desc">New Gradescope work shows without a visit to Gradescope: once a day at most, a Canvas page has Glaze read each course's Gradescope page, with your Gradescope sign-in in this browser.</span></label>
+            <span class="desc">Assignments from your Gradescope courses join Better To Do, the course cards and reminders, marked Gradescope, with a link to each. On gradescope.com Glaze asks once which of your Canvas or Blackboard courses each Gradescope course belongs to, then reads your assignments whenever you visit, signed in as you. It only reads, and what it reads stays on this device.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.gsDaily"><span>Also check Gradescope once a day from Canvas or Blackboard</span>
+            <span class="desc">New Gradescope work shows without a visit to Gradescope: once a day at most, a Canvas or Blackboard page has Glaze read each course's Gradescope page, with your Gradescope sign-in in this browser.</span></label>
           <div id="gs-map" hidden>
             <p class="desc" id="gs-acct"></p>
-            <p class="desc" id="gs-map-note">Your Gradescope courses and the Canvas course each goes with:</p>
+            <p class="desc" id="gs-map-note">Your Gradescope courses and the course each goes with:</p>
             <ul class="gs-map" aria-labelledby="gs-map-note"></ul>
             <div class="row">
               <button type="button" id="gs-ask">Ask on Gradescope again</button>
-              <button type="button" id="gs-forget">Ask on Canvas again</button>
-              <span class="desc">Each Canvas account is asked once, before any Gradescope work shows for it: in Better To Do, above the course cards' tasks or in the reminders hub. One answer counts everywhere.</span>
+              <button type="button" id="gs-forget">Ask on Canvas and Blackboard again</button>
+              <span class="desc">Each Canvas or Blackboard account is asked once, before any Gradescope work shows for it: in Better To Do, above the course cards' tasks or in the reminders hub. One answer counts everywhere.</span>
             </div>
           </div>
         </div>
         <div class="group" id="ics">
           <h3>Export calendar (.ics)</h3>
-          <p class="desc"><span>On Canvas: Export in Better To Do, or Export calendar (.ics) in Ctrl+K.</span> <span>Made on this device. The file holds your course and assignment names: import it into Google Calendar, Outlook or Apple Calendar yourself. Importing a newer file updates the same events where your calendar supports it.</span></p>
-          <label class="check"><input type="checkbox" data-key="todo.icsDue"><span>Canvas due dates</span></label>
+          <p class="desc"><span>On Canvas and Blackboard: Export in Better To Do, or Export calendar (.ics) in Ctrl+K.</span> <span>Made on this device. The file holds your course and assignment names: import it into Google Calendar, Outlook or Apple Calendar yourself. Importing a newer file updates the same events where your calendar supports it.</span></p>
+          <label class="check"><input type="checkbox" data-key="todo.icsDue"><span>Due dates from Canvas or Blackboard</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsTasks"><span>Your tasks with a due date</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsPlan"><span>Do-on days and focus sessions</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsClasses"><span>Your class schedule</span></label>
           <label class="check"><input type="checkbox" data-key="todo.icsGs"><span>Gradescope work</span>
-            <span class="desc">With Gradescope in To Do on, for a Canvas account that said yes to showing it.</span></label>
+            <span class="desc">With Gradescope in To Do on, for an account that said yes to showing it.</span></label>
           <div class="row">
             <label>Range <select data-key="todo.icsRange"><option value="2w">Next 2 weeks</option><option value="4w">Next 4 weeks</option><option value="8w">Next 8 weeks</option><option value="16w">Next 16 weeks</option><option value="term">This term</option></select></label>
           </div>
         </div>
         <div class="group" id="gcal" hidden>
           <h3>Google Calendar sync</h3>
-          <p class="desc">Keeps a calendar named Glaze in your Google account up to date with Canvas: the events Export calendar (.ics) would save, with the choices above. Off until you connect. Chrome signs you in with Google; Glaze asks only to manage calendars it makes, and touches nothing else in your Google Calendar. There's no Glaze server: your calendar goes only between this browser and Google.</p>
+          <p class="desc">Keeps a calendar named Glaze in your Google account up to date with Canvas or Blackboard: the events Export calendar (.ics) would save, with the choices above. Off until you connect. Chrome signs you in with Google; Glaze asks only to manage calendars it makes, and touches nothing else in your Google Calendar. There's no Glaze server: your calendar goes only between this browser and Google.</p>
           <p class="desc" id="gcal-other" hidden>Google Calendar sync works in Google Chrome. In this browser, save your calendar with Export calendar (.ics) and import the file into your calendar.</p>
           <div id="gcal-off" class="gcal" hidden>
             <div class="row"><button type="button" class="primary" id="gcal-connect">Connect Google Calendar</button></div>
@@ -616,7 +620,10 @@
         </div>
         <div class="group" id="remind">
           <h3>Reminders and streak</h3>
-          <p class="desc">Each is off until you turn it on. Reminders show only on Canvas pages, in the tab you're looking at: a small note in the corner, never a browser notification. They stay on this device and change nothing in Canvas. The bell in the To Do header and Ctrl+K "Reminders" list what's coming up.</p>
+          <p class="desc">Each is off until you turn it on. Reminders show only on Canvas and Blackboard pages, in the tab you're looking at: a small note in the corner, never a browser notification. They stay on this device and change nothing in Canvas or Blackboard. The bell in the To Do header and Ctrl+K "Reminders" list what's coming up.</p>
+          <label class="check"><input type="checkbox" data-key="enhance.pet"><span>Pet habitat</span>
+            <span class="desc">A local study buddy that earns XP from handed-in work, streak days and kept do-on plans already saved on this device. Decorate its habitat and unlock new looks. Off by default; no notifications, focus-session XP or missed-day penalties.</span></label>
+          <p class="desc">Streak XP requires Streak to be on; earned XP stays when it is off.</p>
           <label class="check"><input type="checkbox" data-key="enhance.remind"><span>Due-date reminders</span>
             <span class="desc">A note before work is due, at each time you tick below.</span></label>
           <p class="desc" id="remind-leads">Before a due date</p>
@@ -638,7 +645,7 @@
             <label>Before a focus session <select data-key="remind.plan"><option value="0">At the start</option><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option></select></label>
           </div>
           <label class="check"><input type="checkbox" data-key="enhance.remindClass"><span>Class reminders</span>
-            <span class="desc">Before each class in your class schedule (Ctrl+K, Class schedule, on a Canvas page).</span></label>
+            <span class="desc">Before each class in your class schedule (Ctrl+K, Class schedule, on a Canvas or Blackboard page).</span></label>
           <div class="row">
             <label>Before a class <select data-key="remind.cls"><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option></select></label>
           </div>

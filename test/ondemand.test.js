@@ -291,26 +291,31 @@ test('Download all\'s buttons aren\'t drawn by a file that arrives after Glaze, 
 });
 
 // ---- W0d: the draft backup, Ultra's what-if calculator, the document buttons and your place load where they're used ----
-test('Ultra\'s what-if calculator loads on a course\'s Grades with its grades in, and nowhere else', async () => {
-  const grades = { pathname: '/ultra/courses/_1_1/grades' };
-  for (const [why, change, files] of [['grades in', () => {}, ['lib/gradecalc.js', 'features/whatif.js']],
-    ['switched off', (c) => { c.settings.enhance.calc = false; }, []], ['the outline', (c) => { c.location.pathname = '/ultra/courses/_1_1/outline'; }, []],
-    ['grades not in yet', (c) => { c.bookFor = () => ({}); }, []], ['Glaze off', (c) => { c.observer = null; }, []]]) {
-    const h = hooks('  // ---- what-if calculator (Extras)', '  // ---- page changes', { src: ultraPart, ultra: true, courseId: () => '_1_1', bookFor: () => ({ results: [] }), location: { ...grades }, api: 'renderCalc' });
-    h.ctx.settings.enhance.calc = true;
-    change(h.ctx);
-    h.ctx.api.renderCalc();
-    let rendered = 0;
+test("Ultra's grades load where they're used: the what-if on a course's Grades, the GPA on Grades, syllabus import on the outline, Insights' button on Courses", async () => {
+  for (const [why, path, on, hook, file, name, want] of [
+    ['the what-if', '/ultra/courses/_1_1/grades', 'calc', 'renderCalc', 'features/grades.js', 'GZ_GRADES_UI', 'render'],
+    ['the GPA', '/ultra/grades', 'gpa', 'renderCalc', 'features/grades.js', 'GZ_GRADES_UI', 'render'],
+    ['the what-if, switched off', '/ultra/courses/_1_1/grades', '', 'renderCalc', null],
+    ['the GPA, on a course', '/ultra/courses/_1_1/grades', 'gpa', 'renderCalc', null],
+    ['the what-if, on the outline', '/ultra/courses/_1_1/outline', 'calc', 'renderCalc', null],
+    ['syllabus import', '/ultra/courses/_1_1/outline', 'syllabus', 'syncSyl', 'features/syllabus.js', 'GZ_SYL_UI', 'sync'],
+    ['syllabus import, on Grades', '/ultra/courses/_1_1/grades', 'syllabus', 'syncSyl', null],
+    ['Insights', '/ultra/course', 'insights', 'syncInsights', 'features/insights.js', 'GZ_INSIGHTS_UI', 'sync'],
+    ['Insights, on a course', '/ultra/courses/_1_1/outline', 'insights', 'syncInsights', null],
+    ['Glaze off', '/ultra/grades', 'gpa', 'renderCalc', null, 'off']]) {
+    const h = hooks('  // ---- grades (Extras)', '  // ---- page changes', { src: ultraPart, ultra: true, location: { pathname: path }, api: 'renderCalc, syncSyl, syncInsights' });
+    if (on) h.ctx.settings.enhance[on] = true;
+    if (name === 'off') h.ctx.observer = null;
+    h.ctx.api[hook]();
+    const calls = [];
     if (h.loads.length) {
-      h.ctx.GZ_GRADECALC = {};
+      h.ctx[name] = { [want]: (...a) => calls.push(a) };
       h.loads[0].p.resolve();
       await settle();
-      h.ctx.GZ_WHATIF = { render: () => rendered++ };
-      h.loads[1].p.resolve();
-      await settle();
     }
-    assert.deepEqual(h.loads.map((l) => l.file), files, why);
-    assert.equal(rendered, files.length ? 1 : 0, why);
+    assert.deepEqual(h.loads.map((l) => l.file), file ? [file] : [], why);
+    assert.equal(calls.length, file ? 1 : 0, why);
+    if (hook === 'syncSyl' && file) assert.deepEqual(calls[0], [true], 'switched on there');
   }
 });
 

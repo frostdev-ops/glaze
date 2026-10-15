@@ -18,6 +18,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
           const seen = GZ_COURSES(ms);
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
+          for (const m of ms) if (seen[m.courseId]) Object.assign(seen[m.courseId], { site: location.origin, code: String(m.course.displayId || '').slice(0, 80) });
           try { chrome.storage.local.get('seenCourses', (r) => {
             const canvas = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k]) => k.includes(':')));
             chrome.storage.local.set({ seenCourses: { ...canvas, ...seen }, seenCoursesAt: Date.now(), courseSlots });
@@ -35,6 +36,14 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // due-date exception setting.
   let memberships = null;
   const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`)).then((j) => j.results || []).catch(() => (memberships = null, [])));
+  // Planning (features/todo.js…), as Canvas's part: lib/ultra.js reads; each file loaded once on, asked again as it lands.
+  const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
+  const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
+  const top = () => I.links.length && window.top === window && I.settings.enhance;
+  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
+  const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
+  const syncRemind = () => load(() => ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
+
   // Submitted late: the latest attempt against the due date, for work waiting to be graded. An
   // attempt's date never changes, so each is asked once. Nothing is called late in a course that
   // gives this student due-date exceptions, or for an item with one of its own.
@@ -363,21 +372,18 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
-  // ---- what-if calculator (Extras) -----------------------------------------------------------
-  // features/whatif.js (with lib/gradecalc.js), loaded on a course's Grades once its grades are in.
-  const renderCalc = () => {
-    if (globalThis.GZ_WHATIF) return GZ_WHATIF.render();
-    const cid = courseId();
-    if (I.settings.enhance.calc && I.observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview') && bookFor(cid).results) {
-      need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(() => need('features/whatif.js', () => globalThis.GZ_WHATIF)).then(() => GZ_WHATIF.render(), () => {});
-    }
-  };
+  // ---- grades (Extras): features/grades.js (what-if, GPA), syllabus.js (outline), insights.js (Courses) ----
+  const loadIf = (want, f, name, run) => (globalThis[name] || (I.observer && want)) && need(`features/${f}.js`, () => globalThis[name]).then(() => run(globalThis[name]), () => {});
+  const onPath = (re) => re.test(location.pathname);
+  const renderCalc = () => { const e = I.settings.enhance; loadIf((e.calc && onPath(/^\/ultra\/courses\/_\d+_\d+\/grades/)) || (e.gpa && onPath(/^\/ultra\/grades\/?$/)), 'grades', 'GZ_GRADES_UI', (g) => g.render()); };
+  const sylHere = () => window.top === window && I.settings.enhance.syllabus && onPath(/^\/ultra\/courses\/_\d+_\d+\/outline/);
+  const syncSyl = () => loadIf(sylHere(), 'syllabus', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
+  const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
   // ---- code on demand ------------------------------------------------------------------------------
-  // Dashboard notes and widgets (features/widgets.js): Glaze's panel on the Courses page, floating tiles anywhere. The
-  // notes app's Course notes on a course outline (features/notes.js): Ultra changes pages without loading them, so this
-  // pass places it, where Canvas has a hook the worker registers.
-  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || (I.settings.enhance.notes && /^\/ultra\/course\/?$/.test(location.pathname)));
+  // Notes, widgets and the pet: Courses page panel and floating tiles.
+  // Ultra routes without reloading; this pass also places Course notes on the outline.
+  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || ((I.settings.enhance.notes || I.settings.enhance.pet) && /^\/ultra\/course\/?$/.test(location.pathname)));
   const syncWidgets = () => {
     if (widgetsHere()) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}); else globalThis.GZ_WIDGETS_UI?.sync(false);
     if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
@@ -541,6 +547,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   // Run with the flush: Ultra draws cards and headers again as it likes, and this puts the nicknames back.
   const syncNames = () => {
+    syncNav();
     if (!document.querySelector('[data-gz-real]') && !Object.keys(I.settings.courses.names).length) return;
     for (const [sel, idOf, where, exact] of NAME_AT) {
       for (const el of document.querySelectorAll(sel)) {
@@ -553,11 +560,28 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const p of document.querySelectorAll('[data-gz-real]')) if (!nickOf(p.dataset.gzCid)) unname(p);
   };
 
+  const paintNav = (n, picture) => {
+    if (!isPreview && window.top !== window) return;
+    I.setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
+    for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
+    I.setAttr('data-gz-nav-no-logo', !n.logo);
+    const src = n.i ? picture : n.u;
+    I.setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
+    for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) I.setVar(`--gz-nav-${k}`, v);
+  };
+  const syncNav = () => {
+    if (!isPreview && window.top !== window) return;
+    if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
+    else globalThis.GZ_NAV_UI?.sync();
+    if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
+  };
+
   return {
-    record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
-    renderProgress, renderNew, renderCalc, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { cardsIO.disconnect(); onScreen.clear(); },
+    renderProgress, renderNew, renderCalc, syncSyl, syncInsights, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
-    syncWidgets, ctx: { myCourses, courseItems, bookFor, courseColor },
+    syncTodo, syncCardTasks, syncRemind, syncWidgets,
+    ctx: { myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
   };
 });
 

@@ -60,8 +60,8 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
   const cardsHere = () => I.links.length && I.settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
-  // Dashboard notes and widgets, floating ones on every page (features/widgets.js); the palette opens its hub.
-  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || (I.settings.enhance.notes && location.pathname === '/'));
+  // Dashboard widgets and the pet (features/widgets.js); palette hub.
+  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || ((I.settings.enhance.notes || I.settings.enhance.pet) && location.pathname === '/'));
   const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
   const remindHere = () => I.links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]);

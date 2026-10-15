@@ -1,9 +1,10 @@
-// Tasks on the Dashboard's course cards (enhance.cardTasks), loaded on demand: content.js (syncCardTasks) calls sync(on)
-// from its passes while cards are on the page. Each card lists its course's next items as Better To Do sees them
-// (lib/todo.js build and card: its timeframe, past-due window, done rules, ticks on this device and marks in Canvas),
-// from the same planner answer (storage.local todoCache). Canvas is asked only when that answer is missing or over two
-// minutes old and the To Do list isn't on the page to ask itself, and what comes back is kept there for the list and
-// the popup too. Reads only: nothing here writes to Canvas. Classic script, through GZ_CTX; a second injection keeps the first.
+// Tasks on course cards (enhance.cardTasks): Canvas's Dashboard cards and Blackboard Ultra's Courses page cards. Loaded
+// on demand: the site's part (syncCardTasks) calls sync(on) from content.js's passes while cards are on the page. Each
+// card lists its course's next items as Better To Do sees them (lib/todo.js build and card: its timeframe, past-due
+// window, done rules, ticks on this device and marks in Canvas), from the same planner answer (storage.local todoCache).
+// The site is asked only when that answer is missing or over two minutes old and the To Do list isn't on the page to ask
+// itself, and what comes back is kept there for the list (and on Canvas the popup) too. Reads only: nothing here writes
+// to the site. Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const ctx = globalThis.GZ_CTX;
   const t = (k, v) => ctx.t(k, v);
@@ -22,6 +23,13 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     .then((raw) => { o = GZ_SANITIZE({ todo: raw }).todo; });
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
   const chip = (s) => { const e = make('span', { className: 'gz-todo-chip', textContent: t(s) }); e.dataset.tone = TONE[s]; return e; };
+  // The cards: [selector, the card's course id, where the list goes after, the course's name]. Ultra's card is a link to
+  // its course as a whole (a click anywhere on it opens the course), so the list keeps its own clicks and keys.
+  const ultra = ctx.site === 'ultra';
+  const CARDS = ultra
+    ? ['article[id^="course-list-course-"]', (el) => el.dataset.courseId || el.id.slice(19), (el) => el.querySelector(':scope > .element-details'), (el) => el.querySelector('.js-course-title-element')?.textContent.trim() || '']
+    : ['.ic-DashboardCard', (el) => el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1], (el) => el.querySelector(':scope > .ic-DashboardCard__header'), (el) => el.getAttribute('aria-label') || ''];
+  const keep = (e) => e.stopPropagation();
 
   // ---- Canvas: the planner, as the list asks for it (features/todo.js pages and load) ----
   // ponytail: ten pages (1,000 items), as there.
@@ -50,10 +58,19 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const load = async () => {
     const now = Date.now();
     const { start, end } = L.fetchRange(o, now, tz);
-    const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
-    const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
-    const c = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), grading: [], sums: {} };
-    const due = GZ_CANVAS_DUE_WEEK(raw, now);
+    let c, due;
+    if (ultra) {
+      // Ultra: no teachers' grading, and no popup list from here (content.js keeps Ultra's own). Read only while still on.
+      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      if (!on) throw new Error('off');
+      const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
+      c = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
+    } else {
+      const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
+      const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
+      c = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), grading: [], sums: {} };
+      due = GZ_CANVAS_DUE_WEEK(raw, now);
+    }
     const best = (await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key, cache: c, due }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }))?.cache || c;
     if (!(cache?.key === key && cache.at > best.at)) cache = best;
     paint();
@@ -72,21 +89,25 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     if (!on || !data) return;
     const now = Date.now();
     const lang = GZ_I18N.locale(ctx.locale());
-    for (const el of document.querySelectorAll('.ic-DashboardCard')) {
-      const head = el.querySelector(':scope > .ic-DashboardCard__header');
-      const cid = el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
+    const [sel, idOf, headOf, nameOf] = CARDS;
+    for (const el of document.querySelectorAll(sel)) {
+      const head = headOf(el);
+      const cid = idOf(el);
       const was = el.querySelector(':scope > .gz-ct');
       if (!head || !cid || !cache) { was?.remove(); continue; }
       gs ||= L.gradescope(paint);
-      const rows = L.card(L.build({ items: [...(cache.items || []), ...gs(now, uid)], data, o, now, tz, course: cid, sync: o.sync }), o.cardN, o.cardCross, tz).map((r) => {
+      // Ultra has no planner to tick in: its ticks are this device's, as Better To Do's there.
+      const rows = L.card(L.build({ items: [...(cache.items || []), ...gs(now, uid)], data, o, now, tz, course: cid, sync: !ultra && o.sync }), o.cardN, o.cardCross, tz).map((r) => {
         // Undated work planned for a day (a "do on" day or a focus session) reads as planned for that day.
         const w = L.label(r.at === null ? { allDay: true, day: r.plan } : r, now, tz, lang);
         const text = o.rel ? w.rel : w.abs;
         return { ...r, when: r.at === null ? t('Planned for {when}', { when: text }) : r.type === 'planner_note' ? text : t(r.past ? 'Was due {when}' : 'Due {when}', { when: text }), other: o.rel ? w.abs : w.rel };
       });
-      const sig = JSON.stringify([o.cardStatus, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
+      // Ultra couldn't send everything: said, and never "Nothing due".
+      const part = cache.complete === false && t('Blackboard sent only part of your calendar, so some work may be missing.');
+      const sig = JSON.stringify([o.cardStatus, part, rows.map((r) => [r.key, r.url, r.title, r.when, r.other, r.status, r.done, r.past])]);
       if (was?.dataset.sig === sig) continue;
-      const course = el.getAttribute('aria-label') || '';
+      const course = nameOf(el);
       const box = rows.length
         ? make('ul', {}, ...rows.map((r) => {
           const li = make('li', {}, make(r.url ? 'a' : 'span', { className: 'gz-ct-row', ...(r.url && { href: r.url }) },
@@ -97,10 +118,11 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
           if (r.done) li.dataset.done = '';
           if (r.past) li.dataset.past = '';
           return li;
-        }))
-        : make('p', { textContent: t('Nothing due') });
+        }), part && make('li', { className: 'gz-ct-part', textContent: part }))
+        : make('p', { textContent: part || t('Nothing due') });
       box.className = 'gz-ct';
       box.dataset.sig = sig;
+      if (ultra) for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) box.addEventListener(ev, keep);
       if (rows.length) box.setAttribute('aria-label', t('Tasks for {course}', { course }));
       if (was) was.replaceWith(box); else head.after(box);
     }
@@ -108,7 +130,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     // unless Better To Do on this page asks it already (one question a page); drawn again only when what it asks
     // changes, so a pass never moves focus off it.
     const q = document.getElementById('gz-todo') ? null : gs?.question(uid, t, 'gz-ct-ask') ?? null;
-    const first = q && document.querySelector('.ic-DashboardCard > .gz-ct');
+    const first = q && document.querySelector(`${sel} > .gz-ct`);
     if (!first) { asked?.remove(); asked = null; } else if (asked?.dataset.ask !== q.dataset.ask || !asked.isConnected || asked.nextElementSibling !== first) {
       asked?.remove();
       asked = q;
@@ -130,7 +152,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     await ctx.need('lib/todo.js', () => globalThis.GZ_TODO);
     L = globalThis.GZ_TODO;
     const [p] = await Promise.all([ctx.profile(), readPrefs()]);
-    if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
+    if (!L.ID.test(String(p?.id))) throw new Error('no profile');
     tz = L.zone(p.time_zone);
     uid = String(p.id);
     key = L.storeKey(location.origin, uid);

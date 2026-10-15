@@ -238,10 +238,21 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   const g = U.grade(rows, load('schemas').results);
   assert.deepEqual([g.kind, g.estimate, g.overall], ['weighted', false, 88]);
   assert.equal(g.percent() - g.overall, 0);
+  // The what-if reads the same course through the calculator Canvas uses: still no discrepancy.
+  assert.equal(require('../lib/gradecalc.js').calc(g.course, {}).current - g.overall, 0);
+  assert.deepEqual(g.course.groups.map((x) => [x.id, x.name, x.weight]), [['_201_1', 'Assignment', 40], ['_202_1', 'Test', 40], ['_203_1', 'Discussion', 20]]);
   assert.equal(g.scale, null); // the overall column's schema is a percent scale
-  // A letter scale: [[letter, min]], highest first.
+  // A letter scale as a student gets it (B4, measured): letters and the value an entered letter stands for, no bounds.
+  // That value is no cut-off, so there's no scale.
   rows.find((r) => r.column.externalGrade).column.gradingSchemaId = '_403_1';
-  assert.deepEqual(U.grade(rows, load('schemas').results).scale, [['A', 95], ['B', 85], ['C', 75], ['D', 65], ['F', 0]]);
+  const schemas = load('schemas').results;
+  assert.equal(U.grade(rows, schemas).scale, null);
+  // Where Ultra sends each symbol's lowerBound: [[letter, min]], highest first.
+  const bounded = clone(schemas);
+  bounded[2].symbols.forEach((s, i) => { s.lowerBound = [94, 84, 74, 64, 0][i]; });
+  assert.deepEqual(U.grade(rows, bounded).scale, [['A', 94], ['B', 84], ['C', 74], ['D', 64], ['F', 0]]);
+  delete bounded[2].symbols[1].lowerBound;
+  assert.equal(U.grade(rows, bounded).scale, null, 'all or nothing: a gap is no scale');
   // No overall column returned: the share of points, flagged as an estimate.
   const e = U.grade(status());
   assert.deepEqual([e.kind, e.estimate, e.overall], ['points', true, null]);
@@ -251,11 +262,48 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   odd.find((r) => r.column.externalGrade).column.calculatedFormula.formula = '@X@BBCalColElem(avg:{"items":[]})@X@';
   const u = U.grade(odd);
   assert.deepEqual([u.kind, u.estimate, u.overall], ['points', true, 88]);
-  assert.match(u.why, /can't work out/);
+  assert.equal(u.why, "its overall grade uses rules Glaze can't read");
   // One that doesn't reproduce Blackboard's figure: the same.
   const off = book();
   off.find((r) => r.column.externalGrade).displayGrade.score = 87;
   assert.deepEqual([U.grade(off).estimate, U.grade(off).overall], [true, 87]);
+  assert.equal(U.grade(off).why, "its recipe doesn't come out at Blackboard's own figure");
+  // The letter Blackboard writes for the overall grade, where it writes one.
+  const lettered = book();
+  lettered.find((r) => r.column.externalGrade).displayGrade.text = 'B+';
+  assert.equal(U.grade(lettered).letter, 'B+');
+  assert.equal(U.grade(book()).letter, null);
+});
+
+test("this term's courses: a student's, open, within their term's dates; organizations, closed and other roles left out", () => {
+  const mem = clone(load('memberships').results);
+  const all = U.current(mem, NOW);
+  assert.deepEqual(all.courses.map((c) => c.id), ['_101_1', '_102_1', '_103_1', '_104_1']);
+  assert.deepEqual([all.key, all.name, all.from, all.to], ['_51_1', 'Fall 2026', Date.parse('2026-08-31T04:00:00.000Z'), Date.parse('2026-12-22T04:59:00.000Z')]);
+  assert.equal(all.courses[0].m, mem[0]);
+  mem[0].course.isClosed = true;
+  mem[1].role = 'P';
+  mem[2].course.isOrganization = true;
+  mem[3].course.term = { ...mem[3].course.term, id: '_52_1', name: 'Spring 2027', startDate: '2027-01-19T05:00:00.000Z', endDate: '2027-05-20T03:59:00.000Z' };
+  assert.deepEqual(U.current(mem, NOW).courses, []);
+  assert.deepEqual(U.current(mem, Date.parse('2027-02-01T00:00:00Z')).courses.map((c) => c.id), ['_104_1']);
+  // A term with no dates counts as on.
+  delete mem[3].course.term.startDate;
+  mem[3].course.term.durationType = 'CONTINUOUS';
+  assert.deepEqual(U.current(mem, NOW).courses.map((c) => c.id), ['_104_1']);
+  assert.equal(U.current(mem, NOW).name, '');
+});
+
+test("a course's grade over the term, for Insights: Blackboard's own figure after each graded item, by due date", () => {
+  const rows = book();
+  const tr = U.trend(rows, 'UTC');
+  // Discussion (Sep 14), Lab Report 1 (Sep 21), Quiz 1 (Sep 28); the last point is Blackboard's own 88.
+  assert.deepEqual(tr.map(([at]) => new Date(at).toISOString().slice(0, 10)), ['2026-09-14', '2026-09-21', '2026-09-28']);
+  assert.equal(tr.at(-1)[1], 88);
+  assert.equal(tr[0][1], 100); // the discussion alone, 10 of 10
+  // No overall grade: the estimate's points, the same way.
+  const st = U.trend(status(), 'UTC');
+  assert.deepEqual(st.map(([, pct]) => pct), [85]);
 });
 
 test('To Do is read in 14-day slices, the calendar in 56-day ones; a range that is not one is refused', () => {
@@ -386,21 +434,68 @@ test("PRIVACY doesn't promise folder previews leave memory after a minute: the m
 test("a course's content for links: the public API through the reader, kept to id, parent, title and links", async () => {
   const asked = [];
   const extra = { id: '_9_1', parentId: '_720_1', title: 'Synthetic LTI', links: [{ rel: 'alternate', href: '/ultra/redirect?x=9', type: 'text/html', title: 'UI' }],
-    contentDetail: { 'resource/x-bb-blti-link': { secret: 'synthetic-lti-secret', key: 'synthetic-lti-key' } }, body: '<p>x</p>', availability: { available: 'Yes' } };
+    contentDetail: { 'resource/x-bb-blti-link': { secret: 'synthetic-lti-secret', key: 'synthetic-lti-key' } }, body: '<p>x</p>', availability: { available: 'Yes', adaptiveRelease: {} } };
   const hidden = { id: '_8_1', title: 'Hidden', links: [{ rel: 'alternate', href: '/ultra/redirect?x=8' }], availability: { available: 'No' } };
   const f = async (url, init) => {
     asked.push([url, init.method, init.redirect, init.signal]);
     return { ok: true, status: 200, text: async () => JSON.stringify({ results: [...load('contents').results, extra, hidden] }) };
   };
   const ctl = new AbortController();
-  const items = await U.read({ origin: o, f, signal: ctl.signal }).contents('_101_1');
+  const { items, complete } = await U.read({ origin: o, f, signal: ctl.signal }).contents('_101_1');
   assert.deepEqual(asked.map(([u, m, r, s]) => [u, m, r, s === ctl.signal]),
-    [[`${o}/learn/api/public/v1/courses/_101_1/contents?recursive=true&limit=200&fields=id,parentId,title,availability,links`, 'GET', 'error', true]]);
-  assert.equal(items.length, load('contents').results.length + 1, 'what students can open');
-  assert.deepEqual(items.at(-1), { id: '_9_1', parentId: '_720_1', title: 'Synthetic LTI', links: [{ rel: 'alternate', href: '/ultra/redirect?x=9' }] });
+    [[`${o}/learn/api/public/v1/courses/_101_1/contents?limit=200&fields=id%2CparentId%2Ctitle%2Cavailability%2Clinks&recursive=true`, 'GET', 'error', true]]);
+  assert.equal(complete, true);
+  assert.ok(items.some((x) => x.id === '_9_1') && !items.some((x) => x.id === '_8_1'), 'what students can open');
+  assert.deepEqual(items.find((x) => x.id === '_9_1'), { id: '_9_1', parentId: '_720_1', title: 'Synthetic LTI', links: [{ rel: 'alternate', href: '/ultra/redirect?x=9' }] });
   assert.doesNotMatch(JSON.stringify(items), LTI, 'nothing else kept, whatever came back');
-  assert.deepEqual(await U.read({ origin: o, f }).contents('7'), [], 'an Ultra course id only');
+  assert.deepEqual(await U.read({ origin: o, f }).contents('7'), { items: [], complete: true }, 'an Ultra course id only');
   // Aborted (the picker closed): the read stops.
   ctl.abort();
   await assert.rejects(U.read({ origin: o, f, signal: ctl.signal }).contents('_101_1'), /stale/);
+});
+
+// Codex B5 fix verification #7: the picker shows what search may show, by one rule: released now, known availability,
+// and every ancestor too.
+test("a course's content for links: only what is released now, with known availability, under released folders", async () => {
+  const shapes = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'ultra-search.json'), 'utf8')).contents
+    .map((x) => ({ ...x, links: [{ rel: 'alternate', href: `/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=${x.id}` }] }));
+  const f = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ results: shapes }) });
+  const { items } = await U.read({ origin: o, f }).contents('_101_1');
+  assert.deepEqual(items.map((x) => x.title), ['Laboratory', 'Reading: Cell membrane', 'Lab report']);
+  for (const t of ['Hidden unit', 'Lab hidden child', 'Lab unknown availability', 'Lab cycle', 'Final exam answer key', 'Expired answers', 'Restricted answers', 'Unknown release', 'Malformed release', 'Lab in future folder']) {
+    assert.ok(!items.some((x) => x.title === t), t);
+  }
+  // The same rule as search's documents.
+  const search = U.searchItems(U.SEARCH_KINDS[0], shapes, { id: '_101_1', name: 'BIO' }, (h) => h);
+  assert.deepEqual(items.map((x) => x.id), search.map((x) => x.key.split(':')[1]));
+});
+
+// Codex B5 fix verification, finding 2: a nextPage may page this public list only, with its own fields.
+test("a course's content for links pages only the public list, asking each page with its own fields", async () => {
+  const run = async (nextPage) => {
+    const asked = [];
+    const f = async (url) => {
+      asked.push(url);
+      const page2 = asked.length > 1;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ results: [{ id: page2 ? '_2_1' : '_1_1', title: page2 ? 'Two' : 'One', availability: { available: 'Yes', adaptiveRelease: {} } }], paging: page2 ? {} : { nextPage } }) };
+    };
+    const { items, complete } = await U.read({ origin: o, f }).contents('_101_1');
+    return { asked, titles: items.map((x) => x.title), complete };
+  };
+  const first = `${o}/learn/api/public/v1/courses/_101_1/contents?limit=200&fields=id%2CparentId%2Ctitle%2Cavailability%2Clinks&recursive=true`;
+  // The ordinary second page: its offset, with this list's own fields and limit.
+  const ok = await run('/learn/api/public/v1/courses/_101_1/contents?offset=200&limit=200');
+  assert.deepEqual(ok.asked, [first, `${o}/learn/api/public/v1/courses/_101_1/contents?limit=200&fields=id%2CparentId%2Ctitle%2Cavailability%2Clinks&offset=200&recursive=true`]);
+  assert.deepEqual(ok.titles, ['One', 'Two']);
+  assert.equal(ok.complete, true);
+  // A next page that drops the fields, or asks for more: still this list's fields only.
+  const wider = await run('/learn/api/public/v1/courses/_101_1/contents?offset=200&fields=id,contentDetail,body&limit=999');
+  assert.equal(wider.asked[1], ok.asked[1]);
+  // The private contents, another course, another resource, another site: never asked.
+  for (const next of ['/learn/api/v1/courses/_101_1/contents', '/learn/api/public/v1/courses/_102_1/contents?offset=200', '/learn/api/public/v1/courses/_101_1/contents/_1_1/children', 'https://evil.example/learn/api/public/v1/courses/_101_1/contents?offset=200']) {
+    const r = await run(next);
+    assert.deepEqual(r.asked, [first], next);
+    assert.deepEqual(r.titles, ['One']);
+    assert.equal(r.complete, false, 'and the list says it is incomplete');
+  }
 });

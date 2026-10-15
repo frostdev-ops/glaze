@@ -17,7 +17,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const NAMES = { notes: 'Notes', agenda: 'Agenda', timer: 'Focus timer', quotes: 'Quote', music: 'Music', breathe: 'Breathe', buddy: 'Study buddy' };
   // Tiles other files add, the same on both sites: { id: { file, name (an English key for t()), size } }. This file
   // loads the file (need) while its tile is on, and the file calls register(id, fill). Off until the student adds it.
-  const MORE = {};
+  const MORE = { pet: { file: 'features/pet.js', name: 'Pet habitat', size: 'm' } };
+  const loadingMore = new Map(); // id -> retry time, Infinity while loading
   const added = new Map(); // id -> fill(body, api), from register()
   const nameOf = (id) => NAMES[id] || MORE[id]?.name || id;
   const ultra = ctx.site === 'ultra';
@@ -37,12 +38,13 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const HUB = [
     ['Dashboard', ['notes', 'widgets', 'todo', 'cardTasks', 'overall', 'gradeHover', 'gpa', 'insights', 'newgrades', 'newcontent', 'coursemenu']],
     ['Course pages', ['progress', 'place', 'download', 'calc', 'syllabus', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
-    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak']],
+    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak', 'pet']],
     ['Everywhere', ['palette', 'search', 'keys', 'drafts', 'quizLight']],
   ];
   // Ultra's: what works there.
   const HUB_ULTRA = [
     ['Courses page', ['notes', 'widgets', 'newgrades', 'newcontent', 'coursemenu']],
+    ['Reminders and streak', ['streak', 'pet']],
     ['Course pages', ['progress', 'place', 'download', 'calc', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'reading', 'clamp']],
     ['Everywhere', ['palette', 'keys', 'drafts']],
   ];
@@ -52,7 +54,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     progress: 'Course progress', place: 'Remember your place', download: 'Download all', calc: 'What-if calculator', syllabus: 'Syllabus import', inline: 'Due-date status and percentages',
     scores: 'Score bars', urgency: 'Due-date urgency', previews: 'Folder previews', toggles: 'Document buttons', darkDocs: 'Dark documents',
     reading: 'Reading width', clamp: 'Shorter descriptions', palette: 'Command palette', search: 'Search in your courses',
-    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', keys: 'Keyboard shortcuts', drafts: 'Back up what you type', quizLight: 'Keep quizzes light',
+    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', pet: 'Pet habitat', keys: 'Keyboard shortcuts', drafts: 'Back up what you type', quizLight: 'Keep quizzes light',
   };
 
   let W = null; // lib/widgets.js
@@ -88,7 +90,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (rm && rm.hidden !== off) rm.hidden = off;
   };
   const placed = (h) => (ultra ? h.firstElementChild === panel && panel.contains(grid) : h.nextElementSibling === grid);
-  const allowed = (id) => (id === 'notes' ? ctx.settings().enhance.notes : ctx.settings().enhance.widgets);
+  const allowed = (id) => (id === 'pet' ? ctx.settings().enhance.pet : id === 'notes' ? ctx.settings().enhance.notes : ctx.settings().enhance.widgets);
   const saveLayout = (next) => { lay = next; put({ widgetLayout: lay }); draw(); };
   // Who's signed in (their id names their notes; their Canvas time zone counts the agenda's days), asked only when a
   // tile needs it: a page with nothing of theirs to show asks Canvas nothing. A failed ask is asked again next time.
@@ -634,11 +636,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const wanted = (hasGrid) => lay.tiles.filter((x) => {
     if (!x.on || !allowed(x.id) || !(x.float || hasGrid)) return false;
     if (WIDGETS[x.id] || added.has(x.id)) return true;
-    if (MORE[x.id]) ctx.need(MORE[x.id].file, () => added.has(x.id)).then(draw, () => {});
+    if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
+      loadingMore.set(x.id, Infinity);
+      ctx.need(MORE[x.id].file, () => added.has(x.id)).then(() => { loadingMore.delete(x.id); if (on) draw(); }, () => { loadingMore.set(x.id, Date.now() + 60000); });
+    }
     return false;
   });
   // What a tile from another file is given besides its body.
-  const api = (id) => ({ who: () => who().then(() => ({ ...me })), site: ctx.site, size: () => lay.tiles.find((x) => x.id === id)?.size || 's' });
+  const account = () => who().then(() => ({ ...me }));
+  const api = (id) => ({ who: account, site: ctx.site, size: () => lay.tiles.find((x) => x.id === id)?.size || 's' });
   const placeFloats = () => {
     for (const tile of lay.tiles) {
       const el = tile.float && tiles.get(tile.id)?.el;
@@ -786,7 +792,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // grid draws it once its file is in (wanted).
   const register = (id, fill) => { if (MORE[id] && !added.has(id) && typeof fill === 'function') added.set(id, fill); };
 
-  return { sync, hub: open, register };
+  return { sync, hub: open, register, who: account };
 })();
 
 GZ_WIDGETS_UI;
