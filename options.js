@@ -598,7 +598,7 @@ GZ_UI.load().then((s) => {
   const cardsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:cards', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)));
   $('#card-set-clear').addEventListener('click', async () => { const ok = await cardsOp({ set: [] }); hint(ok ? t('Saved') : t('Not saved. Try again in a moment.'), !ok); });
 
-  // ---- Gradescope (lib/gradescope.js): which Canvas course each Gradescope course goes with, changed here too ----
+  // ---- Gradescope (lib/gradescope.js): which Canvas or Ultra course each Gradescope course goes with, changed here too ----
   // Writes go through the worker's queue ('glaze:gradescope'), as the bar's on Gradescope do.
   let gsSeen = {};
   const gsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:gradescope', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)))
@@ -615,9 +615,9 @@ GZ_UI.load().then((s) => {
       const m = d.map[gid];
       const c = d.courses[gid];
       const sel = document.createElement('select');
-      sel.append(...[['', t('Not a Canvas course')], ...canvas.map((x) => [x.key, x.label]), ['?', t('Forget it (ask again on Gradescope)')]]
+      sel.append(...[['', t('None of these courses')], ...canvas.map((x) => [x.key, x.label]), ['?', t('Forget it (ask again on Gradescope)')]]
         .map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label, selected: value === m.to })));
-      sel.setAttribute('aria-label', t('Canvas course for {course}', { course: m.name || gid }));
+      sel.setAttribute('aria-label', t('Course for {course}', { course: m.name || gid }));
       sel.addEventListener('change', () => gsOp({ op: 'map', acct: d.acct?.id, list: [{ gid, to: sel.value === '?' ? null : sel.value }] }));
       const li = document.createElement('li');
       const read = c ? [t('Read {when}', { when: when(c.at) }), c.bad ? t('Unreadable rows: {n}', { n: c.bad }) : ''].filter(Boolean).join(' · ') : '';

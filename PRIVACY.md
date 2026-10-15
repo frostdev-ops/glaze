@@ -13,7 +13,8 @@ _Last updated: 2026-10-15_
   scale you typed and whether it counts. Nothing is stored for a course you leave as it is. It follows
   your account like your settings; Safari keeps it on this device only.
 - **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
-  lists it and which of Ultra's ten colour slots it is in, so the editor can list them for you to
+  lists it and which of Ultra's ten colour slots it is in (with its site's address and course code, so Gradescope
+  courses can be placed with it), so the editor can list them for you to
   recolour or tint. On Canvas this includes the site's address, course id, name, code and native color; on Moodle,
   the site's address (with its folder, if Moodle is in one), course id, full and short name, and the colour Moodle
   gives the course.
@@ -73,11 +74,12 @@ _Last updated: 2026-10-15_
   replies and group recipients are not backed up. Copies are kept until a matching sent message is
   confirmed, the body is cleared or the offer dismissed, or 14 days pass. Switching the Extra off deletes
   them. Canvas's own editor recovery and its own what-if scores stay with Canvas.
-- **Better To Do** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site and
-  signed-in user id: the tasks you add (title, course, due date, notes), the steps, "do on" days and focus sessions
-  you plan, and what you tick off while "Tick off in Canvas too" is off. Export settings includes them, so you can
+- **Better To Do** (Canvas and Blackboard, on by default), in `chrome.storage.local`, on this device only, per Canvas
+  or Blackboard site and signed-in user id: the tasks you add (title, course, due date, notes), the steps, "do on" days
+  and focus sessions you plan, and what you tick off while "Tick off in Canvas too" is off (on Blackboard, always). Export settings includes them, so you can
   move them; nothing else sends them anywhere. It also keeps one copy of your planner items (title, course, dates,
-  submission status, your planner marks) and, for teachers, the work waiting to be graded with its counts. Two
+  submission status, your planner marks; on Blackboard, your due items with whether each was handed in, late, missing or
+  excused, and whether Blackboard sent its calendar whole) and, for teachers, the work waiting to be graded with its counts. Two
   minutes is how long that copy counts as fresh, not how long it is kept: it stays until the next fetch replaces it,
   or until Glaze is removed.
 - **Export calendar (.ics)** (Canvas): no data of its own. Which parts go in the file and how far ahead are settings
@@ -97,15 +99,15 @@ _Last updated: 2026-10-15_
   **Disconnect** deletes all of it.
 - **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Gradescope account
   it's from (your name on Gradescope, and a SHA-256 hash of your Gradescope email address, never the address itself),
-  which Canvas course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "not a Canvas course"), and for
-  each one placed with a Canvas course, the assignments read from its Gradescope course page (id, title, due and late
+  which Canvas or Blackboard course each of your Gradescope courses goes with (by its Gradescope course id and short name, or "none of
+  these courses"), and for each one placed with a course, the assignments read from its Gradescope course page (id, title, due and late
   due dates, whether you handed it in, the score if graded, whether it was late), the time they were read and how many
   rows couldn't be read; whether you said "Don't ask again" on Gradescope; and, with the daily check on, when each
-  course was last tried; and, per Canvas account (site and Canvas user id), your one-time answer to "Show Gradescope
+  course was last tried; and, per Canvas or Blackboard account (site and user id), your one-time answer to "Show Gradescope
   work from … here?" (asked with one line in Better To Do, the course cards or the reminders hub; one answer for all
-  three). Nothing from Gradescope shows for a Canvas account until it says yes there, so two people sharing
+  three). Nothing from Gradescope shows for an account until it says yes there, so two people sharing
   a browser don't see each other's; signing in to another Gradescope account starts the Gradescope data afresh. It
-  shows only on the Canvas site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
+  shows only on the Canvas or Blackboard site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
 - **Dashboard notes and widgets** (Canvas and Blackboard Ultra, off by default), in `chrome.storage.local`, on this device only: your notes
@@ -132,17 +134,17 @@ _Last updated: 2026-10-15_
   storage, so the browser may clear this storage if the device runs very short of space: **Export all** saves a copy
   (a zip of Markdown files, the pictures and attachments, and the notes as HTML for importing back) through your
   browser's own download, and **Import** reads such a zip on your device.
-- **Reminders and streak** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site
-  and signed-in user id: which reminders have been shown (so another tab doesn't show them again; while one tab is
+- **Reminders and streak** (Canvas and Blackboard, off by default), in `chrome.storage.local`, on this device only, per
+  Canvas or Blackboard site and signed-in user id: which reminders have been shown (so another tab doesn't show them again; while one tab is
   showing one, a random id for that tab holds it for 30 seconds), the ones you
   snoozed and the items you muted, each with a time (dropped after a month; mutes after three months), and, with the
   streak on, the day your run started, your best, what a restore forgave and how many restores you used this month.
-  It's kept apart from Canvas's own read and done state, which Glaze never changes. Nothing sends it anywhere, and
+  It's kept apart from Canvas's and Blackboard's own read and done state, which Glaze never changes. Nothing sends it anywhere, and
   Export settings leaves it out; your reminder choices (which kinds, how long before) are settings and sync with them.
-- **Your class schedule** (Canvas), in `chrome.storage.local`, on this device only, per Canvas site and signed-in user
-  id: for each course you saved, its Canvas course id (or a name of your own), code and name, and each meeting's days,
-  start and end time, place, first and last day and days off; the time zone those times are in (your Canvas
-  profile's); and when each course was last saved, when you last pressed Delete all and which courses you deleted when,
+- **Your class schedule** (Canvas and Blackboard), in `chrome.storage.local`, on this device only, per Canvas or
+  Blackboard site and signed-in user id: for each course you saved, its course id there (or a name of your own), code and
+  name, and each meeting's days, start and end time, place, first and last day and days off; the time zone those times
+  are in (your Canvas profile's; on Blackboard, your browser's); and when each course was last saved, when you last pressed Delete all and which courses you deleted when,
   so a save from another tab made before a deletion can't bring a course back. Only what you choose to save on the
   review screen is kept; the file, page or text you import is read on your device and not kept. Delete removes a
   course, Delete all the lot. Nothing sends it anywhere other than into a calendar file you export yourself (Export
@@ -317,6 +319,20 @@ you import) are bundled. It makes requests in these cases:
   Other pages keep fetching the due list on their own schedule; the two aren't merged because the due list covers the
   next seven days from Blackboard, Canvas or Moodle on every page, while To Do's window follows your settings and only runs
   where the list is.
+- **Better To Do, tasks on course cards, reminders, Export calendar (.ics), the class schedule and Google Calendar sync on
+  Blackboard.** They ask your own Blackboard site, with your existing session, in read-only GETs that never follow a
+  redirect, for what Blackboard's own pages ask for: who you are and your course list (the same requests as the course
+  list above, shared with it), your To Do list for the window (in 14-day parts: Blackboard refuses longer ones), your
+  calendar's items for the same window, and, for each course with something due in it, that course's gradebook rows
+  with each item's last attempt and submission status (to tell what you handed in, late, missing or excused), plus your
+  due-date exceptions in a course where work would otherwise count as late or missing. Nothing opens a test, an
+  attempt, a discussion or a message, marks anything read, or reads a content item's tool credentials. One answer
+  serves the To Do list, the cards and the reminders, kept as the copy above and asked for on the same schedule as on
+  Canvas (below): when such a page opens with a copy more than two minutes old (ten for reminders on their own), when
+  you come back to the page after that, and when the list's settings change; Export asks when you press Download, and
+  Google Calendar sync on its schedule while a Blackboard page is open. Blackboard's own calendar feed link ("Share
+  calendar") is never read or made by Glaze; you can paste it into the class schedule yourself, and it's then read
+  once, from your own Blackboard site. Ticks stay on this device: Glaze never writes to Blackboard.
 - **Export calendar (.ics)** (Canvas, only when you press Download). Glaze asks your own Canvas site for your profile
   (user id and time zone), your active courses (with their term dates, for "This term") and, for Canvas deadlines or
   plans, your planner items from today to eight weeks past the end of the range you picked (so a plan has its item's
@@ -334,14 +350,15 @@ you import) are bundled. It makes requests in these cases:
     calendars, and see, create, change and delete events on them"). With it Glaze can't see or change your other
     calendars, nor list them. Chrome talks to Google for the sign-in itself. Glaze then creates one calendar named
     Glaze, with your time zone. **Link another device** opens that same calendar by its ID instead of making one.
-  - **Sync**: a Canvas page works out what Export calendar (.ics) would save, with the same choices, and Glaze sends
+  - **Sync**: a Canvas or Blackboard page works out what Export calendar (.ics) would save, with the same choices, and Glaze sends
     Google what changed: for each event its title (an assignment, task, plan or class name), the course name, your
-    task's notes, its date or time, the class's room, and the link back to the item on your Canvas site. No
+    task's notes, its date or time, the class's room, and the link back to the item on your Canvas or Blackboard site. No
     reminders, and the events show you as free. Glaze also reads back changes made in Google Calendar to the events
     in the Glaze calendar: an edited deadline is written over; a deleted one stays deleted; a "do on" day or focus
-    session you move or delete there moves or clears that plan in Better To Do. It runs when a Canvas page opens if
-    the last sync was 15 minutes ago or more, every 15 minutes while a Canvas page stays open, and 10 seconds after
-    your Better To Do data, class schedule or export choices change. Nothing runs with no Canvas page open.
+    session you move or delete there moves or clears that plan in Better To Do. It runs when a Canvas or Blackboard
+    page opens if the last sync was 15 minutes ago or more, every 15 minutes while such a page stays open, and 10 seconds
+    after your Better To Do data, class schedule or export choices change. Nothing runs with no Canvas or Blackboard
+    page open; a Blackboard page reads what's due as described above.
   - **Disconnect**: if you choose, Glaze deletes the Glaze calendar first; then it asks Google to revoke Glaze's
     access (the token goes in the request body), has Chrome forget its tokens, removes the `identity` permission and
     deletes what it stored. You can also remove Glaze's access at https://myaccount.google.com/connections.
@@ -389,8 +406,8 @@ you import) are bundled. It makes requests in these cases:
   with a Canvas course and that wasn't read in the last ten minutes, asking again before each one whether Glaze and the
   switch are still on: the page you're on if it's that course's, else
   `https://www.gradescope.com/courses/<id>` (a read-only GET from that page, with your existing Gradescope session).
-  With "Also check Gradescope once a day from Canvas" on (off by default), a Canvas page showing your To Do, card tasks
-  or reminders, for a Canvas account that said yes, also has Glaze's background worker GET each of that site's placed
+  With "Also check Gradescope once a day from Canvas or Blackboard" on (off by default), a Canvas or Blackboard page
+  showing your To Do, card tasks or reminders, for an account there that said yes, also has Glaze's background worker GET each of that site's placed
   courses' Gradescope page and your account page (to check it's still the same account), at most once a day per course, whether or not it worked (signed out, Gradescope redirects to its sign-in page; Glaze never
   follows a redirect from Gradescope, here or on Gradescope's own pages, and keeps what it read before); the request carries your Gradescope cookies, as visiting the page would, and the page is read on the Canvas
   page and kept on this device as above. Nothing read on Gradescope is sent to Canvas or anywhere else, and Glaze never
@@ -420,7 +437,7 @@ you import) are bundled. It makes requests in these cases:
   lists a course's content items you can open now from Blackboard's public contents API (each kept to its title, folder and link):
   read-only GETs that never follow a redirect and stop when you close the picker. Only the link and title you pick go
   in the note. Glaze also keeps the address of each Ultra site it has started on (storage.local `ultra`), so only those
-  sites' pages may save notes.
+  sites' pages may save notes, Better To Do's tasks and plans, reminders and class schedules.
 - **Music widget** (Canvas, off by default). Glaze contacts no music service until you press **Load player**, on each
   page. Then your browser loads that service's player inside the widget, from **Spotify** (`open.spotify.com`),
   **YouTube** or **YouTube Music** (both from `www.youtube-nocookie.com`, YouTube's privacy-enhanced mode) or **Apple

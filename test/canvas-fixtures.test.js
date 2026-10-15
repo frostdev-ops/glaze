@@ -134,11 +134,13 @@ const HOOKS = [
   '.ef-file-preview-stretch', '.file_preview', '#doc_preview',
 ];
 
-// The classes and ids canvas.css keys on (Glaze's own gz-* aside), read from its selectors.
+// The classes and ids canvas.css and features/apps.css (what Glaze draws itself, on Canvas and Ultra) key on, read from
+// their selectors: Glaze's own gz-* aside, and features/apps.css's Ultra markup (ULTRA_CSS).
+const ULTRA_CSS = new Set(['#site-wrap', '.todo-panel', '.outline-actions', '.base-header-tools']);
 const cssNames = () => {
-  const css = fs.readFileSync(path.join(__dirname, '..', 'canvas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = ['canvas.css', 'features/apps.css'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
   const selectors = css.replace(/\{[^{}]*\}/g, '{}').replace(/@[^{]*\{/g, '').replace(/url\([^)]*\)/g, '');
-  return new Set([...selectors.matchAll(/([.#])(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1] + m[2]).filter((n) => !/^[.#]gz-/.test(n)));
+  return new Set([...selectors.matchAll(/([.#])(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1] + m[2]).filter((n) => !/^[.#]gz-/.test(n) && !ULTRA_CSS.has(n)));
 };
 
 // Keyed on, but on no fixture: each needs an interaction, a state or content the seed doesn't have. A fixture that
