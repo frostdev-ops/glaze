@@ -6,9 +6,14 @@
 // as one small record for this term, written by the service worker's queue ('glaze:insights'), so the view opens at
 // once next time; "Clear saved insights" drops it. Every chart is inline SVG beside a table of the same figures; the
 // summary card saves as a PNG made on the device. Nothing is sent anywhere, and nothing is compared with anyone.
+// On Blackboard Ultra (content-ultra.js syncInsights; B4): a button on the Courses page and Ctrl+K, this term's courses from
+// your course list (lib/ultra.js current), each one's gradebook with where each piece of work stands (lib/ultra.js work and
+// excepts, [I] rules) and its overall grade over the term (lib/ultra.js trend: the course's own recipe, or its share of
+// points); dates in the browser's time zone, which Ultra doesn't give.
 // Loaded on demand: a second injection keeps the first.
 var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
   const ctx = globalThis.GZ_CTX;
+  const ultra = ctx.site === 'ultra';
   const t = (k, v) => ctx.t(k, v);
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
   const NS = 'http://www.w3.org/2000/svg';
@@ -50,14 +55,22 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
 
   // ---- the Dashboard's button --------------------------------------------------------------------------------------
   let btn = null;
+  // Ultra: in Glaze's panel on the Courses page (features/widgets.js), beside What Glaze can do, where the panel is on
+  // (notes or widgets); otherwise in the page's header, where Ultra keeps its own header tools (B4 [M]: empty but for a
+  // hidden catalog link). Chosen by the switches, so the button never moves once the panel arrives.
+  const ultraBar = () => {
+    const e = ctx.settings().enhance;
+    return document.querySelector(e.widgets || e.notes ? '#gz-panel .gz-dash-bar' : 'div.base-courses-header-container div.base-header-tools');
+  };
   const sync = () => {
     const on = alive();
-    const bar = on && location.pathname === '/' && window.top === window && document.querySelector('#dashboard_header_container .ic-Dashboard-header__actions');
+    const bar = on && window.top === window && (ultra ? location.pathname === '/ultra/course' && ultraBar()
+      : location.pathname === '/' && document.querySelector('#dashboard_header_container .ic-Dashboard-header__actions'));
     if (!bar) btn?.remove();
     else {
-      if (!btn) { btn = make('button', { type: 'button', className: 'Button gz-ins-open' }); btn.addEventListener('click', open); }
+      if (!btn) { btn = make('button', { type: 'button', className: ultra ? 'gz-w-small gz-ins-open' : 'Button gz-ins-open' }); btn.addEventListener('click', open); }
       if (btn.textContent !== t('Insights')) btn.textContent = t('Insights');
-      if (btn.parentNode !== bar) bar.prepend(btn);
+      if (btn.parentNode !== bar) { if (ultra) bar.append(btn); else bar.prepend(btn); }
     }
     if (!on) box?.close();
   };
@@ -95,17 +108,33 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     load(my, false);
   };
 
+  // Ultra: who you are, this term's courses and your time zone, as Canvas's profile and course list give them; and one
+  // course read through lib/ultra.js (one request for its gradebook, one more only for due-date exceptions).
+  const ultraTerm = async () => {
+    await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+    const mem = await ctx.myCourses();
+    const uid = mem.find((m) => /^_\d+_\d+$/.test(m?.userId || ''))?.userId;
+    return { p: { id: uid }, term: GZ_ULTRA.current(mem, Date.now()), tz: GZ_TODO.zone(Intl.DateTimeFormat().resolvedOptions().timeZone) };
+  };
+  const ultraOne = async (c, uid, tz, at, go) => {
+    const r = GZ_ULTRA.read({ origin: location.origin, live: go });
+    const rows = await r.grades(c.id, uid);
+    const excepted = await GZ_ULTRA.excepts(r, c.m, c.id, rows, at);
+    return { id: c.id, name: c.name, q: false, more: false, items: GZ_ULTRA.work(rows, at, excepted), trend: GZ_ULTRA.trend(rows, tz), gp: '' };
+  };
+
   // What's saved, at once if it's this term's; then, unless it's fresh, Canvas asked again and the answer kept.
   const load = async (my, force) => {
     const I = GZ_INSIGHTS, L = GZ_TODO;
     say(t('Working out your term…'));
     try {
-      const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses()]);
+      const u = ultra && await ultraTerm();
+      const [p, list] = u ? [u.p, null] : await Promise.all([ctx.profile(), ctx.canvasCourses()]);
       if (stop(my)) return;
-      if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
-      const uid = String(p.id), tz = L.zone(p.time_zone);
+      if (!(ultra ? /^_\d+_\d+$/ : /^\d+$/).test(String(p?.id))) throw new Error('no profile');
+      const uid = String(p.id), tz = u ? u.tz : L.zone(p.time_zone);
       const key = I.storeKey(location.origin, uid);
-      const term = I.term(list, Date.now());
+      const term = u ? u.term : I.term(list, Date.now());
       const kept = await get(key);
       if (stop(my)) return;
       const rec = I.clean(kept?.[key]);
@@ -122,6 +151,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
       const failed = [];
       const go = () => !stop(my);
       const one = async (c) => {
+        if (u) return ultraOne(c, uid, tz, at, go);
         const [groups, periods] = await Promise.all([
           getAll(`/courses/${c.id}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`, go),
           c.has_grading_periods ? ask(`${location.origin}/api/v1/courses/${c.id}/grading_periods`, go).then(({ j }) => j.grading_periods) : null,
@@ -251,7 +281,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     const T = v.total;
     const counts = (c) => [num(c.on), num(c.late), num(c.missing), num(c.excused), c.share == null ? '–' : pct(c.share)];
     const onTime = section(t('On time'),
-      note(t('Work handed in by its due date, as Canvas marks it. Excused work is left out.')),
+      note(ultra ? t('Work handed in by its due date, by when Blackboard says it was handed in. Excused work, and work with a due-date exception, is left out.') : t('Work handed in by its due date, as Canvas marks it. Excused work is left out.')),
       table(t('On time by course'), [t('Course'), t('On time'), t('Late'), t('Missing'), t('Excused'), t('Share on time'), ''],
         v.courses.map((c) => [c.name, ...counts(c.tally), bar(c.tally)]), [t('All courses'), ...counts(T), bar(T)]),
       make('dl', { className: 'gz-ins-facts' },
@@ -261,7 +291,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
 
     const graded = v.courses.filter((c) => c.trend.length);
     const trend = section(t('Grades over the term'),
-      note(t("Each course's current grade after each piece of graded work, by Canvas's rules, in date order.")),
+      note(ultra ? t("Each course's overall grade after each piece of graded work, by the course's own recipe in Blackboard (or, where Glaze can't read it, the share of points), in date order.") : t("Each course's current grade after each piece of graded work, by Canvas's rules, in date order.")),
       v.courses.some((c) => c.gp) && note(t("In a course with grading periods, each period starts afresh: First, Now and Change are this period's, as Canvas's current grade is.")),
       table(t('Grade trend by course'), [t('Course'), t('First'), t('Now'), t('Change'), t('Trend')], v.courses.map((c) => {
         if (c.q) return [c.name, t('Letter grades only'), '', '', ''];
@@ -294,7 +324,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     const left = [v.left.names.length && t("Some work couldn't be counted, so these figures leave it out: {names}.", { names: v.left.names.join(', ') }),
       v.left.courses && t('Courses not counted: {n}', { n: v.left.courses })].filter(Boolean).map(note);
     body.replaceChildren(...left, summary, onTime, trend, load, ...(plans ? [plans] : []),
-      make('footer', { className: 'gz-ins-foot' }, note(t('Worked out on this device from your own Canvas. Only this summary is kept, on this device, until you clear it. Nothing is sent anywhere.')), clear));
+      make('footer', { className: 'gz-ins-foot' }, note(ultra ? t('Worked out on this device from your own Blackboard. Only this summary is kept, on this device, until you clear it. Nothing is sent anywhere.') : t('Worked out on this device from your own Canvas. Only this summary is kept, on this device, until you clear it. Nothing is sent anywhere.')), clear));
   };
 
   // "Clear saved insights": the record goes, and its time stays so nothing still on its way brings it back.

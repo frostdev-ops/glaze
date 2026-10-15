@@ -884,3 +884,125 @@ span.enhanced-tooltip span.enhanced-tooltip-pip { background-color: var(--gz-tip
   font: 500 12px/1.35 var(--gz-font); letter-spacing: 0.01em; white-space: normal; overflow-wrap: anywhere;
 }
 .gz-tip-sub { display: block; margin-top: 0.1rem; font-weight: 400; color: var(--gz-ink-muted); }
+
+/* Ultra appearance uses the same card settings and paint variables as Canvas. Native banners stay intact. */
+#site-wrap article.course-element-card { border-radius: var(--gz-card-r, var(--gz-radius)) !important; position: relative; }
+#site-wrap article.course-element-card .course-banner { overflow: hidden; position: relative; isolation: isolate; }
+#site-wrap article.course-element-card[data-gz-card] .course-banner { background: var(--gz-card-grad, var(--gz-card-c, var(--gz-course))) !important; }
+#site-wrap article.course-element-card[data-gz-card] .course-banner > img { visibility: hidden; }
+#site-wrap article.course-element-card[data-gz-card="image"] .course-banner::before,
+#site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+#site-wrap article.course-element-card[data-gz-card="image"] .course-banner::before {
+  background: var(--gz-card-img) var(--gz-card-pos) / cover no-repeat; transform: scale(var(--gz-card-zoom)); transform-origin: var(--gz-card-pos); filter: var(--gz-card-filter);
+}
+#site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { background: var(--gz-card-ov); opacity: var(--gz-card-ov-a); }
+html[data-gz-card-plain] #site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { display: none; }
+/* Only the measured grid gets sizing/condensing. List rows keep Ultra's native geometry. */
+html[data-gz-card-width] #site-wrap .multi-column-view .course-columns { display: flex !important; flex-wrap: wrap; }
+html[data-gz-card-width] #site-wrap .multi-column-view .course-card-term-name { flex-basis: 100%; }
+html[data-gz-card-gap] #site-wrap .multi-column-view .course-columns { gap: var(--gz-card-gap) !important; }
+html[data-gz-card-width] #site-wrap .multi-column-view article.course-element-card { width: min(100%, var(--gz-card-w)) !important; flex: 0 1 var(--gz-card-w); margin: 0 !important; }
+html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card .course-banner { height: var(--gz-card-h) !important; }
+#site-wrap .multi-column-view article.course-element-card .course-banner { border-radius: calc(var(--gz-card-r, var(--gz-radius)) - 1px) calc(var(--gz-card-r, var(--gz-radius)) - 1px) 0 0 !important; }
+html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title { position: absolute; top: auto; bottom: calc(100% - var(--gz-card-banner-h, var(--gz-card-h, 146px))); inset-inline: 12px; margin: 0 !important; padding: 0 0 8px !important; max-height: calc(var(--gz-card-banner-h, var(--gz-card-h, 146px)) - 8px); line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; color: white !important; z-index: 1; text-shadow: 0 1px 3px #000; }
+html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title :is(a, span) { color: white !important; }
+#site-wrap article.course-element-card .gz-bm { position: absolute; z-index: 2; top: 8px; left: 8px; right: 80px; display: flex; flex-wrap: wrap; gap: 4px; }
+html:not([data-gz-card-icons]) #site-wrap .gz-bm { display: none; }
+#site-wrap .gz-bm a { display: grid; place-items: center; width: 28px; height: 28px; background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: 50%; }
+#site-wrap .gz-bm a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#site-wrap .gz-bm svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Base navigation: no changes to the course tab bar or other navigation regions. */
+html[data-gz-nav] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools) { position: relative; isolation: isolate; background: var(--gz-nav-c) !important; }
+html[data-gz-nav="gradient"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools) { background: linear-gradient(var(--gz-nav-a), var(--gz-nav-c), var(--gz-nav-d)) !important; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before,
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before { z-index: -2; background: var(--gz-nav-img) center / cover no-repeat; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::after { z-index: -1; background: var(--gz-nav-c); opacity: var(--gz-nav-o); }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content { color: var(--gz-nav-ink) !important; background: transparent !important; }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content :is(span, svg) { color: inherit !important; }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content:is(:hover, :focus-visible) { text-decoration: underline; outline: 2px solid var(--gz-nav-ink); outline-offset: -2px; }
+html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content.Mui-selected::before { background: var(--gz-nav-ink) !important; }
+html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools) header.themed-logo-background-primary-fill :is(img, [analytics-id="baseLayout.logo.link"]) { display: none; }
+html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content { min-height: 40px; padding-block: 6px !important; font-size: 12px; }
+html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content { min-height: 58px; padding-block: 14px !important; font-size: 17px; }
+html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content { font-size: 11px; }
+html[data-gz-nav-labels="icons"] :is(nav:has(> #base_tools), nav#base_tools) .gz-nav-label,
+html[data-gz-nav-collapsed] :is(nav:has(> #base_tools), nav#base_tools) .gz-nav-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]) :is(nav:has(> #base_tools), nav#base_tools) a.base-navigation-button-content { justify-content: center; min-height: 44px; }
+html[data-gz-nav-f="vivid"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before { filter: saturate(1.6) contrast(1.08); }
+html[data-gz-nav-f="mono"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before { filter: grayscale(1); }
+html[data-gz-nav-f="noir"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before { filter: grayscale(1) contrast(1.45) brightness(0.85); }
+html[data-gz-nav-f="warm"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before { filter: sepia(0.35) saturate(1.35) hue-rotate(-10deg); }
+html[data-gz-nav-f="cool"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before { filter: saturate(0.8) hue-rotate(12deg) brightness(1.05); }
+html[data-gz-nav-f="faded"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before { filter: contrast(0.78) saturate(0.7) brightness(1.12); }
+html[data-gz-nav-f="dreamy"] :is(.MuiDrawer-paper:has(#base_tools), nav#base_tools)::before { filter: blur(1.5px) saturate(1.25) brightness(1.08); }
+
+
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools) :is(nav, ul) { background: transparent !important; }
+html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools) svg { width: 20px; height: 20px; }
+html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools) svg { width: 30px; height: 30px; }
+@media (min-width: 900px) {
+  html[data-gz-nav-size="small"] .MuiDrawer-root:has(#base_tools), html[data-gz-nav-size="small"] .MuiDrawer-paper:has(#base_tools) { width: 204px; flex-basis: 204px; }
+  html[data-gz-nav-size="large"] .MuiDrawer-root:has(#base_tools), html[data-gz-nav-size="large"] .MuiDrawer-paper:has(#base_tools) { width: 280px; flex-basis: 280px; }
+  html[data-gz-nav-collapsed] .MuiDrawer-root:has(#base_tools), html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools) { width: 88px !important; flex-basis: 88px !important; }
+}
+html[data-gz-card-hover="none"] #site-wrap article.course-element-card:hover { transform: none; }
+@media (hover: hover) {
+  html[data-gz-card-hover="grow"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover { transform: scale(1.035); }
+  html[data-gz-card-hover="tilt"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover { transform: perspective(900px) rotateX(4deg) rotateY(-5deg) translateY(-3px); }
+  html[data-gz-card-hover="glow"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover {
+    box-shadow: 0 0 0 1px var(--gz-card-c, var(--gz-course, var(--gz-accent))), 0 10px 32px -8px color-mix(in srgb, var(--gz-card-c, var(--gz-course, var(--gz-accent))) 75%, transparent);
+  }
+  /* Shine: a band of light crosses the card once. */
+  html[data-gz-card-hover="shine"]:not([data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover::after {
+    content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.28) 50%, transparent 65%) -150% 0 / 250% 100% no-repeat;
+    animation: gz-card-shine 0.9s var(--gz-ease) forwards;
+  }
+  /* Particles over the picture while the pointer is on the card: soft dots on a repeating tile, drifting. */
+  html:not([data-gz-card-particles="none"], [data-gz-motion="off"], [data-gz-no-hover]) #site-wrap article.course-element-card:hover::before {
+    content: ""; position: absolute; inset: 0 0 auto; height: var(--gz-card-h, 146px); z-index: 1; pointer-events: none;
+    background-size: 90px 90px; animation: gz-card-fall 2.4s linear infinite; animation-play-state: var(--gz-ambient, running);
+  }
+  html[data-gz-card-particles="sparkles"] #site-wrap article.course-element-card:hover::before {
+    background-image: radial-gradient(circle at 20% 30%, #fff 0 1.5px, transparent 2.5px), radial-gradient(circle at 70% 65%, var(--gz-accent-hi) 0 1.5px, transparent 2.5px), radial-gradient(circle at 45% 85%, #fff 0 1px, transparent 2px);
+    animation-name: gz-card-twinkle; animation-direction: alternate; animation-duration: 0.8s;
+  }
+  html[data-gz-card-particles="snow"] #site-wrap article.course-element-card:hover::before {
+    background-image: radial-gradient(circle at 25% 20%, rgb(255 255 255 / 0.9) 0 2.5px, transparent 3.5px), radial-gradient(circle at 75% 60%, rgb(255 255 255 / 0.75) 0 1.8px, transparent 2.8px);
+  }
+  html[data-gz-card-particles="bubbles"] #site-wrap article.course-element-card:hover::before {
+    background-image: radial-gradient(circle at 30% 40%, transparent 0 4px, rgb(255 255 255 / 0.7) 4.5px 5.5px, transparent 6px), radial-gradient(circle at 75% 80%, transparent 0 2.5px, rgb(255 255 255 / 0.6) 3px 3.8px, transparent 4.3px);
+    animation-name: gz-card-rise;
+  }
+  html[data-gz-card-particles="confetti"] #site-wrap article.course-element-card:hover::before {
+    background-image: linear-gradient(30deg, transparent 40%, var(--gz-accent) 40% 60%, transparent 60%), linear-gradient(-40deg, transparent 42%, var(--gz-warn) 42% 58%, transparent 58%), linear-gradient(80deg, transparent 44%, var(--gz-ok) 44% 56%, transparent 56%);
+    background-size: 9px 5px, 7px 6px, 8px 4px; background-repeat: no-repeat; animation-name: gz-card-confetti;
+  }
+}
+@keyframes gz-card-shine { to { background-position: 150% 0; } }
+@keyframes gz-card-fall { from { background-position: 0 0, 30px 0; } to { background-position: 0 90px, 30px 90px; } }
+@keyframes gz-card-rise { from { background-position: 0 0, 30px 0; } to { background-position: 0 -90px, 30px -90px; } }
+@keyframes gz-card-twinkle { from { opacity: 0.25; } to { opacity: 1; } }
+@keyframes gz-card-confetti { from { background-position: 20px -10px, 60px -30px, 35px -50px; } to { background-position: 30px 150px, 50px 160px, 45px 150px; } }
+
+/* The pet (features/cards.js) sits on the first card's picture: it idles through frames 0-3, and on a hover plays its
+   stretch or hop (4-7) once. Frame 0 alone when motion is off. Sheets: 4×2 frames of 128 px, drawn at half size. */
+#site-wrap .gz-pet {
+  position: absolute; z-index: 2; right: 10px; top: calc(var(--gz-card-h, 146px) - 62px); width: 64px; height: 64px; pointer-events: none;
+  background: var(--gz-pet-sheet) 0 0 / 256px 128px no-repeat; filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+  animation: gz-pet-idle 2.46s step-end infinite; animation-play-state: var(--gz-ambient, running);
+}
+/* The stretch or hop only with hover motion on; Off (and reduced motion, which content.js makes Off) stills it. */
+@media (hover: hover) { html:not([data-gz-motion="off"], [data-gz-no-hover]) article.course-element-card:hover > .gz-pet { animation: gz-pet-act 0.98s step-end 1; } }
+html[data-gz-motion="off"] article.course-element-card > .gz-pet { animation: none !important; }
+html[data-gz-card-pet="none"] #site-wrap .gz-pet { display: none; }
+/* Condensed cards have the name low on the picture: the pet peeks in at the top instead, a little smaller. */
+html[data-gz-card-condensed] #site-wrap .gz-pet { top: 2px; right: calc(50% - 32px); scale: 0.75; transform-origin: top center; }
+@keyframes gz-pet-idle { 0% { background-position: 0 0; } 73.2% { background-position: -64px 0; } 82.9% { background-position: -128px 0; } 87.8% { background-position: -192px 0; } }
+@keyframes gz-pet-act { 0% { background-position: 0 -64px; } 16.3% { background-position: -64px -64px; } 34.7% { background-position: -128px -64px; } 77.6% { background-position: -192px -64px; } }
+
+
+#site-wrap article.course-element-card:not(.multi-column-view *) > .gz-pet { display: none; }
+
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools) header.themed-logo-background-primary-fill { background: transparent !important; }

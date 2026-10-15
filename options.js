@@ -598,7 +598,7 @@ GZ_UI.load().then((s) => {
   const cardsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:cards', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)));
   $('#card-set-clear').addEventListener('click', async () => { const ok = await cardsOp({ set: [] }); hint(ok ? t('Saved') : t('Not saved. Try again in a moment.'), !ok); });
 
-  // ---- Gradescope (lib/gradescope.js): which Canvas course each Gradescope course goes with, changed here too ----
+  // ---- Gradescope (lib/gradescope.js): which Canvas or Ultra course each Gradescope course goes with, changed here too ----
   // Writes go through the worker's queue ('glaze:gradescope'), as the bar's on Gradescope do.
   let gsSeen = {};
   const gsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:gradescope', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)))
@@ -615,9 +615,9 @@ GZ_UI.load().then((s) => {
       const m = d.map[gid];
       const c = d.courses[gid];
       const sel = document.createElement('select');
-      sel.append(...[['', t('Not a Canvas course')], ...canvas.map((x) => [x.key, x.label]), ['?', t('Forget it (ask again on Gradescope)')]]
+      sel.append(...[['', t('None of these courses')], ...canvas.map((x) => [x.key, x.label]), ['?', t('Forget it (ask again on Gradescope)')]]
         .map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label, selected: value === m.to })));
-      sel.setAttribute('aria-label', t('Canvas course for {course}', { course: m.name || gid }));
+      sel.setAttribute('aria-label', t('Course for {course}', { course: m.name || gid }));
       sel.addEventListener('change', () => gsOp({ op: 'map', acct: d.acct?.id, list: [{ gid, to: sel.value === '?' ? null : sel.value }] }));
       const li = document.createElement('li');
       const read = c ? [t('Read {when}', { when: when(c.at) }), c.bad ? t('Unreadable rows: {n}', { n: c.bad }) : ''].filter(Boolean).join(' · ') : '';
@@ -952,10 +952,10 @@ GZ_UI.load().then((s) => {
   // ---- backup ----
   // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
   // card styles and bookmarks go too; a picture kept on this computer stays here.
-  $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links'], (r) => chrome.storage.local.get(null, (all) => {
+  $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks'], (r) => chrome.storage.local.get(null, (all) => {
     const tasks = Object.fromEntries(Object.entries(all || {}).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
     const nav = { ...s.nav, i: '', ...(s.nav.i && { k: 'default', u: '' }) };
-    const blob = new Blob([JSON.stringify({ ...s, nav, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), tasks }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ ...s, nav, cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), ucards: GZ_CARDS.styles(r?.ucards), ulinks: GZ_CARDS.links(r?.ulinks), tasks }, null, 2)], { type: 'application/json' });
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -988,9 +988,10 @@ GZ_UI.load().then((s) => {
       return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
     }
     Object.assign(s, next);
+    const ultraStyled = !(raw.ucards || raw.ulinks) || await cardsOp({ ultra: true, replace: { cards: raw.ucards, links: raw.ulinks } });
     const styled = await cardsOp({ nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) });
     fill();
-    if (!styled) return hint(t('Some settings could not be imported. Try again in a moment.'), true);
+    if (!styled || !ultraStyled) return hint(t('Some settings could not be imported. Try again in a moment.'), true);
     hint(t('Imported {file}.', { file: file.name }));
   });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
@@ -1009,7 +1010,7 @@ GZ_UI.load().then((s) => {
     pendingNav.clear();
     save(Object.keys(s));
     // Card styles and bookmarks too, and the pictures kept for them on this computer.
-    cardsOp({ reset: true, nav: GZ_DEFAULTS.nav }).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });
+    cardsOp({ reset: true, nav: GZ_DEFAULTS.nav }).then(async (ok) => await cardsOp({ ultra: true, reset: true }) && ok).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });
     // Stickers, your sticker pictures and pointer, and Look rotation's list (lib/lookx.js): this computer's, gone too,
     // through the worker's queue, so a tab's sticker change still on its way can't bring one back.
     chrome.runtime.sendMessage({ type: 'glaze:stickers', reset: true }, (r) => { if (chrome.runtime.lastError || !r?.ok) hint(t('Not saved. Try again in a moment.'), true); });

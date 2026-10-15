@@ -10,6 +10,24 @@ All notable changes to Glaze are documented here. The format follows
 
 - **Pet reward corrections:** W11's saved streak supplies closed-day rewards without a planner-window requirement; synced/manual unticks revoke work and plan XP. Clearing Insights and deleting finished history preserve settled XP. Bounded records fail closed without resetting progress. The widget now uses B5's real shared Canvas/Ultra panel, account helper and app stylesheet; failed module loads back off quietly.
 
+- **Planning on Blackboard Ultra.** Better To Do (on by default), tasks on course cards, reminders and the streak, Export
+  calendar (.ics), the class schedule, Gradescope in To Do and Google Calendar sync now work on Blackboard Ultra too: the
+  same features, settings and words as on Canvas.
+  - Better To Do takes the place of Ultra's own To Do on the Courses page (Ultra's comes back the moment Glaze's list goes)
+    and is a block beside a course's content on its outline, with that course's work. Your own tasks, steps, "do on" days
+    and focus sessions work as on Canvas; ticks stay on your device (Glaze never writes to Blackboard).
+  - What's due comes from Ultra's To Do list and calendar, read in the parts Ultra allows, and what you handed in, late,
+    missing or excused from each course's gradebook; an item Ultra can't place in a gradebook shows with no status. If
+    Ultra can't send the calendar whole, the list (and a saved export) says some work may be missing. Days are in your
+    browser's time zone. One read serves the list, the cards and the reminders.
+  - Tasks show under each card on the Courses page; a task's link opens the task, not the course.
+  - Reminders show on Blackboard pages, never on a test, assignment or tool page.
+  - The class schedule matches classes to your Blackboard courses by code, then name, and reads a calendar link only on
+    your own Blackboard site. Glaze never reads or makes Ultra's own "Share calendar" link.
+  - Gradescope courses can be placed with Blackboard courses (not yet checked against a real school with Gradescope).
+  - Google Calendar sync also runs from Blackboard pages, behind the same build switch (still off).
+  - The planning features' styles moved to `features/apps.css`, linked on Canvas and Blackboard.
+
 - **Search in your courses on Blackboard Ultra:** the same Ctrl/⌘K search and switch as Canvas, now finding available
   content titles and released public document, announcement and discussion topic text, with native type labels. Current course and term first, up to
   24 results; open current-term courses only, nothing stored, five-minute cache reuse, cancellation on typing, closing or disabling. Unknown release conditions are omitted and transient errors retry after backoff. Read-only public
@@ -24,6 +42,8 @@ All notable changes to Glaze are documented here. The format follows
     a course outline's right column. **Blackboard link** picks from the course's content items (link and title only).
     Kept per Ultra site and account, with every safeguard Notes has on Canvas.
   - Other files can add a tile the same way on both sites (`features/widgets.js`, `MORE` and `register`).
+- **Blackboard Ultra appearance:** shared course-card editor (solid, gradient, picture, overlay, crop and filters), grid layout and motion-aware effects/pets, bookmarks, and base-navigation backgrounds, labels and sizes. Ultra list rows keep their native layout. No new viewer host access.
+
 - **PDFs and photos in the imports** (class schedule, syllabus, transcript), read on your device: a PDF's own text
   (tables kept as rows, two-column pages in order), and the text of a scanned PDF, a photo or a screenshot (PNG, JPEG,
   WebP, HEIC where your browser opens it; or paste one into the import's text box) recognized by the Tesseract OCR engine,
@@ -287,8 +307,26 @@ All notable changes to Glaze are documented here. The format follows
   never sent anywhere; they keep their place at any zoom and come back as you scroll. Works with a mouse, a pen or
   touch (once an Apple Pencil draws, fingers scroll). Canvas's own annotations are left alone.
 
+- **Grades on Blackboard Ultra.** The Canvas grade features, on Ultra:
+  - **What-if calculator** under a course's overall grade, the same one as on Canvas: change real scores, leave work
+    out, add pretend items, and see what a target takes. It follows the course's own overall-grade recipe where Ultra
+    gives it to students and Glaze reproduces Blackboard's figure with it (weighted categories, equal or proportional,
+    running total or not); otherwise its figures are an estimate from your share of the points in graded work, shown
+    beside Blackboard's own figure and marked Estimate. Kept on this device until the real grade arrives; Blackboard
+    never sees it.
+  - **GPA** on Ultra's Grades page, for this term's courses, with credits, levels, a what-if grade per course, past
+    terms, trends and a goal. Blackboard doesn't show students a course's letter cut-offs on the account checked, so
+    Glaze uses your scale for a course (typed, or from its syllabus) or a common one, and says so.
+  - **Syllabus import** on a course's outline, from a document in the course, a file or pasted text; the scale can go
+    to the GPA and the dates to To Do.
+  - **Insights** from a button on the Courses page or Ctrl+K: on time, each course's grade over the term, workload
+    and plans, from your own Blackboard.
+  - Ctrl+K gains the GPA, Insights and, in a course, Import a syllabus.
+
 ### Changed
 
+- **Blackboard's what-if calculator is the Canvas one now.** Scores you typed in the old one move over the first time
+  you open that course's grades (those graded since are dropped, and the calculator says so).
 - **Blackboard (for what comes next):** Glaze can now read Ultra's courses and terms, what's due (To Do in two-week
   slices and the calendar), where each piece of work stands (on time, late, missing, excused, or unknown, never
   guessed) and the gradebook, in the same shapes its Canvas planning and grade features use. Courses with no overall

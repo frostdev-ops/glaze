@@ -44,7 +44,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Ultra's: what works there.
   const HUB_ULTRA = [
     ['Courses page', ['notes', 'widgets', 'newgrades', 'newcontent', 'coursemenu']],
-    ['Reminders and streak', ['pet']],
+    ['Reminders and streak', ['streak', 'pet']],
     ['Course pages', ['progress', 'place', 'download', 'calc', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'reading', 'clamp']],
     ['Everywhere', ['palette', 'keys', 'drafts']],
   ];

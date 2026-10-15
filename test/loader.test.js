@@ -104,9 +104,9 @@ const CTX = { placeAsked: () => 0, t: (k) => k, locale: () => 'en', capi() {}, c
 // What a feature file touches as it loads: the listeners it adds (features/keys.js, coursemenu.js, previews.js).
 const page = () => ({ document: { addEventListener() {}, documentElement: {} }, addEventListener() {}, GZ_COLOR: {}, IntersectionObserver: class {} });
 // Moved out of the first content script in W0c: the palette, the keys, the course menu, the previews and Download all.
-// W0d: the draft backup, Ultra's what-if calculator, the document buttons and your place in a course.
+// W0d: the draft backup, the document buttons and your place in a course (Ultra's what-if is features/grades.js since B4).
 const W0C = [['features/palette.js', 'GZ_CMD'], ['features/keys.js', 'GZ_KEYS'], ['features/coursemenu.js', 'GZ_COURSE_MENU'], ['features/previews.js', 'GZ_PEEK'], ['features/download.js', 'GZ_DOWNLOAD'],
-  ['features/drafts.js', 'GZ_DRAFT_UI'], ['features/whatif.js', 'GZ_WHATIF'], ['features/docs.js', 'GZ_DOCS'], ['features/place.js', 'GZ_PLACE'],
+  ['features/drafts.js', 'GZ_DRAFT_UI'], ['features/docs.js', 'GZ_DOCS'], ['features/place.js', 'GZ_PLACE'],
   ['lib/gpa.js', 'GZ_GPA'], ['features/gpaterms.js', 'GZ_GPA_TERMS'], ['lib/doctext.js', 'GZ_DOCTEXT']];
 // Syllabus import (W15): its extractors and the page's part (lib/doctext.js is listed above).
 const W15 = [['lib/syllabus.js', 'GZ_SYLLABUS'], ['features/syllabus.js', 'GZ_SYL_UI']];

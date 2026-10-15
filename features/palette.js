@@ -11,7 +11,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const TOOLS = [['/ultra/course', 'Courses'], ['/ultra/calendar', 'Calendar'], ['/ultra/grades', 'Grades'], ['/ultra/messages', 'Messages'],
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
-    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu', search: 'Search in your courses' };
+    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu', search: 'Search in your courses',
+    gpa: 'Grade point average', syllabus: 'Syllabus import', insights: 'Insights' };
   // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
@@ -19,6 +20,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', pet: 'Pet habitat',
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
     notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
+  // Ultra's: its own, and the planning switches, which work on both sites.
+  const ULTRA_EXTRAS = { ...EXTRAS, pet: 'Pet habitat', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -47,7 +50,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
       ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
-      ...Object.entries(ultra ? { ...EXTRAS, pet: 'Pet habitat' } : moodle ? { overall: CANVAS_EXTRAS.overall } : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
+      ...Object.entries(ultra ? ULTRA_EXTRAS : moodle ? { overall: CANVAS_EXTRAS.overall } : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
       ...(globalThis.GZ_LOOKX?.cmds() || []),
       { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
       { label: t('Glaze settings'), hint: t('Opens the editor'), group: 'Glaze', run: () => { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } },
@@ -114,7 +117,27 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
         })),
       ...dueCmds(due),
       ...items,
+      // Planning, as on Canvas: Better To Do's Add task and the reminders hub where they're on, the class schedule, the calendar file.
+      ...(globalThis.GZ_TODO_UI?.cmds() || []),
+      ...(globalThis.GZ_REMIND_UI?.cmds() || []),
+      { label: t('Class schedule'), hint: 'Glaze', group: 'Glaze', run: () => need('features/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}) },
+      { label: t('Export calendar (.ics)'), hint: 'Glaze', group: 'Glaze', run: () => need('features/calexport.js', () => globalThis.GZ_CAL_UI).then(() => GZ_CAL_UI.open(), () => {}) },
+      ...gradeCmds(cid),
       ...apps(cid),
+    ];
+  };
+  // Ultra's GPA (on its Grades page, features/grades.js), Insights and, in a course, syllabus import, where each is on.
+  const gradeCmds = (cid) => {
+    const e = ctx.settings().enhance;
+    const open = (file, name) => () => need(file, () => globalThis[name]).then(() => globalThis[name].open(), () => {});
+    return [
+      ...(e.gpa ? [{ label: t('GPA: past terms, trends and goal'), hint: 'Glaze', group: 'Glaze', run: () => {
+        if (/^\/ultra\/grades\/?$/.test(location.pathname) && globalThis.GZ_GRADES_UI) return GZ_GRADES_UI.open();
+        try { sessionStorage.setItem('gz-gpa-open', '1'); } catch { /* blocked */ }
+        go('/ultra/grades')();
+      } }] : []),
+      ...(e.insights ? [{ label: t('Insights: your term in numbers'), hint: 'Glaze', group: 'Glaze', run: open('features/insights.js', 'GZ_INSIGHTS_UI') }] : []),
+      ...(cid && e.syllabus ? [{ label: t('Import a syllabus'), hint: t('This course'), group: 'Glaze', run: open('features/syllabus.js', 'GZ_SYL_UI') }] : []),
     ];
   };
   let cmd = null; // { box, input, list, all, shown, active, back }
