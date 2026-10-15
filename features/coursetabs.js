@@ -308,17 +308,26 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const split = (path) => { const i = path.indexOf('?'); return i < 0 ? [path, ''] : [path.slice(0, i), path.slice(i + 1)]; };
   let shooting = null, shotAt = -1e9;
   const shoot = (cid = ctx.courseId(), path = safePath()) => {
+    const no = (why) => { html.dataset.gzShotDebug = `${Math.round(performance.now())} ${why}`; return Promise.resolve(null); };
     if (shooting) return shooting;
-    if (!on || signedOut || go || !cid || !path || preview || ctx.holding() || document.visibilityState !== 'visible' || performance.now() - shotAt < 600) return Promise.resolve(null);
-    if (safePath(...split(path)) !== path || !atView(path) || loading(document.body) || document.querySelector('.gz-tip, #gz-ctabs-snap')) return Promise.resolve(null);
+    if (!on || signedOut || go || !cid || !path || preview) return no('state');
+    if (ctx.holding()) return no('holding');
+    if (document.visibilityState !== 'visible') return no('hidden');
+    if (performance.now() - shotAt < 600) return no('rate');
+    if (safePath(...split(path)) !== path) return no('path');
+    if (!atView(path)) return no('view');
+    if (loading(document.body)) return no('loading');
+    if (document.querySelector('#gz-ctabs-snap')) return no('snap');
     const bar = shown(courseBar()) ? courseBar() : null;
-    if (bar ? otherCourse(bar, cid) : !routed()) return Promise.resolve(null);
-    const r = strip?.isConnected && shown(strip) && strip.getBoundingClientRect();
+    if (bar ? otherCourse(bar, cid) : !routed()) return no('bar');
+    const box = strip?.isConnected && shown(strip) && strip.getBoundingClientRect();
     shotAt = performance.now();
-    // A frame first, so a tip just taken down is off the screen too.
-    shooting = new Promise((r) => requestAnimationFrame(() => setTimeout(r))).then(() => send({ op: 'shot', cid, path, strip: r ? [r.top, r.left, r.width].map(Math.round) : null, size: [innerWidth, innerHeight] }))
-      .then((x) => { if (x?.snap?.cid === cid && x.snap.path === path) keep(x.snap); return x?.snap || null; }, () => null)
-      .finally(() => { shooting = null; });
+    // Glaze's tip is not part of the page: hidden for the moment of the picture, a frame before it is taken.
+    const tips = [...document.querySelectorAll('.gz-tip')];
+    for (const t of tips) t.style.visibility = 'hidden';
+    shooting = new Promise((ok) => requestAnimationFrame(() => setTimeout(ok))).then(() => send({ op: 'shot', cid, path, strip: box ? [box.top, box.left, box.width].map(Math.round) : null, size: [innerWidth, innerHeight] }))
+      .then((x) => { html.dataset.gzShotDebug = `${Math.round(performance.now())} ${x?.snap ? 'ok' : 'worker-null'}`; if (x?.snap?.cid === cid && x.snap.path === path) keep(x.snap); return x?.snap || null; }, () => null)
+      .finally(() => { shooting = null; for (const t of tips) t.style.visibility = ''; });
     return shooting;
   };
   const keep = (s) => {
