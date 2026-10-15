@@ -16,6 +16,11 @@ All notable changes to Glaze are documented here. The format follows
 - **Looks history and Previous Look:** the last 20 themes you wore, from the popup, the editor or Ctrl+K,
   with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
   kept on this device.
+- **Scheduled dark mode:** auto light and dark can follow a schedule instead of the system, dark from one time
+  until another (20:00 to 08:00 by default, past midnight too). It switches on time while a page is open, and a
+  page opened after the switch starts in the right palette. Set it in the editor, the popup or Ctrl+K.
+- **Keep quizzes light** (Canvas, off by default): no Glaze on a quiz you're taking or its history, and on
+  external tool pages such as New Quizzes.
 
 ### Changed
 
@@ -34,6 +39,8 @@ All notable changes to Glaze are documented here. The format follows
   background show again.
 - **Canvas, light palettes:** "Complete All Items" and the chosen calendar view use a deeper accent that reads.
 - **Canvas:** quiz preview notices use the palette.
+- **Canvas, dark palettes:** an instructor's text in a dark colour (navy, dark green, deep red) is lifted to a
+  light shade of the same colour.
 
 ## [2.2.0] — 2026-10-15
 
