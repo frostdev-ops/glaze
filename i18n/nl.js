@@ -1203,6 +1203,8 @@
   "Lowest percent": "Laagste percentage",
   "Term": "Periode",
   "This term's GPA": "GPA van deze periode",
+  "You'll reach it as long as you pass {names}.": "Je haalt het zolang je {names} haalt.",
+  "Pass {name} (reach {letter}).": "Haal {name} ({letter} halen).",
   "Glaze skipped these lines: {lines}. Add them by hand if they are courses.": "Glaze heeft deze regels overgeslagen: {lines}. Voeg ze met de hand toe als het vakken zijn.",
   "These courses come to {credits} credits, a total your transcript doesn't show: check for a course Glaze missed.": "Deze vakken komen op {credits} studiepunten, een totaal dat je cijferlijst niet toont: kijk of Glaze een vak heeft gemist.",
   "There's no way there with the work left in your courses.": "Met het werk dat nog over is in je vakken kom je er niet.",

@@ -140,10 +140,12 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       return api.schemes.get(id) || null;
     };
     // A course whose work left can't reach a letter (asked with What it takes) is held below it.
-    const pairs = eligible.map((c) => [c, { credits: c.credits, letter: c.pts == null ? null : c.letter, score: c.rqd ? null : c.score, scale: c.rqd ? null : scaleOf(c), bonus: bonus(c), max: V.caps.get(String(c.c.id)) }])
-      .filter(([, x]) => !G().noGpa(x));
+    const all = eligible.map((c) => [c, { credits: c.credits, letter: c.pts == null ? null : c.letter, score: c.rqd ? null : c.score, scale: c.rqd ? null : scaleOf(c), bonus: bonus(c), max: V.caps.get(String(c.c.id)) }]);
+    const pairs = all.filter(([, x]) => !G().noGpa(x));
     const cur = pairs.map(([c]) => c);
     const courses = pairs.map(([, x]) => x);
+    // The plan assumes those pass (an F there counts until then): each is a condition, shown with the route.
+    const pass = all.filter(([, x]) => G().noGpa(x)).map(([c, x]) => ({ c, best: G().passOf(x), name: c.c.name || c.c.course_code || '' }));
     const L = G().LADDER[!!plus];
     const credits = sum(cur, (r) => r.credits);
     const done = past.t.flatMap((x) => G().rowsOf(x, w)).filter((x) => x.points != null && x.credits > 0);
@@ -153,7 +155,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     const say = make('p', { className: 'gz-calc-out', role: 'status' });
     out.push(say);
     if (!r) { say.textContent = t('Give your courses this term credits to plan for a goal.'); return out; }
-    if (r.met) { say.textContent = t("You'll reach it whatever this term brings."); return out; }
+    if (r.met) { say.textContent = pass.length ? t("You'll reach it as long as you pass {names}.", { names: pass.map((p) => p.name).join(', ') }) : t("You'll reach it whatever this term brings."); return out; }
     if (r.reachable === false) {
       say.textContent = g.k === 'cum' ? t("Out of reach this term: the best grades your courses can still give would bring your cumulative GPA to {gpa}.", { gpa: api.two(r.best) }) : t("Out of reach: the best grades your courses can still give make {gpa} this term.", { gpa: api.two(r.best) });
       return out;
@@ -163,8 +165,10 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     // One way there. "Your grades now get you there" only when every course has a grade now and none needs to rise.
     const plan = G().route(courses, r.need, plus);
     if (!plan) { out.push(note(t("There's no way there with the work left in your courses."))); return out; }
-    const rise = plan.some((p) => p.up > 0);
-    const unknown = plan.some((p) => p.up == null);
+    // Met now only on grades that count now: a course to pass that has an F now still has to rise, and one with no
+    // grade yet leaves it unknown.
+    const rise = plan.some((p) => p.up > 0) || pass.some((p) => p.c.pts != null);
+    const unknown = plan.some((p) => p.up == null) || pass.some((p) => p.c.pts == null);
     out.push(note(!rise && !unknown ? t('Your grades now get you there. To keep them:')
       : !rise ? t("Some courses have no grade yet, so whether your grades now get you there isn't known. One way there:") : t('One way there, from your grades now:')));
     const rowsOut = cur.map((c, i) => {
@@ -190,7 +194,9 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       return make('tr', {}, make('th', { scope: 'row', textContent: name }), make('td', { textContent: c.pts == null ? '–' : c.letter }),
         make('td', { className: p.up > 0 ? 'gz-gpa-up' : '', textContent: p.letter }), make('td', { textContent: p.min == null ? '–' : `${api.pct(p.min)}+` }), cell);
     });
-    out.push(make('div', { className: 'gz-gpa-scroll' }, make('table', {}, make('thead', {}, make('tr', {}, ...['Course', 'Now', 'Aim for', 'Lowest percent', ''].map((h) => make('th', { scope: 'col', textContent: h ? t(h) : '' })))), make('tbody', {}, ...rowsOut))));
+    out.push(make('div', { className: 'gz-gpa-scroll' }, make('table', {}, make('thead', {}, make('tr', {}, ...['Course', 'Now', 'Aim for', 'Lowest percent', ''].map((h) => make('th', { scope: 'col', textContent: h ? t(h) : '' })))), make('tbody', {}, ...rowsOut, ...pass.map((p) => make('tr', {}, make('th', { scope: 'row', textContent: p.name }),
+      make('td', { textContent: p.c.pts == null ? '–' : p.c.letter }), make('td', { className: 'gz-gpa-up', textContent: p.best[0] }),
+      make('td', { textContent: `${api.pct(p.best[1])}+` }), make('td', { textContent: t('Pass {name} (reach {letter}).', { name: p.name, letter: p.best[0] }) })))))));
     return out;
   };
 
