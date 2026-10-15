@@ -171,10 +171,14 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         ok(await page.evaluate(() => location.pathname + location.search) === route, `${label} keeps its exact route/query`);
         ok((await strip())?.at === 'routed', `${label} keeps the strip after settlement`);
       };
+      await page.click('.b8b-folder');
+      await opts.waitForFunction(async () => (await chrome.storage.local.get('coursePlace')).coursePlace?._101_1?.open?.includes('_8130_1'));
       await native('a.b8b-document');
       const doc = '/ultra/courses/_101_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
       phase = 'B8b:NATIVE:history'; await page.goBack(); await settled('_101_1');
       ok(await page.evaluate(() => location.pathname.endsWith('/outline')), 'Back from a routed document restores the native outline');
+      await page.waitForSelector('.b8b-folder[aria-expanded="true"]');
+      ok(true, 'the existing Your place path restores the open folder after the routed document');
       await page.goForward(); await settled('_101_1');
       ok(await page.evaluate(() => location.pathname + location.search) === doc && (await strip())?.at === 'routed', 'Forward restores the routed document with its strip and query');
       for (const at of ['above', 'between', 'below']) {

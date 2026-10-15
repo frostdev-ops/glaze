@@ -186,6 +186,10 @@
     const kinds = ['module', 'document', 'assessment', 'discussion'];
     let html = '';
     for (let n = 1; n <= 40; n++) {
+      if (n === 1) {
+        html += `<div class="root content-list-item" data-content-id="_8130_1"><div class="itemContainer"><div>${icon('module')}<div><h3><button class="b8b-folder" id="folder-title-_8130_1" aria-expanded="false">Practice folder</button></h3><div class="b8b-folder-body" hidden>Invented folder contents.</div></div></div></div></div>`;
+        continue;
+      }
       const open = OPENS[n], kind = open ? open[0] : kinds[n % 4];
       const id = open ? open[1] : `_${2000 + n}_1`;
       const title = open ? TITLES[kind] : `${LABELS[kind]} ${n}`;
@@ -332,6 +336,8 @@
   document.addEventListener('click', (e) => {
     const t = e.target;
     if (e.defaultPrevented || !(t instanceof Element)) return;
+    const folder = t.closest('.b8b-folder');
+    if (folder) { const open = folder.getAttribute('aria-expanded') !== 'true'; folder.setAttribute('aria-expanded', String(open)); $('.b8b-folder-body', folder.closest('.content-list-item')).hidden = !open; return; }
     if (t.closest('.js-start-attempt')) { window.__attempts++; return; }
     const a = t.closest('a[href]');
     if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
