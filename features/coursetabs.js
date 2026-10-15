@@ -139,10 +139,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // From content-ultra.js's mutation callback: only when Ultra replaced the bar or took the strip away with the old one.
   let seenBar = null;
   const held = () => {
-    const anchor = courseBar() || routed();
-    if (!on || !strip || go?.over || (strip.isConnected && anchor === seenBar)) return;
-    seenBar = anchor;
+    if (!on || !strip || go?.over) return;
+    const bar = courseBar();
+    if (strip.isConnected && (shown(bar) ? bar === seenBar : shown(seenBar) && seenBar.contains(strip))) return;
+    seenBar = shown(bar) ? bar : routed();
     place();
+    seenBar ||= strip.parentElement;
   };
   // The first paint's reservation (extras.css, set by content-ultra.js from this tab's sessionStorage before this file is in):
   // the strip's place and size, and whether pages outside a course show it.
@@ -365,7 +367,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!on || signedOut || go || !path || ctx.holding()) return;
     const [p, q] = path.split('?');
     if (safePath(p, q) !== path) return;
-    const bar = shown(courseBar()) && courseBar();
+    const bar = shown(courseBar()) ? courseBar() : null;
     if (bar ? otherCourse(bar, cid) : !routed() || !liveView || safePath(...liveView.path.split('?')) !== path) return;
     const ls = layers();
     if (!ls.length || ls.some(loading)) return;
@@ -568,7 +570,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const g = go;
     if (!g) return;
     const dt = performance.now() - g.at;
-    const bar = shown(courseBar()) && courseBar();
+    const bar = shown(courseBar()) ? courseBar() : null;
     const v = view();
     const there = ctx.courseId() === g.cid && (bar ? shown(bar) && !otherCourse(bar, g.cid) : v && !sameView(v, g.before));
     if (there && dt > 120 && !ctx.holding() && !loading(bar?.closest('.panel-wrap, .bb-offcanvas-panel') || v?.[0] || document.body)) return end();

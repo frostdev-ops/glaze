@@ -85,3 +85,12 @@ test('a full routed switch waits for native content replacement, then settles wi
   check(); assert.equal(ended, 0, 'a URL update with the old native shell cannot release the copy');
   current = [old, next]; check(); assert.equal(ended, 1, 'new settled native content can release it');
 });
+
+test('disabled tabs never scan native routes or place a strip from the mutation hook', () => {
+  let scans = 0, writes = 0;
+  const held = vm.runInNewContext(part('  const held = ', '  // The first paint') + '\nheld;', {
+    on: false, strip: {}, go: null, bars: [], seenBar: null,
+    courseBar: () => { scans++; return null; }, routed: () => { scans++; return null; }, place: () => writes++,
+  });
+  held(); assert.equal(scans, 0); assert.equal(writes, 0);
+});
