@@ -10,7 +10,8 @@ All notable changes to Glaze are documented here. The format follows
 
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
-  notes on a course's home, or a class reminder. It opens and acts only on your own clicks and keys.
+  notes on a course's home (there as soon as Notes is turned on), or a class reminder. It opens and acts only on your own
+  clicks and keys.
   - Folders for a course or free-standing; rich text with headings, bold, italic, underline, strikethrough, lists,
     checklists (Ctrl/⌘+Enter ticks), quotes, code and links (Ctrl/⌘+K); pictures pasted, dropped or added (PNG, JPEG,
     GIF, WebP up to 5 MB) and attachments (up to 20 MB, downloaded, never opened in the page); links to a course's

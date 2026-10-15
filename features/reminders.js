@@ -237,7 +237,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const id = ev.target.closest('[data-id]')?.dataset.id;
     if (act === 'hide') hide();
     else if (act === 'hub') { hide(); openHub(); }
-    else if (act === 'notes' && human(ev)) { const course = ev.target.closest('[data-course]')?.dataset.course; hide(); ctx.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course, create: true }), () => {}); }
+    else if (act === 'notes' && human(ev)) { const course = ev.target.closest('[data-course]')?.dataset.course; hide(); ctx.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ course, create: true, event: ev }), () => {}); }
     else if (act === 'snooze' && id && human(ev)) {
       hide();
       send({ op: 'snooze', id, until: Date.now() + H }).then((r) => {

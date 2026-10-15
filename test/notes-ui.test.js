@@ -113,6 +113,7 @@ class El {
   removeEventListener(type, f) { this.listeners = this.listeners.filter((l) => l.type !== type || l.f !== f); }
   dispatchEvent(ev) { for (const l of this.listeners.filter((x) => x.type === ev.type)) l.f(ev); return true; }
   focus() { this.doc.activeElement = this; }
+  scrollIntoView() {}
   click() { this.doc.fire(this, 'click', { trusted: false }); }
   showModal() { this.open = true; }
   close() { if (!this.open) return; this.open = false; this.dispatchEvent({ type: 'close' }); }
@@ -120,8 +121,10 @@ class El {
 }
 // A Canvas course home with Glaze and Notes on; the worker is lib/notes.js run over memory, its answers and storage's
 // change events arriving later, as in a browser. env.activation: navigator.userActivation.isActive; env.hold(m): a
-// promise the worker waits for before it runs m; env.zipHold: a promise loading lib/zip.js waits for.
-const page = () => {
+// promise the worker waits for before it runs m; env.zipHold: a promise loading lib/zip.js waits for. on: the page's own
+// copy of the Notes switch; stored: the switch in storage.sync (the two differ just after it is turned on elsewhere).
+const D = require('../defaults.js');
+const page = ({ on = true, stored = on } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => new El(t, doc);
   doc.root = make('html');
@@ -161,20 +164,26 @@ const page = () => {
     document: doc, window: {}, location: { origin: 'https://school.instructure.com', pathname: '/courses/7', href: 'https://school.instructure.com/courses/7' },
     navigator: { platform: 'MacIntel', get userActivation() { return { isActive: env.activation }; } },
     getSelection: () => ({ rangeCount: 0, anchorNode: null, isCollapsed: true, removeAllRanges() {}, addRange() {} }),
-    addEventListener() {}, URL: URLs, Blob, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, Promise, JSON, structuredClone,
-    GZ_NOTES: N, GZ_DOCTEXT: require('../lib/doctext.js'), GZ_ZIP: require('../lib/zip.js'), GZ_I18N: require('../lib/i18n.js'), GZ_SANITIZE: require('../defaults.js').GZ_SANITIZE,
+    // The view's minute-long timers (revoking a download's address) mustn't keep the test process waiting.
+    setTimeout: (f, ms) => { const h = setTimeout(f, ms); if (ms >= 1000) h.unref(); return h; },
+    addEventListener() {}, URL: URLs, Blob, Date, clearTimeout, crypto: globalThis.crypto, Promise, JSON, structuredClone,
+    GZ_NOTES: N, GZ_DOCTEXT: require('../lib/doctext.js'), GZ_ZIP: require('../lib/zip.js'), GZ_I18N: require('../lib/i18n.js'), GZ_PAGE: require('../lib/page.js'),
+    GZ_SANITIZE: D.GZ_SANITIZE, GZ_LOOKS: D.GZ_LOOKS, GZ_ALL_PRESETS: D.GZ_ALL_PRESETS, GZ_LOOK_ON: D.GZ_LOOK_ON, GZ_LOOK_APPLY: D.GZ_LOOK_APPLY,
     GZ_CTX: {
-      t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => true, locale: () => 'en', settings: () => ({ enabled: true, enhance: { notes: true } }), wordsIn: new Set(),
+      t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => true, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
       profile: async () => ({ id: 5 }), canvasCourses: async () => [{ id: 7, name: 'Biology' }, { id: 9, name: 'History' }],
       need: (file) => (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
+      // What the command palette (features/palette.js) asks of the page.
+      site: 'canvas', capi: async () => [], canvasCourseId: () => '7', dueWeek: async () => [], nickOf: () => '', courseList: () => ({}),
     },
     chrome: {
       runtime: { sendMessage: (m, cb) => { sent.push(m); Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => cb(JSON.parse(JSON.stringify(r)))); } },
-      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, onChanged: { addListener: (f) => changed.push(f) } },
+      storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => cb({ enhance: { notes: stored } }) }, onChanged: { addListener: (f) => changed.push(f) } },
     },
   });
   context.window.top = context.window;
   env.ui = vm.runInContext(SOURCE, context);
+  env.run = (src) => vm.runInContext(src, context);
   env.ops = () => sent.map((m) => m.op);
   env.box = () => doc.getElementById('gz-nt');
   env.button = (text) => env.box().querySelectorAll('button').find((b) => b.textContent === text);
@@ -228,6 +237,131 @@ test("the page's scripts can't open Notes or pick a note: a faked click, change 
   P.fire(P.items()[0], 'click');
   await settle();
   assert.ok(P.ops().includes('load'), 'a real click on a note opens it');
+});
+
+test("a control a page script moves out of the view and fakes an event on does nothing (Codex W19a fix verification)", async () => {
+  const P = page();
+  // The list shows each listed note's first line; the rest of a note's text only comes with opening it.
+  await P.seed([{ id: id(1), title: 'Opened', course: '7', html: '<p>seen</p>' }, { id: id(2), title: 'Never opened', course: '7', html: `<p>${'first line '.repeat(15)}</p><p>Deep private text</p>` },
+    { id: id(3), title: 'Other course', course: '9', html: '<p>Other course secret</p>' }]);
+  await P.openView();
+  // Out of the dialog, past its capture filter: the course filter, a note's button, the trash and New note.
+  const course = P.box().querySelector('.gz-nt-filters select');
+  P.doc.body.append(course);
+  course.value = '';
+  P.fire(course, 'change', { trusted: false });
+  const unopened = P.items().find((b) => b.textContent.startsWith('Never opened'));
+  P.doc.body.append(unopened);
+  P.fire(unopened, 'click', { trusted: false });
+  const trash = P.box().querySelector('.gz-nt-lib button[aria-pressed]');
+  P.doc.body.append(trash);
+  P.fire(trash, 'click', { trusted: false });
+  await settle();
+  assert.ok(!P.ops().includes('load'), 'no note was read');
+  assert.ok(!P.doc.root.innerHTML.includes('Deep private text'));
+  assert.ok(!P.doc.root.innerHTML.includes('Other course secret'), "no other course's notes listed");
+});
+
+test("the palette's Notes rows open Notes only for a real click or Enter, carried through loading the notes code", async () => {
+  const P = page();
+  await P.seed([{ id: id(2), title: 'Never opened', course: '7', html: '<p>Previously closed private text</p>' }]);
+  const cmd = P.run(read('features/palette.js'));
+  const row = async () => {
+    cmd.open();
+    await settle();
+    const input = P.doc.getElementById('gz-cmd').querySelector('input');
+    input.value = 'Notes';
+    P.fire(input, 'input', { trusted: false });
+    await settle();
+    const li = P.doc.getElementById('gz-cmd').querySelectorAll('li').find((x) => x.children[0]?.textContent === 'Notes');
+    assert.ok(li, 'the palette lists Notes');
+    return { input, li };
+  };
+  // Recent activation (the student opened the palette) is not the choice of Notes: faked click, faked Enter.
+  let { li } = await row();
+  P.fire(li, 'click', { trusted: false });
+  await settle();
+  assert.equal(P.box(), null, 'a faked click on the Notes row opens nothing');
+  const { input } = await row();
+  for (let i = 0; i < 20 && P.doc.getElementById('gz-cmd').querySelector('[aria-selected="true"]')?.children[0]?.textContent !== 'Notes'; i++) P.fire(input, 'keydown', { trusted: false, key: 'ArrowDown' });
+  P.fire(input, 'keydown', { trusted: false, key: 'Enter' });
+  await settle();
+  assert.equal(P.box(), null, 'a faked Enter on it opens nothing');
+  assert.ok(!P.ops().includes('load'));
+  ({ li } = await row());
+  P.fire(li, 'click');
+  await settle();
+  assert.ok(P.box()?.open, "the student's own click opens it");
+});
+
+test('restoring a deleted note from a backup keeps the files staged for it, whatever another tab cleans up meanwhile', async () => {
+  const store = {}, db = { bodies: new Map(), files: new Map(), blobs: new Map() };
+  const local = { get: async (k) => (k in store ? { [k]: structuredClone(store[k]) } : {}), set: async (o) => { Object.assign(store, structuredClone(o)); return true; } };
+  const idb = { get: async (s, k) => db[s].get(k), put: async (s, k, v) => { db[s].set(k, v); }, del: async (s, ks) => { for (const k of ks) db[s].delete(k); },
+    scan: async (s, p) => [...db[s]].filter(([k]) => k.startsWith(p)), keys: async (s, p) => [...db[s].keys()].filter((k) => k.startsWith(p)), estimate: async () => null };
+  const run = (m, at) => N.run({ key: 'notesIdx:https://school.instructure.com/5', ...m }, { local }, idb, at);
+  const png = N.b64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]));
+  const t = Date.UTC(2026, 9, 1), A = id(1), F = id(20);
+  await run({ op: 'file', id: F, kind: 'image', name: 'a.png', data: png, note: A }, t);
+  await run({ op: 'save', id: A, base: 0, sid: 'a', html: `<p><img data-gz-file="${F}"></p>`, title: 'A', copy: id(90) }, t + 1);
+  await run({ op: 'trash', ids: [A] }, t + 2);
+  await run({ op: 'purge', ids: [A] }, t + 3);
+  assert.equal((await run({ op: 'getFile', id: F }, t + 4)).ok, false, 'deleted with its note');
+  // The backup: its picture staged, another tab's clean-up, then the note.
+  assert.equal((await run({ op: 'file', id: F, kind: 'image', name: 'a.png', data: png, note: A }, t + 10)).ok, true);
+  assert.equal((await run({ op: 'tidy' }, t + 11)).freed, 0);
+  assert.deepEqual(await run({ op: 'import', notes: [{ id: A, title: 'A', created: t, at: t + 1, html: `<p><img data-gz-file="${F}"></p>` }] }, t + 12), { ok: true, done: 1, skipped: 0 });
+  assert.equal((await run({ op: 'getFile', id: F }, t + 13)).ok, true);
+});
+
+test('turning Notes on puts the Course notes hook into course homes already open, and into a newly found Canvas site', async () => {
+  const changed = [], listeners = [], injected = [];
+  let registered = [];
+  const store = { local: { canvas: ['https://canvas.school.edu/*'] }, sync: { enhance: { notes: false } } };
+  const area = (s) => ({ get: async (k) => Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, structuredClone(s[x])])), set: async (v) => { Object.assign(s, structuredClone(v)); } });
+  const tabs = [{ id: 4, url: 'https://school.instructure.com/courses/7' }, { id: 5, url: 'https://canvadocs.instructure.com/courses/1/x' }];
+  const context = vm.createContext({
+    URL, console, TextEncoder, TextDecoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto, atob, btoa, navigator: {},
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    chrome: {
+      runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
+        onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener: (f) => changed.push(f) } },
+      tabs: { query: async ({ url }) => tabs.filter((t) => url.some((p) => new RegExp(`^${p.replace(/[.?]/g, '\\$&').replace(/\*/g, '.*')}$`).test(t.url))) },
+      scripting: {
+        getRegisteredContentScripts: async () => registered,
+        registerContentScripts: async (l) => { registered.push(...l); },
+        unregisterContentScripts: async ({ ids }) => { registered = registered.filter((s) => !ids.includes(s.id)); },
+        executeScript: async (o) => { injected.push([o.target.tabId, [...o.target.frameIds], [...o.files].join()]); return [{ result: true }]; },
+      },
+    },
+  });
+  vm.runInContext(read('lib/background.js'), context);
+  const toggle = async (enhance) => { store.sync.enhance = enhance; for (const f of changed) f({ enhance: {} }, 'sync'); await wait(10); };
+  await toggle({ notes: true });
+  assert.deepEqual(injected, [[4, [0], 'features/notes-home.js']], 'the open course home, top frame; never the document viewer');
+  await toggle({ notes: true, todo: true });
+  assert.equal(injected.length, 1, 'only when it is turned on');
+  await toggle({ notes: false });
+  await toggle({ notes: true });
+  assert.equal(injected.length, 2, 'on again: again');
+  // A Canvas site found on a page (lib/detect.js): Glaze first, then the hook, and the site's pages registered for it.
+  injected.length = 0;
+  for (const f of listeners) f('canvas', { tab: { id: 8 }, frameId: 0, url: 'https://canvas.new.edu/courses/3' }, () => {});
+  await wait(20);
+  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, require('../manifest.json').content_scripts[0].js.join()], [8, 'features/notes-home.js']]);
+  assert.ok(registered.find((s) => s.id === 'gz-notes-home').matches.includes('https://canvas.new.edu/courses/*'));
+});
+
+test("the hook in a page whose own settings haven't caught up reads the switch from storage", async () => {
+  const P = page({ on: false, stored: true });
+  P.run(read('features/notes-home.js'));
+  await settle();
+  assert.ok(P.doc.getElementById('gz-nt-course'), 'Course notes is there at once');
+  const Q = page({ on: true, stored: false });
+  Q.run(read('features/notes-home.js'));
+  await settle();
+  assert.equal(Q.doc.getElementById('gz-nt-course'), null, 'and not when storage says it is off');
 });
 
 test('Export all stores the open note first and exports the index as stored then; a file that can\'t be read fails it', async () => {
@@ -347,7 +481,7 @@ test('the Course notes button costs the first script nothing: the worker registe
   // The script loads the notes code on a course's home only.
   for (const [pathname, want] of [['/courses/7', true], ['/courses/7/', true], ['/courses/7/modules', false], ['/', false]]) {
     const asked = [];
-    const ctx = vm.createContext({ window: {}, location: { pathname }, GZ_CTX: { need: (f) => { asked.push(f); return Promise.resolve(); } }, GZ_NOTES_UI: { sync() {} } });
+    const ctx = vm.createContext({ window: {}, location: { pathname }, GZ_CTX: { need: (f) => { asked.push(f); return Promise.resolve(); } }, GZ_NOTES_UI: { home() {} } });
     ctx.window.top = ctx.window;
     vm.runInContext(read('features/notes-home.js'), ctx);
     assert.deepEqual(asked, want ? ['features/notes.js'] : [], pathname);

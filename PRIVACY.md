@@ -109,9 +109,10 @@ _Last updated: 2026-10-15_
   when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'
   names, courses and order. Each note's text and the pictures and attachments you add are in the extension's own
   IndexedDB, which only Glaze's background worker opens. Neither is in the school page's own storage (its
-  `localStorage` or IndexedDB), so your school's Canvas pages can't read them. Notes opens, and its buttons act, only on
-  your own clicks and keys: ones the page's scripts fake are ignored. While the Notes view is open, what it shows (the
-  list and the note on screen) is part of the page, like anything shown there, and the page's scripts can read it. Pictures are kept as PNG, JPEG, GIF or WebP, up to 5 MB each;
+  `localStorage` or IndexedDB), so your school's Canvas pages can't read them. Notes opens, and its buttons, lists and
+  menus act, only on your own clicks and key presses; clicks and keys the page's scripts fake are ignored, even on a
+  control they move out of the view. While the Notes view is open, what it shows (the list and the note on screen) is
+  part of the page, like anything shown there: the page's scripts can read it, and could type into it while you use it. Pictures are kept as PNG, JPEG, GIF or WebP, up to 5 MB each;
   attachments up to 20 MB each, kept as bytes and only ever offered as a download; 200 MB in all on this device. Links to
   Canvas files, pages and module items are kept as their address and title only; the file itself is never copied. A note
   or folder in the trash is deleted for good after 30 days, or when you empty the trash; its id and the time are kept

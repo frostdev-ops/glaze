@@ -1,10 +1,11 @@
 // Notes (Canvas, enhance.notes, off by default; the same switch as the Dashboard notes tile), loaded on demand: a notes
 // app over the page, like Insights. Opened from the command palette (Notes, New note, Course notes), the Dashboard notes
 // tile, a course card's create menu, a Course notes button on a course's home (features/notes-home.js, which the worker
-// registers only while Notes is on, calls sync) and a class reminder. It opens, and its controls act, only on the
-// student's own clicks and keys: a click or key the page's scripts fake is ignored (isTrusted), and opening, typing and
-// submitting also need the user activation a real click or key gives. While it is open, what it shows is part of the
-// page, as anything on screen is. Folders (per course or free-standing),
+// registers only while Notes is on, calls home) and a class reminder. It opens only for the student's own click or key
+// (the event that chose Notes is handed to open, through any loading on the way), and each of its controls acts only on
+// one: every listener checks its own event (isTrusted), so a control a page script moves out of the view and clicks does
+// nothing; typing and submitting also need the user activation a real click or key gives. While it is open, what it
+// shows is part of the page, as anything on screen is. Folders (per course or free-standing),
 // rich text, pictures and attachments, links to the course's Canvas files, pages and module items, search, sort and
 // filter, a trash kept 30 days, and export (one note as Markdown or HTML; everything as a zip) and import of that zip.
 // What it keeps is written by the service worker's queue ('glaze:notesapp', lib/notes.js run): the library's index in
@@ -19,6 +20,10 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const attr = (e, o) => { for (const [k, v] of Object.entries(o)) e.setAttribute(k, v); return e; };
   const alive = (s = ctx.settings()) => ctx.on() && s.enabled !== false && !!s.enhance.notes;
   const activated = () => navigator.userActivation?.isActive ?? true;
+  // The student's own action: an event the browser made from a real click or key (a page script's are isTrusted false).
+  // Typing and submitting also need the activation a real click or key gives (a script can make the browser type).
+  const real = (e) => !!e?.isTrusted;
+  const typed = (e) => real(e) && activated();
   const libs = () => ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT).then(() => ctx.need('lib/notes.js', () => globalThis.GZ_NOTES));
   const zipLib = () => ctx.need('lib/zip.js', () => globalThis.GZ_ZIP);
   const uuid = () => crypto.randomUUID();
@@ -54,7 +59,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     let b = document.getElementById('gz-nt-course');
     if (!side) b?.remove();
     else {
-      if (!b) { b = make('button', { type: 'button', id: 'gz-nt-course', className: 'btn button-sidebar-wide' }); b.addEventListener('click', (e) => { if (e.isTrusted) open({ course: canvasId() }); }); }
+      if (!b) { b = make('button', { type: 'button', id: 'gz-nt-course', className: 'btn button-sidebar-wide' }); b.addEventListener('click', (e) => open({ course: canvasId(), event: e })); }
       if (b.lastChild?.textContent !== t('Course notes')) b.replaceChildren(attr(make('i', { className: 'icon-document' }), { 'aria-hidden': 'true' }), ' ', t('Course notes'));
       const last = [...side.querySelectorAll('a.button-sidebar-wide')].pop();
       if (last ? b.previousElementSibling !== last : b.parentNode !== side) { if (last) last.after(b); else side.prepend(b); }
@@ -62,6 +67,10 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     if (!on) box?.close();
   };
   ctx.wordsIn?.add(() => sync());
+  // The course-home hook (features/notes-home.js), which the worker also puts into a course home already open when Notes
+  // is turned on: the switch is read from storage now, as the page's own copy of the settings may not have caught up.
+  const home = () => new Promise((res) => { try { chrome.storage.sync.get(['enabled', 'enhance'], (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } })
+    .then((r) => r && sync(alive(GZ_SANITIZE(r))));
   // Switched off (or on) in another tab or the editor: read from the change itself, as the page's own copy of the
   // settings may not have caught up yet.
   try {
@@ -83,8 +92,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const stop = (my) => my !== gen || !box || !alive();
   const say = (s) => { if (el.say) el.say.textContent = s || ''; };
 
-  const open = async ({ course = '', create = false } = {}) => {
-    if (!activated()) return;
+  // event: the click or key that chose Notes (the course button, the palette, a tile, a card's menu, a reminder).
+  const open = async ({ course = '', create = false, event } = {}) => {
+    if (!real(event) || !activated()) return;
     if (box) { if (create) newNote(course); else if (course) { view.course = course; view.trash = false; drawLib(); } return el.title?.focus(); }
     if (!alive()) return;
     const my = ++gen;
@@ -114,11 +124,11 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const close = () => box?.close();
   // Glaze's own click on its hidden file fields (to open the browser's file picker), let through the filter below.
   let ours = null;
-  const own = (input) => { ours = input; try { input.click(); } finally { ours = null; } };
-  const button = (text, run, props = {}) => { const b = make('button', { type: 'button', textContent: text, ...props }); b.addEventListener('click', run); return b; };
+  const pickFile = (input) => { ours = input; try { input.click(); } finally { ours = null; } };
+  const button = (text, run, props = {}) => { const b = make('button', { type: 'button', textContent: text, ...props }); b.addEventListener('click', (e) => { if (real(e)) run(e); }); return b; };
   const select = (label, opts, value, onChange, cls = '') => {
     const s = make('select', {}, ...opts.map(([v, text]) => make('option', { value: v, textContent: text, selected: v === value })));
-    s.addEventListener('change', () => onChange(s.value));
+    s.addEventListener('change', (e) => { if (real(e)) onChange(s.value); });
     return make('label', { className: `gz-nt-field ${cls}`.trim() }, make('span', { textContent: label }), s);
   };
 
@@ -128,7 +138,8 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     el.search = make('input', { type: 'search', placeholder: t('Search notes'), autocomplete: 'off', spellcheck: false });
     el.search.setAttribute('aria-label', t('Search notes'));
     let searchWait = 0;
-    el.search.addEventListener('input', () => {
+    el.search.addEventListener('input', (e) => {
+      if (!typed(e)) return;
       view.q = el.search.value;
       view.found = null;
       drawList();
@@ -146,9 +157,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     el.ed = make('section', { className: 'gz-nt-ed' });
     el.ed.setAttribute('aria-label', t('Note'));
     el.file = make('input', { type: 'file', multiple: true, hidden: true });
-    el.file.addEventListener('change', () => { const f = [...el.file.files]; el.file.value = ''; addFiles(f); });
+    el.file.addEventListener('change', (e) => { if (!real(e)) return; const f = [...el.file.files]; el.file.value = ''; addFiles(f); });
     el.zip = make('input', { type: 'file', accept: '.zip,application/zip', hidden: true });
-    el.zip.addEventListener('change', () => { const f = el.zip.files[0]; el.zip.value = ''; if (f) importZip(f); });
+    el.zip.addEventListener('change', (e) => { if (!real(e)) return; const f = el.zip.files[0]; el.zip.value = ''; if (f) importZip(f); });
     const lib = make('nav', { className: 'gz-nt-lib' }, el.search, el.filters, el.count, el.list, el.folders, make('div', { className: 'gz-nt-row' }, el.trash), el.usage);
     lib.setAttribute('aria-label', t('Library'));
     box = make('dialog', { id: 'gz-nt' },
@@ -158,7 +169,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
           button(t('New note'), () => newNote(view.course !== '-' ? view.course : '')),
           button(t('New folder'), newFolder),
           button(t('Export all'), exportAll),
-          button(t('Import'), () => own(el.zip)),
+          button(t('Import'), () => pickFile(el.zip)),
           button(t('Close'), close))),
       el.say, el.ask, make('div', { className: 'gz-nt-main' }, lib, el.ed), el.file, el.zip);
     attr(box, { role: 'dialog', 'aria-labelledby': 'gz-nt-title' });
@@ -166,9 +177,10 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     // Keys typed here are the view's: Canvas's own page shortcuts (n, e, d, r… on the document) would swallow letters
     // typed in a note. Glaze's own (Ctrl/⌘+K, g then a letter) listen before this and stand down in a dialog.
     for (const ev of ['keydown', 'keypress', 'keyup']) box.addEventListener(ev, (e) => e.stopPropagation());
-    // A click, key, change, paste or drop the page's scripts fake is stopped here, before anything of Glaze's acts on it;
-    // so are typing and a submit the browser makes for a script (execCommand, requestSubmit) without the student's own
-    // recent click or key. Glaze's own edits mark the note changed themselves (exec).
+    // A second line of defence (each listener also checks its own event): a click, key, change, paste or drop the page's
+    // scripts fake is stopped here, before anything of Glaze's acts on it; so are typing and a submit the browser makes
+    // for a script (execCommand, requestSubmit) without the student's own recent click or key. Glaze's own edits mark
+    // the note changed themselves (exec).
     for (const ev of ['click', 'keydown', 'keypress', 'change', 'paste', 'drop', 'dragstart', 'input', 'beforeinput', 'submit']) {
       box.addEventListener(ev, (e) => {
         if (e.target === ours || (e.isTrusted && (!['input', 'beforeinput', 'submit'].includes(e.type) || activated()))) return;
@@ -205,7 +217,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     } else {
       const input = make('input', { type, value, required: true, autocomplete: 'off' });
       form.append(make('label', { className: 'gz-nt-field' }, make('span', { textContent: label }), input), make('div', { className: 'gz-nt-row' }, make('button', { type: 'submit', textContent: t('OK') }), button(t('Cancel'), cancel)));
-      form.addEventListener('submit', (e) => { e.preventDefault(); done(input.value.trim() || null); });
+      form.addEventListener('submit', (e) => { e.preventDefault(); if (typed(e)) done(input.value.trim() || null); });
     }
     el.ask.replaceChildren(form);
     el.ask.hidden = false;
@@ -247,7 +259,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
         n.ex && make('span', { textContent: n.ex }));
       b.dataset.id = id;
       if (cur?.id === id) b.setAttribute('aria-current', 'true');
-      b.addEventListener('click', () => openNote(id));
+      b.addEventListener('click', (e) => { if (real(e)) openNote(id); });
       return make('li', {}, b);
     }));
     if (!rows.length) el.list.append(make('li', { className: 'gz-nt-none', textContent: t(view.trash ? 'The trash is empty.' : view.q ? 'No notes match.' : 'No notes here yet.') }));
@@ -372,13 +384,14 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const drawEditor = (n, ro) => {
     const title = make('input', { className: 'gz-nt-title', value: n.title || '', placeholder: t('Untitled'), readOnly: ro, maxLength: N.LIMIT.title });
     title.setAttribute('aria-label', t('Title'));
-    title.addEventListener('input', titleChanged);
-    title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); el.body.focus(); } });
+    title.addEventListener('input', (e) => { if (typed(e)) titleChanged(); });
+    title.addEventListener('keydown', (e) => { if (real(e) && e.key === 'Enter') { e.preventDefault(); el.body.focus(); } });
     const body = make('div', { className: 'gz-nt-body' });
     attr(body, { role: 'textbox', 'aria-multiline': 'true', 'aria-label': t('Note text'), spellcheck: 'true', contenteditable: 'false' });
     body.style.setProperty('--gz-nt-done', JSON.stringify(t('Done')));
     body.style.setProperty('--gz-nt-todo', JSON.stringify(t('Not done')));
     body.addEventListener('input', (e) => {
+      if (!typed(e)) return;
       // A new checklist item starts unticked (the browser copies the ticked one Enter was pressed in).
       if (e.inputType === 'insertParagraph') { const li = closest('ul[data-check] > li'); if (inBody(li) && !li.textContent.trim()) li.removeAttribute('data-done'); }
       changed();
@@ -395,7 +408,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       b.addEventListener('mousedown', (e) => e.preventDefault()); // the selection stays in the note
       return b;
     }), button(t('Link'), () => link(), { title: `${t('Link')} (${/Mac/.test(navigator.platform) ? '⌘' : 'Ctrl'}+K)` }),
-    button(t('Canvas link'), () => canvasPicker()), button(t('Picture or file'), () => { keepRange(); own(el.file); }));
+    button(t('Canvas link'), () => canvasPicker()), button(t('Picture or file'), () => { keepRange(); pickFile(el.file); }));
     attr(bar, { role: 'toolbar', 'aria-label': t('Formatting') });
     for (const b of bar.querySelectorAll('button')) b.addEventListener('mousedown', (e) => e.preventDefault());
     el.linkbar = make('div', { className: 'gz-nt-linkbar', hidden: true });
@@ -638,6 +651,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     download(new Blob([N.unb64(f.data)], { type: 'application/octet-stream' }), f.name || name);
   };
   const onClick = (e) => {
+    if (!real(e)) return;
     const li = e.target.closest('ul[data-check] > li');
     if (li && inBody(li) && !cur.ro) {
       const r = li.getBoundingClientRect(), rtl = (li.closest('[dir]')?.getAttribute('dir') || '') === 'rtl';
@@ -649,6 +663,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   // Keys: Ctrl/⌘+K a link, Ctrl/⌘+Enter ticks a checklist item. Bold, italic, underline and undo are the browser's own.
   // None of them reaches Canvas, the command palette or Glaze's g-shortcuts (they don't act inside a dialog or while typing).
   const onKey = (e) => {
+    if (!real(e)) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); link(); } else if (mod && e.key === 'Enter') {
       const li = closest('ul[data-check] > li');
@@ -658,7 +673,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
 
   // ---- paste, drop, pictures and attachments ---------------------------------------------------------------------------
   const onPaste = (e) => {
-    if (!cur || cur.ro) return;
+    if (!real(e) || !cur || cur.ro) return;
     const files = [...(e.clipboardData?.files || [])];
     if (files.length) { e.preventDefault(); keepRange(); addFiles(files); return; }
     const html = e.clipboardData?.getData('text/html');
@@ -666,7 +681,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   };
   let dragging = false; // a drag that started in the note: the browser moves it
   const onDrop = (e) => {
-    if (!cur || cur.ro || dragging) return;
+    if (!real(e) || !cur || cur.ro || dragging) return;
     const files = [...(e.dataTransfer?.files || [])];
     const html = !files.length && e.dataTransfer?.getData('text/html');
     if (!files.length && !html) return;
@@ -775,8 +790,8 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
         if (!ctl.signal.aborted && course.value === cid && kind.value === k) status.textContent = t("Couldn't read that from Canvas.");
       }
     };
-    course.addEventListener('change', load);
-    kind.addEventListener('change', load);
+    course.addEventListener('change', (e) => { if (real(e)) load(); });
+    kind.addEventListener('change', (e) => { if (real(e)) load(); });
     filter.addEventListener('input', show);
     el.ed.querySelector('.gz-nt-tools-bar')?.after(panel);
     filter.focus();
@@ -884,7 +899,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     usage();
   };
 
-  return { sync, open, isOpen: () => !!box };
+  return { sync, home, open, isOpen: () => !!box };
 })();
 
 GZ_NOTES_UI;
