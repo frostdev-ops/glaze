@@ -282,12 +282,13 @@ you import) are bundled. It makes requests in these cases:
   session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
 - **Course tabs.** To keep each account's tabs apart, Glaze asks your own Blackboard site who is signed in (Ultra's
   `/learn/api/v1/users/me`, which Ultra itself asks on every page), once a page, shared with the grade and course-list
-  reads above. What a tab shows the instant you click it is a picture of that course's page as you left it: Glaze's
-  worker takes it of the Blackboard tab on screen (checking before and after that it still is), keeps it in memory
-  (storage.session, never on disk), and shows it over the page until Blackboard's live page has finished drawing under
-  it. Showing it makes no requests. Blackboard routes the selected course normally; if it fails to switch in place
-  within 2.5 seconds, Glaze loads that selected course's own-site address. Glaze never prefetches a course or opens one
-  in the background.
+  reads above. A tab you pick from the strip opens that course's own-site address in a frame over the page, only
+  when you pick it, and keeps it running while you're on another tab (four at most), as a browser keeps its tabs; it
+  stops when you close the tab, sign out, or turn the tabs or Glaze off. While a tab's page first loads, a blurred
+  picture of how it last looked covers it: Glaze's worker takes pictures of the Blackboard tab on screen (checking
+  before and after that it still is), keeps them in memory (storage.session, never on disk) and they go when the
+  browser closes, on sign-out, or when the tabs or Glaze are turned off. Showing one makes no requests. Glaze never
+  prefetches a course.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette
