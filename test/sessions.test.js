@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const vm = require('node:vm');
 const G = require('../lib/sharing.js');
 const S = require('../lib/sessions.js');
@@ -26,8 +27,7 @@ const notesDB = () => {
     keys: async (s, p) => [...stores[s].keys()].filter((k) => k.startsWith(p)), estimate: async () => ({ quota: 1e9, usage: 0 }) };
 };
 const start = async (t) => {
-  fs.mkdirSync(path.join(__dirname, '../scratch/s6b'), { recursive: true });
-  const dir = fs.mkdtempSync(path.join(__dirname, '../scratch/s6b/relay-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-s6b-relay-'));
   let r;
   t.after(async () => { if (r) await r.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const store = diskStore(path.join(dir, 'blobs'));
