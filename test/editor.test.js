@@ -1,0 +1,118 @@
+// Phase-2 acceptance test SOURCE ONLY. Run explicitly with node --test after the options handoff.
+// Kept outside automatic test discovery until phase 2 supplies the tab/section DOM contract below.
+const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
+const root = path.resolve(__dirname, '../..'), D = require(path.join(root, 'defaults.js'));
+for (const file of ['todo', 'widgets', 'remind', 'nav']) require(path.join(root, `lib/${file}.js`));
+const cards = require(path.join(root, 'lib/cards.js'));
+const TABS = ['look', 'blackboard', 'canvas', 'moodle', 'study', 'sharing', 'backup', 'about'];
+const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses' };
+const ENHANCE = {
+  'study/tools': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'keys', 'newcontent', 'palette', 'drafts', 'download', 'search', 'place', 'coursemenu', 'docPages', 'toggles'],
+  'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
+  'study/todo': ['todo', 'cardTasks', 'gradescope'],
+  'study/widgets': ['notes', 'widgets'],
+  'study/pet': ['pet'],
+  'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
+  'study/imports': ['syllabus', 'insights'],
+  'blackboard/dashboard': ['dashboard'], 'blackboard/folders': ['hideFolders'],
+  'canvas/documents': ['docTheme', 'docInk'], 'canvas/quizzes': ['quizLight'],
+};
+const OVERRIDE = {
+  enabled: 'header', footer: 'blackboard/declutter', preset: 'look/palette', presets: 'look/palette',
+  'widgets.land': 'blackboard/dashboard',
+  ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
+  ...Object.fromEntries(['width', 'icon', 'text', 'height', 'gap', 'padding', 'detailed', 'brand', 'li'].map((key) => [`nav.${key}`, 'blackboard/nav'])),
+  ...Object.fromEntries(['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((key) => [`todo.${key}`, 'study/schedule'])),
+};
+// These are real existing picker/group carriers, not invented inputs for internal bookkeeping or storage IDs.
+const SPECIAL = {
+  enabled: ['enabled'], preset: ['presets'], presets: ['mine'],
+  'look.font': ['font-grid'], 'look.head': ['font-grid'], 'look.mono': ['font-grid'],
+  'bg.image': ['bg-image'], 'bg.colors': ['bg-colors'],
+  'nav.u': ['nav-url'], 'nav.i': ['nav-file'], 'nav.li': ['nav-logo-file'], 'nav.detailed': ['ultra-nav-editor'],
+  'declutter.tabs': ['declutter-tabs'],
+  ...Object.fromEntries(D.GZ_COLORS.map(([key]) => [`colors.${key}`, ['colors']])),
+  ...Object.fromEntries(['colors', 'tinted', 'looks', 'names'].map((key) => [`courses.${key}`, ['course-list', 'org-list']])),
+};
+const ACTIONS = {
+  'look/palette': ['looks', 'save-preset', 'reset-colors', 'share-copy', 'share-code', 'share-try', 'share-offer', 'share-apply', 'share-fav', 'share-cancel', 'gallery-link', 'favorites', 'history', 'history-back', 'history-clear'],
+  'look/type': ['font-custom', 'font-use'], 'look/background': ['bg-sets'],
+  'look/extras': ['rotate-looks', 'cursor-pick', 'cursor-file'],
+  'look/navigation': ['nav-pick', 'nav-file', 'nav-url'],
+  'look/cards': ['card-set', 'card-set-clear'], 'look/courses': ['course-list', 'org-list'],
+  'blackboard/nav': ['nav-items', 'nav-widgets', 'nav-logo-pick', 'nav-logo-file', 'nav-link-name', 'nav-link-url', 'nav-link-icon', 'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset'],
+  'sharing/sessions': ['share-sessions'],
+  'sharing/calendar': ['gcal', 'gcal-connect', 'gcal-code', 'gcal-link', 'gcal-reconnect', 'gcal-share', 'gcal-disconnect', 'gcal-pair', 'gcal-id', 'gcal-copy'],
+  'backup/privacy': ['export', 'import-btn', 'import', 'reset-all'], 'about/glaze': ['report-link', 'news', 'news-close'],
+};
+
+// A static markup reader for this checked-in page, not a browser/HTML implementation. Scripts/styles/comments are
+// excluded; dynamic pickers are checked as explicit carriers above and by the eventual real-page DOM gate.
+const parse = (html) => {
+  const nodes = [], stack = [], voids = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+  html = html.replace(/<!--[\s\S]*?-->|<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
+  for (const m of html.matchAll(/<(\/?)([a-z][\w:-]*)\b([^>]*?)>/gi)) {
+    const tag = m[2].toLowerCase();
+    if (m[1]) { const at = stack.findLastIndex((n) => n.tag === tag); if (at !== -1) stack.length = at; continue; }
+    const attrs = Object.fromEntries([...m[3].matchAll(/([\w:-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)].map((x) => [x[1], x[2] ?? x[3] ?? x[4] ?? '']));
+    const node = { n: nodes.length, tag, attrs, parents: [...stack] }; nodes.push(node);
+    if (!voids.has(tag) && !/\/\s*$/.test(m[3])) stack.push(node);
+  }
+  return nodes;
+};
+const nodes = parse(fs.readFileSync(path.join(root, 'options.html'), 'utf8'));
+const byId = (id) => nodes.filter((n) => n.attrs.id === id);
+const owner = (node) => [node, ...node.parents.toReversed()].find((n) => n.attrs['data-editor-section'])?.attrs['data-editor-section'] || (node.parents.some((n) => n.tag === 'header') ? 'header' : undefined);
+const preview = (node) => [node, ...node.parents].some((n) => n.attrs.id === 'preview' || (n.attrs.class || '').split(/\s+/).includes('preview'));
+const schema = { ...D.GZ_SPEC, card: cards.SPEC };
+const expected = [
+  ...Object.entries(schema).flatMap(([group, keys]) => Object.keys(keys).map((key) => `${group}.${key}`)),
+  ...Object.keys(D.GZ_DEFAULTS.courses).map((key) => `courses.${key}`), ...D.GZ_COLORS.map(([key]) => `colors.${key}`),
+  'enabled', 'footer', 'preset', 'presets',
+];
+const section = (key) => OVERRIDE[key] || (key.startsWith('colors.') ? 'look/palette' : GROUP[key.split('.')[0]]);
+
+test('E1 every schema setting has one explicit owning section, including modules loaded by the editor', () => {
+  assert.equal(new Set(expected).size, expected.length);
+  for (const key of expected) assert.ok(section(key), `No section for ${key}; update the inventory after a schema change`);
+  assert.deepEqual(Object.keys(D.GZ_SPEC.enhance).sort(), Object.values(ENHANCE).flat().sort());
+  for (const key of Object.keys(OVERRIDE)) assert.ok(expected.includes(key), `Stale owner: ${key}`);
+});
+
+test('E1 each setting has exactly one real control/group; radios, dynamic carriers and preview choices stay distinct', () => {
+  const controls = new Map();
+  const add = (key, id, route) => { if (!controls.has(key)) controls.set(key, new Map()); controls.get(key).set(id, route); };
+  for (const node of nodes) {
+    if (preview(node) || Object.hasOwn(node.attrs, 'data-local') || !['input', 'select', 'textarea'].includes(node.tag)) continue;
+    const radio = node.attrs.type === 'radio', key = node.attrs['data-key'] || (radio && node.attrs.name?.includes('.') ? node.attrs.name : '');
+    if (!key) continue;
+    const group = radio && node.parents.findLast((n) => n.attrs.role === 'radiogroup' || (n.attrs.class || '').split(/\s+/).includes('seg'));
+    assert.ok(expected.includes(key), `Unknown editor control: ${key}`);
+    add(key, radio ? `radio:${group?.n ?? node.n}:${key}` : `control:${node.n}`, owner(node));
+  }
+  for (const [key, ids] of Object.entries(SPECIAL)) {
+    assert.ok(expected.includes(key), `Stale dynamic control: ${key}`);
+    for (const id of ids) { assert.equal(byId(id).length, 1, `Missing/duplicate carrier #${id}`); assert.equal(owner(byId(id)[0]), section(key), `${key}: #${id} has the wrong section`); }
+    add(key, `carrier:${ids.join(',')}`, section(key));
+  }
+  for (const key of expected) {
+    assert.equal(controls.get(key)?.size, 1, `${key} needs exactly one control or logical picker group`);
+    assert.equal([...controls.get(key).values()][0], section(key), `${key} is in the wrong section`);
+  }
+  for (const node of nodes.filter((n) => Object.hasOwn(n.attrs, 'data-editor-alias'))) assert.ok(node.tag === 'a' && /^#[a-z]+\/[a-z-]+$/.test(node.attrs.href || ''), 'Section aliases are links, never duplicate controls');
+});
+
+test('E1 eight labelled tabs own panels and existing action IDs survive in their mapped sections', () => {
+  const tabs = nodes.filter((n) => n.attrs.role === 'tab' && !preview(n));
+  assert.equal(tabs.length, TABS.length);
+  for (const tab of TABS) {
+    const choices = tabs.filter((n) => n.attrs['data-editor-tab'] === tab); assert.equal(choices.length, 1, tab);
+    const item = choices[0], panels = byId(item.attrs['aria-controls']);
+    assert.equal(panels.length, 1, `${tab}: aria-controls`); assert.equal(panels[0].attrs.role, 'tabpanel'); assert.equal(panels[0].attrs['aria-labelledby'], item.attrs.id);
+  }
+  assert.equal(tabs.filter((n) => n.attrs.tabindex === '0').length, 1, 'One tab has keyboard focus');
+  for (const [route, ids] of Object.entries(ACTIONS)) for (const id of ids) {
+    assert.equal(byId(id).length, 1, `Missing/duplicate action #${id}`); assert.equal(owner(byId(id)[0]), route, `#${id} moved to the wrong section`);
+  }
+  for (const id of ['gcal-bye', 'gcal-drop']) assert.equal(byId(id).length, 1, `Preserve external modal #${id}`);
+});
