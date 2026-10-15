@@ -67,8 +67,6 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // asked only by the due-date chips (late = true), so a course card never costs attempt requests. An
   // answer that changes anything re-tags the page.
   const books = new Map();
-  // Cached only: tabs never fetch.
-  GZ_SITE_ULTRA.assignment = (cid, id) => !!books.get(cid)?.results?.some((r) => r?.column?.assessmentSubtype === 'Assignment' && r.column.contentId === id);
   const bookFor = (cid, late = false) => {
     let b = books.get(cid);
     if (!b || (!b.pending && (Date.now() - b.at > 60000 || (late && !b.late)))) {

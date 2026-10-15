@@ -89,31 +89,6 @@ test('an emptied native main containing only a Glaze root cannot establish desti
   assert.equal(f.tab.path, next, 'native main text remains legitimate content without an element wrapper');
 });
 
-test('a previously captured overview cannot be recorded in the worker after its positive subtype is lost', () => {
-  const overview = '/ultra/courses/_71_1/assessment/_81_1/overview', snap = { path: overview };
-  let positive = false, writes = 0;
-  const push = vm.runInNewContext(part('  const pushed = ', '  // A fresh copy') + '\npush;', {
-    snaps: new Map([['_71_1', snap]]), safePath: (p) => L.safe(p, '', positive), send: () => writes++,
-  });
-  push('_71_1'); assert.equal(writes, 0, 'a saved snapshot is not fresh Assignment authorization');
-  positive = true; push('_71_1'); assert.equal(writes, 1, 'a fresh positive cached classification still permits storage');
-});
-
-test('a native gradebook refresh revokes stale Assignment classification even when grades do not change', async () => {
-  const ultra = fs.readFileSync(path.join(root, 'content-ultra.js'), 'utf8');
-  const block = ultra.slice(ultra.indexOf('  const books = '), ultra.indexOf('  // undefined until'));
-  let now = 1, subtype = 'Assignment';
-  const fn = vm.runInNewContext(block + '\n({bookFor,check:GZ_SITE_ULTRA.assignment});', {
-    GZ_SITE_ULTRA: {}, Date: { now: () => now }, me: async () => '_41_1',
-    api: async () => ({ results: [{ columnId: '_91_1', column: { contentId: '_81_1', assessmentSubtype: subtype } }] }),
-    GZ_PAGE: { gradesByContent: () => ({}), overall: () => null }, locale: () => 'en', onBook() {},
-  });
-  fn.bookFor('_71_1'); await new Promise(setImmediate);
-  assert.equal(fn.check('_71_1', '_81_1'), true);
-  now += 61000; subtype = 'Test'; fn.bookFor('_71_1'); await new Promise(setImmediate);
-  assert.equal(fn.check('_71_1', '_81_1'), false, 'fresh native cached data supersedes an old positive subtype');
-});
-
 test('an invalidated extension never attempts a delayed storage or worker call', async () => {
   let calls = 0;
   const api = vm.runInNewContext(part('  const local = ', '  const readPrefs = ') + '\n({local,send});', {
