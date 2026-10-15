@@ -8,6 +8,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Search in your courses on Blackboard Ultra:** the same Ctrl/⌘K search and switch as Canvas, now finding available
+  content titles and released public document, announcement and discussion topic text, with native type labels. Current course and term first, up to
+  24 results; open current-term courses only, nothing stored, five-minute cache reuse, cancellation on typing, closing or disabling. Unknown release conditions are omitted and transient errors retry after backoff. Read-only public
+  lists only, bounded to 30 requests per query and two pages per list. No addition to any site's first content script.
+
 - **PDFs and photos in the imports** (class schedule, syllabus, transcript), read on your device: a PDF's own text
   (tables kept as rows, two-column pages in order), and the text of a scanned PDF, a photo or a screenshot (PNG, JPEG,
   WebP, HEIC where your browser opens it; or paste one into the import's text box) recognized by the Tesseract OCR engine,

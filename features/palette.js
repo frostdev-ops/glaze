@@ -11,7 +11,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const TOOLS = [['/ultra/course', 'Courses'], ['/ultra/calendar', 'Calendar'], ['/ultra/grades', 'Grades'], ['/ultra/messages', 'Messages'],
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
-    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu' };
+    previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu', search: 'Search in your courses' };
   // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
@@ -176,8 +176,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     closeCmd();
     c.run(e);
   };
-  // Search in your courses is Canvas's: not on Ultra, nor on Moodle, which has no /api/v1.
-  const searchHere = () => !ultra && !moodle && ctx.settings().enhance.search;
+  // Canvas and Ultra share content search; Moodle has no adapter.
+  const searchHere = () => !moodle && ctx.settings().enhance.search;
   const openCmd = () => {
     const box = document.createElement('div');
     box.id = 'gz-cmd';

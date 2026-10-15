@@ -1,13 +1,17 @@
-// Search in the command palette on Canvas (enhance.search), loaded on demand when the palette opens: content.js (openCmd)
+// Search in the command palette on Canvas and Ultra (enhance.search), loaded on demand when the palette opens. The palette
 // calls attach(cmd, show). From 2 characters, after a 150 ms pause, your courses are asked for pages, assignments,
-// discussions, announcements, modules and files whose titles match (lib/seek.js): this course and this term's first. What
+// discussions, announcements, modules and files whose titles match (lib/seek.js). Ultra uses its public content tree,
+// announcements and discussion lists, matching titles and their public body text on the device: this course and this term's first. What
 // comes back joins the list as it arrives below what is already there, so nothing moves under the cursor, and each
-// keystroke cancels what was still being asked. Turning the setting (or Glaze) off stops it at once. Answers are kept in memory for five minutes, on this page only. Read-only GETs to this Canvas.
+// keystroke cancels what was still being asked. Turning the setting (or Glaze) off stops it at once. Answers are kept in
+// memory for five minutes, on this page only. Read-only GETs to this LMS.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
   const ctx = globalThis.GZ_CTX;
   const t = (k, v) => ctx.t(k, v);
-  let kept = null;
+  const ultra = ctx.site === 'ultra';
+  let kept = null, sources = null;
+  const retry = new Map();
   let quit = null; // stops the open palette's search
   // Whether Glaze and this search are on, as storage has it: content.js's own copy of the settings can lag behind a
   // change. Read from storage when the palette attaches, then followed through every change, even one that comes while
@@ -32,14 +36,16 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
 
   // cmd is the open palette ({ input, list, found, seeking, stop }); show(true) redraws it keeping the choice where it is.
   const attach = async (cmd, show) => {
-    const [, r] = await Promise.all([ctx.need('lib/seek.js', () => globalThis.GZ_SEEK), fromStorage()]);
+    const [, r] = await Promise.all([ctx.need('lib/seek.js', () => globalThis.GZ_SEEK), fromStorage(),
+      ...(ultra ? [ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA), ctx.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT)] : [])]);
     if (r) {
       stored.enabled ??= r.enabled !== false;
       stored.search ??= r.enhance?.search !== false;
     }
     if (!cmd.box.isConnected || cmd.stop || !allowed()) return;
     const S = globalThis.GZ_SEEK;
-    kept ||= S.cache();
+    if (!ultra) kept ||= S.cache();
+
     // Screen readers hear the count once the search is done, not every arrival.
     const live = document.createElement('p');
     live.className = 'screenreader-only';
@@ -50,6 +56,8 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
     quit = () => {
       if (!cmd.box.isConnected) return;
       last = '';
+      kept = sources = null;
+      retry.clear();
       cmd.stop();
       cmd.found = null;
       cmd.seeking = false;
@@ -59,18 +67,59 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
     const run = async (term) => {
       if (!allowed()) return void quit();
       const c = (ctl = new AbortController());
-      const courses = S.order(await ctx.canvasCourses(), ctx.canvasCourseId(), Date.now());
-      const n = await S.search({
-        term, courses, cache: kept, signal: c.signal, get: (p) => get(p, c.signal),
-        onBatch: (rs) => {
-          cmd.found.push(...rs.map((r) => ({ label: r.title, hint: r.course, group: r.kind, run: () => location.assign(r.url) })));
-          show(true);
-        },
-      });
+      try {
+        let courses, adapter = {};
+        if (ultra) {
+          const U = globalThis.GZ_ULTRA;
+          // shortcut: at most 30 requests per query and two pages (400 rows) per list; raise only after measuring large schools.
+          const r = U.read({ origin: location.origin, signal: c.signal, maxPages: 2, maxRequests: 30 });
+          sources ||= S.cache(300000, 301);
+          courses = sources.get('courses');
+          if (!courses) {
+            const mem = await ctx.myCourses();
+            if (c.signal.aborted) return;
+            const terms = await r.terms().catch(() => []);
+            if (c.signal.aborted) return;
+            courses = Object.entries(U.courses(mem, { terms })).filter(([, x]) => !x.org)
+              .map(([id, x]) => ({ id, name: x.name, course_code: x.code, term: x.term, closed: x.closed }));
+            sources.set('courses', courses);
+          }
+          // shortcut: first 100 open current-term courses, so all three source lists fit the 301-entry cache.
+          const now = Date.now(), here = ctx.courseId();
+          courses = S.order(courses.filter((x) => !x.closed && (x.id === here || x.term && S.current(x, now))), here, now, (id) => /^_\d+_\d+$/.test(id)).slice(0, 100);
+          adapter = { kinds: U.SEARCH_KINDS, conc: 3, load: async (course, k) => {
+            const key = `${course.id}|${k.kind}`;
+            let rows = sources.get(key);
+            if (!rows) {
+              if (Date.now() < (retry.get(key) || 0)) return [];
+              try {
+                rows = (await r.search(course, k, (html) => GZ_DOCTEXT.html(html)))
+                  .map(({ text, ...row }) => ({ ...row, index: S.fold(`${row.title} ${text}`) }));
+                retry.delete(key);
+              } catch (e) {
+                if (c.signal.aborted || e.message === 'Ultra request budget') return [];
+                if (!/^HTTP (403|404)$/.test(e.message)) { retry.set(key, Date.now() + (e.message === 'HTTP 429' ? 30000 : 3000)); return []; }
+                rows = [];
+              }
+              if (c.signal.aborted) return [];
+              sources.set(key, rows);
+            }
+            const q = S.fold(term);
+            return rows.filter((x) => x.until >= Date.now() && x.index.includes(q));
+          } };
+        } else { kept ||= S.cache(); courses = S.order(await ctx.canvasCourses(), ctx.canvasCourseId(), Date.now()); }
+        const n = await S.search({
+          term, courses, cache: ultra ? null : kept, signal: c.signal, get: (p) => get(p, c.signal), ...adapter,
+          onBatch: (rs) => {
+            cmd.found.push(...rs.map((r) => ({ label: r.title, hint: r.course, group: r.kind, run: () => location.assign(r.url) })));
+            show(true);
+          },
+        });
+        if (!c.signal.aborted) live.textContent = n ? t('Results from your courses: {n}', { n }) : t('Nothing found in your courses.');
+      } catch { /* unavailable tools or a signed-out session leave the ordinary palette usable */ }
       if (c.signal.aborted) return;
       cmd.seeking = false;
       show(true);
-      live.textContent = n ? t('Results from your courses: {n}', { n }) : t('Nothing found in your courses.');
     };
     // After content.js's own redraw for the same keystroke: a new term clears the old results and starts the pause.
     // First (what was typed while this loaded): the rows already on screen stay where they are, "Searching…" below them.
