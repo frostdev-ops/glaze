@@ -1661,4 +1661,5 @@
   "Research resources and academic support": "Onderzoeksbronnen en studieondersteuning",
   "Left": "Links",
   "Right": "Rechts",
+  "Expand on hover": "Uitklappen bij aanwijzen",
 };

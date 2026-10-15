@@ -13,7 +13,10 @@ All notable changes to Glaze are documented here. The format follows
   at first paint, school/device-only custom logos, precise sizes and spacing, custom http/https links with built-in
   icons, reversible native-item order/hiding and Reset. Institution page reads Dashboard at the same link while
   Glaze's Dashboard is enabled. Optional clock/date, planner-backed next-due item, shared focus timer and pet level can sit at the top or bottom. The editor previews
-  the real Ultra nav rules; navigation settings and custom links are included in Export all.
+  the real Ultra nav rules, with compact rows, ellipsis/wrap/shrink labels, tile/pill/flat items, active indicators,
+  logo alignment and footer controls, section resets, drag/keyboard reordering and a collapsed-rail hover/focus/touch overlay
+  that keeps page content in place. Navigation settings and custom links
+  are included in Export all.
 
 - **Planning on Blackboard Ultra.** Better To Do (on by default), tasks on course cards, reminders and the streak, Export
   calendar (.ics), the class schedule, Gradescope in To Do and Google Calendar sync now work on Blackboard Ultra too: the

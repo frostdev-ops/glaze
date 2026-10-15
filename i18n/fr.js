@@ -1661,4 +1661,5 @@
   "Research resources and academic support": "Ressources de recherche et aide scolaire",
   "Left": "Gauche",
   "Right": "Droite",
+  "Expand on hover": "Déployer au survol",
 };

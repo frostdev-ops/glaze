@@ -37,15 +37,16 @@ test('bundled-logo CSS retains the original img accessible name', () => {
 const dashboardFixture = () => {
   const src = source('content-ultra.js'), a = Math.max(src.indexOf('  const navRoots ='), src.indexOf('  const renamed =')), b = src.indexOf('  const paintNav =', a);
   const attrs = new Map(), classes = new Set(), text = { nodeType: 3, data: 'Institution page' }, wrapper = { text };
-  let scans = 0, globalScans = 0;
-  const link = { nodeType: 1, isConnected: true, getAttribute: (k) => k === 'href' ? 'https://school.test/ultra/institution-page' : attrs.get(k) ?? null, setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k), querySelector: () => wrapper, closest: () => link, prepend: (n) => { n.isConnected = true; }, classList: { toggle: (k, on) => on ? classes.add(k) : classes.delete(k) } };
+  let scans = 0, globalScans = 0, ownedIcon;
+  const link = { nodeType: 1, isConnected: true, hasAttribute: (k) => attrs.has(k), getAttribute: (k) => k === 'href' ? 'https://school.test/ultra/institution-page' : attrs.get(k) ?? null, setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k), querySelector: (s) => s.startsWith(':scope') ? ownedIcon?.isConnected ? ownedIcon : null : wrapper, closest: () => link, prepend: (n) => { n.isConnected = true; ownedIcon = n; }, classList: { contains: (k) => classes.has(k), toggle: (k, on) => on ? classes.add(k) : classes.delete(k) } };
   text.parentElement = link;
   const root = { isConnected: true, contains: (n) => n === link || n === root || n?.inRail, querySelectorAll: () => { scans++; return [link]; } };
   const I = { links: [1], settings: { enabled: true, enhance: { dashboard: true } } }, callbacks = [], queued = [];
-  const c = vm.createContext({ I, GZ_NAV: moduleOf('lib/nav.js'), NodeFilter: { SHOW_TEXT: 4 }, t: (s) => s, html: {}, addEventListener() {}, queueMicrotask: (f) => queued.push(f), MutationObserver: class { constructor(cb) { callbacks.push(cb); } observe() {} disconnect() {} }, document: { querySelectorAll: (selector) => { globalScans++; return selector.endsWith(' a[href]') ? [link] : [root]; }, createTreeWalker: (w) => ({ nextNode: () => w.text }), createElementNS: () => ({ namespaceURI: 'svg', isConnected: false, classList: { add() {}, contains: () => true }, setAttribute() {}, append() {}, remove() { this.isConnected = false; } }) } });
-  const api = vm.runInContext(src.slice(a, b) + '\n({syncDashboard, discoverNav: typeof discoverNav === 'undefined' ? null : discoverNav});', c);
+  const globals = { I, GZ_NAV: moduleOf('lib/nav.js'), NodeFilter: { SHOW_TEXT: 4 }, t: (s) => s, html: {}, addEventListener() {}, queueMicrotask: (f) => queued.push(f), MutationObserver: class { constructor(cb) { callbacks.push(cb); } observe() {} disconnect() {} }, document: { querySelectorAll: (selector) => { globalScans++; return selector.endsWith(' a[href]') ? [link] : [root]; }, createTreeWalker: (w) => ({ nextNode: () => w.text }), createElementNS: () => ({ namespaceURI: 'svg', isConnected: false, classList: { add() {}, contains: () => true }, setAttribute() {}, append() {}, remove() { this.isConnected = false; } }) } };
+  const c = vm.createContext({ ...globals });
+  const api = vm.runInContext(src.slice(a, b) + `\n({syncDashboard, discoverNav: typeof discoverNav === 'undefined' ? null : discoverNav});`, c);
   const flush = () => { let n = 0; while (queued.length && n++ < 10) queued.shift()(); assert.ok(n < 10, 'observer settles without a feedback loop'); };
-  return { ...api, text, wrapper, link, attrs, classes, I, root, callbacks, queued, flush, counts: () => ({ scans, globalScans }) };
+  return { ...api, reload: () => vm.runInContext(src.slice(a, b) + '\nsyncDashboard;', vm.createContext({ ...globals })), text, wrapper, link, attrs, classes, I, root, callbacks, queued, flush, counts: () => ({ scans, globalScans }) };
 };
 
 test('Dashboard first-paint rename preserves its React wrapper, native icon and tooltip when disabled', () => {
@@ -53,6 +54,12 @@ test('Dashboard first-paint rename preserves its React wrapper, native icon and 
   assert.equal(f.text.data, 'Dashboard'); assert.equal(f.wrapper.text, f.text); assert.ok(f.classes.has('gz-nav-dashboard')); assert.equal(f.attrs.get('title'), 'Dashboard');
   f.I.settings.enhance.dashboard = false; f.syncDashboard();
   assert.equal(f.text.data, 'Institution page'); assert.ok(!f.classes.has('gz-nav-dashboard')); assert.equal(f.attrs.has('aria-label'), false); assert.equal(f.attrs.has('title'), false);
+});
+
+test('a new extension context restores the native Dashboard name and icon metadata', () => {
+  const f = dashboardFixture(); f.syncDashboard(); assert.equal(f.text.data, 'Dashboard');
+  f.I.settings.enhance.dashboard = false; const again = f.reload(); again();
+  assert.equal(f.text.data, 'Institution page'); assert.equal(f.attrs.has('aria-label'), false); assert.equal(f.attrs.has('title'), false); assert.equal(f.attrs.has('data-gz-nav-original'), false);
 });
 
 test('thirty unrelated widget text updates cause no navigation scans and own writes become idle', () => {
@@ -90,7 +97,7 @@ test('all navigation customization values use one bounded first-paint spec', () 
   assert.deepEqual(N.SPEC.labelOverflow, ['ellipsis', ['ellipsis', 'wrap', 'shrink']]);
   assert.deepEqual(N.SPEC.itemStyle, ['tile', ['tile', 'pill', 'flat']]);
   assert.deepEqual(N.SPEC.activeIndicator, ['bar', ['bar', 'outline', 'background', 'none']]);
-  assert.deepEqual(N.SPEC.logoSize, [48, [24, 96]]); assert.deepEqual(N.SPEC.footer, [true, 'bool']);
+  assert.deepEqual(N.SPEC.expandOnHover, [true, 'bool']); assert.deepEqual(N.SPEC.width, [200, [160, 400]]); assert.deepEqual(N.SPEC.logoSize, [48, [24, 96]]); assert.deepEqual(N.SPEC.footer, [true, 'bool']);
   for (const [size, height] of [['small', 40], ['medium', 44], ['large', 48]]) assert.equal(N.dimensions({ size, gap: 2, padding: 8 }).height, height);
 });
 

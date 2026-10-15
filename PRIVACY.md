@@ -4,7 +4,7 @@ _Last updated: 2026-10-15_
 
 ## What Glaze stores
 
-- **Blackboard navigation:** precise size/spacing and logo choices sync in `nav`; up to eight custom link names,
+- **Blackboard navigation:** precise size/spacing, label overflow, item style/background, active indicator, logo size/alignment, footer visibility and hover-expansion choices sync in `nav`; up to eight custom link names,
   http/https URLs, built-in icon choices, new-tab preferences, native-item order/hidden choices and rail-widget
   switches/order/position sync in the separate capped `navItems` item. A link is contacted only when you click it;
   icons and the default Glaze logo are bundled. Custom logos are resized on this device and stored as `navLogo:<id>`

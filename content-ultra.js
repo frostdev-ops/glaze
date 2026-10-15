@@ -571,21 +571,30 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const p of document.querySelectorAll('[data-gz-real]')) if (!nickOf(p.dataset.gzCid)) unname(p);
   };
 
+  html.removeAttribute?.('data-gz-nav-expanded');
   const navRoots = new Set(), renamed = new Map();
   const navSelector = 'nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
-  let navDirty = true, navQueued = false;
+  let navDirty = false, navQueued = false;
   const syncDashboard = () => {
     const enabled = I.links.length && I.settings.enabled, on = enabled && I.settings.enhance.dashboard;
     if (navDirty) {
       navDirty = false;
       for (const root of navRoots) {
         if (!root.isConnected) { navRoots.delete(root); continue; }
-        for (const a of root.querySelectorAll('a[href]')) {
+        const footer = root.closest?.('.MuiDrawer-paper')?.querySelectorAll('footer a[href], [class*="makeStylesfooter"] a[href]') || [];
+        for (const a of [...root.querySelectorAll('a[href]'), ...footer]) {
           const id = GZ_NAV.native(a.getAttribute('href'));
-          if (!id) continue;
-          const label = a.querySelector('.MuiTypography-root, .MuiListItemText-root, span:not(:has(svg))');
+          if (!id && !a.closest('footer, [class*="makeStylesfooter"]')) continue;
+          const label = a.querySelector('.MuiTypography-root, .MuiListItemText-root, span:not(:has(svg))') || a;
           const text = label && document.createTreeWalker(label, NodeFilter.SHOW_TEXT).nextNode();
-          if (text && renamed.get(a)?.node !== text) renamed.set(a, { node: text, text: text.data, dashboard: id === 'institution-page', aria: a.getAttribute('aria-label'), title: a.getAttribute('title') });
+          const prior = renamed.get(a);
+          if (text && prior?.node !== text) {
+            let original;
+            if (!prior && id === 'institution-page' && a.classList.contains('gz-nav-dashboard')) {
+              try { const raw = a.getAttribute('data-gz-nav-original'); if (raw?.length <= 2048) { const v = JSON.parse(raw); if (typeof v?.text === 'string' && v.text.length <= 512 && ['aria', 'title'].every((k) => v[k] === null || typeof v[k] === 'string' && v[k].length <= 512)) original = v; } } catch { /* malformed own mark: keep native text */ }
+            }
+            renamed.set(a, { ...prior, node: text, text: original?.text ?? text.data, dashboard: id === 'institution-page', aria: original ? original.aria : prior ? prior.aria : a.getAttribute('aria-label'), title: original ? original.title : prior ? prior.title : a.getAttribute('title'), icon: prior?.icon || a.querySelector(':scope > svg.gz-nav-dashboard-icon') });
+          }
         }
       }
     }
@@ -594,6 +603,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       const dash = on && r.dashboard, name = dash ? t('Dashboard') : r.text;
       r.painted = name;
       if (r.node.data !== name) r.node.data = name;
+      if (dash && !a.hasAttribute('data-gz-nav-original')) a.setAttribute('data-gz-nav-original', JSON.stringify({ text: r.text, aria: r.aria, title: r.title }));
+      else if (!dash && r.dashboard) a.removeAttribute('data-gz-nav-original');
       a.classList.toggle('gz-nav-dashboard', !!dash);
       if (dash && !r.icon) {
         r.icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -623,6 +634,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   });
   // The existing core gate already sees added subtrees before paint; no second document-wide observer.
   const discoverNav = (scope) => {
+    if (scope.closest?.('footer, [class*="makeStylesfooter"]')) navDirty = true;
     if ([...navRoots].some((root) => !root.isConnected)) {
       navObserver.disconnect();
       for (const root of navRoots) if (!root.isConnected) navRoots.delete(root); else navObserver.observe(root, { childList: true, subtree: true, characterData: true });
@@ -682,7 +694,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   }
 
   return {
-    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { syncDashboard(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights, openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
     syncTodo, syncCardTasks, syncRemind, syncWidgets,

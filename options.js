@@ -495,7 +495,7 @@ GZ_UI.load().then((s) => {
     if (section === 'layout') return writeNavItems({ ...navItems, order: [], hidden: [] });
     if (section === 'widgets') return writeNavItems({ ...navItems, widgets: N.clean().widgets });
     const keys = {
-      dimensions: ['size', 'width', 'icon', 'height', 'gap', 'padding'],
+      dimensions: ['size', 'width', 'icon', 'height', 'gap', 'padding', 'expandOnHover'],
       labels: ['labels', 'text', 'labelOverflow'],
       appearance: ['itemStyle', 'itemBackground', 'activeIndicator'],
       branding: ['brand', 'li', 'logo', 'logoSize', 'logoAlign', 'footer'],

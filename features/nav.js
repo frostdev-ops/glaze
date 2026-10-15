@@ -4,11 +4,14 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const X = globalThis.GZ_CTX;
   const rail = X.site === 'ultra' && typeof GZ_NAV !== 'undefined' ? GZ_ULTRA_RAIL(X) : null;
   let reading = '', loaded = null, toggle = null;
+  const overlay = X.site === 'ultra' ? GZ_ULTRA_OVERLAY(X, () => X.repaintNav(loaded?.src)) : null;
   const titled = new Map();
   const labels = new Set(), fitted = new Map();
   let fitFrame = 0, fitObserver;
   const fitLabels = () => {
     fitFrame = 0;
+    if (!chrome.runtime?.id) { fitObserver?.disconnect(); fitted.clear(); return; }
+    if (!X.on() || X.nav().labelOverflow !== 'shrink') return;
     const size = GZ_NAV.dimensions(X.nav()).text;
     for (const [a, label] of fitted) {
       if (!a.isConnected) { fitObserver.unobserve(a); fitted.delete(a); continue; }
@@ -21,10 +24,11 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
     const n = X.nav();
     const on = X.on() && X.settings().enabled;
     rail?.sync(on);
-    if (X.site === 'ultra' && on && n.labelOverflow === 'shrink' && !n.collapsed && n.labels !== 'icons') {
+    overlay?.sync(on);
+    if (X.site === 'ultra' && on && n.labelOverflow === 'shrink' && (!n.collapsed || overlay?.open()) && (n.labels !== 'icons' || overlay?.open())) {
       fitObserver ||= new ResizeObserver(() => { if (!fitFrame) fitFrame = requestAnimationFrame(fitLabels); });
-      for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a[href]')) {
-        const label = a.querySelector('.MuiListItemText-root, span:not(:has(svg))');
+      for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a[href], .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(footer, [class*="makeStylesfooter"]) a[href]')) {
+        const label = a.querySelector('.MuiListItemText-root, span:not(:has(svg))') || a;
         if (label && !fitted.has(a)) { fitted.set(a, label); fitObserver.observe(a); }
       }
       fitLabels();
@@ -91,6 +95,82 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   return { sync };
 })();
 GZ_NAV_UI;
+
+// Expanded paper floats above the page; the saved collapsed rail still owns its narrow layout width.
+function GZ_ULTRA_OVERLAY(X, repaint) {
+  const html = document.documentElement, titles = new Map();
+  let paper, button, enter = 0, leave = 0, expanded = false, hovered = false;
+  const valid = () => { if (!chrome.runtime?.id) { cleanup(false); return false; } return X.on() && X.settings().enabled && X.nav().collapsed; };
+  let hintStyle;
+  const portalHints = () => {
+    const ids = new Set();
+    for (const el of paper.querySelectorAll('[aria-describedby]')) for (const id of el.getAttribute('aria-describedby').split(/\s+/)) if (id) ids.add(id);
+    hintStyle.textContent = [...ids].map((id) => `#${CSS.escape(id)}[role="tooltip"], #${CSS.escape(id)} [role="tooltip"] { visibility: hidden !important; }`).join('\n');
+  };
+  const suppress = (el) => {
+    const title = el.getAttribute('title') ?? el.getAttribute('data-gz-title');
+    if (title === '' && titles.has(el)) return;
+    titles.set(el, title); if (title !== '') el.setAttribute('title', '');
+  };
+  const titleObserver = new MutationObserver((ms) => { if (expanded && valid()) for (const m of ms) { if (m.attributeName === 'aria-describedby') portalHints(); else suppress(m.target); } });
+  const setOpen = (on) => {
+    clearTimeout(enter); clearTimeout(leave); enter = leave = 0;
+    if (on === expanded) return;
+    expanded = on;
+    html.toggleAttribute('data-gz-nav-expanded', on);
+    button?.setAttribute('aria-expanded', String(on));
+    if (button) button.setAttribute('aria-label', X.t(on ? 'Collapse the sidebar' : 'Expand global navigation'));
+    if (on) {
+      hintStyle = document.createElement('style'); document.head.append(hintStyle);
+      for (const el of paper.querySelectorAll('a, button, [title], [data-gz-title]')) suppress(el);
+      portalHints(); titleObserver.observe(paper, { attributes: true, subtree: true, attributeFilter: ['title', 'aria-describedby'] });
+    } else {
+      titleObserver.disconnect();
+      hintStyle?.remove(); hintStyle = null;
+      for (const [el, title] of titles) if (el.isConnected && (!el.hasAttribute('title') || el.getAttribute('title') === '') && ((X.on() && X.settings().enabled) || !el.closest('nav, footer, [class*="makeStylesfooter"]'))) { if (title === null) el.removeAttribute('title'); else el.setAttribute('title', title); }
+      titles.clear();
+      if (chrome.runtime?.id && X.on()) repaint();
+    }
+  };
+  const laterClose = () => {
+    clearTimeout(enter); enter = 0; clearTimeout(leave);
+    leave = setTimeout(() => { leave = 0; if (valid() && !hovered && !paper.contains(document.activeElement)) setOpen(false); }, 300);
+  };
+  const pointerEnter = (e) => {
+    if (!valid() || e.pointerType === 'touch' || !X.nav().expandOnHover || !matchMedia('(hover: hover)').matches) return;
+    hovered = true; clearTimeout(leave); clearTimeout(enter); enter = setTimeout(() => { enter = 0; if (valid() && hovered) setOpen(true); }, 150);
+  };
+  const pointerLeave = (e) => { if (!valid() || e.pointerType === 'touch') return; hovered = false; laterClose(); };
+  const focusIn = (e) => { if (valid() && e.target !== button) setOpen(true); };
+  const focusOut = (e) => { if (valid() && !paper.contains(e.relatedTarget)) laterClose(); };
+  const outside = (e) => { if (valid() && expanded && !paper.contains(e.target)) { hovered = false; setOpen(false); } };
+  const toggle = (e) => { if (!valid()) return; e.preventDefault(); e.stopPropagation(); setOpen(!expanded); };
+  const keydown = (e) => { if (valid() && expanded && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hovered = false; setOpen(false); button.focus({ preventScroll: true }); } };
+  const cleanup = (restore = true) => {
+    clearTimeout(enter); clearTimeout(leave); enter = leave = 0; hovered = false;
+    if (!paper) return;
+    if (restore) setOpen(false); else { expanded = false; titles.clear(); hintStyle?.remove(); hintStyle = null; }
+    titleObserver.disconnect();
+    for (const [name, fn] of [['pointerenter', pointerEnter], ['pointerleave', pointerLeave], ['focusin', focusIn], ['focusout', focusOut], ['keydown', keydown]]) paper.removeEventListener(name, fn);
+    document.removeEventListener('pointerdown', outside, true);
+    if (restore && document.activeElement === button) paper.querySelector('a[href]')?.focus({ preventScroll: true });
+    button.remove(); button = null; paper = null;
+  };
+  const sync = (on) => {
+    const next = on && X.nav().collapsed && document.querySelector('nav[class*="makeStylesnavigation"], nav#base_tools, nav:has(> #base_tools)')?.closest('.MuiDrawer-paper');
+    if (next !== paper) {
+      cleanup(); if (!next) return; paper = next;
+      button = document.createElement('button'); button.type = 'button'; button.className = 'gz-nav-expand'; button.textContent = '›';
+      button.setAttribute('aria-label', X.t('Expand global navigation')); button.setAttribute('aria-expanded', 'false'); button.addEventListener('click', toggle);
+      (paper.querySelector('header') || paper).append(button);
+      for (const [name, fn] of [['pointerenter', pointerEnter], ['pointerleave', pointerLeave], ['focusin', focusIn], ['focusout', focusOut], ['keydown', keydown]]) paper.addEventListener(name, fn);
+      document.addEventListener('pointerdown', outside, true);
+    }
+    if (!X.nav().expandOnHover) { hovered = false; clearTimeout(enter); enter = 0; if (expanded && !paper.contains(document.activeElement)) setOpen(false); }
+  };
+  addEventListener('pagehide', cleanup, { once: true });
+  return { sync, open: () => expanded };
+}
 
 // The modern drawer and legacy rail keep their native links. Comments remember each item's original DOM position.
 function GZ_ULTRA_RAIL(X) {

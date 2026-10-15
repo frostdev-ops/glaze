@@ -166,7 +166,7 @@ test('each site\'s part returns only what content.js calls, and content.js calls
   assert.ok(forwarded, 'GZ_CTX forwards the part\'s helpers');
   const keys = JSON.parse(forwarded[1].replace(/'/g, '"'));
   for (const [file, name] of [['content-ultra.js', 'GZ_SITE_ULTRA'], ['content-canvas.js', 'GZ_SITE_CANVAS']]) {
-    const context = vm.createContext({ document: { addEventListener() {} }, addEventListener() {}, IntersectionObserver: class { observe() {} }, MutationObserver: class { observe() {} }, chrome: { storage: { onChanged: { addListener() {} } } }, window: {}, location: { origin: 'https://school.test' } });
+    const context = vm.createContext({ document: { addEventListener() {}, querySelectorAll: () => [] }, addEventListener() {}, IntersectionObserver: class { observe() {} }, MutationObserver: class { observe() {} }, chrome: { storage: { onChanged: { addListener() {} } } }, window: {}, location: { origin: 'https://school.test' } });
     context.globalThis = context;
     const make = vm.runInContext(read(file), context);
     assert.equal(make, vm.runInContext(name, context));

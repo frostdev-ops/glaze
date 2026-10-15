@@ -1661,4 +1661,5 @@
   "Research resources and academic support": "Forschungsressourcen und Studienberatung",
   "Left": "Links",
   "Right": "Rechts",
+  "Expand on hover": "Beim Darüberfahren ausklappen",
 };

@@ -1661,4 +1661,5 @@
   "Research resources and academic support": "Recursos de investigación y apoyo académico",
   "Left": "Izquierda",
   "Right": "Derecha",
+  "Expand on hover": "Expandir al pasar el cursor",
 };
