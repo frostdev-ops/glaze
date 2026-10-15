@@ -1120,7 +1120,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }
   };
   // The hub can open with the widgets off: it needs only this file and lib/widgets.js.
-  const open = () => ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(() => { W ||= globalThis.GZ_WIDGETS; hub(); });
+  const open = () => !validContext() ? Promise.resolve() : ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(() => { W ||= globalThis.GZ_WIDGETS; hub(); });
 
   // A tile from another file (MORE), called as that file runs: fill(body, api) gives { wake?, update?, stop? }, as the
   // built-in ones do; the first registration of an id wins. api: who() (the account: { uid, tz }), site, size(). The

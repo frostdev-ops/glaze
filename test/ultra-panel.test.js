@@ -229,6 +229,7 @@ test('the feature hub refuses an invalid context before the core observes any mu
   const before = p.doc.root.all().length;
   const hub = p.doc.querySelector('.gz-dash-bar').children.find((x) => x.textContent === 'What Glaze can do');
   assert.doesNotThrow(() => p.doc.fire(hub, 'click'));
+  p.c.GZ_CTX.need = () => { calls++; throw Error('Extension context invalidated'); };
   await assert.doesNotReject(p.ui.hub());
   assert.equal(calls, 0, 'guard precedes getManifest');
   assert.equal(p.doc.root.all().length, before, 'no DOM mutation needed to notice invalidation');
