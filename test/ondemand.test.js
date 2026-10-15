@@ -127,44 +127,59 @@ test('a closed keyboard help stays closed when the words arrive', () => {
   assert.equal(k.document.body.children.length, 0);
 });
 
-// The draft backup on Ultra, while lib/drafts.js and features/drafts.js are on their way.
-test('a first and only input while the draft backup loads is still backed up once it arrives', async () => {
-  const saved = [];
-  const t = clock();
-  const loads = [];
-  class Element {}
-  const editor = Object.assign(new Element(), {
-    id: 'ed1', isConnected: true, textContent: 'A pasted paragraph that is long enough to keep.', innerHTML: '<p>A pasted paragraph that is long enough to keep.</p>',
-    parentElement: null, attributes: [], matches: () => true, closest(sel) { return sel.includes('ql-editor') ? this : null; },
+// The draft backup on Ultra, while lib/drafts.js and features/drafts.js are on their way: the editor still there when
+// they arrive, or gone by then (the reply closed, the page changed), when what was read as it was written is kept.
+for (const gone of [false, true]) {
+  test(`a first and only input while the draft backup loads is still backed up once it arrives${gone ? ', even with its editor gone by then' : ''}`, async () => {
+    const saved = [];
+    const t = clock();
+    const loads = [];
+    class Element {}
+    const text = 'A pasted paragraph that is long enough to keep.';
+    const editor = Object.assign(new Element(), {
+      id: 'ed1', isConnected: true, textContent: '', innerHTML: '',
+      parentElement: { attributes: [{ name: 'data-post-id', value: 'post_12_3' }], parentElement: null },
+      attributes: [], matches: () => true, closest(sel) { return sel.includes('ql-editor') ? this : null; },
+    });
+    const listeners = {};
+    const ctx = vm.createContext({
+      ultra: true, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/ultra/courses/_1_1/outline' },
+      document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => null, querySelectorAll: () => [],
+        body: {}, createTreeWalker: () => ({ nextNode: () => null }) }, // the page's text, where a sent post would show: none here
+      NodeFilter: { SHOW_ELEMENT: 1, SHOW_TEXT: 4 },
+      chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
+      need: (file) => (loads.find((l) => l.file === file) || loads[loads.push({ file, p: later() }) - 1]).p, // one request a file, as need() does
+      setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, window: {}, globalThis: null,
+    });
+    ctx.globalThis = ctx;
+    vm.runInContext(`${block('  // ---- draft backup (Extras)', '  // ---- download all (Extras)')}
+      globalThis.api = { watchDrafts, local, draftAt: typeof draftAt === 'undefined' ? undefined : draftAt };`, ctx);
+    ctx.api.watchDrafts();
+    assert.deepEqual(loads, [], 'no editor on the page: nothing loads');
+    for (const f of listeners.paste || []) f({ type: 'paste', target: editor });
+    // Quill puts the paste in after its event; a pass sees it.
+    Object.assign(editor, { textContent: text, innerHTML: `<p>${text}</p>` });
+    ctx.document.querySelector = () => editor;
+    ctx.api.watchDrafts();
+    t.run();
+    assert.deepEqual(saved, [], 'nothing kept before the module is in');
+    assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js']);
+    if (gone) { editor.isConnected = false; ctx.document.querySelector = () => null; ctx.location.pathname = '/ultra/stream'; }
+    ctx.GZ_DRAFTS = require('../lib/drafts.js');
+    loads[0].p.resolve();
+    await settle();
+    assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js', 'features/drafts.js'], 'then the backup itself');
+    ctx.GZ_CTX = { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local,
+      draftEditor: '.ql-editor[contenteditable="true"]', draftAt: ctx.api.draftAt };
+    vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
+    loads[1].p.resolve();
+    await settle();
+    t.run();
+    assert.equal(saved.length, 1, 'the paste is kept once the module arrives, without another input');
+    assert.deepEqual(Object.keys(saved[0]), ['draft:/ultra/courses/_1_1/outline#_12_3/ed1'], 'under the page and post it was written on');
+    assert.equal(Object.values(saved[0])[0].text, text);
   });
-  const listeners = {};
-  const ctx = vm.createContext({
-    ultra: true, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/ultra/courses/_1_1/outline' },
-    document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: () => null, querySelectorAll: () => [] },
-    chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
-    need: (file) => { const p = later(); loads.push({ file, p }); return p; },
-    setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, window: {}, globalThis: null,
-  });
-  ctx.globalThis = ctx;
-  vm.runInContext(`${block('  // ---- draft backup (Extras)', '  // ---- download all (Extras)')}; globalThis.api = { watchDrafts, local };`, ctx);
-  ctx.api.watchDrafts();
-  assert.deepEqual(loads, [], 'no editor on the page: nothing loads');
-  for (const f of listeners.paste || []) f({ type: 'paste', target: editor });
-  t.run();
-  assert.deepEqual(saved, [], 'nothing kept before the module is in');
-  assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js']);
-  ctx.GZ_DRAFTS = require('../lib/drafts.js');
-  loads[0].p.resolve();
-  await settle();
-  assert.deepEqual(loads.map((l) => l.file), ['lib/drafts.js', 'features/drafts.js'], 'then the backup itself');
-  ctx.GZ_CTX = { site: 'ultra', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local, draftEditor: '.ql-editor[contenteditable="true"]' };
-  vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
-  loads[1].p.resolve();
-  await settle();
-  t.run();
-  assert.equal(saved.length, 1, 'the paste is kept once the module arrives, without another input');
-  assert.match(Object.keys(saved[0])[0], /^draft:\/ultra\/courses\/_1_1\/outline#\/ed1$/);
-});
+}
 
 // ---- the hooks that load a feature on first use (W0c), while its file is on its way ----
 // The first-use hooks of content.js, with document listeners kept, the loader answering when the test says, and
@@ -353,41 +368,54 @@ test('Ultra: a place is put back when the outline loads, but not if you did some
   assert.equal(await ultraPlace(true), 0, 'a wheel while the file loaded: left as you have it');
 });
 
-test('Canvas: the first input in Inbox compose, while the backup loads, is kept once the account is in', async () => {
-  const saved = [];
-  const t = clock();
-  const loads = [];
-  class Element {}
-  const SEL = '#compose-message-modal textarea[data-testid="message-body"]';
-  const fields = { 'input[data-testid="subject-input"]': { value: 'Lab question' }, 'input[data-testid="course-select-modal"]': { value: 'BIO 1100' } };
-  const modal = { querySelector: (s) => fields[s] || null, querySelectorAll: () => [{ id: 'address-book-label-2-user' }] };
-  const editor = Object.assign(new Element(), { isConnected: true, value: 'A first and only paste, long enough to be worth keeping.',
-    closest: (s) => (s === SEL ? editor : s === '#compose-message-modal' ? modal : null) });
-  const listeners = {};
-  let account;
-  const ctx = vm.createContext({
-    ultra: false, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/conversations', origin: 'https://school.test' },
-    document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: (s) => (s === SEL ? editor : null), querySelectorAll: () => [] },
-    chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
-    need: (file) => { const p = later(); loads.push({ file, p }); return p; },
-    setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, Promise, window: {}, globalThis: null,
+// Canvas: the first input in Inbox compose while the backup loads. Kept once the account is in, whether compose is still
+// open then, closed before the files arrived, or closed while the account was being asked for.
+for (const gone of ['never', 'before the files arrive', 'while the account is asked for']) {
+  test(`Canvas: the first input in Inbox compose, while the backup loads, is kept once the account is in (compose closed: ${gone})`, async () => {
+    const saved = [];
+    const t = clock();
+    const loads = [];
+    class Element {}
+    const SEL = '#compose-message-modal textarea[data-testid="message-body"]';
+    const fields = { 'input[data-testid="subject-input"]': { value: 'Lab question' }, 'input[data-testid="course-select-modal"]': { value: 'BIO 1100' } };
+    const modal = { querySelector: (s) => fields[s] || null, querySelectorAll: () => [{ id: 'address-book-label-2-user' }] };
+    const text = 'A first and only paste, long enough to be worth keeping.';
+    const editor = Object.assign(new Element(), { isConnected: true, value: text, parentElement: null,
+      closest: (s) => (s === SEL ? editor : s === '#compose-message-modal' && editor.isConnected ? modal : null) });
+    // Closing compose takes the dialog, its fields and the editor off the page.
+    const close = () => { editor.isConnected = false; ctx.document.querySelector = () => null; };
+    const listeners = {};
+    let account;
+    const ctx = vm.createContext({
+      ultra: false, observer: {}, settings: { enhance: { drafts: true } }, Element, location: { pathname: '/conversations', origin: 'https://school.test' },
+      document: { addEventListener: (type, f) => { (listeners[type] ||= []).push(f); }, querySelector: (s) => (s === SEL ? editor : null), querySelectorAll: () => [] },
+      chrome: { storage: { local: { set: (v) => saved.push(v), get() {}, remove() {} } } },
+      need: (file) => { const p = later(); loads.push({ file, p }); return p; },
+      setTimeout: t.setTimeout, clearTimeout: t.clearTimeout, addEventListener() {}, Date, Promise, window: {}, globalThis: null,
+    });
+    ctx.globalThis = ctx;
+    vm.runInContext(`${block('  // ---- draft backup (Extras)', '  // ---- download all (Extras)')}
+      globalThis.api = { local, draftAt: typeof draftAt === 'undefined' ? undefined : draftAt };`, ctx);
+    for (const f of listeners.input) f({ type: 'input', target: editor });
+    if (gone === 'before the files arrive') close();
+    ctx.GZ_DRAFTS = require('../lib/drafts.js');
+    loads[0].p.resolve();
+    await settle();
+    ctx.GZ_CTX = { site: 'canvas', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local, draftEditor: SEL,
+      draftAt: ctx.api.draftAt, profile: () => (account ||= later()), canvasCourses: () => Promise.resolve([{ id: 5, name: 'BIO 1100' }]),
+      capi: () => Promise.reject(new Error('offline')) };
+    vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
+    loads[1].p.resolve();
+    await settle();
+    t.run();
+    assert.deepEqual(saved, [], 'nothing kept before the account is in');
+    if (gone === 'while the account is asked for') close();
+    assert.ok(account, 'the account is asked for');
+    account.resolve({ id: 7 });
+    await settle();
+    t.run();
+    assert.equal(saved.length, 1, 'the input is kept once the account arrives, without another');
+    assert.deepEqual(Object.keys(saved[0]), ['draft:canvas:["https://school.test","7","5",["2"],"Lab question"]']);
+    assert.equal(Object.values(saved[0])[0].text, text);
   });
-  ctx.globalThis = ctx;
-  vm.runInContext(`${block('  // ---- draft backup (Extras)', '  // ---- download all (Extras)')}; globalThis.api = { local };`, ctx);
-  for (const f of listeners.input) f({ type: 'input', target: editor });
-  ctx.GZ_DRAFTS = require('../lib/drafts.js');
-  loads[0].p.resolve();
-  await settle();
-  ctx.GZ_CTX = { site: 'canvas', t: (k) => k, locale: () => 'en', settings: () => ctx.settings, on: () => !!ctx.observer, local: ctx.api.local, draftEditor: SEL,
-    profile: () => (account ||= later()), canvasCourses: () => Promise.resolve([{ id: 5, name: 'BIO 1100' }]), capi: () => Promise.reject(new Error('offline')) };
-  vm.runInContext(fs.readFileSync(require.resolve('../features/drafts.js'), 'utf8'), ctx);
-  loads[1].p.resolve();
-  await settle();
-  t.run();
-  assert.deepEqual(saved, [], 'nothing kept before the account is in');
-  account.resolve({ id: 7 });
-  await settle();
-  t.run();
-  assert.equal(saved.length, 1, 'the input is kept once the account arrives, without another');
-  assert.match(Object.keys(saved[0])[0], /^draft:canvas:\["https:\/\/school\.test","7","5",\["2"\],"Lab question"\]$/);
-});
+}

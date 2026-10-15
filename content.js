@@ -1418,22 +1418,32 @@
   // does, as if just written in; from then on it gets every keydown, input and paste, and the passes (watchDrafts).
   const DRAFT_ED = ultra ? '.ql-editor[contenteditable="true"]' : '#compose-message-modal textarea[data-testid="message-body"]';
   const local = (fn) => { try { fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
-  const draftsWaiting = new Set();
+  // What a copy needs, read as it is written: the editor can be gone (compose closed, the page changed) before it's kept.
+  const draftAt = (ed) => {
+    const m = ed.closest('#compose-message-modal'), up = [];
+    for (let p = ed.parentElement; p && up.length < 15; p = p.parentElement) up.push(p);
+    return { ed, up, path: location.pathname, at: Date.now(), text: ultra ? ed.textContent : ed.value, html: ultra ? ed.innerHTML : ed.value,
+      subject: m?.querySelector('input[data-testid="subject-input"]')?.value, name: m?.querySelector('input[data-testid="course-select-modal"]')?.value,
+      to: [...(m?.querySelectorAll('[data-testid="address-book-tag"]') || [])].map((e) => e.id) };
+  };
+  const draftsWaiting = new Map(); // editor -> what was read from it last
   const draftsIn = () => need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => need('features/drafts.js', () => globalThis.GZ_DRAFT_UI)).then(() => {
     const eds = [...draftsWaiting];
     draftsWaiting.clear();
-    for (const ed of eds) if (ed.isConnected) GZ_DRAFT_UI.write({ type: 'input', target: ed });
+    for (const [ed, at] of eds) if (ed.isConnected) GZ_DRAFT_UI.write({ type: 'input', target: ed }); else GZ_DRAFT_UI.keep(at);
     if (observer) watchDrafts();
   }, () => draftsWaiting.clear());
   for (const ev of ['keydown', 'input', 'paste']) document.addEventListener(ev, (e) => {
     if (globalThis.GZ_DRAFT_UI) return GZ_DRAFT_UI.write(e);
     if ((!ultra && e.type !== 'input') || !settings.enhance.drafts || !observer || !(e.target instanceof Element)) return;
     const ed = e.target.closest(DRAFT_ED);
-    if (ed) { draftsWaiting.add(ed); draftsIn(); } else if (!ultra && e.target.closest('#compose-message-modal')) watchDrafts();
+    if (ed) { draftsWaiting.set(ed, draftAt(ed)); draftsIn(); } else if (!ultra && e.target.closest('#compose-message-modal')) watchDrafts();
   }, true);
   // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
   const watchDrafts = () => {
     if (globalThis.GZ_DRAFT_UI) return GZ_DRAFT_UI.watch();
+    // Read again each pass while it loads: a paste lands in Quill after its event.
+    for (const [ed] of draftsWaiting) if (ed.isConnected) draftsWaiting.set(ed, draftAt(ed));
     if (settings.enhance.drafts && (ultra || /^\/conversations\/?$/.test(location.pathname)) && document.querySelector(DRAFT_ED)) draftsIn();
   };
   // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
@@ -2202,7 +2212,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     nickOf, courseList: () => courseList, courseColor, courseColors, varText, cardUI,
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
-    draftEditor: DRAFT_ED, bookFor, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
+    draftEditor: DRAFT_ED, draftAt, bookFor, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
     canvasCourseKey, ROWS, holding: () => held.size > 0, tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
