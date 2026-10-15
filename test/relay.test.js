@@ -481,6 +481,170 @@ test('keys from Export all bring a share back on a new computer, delete rights i
   assert.deepEqual(await a.pump(), { gone: true });
 });
 
+// A store whose first put waits until the test lets it go (a slow R2 or disk write), then works or fails.
+const slow = () => {
+  const s = memory();
+  const put = s.put;
+  let go, first = true;
+  s.started = new Promise((resolve) => { s.start = resolve; });
+  const gate = new Promise((resolve) => { go = resolve; });
+  s.put = async (k, b) => {
+    if (!first) return put(k, b);
+    first = false;
+    s.start();
+    if (await gate) throw new Error('store down');
+    return put(k, b);
+  };
+  s.release = (fail = false) => go(fail);
+  return s;
+};
+const blobRows = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM blobs WHERE sid = ?').get(sid).c;
+
+test('a file upload still in flight when its share is deleted (by the creator or by expiry) leaves nothing behind', async (t) => {
+  for (const [how, fail] of [['creator', false], ['creator', true], ['expiry', false]]) {
+    const store = slow();
+    const r = await up({ store });
+    t.after(() => r.close());
+    const a = make(r, 'notes', { expire: how === 'expiry' });
+    a.local = { n1: { title: 'x', html: '' } };
+    await a.pump();
+    const upload = a.s.put(new Uint8Array(3000)).then(() => 'stored', (e) => e.status ?? e.message);
+    await store.started;
+    if (how === 'creator') assert.equal((await fetch(`${r.url}/s/${a.st.sid}`, { method: 'DELETE', headers: { authorization: `Bearer ${a.st.del}` } })).status, 204);
+    else r.db.prepare('UPDATE sessions SET touched = touched - 400 WHERE sid = ?').run(a.st.sid);
+    await r.expire();
+    assert.equal((await fetch(`${r.url}/s/${a.st.sid}`)).status, 410, `${how} ${fail}`);
+    store.release(fail);
+    assert.equal(await upload, 410, `${how} ${fail}: the upload isn't acknowledged`);
+    await r.expire();
+    assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [0, 0], `${how} ${fail}`);
+  }
+});
+
+test('a failed upload frees its room; one left by a relay that stopped mid-upload is cleaned at the next start', async (t) => {
+  const dir = tmp(t);
+  const db = path.join(dir, 'share.db');
+  const store = slow();
+  let r = await up({ db, store, maxBlobBytes: 5000 });
+  const a = make(r);
+  a.local = { n1: { title: 'x', html: '' } };
+  await a.pump();
+  const upload = a.s.put(new Uint8Array(3000)).then(() => 'stored', (e) => e.status);
+  await store.started;
+  store.release(true);
+  assert.equal(await upload, 500);
+  assert.equal(blobRows(r, a.st.sid), 0);
+  await a.s.put(new Uint8Array(4000)); // the room the failed one held is back
+  // A relay that stops between counting an upload and storing it leaves a pending row (and maybe the object).
+  const port = r.port;
+  r.db.prepare('INSERT INTO blobs (sid, id, size, at) VALUES (?, ?, ?, ?)').run(a.st.sid, 'P'.repeat(22), 100, Date.now());
+  store.m.set(`${a.st.sid}/${'P'.repeat(22)}`, Buffer.alloc(100));
+  await r.close();
+  r = await up({ db, store, maxBlobBytes: 5000 }, port);
+  t.after(() => r.close());
+  await r.expire();
+  assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [1, 1]);
+});
+
+test('a deleted share\'s files stop counting, also after a restart, and after a store that was down recovers', async (t) => {
+  const dir = tmp(t);
+  const db = path.join(dir, 'share.db');
+  const store = memory();
+  const del = store.del;
+  let r = await up({ db, store, maxBlobBytes: 5000 });
+  let port = r.port;
+  const a = make(r);
+  await a.s.put(new Uint8Array(4000)); // 4,124 bytes sealed
+  await a.s.remove();
+  await r.expire();
+  assert.equal(store.m.size, 0);
+  await r.close();
+  r = await up({ db, store, maxBlobBytes: 5000 }, port);
+  const b = make(r);
+  await b.s.put(new Uint8Array(4000)); // fits: the deleted share no longer counts
+  // The store is down while b is deleted: its file is still there, so it still counts until it's gone.
+  store.del = async () => { throw new Error('store down'); };
+  await b.s.remove();
+  await r.expire();
+  assert.deepEqual([store.m.size, blobRows(r, b.st.sid)], [1, 1]);
+  const c = make(r);
+  await assert.rejects(c.s.put(new Uint8Array(4000)), (e) => e.status === 507);
+  await r.close();
+  store.del = del;
+  r = await up({ db, store, maxBlobBytes: 5000 }, port);
+  t.after(() => r.close());
+  await r.expire();
+  assert.deepEqual([store.m.size, blobRows(r, b.st.sid)], [0, 0]);
+  const d = make(r);
+  await d.s.put(new Uint8Array(4000));
+});
+
+test('catch-up applies batches strictly in order: a reordered or gapped page never moves the cursor past a missing batch', async (t) => {
+  const r = await up({ limit: { ...LIMIT, page: 1 } }); // one batch per page: catch-up over many pages
+  t.after(() => r.close());
+  const a = make(r);
+  for (let i = 1; i <= 5; i++) { a.local[`n${i}`] = { title: `n${i}`, html: '' }; await a.pump(); }
+  const link = await a.s.link(false);
+  // An ordinary catch-up over five pages.
+  const plain = await join(link);
+  await plain.pump();
+  assert.deepEqual(plain.local, a.local);
+  // A relay that answers once with batches out of order, then once with a hole, then honestly.
+  const r2 = await up();
+  t.after(() => r2.close());
+  const e = make(r2);
+  e.local = { n1: { title: 'one', html: '' } };
+  await e.pump();
+  e.local.n2 = { title: 'two', html: '' };
+  await e.pump();
+  e.local.n3 = { title: 'three', html: '' };
+  await e.pump();
+  const lies = [(ops) => ops.reverse(), (ops) => ops.filter((o) => o.n !== 1)];
+  const b = await join(await e.s.link(false), {
+    fetch: async (u, init) => {
+      const res = await fetch(u, init);
+      if (!u.includes('?after=') || !lies.length) return res;
+      const page = await res.json();
+      page.ops = lies.shift()(page.ops);
+      return new Response(JSON.stringify(page), { status: 200 });
+    },
+  });
+  for (let i = 0; i < 2; i++) {
+    const got = await b.pump();
+    assert.deepEqual([b.st.cursor, got.more, Object.keys(b.local)], [0, true, []], `lie ${i}`);
+  }
+  await b.pump();
+  assert.deepEqual(b.local, e.local);
+});
+
+test('a forwarded client address is trusted only from configured proxies, and only if it is an address', async (t) => {
+  const tries = async (opts, values) => {
+    const r = await up({ rate: { ...RATE, create: [1, 3600e3] }, ...opts });
+    t.after(() => r.close());
+    const out = [];
+    for (const v of values) {
+      const res = await fetch(`${r.url}/s`, { method: 'POST', headers: { 'x-real-ip': v }, body: JSON.stringify({ sid: G.b64(crypto.getRandomValues(new Uint8Array(16))), pub: 'A'.repeat(43), del: 'A'.repeat(43) }) });
+      out.push(res.status);
+    }
+    return out;
+  };
+  assert.deepEqual(await tries({}, ['203.0.113.1', '203.0.113.1', '203.0.113.2']), [201, 429, 429]); // no header configured
+  assert.deepEqual(await tries({ ipHeader: 'x-real-ip' }, ['203.0.113.1', '203.0.113.1', '203.0.113.2']), [201, 429, 201]); // loopback is trusted by default
+  assert.deepEqual(await tries({ ipHeader: 'x-real-ip', trustedProxies: '10.0.0.0/8' }, ['203.0.113.1', '203.0.113.2']), [201, 429]); // this peer isn't a proxy
+  assert.deepEqual(await tries({ ipHeader: 'x-real-ip' }, ['not-an-address', 'also-not']), [201, 429]); // not an address: the peer counts
+});
+
+test('the number of sessions is capped, tombstones included, so the database stays bounded', async (t) => {
+  const r = await up({ maxSessions: 2 });
+  t.after(() => r.close());
+  const a = make(r), b = make(r), c = make(r);
+  await a.s.sync();
+  await b.s.sync();
+  await assert.rejects(c.s.sync(), (e) => e.status === 507);
+  await a.s.remove();
+  await assert.rejects(c.s.sync(), (e) => e.status === 507);
+});
+
 test('SigV4 matches AWS\'s published test vectors', () => {
   const base = { keyId: 'AKIDEXAMPLE', secret: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY', region: 'us-east-1', service: 'service', date: new Date('2015-08-30T12:36:00Z') };
   // aws4_testsuite get-vanilla and post-x-www-form-urlencoded (botocore tests/unit/auth/aws4_testsuite)

@@ -7,8 +7,11 @@
 // Node's built-ins only (node:sqlite: Node 22.13 or later). One command, behind a TLS reverse proxy:
 //   node server/relay.js                   PORT (8787), HOST (127.0.0.1), DB (./share.db), BLOBS (./share-blobs),
 //                                          IP_HEADER (the header the proxy puts the client's address in; for
-//                                          X-Forwarded-For its last entry), MAX_BYTES (5 GiB of batches),
-//                                          MAX_BLOB_BYTES (20 GiB of files)
+//                                          X-Forwarded-For its last entry), TRUSTED_PROXIES (the peers whose IP_HEADER
+//                                          counts, addresses or CIDRs; default this computer only), MAX_BYTES (5 GiB
+//                                          of batches), MAX_BLOB_BYTES (20 GiB of files), MAX_SESSIONS (500,000,
+//                                          deleted ones included). These cap what's stored, not the disk itself:
+//                                          leave room for the database's own overhead, its WAL and backups.
 //                                          Files go to Cloudflare R2 instead of BLOBS when R2_ACCOUNT_ID,
 //                                          R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET are set.
 //   node server/relay.js --backup <file>   a consistent copy of the database, safe while the relay runs (files aren't in it)
@@ -17,6 +20,7 @@
 const http = require('node:http');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const net = require('node:net');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
@@ -79,14 +83,16 @@ const diskStore = (dir) => {
   };
 };
 
-const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHeader = '', maxBytes = 5 * 2 ** 30, maxBlobBytes = 20 * 2 ** 30, expiryDays = 365, rate = RATE, limit = LIMIT } = {}) => {
+const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHeader = '', trustedProxies = '127.0.0.1/8,::1/128', maxBytes = 5 * 2 ** 30,
+  maxBlobBytes = 20 * 2 ** 30, maxSessions = 500000, expiryDays = 365, rate = RATE, limit = LIMIT } = {}) => {
   const db = new DatabaseSync(file);
+  // A file's row is written before its object and counts from then on: `at` is set while it uploads (pending) and
+  // cleared once stored, so a row with no object, or an object a deleted share no longer wants, is always found.
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
     CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, pub BLOB, del BLOB, expire INTEGER NOT NULL DEFAULT 0, touched INTEGER NOT NULL,
-      head INTEGER NOT NULL DEFAULT 0, base INTEGER NOT NULL DEFAULT 0, base_sig BLOB, bytes INTEGER NOT NULL DEFAULT 0,
-      blob_bytes INTEGER NOT NULL DEFAULT 0, gone INTEGER) STRICT;
+      head INTEGER NOT NULL DEFAULT 0, base INTEGER NOT NULL DEFAULT 0, base_sig BLOB, bytes INTEGER NOT NULL DEFAULT 0, gone INTEGER) STRICT;
     CREATE TABLE IF NOT EXISTS ops (sid TEXT NOT NULL, n INTEGER NOT NULL, op BLOB NOT NULL, sig BLOB NOT NULL, PRIMARY KEY (sid, n)) STRICT, WITHOUT ROWID;
-    CREATE TABLE IF NOT EXISTS blobs (sid TEXT NOT NULL, id TEXT NOT NULL, size INTEGER NOT NULL, PRIMARY KEY (sid, id)) STRICT, WITHOUT ROWID;`);
+    CREATE TABLE IF NOT EXISTS blobs (sid TEXT NOT NULL, id TEXT NOT NULL, size INTEGER NOT NULL, at INTEGER, PRIMARY KEY (sid, id)) STRICT, WITHOUT ROWID;`);
   const q = Object.fromEntries(Object.entries({
     get: 'SELECT * FROM sessions WHERE sid = ?',
     make: 'INSERT INTO sessions (sid, pub, del, expire, touched) VALUES (?, ?, ?, ?, ?)',
@@ -100,17 +106,22 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     drop: 'DELETE FROM ops WHERE sid = ? AND n <= ?',
     trim: 'UPDATE sessions SET base = ?, base_sig = ?, bytes = bytes - ? WHERE sid = ?',
     gone: 'UPDATE sessions SET pub = NULL, del = NULL, base_sig = NULL, bytes = 0, gone = ? WHERE sid = ?',
-    blob: 'SELECT size FROM blobs WHERE sid = ? AND id = ?',
-    addBlob: 'INSERT INTO blobs (sid, id, size) VALUES (?, ?, ?)',
-    growBlobs: 'UPDATE sessions SET blob_bytes = blob_bytes + ? WHERE sid = ?',
+    blob: 'SELECT size, at FROM blobs WHERE sid = ? AND id = ?',
+    addBlob: 'INSERT OR IGNORE INTO blobs (sid, id, size, at) VALUES (?, ?, ?, ?)',
+    stored: 'UPDATE blobs SET at = NULL WHERE sid = ? AND id = ?',
     dropBlob: 'DELETE FROM blobs WHERE sid = ? AND id = ?',
-    orphans: 'SELECT b.sid, b.id FROM blobs b JOIN sessions s ON s.sid = b.sid WHERE s.gone IS NOT NULL LIMIT 1000',
+    blobBytes: 'SELECT coalesce(sum(size), 0) AS b FROM blobs WHERE sid = ?',
+    // Files to remove from the store: a deleted share's, and uploads left pending by a relay that stopped.
+    orphans: 'SELECT b.sid, b.id, b.size FROM blobs b JOIN sessions s ON s.sid = b.sid WHERE s.gone IS NOT NULL OR b.at < ? LIMIT 1000',
     old: 'SELECT sid FROM sessions WHERE expire = 1 AND gone IS NULL AND touched < ?',
-    total: 'SELECT coalesce(sum(bytes), 0) AS b, coalesce(sum(blob_bytes), 0) AS f FROM sessions',
+    total: 'SELECT coalesce(sum(bytes), 0) AS b, count(*) AS n FROM sessions',
+    blobTotal: 'SELECT coalesce(sum(size), 0) AS f FROM blobs',
   }).map(([k, sql]) => [k, db.prepare(sql)]));
   const tx = (f) => { db.exec('BEGIN IMMEDIATE'); try { const out = f(); db.exec('COMMIT'); return out; } catch (e) { db.exec('ROLLBACK'); throw e; } };
+  // What's stored, from the rows themselves: a deleted share's files count until they're gone from the store, and
+  // never after. Sessions count with their tombstones, which keep a deleted id from coming back.
   const totals = q.total.get();
-  let total = Number(totals.b), blobTotal = Number(totals.f);
+  let total = Number(totals.b), sessions = Number(totals.n), blobTotal = Number(q.blobTotal.get().f);
   const today = () => Math.floor(Date.now() / DAY);
 
   // ---- limits: token buckets per client address, in memory only --------------------------------------------------
@@ -132,7 +143,21 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     const all = ip.includes('::') ? [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail] : head;
     return all.slice(0, 4).map((x) => parseInt(x, 16).toString(16)).join(':') + '::/64';
   };
-  const clientOf = (req) => keyOf((ipHeader && String(req.headers[ipHeader] || '').split(',').pop().trim()) || req.socket.remoteAddress || '');
+  // The forwarded address counts only when the peer is one of the configured proxies and the value is an address;
+  // otherwise the peer itself does. Setting IP_HEADER alone trusts nobody but this computer.
+  const trusted = new net.BlockList();
+  const family = (ip) => (net.isIPv6(ip) ? 'ipv6' : 'ipv4');
+  for (const x of String(trustedProxies).split(',')) {
+    const [ip, bits] = x.trim().split('/');
+    if (!net.isIP(ip)) continue;
+    if (bits === undefined) trusted.addAddress(ip, family(ip)); else trusted.addSubnet(ip, Number(bits), family(ip));
+  }
+  const bare = (ip) => ip.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '');
+  const clientOf = (req) => {
+    const peer = bare(req.socket.remoteAddress || '');
+    const fwd = ipHeader && net.isIP(peer) && trusted.check(peer, family(peer)) ? bare(String(req.headers[ipHeader] || '').split(',').pop().trim()) : '';
+    return keyOf(net.isIP(fwd) ? fwd : peer);
+  };
   // A request target Node accepts can still be one URL refuses (`http://[`): that's a bad request, never a crash.
   const target = (req) => { try { return new URL(req.url, 'http://relay'); } catch { return null; } };
 
@@ -203,11 +228,16 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
 
   // ---- deletion and expiry ------------------------------------------------------------------------------------------
   // A deleted session's batches go at once; its id stays (with the day) so it can't be made again. Its files go from
-  // the store one by one, each row only once its file is gone, so a store that's down is caught up with later.
+  // the store one by one, each row only once its file is gone, so a store that's down is caught up with later. A file
+  // still uploading here is left to its upload, which finds the session gone and hands the file back to this sweep.
+  // A pending row older than an hour (a relay that stopped mid-upload; at start, any) goes the same way.
+  const uploading = new Set();
   let removing = Promise.resolve();
-  const removeFiles = () => (removing = removing.then(async () => {
-    for (const { sid, id } of q.orphans.all()) {
-      try { await store.del(`${sid}/${id}`); q.dropBlob.run(sid, id); } catch (e) { console.error('relay: file store:', e.message); return; }
+  const removeFiles = (pendingBefore = Date.now() - 3600e3) => (removing = removing.then(async () => {
+    for (const { sid, id, size } of q.orphans.all(pendingBefore)) {
+      if (uploading.has(`${sid}/${id}`)) continue;
+      try { await store.del(`${sid}/${id}`); } catch (e) { console.error('relay: file store:', e.message); return; }
+      if (q.dropBlob.run(sid, id).changes) blobTotal -= size;
     }
   }));
   const remove = (sid) => {
@@ -215,7 +245,6 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
     if (!row || row.gone) return false;
     tx(() => { q.drop.run(sid, Number.MAX_SAFE_INTEGER); q.gone.run(today(), sid); });
     total -= row.bytes;
-    blobTotal -= row.blob_bytes;
     ring(sid, { gone: 1 });
     removeFiles();
     return true;
@@ -271,9 +300,10 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (!take(ip, 'create')) return send(res, 429, { error: 'rate' });
       const b = await json(req);
       if (!SID.test(b?.sid) || !KEY.test(b.pub) || !KEY.test(b.del)) return send(res, 400, { error: 'bad' });
-      if (total >= maxBytes) return send(res, 507, { error: 'full' });
       if (q.get.get(b.sid)) return send(res, 409, { error: 'exists' });
+      if (total >= maxBytes || sessions >= maxSessions) return send(res, 507, { error: 'full' });
       q.make.run(b.sid, Buffer.from(b.pub, 'base64url'), Buffer.from(b.del, 'base64url'), b.expire === true ? 1 : 0, today());
+      sessions++;
       return send(res, 201, {});
     }
     const m = ROUTE.exec(url.pathname);
@@ -341,20 +371,33 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (q.blob.get(sid, m[3])) return send(res, 409, { error: 'exists' });
       if (!signed(row.pub, sid, 'blob', m[3], b, sig)) return send(res, 403, { error: 'signature' });
       if (!take(ip, 'bytes', b.length)) return send(res, 429, { error: 'rate' });
-      if (row.blob_bytes + b.length > limit.blobs || blobTotal + b.length > maxBlobBytes) return send(res, 507, { error: 'full' });
-      // Counted before the store call, so two uploads at once can't both fit in the last room.
-      tx(() => { q.addBlob.run(sid, m[3], b.length); q.growBlobs.run(b.length, sid); });
+      if (Number(q.blobBytes.get(sid).b) + b.length > limit.blobs || blobTotal + b.length > maxBlobBytes) return send(res, 507, { error: 'full' });
+      // On the books (pending) before the store call: two uploads at once can't both take the last room, and a file
+      // whose share is deleted meanwhile is never lost track of.
+      const key = `${sid}/${m[3]}`;
+      q.addBlob.run(sid, m[3], b.length, Date.now());
       blobTotal += b.length;
-      try { await store.put(`${sid}/${m[3]}`, b); } catch (e) {
-        tx(() => { q.dropBlob.run(sid, m[3]); q.growBlobs.run(-b.length, sid); });
-        blobTotal -= b.length;
-        throw e;
+      uploading.add(key);
+      let failed = null;
+      try { await store.put(key, b); } catch (e) { failed = e; } finally { uploading.delete(key); }
+      if (q.get.get(sid)?.gone) {
+        // Deleted while it uploaded: never acknowledged. Its row (put back if another process took it) hands whatever
+        // the store holds to the sweep.
+        if (q.addBlob.run(sid, m[3], b.length, Date.now()).changes) blobTotal += b.length;
+        await removeFiles();
+        return send(res, 410, { error: 'gone' });
       }
+      if (failed) {
+        // Nothing kept: what the store may hold goes now, or, if it can't, with the pending row's sweep.
+        await store.del(key).then(() => { if (q.dropBlob.run(sid, m[3]).changes) blobTotal -= b.length; }, () => {});
+        throw failed;
+      }
+      q.stored.run(sid, m[3]);
       return send(res, 201, {});
     }
     if (kind === 'getBlob') {
       const meta = q.blob.get(sid, m[3]);
-      if (!meta) return send(res, 404, { error: 'unknown' });
+      if (!meta || meta.at !== null) return send(res, 404, { error: 'unknown' });
       if (!take(ip, 'down', meta.size)) return send(res, 429, { error: 'rate' });
       const data = await store.get(`${sid}/${m[3]}`);
       return data ? send(res, 200, data, 'application/octet-stream') : send(res, 404, { error: 'unknown' });
@@ -380,6 +423,8 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
   }));
   server.requestTimeout = 60e3;
   server.on('upgrade', upgrade);
+  // At start nothing is uploading here, so every pending row is left over from a relay that stopped.
+  removeFiles(Number.MAX_SAFE_INTEGER);
   expire().catch(() => {});
   return {
     server, db, remove, expire, subs,
@@ -396,6 +441,8 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
 const fromEnv = (env) => ({
   db: env.DB || 'share.db',
   ipHeader: (env.IP_HEADER || '').toLowerCase(),
+  trustedProxies: env.TRUSTED_PROXIES || undefined,
+  maxSessions: Number(env.MAX_SESSIONS) || undefined,
   maxBytes: Number(env.MAX_BYTES) || undefined,
   maxBlobBytes: Number(env.MAX_BLOB_BYTES) || undefined,
   store: env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET
