@@ -92,7 +92,8 @@
         "extras.css",
         "canvas.css",
         "fonts/*.woff2",
-        "assets/art/pets/*/sprites.webp"
+        "assets/art/pets/*/sprites.webp",
+        "assets/art/stickers/critters/*.webp"
       ],
       "matches": [
         "https://*/*"

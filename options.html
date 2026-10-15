@@ -450,6 +450,34 @@
           <label class="check"><input type="checkbox" data-key="todo.cardCross"><span>Cross out done tasks</span>
             <span class="desc">Done items stay on the card, crossed out, until their due date passes. Off: they leave it.</span></label>
         </div>
+        <div class="group" id="widgets">
+          <h3>Notes and widgets</h3>
+          <label class="check"><input type="checkbox" data-key="enhance.notes"><span>Dashboard notes</span>
+            <span class="desc">On Canvas's Dashboard: a box for your own notes, small, medium or large. Saved as you type, on this device only, for each Canvas site and account. Web addresses in them become links.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.widgets"><span>Widgets</span>
+            <span class="desc">On Canvas's Dashboard: an agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. Edit widgets to add, order and size them; any of them can float over every Canvas page, where you drag it or move it with the arrow keys.</span></label>
+          <div class="row">
+            <label class="field"><span>Focus minutes</span><input type="range" data-key="widgets.work" min="1" max="120" step="1"><output data-for="widgets.work"></output></label>
+            <label class="field"><span>Break minutes</span><input type="range" data-key="widgets.rest" min="1" max="60" step="1"><output data-for="widgets.rest"></output></label>
+          </div>
+          <label class="check"><input type="checkbox" data-key="widgets.sound"><span>Chime when the timer ends</span>
+            <span class="desc">A soft chime made by your browser, in the tab where you pressed Start.</span></label>
+          <div class="row">
+            <label>Quotes <select data-key="widgets.quotes"><option value="all">All</option><option value="focus">Focus</option><option value="calm">Calm</option><option value="courage">Courage</option></select></label>
+            <label>New quote <select data-key="widgets.quoteMode"><option value="cycle">Every few seconds</option><option value="daily">Once a day</option></select></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Seconds per quote</span><input type="range" data-key="widgets.quoteEvery" min="10" max="600" step="5"><output data-for="widgets.quoteEvery"></output></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Breathe in (seconds)</span><input type="range" data-key="widgets.inhale" min="2" max="10" step="1"><output data-for="widgets.inhale"></output></label>
+            <label class="field"><span>Hold (seconds)</span><input type="range" data-key="widgets.hold" min="0" max="10" step="1"><output data-for="widgets.hold"></output></label>
+          </div>
+          <div class="row">
+            <label class="field"><span>Breathe out (seconds)</span><input type="range" data-key="widgets.exhale" min="2" max="12" step="1"><output data-for="widgets.exhale"></output></label>
+            <label class="field"><span>Breaths</span><input type="range" data-key="widgets.cycles" min="1" max="30" step="1"><output data-for="widgets.cycles"></output></label>
+          </div>
+        </div>
         <div class="group">
           <h3>Declutter</h3>
           <label class="check"><input type="checkbox" data-key="declutter.help"><span>Hide the floating help button</span></label>
@@ -497,6 +525,11 @@
         </div>
         <p class="desc">Exports are a JSON file with your palette, presets, options, any course nicknames you set, and your Better To Do tasks and plans. Course names from Blackboard or Canvas stay on this computer and are not exported.</p>
         <p class="desc">Card styles and bookmarks go in the export too. Pictures kept for cards stay on this computer.</p>
+        <div class="group">
+          <h3>Report a problem</h3>
+          <p class="desc" id="report-note">Opens a new issue on Glaze's GitHub page with your Glaze version, browser and system filled in, and nothing else. You add what happened and send it yourself, or don't.</p>
+          <div class="row"><a class="button" id="report-link" href="https://github.com/frostdev-ops/glaze/issues/new" target="_blank" rel="noopener" aria-describedby="report-note">Report a problem</a></div>
+        </div>
       </section>
     </main>
 
@@ -514,6 +547,7 @@
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
   <script src="lib/todo.js"></script>
+  <script src="lib/widgets.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>

@@ -66,6 +66,8 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [false, 'bool'], cardTasks: [false, 'bool'],
+    // Canvas's Dashboard: notes, and widgets (lib/widgets.js has their settings, the widgets item).
+    notes: [false, 'bool'], widgets: [false, 'bool'],
     // place: a course's content reopens where you left it (open folders, scroll).
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
