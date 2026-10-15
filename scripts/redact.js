@@ -3,7 +3,7 @@
 
 // Query values that unlock something: file verifiers, tokens. The whole value goes. In a plain query it ends at the next
 // & (an encoded %26 there is part of the value); inside an encoded URL (a file preview's ?url=…%3Fverifier%3D…) at %26.
-const NAMES = '(?:verifier|sf_verifier|access_token|token|session_token|authenticity_token|_csrf_token)';
+const NAMES = '(?:verifier|sf_verifier|access_token|token|session_token|authenticity_token|_csrf_token|sesskey|logintoken)';
 const SECRET_PARAM = new RegExp(`([?&](?:amp;)?${NAMES}=)[^&"'\\s<#]+`, 'gi');
 const SECRET_ENCODED = new RegExp(`((?:%3F|%26)${NAMES}%3D)(?:(?!%26)[^&"'\\s<#])+`, 'gi');
 // Feed addresses (calendar .ics, announcement and discussion Atom) carry a capability in their path, not a parameter.
@@ -20,6 +20,7 @@ const redact = (html) => html
   .replace(DATA_URI, '$1');
 
 // A fixture as written to disk: its provenance note (which names the captured address) and the page, scrubbed together.
-const fixture = (url, html) => redact(`<!-- Glaze test fixture: ${url} on the local Canvas (seed: ~/Projects/canvas-lms/glaze/seed.rb), rendered DOM after load. Made by scripts/canvas-shots.js --html; scripts emptied, tokens redacted, repeated rows trimmed. -->\n${html}`);
+const SEEDS = { canvas: 'the local Canvas (seed: ~/Projects/canvas-lms/glaze/seed.rb)', moodle: 'the local Moodle (seed: ~/Projects/moodle-dev/seed.php)' };
+const fixture = (url, html, lms = 'canvas') => redact(`<!-- Glaze test fixture: ${url} on ${SEEDS[lms]}, rendered DOM after load. Made by scripts/canvas-shots.js --html; scripts emptied, tokens redacted, repeated rows trimmed. -->\n${html}`);
 
 module.exports = { redact, fixture };

@@ -3,9 +3,10 @@
 // toggle them without a reload), (2) push settings onto <html> — colors and look values as inline
 // --gz-* vars, everything else as data-gz-* attributes — so the CSS never branches here,
 // (3) the long tail: tag what no selector can reach and let the CSS restyle the tag.
-// It runs on two sites: Blackboard Ultra, which gets all of that plus its extras (everything marked
+// It runs on three sites: Blackboard Ultra, which gets all of that plus its extras (everything marked
 // Extras below), and Canvas LMS, which gets (1) to (3), with its own stylesheet, and three extras: Due this
-// week, the command palette and grades on the dashboard's course cards (marked Canvas below).
+// week, the command palette and grades on the dashboard's course cards (marked Canvas below). Moodle is themed as
+// Canvas is (moodle.css), and its three of those load on demand (moodleIn).
 (async () => {
   // Only HTML pages: an /ultra/ address can also be an XML error from Ultra's CDN, or a raw script.
   if (window.__gzGlaze || !/html/.test(document.contentType)) return;
@@ -15,15 +16,16 @@
   // addresses and body classes can belong to another app or a same-host tool.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
   const ULTRA = 'base[href*="/ultra/"]';
+  const MOODLE = 'meta[name="keywords"][content^="moodle,"]'; // core writes it on every page
   let site;
   if (isPreview) site = 'ultra';
   else site = await new Promise((resolve) => {
     const look = () => {
-      const hit = document.head?.querySelector(`${ULTRA}, link[rel~="stylesheet"][href*="/dist/brandable_css/"]`);
+      const hit = document.head?.querySelector(`${ULTRA}, ${MOODLE}, link[rel~="stylesheet"][href*="/dist/brandable_css/"]`);
       if (!hit && !document.body) return;
       mo.disconnect();
       document.removeEventListener('DOMContentLoaded', look);
-      resolve(hit ? (hit.matches(ULTRA) ? 'ultra' : 'canvas') : null);
+      resolve(hit ? (hit.matches(ULTRA) ? 'ultra' : hit.matches(MOODLE) ? 'moodle' : 'canvas') : null);
     };
     const mo = new MutationObserver(look);
     mo.observe(document, { childList: true, subtree: true });
@@ -32,6 +34,7 @@
   });
   if (!site) return;
   const ultra = site === 'ultra';
+  const moodle = site === 'moodle';
 
   const C = GZ_COLOR;
   const html = document.documentElement;
@@ -53,7 +56,7 @@
   // motion.css comes along: it is mostly the motion knobs (--gz-t, --gz-enter…, set per level by
   // html[data-gz-motion] and the three switches) that any sheet's animations read, so canvas.css doesn't
   // redo them. Its Ultra-named rules (.route-view-container, .element-card…) match nothing in Canvas.
-  const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css'] : ['canvas.css', 'motion.css'];
+  const SHEETS = ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'];
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
   // On Canvas, the whole document: put on a school's own host by lib/background.js mid-load, the body can be
@@ -64,7 +67,8 @@
   // Likewise `https://*.instructure.com/*`, and each school's own Canvas host that lib/detect.js found, is
   // every page and frame on that host. Canvas's own pages sit in this wrapper; a tool framed inside one
   // doesn't, and stays as it is.
-  const isCanvas = () => !!document.querySelector('#application.ic-app');
+  // Moodle's: its page id and layout on <body>.
+  const isCanvas = () => !!document.querySelector(moodle ? 'body[id^="page-"][class*="pagelayout-"]' : '#application.ic-app');
   // A same-host tool can carry Canvas's head marker too; confirm its wrapper before styling a frame.
   if (!ultra && window.top !== window) {
     await new Promise(onBody);
@@ -124,7 +128,7 @@
         }
         continue;
       }
-      if (!e.isConnected || SKIP.test(e.tagName) || e.id.startsWith('gz-') || e.closest('svg, [id^="gz-"]')) continue;
+      if (!e.isConnected || SKIP.test(e.tagName) || e.closest('svg, [id^="gz-"]')) continue; // a form's e.id can be its field named id
       const cs = getComputedStyle(e);
       const instui = !ultra && e.getAttribute('class')?.includes('css-');
       const colors = instui ? sweepColors(e, cs) : cs;
@@ -260,7 +264,7 @@
   const canvasCourseKey = (id = canvasCourseId()) => id ? `canvas:${location.origin}/${id}` : null;
   const recordCourses = () => {
     if (!ultra) {
-      if (canvasRecorded || window.top !== window) return;
+      if (moodle || canvasRecorded || window.top !== window) return;
       canvasRecorded = true;
       Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
         const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
@@ -310,7 +314,7 @@
     if (!other && now - (r?.dueWeekAt || 0) < 600000) return kept;
     const at = (days) => new Date(now + days * 864e5).toISOString();
     const ask = ultra ? api(`/calendars/todo/studentItems?since=${at(0)}&until=${at(7)}`).then((j) => GZ_DUE_WEEK(j, now))
-      : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
+      : moodle ? moodleIn().then((m) => m.due(now)) : capi(`/planner/items?start_date=${at(0)}&end_date=${at(7)}&per_page=100`).then((j) => GZ_CANVAS_DUE_WEEK(j, now));
     return ask.then((list) => {
       try { chrome.storage.local.set({ dueWeek: list, dueWeekAt: Date.now(), dueWeekFrom: location.origin }); } catch { /* reloaded */ }
       return list;
@@ -349,8 +353,10 @@
     }
     return loading.get(file);
   };
+  // Moodle's extras, on first use: its data read (lib/moodle.js), then asked of the page's own Moodle.
+  const moodleIn = () => need('lib/moodle.js', () => globalThis.GZ_MOODLE).then(() => need('features/moodle.js', () => globalThis.GZ_MOODLE_PAGE)).then(() => GZ_MOODLE_PAGE);
   // Better To Do (features/todo.js)
-  const todoHere = () => !ultra && links.length && settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
+  const todoHere = () => !ultra && !moodle && links.length && settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
   const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
   const cardsHere = () => !ultra && links.length && settings.enhance.cardTasks && location.pathname === '/';
@@ -446,6 +452,7 @@
   });
   const tagCards = () => {
     if (!observer || !settings.enhance.overall) return;
+    if (moodle) return document.querySelector('[data-region="course-content"]') && moodleIn().then((m) => m.cards(), () => {});
     if (!ultra) return tagCanvasCards();
     if (location.pathname !== '/ultra/course') return;
     for (const el of document.querySelectorAll(CARD_STATUS)) cardsIO.observe(el);
@@ -1645,7 +1652,7 @@
     }
   };
   const renderCalc = () => {
-    if (!ultra) return canvasGrades();
+    if (!ultra) return moodle || canvasGrades();
     const old = document.getElementById('gz-calc');
     const cid = courseId();
     const host = settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview');
@@ -2373,7 +2380,7 @@
     document.addEventListener('keydown', (e) => {
       if (!ultra && e.key === 'Escape' && keysBox && !typing(e.target)) { e.preventDefault(); closeKeys(); return; }
       if (!ultra && e.key === 'Shift') return; // g then Shift+? must keep its prefix.
-      if (!settings.enhance.keys || !observer || e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || (!ultra && (e.defaultPrevented || e.repeat || !GZ_PAGE.canvasKeys(location.pathname) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')))) { gAt = 0; return; }
+      if (!settings.enhance.keys || !observer || e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || (!ultra && (moodle || e.defaultPrevented || e.repeat || !GZ_PAGE.canvasKeys(location.pathname) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')))) { gAt = 0; return; }
       if (e.key === 'Escape' && keysBox) { closeKeys(); return; }
       if (!ultra && Date.now() - gAt < 1200 && e.key === '?') {
         e.preventDefault(); e.stopImmediatePropagation(); gAt = 0;
@@ -2423,7 +2430,7 @@
     try { u = new URL(url, location.origin); } catch { return; }
     if (u.protocol === 'https:' || u.protocol === 'http:') location.assign(u.href);
   };
-  const pages = () => (ultra ? TOOLS : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
+  const pages = () => (moodle ? [] : ultra ? TOOLS : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
   const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
     const title = new Map(all.map((c) => [c.id, c.title]));
@@ -2445,7 +2452,7 @@
       ...GZ_ALL_PRESETS(s.presets).map(([name, colors]) => ({ label: t('Palette: {name}', { name }), hint: s.preset === name && !s.auto.on ? t('Current') : 'Glaze', group: 'Glaze', run: store({ colors, preset: name, auto: { ...s.auto, on: false } }) })),
       ...[['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']].map(([m, n]) => ({ label: t('Auto light and dark: {mode}', { mode: t(n) }), hint: (s.auto.on ? s.auto.mode : 'off') === m ? t('Current') : 'Glaze', group: 'Glaze', run: store({ auto: { ...s.auto, on: m !== 'off', ...(m !== 'off' && { mode: m }) } }) })),
       ...['off', 'subtle', 'expressive'].map((level) => ({ label: t('Motion: {level}', { level: t(`${level[0].toUpperCase()}${level.slice(1)}`) }), hint: s.motion.level === level ? t('Current') : 'Glaze', group: 'Glaze', run: store({ motion: { ...s.motion, level } }) })),
-      ...Object.entries(ultra ? EXTRAS : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
+      ...Object.entries(ultra ? EXTRAS : moodle ? { overall: CANVAS_EXTRAS.overall } : CANVAS_EXTRAS).map(([k, label]) => ({ label: t(s.enhance[k] ? 'Turn off {name|lower}' : 'Turn on {name|lower}', { name: t(label) }), hint: t('Glaze extra'), group: 'Glaze', run: store({ enhance: { ...s.enhance, [k]: !s.enhance[k] } }) })),
       { label: t('Turn the theme off'), hint: 'Glaze', group: 'Glaze', run: store({ enabled: false }) },
       { label: t('Glaze settings'), hint: t('Opens the editor'), group: 'Glaze', run: () => { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* extension reloaded under the tab */ } } },
     ];
@@ -2466,6 +2473,7 @@
   };
   // Everything the palette can do, built when it opens.
   const commands = async () => {
+    if (moodle) { const [m, due] = await Promise.all([moodleIn(), dueWeek()]); return [...await m.commands(go), ...dueCmds(due), ...glazeCmds()]; }
     if (!ultra) return canvasCommands();
     const cid = courseId();
     // A tab's name without its count badge ("Announcements 12").
@@ -2997,7 +3005,7 @@
   };
   // Canvas's dashboard cards: features/cards.js.
   const cardUI = (f) => need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => f(GZ_CARD_UI), () => {});
-  const syncCards = () => { if (!isPreview && location.pathname === '/') cardUI((m) => m.paint()); };
+  const syncCards = () => { if (!isPreview && !moodle && location.pathname === '/') cardUI((m) => m.paint()); };
   // Nothing of the extra left on the page: the theme or the extra is off.
   const unmenu = () => {
     closeMenu(false, true);

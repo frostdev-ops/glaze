@@ -90,6 +90,12 @@ All notable changes to Glaze are documented here. The format follows
   - One timer to the next reminder, set again when the page is shown and at most ten minutes long: no polling. It
     reuses Better To Do's planner copy. What's seen, snoozed, muted and the streak stay on this device, apart from
     Canvas's own read state, which Glaze never changes.
+- **Moodle:** Glaze restyles Moodle (the Boost theme of Moodle 5, and 4.x where its markup is the same) on any
+  school's domain, with the same palettes, Looks, fonts, backgrounds and motion: the Dashboard and My courses,
+  course and activity pages, grades, the calendar, messages and the login page, in light and dark palettes.
+  Course cards show your course total from Moodle's grades overview; what's due this week comes from your
+  Timeline, in the popup and the command palette, which also lists Moodle's pages, your courses and the
+  course's tabs. Read-only: Glaze asks your own Moodle what its own pages ask.
 
 ### Changed
 
@@ -99,6 +105,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
+- **Dark palettes:** a page with a form holding a field named "id" no longer stops Glaze's pass that darkens
+  what the stylesheet can't reach.
 - **Canvas, dark palettes:** text that was too faint is now readable:
   - the list view's item labels, due times, points and status pills;
   - its course titles, which now show in each course's color;
