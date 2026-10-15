@@ -5,7 +5,7 @@ _Last updated: 2026-10-15_
 ## What Glaze stores
 
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
-  background, motion, course colour and extras choices, and what you set for a course in its course menu:
+  background, motion, light/dark schedule, course colour and extras choices, and what you set for a course in its course menu:
   its colour, look, tint and the **nickname you type for it**. When Chrome sync is on, these follow
   your own account between devices. Safari keeps them on this device only.
 - **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard

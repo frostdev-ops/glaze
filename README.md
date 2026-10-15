@@ -19,7 +19,7 @@ domain, and on Canvas, which Glaze recognizes on any school's domain.
 
 ## Features
 
-- **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system.
+- **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system or a schedule (dark from 20:00 to 08:00, say). Keep quizzes light (off by default) leaves quizzes you're taking and external tools such as New Quizzes unthemed on Canvas.
 - **Look** — fonts for text, headings and code (two bundled; about forty more from Google Fonts and Nerd Fonts, or any Google Font by name, each previewed in its own face), text size, line height, corner radius, density, depth and glass.
 - **Backgrounds** — solid; a gradient you shape (linear, radial, conic or mesh; angle, blend, spread); a drifting aurora; your own image; or ten slow animated scenes (three.js, drawn at low resolution; two for Halloween, a moonlit graveyard and a pumpkin patch) with one Intensity slider. Palette colors or your own.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
