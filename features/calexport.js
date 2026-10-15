@@ -45,14 +45,18 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     const d = G ? G.clean(kept.gradescope) : null;
     const sig = JSON.stringify([s.enabled, s.enhance.gradescope, d?.acct?.id, d?.bind[`${location.origin}/${uid}`]]);
     const gs = s.enabled && s.enhance.gradescope && G ? G.items(kept.gradescope, location.origin, uid, Date.now()) : [];
-    return { on: s.enabled, gs, data: kept[key], sig };
+    return { on: s.enabled, gs, data: kept[key], sig, s, gradescope: kept.gradescope };
   };
 
-  // Makes the file for these choices and hands it to save(text) → its name: { n, name, guessed }, or null when it
-  // stopped because something changed while Canvas answered, or couldn't be read back (alive() false: the dialog closed; Glaze turned off; the
-  // Gradescope switch or this account's answer changed since the export began). Checked right before the file is made
-  // and again right before it's saved, with nothing awaited between that check and the save.
-  const run = async (o, alive, save) => {
+  // The events for these choices (o; null: the ones remembered, as Google Calendar sync uses them, features/gcal.js):
+  // { events, from, first (where the range starts: an instant, and that day), guessed, now, recheck(), consent (what the
+  // events were composed under: lib/calexport.js consent, from the same reads) }, or null when it
+  // stopped because something changed while Canvas answered, or couldn't be read back (alive() false: the dialog closed;
+  // Glaze turned off; the Gradescope switch or this account's answer changed since it began). recheck(): whether all of
+  // that still holds.
+  const compose = async (o, alive) => {
+    await libs();
+    o ||= GZ_SANITIZE({ todo: await readTodo() }).todo;
     const L = GZ_TODO, X = GZ_CALEXPORT;
     // Every chosen source is read strictly: one that can't be loaded or read stops the export, and nothing is saved.
     if (ctx.settings().enhance.gradescope && o.icsGs !== false) await ctx.need('lib/gradescope.js', () => globalThis.GZ_GRADESCOPE);
@@ -99,10 +103,19 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
       items, gs: a.gs, data: a.data, o, ...r, site: location.origin, host: location.host, cids: live.length ? new Set(Object.keys(names)) : null, names,
       words: { plan: (title) => t('Do: {title}', { title }), focus: (title) => t('Focus: {title}', { title }), untitled: t('Planned work') }, classes,
     });
-    const text = GZ_ICS.write({ name: 'Glaze', events }, { now });
-    const b = await state(key, uid);
-    if (!alive() || !b?.on || b.sig !== a.sig) return null;
-    return { n: events.length, name: events.length ? save(text) : '', guessed: r.guessed };
+    const recheck = async () => { const b = await state(key, uid); return alive() && !!b?.on && b.sig === a.sig; };
+    return { events, from: r.from, first: L.dayKey(r.first), guessed: r.guessed, now, recheck, consent: X.consent(a.s, o, a.gradescope, `${location.origin}/${uid}`) };
+  };
+
+  // Makes the file for these choices and hands it to save(text) → its name: { n, name, guessed }, or null when it
+  // stopped (compose()). Checked right before the file is made and again right before it's saved, with nothing awaited
+  // between that check and the save.
+  const run = async (o, alive, save) => {
+    const c = await compose(o, alive);
+    if (!c) return null;
+    const text = GZ_ICS.write({ name: 'Glaze', events: c.events }, { now: c.now });
+    if (!await c.recheck()) return null;
+    return { n: c.events.length, name: c.events.length ? save(text) : '', guessed: c.guessed };
   };
 
   const save = (text) => {
@@ -166,7 +179,7 @@ var GZ_CAL_UI = globalThis.GZ_CAL_UI || (() => {
     box.showModal();
   };
 
-  return { open, run };
+  return { open, run, compose };
 })();
 
 GZ_CAL_UI;
