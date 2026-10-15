@@ -244,6 +244,26 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | A look with its own palette (Synthwave) leaves no preset name, like an unsaved palette | Adding Synthwave to the palette presets | The palette list stays the six palettes; save it as a preset to keep it on its own. |
 | Look names aren't translated | Translating them | Same as palette names: they're names. |
 
+## Canvas course cards (W4, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Card settings, styles and bookmarks are their own sync items (`card`, `cards`, `links`), sanitized by `lib/cards.js`, not part of `GZ_SANITIZE` | Adding them to `GZ_SPEC` | The first content script has about 4 KB of budget left for every Wave 1 package; the card code is loaded only on the Dashboard (`features/cards.js`). W4 adds 472 bytes to the first script. |
+| Card settings reach the page when `features/cards.js` arrives on the Dashboard | `applySettings` writing them at document start | The same budget. Canvas draws the cards after its own scripts run, so the sizes usually land before the cards do; a card can be drawn at Canvas's size for a moment on a slow machine. |
+| A card's style is painted as `--gz-card-*` variables and one `data-gz-card` attribute on the card; canvas.css does the rest, and only what changed is written | Regenerating a card stylesheet on every change (another extension) | One card's edit touches that card; a pass over unchanged cards writes nothing, so it can run with every sweep. |
+| Pictures from the computer are scaled to 960 px and kept as WebP data URLs in `storage.local`, capped per picture and in all, and deleted with the last style that uses them | Uploading to a server (another extension `/upload-image`); IndexedDB | Nothing leaves the device. A content script's IndexedDB is the school site's, which the page can read; `storage.local` is the extension's. |
+| The caps count every `cardImg:` key in storage, the picture being replaced included; it is deleted only after the new style is saved | An index of sizes, with the replaced picture credited at once | An index can drift from storage and a credited picture can still be in use; storage's own keys can't be wrong. Replacing a picture right at the 4 MB cap is refused until another is removed. |
+| Every write of card styles, bookmarks and pictures goes through the background worker (`glaze:cards`), one at a time, each applied to what storage holds when its turn comes; a picture is stored and its style saved in the same turn, and a picture is deleted only when no stored style uses it | Web Locks around the editor's read and write (as for Canvas badge records) | A page's locks belong to its origin, and two schools' Canvas sites, or the editor page, share this extension's storage; the worker is one for all of them. Not covered: another computer writing the same synced item (sync storage keeps the last write; pictures are per computer anyway), and the same course edited in two tabs at once (the later save wins). |
+| Only the latest picture picked in an editor is kept | Whichever finishes last | Decoding a big picture can take longer than a small one picked after it. |
+| A failed save keeps the editor open with the draft; closing again leaves without it | Closing anyway | A full sync item or a quota error is exactly when the student needs the draft to trim it. |
+| Contrast composites the overlay in sRGB, as the browser paints an opacity layer, and skips it when overlays are off | OKLab mixing (GZ_COLOR.mix) | A white picture under 50% black is #808080 on screen (3.95:1), not OKLab's lighter mix (6.01:1). |
+| Picture filters, crop and focus are free | another extension's paid image editing | No tiers, by rule. |
+| Bookmark icons come from a small set Glaze draws | Each site's favicon (another extension) | A favicon is a request to the linked site, or to a favicon service, on every Dashboard load. |
+| Contrast is measured for white text on the picture area, shown only with condensed cards, and never corrected | Off/low/medium/high thresholds; correcting the color | Only condensed cards put text on the picture; elsewhere the card's name is toned to read on the card. The palette editor already lists its pairs with their ratios. |
+| A theme code carries how cards look and up to eight linked card styles, worn in turn by cards without their own; never a picture from the computer | Course-keyed styles in the code | Another student's courses have other ids. Taking turns is how a theme dresses any set of cards. |
+| The create button is off by default and offers Canvas's own pages (message the class; start a discussion where the course allows it) | A Glaze-made task (another extension) | Better To Do (W1) can add its own entry. A + on every card is a change nobody asked for until they turn it on. |
+| The pet sits on the first card only | One on every card | A cat on every card is clutter. |
+
 ## Looks gallery, favorites and history (G1, Oct 2026)
 
 | Decision | Considered | Why |

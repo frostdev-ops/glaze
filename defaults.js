@@ -268,7 +268,7 @@ const GZ_LOOKS = [
     '#fb923c', '#fdba74', '#3d1d0c', '#1f0d03',
     '#1e1426', '#120b18', '#fdf2e9', '#c9b2a6', '#8e7b86', '#2f2236', '#47334f',
     '#a3e635', '#facc15', '#f87171'), { font: 'nunito', head: 'fredoka', radius: 20, glass: 16, depth: 2 }, { kind: 'scene', scene: 'pumpkins', intensity: 60, colors: ['#fb923c', '#a855f7', '#fde047'] }],
-].map(([name, palette, look, bg]) => ({ name, palette: typeof palette === 'string' ? palette : null, colors: typeof palette === 'string' ? GZ_PRESETS.find(([n]) => n === palette)[1] : palette, look, bg }));
+].map(([name, palette, look, bg, card]) => ({ name, palette: typeof palette === 'string' ? palette : null, colors: typeof palette === 'string' ? GZ_PRESETS.find(([n]) => n === palette)[1] : palette, look, bg, card }));
 // The settings a look changes, from settings `s`: { colors, preset, auto, look, bg }. A look with its own
 // colors (Synthwave) has no preset name, like any unsaved palette.
 const GZ_LOOK_APPLY = (s, L) => ({

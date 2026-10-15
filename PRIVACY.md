@@ -57,6 +57,13 @@ _Last updated: 2026-10-15_
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
   Clear history in the editor deletes the history; Remove deletes a favorite.
+- **Canvas course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
+  card style (`cards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
+  (`links`: their names, addresses and icons), by your Canvas site's address and course number.
+- **Pictures you choose for course cards from your computer**, in `chrome.storage.local`, on this device only:
+  scaled down to at most 960 pixels and kept as WebP (JPEG in Safari), at most about 400 KB each and 4 MB in all.
+  They are never synced, exported or put in a theme code. Choosing another picture, or removing the card's style,
+  deletes the old one; Reset everything deletes them all.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -143,6 +150,12 @@ animated backgrounds) are bundled. It makes requests in these cases:
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
+- **Course card pictures and bookmarks.** A card picture you give as an `https://` link is loaded by your browser
+  like the background image. With condensed cards, the card editor reads that picture once more to measure how
+  well text reads on it; a site that doesn't allow that gets an ordinary request and is just not measured. A
+  theme code's card pictures are named in its preview before you use it. Bookmark icons are drawn by Glaze: the
+  linked sites are asked for nothing (no favicons) until you click a bookmark. The create button asks your own
+  Canvas site, once per course, whether you may start a discussion there.
 - **Mac app updates.** The downloaded Mac DMG app checks
   `https://frostdev.io/projects/glaze/appcast.xml` about once a day while Glaze is in use and downloads
   updates from GitHub. Sparkle system profiling is disabled: no system profile, coursework, settings,
