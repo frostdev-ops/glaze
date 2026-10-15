@@ -162,7 +162,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const code = c.code || x.code || '';
       return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: nick || (p.label === 'code' && code) || name, full: [nick || name, code !== name && code].filter(Boolean).join(' · '), slot: c.slot || x.slot || '' };
     });
-    const k = JSON.stringify([rows, p, ctx.locale(), drag?.cid]);
+    const k = JSON.stringify([rows, p, ctx.locale(), drag?.on && drag.cid]);
     if (k === drawn) return;
     drawn = k;
     for (const a of ['shape', 'size', 'mark', 'color']) set(strip, `data-${a}`, p[a]);
@@ -321,7 +321,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     for (const k of L.fit([...snaps.values()].map((x) => [x.cid, x.n, x.at]))) snaps.delete(k);
   };
   // To the worker, for after a reload: when the student leaves the course, or the page.
-  const push = (cid) => { const s = snaps.get(cid); if (s) send({ op: 'put', cid, snap: s }); };
+  const pushed = new WeakSet();
+  const push = (cid) => { const s = snaps.get(cid); if (s && !pushed.has(s)) { pushed.add(s); send({ op: 'put', cid, snap: s }); } };
   // A fresh copy for leaving some way Glaze doesn't see coming: a moment after each new page of the course, and every
   // 15 s while one stays open (Ultra never stops changing the page, so not after every change).
   let capTimer = 0;
@@ -482,7 +483,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const bar = courseBar();
     const there = ctx.courseId() === g.cid && shown(bar) && !otherCourse(bar, g.cid);
     if (there && dt > 120 && !ctx.holding() && !loading(bar.closest('.panel-wrap, .bb-offcanvas-panel') || document.body)) return end();
-    if (dt > 2500 && !g.hard && (!location.pathname.startsWith(`/ultra/courses/${g.cid}/`) || (bar && otherCourse(bar, g.cid)))) {
+    // Ultra (or the student) went somewhere else: nothing to wait for.
+    if (!location.pathname.startsWith(`/ultra/courses/${g.cid}/`)) return end(true);
+    if (dt > 2500 && !g.hard && bar && otherCourse(bar, g.cid)) {
       g.hard = true;
       // The next page finds its copy (from the worker), as this one would have.
       try { sessionStorage.setItem('gz-ctabs-go', `${g.cid} ${who}`); } catch { /* blocked */ }
