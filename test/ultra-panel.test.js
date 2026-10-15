@@ -69,7 +69,7 @@ const page = ({ site = 'ultra', todo = true, local = {}, failLoad = false } = {}
   return { ui, doc, c, settings, loads, clock, filled, stopped, wrote, woke, visible, local, bbTodo, panel: () => doc.getElementById('gz-panel') };
 };
 // Only the declared tile is on: the built-in ones have tests of their own.
-const ONLY_PET = { widgetLayout: { tiles: [...W.TILES.map((id) => ({ id, on: false })), { id: 'pet', on: true }] } };
+const ONLY_PET = { widgetLayout: { todo: true, tiles: [...W.TILES.map((id) => ({ id, on: false })), { id: 'pet', on: true }] } };
 
 test("Ultra: the panel goes first in the Courses page's To Do column, and comes back when Ultra redraws it", async () => {
   const p = page({ local: structuredClone(ONLY_PET) });
@@ -90,29 +90,12 @@ test("Ultra: the panel goes first in the Courses page's To Do column, and comes 
   assert.equal(col.querySelectorAll('#gz-panel').length, 1, 'once, however often the pass runs');
 });
 
-test('Ultra: the panel folds away from its heading, by keyboard or pointer, and stays folded on this device', async () => {
+test('Ultra: the panel has no heading to fold: the To Do is a widget, and Hide widgets is in the toolbar', async () => {
   const p = page({ local: structuredClone(ONLY_PET) });
   p.ui.sync(true);
   await settle();
-  const toggle = p.panel().querySelector('.gz-panel-toggle');
-  assert.equal(toggle.tagName, 'BUTTON', 'a real button: Tab reaches it, Enter and Space press it');
-  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
-  assert.equal(toggle.getAttribute('aria-controls'), 'gz-panel-body');
-  assert.equal(toggle.textContent, 'Notes and widgets', 'its name');
-  const tile = () => p.panel().querySelector('section[data-tile="pet"]');
-  p.doc.fire(toggle, 'click');
-  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
-  assert.equal(tile().hidden, true, 'the column\'s widget folds with it');
-  assert.equal(p.doc.getElementById('gz-room').hidden, false, 'the layer stays: widgets placed elsewhere stay');
-  assert.equal(JSON.stringify(p.wrote.at(-1)), '{"panelShut":true}', 'storage.local, never the page');
-  // A new page load: still folded.
-  const q = page({ local: { ...structuredClone(ONLY_PET), panelShut: true } });
-  q.ui.sync(true);
-  await settle();
-  assert.equal(q.panel().querySelector('.gz-panel-toggle').getAttribute('aria-expanded'), 'false');
-  assert.equal(q.panel().querySelector('section[data-tile="pet"]').hidden, true);
-  p.doc.fire(toggle, 'click');
-  assert.equal(tile().hidden, false, 'unfolded, it is back');
+  assert.equal(p.panel().querySelector('h2, .gz-panel-toggle'), null);
+  assert.ok(p.doc.querySelector('.gz-dash-hide'), 'Hide widgets instead');
 });
 
 test('Ultra: Hide widgets takes every widget on the Courses page away, and stays on this device', async () => {

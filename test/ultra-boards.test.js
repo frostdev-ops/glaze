@@ -16,7 +16,8 @@ const { El } = require('./stand-in-dom.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
-const ONLY = (ids) => ({ tiles: W.TILES.map((id) => ({ id, on: ids.includes(id) })) });
+// A layout saved since the Courses page's To Do became a tile (todo: true), so only these tiles are on.
+const ONLY = (ids) => ({ todo: true, tiles: W.TILES.map((id) => ({ id, on: ids.includes(id) })) });
 const queues = new WeakMap(); // store -> the worker's queue for the tabs that share it
 const later = () => { let done; const p = new Promise((res, rej) => { done = { res, rej }; }); return Object.assign(p, done); };
 
@@ -122,6 +123,25 @@ const px = (v) => Number(String(v ?? '').replace('px', ''));
 const lay = (p) => W.layout(p.store.widgetLayout);
 const on = (p, b, id) => lay(p).boards[b].find((x) => x.id === id);
 
+test('Courses page: the To Do is a widget, on from the start (an older layout too), and Ultra\'s own steps aside', async () => {
+  const old = { tiles: W.TILES.map((id) => ({ id, on: id === 'notes' })), boards: { courses: W.TILES.map((id) => ({ id, on: id === 'notes' })) } };
+  assert.equal(W.layout(old).boards.courses.find((x) => x.id === 'todo').on, true, 'an older layout: never the student\'s choice there');
+  assert.equal(W.layout({ ...old, todo: true }).boards.courses.find((x) => x.id === 'todo').on, false, 'one saved since: kept');
+  assert.equal(W.layout(W.layout(old)).boards.courses.find((x) => x.id === 'todo').on, true, 'the mark comes with the layout');
+  const p = page({ local: { widgetLayout: old }, enhance: { todo: true } });
+  p.ui.sync(true);
+  await settle();
+  const todo = p.tile('todo');
+  assert.ok(todo && todo.parentNode === p.room(), 'a tile in the page\'s layer, like the others');
+  assert.ok(todo.querySelector('.gz-w-todo-spot'), 'with the spot Better To Do goes before');
+  assert.equal(p.doc.documentElement.hasAttribute('data-gz-todo-tile'), true, 'Ultra\'s own To Do steps aside');
+  const q = page({ local: { widgetLayout: old }, enhance: { todo: false } });
+  q.ui.sync(true);
+  await settle();
+  assert.equal(q.tile('todo'), null, 'Better To Do off: no tile, and Ultra\'s own To Do stays');
+  assert.equal(q.doc.documentElement.hasAttribute('data-gz-todo-tile'), false);
+});
+
 test('Courses page: the tiles float in the page, where the panel was, and the column keeps room for them', async () => {
   const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } });
   p.ui.sync(true);
@@ -137,7 +157,7 @@ test('Courses page: the tiles float in the page, where the panel was, and the co
   // The column's own contents (Better To Do, Ultra's To Do) start below them.
   assert.equal(px(p.grid().style.height), px(timer.style.top) + 200 - 120);
   assert.equal(p.grid().getAttribute('data-stack'), null);
-  assert.equal(p.tile('todo'), null, "no To Do tile here: Better To Do has its place in the column (one copy)");
+  assert.equal(p.tile('todo'), null, 'a To Do the student took away stays away');
   // Not editing: a press on a heading moves nothing.
   notes.querySelector('.gz-w-head').dispatchEvent(p.ev('pointerdown', { target: notes.querySelector('.gz-w-head'), clientX: 1000, clientY: 130 }));
   notes.querySelector('.gz-w-head').dispatchEvent(p.ev('pointermove', { clientX: 400, clientY: 500 }));

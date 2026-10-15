@@ -78,7 +78,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const button = (text, run, props = {}) => { const b = make('button', { type: 'button', className: 'gz-w-btn', textContent: text, ...props }); b.addEventListener('click', run); return b; };
   const area = (a) => { try { return chrome.storage[a]; } catch { return null; } };
   const get = (a, keys, failed = {}) => new Promise((res) => { try { area(a).get(keys, (r) => res(chrome.runtime.lastError ? failed : r || {})); } catch { res(failed); } });
-  // This device's own small items (panelShut, widgetsHidden, widgetBuddy); the layout and the timer go through the worker.
+  // This device's own small items (widgetsHidden, widgetBuddy); the layout and the timer go through the worker.
   const put = (v) => { try { area('local').set(v); } catch { /* reloaded under the tab */ } };
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   // A reload can invalidate a callback before the core sees its first DOM mutation.
@@ -112,7 +112,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // The Dashboard is its own switch: its widgets need no other, but the notes and the pet keep theirs.
   const allowed = (id) => {
     const e = ctx.settings().enhance;
-    return id === 'todo' ? ultra && board === 'dash' && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
+    return id === 'todo' ? ultra && !!board && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
   };
   // A change to the layout (lib/widgets.js apply): shown here at once, and sent to the worker, which applies it to what
   // is stored then, so another tab's change made since is kept. While changes are on their way, the stored layout that
@@ -768,22 +768,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     box.addEventListener('keydown', escape);
     return box;
   };
-  // Ultra's panel: a heading whose button folds the widgets in its column (kept on this device, storage.local panelShut),
-  // then the grid, whose height keeps the column's widgets clear of Ultra's To Do. Widgets elsewhere on the page stay;
-  // Hide widgets in the toolbar takes them all. With no widget in the column, there's no heading.
-  let shut = false;
+  // Ultra's panel: first in its column, the grid, whose height keeps the column's widgets clear of what is below them
+  // (Ultra's own To Do, when Better To Do is off). The To Do is a widget too, so there's nothing to fold here: Hide
+  // widgets, in the toolbar, takes them all away.
   const panelEl = () => {
-    const toggle = make('button', { type: 'button', className: 'gz-panel-toggle', textContent: t('Notes and widgets') });
-    const body = make('div', { id: 'gz-panel-body' }, grid);
-    toggle.setAttribute('aria-controls', body.id);
-    toggle.setAttribute('aria-expanded', String(!shut));
-    toggle.addEventListener('click', () => {
-      shut = !shut;
-      toggle.setAttribute('aria-expanded', String(!shut));
-      put({ panelShut: shut });
-      layoutBoard();
-    });
-    const box = make('section', { id: 'gz-panel' }, make('h2', { className: 'gz-panel-head' }, toggle), body);
+    const box = make('section', { id: 'gz-panel' }, make('div', { id: 'gz-panel-body' }, grid));
     box.setAttribute('aria-label', 'Glaze');
     return box;
   };
@@ -833,6 +822,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     floatWatched.clear();
     cancelAnimationFrame(floatFrame);
     globalThis.GZ_DASH_UI?.tabs(null);
+    document.documentElement?.removeAttribute('data-gz-todo-tile');
     for (const e of [grid, panel, room, bar, all && floats]) e?.remove?.();
     grid = panel = room = bar = null;
     if (all) floats = null;
@@ -878,6 +868,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }
     // Hide widgets (the Courses page only; editing shows them all).
     const away = board === 'courses' && hidden && !editing;
+    // Better To Do in its tile on the Courses page: Ultra's own To Do in the column steps aside (apps.css).
+    document.documentElement?.toggleAttribute('data-gz-todo-tile', board === 'courses' && want.some((x) => x.id === 'todo'));
     for (const e of [room, panel, floats]) if (e && e.hidden !== away) e.hidden = away;
     const hb = bar?.querySelector('.gz-dash-hide');
     if (hb) { hb.textContent = t(hidden ? 'Show widgets' : 'Hide widgets'); hb.setAttribute('aria-pressed', String(hidden)); }
@@ -929,16 +921,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     stacked = !side || res.stack;
     area.toggleAttribute('data-stack', stacked);
     const parent = stacked || board === 'dash' ? area : room;
-    // The Courses page's column (where the panel is): its widgets fold with the panel; the others stay where they are.
-    const inCol = (id) => board === 'courses' && (stacked || (res.at[id].left + dims[id].w > lines[0] && res.at[id].left < lines[1]));
-    const fold = shut && !editing;
-    if (panel) panel.toggleAttribute('data-empty', !editing && !res.order.some(inCol));
     const focus = document.activeElement;
     let prev = null;
     for (const id of res.order) {
       const { el } = tiles.get(id);
-      const away = fold && inCol(id);
-      if (el.hidden !== away) el.hidden = away;
       if (el.parentNode !== parent || el.previousElementSibling !== prev) { if (prev) prev.after(el); else parent.prepend(el); }
       prev = el;
       const a = res.at[id];
@@ -949,7 +935,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (el.style.zIndex !== z) el.style.zIndex = z;
     }
     if (focus !== document.activeElement && focus?.isConnected) focus.focus({ preventScroll: true });
-    const keep = stacked ? '' : board === 'courses' && fold ? '0px' : `${board === 'courses' ? W.reserve(Object.values(res.at), lines[0], lines[1], col.top) : res.bottom + W.GAP}px`;
+    const keep = stacked ? '' : `${board === 'courses' ? W.reserve(Object.values(res.at), lines[0], lines[1], col.top) : res.bottom + W.GAP}px`;
     if (area.style.height !== keep) area.style.height = keep;
   };
 
@@ -1106,9 +1092,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const start = async () => {
     await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
     W = globalThis.GZ_WIDGETS;
-    const [r] = await Promise.all([get('local', ['widgetLayout', 'panelShut', 'widgetsHidden']), readPrefs()]);
+    const [r] = await Promise.all([get('local', ['widgetLayout', 'widgetsHidden']), readPrefs()]);
     lay = W.layout(r.widgetLayout, MORE);
-    shut = r.panelShut === true;
     hidden = r.widgetsHidden === true;
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
     document.addEventListener('visibilitychange', onShow);

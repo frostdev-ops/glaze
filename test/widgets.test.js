@@ -225,7 +225,7 @@ test('boards: each its own layout; the Courses page starts from the tiles in its
   assert.equal(lay.music, old.music, 'the music link is shared');
   const c = lay.boards.courses;
   assert.deepEqual(c.map((t) => t.id), lay.tiles.map((t) => t.id), 'the same tiles in the same order');
-  assert.deepEqual(c.map((t) => t.on), lay.tiles.map((t) => t.on), 'every tile that was on is on, none lost');
+  assert.deepEqual(c.map((t) => t.on), lay.tiles.map((t) => t.on || t.id === 'todo'), 'every tile that was on is on, none lost; and the To Do (a tile there now)');
   assert.ok(c.every((t) => t.size === 's' && t.x === null && t.y === null && t.z === 0 && !t.fold), "small enough for Ultra's column, placed where the panel was");
   const d = lay.boards.dash;
   assert.deepEqual(d.filter((t) => t.on).map((t) => [t.id, t.size]), [['notes', 'm'], ['agenda', 'm'], ['timer', 's'], ['quotes', 'm'], ['todo', 'm']], "Canvas's Dashboard defaults, Better To Do with them (Codex B7b 5)");
