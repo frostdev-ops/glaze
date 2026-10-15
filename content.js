@@ -962,12 +962,16 @@
   let canvasNews = null, canvasNewsLoad = null, canvasNewsUser = null;
   const canvasNewsPending = new Set(), canvasNewsShown = new Map();
   const canvasNewsKey = (cid) => `${location.origin}/${canvasNewsUser}/${cid}`;
+  // Serialize this tab's get/set pairs so simultaneous grades/items saves don't drop each other.
+  let canvasNewsWrite = Promise.resolve();
   const saveCanvasNews = (key, patch) => {
-    canvasNews[key] = { ...canvasNews[key], ...patch };
-    try { chrome.storage.local.get('canvasNews', (r) => {
-      const all = { ...r?.canvasNews, [key]: { ...r?.canvasNews?.[key], ...canvasNews[key] } };
-      chrome.storage.local.set({ canvasNews: all });
-    }); } catch { /* extension reloaded under the tab */ }
+    return canvasNewsWrite = canvasNewsWrite.then(() => new Promise((done) => {
+      try { chrome.storage.local.get('canvasNews', (r) => {
+        const record = GZ_GRADES.canvasNewsRecord(r ? r.canvasNews?.[key] : canvasNews[key], patch);
+        canvasNews[key] = record;
+        try { chrome.storage.local.set({ canvasNews: { ...r?.canvasNews, [key]: record } }, done); } catch { done(); }
+      }); } catch { canvasNews[key] = GZ_GRADES.canvasNewsRecord(canvasNews[key], patch); done(); } // extension reloaded under the tab
+    }));
   };
   const loadCanvasNews = () => {
     canvasNewsLoad ||= Promise.all([capi('/users/self').then((u) => u.id), new Promise((resolve) => {
@@ -989,9 +993,7 @@
           // Restricted and upgraded React grade pages have no server-rendered table: fail closed.
           return doc.querySelector('#grades_summary') ? doc.querySelectorAll('#grades_summary .unread_dot.grade_dot').length : null;
         });
-    p.then((value) => {
-      saveCanvasNews(key, { [kind]: { at: Date.now(), value } });
-    }, () => { saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } }); }).finally(() => {
+    p.then((value) => saveCanvasNews(key, { [kind]: { at: Date.now(), value } }), () => saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } })).finally(() => {
       canvasNewsPending.delete(pending);
       if (observer && settings.enhance[kind === 'items' ? 'newcontent' : 'newgrades']) renderNew();
     });

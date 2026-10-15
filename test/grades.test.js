@@ -142,3 +142,14 @@ test('Canvas new items: only available module content, with stable string ids', 
   assert.equal(R.canvasItems([...modules, { items_count: 200 }]), null, 'oversized modules cannot seed a false empty baseline');
   assert.equal(R.canvasItems(null), null, 'failure preserves the visit baseline');
 });
+
+
+test('Canvas news: stale tabs patch only their field and visit ids only grow', () => {
+  const latest = { seen: ['271', '280'], items: { at: 200, value: [{ id: '280' }] }, grades: { at: 100, value: 2 } };
+  const grades = { at: 300, value: 1 };
+  const refreshed = R.canvasNewsRecord(latest, { grades });
+  assert.deepEqual(refreshed, { ...latest, grades }, 'grade refresh preserves the newer visit and item cache');
+  assert.deepEqual(R.canvasNewsRecord(refreshed, { seen: ['271', '318'] }), {
+    ...refreshed, seen: ['271', '280', '318'],
+  }, "an older visit snapshot adds ids without forgetting another tab's ids");
+});
