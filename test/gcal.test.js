@@ -686,7 +686,7 @@ test('review (B2): the page tells the worker whether its batch was read whole, a
       location: { origin: 'https://bb.example.edu' }, Date,
       chrome: {
         storage: { local: { get: async () => ({ gcal: { cal: 'c_1@group.calendar.google.com', last: {} } }) }, onChanged: { addListener() {} } },
-        runtime: { sendMessage: async (m) => { sent.push(m); done(); return { ok: true }; } },
+        runtime: { id: 'glaze', sendMessage: async (m) => { sent.push(m); done(); return { ok: true }; } },
       },
       GZ_CTX: { site: 'ultra', on: () => true, settings: () => ({ enabled: true }), profile: async () => ({ id: '_900_1' }), need: async () => {} },
       GZ_CAL_UI: { compose: async () => ({ events: [], from: FROM, first: FIRST, consent: '[]', recheck: async () => true, ...(whole !== undefined && { whole }) }) },

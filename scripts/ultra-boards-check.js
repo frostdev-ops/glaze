@@ -279,8 +279,71 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       ok(g.t.l >= g.nav && g.t.tp >= g.bar && g.t.r <= g.w && g.t.b <= g.h, `a course page, ${width}px: the timer floats clear of the nav and the course's top bar, on screen`);
       ok(g.others === 1, `a course page, ${width}px: only the floating widget, not the Courses page's`);
       await page.screenshot({ path: path.join(out, `outline-float-light-${width}.png`) });
+      if (width === 375) {
+        const start = await rect(`${tile('timer')} .gz-w-head h3`);
+        const beforeTouch = await rect(tile('timer'));
+        const touch = await ctx.newCDPSession(page);
+        try {
+          await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+          await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: start.left + 20, y: start.top + 5, id: 1 }] });
+          await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: start.left + 4, y: start.top - 59, id: 1 }] });
+          await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        } finally { await touch.detach(); }
+        await page.waitForTimeout(500);
+        const moved = await rect(tile('timer'));
+        ok(moved.top < beforeTouch.top && moved.left >= 0 && moved.right <= width, 'touch drag: global timer moves and stays on screen at 375px');
+        await page.screenshot({ path: path.join(out, 'outline-float-touch-light-375.png') });
+      }
     }
+    await page.waitForTimeout(800);
+    const idleWrites = await page.evaluate(() => new Promise((resolve) => {
+      let count = 0;
+      const observer = new MutationObserver((records) => { count += records.filter((r) => r.target.closest?.('#gz-float, #gz-dash, #gz-room, .gz-dash-tabs')).length; });
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] });
+      setTimeout(() => { observer.disconnect(); resolve(count); }, 1200);
+    }));
+    ok(idleWrites === 0, `global float idle: ${idleWrites} own DOM/style writes in 1.2 seconds`);
+
+    // B8 can add/resize its own strip after the widgets mount. RTL rails and a footer leave the same bounded room.
     await page.setViewportSize({ width: 1280, height: 860 });
+    await page.evaluate(() => {
+      const nav = document.querySelector('.MuiDrawer-paper');
+      Object.assign(nav.style, { left: 'auto', right: '0' });
+      const strip = document.createElement('div');
+      strip.id = 'synthetic-b8'; strip.dataset.gzKeepClear = '';
+      Object.assign(strip.style, { position: 'fixed', left: '0', right: '200px', top: '94px', height: '48px', background: '#598', zIndex: 100 });
+      document.body.append(strip);
+    });
+    await page.waitForTimeout(700);
+    const clear = () => page.evaluate(() => {
+      const t = document.querySelector('#gz-float section.gz-w').getBoundingClientRect();
+      const bar = document.querySelector('#synthetic-b8').getBoundingClientRect();
+      const nav = document.querySelector('.MuiDrawer-paper').getBoundingClientRect();
+      const footer = document.querySelector('#synthetic-footer')?.getBoundingClientRect();
+      return t.left >= 0 && t.right <= nav.left && t.top >= bar.bottom && t.bottom <= (footer?.top ?? innerHeight);
+    });
+    ok(await clear(), 'global float: a late B8 strip and RTL right rail stay clear');
+    await page.evaluate(() => { document.querySelector('#synthetic-b8').style.height = '80px'; });
+    await page.waitForTimeout(400);
+    ok(await clear(), 'global float: a keep-clear strip resizing remeasures its room');
+    await page.setViewportSize({ width: 1280, height: 380 });
+    await page.evaluate(() => {
+      const footer = document.createElement('div');
+      footer.id = 'synthetic-footer'; footer.dataset.gzKeepClear = '';
+      Object.assign(footer.style, { position: 'fixed', left: '0', right: '200px', bottom: '0', height: '60px', background: '#965', zIndex: 100 });
+      document.body.append(footer);
+    });
+    await page.waitForTimeout(700);
+    ok(await page.evaluate(() => document.querySelector('#gz-float').hasAttribute('data-stack')), 'short room: tall float uses a scrolling stack');
+    const bounded = await page.evaluate(() => {
+      const f = document.querySelector('#gz-float').getBoundingClientRect(), bar = document.querySelector('#synthetic-b8').getBoundingClientRect(), nav = document.querySelector('.MuiDrawer-paper').getBoundingClientRect(), foot = document.querySelector('#synthetic-footer').getBoundingClientRect();
+      return f.left >= 0 && f.right <= nav.left && f.top >= bar.bottom && f.bottom <= foot.top;
+    });
+    ok(bounded, 'stack stays inside the room, clear of the right rail, B8 strip and footer');
+    await page.screenshot({ path: path.join(out, 'outline-float-rtl-short-1280.png') });
+    await page.reload();
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await page.waitForSelector(tile('timer'));
     await page.click(`${tile('timer')} button[aria-label="Put Focus timer back on the Courses page"]`);
     await page.waitForTimeout(300);
     await open('/ultra/course', 1280);
@@ -310,6 +373,18 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await open('/ultra/institution-page', width);
       await shot(`dash-dark-${width}`);
     }
+
+    // ---- Dashboard defaults can opt a tile into every page without enabling the older Courses widgets switch -----
+    await store(settingsFor('Paper', { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: false, pet: false } }), notes);
+    await open('/ultra/institution-page', 1280);
+    await page.click('#gz-dash .gz-dash-edit');
+    await page.click(`${tile('timer')} button[aria-label="Float Focus timer on every Blackboard page"]`);
+    await page.waitForTimeout(400);
+    await page.click('[role="tab"][data-tab="ip"]');
+    ok(await page.evaluate(() => document.getElementById('gz-dash').hidden && document.querySelectorAll('#gz-float section[data-tile="timer"]').length === 1), 'native Institution tab: board hidden, explicitly global timer stays once');
+    await page.goto(`${O}/ultra/courses/_101_1/outline`);
+    await page.waitForSelector('#gz-float section[data-tile="timer"]', { timeout: 10000 }).catch(() => {});
+    ok(await page.evaluate(() => document.querySelectorAll('section[data-tile="timer"]').length === 1 && !!document.querySelector('#gz-float section[data-tile="timer"]')), 'Dashboard float works on a course route with the older Widgets switch off');
 
     // ---- the landing: opt-in, once, never a reload ------------------------------------------------------------
     await store(settingsFor('Paper', { widgets: { ...G.GZ_SANITIZE({}).widgets, land: false } }));

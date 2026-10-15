@@ -170,7 +170,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     GZ_CTX: {
       t: (k, v) => k.replace(/\{(\w+)\}/g, (m, x) => v?.[x] ?? m), on: () => env.live, locale: () => 'en', settings: () => D.GZ_SANITIZE({ enabled, enhance: { notes: on, palette: true, search: false } }), wordsIn: new Set(),
       profile: async () => ({ id: 5 }), canvasCourses: async () => [{ id: 7, name: 'Biology' }, { id: 9, name: 'History' }],
-      need: (file) => (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
+      need: (file) => (file === 'features/sharing.js' && env.shareHold) || (file === 'lib/zip.js' && env.zipHold) || Promise.resolve(),
       // What the command palette (features/palette.js) asks of the page.
       site: 'canvas', capi: async () => [], canvasCourseId: () => '7', dueWeek: async () => [], nickOf: () => '', courseList: () => ({}),
       // Ultra: everything asked of Blackboard goes through lib/ultra.js's reader; the old helpers aren't there.
@@ -179,7 +179,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     // The real reader over a stand-in fetch that records what it was asked and how (env.fetched).
     ...(ultra && { GZ_ULTRA: { ...U, read: (o) => U.read({ ...o, f: ultraFetch }) } }),
     chrome: {
-      runtime: { sendMessage: (m, cb) => { sent.push(m); Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => cb(JSON.parse(JSON.stringify(r)))); } },
+      runtime: { sendMessage: (m, cb) => { sent.push(m); if (m.type === 'glaze:sessions-open') return Promise.resolve({ ok: true }); const p = Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => JSON.parse(JSON.stringify(r))); if (cb) p.then(cb); else return p; } },
       storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { if (env.syncFail) throw new Error('Extension context invalidated.'); const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
     },
   });
@@ -196,7 +196,6 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
   env.openView = async () => { await env.ui.home(); env.fire(doc.getElementById('gz-nt-course'), 'click'); await settle(); };
   return env;
 };
-const zipNotes = async (blob) => JSON.parse(await require('../lib/doctext.js').unzip(new Uint8Array(await blob.arrayBuffer())).text('notes.json')).notes;
 
 test("the page's scripts can't open Notes or pick a note: a faked click, change or typing is ignored", async () => {
   const P = page();
@@ -367,7 +366,7 @@ test("the hook in a page whose own settings haven't caught up reads the switch f
   assert.equal(Q.doc.getElementById('gz-nt-course'), null, 'and not when storage says it is off');
 });
 
-test('Export all stores the open note first and exports the index as stored then; a file that can\'t be read fails it', async () => {
+test('Export all settles the open note, then opens extension-only backup with no keys or archive in the LMS', async () => {
   const P = page();
   await P.openView();
   P.fire(P.button('New note'), 'click');
@@ -379,19 +378,28 @@ test('Export all stores the open note first and exports the index as stored then
   P.hold = (m) => (m.op === 'save' && !release ? (release = later()) : null);
   P.fire(P.button('Export all'), 'click');
   await settle();
-  assert.equal(P.blobs.length, 0, 'nothing downloaded while the save is on its way');
-  release.resolve();
-  await settle(60);
-  assert.equal(P.blobs.length, 1);
-  assert.deepEqual((await zipNotes(P.blobs[0])).map((n) => n.html), ['<p>Typed just now</p>']);
-  // A note whose picture can't be read: no archive, and the student is told.
-  const Q = page();
-  await Q.seed([{ id: id(3), title: 'With a picture', html: `<p>x<img data-gz-file="${id(30)}"></p>` }]);
-  await Q.openView();
-  Q.fire(Q.button('Export all'), 'click');
-  await settle(60);
-  assert.equal(Q.blobs.length, 0);
-  assert.match(Q.say(), /Couldn't export “With a picture”/);
+  assert.equal(P.blobs.length, 0);
+  assert.ok(!P.sent.some((m) => m.type === 'glaze:sessions-open'));
+  release.resolve(); await settle(60);
+  assert.equal(P.blobs.length, 0, 'no key-bearing blob in the LMS world');
+  assert.deepEqual(JSON.parse(JSON.stringify(P.sent.find((m) => m.type === 'glaze:sessions-open'))), { type: 'glaze:sessions-open', key: 'notesIdx:https://school.instructure.com/5' });
+  const before = P.sent.length;
+  P.fire(P.button('Import'), 'click', { trusted: false }); await settle();
+  assert.equal(P.sent.length, before, 'a synthetic import does not open the extension surface');
+  P.fire(P.button('Import'), 'click'); await settle();
+  assert.equal(P.sent.at(-1).type, 'glaze:sessions-open');
+});
+
+test('a sharing module loaded for an old Notes opening cannot leak a live port into the next opening', async () => {
+  const P = page();
+  P.run('globalThis.sharePorts = 0; globalThis.GZ_SHARING_UI = { surface: () => { sharePorts++; return () => { sharePorts--; }; } };');
+  P.shareHold = later(); const old = P.shareHold;
+  await P.openView(); P.fire(P.button('Close'), 'click');
+  P.shareHold = later(); const current = P.shareHold;
+  await P.openView(); old.resolve(); current.resolve(); await settle();
+  assert.equal(P.run('sharePorts'), 1);
+  P.fire(P.button('Close'), 'click'); await settle();
+  assert.equal(P.run('sharePorts'), 0);
 });
 
 test('Export as HTML exports the note it was pressed in, whatever is opened meanwhile', async () => {

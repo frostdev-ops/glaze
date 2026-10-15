@@ -111,10 +111,8 @@ const review = (list, seen, what) => {
 
 // Timers that fire faster than once a minute, each reviewed: bounded in time, and the clear that ends it must stay.
 const FAST_INTERVALS = [
-  // Ultra's hold-and-reveal: polls every 50 ms only while part of a page is held back; release() clears it when none is.
-  ['content-ultra.js', 'setInterval(release, 50)', 1, /\bclearInterval\s*\(\s*gateTimer\s*\)/],
   // Download all: a 15 s keep-alive to the service worker only while a zip streams; cleared when its port closes.
-  ['features/download.js', "setInterval(() => { if (!closed) port.postMessage({ type: 'ping' }); }, 15000)", 1, /\bclearInterval\s*\(\s*ping\s*\)/],
+  ['features/download.js', "setInterval(() => { if (!closed) post({ type: 'ping' }); }, 15000)", 1, /\bclearInterval\s*\(\s*ping\s*\)/],
 ];
 
 test('no setInterval fires faster than once a minute unless it is reviewed, and its clear is still there', () => {
@@ -162,6 +160,6 @@ test('the scans see the code they are meant to', () => {
   assert.deepEqual(calls('getComputedStyle', 'x = el && getComputedStyle?.(el)').map((c) => c.call), ['getComputedStyle(el)']);
   // A clear that is only a comment doesn't bound anything.
   const clear = FAST_INTERVALS[0][3];
-  assert.match(executable('if (!held.size) { clearInterval(gateTimer); gateTimer = 0; }'), clear);
-  for (const gone of ['/* clearInterval(gateTimer); */ gateTimer = 0;', '// clearInterval(gateTimer);\ngateTimer = 0;', '/*\n * clearInterval(gateTimer)\n */']) assert.doesNotMatch(executable(gone), clear, gone);
+  assert.match(executable('if (closed) { clearInterval(ping); }'), clear);
+  for (const gone of ['/* clearInterval(ping); */ closed = true;', '// clearInterval(ping);\nclosed = true;', '/*\n * clearInterval(ping)\n */']) assert.doesNotMatch(executable(gone), clear, gone);
 });

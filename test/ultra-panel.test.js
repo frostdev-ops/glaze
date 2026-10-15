@@ -42,7 +42,7 @@ const page = ({ site = 'ultra', todo = true, local = {}, failLoad = false } = {}
     console, URL, Intl, Date: FakeDate, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, setTimeout, clearTimeout,
     document: doc, location: site === 'ultra' ? { origin: 'https://school.blackboard.test', pathname: '/ultra/course' } : { origin: 'https://canvas.test', pathname: '/' },
     innerWidth: 1280, innerHeight: 900, addEventListener() {}, removeEventListener() {},
-    ResizeObserver: class { observe() {} disconnect() {} }, requestAnimationFrame: () => 0, cancelAnimationFrame() {},
+    ResizeObserver: class { observe() {} unobserve() {} disconnect() {} }, requestAnimationFrame: () => 0, cancelAnimationFrame() {},
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W,
     GZ_CTX: {
       site, t: (k) => k, locale: () => 'en', settings: () => settings,
@@ -51,7 +51,7 @@ const page = ({ site = 'ultra', todo = true, local = {}, failLoad = false } = {}
       need: async (f) => { if (f === 'features/pet.js') { loads.push(f); if (failLoad) throw new Error('load failed'); ui.register('pet', (body, api) => { filled.push([body, api.site]); body.append(make('p')); return { stop: () => stopped.push(body), wake: () => woke.push(doc.visibilityState) }; }); } },
     },
     chrome: {
-      runtime: { lastError: undefined, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => cb?.({ ok: true }) },
+      runtime: { id: 'glaze', lastError: undefined, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => cb?.({ ok: true }) },
       storage: {
         local: { get: (keys, cb) => cb(Object.fromEntries([keys].flat().filter((k) => k in local).map((k) => [k, structuredClone(local[k])]))), set: (v) => { wrote.push(v); Object.assign(local, v); } },
         sync: { get: (k, cb) => cb({}) },
@@ -217,4 +217,22 @@ test('Ultra hub offers Streak beside Pet habitat', async () => {
   assert.ok(group.querySelector('input[data-key="streak"]'));
   assert.ok(group.querySelector('input[data-key="pet"]'));
   hub.close();
+});
+
+
+test('the feature hub refuses an invalid context before the core observes any mutation', async () => {
+  const p = page({ local: { widgetLayout: { tiles: W.TILES.map((id) => ({ id, on: false })) } } }); p.c.navigator = { userAgent: 'Synthetic fixture' };
+  p.ui.sync(true); await settle();
+  let calls = 0;
+  delete p.c.chrome.runtime.id;
+  p.c.chrome.runtime.getManifest = () => { calls++; throw Error('Extension context invalidated'); };
+  const before = p.doc.root.all().length;
+  const hub = p.doc.querySelector('.gz-dash-bar').children.find((x) => x.textContent === 'What Glaze can do');
+  assert.doesNotThrow(() => p.doc.fire(hub, 'click'));
+  p.c.GZ_CTX.need = () => { calls++; throw Error('Extension context invalidated'); };
+  await assert.doesNotReject(p.ui.hub());
+  assert.equal(calls, 0, 'guard precedes getManifest');
+  assert.equal(p.doc.root.all().length, before, 'no DOM mutation needed to notice invalidation');
+  assert.equal(p.doc.getElementById('gz-hub'), null);
+  p.ui.sync(false);
 });

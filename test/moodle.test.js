@@ -613,6 +613,7 @@ test('Moodle\'s shortcuts work on its main pages, a course\'s and its activities
 test('content.js hands Moodle\'s keys to keys.js, with Canvas\'s guards: not repeated, not taken, not in a menu or dialog', () => {
   const line = read('content.js').match(/^ {2}const keyOn = [^\n]*\n[^\n]*;$/m)[0];
   const keyOn = (site, e, pathname = '/course/view.php') => vm.runInNewContext(`${line} keyOn`, {
+    chrome: { runtime: { id: 'glaze' } },
     settings: { enhance: { keys: true } }, observer: {}, typing: () => false, ultra: site === 'ultra', moodle: site === 'moodle', location: { pathname }, GZ_PAGE: require('../lib/page.js'),
   })({ key: 'g', target: { closest: () => null }, ...e });
   assert.ok(keyOn('moodle', {}));

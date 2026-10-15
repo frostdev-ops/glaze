@@ -43,8 +43,8 @@ class El {
   getClientRects() { return []; }
 }
 
-const page = ({ site, preload, answer, raw = {} }) => {
-  const sent = [], held = [], swept = [];
+const page = ({ site, preload, answer, raw = {}, local = {}, pathname }) => {
+  const sent = [], held = [], swept = [], storeListeners = [];
   const html = new El('html');
   html.lang = 'en';
   const head = new El('head');
@@ -60,13 +60,13 @@ const page = ({ site, preload, answer, raw = {} }) => {
     addEventListener() {}, removeEventListener() {}, fonts: { load: () => Promise.resolve([]), add() {} },
   };
   const area = () => ({
-    get: (keys, cb) => (cb ? cb({}) : Promise.resolve({})),
+    get: (keys, cb) => (cb ? cb(structuredClone(local)) : Promise.resolve(structuredClone(local))),
     set: (o, cb) => { cb?.(); return Promise.resolve(); },
     remove: (k, cb) => { cb?.(); return Promise.resolve(); },
   });
   const c = vm.createContext({
     document, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone, crypto: require('node:crypto').webcrypto,
-    location: { protocol: 'https:', origin: 'https://school.test', pathname: site === 'ultra' ? '/ultra/course' : '/', href: 'https://school.test/', search: '', hash: '' },
+    location: { protocol: 'https:', origin: 'https://school.test', pathname: pathname || (site === 'ultra' ? '/ultra/course' : '/'), href: 'https://school.test/', search: '', hash: '' },
     navigator: { language: 'en' }, Element: El, HTMLElement: El, SVGElement: class {}, Node: El, NodeFilter: { SHOW_TEXT: 4 },
     getComputedStyle: () => ({ getPropertyValue: () => '', color: '', backgroundColor: '' }), CSS: { supports: () => false },
     matchMedia: () => ({ matches: false, addEventListener() {} }), Image: class {},
@@ -89,7 +89,7 @@ const page = ({ site, preload, answer, raw = {} }) => {
           return Promise.resolve({ ok: false, error: 'not in this test' });
         },
       },
-      storage: { sync: { get: (k, cb) => cb(raw) }, local: area(), onChanged: { addListener() {} } },
+      storage: { sync: { get: (k, cb) => cb(raw) }, local: area(), onChanged: { addListener: (f) => storeListeners.push(f) } },
     },
   });
   c.window = c; c.top = c; c.globalThis = c;
@@ -104,7 +104,7 @@ const page = ({ site, preload, answer, raw = {} }) => {
   const sheets = () => head.kids.map((l) => String(l.href || '').split('/').pop()).filter((f) => f.endsWith('.css'));
   // The part's file arriving, as lib/background.js would put it in, then the worker's answer.
   const arrive = () => { loadPart(); held.shift()({ ok: true }); };
-  return { c, html, sent, held, swept, sheets, done, arrive, asked: () => sent.filter((m) => m?.files?.includes(`content-${site}.js`)).length };
+  return { c, html, sent, held, swept, sheets, done, arrive, storeListeners, asked: () => sent.filter((m) => m?.files?.includes(`content-${site}.js`)).length };
 };
 
 const noUnhandled = async (run) => {
@@ -170,3 +170,20 @@ for (const site of ['canvas', 'ultra']) {
     assert.throws(() => p.c.GZ_CTX.bookFor('_1_1'), (e) => e.name === 'TypeError', 'the part\'s own helpers are not there');
   }));
 }
+
+
+test('default Dashboard alone does not load widgets on course routes; an explicitly saved global float does', () => noUnhandled(async () => {
+  const opts = { site: 'ultra', preload: true, pathname: '/ultra/courses/_1_1/outline', raw: { enhance: { notes: false, widgets: false, pet: false } } };
+  const asks = (p) => p.sent.filter((m) => m?.files?.includes('features/widgets.js')).length;
+  const p = page(opts);
+  await settle();
+  assert.equal(asks(p), 0, 'no global tiles: retain lazy cost');
+  const q = page({ ...opts, local: { widgetLayout: { boards: { pages: [{ id: 'timer', on: true }] } } } });
+  await settle();
+  assert.equal(asks(q), 1, 'saved global tile: load its UI with legacy Widgets off');
+  const r = page(opts);
+  await settle();
+  for (const f of r.storeListeners) f({ widgetLayout: { newValue: { boards: { pages: [{ id: 'timer', on: true }] } } } }, 'local');
+  await settle();
+  assert.equal(asks(r), 1, 'a float enabled in another tab becomes available');
+}));

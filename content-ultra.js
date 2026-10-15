@@ -77,6 +77,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         .then((j) => (late || b.late ? lateIn(cid, j.results) : Promise.resolve(undefined)).then((lateCols) => {
           b.pending = false;
           const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])]]);
+          b.late = lateCols;
           if (key === b.key) return;
           Object.assign(b, { results: j.results, grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results, locale()), late: lateCols, key });
           onBook();
@@ -167,47 +168,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
-  // ---- page loads ------------------------------------------------------------------------------
-  // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
-  // Glaze's progress bar and chips landing on top. A page's container (a course tab's, not the course
-  // shell around it) is held hidden while that happens and let go once it's built: still for 300 ms
-  // (pages that load per course, like Grades, pause ~250 ms between parts), no spinner or skeleton
-  // showing, the course's grades in, or after 2.5 s at most. It then resolves from a blur, once
-  // (motion.css). content.js's mutation callback hands each added element here (gate) and each change (still), so a
-  // page is held before it's first painted.
-  const GATE = '.route-view-container:not(.bb-offcanvas-container)';
-  const held = new Map(); // container -> { at, still }
-  let gateTimer = 0;
-  const loaderIn = (el) => [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root')]
-    .some((e) => e.getClientRects().length && !e.closest('.ng-hide'));
-  const release = () => {
-    const now = performance.now();
-    for (const [el, t] of held) {
-      if (el.isConnected && now - t.at < 2500 && (now - t.still < 300 || I.timer || [...books.values()].some((b) => b.pending) || loaderIn(el))) continue;
-      held.delete(el);
-      // Cards already there arrive with the page, not one by one after it.
-      for (const c of el.querySelectorAll('.content-list-item, .element-card')) c.setAttribute('data-gz-held', '');
-      el.setAttribute('data-gz-reveal', '');
-      el.removeAttribute('data-gz-loading');
-      setTimeout(() => el.removeAttribute('data-gz-reveal'), 800);
-    }
-    if (!held.size) { clearInterval(gateTimer); gateTimer = 0; }
-  };
-  const hold = (el) => {
-    if (held.has(el) || el.parentElement?.closest('[data-gz-loading]')) return;
-    const now = performance.now();
-    held.set(el, { at: now, still: now });
-    // data-gz-held: the reveal is its entrance, so its own fade-up never starts (motion.css).
-    el.setAttribute('data-gz-held', '');
-    el.setAttribute('data-gz-loading', '');
-    gateTimer ||= setInterval(release, 50);
-  };
-  const gate = (n) => {
-    globalThis.GZ_CTABS?.held();
-    if (n.matches(GATE)) hold(n);
-    else if (n.firstElementChild) for (const c of n.querySelectorAll(GATE)) hold(c);
-  };
-  const still = (target) => { if (held.size) for (const [el, t] of held) if (el.contains(target)) t.still = performance.now(); };
+  // Keep the course strip attached when Ultra replaces its header; no route paint hold.
+  const gate = () => globalThis.GZ_CTABS?.held();
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
@@ -390,15 +352,26 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // (html[data-gz-dash], apps.css), so it doesn't show for a moment first. A page loaded at Ultra's start may go on to the
   // Dashboard (opt-in, once: features/dashboard.js); from is its first address, kept until a pass has the settings.
   let from = location.pathname;
+  let globalFloats = false, floatEpoch = 0;
+  const floatsIn = (l) => {
+    globalFloats = Array.isArray(l?.boards?.pages) ? l.boards.pages.some((x) => x?.on === true)
+      : Array.isArray(l?.tiles) && l.tiles.some((x) => x?.on === true && x.float === true);
+    syncWidgets();
+  };
   const dash = () => top()?.dashboard && /^\/ultra\/institution-page\/?$/.test(location.pathname);
-  const widgetsHere = () => { const e = top(); return !!e && (dash() || e.widgets || e.notes || e.pet); };
+  const widgetsHere = () => { const e = top(); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats)); };
   const syncWidgets = () => {
     const on = widgetsHere();
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
-    if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => html.setAttribute('data-gz-dash', 'ip')); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);
     if (from && top()?.dashboard) { const f = from; from = ''; if (/^\/ultra(\/(stream|course))?\/?$/.test(f)) need('features/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => GZ_DASH_UI.land(f), () => {}); }
     if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
   };
+  if (window.top === window) try {
+    const epoch = floatEpoch;
+    chrome.storage.local.get('widgetLayout', (r) => { if (!chrome.runtime.lastError && epoch === floatEpoch) floatsIn(r?.widgetLayout); });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { floatEpoch++; floatsIn(ch.widgetLayout.newValue); } });
+  } catch { /* extension reloaded */ }
 
   // ---- course tabs: features/coursetabs.js (after lib/coursetabs.js), in the top frame and the preview -------------
   // Until it's in, extras.css holds the strip's place from data-gz-ctabs (paintCourses): the place and size it last had in
@@ -411,8 +384,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Ultra swaps pages in place, painting its half-built states on the way (and one long script can
   // stall it for half a second). A click on the main menu or a course's tabs instead holds the old
   // page in a view transition until the next one exists, then crossfades into it: when the address has
-  // changed and the new page is being held while it loads (see page loads), or has been still for
-  // 120 ms, or after 500 ms at most. Top frame only, and only while entrances are on.
+  // changed and the new page has been still for 120 ms, or after 500 ms at most. Top frame only,
+  // and only while entrances are on. Route containers themselves stay visible as Ultra builds them.
   if (window.top === window && document.startViewTransition) {
     const PAGE_LINKS = '#base_tools a, .bb-ui-navigation-list-horizontal a';
     const settled = (from) => new Promise((done) => {
@@ -422,7 +395,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       mo.observe(document.body, { childList: true, subtree: true });
       const check = () => {
         const now = performance.now();
-        if ((location.href !== from && (held.size || now - still > 120)) || now - t0 > 500) { mo.disconnect(); done(); } else setTimeout(check, 25);
+        if ((location.href !== from && now - still > 120) || now - t0 > 500) { mo.disconnect(); done(); } else setTimeout(check, 25);
       };
       setTimeout(check, 25);
     });
@@ -611,9 +584,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   }
 
   return {
-    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, still, stop: () => { globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
-    unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); }, holding: () => held.size > 0,
+    unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
     syncTodo, syncCardTasks, syncRemind, syncWidgets,
     ctx: { me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
   };
