@@ -131,3 +131,39 @@ test('NEW-2: Ultra uses local ticks even when Canvas tick sync is on', async () 
   });
   assert.equal(result.data.work, 0); assert.equal(result.data.plans, 0);
 });
+
+
+for (const done of ['auto', 'manual']) test(`R2-1: synced ${done} first read rewards submitted history outside the planner window`, () => {
+  const old = { at: now, courses: [{ id: '1', items: [1, 2, 3].map((i) => ({
+    k: `assignment:${i}`, n: 'Historical work', d: now - 20 * T.DAY, a: now - 21 * T.DAY, s: 'on',
+  })) }] };
+  const sources = { insights: old, planner: [], cache: { at: now }, todoO: { sync: true, done } };
+  const first = run(sources);
+  assert.equal(view(first).work, 60);
+  assert.deepEqual(run(sources, first), first, 'backfill is idempotent');
+  const settled = { earned: { 'work:assignment:1': 20, 'work:assignment:2': 0 } };
+  const mixed = run(sources, settled);
+  assert.deepEqual(mixed.earned, { 'work:assignment:1': 20, 'work:assignment:2': 0, 'work:assignment:3': 20 });
+});
+test('R2-1: a returning synced planner row resumes authoritative tick corrections after history backfill', () => {
+  const todoO = { sync: true, done: 'auto' };
+  const first = run({ insights, todo, todoO });
+  assert.equal(view(first).work, 20);
+  const undone = run({ insights, todo, todoO, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 1 } }, first);
+  assert.equal(view(undone).work, 0);
+  const missing = run({ insights: { ...insights, at: now + 2 }, todo, todoO }, undone);
+  assert.equal(view(missing).work, 0);
+  const reticked = run({ insights, todo, todoO, planner: [{ ...row, ov: { done: true } }], cache: { at: now + 3 } }, missing);
+  assert.equal(view(reticked).work, 20);
+});
+
+
+test('R2-1: a first-read visible synced untick stores zero without growing history for ordinary unsubmitted work', () => {
+  const todoO = { sync: true, done: 'auto' };
+  const sources = { insights, todoO, planner: [{ ...row, ov: { done: false } }], cache: { at: now + 1 } };
+  const first = run(sources);
+  assert.equal(first.earned['work:assignment:1'], 0, 'the visible native untick is settled evidence');
+  assert.equal(view(run({ insights: { ...insights, at: now + 2 }, todoO }, first)).work, 0);
+  const open = run({ todoO, planner: [{ ...row, sub: { submitted: false } }], cache: { at: now + 1 } });
+  assert.deepEqual(open.earned, {}); assert.deepEqual(open.seen, {});
+});
