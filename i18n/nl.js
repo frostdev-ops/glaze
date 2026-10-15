@@ -1274,4 +1274,5 @@
   "Your class schedule": "Je lesrooster",
   "Some of this changed in another tab first. This is what is kept now.": "Een deel hiervan is eerder in een ander tabblad gewijzigd. Dit is wat nu bewaard is.",
   "Choose a date first.": "Kies eerst een datum.",
+  "Couldn't read your class schedule. Nothing was saved.": "Je lesrooster kon niet worden gelezen. Er is niets opgeslagen.",
 };

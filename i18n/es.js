@@ -1274,4 +1274,5 @@
   "Your class schedule": "Tu horario de clases",
   "Some of this changed in another tab first. This is what is kept now.": "Parte de esto cambió antes en otra pestaña. Esto es lo que queda guardado ahora.",
   "Choose a date first.": "Elige primero una fecha.",
+  "Couldn't read your class schedule. Nothing was saved.": "No se pudo leer tu horario de clases. No se guardó nada.",
 };
