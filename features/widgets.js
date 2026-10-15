@@ -1,12 +1,16 @@
 // Dashboard notes, widgets and the feature hub (Canvas and Blackboard Ultra), loaded on demand. The site's part
 // (syncWidgets) calls sync(on) from its passes while enhance.notes or enhance.widgets is on, in the top frame, and the
-// command palette calls hub(). Ultra has no Dashboard: the grid goes in Glaze's panel at the top of its Courses page's
-// right column, above Ultra's own To Do (owner decision A), collapsible; on a narrow window Ultra puts that column
-// under the courses, and the panel with it. Other files add tiles: MORE, then register().
-// The Dashboard gets a grid of tiles under its heading (notes, agenda, focus timer, quote, music, breathe, study buddy),
-// each small, medium or large, in the order the student puts them; any tile can float instead, over every page of the
-// site, dragged with the pointer or moved with the arrow keys, and it snaps to the window's edges. The logic is
-// lib/widgets.js. What it asks Canvas for: the student's profile (id and time zone, shared with the other extras) and,
+// command palette calls hub(). Other files add tiles: MORE, then register().
+// Canvas: the Dashboard gets a grid of tiles under its heading (notes, agenda, focus timer, quote, music, breathe, study
+// buddy), each small, medium or large, in the order the student puts them; any tile can float instead, over every page
+// of the site, dragged with the pointer or moved with the arrow keys.
+// Blackboard Ultra has two boards, each its own layout of free tiles (B7b): the Courses page, where they float over the
+// page and start where Glaze's panel was, at the top of its right column (the panel keeps its bar there and makes room
+// for them), and the Dashboard, Glaze's page on Ultra's Institution page (features/dashboard.js has its tabs). Edit
+// layout lets the tiles move: dragged by their heading or moved with the arrow keys on their handle, they snap to the
+// grid, the room's edges, each other and Ultra's column, with a guide while dragging; Alt places freely. A window too
+// narrow for the layout stacks them in a column instead, and keeps the layout. The logic is lib/widgets.js.
+// What it asks Canvas for: the student's profile (id and time zone, shared with the other extras) and,
 // for the agenda, their planner items for a day Better To Do's copy doesn't cover; Ultra: who's signed in (/users/me)
 // and, for the agenda, that day's To Do and calendar with their submissions (lib/ultra.js). The music player is the one other
 // address, and only after the student clicks Load player. Nothing here polls: each clock is one setTimeout to its next
@@ -63,6 +67,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let on = false, starting = null, editing = false;
   let me = null; // { uid, tz }
   let grid = null, floats = null, panel = null;
+  // Ultra's boards: which one this page is ('courses', 'dash' or null), the one drawn, and the Courses page's layer the
+  // tiles float in (the Dashboard's tiles are in its own room, the grid).
+  let board = null, drawn = null, room = null;
   const tiles = new Map(); // id -> { el, body, wake?, stop?, update? }
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
@@ -79,17 +86,23 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const shown = () => document.visibilityState === 'visible';
   const lang = () => GZ_I18N.locale(ctx.locale());
-  const dash = () => (ultra ? /^\/ultra\/course\/?$/.test(location.pathname) : location.pathname === '/');
+  const boardOf = () => (!ultra ? null : /^\/ultra\/course\/?$/.test(location.pathname) ? 'courses' : /^\/ultra\/institution-page\/?$/.test(location.pathname) ? 'dash' : null);
   // Where the grid goes: under Canvas's Dashboard heading; on Ultra's Courses page, first in its right column (or, at a
-  // school without Ultra's To Do, above the courses).
-  const home = () => dash() && (ultra ? document.querySelector('div.todo-panel') || document.querySelector('div.courses-panel') : document.getElementById('dashboard_header_container'));
+  // school without Ultra's To Do, above the courses); on its Institution page, before Ultra's own page.
+  const home = () => (ultra ? board === 'courses' ? document.querySelector('div.todo-panel') || document.querySelector('div.courses-panel')
+    : board === 'dash' && (document.querySelector('institution-page-home')?.parentElement || document.querySelector('section.institution-page-container'))
+    : location.pathname === '/' && document.getElementById('dashboard_header_container'));
+  // The Courses page's layer: first in the page's own container, no height of its own, so the tiles in it are placed
+  // from the page's top left, scroll with it and never go under Ultra's nav.
+  const roomHost = (h) => h.closest('.route-view-container') || h.parentElement;
   // Ultra's Reminders button, shown while the reminders (features/reminders.js, which may load after the panel) have a hub.
   const remindIn = () => {
     const rm = grid?.querySelector('.gz-dash-remind');
     const off = !globalThis.GZ_REMIND_UI?.cmds().length;
     if (rm && rm.hidden !== off) rm.hidden = off;
   };
-  const placed = (h) => (ultra ? h.firstElementChild === panel && panel.contains(grid) : h.nextElementSibling === grid);
+  const placed = (h) => (board === 'courses' ? h.firstElementChild === panel && panel.contains(grid) && roomHost(h).firstElementChild === room
+    : board === 'dash' ? grid.parentNode === h && (!grid.nextElementSibling || grid.nextElementSibling.matches('institution-page-home')) : h.nextElementSibling === grid);
   const allowed = (id) => (id === 'pet' ? ctx.settings().enhance.pet : id === 'notes' ? ctx.settings().enhance.notes : ctx.settings().enhance.widgets);
   const saveLayout = (next) => { lay = next; put({ widgetLayout: lay }); draw(); };
   // Who's signed in (their id names their notes; their Canvas time zone counts the agenda's days), asked only when a
@@ -264,17 +277,19 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const clock = make('p', { className: 'gz-w-clock' }, time);
       clock.setAttribute('role', 'timer');
       const say = make('p', { className: 'gz-w-status', role: 'status' });
+      // Every change goes through the worker's one queue ('glaze:widgetTimer'), which the nav's timer (B7c) uses too:
+      // it applies the change to what is stored then. Its answer is shown; without one, nothing changed and the stored
+      // state stays (an advance the page saw for itself says nothing: the next tab or look does it again).
+      const ask = (op) => send({ type: 'glaze:widgetTimer', op }).then((r) => {
+        if (r?.ok && r.timer) { s = W.cleanTimer(r.timer); say.textContent = ''; run(); return; }
+        if (op !== 'advance') say.textContent = t("Couldn't change the timer. Nothing changed; try again in a moment.");
+      });
       const go = button(t('Start'), () => {
-        if (s.end) s = W.pause(s, Date.now());
-        else {
-          // A sound needs a click to be allowed: it plays in the tab where Start was pressed.
-          if (o.sound) try { audio ||= new AudioContext(); audio.resume(); } catch { audio = null; }
-          s = W.start(s, Date.now(), o);
-        }
-        put({ widgetTimer: s });
-        run();
+        // A sound needs a click to be allowed: it plays in the tab where Start was pressed.
+        if (!s.end && o.sound) try { audio ||= new AudioContext(); audio.resume(); } catch { audio = null; }
+        ask('toggle');
       }, { className: 'gz-w-btn gz-w-main' });
-      const reset = button(t('Reset'), () => { s = W.IDLE; put({ widgetTimer: s }); run(); });
+      const reset = button(t('Reset'), () => ask('reset'));
       const chime = () => {
         if (!o.sound || !audio) return;
         const at = audio.currentTime;
@@ -299,7 +314,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         const was = s;
         s = W.advance(s, now, o);
         if (s !== was && shown()) {
-          put({ widgetTimer: s });
+          ask('advance');
           if (now - was.end < 2000) { chime(); say.textContent = t(s.phase === 'rest' ? 'Time for a break.' : 'Break over. Ready when you are.'); }
         }
         phase.data = t(s.phase === 'rest' ? 'Break' : 'Focus');
@@ -309,7 +324,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         body.dataset.running = s.end ? 'yes' : 'no';
         if (s.end && shown()) tick = setTimeout(run, ((s.end - now) % 1000 || 1000) + 5);
       };
-      const onStore = (ch, a) => { if (a === 'local' && ch.widgetTimer && !echo('widgetTimer', ch.widgetTimer)) { s = W.cleanTimer(ch.widgetTimer.newValue); run(); } };
+      const onStore = (ch, a) => { if (a === 'local' && ch.widgetTimer) { s = W.cleanTimer(ch.widgetTimer.newValue); run(); } };
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       get('local', 'widgetTimer').then((r) => { s = W.cleanTimer(r.widgetTimer); run(); });
       body.append(make('p', { className: 'gz-w-faint' }, phase), clock, make('div', { className: 'gz-w-row' }, go, reset), say);
@@ -462,7 +477,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     },
   };
 
-  // ---- the grid and the floating layer ------------------------------------------------------------------------
+  // ---- the grid, the boards and the floating layer -------------------------------------------------------------
   const tileEl = (id) => {
     const name = t(nameOf(id));
     const el = make('section', { className: 'gz-w' });
@@ -479,21 +494,34 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     drag(el, head, grip, id);
     return { el, head, tools, body };
   };
-  // The controls a tile shows: floating, its way back and away; in the grid while editing, order, size and float.
+  // The tile as this page keeps it: the board's, or Canvas's.
+  const cur = (id) => (board ? lay.boards[board] : lay.tiles).find((x) => x.id === id);
+  const saveBoard = (id, patch) => saveLayout(W.bset(lay, board, id, patch, MORE));
+  // The controls a tile shows: on a board, Fold at any time, and its size and Remove while editing; on Canvas, a floating
+  // tile its way back and away, and in the grid while editing, order, size and float. A control redrawn by its own click
+  // keeps the focus.
   const toolsFor = (x, tile) => {
     const name = t(nameOf(tile.id));
     const label = (b, text) => { b.setAttribute('aria-label', text); b.title = text; return b; };
+    const again = (sel, run) => () => { run(); x.tools.querySelector(sel)?.focus(); };
+    const size = make('select', { className: 'gz-w-size' }, ...W.SIZES.map((v) => make('option', { value: v, textContent: t(SIZE_NAMES[v]), selected: v === tile.size })));
+    size.setAttribute('aria-label', t('Size of {name}', { name }));
+    size.addEventListener('change', again('.gz-w-size', () => (board ? saveBoard(tile.id, { size: size.value }) : saveLayout(W.set(lay, tile.id, { size: size.value })))));
+    if (board) {
+      const fold = label(button(tile.fold ? '▸' : '▾', again('.gz-w-fold', () => saveBoard(tile.id, { fold: !tile.fold })), { className: 'gz-w-icon gz-w-fold' }), t(tile.fold ? 'Unfold {name}' : 'Fold {name}', { name }));
+      fold.setAttribute('aria-expanded', String(!tile.fold));
+      x.body.hidden = tile.fold;
+      x.tools.replaceChildren(...(editing ? [size, label(button('×', () => saveBoard(tile.id, { on: false }), { className: 'gz-w-icon' }), t('Remove {name}', { name }))] : []), fold);
+      return;
+    }
     if (tile.float) {
       x.tools.replaceChildren(
-        label(button('⇲', () => saveLayout(W.set(lay, tile.id, { float: false })), { className: 'gz-w-icon' }), t(ultra ? 'Put {name} back in the panel' : 'Put {name} back on the Dashboard', { name })),
+        label(button('⇲', () => saveLayout(W.set(lay, tile.id, { float: false })), { className: 'gz-w-icon' }), t('Put {name} back on the Dashboard', { name })),
         label(button('×', () => saveLayout(W.set(lay, tile.id, { on: false, float: false })), { className: 'gz-w-icon' }), t('Remove {name}', { name })),
       );
       return;
     }
     if (!editing) { x.tools.replaceChildren(); return; }
-    const size = make('select', { className: 'gz-w-size' }, ...W.SIZES.map((v) => make('option', { value: v, textContent: t(SIZE_NAMES[v]), selected: v === tile.size })));
-    size.setAttribute('aria-label', t('Size of {name}', { name }));
-    size.addEventListener('change', () => saveLayout(W.set(lay, tile.id, { size: size.value })));
     x.tools.replaceChildren(
       label(button('←', () => saveLayout(W.move(lay, tile.id, -1)), { className: 'gz-w-icon' }), t('Move {name} earlier', { name })),
       label(button('→', () => saveLayout(W.move(lay, tile.id, 1)), { className: 'gz-w-icon' }), t('Move {name} later', { name })),
@@ -503,34 +531,93 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     );
   };
 
-  // Floating: dragged by its header with the pointer, or moved by its grip with the arrow keys (Shift: further).
-  // It lands inside the window and snaps to an edge near it; where it is in the room the window leaves is kept.
+  // What is said to a screen reader (a status line in the bar, or the floating layer's).
+  let live = null;
+  const say = (text) => {
+    const at = grid || floats;
+    if (!at) return;
+    if (live?.parentNode !== at) { live = make('p', { className: 'gz-sr', role: 'status' }); at.append(live); }
+    live.textContent = text;
+  };
+  // The guides a dragged tile shows on the lines it met (snap's guides), in its room: len, how far they reach.
+  let guides = null;
+  const showGuides = (parent, g, len) => {
+    guides ||= ['x', 'y'].map((a) => { const d = make('div', { className: 'gz-guide' }); d.dataset.axis = a; d.setAttribute('aria-hidden', 'true'); return d; });
+    guides.forEach((d, i) => {
+      const at = i ? g.y : g.x;
+      d.hidden = at === null;
+      if (at === null) return;
+      if (d.parentNode !== parent) parent.append(d);
+      Object.assign(d.style, i ? { left: '0', top: `${at}px`, width: `${len.w}px`, height: '' } : { left: `${at}px`, top: '0', width: '', height: `${len.h}px` });
+    });
+  };
+
+  // Moving a tile: floating on Canvas, dragged by its header or moved by its grip with the arrow keys (Shift: further);
+  // on a board the same while editing. It snaps to the grid, its room's edges, the other tiles and Ultra's column
+  // (lib/widgets.js snap), with a guide on the line it met; Alt places it freely. Canvas keeps where it is in the room
+  // the window leaves; a board keeps its spot from its nearer side, and it goes on top of the others.
   let dragged = null; // the grid tile being dragged to a new place in the order
+  let lastAt = {}, lastW = 0, stacked = false; // the board's last arrangement (arrange), its room's width, stacked or not
+  const movable = (id) => (board ? editing && !stacked : !!cur(id)?.float);
+  const roomEl = () => (board === 'courses' ? room : grid?.querySelector('.gz-dash-grid'));
+  // The room a tile moves in: its box on screen, its size, the other tiles in it ({ left, top, w, h }) and Ultra's column.
+  const frame = (id) => {
+    if (!board) {
+      const others = lay.tiles.filter((x) => x.float && x.id !== id && tiles.has(x.id)).map((x) => tiles.get(x.id).el.getBoundingClientRect());
+      return { at: () => ({ left: 0, top: 0 }), W: innerWidth, H: innerHeight, others: others.map((r) => ({ left: r.left, top: r.top, w: r.width, h: r.height })), lines: [], layer: floats };
+    }
+    const host = roomEl();
+    const at = () => host.getBoundingClientRect();
+    const g = grid.querySelector('.gz-dash-grid').getBoundingClientRect();
+    return {
+      at, W: host.clientWidth, H: board === 'courses' ? Math.max(host.parentElement.scrollHeight, lastAt[id]?.top + lastAt[id]?.h || 0) : Infinity,
+      others: Object.entries(lastAt).filter(([k]) => k !== id).map(([, a]) => a),
+      lines: board === 'courses' && g.width ? [g.left - at().left, g.right - at().left] : [], layer: host,
+    };
+  };
+  // A board's tile moved: every tile keeps where it shows now (the first move fixes those still placed in free room, so
+  // nothing else moves), and this one goes to its new spot, on top.
+  const settle = (id, spot) => {
+    const b = W.front(lay.boards[board].map((x) => (x.x === null && lastAt[x.id] ? { ...x, ...W.spotOf(lastAt[x.id], lastW) } : x)), id);
+    saveLayout({ ...lay, boards: { ...lay.boards, [board]: b.map((x) => (x.id === id ? { ...x, ...spot } : x)) } });
+  };
   const drag = (el, head, grip, id) => {
-    const keep = (left, top) => {
-      const r = el.getBoundingClientRect();
-      const p = W.place(left, top, r.width, r.height, innerWidth, innerHeight);
+    const to = (left, top, f, free) => {
+      const s = W.snap(left, top, el.offsetWidth, el.offsetHeight, f.W, f.H, f.others, { free, lines: f.lines });
+      el.style.left = `${s.left}px`;
+      el.style.top = `${s.top}px`;
+      return s;
+    };
+    const keep = (s, f) => {
+      if (board) return settle(id, W.spotOf({ left: s.left, top: s.top, w: el.offsetWidth }, f.W));
+      const p = W.place(s.left, s.top, el.offsetWidth, el.offsetHeight, innerWidth, innerHeight, true);
       el.style.left = `${p.left}px`;
       el.style.top = `${p.top}px`;
       lay = W.set(lay, id, { x: p.x, y: p.y });
       put({ widgetLayout: lay });
     };
     head.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || !lay.tiles.find((x) => x.id === id)?.float || (e.target.closest('button, a, input, select, textarea') && e.target !== grip)) return;
-      const r = el.getBoundingClientRect();
+      if (e.button !== 0 || !movable(id) || (e.target.closest('button, a, input, select, textarea') && e.target !== grip)) return;
+      const f = frame(id);
+      const r = el.getBoundingClientRect(), room0 = f.at();
       const dx = e.clientX - r.left, dy = e.clientY - r.top;
       head.setPointerCapture(e.pointerId);
       el.dataset.dragging = '';
+      if (board) el.style.zIndex = '999';
+      let s = null;
+      // The room's box is asked again each move: the page can scroll under the pointer.
       const move = (ev) => {
-        el.style.left = `${Math.min(innerWidth - r.width, Math.max(0, ev.clientX - dx))}px`;
-        el.style.top = `${Math.min(innerHeight - r.height, Math.max(0, ev.clientY - dy))}px`;
+        const at = board ? f.at() : room0;
+        s = to(ev.clientX - dx - at.left, ev.clientY - dy - at.top, f, ev.altKey);
+        showGuides(f.layer, s.guides, { w: f.W, h: Number.isFinite(f.H) ? f.H : Math.max(f.layer.clientHeight, innerHeight) });
       };
-      const up = (ev) => {
+      const up = () => {
         head.removeEventListener('pointermove', move);
         head.removeEventListener('pointerup', up);
         head.removeEventListener('pointercancel', up);
         delete el.dataset.dragging;
-        keep(ev.clientX - dx, ev.clientY - dy);
+        guides?.forEach((d) => d.remove());
+        if (s) keep(s, f);
       };
       head.addEventListener('pointermove', move);
       head.addEventListener('pointerup', up);
@@ -538,17 +625,22 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       e.preventDefault();
     });
     grip.addEventListener('keydown', (e) => {
-      const by = e.shiftKey ? 96 : 32; // more than SNAP, so a step away from an edge isn't pulled back to it
-      const d = { ArrowLeft: [-by, 0], ArrowRight: [by, 0], ArrowUp: [0, -by], ArrowDown: [0, by] }[e.key];
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (!d) return;
       e.preventDefault();
-      const tile = lay.tiles.find((x) => x.id === id);
-      // In the grid: left and up move it earlier, right and down later.
-      if (!tile?.float) { saveLayout(W.move(lay, id, d[0] + d[1] < 0 ? -1 : 1)); grip.focus(); return; }
-      const r = el.getBoundingClientRect();
-      keep(r.left + d[0], r.top + d[1]);
+      // In Canvas's grid: left and up move it earlier, right and down later.
+      if (!board && !cur(id)?.float) { saveLayout(W.move(lay, id, d[0] + d[1] < 0 ? -1 : 1)); grip.focus(); return; }
+      if (!movable(id)) return;
+      const by = W.GRID * (e.shiftKey ? 4 : 1);
+      const f = frame(id);
+      const at = board ? lastAt[id] : el.getBoundingClientRect();
+      if (!at) return;
+      const s = to(at.left + d[0] * by, at.top + d[1] * by, f, true);
+      keep(s, f);
+      grip.focus();
+      say(t('Moved {name}: {x} px from the left, {y} px from the top', { name: t(nameOf(id)), x: s.left, y: s.top }));
     });
-    // In the grid while editing: drag a tile onto another to put it there.
+    // In Canvas's grid while editing: drag a tile onto another to put it there.
     el.addEventListener('dragstart', (e) => { dragged = id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t(nameOf(id))); });
     el.addEventListener('dragover', (e) => { if (dragged && dragged !== id) { e.preventDefault(); el.dataset.over = ''; } });
     el.addEventListener('dragleave', () => delete el.dataset.over);
@@ -556,50 +648,104 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     el.addEventListener('dragend', () => { dragged = null; });
   };
 
+  // Edit widgets (Canvas's grid) or Edit layout (a board: then Done, with Reset layout and the tiles to add). Said to a
+  // screen reader as it starts and ends; Esc ends it too.
+  const setEditing = (v) => {
+    editing = v;
+    const edit = grid?.querySelector('.gz-dash-edit');
+    if (edit) { edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
+    const reset = grid?.querySelector('.gz-dash-reset');
+    if (reset) reset.hidden = !editing;
+    if (board) say(t(editing ? 'Editing the layout. Drag a widget by its heading, or use the arrow keys on its handle; Alt places it freely.' : 'Layout saved.'));
+    draw();
+  };
+  const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); grid?.querySelector('.gz-dash-edit')?.focus(); } };
   const gridEl = () => {
-    const edit = button(t('Edit widgets'), () => { editing = !editing; edit.setAttribute('aria-pressed', String(editing)); draw(); }, { className: 'gz-w-small' });
+    const edit = button(t(board ? 'Edit layout' : 'Edit widgets'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
+    const reset = board && button(t('Reset layout'), () => {
+      saveLayout({ ...lay, boards: { ...lay.boards, [board]: lay.boards[board].map((x) => ({ ...x, x: null, y: null, r: false, z: 0, fold: false })) } });
+      say(t('Layout reset.'));
+    }, { className: 'gz-w-small gz-dash-reset', hidden: true });
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
     // Ultra: the reminders' hub (features/reminders.js) from here too, when it has one to open (Canvas's is in its To Do's head).
     const remind = ultra && button(t('Reminders'), () => globalThis.GZ_REMIND_UI?.cmds()[0]?.run(), { className: 'gz-w-small gz-dash-remind', hidden: true });
-    const box = make('section', { id: 'gz-dash' }, make('div', { className: 'gz-dash-bar' }, !ultra && make('h2', { className: 'screenreader-only', textContent: t('Notes and widgets') }), edit, remind, hubBtn),
-      make('div', { className: 'gz-dash-grid' }), make('div', { className: 'gz-dash-add' }));
-    box.setAttribute('aria-label', t('Notes and widgets'));
+    const add = make('div', { className: 'gz-dash-add' });
+    const area = make('div', { className: 'gz-dash-grid' });
+    const box = make('section', { id: 'gz-dash' }, make('div', { className: 'gz-dash-bar' }, !ultra && make('h2', { className: 'screenreader-only', textContent: t('Notes and widgets') }), edit, reset, remind, hubBtn),
+      ...(board ? [add, area] : [area, add]));
+    if (board) box.dataset.board = board;
+    box.setAttribute('aria-label', t(board === 'dash' ? 'Dashboard' : 'Notes and widgets'));
+    box.addEventListener('keydown', escape);
     return box;
   };
   // Ultra's panel: a heading whose button folds it away (kept on this device, storage.local panelShut), then the grid.
+  // Folded, the Courses page's tiles go too.
   let shut = false;
   const panelEl = () => {
     const toggle = make('button', { type: 'button', className: 'gz-panel-toggle', textContent: t('Notes and widgets') });
     const body = make('div', { id: 'gz-panel-body', hidden: shut }, grid);
     toggle.setAttribute('aria-controls', body.id);
     toggle.setAttribute('aria-expanded', String(!shut));
-    toggle.addEventListener('click', () => { shut = !shut; body.hidden = shut; toggle.setAttribute('aria-expanded', String(!shut)); put({ panelShut: shut }); });
+    toggle.addEventListener('click', () => {
+      shut = !shut;
+      body.hidden = shut;
+      if (room) room.hidden = shut;
+      toggle.setAttribute('aria-expanded', String(!shut));
+      put({ panelShut: shut });
+      if (!shut) layoutBoard();
+    });
     const box = make('section', { id: 'gz-panel' }, make('h2', { className: 'gz-panel-head' }, toggle), body);
     box.setAttribute('aria-label', 'Glaze');
     return box;
   };
-  // Right under the Dashboard's heading: the GPA goes right before the cards, so the two never trade places. On Ultra,
-  // the panel goes first in its column, above Ultra's To Do and Glaze's Better To Do.
+  // The Dashboard's tabs (features/dashboard.js). Without them the board stays hidden, and Ultra's page shows as it is.
+  const tabsIn = () => ctx.need('features/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => { if (board === 'dash' && grid?.isConnected) GZ_DASH_UI.tabs(grid); }, () => {
+    if (grid) grid.hidden = true;
+    document.documentElement.setAttribute('data-gz-dash', 'ip');
+  });
+  // Canvas: right under the Dashboard's heading; the GPA goes right before the cards, so the two never trade places.
+  // Ultra's Courses page: the panel goes first in its column, above Ultra's To Do and Glaze's Better To Do, and the tiles'
+  // layer first in the page; its Dashboard: before Ultra's own Institution page.
   const placeGrid = () => {
     const h = home();
     // Off this page: Ultra's panel goes with the grid still in it, so it comes back whole.
-    if (!h) { (ultra ? panel : grid)?.remove(); return false; }
+    if (!h) { for (const e of [panel, grid, room]) e?.remove(); return false; }
     grid ||= gridEl();
-    if (ultra) {
+    if (board === 'courses') {
       panel ||= panelEl();
       const body = panel.querySelector('#gz-panel-body');
       if (grid.parentNode !== body) body.append(grid);
-      if (!placed(h)) h.prepend(panel);
+      if (h.firstElementChild !== panel) h.prepend(panel);
+      if (!room) { room = make('div', { id: 'gz-room', hidden: shut }); room.addEventListener('keydown', escape); }
+      if (roomHost(h).firstElementChild !== room) roomHost(h).prepend(room);
+    } else if (board === 'dash') {
+      if (!placed(h)) { const ip = [...h.children].find((e) => e.tagName === 'INSTITUTION-PAGE-HOME'); if (ip) ip.before(grid); else h.append(grid); }
+      tabsIn();
     } else if (!placed(h)) h.after(grid);
     return true;
   };
 
+  // Everything of this page's taken away (Glaze off, or another page: a board's tiles start again on the next).
+  let ro = null, frame0 = 0;
+  const teardown = () => {
+    for (const x of tiles.values()) { x.stop?.(); x.el.remove(); }
+    tiles.clear();
+    ro?.disconnect();
+    globalThis.GZ_DASH_UI?.tabs(null);
+    for (const e of [grid, panel, floats, room]) e?.remove();
+    grid = floats = panel = room = null;
+    editing = false;
+    lastAt = {};
+    stacked = false;
+  };
   const draw = () => {
     if (!on || !lay) return;
+    if (drawn !== board) teardown();
+    drawn = board;
     const hasGrid = placeGrid();
     const want = wanted(hasGrid);
-    if (want.some((x) => x.float) && !floats?.isConnected) { floats = make('div', { id: 'gz-float' }); document.body.append(floats); }
+    if (!board && want.some((x) => x.float) && !floats?.isConnected) { floats = make('div', { id: 'gz-float' }); document.body.append(floats); }
     for (const [id, x] of tiles) if (!want.some((w) => w.id === id)) { x.stop?.(); x.el.remove(); tiles.delete(id); }
     const last = new Map(); // home -> the tile placed last in it
     for (const tile of want) {
@@ -608,11 +754,18 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         x = tileEl(tile.id);
         Object.assign(x, (WIDGETS[tile.id] || added.get(tile.id))(x.body, api(tile.id)) || {});
         tiles.set(tile.id, x);
+        if (board) {
+          // A tile's height changes with what it shows: the board is laid out again, once a frame at most.
+          ro ||= new ResizeObserver(() => { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board) layoutBoard(); }); });
+          ro.observe(x.el);
+        }
       }
       x.el.dataset.size = tile.size;
-      x.el.draggable = editing && !tile.float;
-      x.el.toggleAttribute('data-float', tile.float);
+      x.el.draggable = editing && !board && !tile.float;
+      x.el.toggleAttribute('data-float', !!tile.float);
+      x.el.toggleAttribute('data-fold', !!tile.fold);
       toolsFor(x, tile);
+      if (board) continue; // laid out below, in reading order
       // In order, moving only what is out of place: a moved element loses focus (a note being typed).
       const home = tile.float ? floats : grid.querySelector('.gz-dash-grid');
       const prev = last.get(home);
@@ -620,21 +773,72 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       last.set(home, x.el);
       if (!tile.float) x.el.removeAttribute('style');
     }
-    placeFloats();
+    if (board) layoutBoard(); else placeFloats();
     if (grid) {
       remindIn();
       grid.toggleAttribute('data-editing', editing);
+      room?.toggleAttribute('data-editing', editing);
       const add = grid.querySelector('.gz-dash-add');
-      const off = lay.tiles.filter((x) => !x.on && allowed(x.id));
+      const off = (board ? lay.boards[board] : lay.tiles).filter((x) => !x.on && allowed(x.id));
       add.replaceChildren(...(editing && off.length ? [make('span', { className: 'gz-w-faint', textContent: t('Add:') }),
-        ...off.map((x) => button(`+ ${t(nameOf(x.id))}`, () => saveLayout(W.set(lay, x.id, { on: true })), { className: 'gz-w-small' }))] : []));
+        ...off.map((x) => button(`+ ${t(nameOf(x.id))}`, () => (board ? saveBoard(x.id, { on: true, x: null, y: null }) : saveLayout(W.set(lay, x.id, { on: true }))), { className: 'gz-w-small' }))] : []));
     }
   };
 
-  // What this page shows: tiles that are on, allowed by their switch, and floating or with the grid here.
-  // A declared tile (MORE) shows once its file has registered it; while it's on, the file is asked for.
-  const wanted = (hasGrid) => lay.tiles.filter((x) => {
-    if (!x.on || !allowed(x.id) || !(x.float || hasGrid)) return false;
+  // Where a board's tiles show (lib/widgets.js arrange): at their spots, or one under another when the window is too
+  // narrow for the layout, which is kept for a wider one; the Courses page's panel makes room for the tiles at its
+  // column's top, so Ultra's To Do and Better To Do start below them. The tiles' order on the page (Tab, a screen reader)
+  // is their reading order. A tile's height is kept from when it was on the board, so stacking doesn't flip back and forth.
+  const heights = new Map();
+  const layoutBoard = () => {
+    const area = grid?.querySelector('.gz-dash-grid');
+    const host = roomEl();
+    if (!board || !area || !host?.isConnected || (board === 'courses' && shut)) return;
+    const list = wanted(true).filter((x) => tiles.has(x.id));
+    const dims = {};
+    for (const x of list) {
+      const { el } = tiles.get(x.id);
+      if (!el.isConnected) (stacked || board === 'dash' ? area : room).append(el);
+      if (el.offsetHeight && (!stacked || !heights.has(x.id))) heights.set(x.id, el.offsetHeight);
+      dims[x.id] = { w: W.WIDTH[x.size], h: heights.get(x.id) || el.offsetHeight };
+    }
+    const width = host.clientWidth;
+    let col = null, lines = null, side = true;
+    if (board === 'courses') {
+      // Ultra's column, where the panel is: beside the courses, or (narrow) under them at their width.
+      const r = host.getBoundingClientRect(), g = area.getBoundingClientRect();
+      col = { right: Math.max(0, Math.round(r.right - g.right)), top: Math.round(g.top - r.top) };
+      lines = [g.left - r.left, g.right - r.left];
+      side = g.width > 0 && g.width <= width / 2;
+    }
+    const res = W.arrange(list, dims, width, { col });
+    lastAt = res.at;
+    lastW = width;
+    stacked = !side || res.stack;
+    area.toggleAttribute('data-stack', stacked);
+    const parent = stacked || board === 'dash' ? area : room;
+    const focus = document.activeElement;
+    let prev = null;
+    for (const id of res.order) {
+      const { el } = tiles.get(id);
+      if (el.parentNode !== parent || el.previousElementSibling !== prev) { if (prev) prev.after(el); else parent.prepend(el); }
+      prev = el;
+      const a = res.at[id];
+      const z = String(1 + (cur(id)?.z || 0));
+      if (stacked) { if (el.style.left) el.removeAttribute('style'); continue; }
+      if (el.style.left !== `${a.left}px`) el.style.left = `${a.left}px`;
+      if (el.style.top !== `${a.top}px`) el.style.top = `${a.top}px`;
+      if (el.style.zIndex !== z) el.style.zIndex = z;
+    }
+    if (focus !== document.activeElement && focus?.isConnected) focus.focus({ preventScroll: true });
+    const keep = stacked ? '' : `${board === 'courses' ? W.reserve(Object.values(res.at), lines[0], lines[1], col.top) : res.bottom + W.GAP}px`;
+    if (area.style.height !== keep) area.style.height = keep;
+  };
+
+  // What this page shows: tiles that are on, allowed by their switch, and on this board, or (Canvas) floating or with
+  // the grid here. A declared tile (MORE) shows once its file has registered it; while it's on, the file is asked for.
+  const wanted = (hasGrid) => (board ? lay.boards[board] : ultra ? [] : lay.tiles).filter((x) => {
+    if (!x.on || !allowed(x.id) || !(hasGrid || (!board && x.float))) return false;
     if (WIDGETS[x.id] || added.has(x.id)) return true;
     if (MORE[x.id] && !(loadingMore.get(x.id) > Date.now())) {
       loadingMore.set(x.id, Infinity);
@@ -644,7 +848,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   });
   // What a tile from another file is given besides its body.
   const account = () => who().then(() => ({ ...me }));
-  const api = (id) => ({ who: account, site: ctx.site, size: () => lay.tiles.find((x) => x.id === id)?.size || 's' });
+  const api = (id) => ({ who: account, site: ctx.site, size: () => cur(id)?.size || 's' });
   const placeFloats = () => {
     for (const tile of lay.tiles) {
       const el = tile.float && tiles.get(tile.id)?.el;
@@ -699,7 +903,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     [null, "Glaze's button in your browser's toolbar has your Looks and palettes, and What Glaze can do is in Ctrl+K whenever you want it."],
   ];
   const STEPS_ULTRA = [
-    ['#gz-panel', 'Your notes and widgets. Edit widgets adds, orders and sizes them; any of them can float over every Blackboard page.'],
+    ['#gz-panel', 'Your notes and widgets. Edit layout adds them and moves them anywhere on this page; your Dashboard has a layout of its own.'],
     ['#gz-todo, div.todo-panel bb-todo', "Your To Do. Glaze's Better To Do can take its place, grouped by day, with your own tasks and plans."],
     [null, 'Press Ctrl+K (⌘K on a Mac) anywhere in Blackboard to jump to a course, a page or a Glaze setting.'],
     STEPS[4],
@@ -750,7 +954,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }
   };
   const onShow = () => { if (shown()) for (const x of tiles.values()) x.wake?.(); };
-  const onResize = () => { if (on && lay) placeFloats(); };
+  const onResize = () => { if (on && lay) (board ? layoutBoard() : placeFloats()); };
   const start = async () => {
     await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
     W = globalThis.GZ_WIDGETS;
@@ -764,24 +968,21 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // If it can't start (the extension reloaded under the tab), the page stays as Canvas has it; it tries again after a minute.
   const sync = (want) => {
     on = !!want;
-    if (!on) {
-      for (const x of tiles.values()) { x.stop?.(); x.el.remove(); }
-      tiles.clear();
-      grid?.remove();
-      panel?.remove();
-      floats?.remove();
-      grid = floats = panel = null;
-      return;
-    }
+    board = boardOf();
+    if (!on) { teardown(); drawn = null; return; }
     if (!starting) starting = start().then(draw, () => { setTimeout(() => { starting = null; }, 60000); });
     else if (W && lay) {
       // A pass: draw only when something changed (a switch let a tile in or out, Canvas redrew the Dashboard), so the
       // page's observer isn't fed changes of Glaze's own.
       const h = home();
       const want = wanted(!!h);
-      if (want.map((x) => x.id).sort().join() !== [...tiles.keys()].sort().join() || (h ? !grid || !placed(h) : grid?.isConnected)
-        || (want.some((x) => x.float) && !floats?.isConnected)) draw();
-      else remindIn();
+      if (drawn !== board || want.map((x) => x.id).sort().join() !== [...tiles.keys()].sort().join() || (h ? !grid || !placed(h) : grid?.isConnected)
+        || (!board && want.some((x) => x.float) && !floats?.isConnected)) draw();
+      else {
+        remindIn();
+        // Ultra draws its page's header again as it likes: the Dashboard's tabs go back in.
+        if (board === 'dash') globalThis.GZ_DASH_UI?.tabs(grid);
+      }
     }
   };
   // The hub can open with the widgets off: it needs only this file and lib/widgets.js.

@@ -18,7 +18,7 @@
   background: var(--gz-panel, var(--gz-surface)); border: 1px solid var(--gz-line); border-radius: var(--gz-radius); box-sizing: border-box;
 }
 /* Outside #application: Glaze's font and line height, as its other floating parts. */
-#gz-float .gz-w, #gz-hub, .gz-tour { font-family: var(--gz-font); line-height: 1.4; }
+#gz-float .gz-w, #gz-room .gz-w, #gz-hub, .gz-tour { font-family: var(--gz-font); line-height: 1.4; }
 #gz-float .gz-w { position: fixed; z-index: 999; width: min(17rem, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; background: var(--gz-surface); box-shadow: var(--gz-shadow); }
 #gz-float .gz-w[data-size="m"] { width: min(21rem, calc(100vw - 24px)); }
 #gz-float .gz-w[data-size="l"] { width: min(27rem, calc(100vw - 24px)); }
@@ -28,17 +28,17 @@
 .gz-w [hidden], #gz-hub [hidden], .gz-tour [hidden] { display: none !important; }
 .gz-w :is(button, input, select, textarea, a, [tabindex]):focus-visible, :is(#gz-hub, .gz-tour) :is(button, input, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 .gz-w-head { display: flex; align-items: center; gap: 0.35rem; min-width: 0; padding-inline-end: 4.5rem; }
-:is(#gz-dash, #gz-float) .gz-w-head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(#gz-dash, #gz-float, #gz-room) .gz-w-head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gz-w-grip {
   display: none; flex: none; width: 1.1rem; height: 1.4rem; padding: 0; border: 0; border-radius: 4px; cursor: grab; color: var(--gz-ink-faint);
   background: radial-gradient(circle, currentColor 1.2px, transparent 1.5px) 0 0 / 6px 6px;
 }
-:is(#gz-float, #gz-dash[data-editing]) .gz-w-grip { display: block; }
+:is(#gz-float, #gz-dash[data-editing], #gz-room[data-editing]) .gz-w-grip { display: block; }
 .gz-w-tools { position: absolute; top: 0.45rem; inset-inline-end: 0.5rem; display: flex; align-items: center; gap: 0.15rem; }
 .gz-w-tools:empty { display: none; }
 /* While editing, a grid tile's controls get their own row above its heading. */
-#gz-dash[data-editing] .gz-w:not([data-float]) .gz-w-tools { position: static; order: -1; flex-wrap: wrap; justify-content: flex-end; }
-#gz-dash[data-editing] .gz-w:not([data-float]) .gz-w-head { padding-inline-end: 0; }
+:is(#gz-dash, #gz-room)[data-editing] .gz-w:not([data-float]) .gz-w-tools { position: static; order: -1; flex-wrap: wrap; justify-content: flex-end; }
+:is(#gz-dash, #gz-room)[data-editing] .gz-w:not([data-float]) .gz-w-head { padding-inline-end: 0; }
 .gz-w-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .gz-w-faint { margin: 0; color: var(--gz-ink-muted); font-size: 0.8rem; }
 .gz-w-status { margin: 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
@@ -56,7 +56,7 @@
 :is(.gz-w, #gz-dash, #gz-hub, .gz-tour) .gz-w-icon { min-width: 1.7rem; padding: 0.05rem 0.3rem; font-size: 1rem; line-height: 1.3; }
 :is(.gz-w, #gz-dash, #gz-hub, .gz-tour) :is(.gz-w-small, .gz-w-icon):hover, #gz-dash .gz-w-small[aria-pressed="true"] { color: var(--gz-accent); border-color: var(--gz-line-strong); }
 :is(.gz-w, #gz-dash, .gz-tour) button:disabled { opacity: 0.45; cursor: default; }
-:is(#gz-dash, #gz-float) select.gz-w-size { width: auto; height: auto; min-height: 0; margin: 0; font-size: 0.8rem; padding: 0.1rem 0.3rem; border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface); }
+:is(#gz-dash, #gz-float, #gz-room) select.gz-w-size { width: auto; height: auto; min-height: 0; margin: 0; font-size: 0.8rem; padding: 0.1rem 0.3rem; border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface); }
 .gz-w:not([data-float]) .gz-w-edit-only { display: none; }
 #gz-dash[data-editing] .gz-w .gz-w-edit-only, #gz-float .gz-w-edit-only { display: inline-flex; }
 /* Notes: the text with its links, until clicked; then the box to type in. Height by the tile's size. */
@@ -246,6 +246,40 @@ html:not([data-gz-motion="off"]) #gz-panel .gz-panel-toggle::after { transition:
 #gz-panel [hidden] { display: none !important; }
 #gz-panel-body { container-type: inline-size; }
 #gz-panel #gz-dash .gz-dash-bar { flex-wrap: wrap; }
+
+/* ---- Ultra's boards (B7b): the Courses page's tiles float in #gz-room, a layer first in the page with no height of its
+   own (placed from the page's top left, scrolling with it); the Dashboard's in its grid. Each tile is placed by
+   features/widgets.js (left, top, z-index) at its size's width (lib/widgets.js WIDTH, in pixels: Ultra's rem may not be
+   16px). Stacked (data-stack, a window too narrow for the layout), they are one column in the grid instead. */
+#gz-room { position: relative; z-index: 6; height: 0; }
+:is(#gz-room, #gz-dash[data-board] .gz-dash-grid:not([data-stack])) > .gz-w { position: absolute; max-width: 100%; background: var(--gz-surface); box-shadow: var(--gz-shadow); }
+:is(#gz-room, #gz-dash[data-board] .gz-dash-grid:not([data-stack])) > .gz-w[data-size="s"] { width: 288px; }
+:is(#gz-room, #gz-dash[data-board] .gz-dash-grid:not([data-stack])) > .gz-w[data-size="m"] { width: 384px; }
+:is(#gz-room, #gz-dash[data-board] .gz-dash-grid:not([data-stack])) > .gz-w[data-size="l"] { width: 512px; }
+#gz-dash[data-board] .gz-dash-grid[data-stack] { grid-template-columns: minmax(0, 1fr); }
+#gz-dash[data-board] .gz-dash-grid[data-stack] > .gz-w[data-size] { grid-column: auto; }
+#gz-dash[data-board="dash"] { margin: 0; padding: 1rem 1.5rem 2rem; font-family: var(--gz-font); }
+#gz-dash[data-board="dash"] .gz-dash-grid:not([data-stack]) { position: relative; display: block; min-height: 24rem; }
+:is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w { outline: 1px dashed var(--gz-line-strong); outline-offset: 3px; }
+:is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w .gz-w-head { cursor: grab; touch-action: none; }
+#gz-dash[data-board] .gz-dash-grid[data-stack] .gz-w { cursor: auto; }
+#gz-dash[data-board] .gz-dash-grid[data-stack] .gz-w-grip { display: none; }
+:is(#gz-room, #gz-dash[data-board]) .gz-w[data-dragging] { cursor: grabbing; opacity: 0.92; }
+#gz-dash[data-board="dash"][data-editing] .gz-dash-grid:not([data-stack]) { background: radial-gradient(circle, var(--gz-line-strong) 1px, transparent 1.5px) 0 0 / 16px 16px; }
+/* The line a dragged tile met. */
+.gz-guide { position: absolute; z-index: 1000; pointer-events: none; background: var(--gz-accent); }
+#gz-float .gz-guide { position: fixed; }
+.gz-guide[data-axis="x"] { width: 1px; }
+.gz-guide[data-axis="y"] { height: 1px; }
+.gz-guide[hidden] { display: none; }
+.gz-sr { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* The Dashboard: Ultra's own Institution page waits hidden until its tab is chosen (content-ultra.js, features/dashboard.js). */
+html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: none !important; }
+.gz-dash-tabs { display: inline-flex; gap: 0.25rem; margin: 0.5rem 0; padding: 0.2rem; border: 1px solid var(--gz-line); border-radius: 999px; font-family: var(--gz-font); background: var(--gz-surface); }
+.gz-dash-tabs [role="tab"] { padding: 0.3rem 0.95rem; border: 0; border-radius: 999px; font: 600 0.875rem/1.4 var(--gz-font); color: var(--gz-ink-muted); background: none; cursor: pointer; }
+.gz-dash-tabs [role="tab"]:hover { color: var(--gz-accent); }
+.gz-dash-tabs [role="tab"][aria-selected="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); }
+.gz-dash-tabs [role="tab"]:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 @container (max-width: 31rem) { #gz-panel #gz-dash .gz-dash-grid > .gz-w[data-size] { grid-column: 1 / -1; } }
 
 /* Ultra: Course notes on a course outline, a block of its own at the end of the right column. */

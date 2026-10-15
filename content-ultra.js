@@ -381,11 +381,18 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
 
   // ---- code on demand ------------------------------------------------------------------------------
-  // Notes, widgets and the pet: Courses page panel and floating tiles.
-  // Ultra routes without reloading; this pass also places Course notes on the outline.
-  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || ((I.settings.enhance.notes || I.settings.enhance.pet) && /^\/ultra\/course\/?$/.test(location.pathname)));
+  // Notes, widgets and the pet: the Courses page's board and the Dashboard's (the Institution page, B7b). Ultra routes
+  // without reloading; this pass also places Course notes on the outline. Until the Dashboard is drawn, Ultra's own
+  // Institution page waits hidden (html[data-gz-dash], apps.css), so it doesn't show for a moment first. A page loaded
+  // at Ultra's start may go on to the Dashboard (opt-in, once: features/dashboard.js); from is its first address.
+  let from = location.pathname;
+  const boards = () => { const e = I.settings.enhance; return I.links.length && window.top === window && (e.widgets || e.notes || e.pet); };
+  const widgetsHere = () => boards() && /^\/ultra\/(course|institution-page)\/?$/.test(location.pathname);
   const syncWidgets = () => {
-    if (widgetsHere()) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    const on = widgetsHere();
+    if (!on || !/^\/ultra\/institution-page/.test(location.pathname)) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
+    if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => html.setAttribute('data-gz-dash', 'ip')); else globalThis.GZ_WIDGETS_UI?.sync(false);
+    if (from && I.links.length) { const f = from; from = ''; if (boards() && /^\/ultra(\/(stream|course))?\/?$/.test(f)) need('features/dashboard.js', () => globalThis.GZ_DASH_UI).then(() => GZ_DASH_UI.land(f), () => {}); }
     if (window.top === window && (globalThis.GZ_NOTES_UI || (I.settings.enhance.notes && /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname)))) need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.sync(!!I.links.length && I.settings.enhance.notes), () => {});
   };
 

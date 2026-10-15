@@ -30,6 +30,8 @@ class El {
   prepend(...k) { this.children.unshift(...this.kids(k).map((x) => this.adopt(x))); }
   replaceChildren(...k) { for (const c of this.children) c.parentNode = null; this.children = []; this._html = ''; this.append(...k); }
   after(x) { const p = this.parentNode, k = this.kids([x])[0]; p.adopt(k); p.children.splice(p.children.indexOf(this) + 1, 0, k); }
+  before(x) { const p = this.parentNode, k = this.kids([x])[0]; p.adopt(k); p.children.splice(p.children.indexOf(this), 0, k); }
+  get parentElement() { return this.parentNode instanceof El ? this.parentNode : null; }
   remove() { if (this.parentNode) { this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); this.parentNode = null; } }
   replaceWith(...k) { const p = this.parentNode, at = p.children.indexOf(this); this.remove(); p.children.splice(at, 0, ...this.kids(k).map((x) => p.adopt(x))); }
   get previousElementSibling() { const s = this.parentNode?.children || []; return s.slice(0, s.indexOf(this)).filter((x) => x instanceof El).at(-1) || null; }
@@ -62,6 +64,11 @@ class El {
   click() { this.doc.fire(this, 'click', { trusted: false }); }
   showModal() { this.open = true; }
   close() { if (!this.open) return; this.open = false; this.dispatchEvent({ type: 'close' }); }
-  getBoundingClientRect() { return { left: 0, right: 100, top: 0, bottom: 20 }; }
+  // A test can give an element a box ({ left, top, width, height }); without one, every element is the same small box.
+  getBoundingClientRect() { const b = this.box; return b ? { ...b, right: b.left + b.width, bottom: b.top + b.height } : { left: 0, right: 100, top: 0, bottom: 20 }; }
+  get clientWidth() { return this.box?.width ?? 0; }
+  get offsetWidth() { return this.box?.width ?? 0; }
+  get offsetHeight() { return this.box?.height ?? 0; }
+  get scrollHeight() { return this.box?.height ?? 0; }
 }
 module.exports = { El, matches };
