@@ -1715,4 +1715,12 @@
 
   "This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?": "Diese Freigabe liegt auf {host}, nicht auf deinem gewählten Relay ({selected}). Mit diesem Server verbinden?",
 
+  "Hide them again ({n})": "Wieder ausblenden ({n})",
+  "Hidden": "Ausgeblendet",
+  "Folder hidden.": "Ordner ausgeblendet.",
+  "Folder shown.": "Ordner eingeblendet.",
+  "Showing {n} hidden folders.": "{n} ausgeblendete Ordner werden angezeigt.",
+  "Hiding {n} folders.": "{n} Ordner werden ausgeblendet.",
+  "Showing 1 hidden folder.": "Ein ausgeblendeter Ordner wird angezeigt.",
+  "Hiding 1 folder.": "Ein Ordner wird ausgeblendet.",
 };

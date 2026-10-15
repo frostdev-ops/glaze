@@ -2,6 +2,11 @@
 
 _Last updated: 2026-10-15_
 
+Ultra performance changes reuse the page's existing gradebook reads and ignore internal Glaze UI mutations. They add
+no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
+The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep
+their separate, existing URL handling.
+
 ## Optional encrypted share sessions
 
 Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's extension-owned Sessions page. Glaze checks the selected origin's browser permission and requests it only if missing. The optional default `https://share.frostdev.io/*` remains declared, alongside optional `http://localhost/*` and `http://127.0.0.1/*` for local testing. Glaze already requires broad HTTPS access for LMS detection, so the optional default declaration does not technically reduce existing HTTPS access. Device-local consent gates session traffic independently. Pause aborts requests and closes the live connections. Backup/key restore never enables sharing. No session connection runs without an open Notes, To Do or Sessions surface. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
@@ -608,4 +613,4 @@ admin@frostdev.io
 
 ### Hidden Ultra folders
 
-Hidden folder/module IDs and the Show hidden folders switch are stored in `storage.local`, separately for each HTTPS site, known Ultra account and course. No titles or content are stored. Limits are 500 IDs per course, 200 account/course records and 256 KiB across them. Unknown identity or failed storage leaves the outline untouched. The feature makes no requests, including no profile request; it reuses only the existing page identity cache. Export all includes validated records; imports retain their account/site/course keys and ignore malformed records without replacing existing choices. Only your own clicks or keyboard activation save a choice. Search, Download all, progress and new-item counts are unaffected.
+Hidden folder/module IDs and the Show hidden folders switch are stored in `storage.local`, separately for each HTTPS site, known Ultra account and course. No titles or content are stored. Limits are 500 IDs per course, 200 account/course records and 256 KiB across them. Unknown identity or failed storage leaves the outline untouched. The feature makes no requests, including no profile request; it reuses only the existing page identity cache. Export all includes validated records; imports retain their account/site/course keys and ignore malformed records without replacing existing choices. Only your own clicks or keyboard activation save a choice. The brief status and Undo are held only in memory, cleared on navigation, account changes or disabling, and store no additional data. Undo changes only the folder just hidden. Search, Download all, progress and new-item counts are unaffected.

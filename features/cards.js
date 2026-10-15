@@ -72,6 +72,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (window.top !== window && !globalThis.location?.pathname.endsWith('/preview.html')) return;
     let d;
     try { d = await read(); } catch { return; }
+    if (!chrome.runtime?.id) return;
     const on = html.hasAttribute('data-gz-motion');
     const card = location.pathname.endsWith('/preview.html') ? K.settings(GZ_CTX.settings().card) : d.card;
     const p = on ? K.page(card) : { vars: {}, attrs: {} };

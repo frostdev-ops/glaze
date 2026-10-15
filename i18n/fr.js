@@ -1715,4 +1715,12 @@
 
   "This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?": "Ce partage est hébergé sur {host}, pas sur le relais sélectionné ({selected}). Se connecter à ce serveur ?",
 
+  "Hide them again ({n})": "Masquer à nouveau ({n})",
+  "Hidden": "Masqué",
+  "Folder hidden.": "Dossier masqué.",
+  "Folder shown.": "Dossier affiché.",
+  "Showing {n} hidden folders.": "Affichage de {n} dossiers masqués.",
+  "Hiding {n} folders.": "Masquage de {n} dossiers.",
+  "Showing 1 hidden folder.": "Affichage de 1 dossier masqué.",
+  "Hiding 1 folder.": "Masquage de 1 dossier.",
 };

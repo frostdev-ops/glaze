@@ -1715,4 +1715,12 @@
 
   "This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?": "Este contenido se aloja en {host}, no en el servidor seleccionado ({selected}). ¿Conectar a este servidor?",
 
+  "Hide them again ({n})": "Volver a ocultarlas ({n})",
+  "Hidden": "Oculto",
+  "Folder hidden.": "Carpeta oculta.",
+  "Folder shown.": "Carpeta visible.",
+  "Showing {n} hidden folders.": "Mostrando {n} carpetas ocultas.",
+  "Hiding {n} folders.": "Ocultando {n} carpetas.",
+  "Showing 1 hidden folder.": "Mostrando 1 carpeta oculta.",
+  "Hiding 1 folder.": "Ocultando 1 carpeta.",
 };

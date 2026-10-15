@@ -1715,4 +1715,12 @@
 
   "This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?": "Deze gedeelde inhoud staat op {host}, niet op je geselecteerde relay ({selected}). Verbinden met deze server?",
 
+  "Hide them again ({n})": "Weer verbergen ({n})",
+  "Hidden": "Verborgen",
+  "Folder hidden.": "Map verborgen.",
+  "Folder shown.": "Map getoond.",
+  "Showing {n} hidden folders.": "{n} verborgen mappen worden getoond.",
+  "Hiding {n} folders.": "{n} mappen worden verborgen.",
+  "Showing 1 hidden folder.": "1 verborgen map wordt getoond.",
+  "Hiding 1 folder.": "1 map wordt verborgen.",
 };
