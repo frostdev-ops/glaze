@@ -5,8 +5,16 @@
 var GZ_KEYS = globalThis.GZ_KEYS || (() => {
   const ctx = globalThis.GZ_CTX;
   const ultra = ctx.site === 'ultra';
+  const moodle = ctx.site === 'moodle';
   const { t, typing } = ctx;
-  const GO = ultra ? { c: ['/ultra/course', 'Courses'], a: ['/ultra/calendar', 'Calendar'], g: ['/ultra/grades', 'Grades'], m: ['/ultra/messages', 'Messages'], s: ['/ultra/stream', 'Activity stream'] } : { d: ['/', 'Dashboard'], c: ['/courses', 'Courses'], a: ['/calendar', 'Calendar'], g: ['/grades', 'Grades'], m: ['/conversations', 'Inbox'] };
+  const GO = ultra ? { c: ['/ultra/course', 'Courses'], a: ['/ultra/calendar', 'Calendar'], g: ['/ultra/grades', 'Grades'], m: ['/ultra/messages', 'Messages'], s: ['/ultra/stream', 'Activity stream'] }
+    : moodle ? { d: ['/my/', 'Dashboard'], c: ['/my/courses.php', 'Courses'], a: ['/calendar/view.php?view=month', 'Calendar'], g: ['/grade/report/overview/index.php', 'Grades'], m: ['/message/index.php', 'Messages'] }
+    : { d: ['/', 'Dashboard'], c: ['/courses', 'Courses'], a: ['/calendar', 'Calendar'], g: ['/grades', 'Grades'], m: ['/conversations', 'Inbox'] };
+  // Moodle's keys work as Canvas's do, on its own pages by <body> id: the main ones, a course's and its sections', and
+  // its activities' (not a quiz being taken, an editing form or a teacher's page). Its root is where its theme's sheet
+  // is (a folder, maybe), as content.js's course keys have it.
+  const MOODLE_PAGES = /^page-(?:my-index|calendar-view|message-index|grade-report-(?:overview|user)-index|course-(?:view-\w+|section)|mod-\w+-(?:view|discuss))$/;
+  const root = () => (moodle && document.querySelector('link[href*="/theme/styles"]')?.href.split('/theme/')[0]) || location.origin;
   let gAt = 0;
   let keysBox = null;
   let keysBack = null;
@@ -58,7 +66,7 @@ var GZ_KEYS = globalThis.GZ_KEYS || (() => {
   const key = (e) => {
     if (!ultra && e.key === 'Escape' && keysBox && !typing(e.target)) { e.preventDefault(); closeKeys(); return; }
     if (!ultra && e.key === 'Shift') return; // g then Shift+? must keep its prefix.
-    if (!ctx.keyOn(e)) { gAt = 0; return; }
+    if (!ctx.keyOn(e) || (moodle && !MOODLE_PAGES.test(document.body.id))) { gAt = 0; return; }
     const now = e.at || Date.now(); // a key pressed while this file loaded keeps its time
     if (e.key === 'Escape' && keysBox) { closeKeys(); return; }
     if (!ultra && now - gAt < 1200 && e.key === '?') {
@@ -69,7 +77,7 @@ var GZ_KEYS = globalThis.GZ_KEYS || (() => {
     if (now - gAt < 1200 && GO[e.key]) {
       e.preventDefault();
       gAt = 0;
-      location.assign(location.origin + GO[e.key][0]);
+      location.assign(root() + GO[e.key][0]);
       return;
     }
     gAt = e.key === 'g' ? now : 0;

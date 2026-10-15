@@ -22,8 +22,10 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
   };
 
   // The Timeline's own call, for the week ahead. ponytail: Moodle's cap of 50 events; a week with more shows the soonest 50.
+  // content.js asks for it once a page load and at most every ten minutes (dueWeek): the course list is kept fresh with it.
   const due = (now) => {
     const from = Math.floor(now / 1000);
+    record().catch(() => {});
     return service('core_calendar_get_action_events_by_timesort', { timesortfrom: from, timesortto: from + 7 * 86400, limitnum: 50, limittononsuspendedevents: true })
       .then((d) => M.due(d, now, location.origin));
   };
@@ -45,6 +47,14 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
       ...(await courses()).map((c) => ({ label: c.name, hint: c.code || t('Course'), group: 'Courses', run: go(c.url) })),
     ];
   };
+
+  // Every course the student is in, for the editor's list, the course menu and the tint (with due, above), kept beside
+  // other sites' courses (storage.local seenCourses, content.js's course keys).
+  const record = () => service('core_course_get_enrolled_courses_by_timeline_classification', { classification: 'all', limit: 0, offset: 0, sort: 'fullname' })
+    .then((d) => {
+      const seen = M.seen(d, GZ_CTX.canvasCourseKey);
+      if (Object.keys(seen).length) GZ_CTX.local((l) => l.get('seenCourses', (r) => l.set({ seenCourses: { ...r?.seenCourses, ...seen } })));
+    });
 
   // Grades on course cards (Dashboard and My courses): the totals from the grades overview, asked once a page load when a
   // card is on the page. Each card's name is tagged; moodle.css draws the chip. Only on change: the cards are redrawn
@@ -71,7 +81,7 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
     });
   };
 
-  return { session, due, commands, cards };
+  return { session, due, commands, cards, record };
 })();
 
 GZ_MOODLE_PAGE;
