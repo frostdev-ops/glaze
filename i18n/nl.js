@@ -697,4 +697,5 @@
   "Nothing due": "Niets in te leveren",
   "Tasks for {course}": "Taken voor {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Taken op cursuskaarten: elke Canvas-cursuskaart toont wat er binnenkort moet worden ingeleverd, als je het aanzet.",
+  "Not cleared. Try again in a moment.": "Niet gewist. Probeer het zo meteen opnieuw.",
 };

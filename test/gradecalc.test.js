@@ -273,6 +273,35 @@ test('what-if changes from any tab: one made before a Clear all is dropped, howe
   assert.deepEqual(G.applyWhatIf({ op: 'course', cid: '25', rec: { s: {}, h: [], p: [], c: null }, at: 400 }, { 25: { ...rec(null), at: 1 } }, 0).all, {}, 'an emptied course goes');
 });
 
+test('each what-if change writes only the fields it carries', () => {
+  // Cleared at 200. The Dashboard then sets a GPA what-if of 95; a Grades tab whose copy is older (course grade
+  // null) saves an assignment score.
+  let r = G.applyWhatIf({ op: 'grade', cid: '25', c: 95, at: 250 }, {}, 200);
+  r = G.applyWhatIf({ op: 'course', cid: '25', rec: { s: { 175: [90, null] }, h: [], p: [], c: null }, at: 300 }, r.all, r.cleared);
+  assert.deepEqual([r.all['25'].c, r.all['25'].s], [95, { 175: [90, null, 300] }], 'the course grade stays');
+  r = G.applyWhatIf({ op: 'grade', cid: '25', c: null, at: 350 }, r.all, r.cleared);
+  assert.deepEqual([r.all['25'].c, r.all['25'].s], [null, { 175: [90, null, 300] }], 'and a course-grade change leaves the scores');
+});
+
+test('a clear arriving late takes each part changed before it, even from a record changed after it', () => {
+  // A score typed at 100; the course grade set at 300; then a Clear all asked for at 200 arrives.
+  let r = G.applyWhatIf({ op: 'course', cid: '25', rec: { s: { 175: [90, null] }, h: [], p: [] }, at: 100 }, {}, 0);
+  r = G.applyWhatIf({ op: 'grade', cid: '25', c: 95, at: 300 }, r.all, r.cleared);
+  r = G.applyWhatIf({ op: 'clear', at: 200 }, r.all, r.cleared);
+  assert.deepEqual([r.all['25'].s, r.all['25'].c, r.cleared], [{}, 95, 200], 'the score goes, the course grade stays');
+  // The same with work left out and a pretend assignment, and a resend that doesn't change a part keeps its time.
+  r = G.applyWhatIf({ op: 'course', cid: '26', rec: { s: { 1: [5, null] }, h: ['2'], p: [{ id: 'p1', g: '9', n: 'Quiz', s: 9, pp: 10, pd: null }] }, at: 400 }, {}, 0);
+  r = G.applyWhatIf({ op: 'course', cid: '26', rec: { s: { 1: [5, null], 3: [7, null] }, h: ['2'], p: [{ id: 'p1', g: '9', n: 'Quiz', s: 9, pp: 10, pd: null }] }, at: 600 }, r.all, r.cleared);
+  r = G.applyWhatIf({ op: 'clear', at: 500 }, r.all, r.cleared);
+  assert.deepEqual([r.all['26'].s, r.all['26'].h, r.all['26'].p], [{ 3: [7, null, 600] }, [], []]);
+});
+
+test('a clear recorded but not finished completes with the next change', () => {
+  const stored = { 25: { s: { 1: [5, null] }, h: [], p: [], c: null, at: 100 }, 26: { s: {}, h: [], p: [], c: 80, at: 300 } };
+  assert.deepEqual(Object.keys(G.applyWhatIf({ op: 'grade', cid: '27', c: 70, at: 400 }, stored, 200).all).sort(), ['26', '27']);
+  assert.deepEqual(Object.keys(G.applyWhatIf({ op: 'grade', cid: '27', c: 70, at: 400 }, stored, 0).all).sort(), ['25', '26', '27'], 'never cleared: all stay');
+});
+
 test('what a tab sends is cleaned before it is stored', () => {
   const r = G.cleanRecord({
     s: { 175: [90, null], 176: [-1, null], 177: [5, 'x'], '<b>': [1, null], 178: [5, 'nonsense'] },
@@ -290,7 +319,7 @@ test('what a tab sends is cleaned before it is stored', () => {
 test('the Dashboard sets a course’s what-if grade without touching the rest of its record', () => {
   const all = { 10: { s: { 1: [5, null] }, h: ['2'], p: [], c: null, at: 1 } };
   const set = G.withCourseGrade(all, '10', 91);
-  assert.deepEqual([set['10'].s, set['10'].h, set['10'].c], [{ 1: [5, null] }, ['2'], 91]);
+  assert.deepEqual([set['10'].s, set['10'].h, set['10'].c], [{ 1: [5, null, 1] }, ['2'], 91], 'parts stored without a time take their record’s');
   assert.deepEqual(G.withCourseGrade({ 11: { s: {}, h: [], p: [], c: 80 } }, '11', null), {}, 'cleared: nothing left, the course goes');
   assert.equal(G.withCourseGrade({ 12: 'junk' }, '12', 70)['12'].c, 70);
 });
@@ -301,4 +330,24 @@ test('drops match Canvas where sets tie or work is worth no points', () => {
   // 12/14 and 15/17 both make 100% with a never-dropped 3/1: Canvas keeps 15/17.
   const tie = [{ id: '1', possible: 14, score: 12 }, { id: '2', possible: 1, score: 3 }, { id: '3', possible: 17, score: 15 }];
   assert.deepEqual(G.drop(tie, { lo: 2, hi: 0, never: ['2'] }).map((s) => s.id).sort(), ['2', '3']);
+});
+
+test('a damaged stored what-if record is cleaned before any change keeps it', () => {
+  const huge = 8.64e15;
+  const stored = { 30: {
+    at: 100,
+    s: { 175: [90, null, huge], 'bad id!': [1, null, 100], 176: ['x', null, 100], ...Object.fromEntries(Array.from({ length: 600 }, (_, i) => [`a${i}`, [1, null, 100]])) },
+    h: ['ok1', 'bad id!'], ht: { ok1: huge },
+    p: [{ id: 'p1', g: 'g1', n: 'x', s: 1, pp: 2, t: huge }, { id: 'nope', g: 'g1', s: 1, pp: 2 }],
+    c: 95, ct: huge,
+  } };
+  const r = G.applyWhatIf({ op: 'grade', cid: '31', c: 80, at: 300 }, stored, 0);
+  const rec = r.all[30];
+  assert.ok(Object.keys(rec.s).length <= 500, 'over-limit scores dropped');
+  assert.ok(!('bad id!' in rec.s) && !('176' in rec.s), 'malformed scores dropped');
+  assert.deepEqual(rec.h, ['ok1']);
+  assert.deepEqual(rec.p.map((x) => x.id), ['p1']);
+  // A time from the future counts as now, so a later clear still takes it.
+  const later = G.applyWhatIf({ op: 'clear', at: Date.now() + 1000 }, r.all, r.cleared);
+  assert.equal(later.all[30], undefined);
 });

@@ -697,4 +697,5 @@
   "Nothing due": "Rien à rendre",
   "Tasks for {course}": "Tâches de {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Tâches sur les cartes de cours : chaque carte de cours Canvas indique ce qui est à rendre bientôt, si vous l’activez.",
+  "Not cleared. Try again in a moment.": "Rien n'a été effacé. Réessayez dans un instant.",
 };

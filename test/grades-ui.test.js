@@ -81,13 +81,19 @@ const shared = (init = {}) => {
   const pick = (keys) => Object.fromEntries((keys == null ? Object.keys(data) : [].concat(keys)).filter((k) => k in data).map((k) => [k, structuredClone(data[k])]));
   const set = (patch) => { const ch = {}; for (const [k, v] of Object.entries(patch)) { ch[k] = { oldValue: data[k], newValue: structuredClone(v) }; data[k] = structuredClone(v); } tell(ch); };
   const remove = (keys) => { const ch = {}; for (const k of [].concat(keys)) if (k in data) { ch[k] = { oldValue: data[k] }; delete data[k]; } tell(ch); };
-  const worker = { get: (k) => Promise.resolve(pick(k)), set: (p) => { set(p); return Promise.resolve(); }, remove: (k) => { remove(k); return Promise.resolve(); } };
+  // The worker's writes fail for keys in `fail` (a full disk, a quota), as Chrome's reject.
+  const fail = new Set();
+  const worker = {
+    get: (k) => Promise.resolve(pick(k)),
+    set: (p) => (Object.keys(p).some((k) => fail.has(k)) ? Promise.reject(new Error('QUOTA_BYTES')) : (set(p), Promise.resolve())),
+    remove: (k) => { remove(k); return Promise.resolve(); },
+  };
   const tab = (held) => ({
     get: (k, cb) => { const v = pick(k); const run = () => cb(v); if (held.on) held.queue.push(run); else Promise.resolve().then(run); },
     set: (p, cb) => { set(p); cb?.(); },
     remove: (k, cb) => { remove(k); cb?.(); },
   });
-  return { data, listeners, worker, tab };
+  return { data, listeners, worker, tab, fail };
 };
 // The service worker (lib/background.js) on that storage, answering messages as Chrome would.
 const WORKER_ID = 'glaze-test-id';
@@ -195,7 +201,31 @@ test('two tabs: a change still on its way from one tab doesn’t bring back what
   again.value = '80';
   again.fire('input');
   await settle(10);
-  assert.deepEqual(store.data[KEY][BIO.course.id].s, { 175: [80, null] });
+  assert.deepEqual(store.data[KEY][BIO.course.id].s['175'].slice(0, 2), [80, null]);
+});
+
+test('a Clear all that can’t be recorded clears nothing and says so; one that was can’t be undone by an earlier edit after a restart', async () => {
+  const store = shared({ [KEY]: { [BIO.course.id]: { s: { 175: [90, null] }, h: [], p: [], c: 70, at: 1 } } });
+  store.fail.add('whatIfCleared');
+  const p = gradesPage({ store });
+  await ready(p);
+  assert.equal(totals(p)[1], '86%');
+  byText(p.box(), 'Clear all courses').fire('click');
+  await settle(10);
+  assert.match(p.box().textContent, /Not cleared\. Try again in a moment\./);
+  assert.equal(totals(p)[1], '86%', 'still shown');
+  assert.deepEqual(store.data[KEY][BIO.course.id].s, { 175: [90, null] }, 'and still stored');
+  assert.equal(store.data.whatIfCleared, undefined);
+  // Recorded this time. Then the worker restarts and an edit made before the clear arrives.
+  store.fail.clear();
+  byText(p.box(), 'Clear all courses').fire('click');
+  await settle(10);
+  assert.equal(store.data[KEY], undefined);
+  assert.doesNotMatch(p.box().textContent, /Not cleared/);
+  const restarted = serviceWorker(store);
+  const sender = { id: WORKER_ID, tab: { id: 9 }, frameId: 0, url: `${ORIGIN}/courses/${BIO.course.id}/grades` };
+  assert.deepEqual(await restarted({ type: 'glaze:whatif', op: 'course', key: KEY, cid: String(BIO.course.id), rec: { s: { 175: [90, null] }, h: [], p: [] }, at: 2 }, sender), { ok: true });
+  assert.equal(store.data[KEY], undefined, 'nothing comes back');
 });
 
 test('a page may change only its own Canvas site’s what-if records', async () => {

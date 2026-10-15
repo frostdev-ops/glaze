@@ -697,4 +697,5 @@
   "Nothing due": "Nichts fällig",
   "Tasks for {course}": "Aufgaben für {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Aufgaben auf Kurskarten: Jede Canvas-Kurskarte zeigt, was als Nächstes fällig ist, wenn du es einschaltest.",
+  "Not cleared. Try again in a moment.": "Nicht geleert. Versuch es gleich noch einmal.",
 };

@@ -25,7 +25,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const live = () => X.on() && S().enabled !== false;
   // Saved what-ifs are changed by the service worker, in the one queue every tab shares (lib/background.js
   // 'glaze:whatif'): a change made before a Clear all, in this tab or another, can't bring records back.
-  const send = (m) => { try { Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:whatif', at: Date.now(), ...m })).catch(() => {}); } catch { /* extension reloaded */ } };
+  // Answers the worker's reply ({ ok }), or null when it couldn't be asked.
+  const send = (m) => { try { return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:whatif', at: Date.now(), ...m })).catch(() => null); } catch { return Promise.resolve(null); } };
   // A Clear all from any tab empties what this tab shows for that user too.
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -115,7 +116,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const keep = (st) => {
     st.what = C.whatOf(st.rec);
     const rec = st.rec;
-    send({ op: 'course', key: st.key, cid: st.cid, rec });
+    send({ op: 'course', key: st.key, cid: st.cid, rec: { s: rec.s, h: rec.h, p: rec.p } });
   };
 
   const whatIf = () => {
@@ -163,6 +164,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     } else if (!st.truth || st.row.hide_final_grades) {
       box.append(make('p', { className: 'gz-calc-note', textContent: t("Canvas doesn't show a total here. These figures are Glaze's sum of your scores.") }));
     }
+    if (st.note) box.append(make('p', { className: 'gz-calc-note', role: 'status', textContent: st.note }));
     if (st.gone.length) {
       box.append(make('ul', { className: 'gz-calc-gone' }, ...st.gone.map((g) => make('li', { textContent: t(g.was === null ? 'Your grade for {name} is in, so your what-if score for it is gone.' : 'Your grade for {name} changed, so your what-if score for it is gone.', { name: g.name }) }))));
     }
@@ -276,21 +278,24 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     box.append(make('label', { className: 'gz-calc-target' }, before, target, rqd ? after.replace(/^\s*%/, '') : after), need);
 
     const clear = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Clear this course') });
-    clear.addEventListener('click', () => { st.rec = { s: {}, h: [], p: [], c: null }; st.focus = 'summary'; redraw(); });
+    clear.addEventListener('click', () => { st.rec = { s: {}, h: [], p: [], c: st.rec.c }; st.focus = 'summary'; redraw(); });
     const clearAll = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Clear all courses') });
-    clearAll.addEventListener('click', () => {
-      send({ op: 'clear', key: st.key });
-      // Every course this page holds for that user is emptied with it.
-      for (const s of W.values()) {
-        if (s.key !== st.key || !s.rec) continue;
-        Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [] });
-        s.what = C.whatOf(s.rec);
-        s.v++;
-      }
-      if (D.wkey === st.key) D.wi = {};
+    clearAll.addEventListener('click', () => send({ op: 'clear', key: st.key }).then((r) => {
       st.focus = 'summary';
+      st.note = r?.ok ? '' : t('Not cleared. Try again in a moment.');
+      // Cleared: every course this page holds for that user is emptied with it.
+      if (r?.ok) {
+        for (const s of W.values()) {
+          if (s.key !== st.key || !s.rec) continue;
+          Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [] });
+          s.what = C.whatOf(s.rec);
+          s.v++;
+        }
+        if (D.wkey === st.key) D.wi = {};
+      }
+      st.v++;
       whatIf();
-    });
+    }));
     box.append(make('div', { className: 'gz-calc-actions' }, clear, clearAll),
       make('p', { className: 'gz-calc-note', textContent: t('Kept on this device only. Canvas never sees these scores.') }));
     update();

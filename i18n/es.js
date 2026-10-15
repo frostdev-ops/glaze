@@ -697,4 +697,5 @@
   "Nothing due": "Nada pendiente",
   "Tasks for {course}": "Tareas de {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Tareas en las tarjetas de curso: cada tarjeta de curso de Canvas muestra lo próximo que vence, si lo activas.",
+  "Not cleared. Try again in a moment.": "No se ha borrado. Inténtalo de nuevo en un momento.",
 };

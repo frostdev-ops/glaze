@@ -697,4 +697,5 @@
   "Nothing due": "Nada a entregar",
   "Tasks for {course}": "Tarefas de {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Tarefas nos cartões de curso: cada cartão de curso do Canvas mostra o que vence em seguida, se você ativar.",
+  "Not cleared. Try again in a moment.": "Não foi limpo. Tente de novo daqui a pouco.",
 };
