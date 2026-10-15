@@ -85,3 +85,37 @@ test('unsubmitted work that has never earned XP does not create zero-credit hist
   const state = run({ planner: [{ ...row, sub: { submitted: false } }], cache: { at: now } });
   assert.deepEqual(state.earned, {}); assert.deepEqual(state.seen, {});
 });
+
+
+test('NEW-1: stale W11 state credits only its calculated closed days before a later miss is reckoned', () => {
+  const R = require('../lib/remind.js');
+  const stale = { start: today - 20, best: 10, asOf: today - 10 };
+  const missDay = today - 5;
+  const planner = [{ ...row, at: T.midnight(missDay, tz) + 20 * 36e5, sub: { submitted: false, missing: true } }];
+  const first = run({ streak: stale, planner });
+  assert.equal(first.days.length, 10);
+  const b = T.build({ items: planner, data: {}, o: { ...D.GZ_SANITIZE({}).todo, past: 'month', group: false }, now, tz });
+  const saved = R.clean({ streak: R.streak(b, stale, today) }, now).streak;
+  assert.equal(saved.start, today - 4);
+  const after = run({ streak: saved }, first);
+  assert.equal(after.days.length, 14);
+  assert.equal(after.days.includes(missDay), false);
+  assert.deepEqual(run({ streak: saved }, after), after);
+});
+test('NEW-1: legacy or invalid calculated day cannot mint streak XP; settled days remain', () => {
+  for (const asOf of [undefined, null, 'today', NaN]) {
+    const saved = { start: today - 20, best: 1000, asOf };
+    assert.equal(view(run({ streak: saved })).streakXp, 0);
+    assert.deepEqual(run({ streak: saved }, { days: [today - 30] }).days, [today - 30]);
+  }
+  assert.equal(view(run({ streak: { start: today - 2, asOf: today + 2 } })).streakXp, 10, 'never credit today');
+});
+for (const [done, tick, work, plans] of [['manual', true, 20, 8], ['auto', false, 0, 0]]) {
+  test(`NEW-2: synced ${done} state survives a missing planner row`, () => {
+    const todoO = { done, sync: true };
+    const first = run({ insights, todo, todoO, planner: [{ ...row, ov: { done: tick } }], cache: { at: now - 1 } });
+    assert.equal(view(first).work, work); assert.equal(view(first).plans, plans);
+    const after = run({ insights: { ...insights, at: now + 2 }, todo, todoO, planner: [], cache: { at: now + 3 } }, first);
+    assert.equal(view(after).work, work); assert.equal(view(after).plans, plans);
+  });
+}
