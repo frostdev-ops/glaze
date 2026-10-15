@@ -678,7 +678,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 if (/html/.test(document.contentType) && !document.body && /^\/ultra(?:\/|$)/.test(location.pathname) && !GZ_SITE_ULTRA.sheets) {
   GZ_SITE_ULTRA.sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => {
     const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = chrome.runtime.getURL(f);
-    l.setAttribute('blocking', 'render'); setTimeout(() => l.removeAttribute('blocking'), 1000);
+    l.setAttribute('blocking', 'render');
+    l.onload = l.onerror = () => l.removeAttribute('blocking'); setTimeout(l.onload, 1000);
     (document.head || document.documentElement).appendChild(l); return l;
   });
 }

@@ -124,6 +124,7 @@ function GZ_ULTRA_OVERLAY(X, repaint) {
       hintStyle = document.createElement('style'); document.head.append(hintStyle);
       for (const el of paper.querySelectorAll('a, button, [title], [data-gz-title]')) suppress(el);
       portalHints(); titleObserver.observe(paper, { attributes: true, subtree: true, attributeFilter: ['title', 'aria-describedby'] });
+      if (X.nav().labelOverflow === 'shrink') queueMicrotask(() => { if (expanded && valid()) GZ_NAV_UI.sync(); });
     } else {
       titleObserver.disconnect();
       hintStyle?.remove(); hintStyle = null;

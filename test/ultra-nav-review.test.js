@@ -34,6 +34,38 @@ test('bundled-logo CSS retains the original img accessible name', () => {
   assert.match(rule, /opacity: 0/); assert.doesNotMatch(rule, /visibility: hidden|display: none/);
 });
 
+test('the core reuses connected provisional sheets without restarting or moving their blocking load', () => {
+  const src = source('content.js'), a = src.indexOf('  const enable = () => {'), b = src.indexOf('    applySettings();', a), events = [];
+  const sheets = ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'].map((f) => ({
+    isConnected: true,
+    set rel(v) { assert.fail(`reassigned ${f} rel`); },
+    set href(v) { assert.fail(`restarted ${f} URL`); },
+    addEventListener: (name) => events.push([f, name]),
+  }));
+  const c = vm.createContext({ notUltra: false, links: [], ultra: true, SHEETS: [...sheets.keys()], GZ_SITE_ULTRA: { sheets },
+    document: { body: null, head: { appendChild: () => assert.fail('moved a connected blocker') } }, html: {}, chrome: { runtime: { getURL: (f) => f } },
+    setTimeout: () => assert.fail('reset the bounded blocker timer'), tintKey() {}, reapply() {} });
+  vm.runInContext(src.slice(a, b) + '\n}; enable();', c);
+  assert.equal(c.links.length, 4); assert.equal(events.length, 4);
+});
+
+test('provisional load/error settling before core reuse releases blocking without another node or deadline', () => {
+  const sheets = [], timers = [], events = []; let writes = 0;
+  const document = { contentType: 'text/html', body: null, head: { appendChild(l) { l.isConnected = true; sheets.push(l); } },
+    createElement: () => ({ attrs: {}, set rel(v) { writes++; }, set href(v) { writes++; },
+      setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; }, addEventListener: (n) => events.push(n) }) };
+  const c = vm.createContext({ document, location: { pathname: '/ultra/course' }, chrome: { runtime: { getURL: (f) => f } },
+    setTimeout: (fn, ms) => timers.push({ fn, ms }), notUltra: false, links: [], ultra: true, SHEETS: ['theme.css', 'motion.css', 'extras.css', 'features/apps.css'], html: {}, tintKey() {}, reapply() {} });
+  vm.runInContext(source('content-ultra.js'), c);
+  sheets[0].onload(); sheets[1].onerror();
+  const src = source('content.js'), a = src.indexOf('  const enable = () => {'), b = src.indexOf('    applySettings();', a);
+  vm.runInContext(src.slice(a, b) + '\n}; enable();', c);
+  assert.equal(sheets.length, 4); assert.equal(writes, 8); assert.equal(events.length, 4); assert.equal(timers.length, 4);
+  assert.ok(timers.every((t) => t.ms === 1000)); assert.ok(sheets.slice(0, 2).every((l) => !l.attrs.blocking));
+  assert.ok(sheets.slice(2).every((l) => l.attrs.blocking === 'render'));
+  timers.forEach((t) => t.fn()); assert.ok(sheets.every((l) => !l.attrs.blocking));
+});
+
 const dashboardFixture = () => {
   const src = source('content-ultra.js'), a = Math.max(src.indexOf('  const navRoots ='), src.indexOf('  const renamed =')), b = src.indexOf('  const paintNav =', a);
   const attrs = new Map(), classes = new Set(), text = { nodeType: 3, data: 'Institution page' }, wrapper = { text };
