@@ -5,12 +5,30 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const rail = X.site === 'ultra' && typeof GZ_NAV !== 'undefined' ? GZ_ULTRA_RAIL(X) : null;
   let reading = '', loaded = null, toggle = null;
   const titled = new Map();
-  const labels = new Set();
+  const labels = new Set(), fitted = new Map();
+  let fitFrame = 0, fitObserver;
+  const fitLabels = () => {
+    fitFrame = 0;
+    const size = GZ_NAV.dimensions(X.nav()).text;
+    for (const [a, label] of fitted) {
+      if (!a.isConnected) { fitObserver.unobserve(a); fitted.delete(a); continue; }
+      a.style.setProperty('--gz-nav-fit', `${size}px`);
+      if (label.scrollWidth > label.clientWidth && label.clientWidth) a.style.setProperty('--gz-nav-fit', `${Math.max(10, Math.floor(size * label.clientWidth / label.scrollWidth * 100) / 100)}px`);
+    }
+  };
   const forget = () => { if (loaded) URL.revokeObjectURL(loaded.src); loaded = null; };
   const sync = () => {
     const n = X.nav();
     const on = X.on() && X.settings().enabled;
     rail?.sync(on);
+    if (X.site === 'ultra' && on && n.labelOverflow === 'shrink' && !n.collapsed && n.labels !== 'icons') {
+      fitObserver ||= new ResizeObserver(() => { if (!fitFrame) fitFrame = requestAnimationFrame(fitLabels); });
+      for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a[href]')) {
+        const label = a.querySelector('.MuiListItemText-root, span:not(:has(svg))');
+        if (label && !fitted.has(a)) { fitted.set(a, label); fitObserver.observe(a); }
+      }
+      fitLabels();
+    } else if (fitted.size) { for (const a of fitted.keys()) a.style.removeProperty('--gz-nav-fit'); fitted.clear(); fitObserver.disconnect(); cancelAnimationFrame(fitFrame); fitFrame = 0; }
     for (const [a, text] of titled) if (a.isConnected === false) { if (a.getAttribute('title') === text) a.removeAttribute('title'); titled.delete(a); }
     const b = X.site === 'ultra' ? null : document.getElementById('primaryNavToggle');
     for (const el of labels) if (!on || (!n.collapsed && n.labels !== 'icons') || !el.isConnected) { el.classList.remove('gz-nav-label'); labels.delete(el); }
@@ -61,7 +79,7 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
     }));
   };
   document.addEventListener('click', (e) => {
-    if (!X.on() || !X.nav().collapsed || !e.target.closest?.('#primaryNavToggle')) return;
+    if (!chrome.runtime?.id || !X.on() || !X.nav().collapsed || !e.target.closest?.('#primaryNavToggle')) return;
     e.preventDefault(); e.stopImmediatePropagation();
     chrome.runtime.sendMessage({ type: 'glaze:nav', nav: { collapsed: false } }).then((r) => {
       if (r?.ok && X.on()) document.body.classList.add('primary-nav-expanded');

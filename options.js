@@ -114,6 +114,7 @@ GZ_UI.load().then((s) => {
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
+  const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
   const preview = () => {
     const sec = frame.contentDocument?.querySelector('section.course');
     // The mock is a course: it shows as the first course picked for tinting, in that course's color.
@@ -123,11 +124,16 @@ GZ_UI.load().then((s) => {
       sec.style.cssText = Object.entries(GZ_COURSE_VARS(GZ_COURSE_COLORS(courses, s.courses.colors)[s.courses.tinted[0]])).map(([k, v]) => `${k}:${v}`).join(';');
       sec.querySelector('.pv-course').textContent = first.name;
     }
-    frame.contentWindow?.postMessage({ gzPreview: offer || s }, location.origin);
+    const settings = offer || s, mode = $('#nav-preview-mode').value, scheme = $('#nav-preview-scheme').value;
+    const nav = { ...settings.nav };
+    if (mode !== 'current') { nav.collapsed = mode === 'collapsed'; nav.labels = mode === 'icons' ? 'icons' : nav.labels === 'icons' ? 'normal' : nav.labels; }
+    const colors = scheme === 'current' ? null : GZ_PRESET(scheme === 'light' ? 'Paper' : 'Frost');
+    frame.contentWindow?.postMessage({ gzPreview: { ...settings, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) } }, location.origin);
     renderNav();
-    frame.contentWindow?.postMessage({ gzNavPreview: navItems }, location.origin);
+    frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin);
   };
   frame.addEventListener('load', preview);
+  for (const el of $$('#nav-preview-mode, #nav-preview-scheme')) el.addEventListener('change', preview);
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
   const pending = new Set(), pendingNav = new Set();
@@ -261,6 +267,7 @@ GZ_UI.load().then((s) => {
     for (const [slug, box] of tabBoxes) box.checked = s.declutter.tabs.includes(slug);
     renderFonts();
     renderCourses();
+    renderNavItems();
     refresh();
   };
 
@@ -395,8 +402,9 @@ GZ_UI.load().then((s) => {
   const iconNames = ['Link', 'Book', 'Video', 'Chat', 'Document', 'Calendar', 'Folder', 'Code', 'Star', 'Globe'];
   const node = (tag, props = {}, ...kids) => { const el = Object.assign(document.createElement(tag), props); el.append(...kids); return el; };
   const navButton = (text, run, label = text) => { const b = node('button', { type: 'button', textContent: t(text) }); b.setAttribute('aria-label', t(label)); b.addEventListener('click', run); return b; };
-  let editingLink = '', navLogoPick = 0;
-  const showNavPreview = () => frame.contentWindow?.postMessage({ gzNavPreview: navItems }, location.origin);
+  let editingLink = '', navLogoPick = 0, navDrag = null;
+  const showLinkIcon = () => $('#nav-link-icon-preview path').setAttribute('d', GZ_CARDS.ICONS[$('#nav-link-icon').value] || GZ_CARDS.ICONS.link);
+  const showNavPreview = () => frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin);
   const writeNavItems = async (next) => {
     next = N.clean(next);
     const r = await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:nav', nav: {}, items: next }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
@@ -405,18 +413,40 @@ GZ_UI.load().then((s) => {
     return true;
   };
   const move = (list, at, by) => { const out = [...list]; const [x] = out.splice(at, 1); out.splice(at + by, 0, x); return out; };
+  const reorderHandle = (li, ids, at, name, write, list) => {
+    const handle = node('button', { type: 'button', textContent: '↕', draggable: true });
+    handle.setAttribute('aria-label', t('Reorder {name}', { name })); handle.setAttribute('aria-describedby', 'nav-reorder-note');
+    handle.addEventListener('keydown', (e) => {
+      const by = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+      if (!by) return;
+      e.preventDefault();
+      if (at + by >= 0 && at + by < ids.length) write(move(ids, at, by));
+    });
+    handle.addEventListener('dragstart', (e) => { navDrag = { list, id: ids[at] }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(at)); });
+    handle.addEventListener('dragend', () => { navDrag = null; for (const row of $$('.nav-editor-list [data-drop]')) delete row.dataset.drop; });
+    li.addEventListener('dragover', (e) => { if (navDrag?.list === list && navDrag.id !== ids[at]) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; li.dataset.drop = ''; } });
+    li.addEventListener('dragleave', (e) => { if (!li.contains(e.relatedTarget)) delete li.dataset.drop; });
+    li.addEventListener('drop', (e) => {
+      if (navDrag?.list !== list) return;
+      e.preventDefault(); delete li.dataset.drop;
+      const from = ids.indexOf(navDrag.id); navDrag = null;
+      if (from >= 0 && from !== at) write(move(ids, from, at - from));
+    });
+    li.prepend(handle);
+  };
   const renderNavItems = () => {
     const focused = document.activeElement, focusRow = focused?.closest('#nav-items li, #nav-widgets li'), focusAt = focusRow ? [...focusRow.querySelectorAll('button, input, select')].indexOf(focused) : -1, focusId = focusRow?.dataset.id;
     const order = N.sequence(N.NATIVE, navItems);
     $('#nav-items').replaceChildren(...order.map((id, at) => {
-      const link = navItems.links.find((l) => l.id === id), name = link ? link.n : t(nativeNames[id]);
+      const link = navItems.links.find((l) => l.id === id), name = link ? link.n : t(id === 'institution-page' && !s.enhance.dashboard ? 'Institution page' : nativeNames[id]);
       const li = node('li', { }, node('span', { textContent: name })); li.dataset.id = id;
+      reorderHandle(li, order, at, name, (order) => writeNavItems({ ...navItems, order }), 'items');
       const up = navButton('Move up', () => { if (at > 0) writeNavItems({ ...navItems, order: move(order, at, -1) }); }); up.setAttribute('aria-disabled', String(at === 0));
       const down = navButton('Move down', () => { if (at < order.length - 1) writeNavItems({ ...navItems, order: move(order, at, 1) }); }); down.setAttribute('aria-disabled', String(at === order.length - 1));
       up.setAttribute('aria-label', `${t('Move up')} · ${name}`); down.setAttribute('aria-label', `${t('Move down')} · ${name}`);
       li.append(up, down);
       if (link) {
-        li.append(navButton('Edit', () => { editingLink = id; $('#nav-link-name').value = link.n; $('#nav-link-url').value = link.u; $('#nav-link-icon').value = link.i; $('#nav-link-tab').checked = link.tab; $('#nav-link-save').textContent = t('Save link'); $('#nav-link-name').focus(); }), navButton('Remove link', () => writeNavItems({ ...navItems, links: navItems.links.filter((l) => l.id !== id), order: navItems.order.filter((k) => k !== id) })));
+        li.append(navButton('Edit', () => { editingLink = id; $('#nav-link-name').value = link.n; $('#nav-link-url').value = link.u; $('#nav-link-icon').value = link.i; showLinkIcon(); $('#nav-link-tab').checked = link.tab; $('#nav-link-save').textContent = t('Save link'); $('#nav-link-name').focus(); }), navButton('Remove link', () => writeNavItems({ ...navItems, links: navItems.links.filter((l) => l.id !== id), order: navItems.order.filter((k) => k !== id) })));
       } else {
         const hidden = navItems.hidden.includes(id);
         const b = navButton(hidden ? 'Show' : 'Hide', () => writeNavItems({ ...navItems, hidden: hidden ? navItems.hidden.filter((k) => k !== id) : [...navItems.hidden, id] }));
@@ -432,12 +462,14 @@ GZ_UI.load().then((s) => {
       position.addEventListener('change', () => writeNavItems({ ...navItems, widgets: navItems.widgets.map((x) => x.id === w.id ? { ...x, at: position.value } : x) }));
       const up = navButton('Move up', () => { if (at > 0) writeNavItems({ ...navItems, widgets: move(navItems.widgets, at, -1) }); }); up.setAttribute('aria-disabled', String(at === 0));
       const down = navButton('Move down', () => { if (at < navItems.widgets.length - 1) writeNavItems({ ...navItems, widgets: move(navItems.widgets, at, 1) }); }); down.setAttribute('aria-disabled', String(at === navItems.widgets.length - 1));
-      const row = node('li', {}, node('label', {}, input, t(widgetNames[w.id])), position, up, down); row.dataset.id = `widget-${w.id}`; return row;
+      const row = node('li', {}, node('label', {}, input, t(widgetNames[w.id])), position, up, down); row.dataset.id = `widget-${w.id}`; reorderHandle(row, navItems.widgets.map((x) => x.id), at, t(widgetNames[w.id]), (ids) => writeNavItems({ ...navItems, widgets: ids.map((id) => navItems.widgets.find((x) => x.id === id)) }), 'widgets'); return row;
     }));
     if (focusId) { const row = document.querySelector(`.nav-editor-list [data-id="${focusId}"]`); const controls = row?.querySelectorAll('button, input, select'); (controls?.[focusAt]?.disabled ? row.querySelector('button:not([disabled]), input, select') : controls?.[focusAt])?.focus(); }
   };
-  const cancelLink = () => { editingLink = ''; $('#nav-link-name').value = ''; $('#nav-link-url').value = ''; $('#nav-link-tab').checked = false; $('#nav-link-save').textContent = t('Add link'); };
+  const cancelLink = () => { editingLink = ''; $('#nav-link-name').value = ''; $('#nav-link-url').value = ''; $('#nav-link-icon').value = 'link'; showLinkIcon(); $('#nav-link-tab').checked = false; $('#nav-link-save').textContent = t('Add link'); };
   N.ICONS.forEach((id, at) => $('#nav-link-icon').append(new Option(t(iconNames[at]), id)));
+  $('#nav-link-icon').addEventListener('change', showLinkIcon);
+  showLinkIcon();
   $('#nav-link-save').addEventListener('click', async () => {
     const id = editingLink || Array.from(crypto.getRandomValues(new Uint8Array(12)), (v) => 'abcdefghijklmnopqrstuvwxyz0123456789'[v % 36]).join('');
     const l = N.link({ id, n: $('#nav-link-name').value, u: $('#nav-link-url').value.trim(), i: $('#nav-link-icon').value, tab: $('#nav-link-tab').checked });
@@ -457,6 +489,25 @@ GZ_UI.load().then((s) => {
     if (rev !== navLogoPick) return;
     if (!r?.ok) return hint(t(r?.error === 'cap' ? "That picture is too big to keep. Try a smaller one, or remove another card's picture." : 'Not saved. Try again in a moment.'), true);
     Object.assign(s.nav, r.nav); fill(); hint(t('Saved'));
+  });
+  for (const button of $$('[data-nav-reset]')) button.addEventListener('click', async () => {
+    const section = button.dataset.navReset;
+    if (section === 'layout') return writeNavItems({ ...navItems, order: [], hidden: [] });
+    if (section === 'widgets') return writeNavItems({ ...navItems, widgets: N.clean().widgets });
+    const keys = {
+      dimensions: ['size', 'width', 'icon', 'height', 'gap', 'padding'],
+      labels: ['labels', 'text', 'labelOverflow'],
+      appearance: ['itemStyle', 'itemBackground', 'activeIndicator'],
+      branding: ['brand', 'li', 'logo', 'logoSize', 'logoAlign', 'footer'],
+    }[section];
+    if (!keys) return;
+    if (section === 'dimensions' || section === 'labels') {
+      Object.assign(s.nav, N.dimensions(s.nav), { detailed: true });
+      for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k);
+    }
+    if (section === 'branding') navLogoPick++;
+    for (const k of keys) { s.nav[k] = GZ_DEFAULTS.nav[k]; pendingNav.add(k); }
+    fill(); save(['nav']);
   });
   $('#nav-reset').addEventListener('click', async () => {
     navLogoPick++; cancelLink(); if (!await writeNavItems(N.clean())) return;
@@ -560,7 +611,7 @@ GZ_UI.load().then((s) => {
     const key = el.dataset.key;
     if (key === 'nav.size') el.addEventListener('change', () => { s.nav.detailed = false; pendingNav.add('detailed'); });
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
-    if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'enhance.coursemenu') renderCourses(); refresh(); save([group(key)]); });
+    if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });
       el.addEventListener('change', () => save([group(key)]));

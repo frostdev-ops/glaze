@@ -25,7 +25,10 @@
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 46%); gap: 1.5rem; padding: 1.5rem; max-width: 1500px; margin: 0 auto; }
   .editor { display: grid; gap: 1.25rem; min-width: 0; align-content: start; }
   .preview { position: sticky; top: 4.5rem; height: calc(100vh - 6rem); border: 1px solid var(--gz-line); border-radius: 14px; overflow: hidden; background: var(--gz-surface-2); }
-  .preview iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .preview { display: flex; flex-direction: column; }
+  .preview iframe { width: 100%; flex: 1; min-height: 0; border: 0; display: block; }
+  .preview-controls { display: flex; gap: .5rem; flex-wrap: wrap; padding: .6rem; border-bottom: 1px solid var(--gz-line); }
+  .preview-controls label { display: flex; align-items: center; gap: .35rem; font-size: 12px; }
   @media (max-width: 980px) {
     .layout { grid-template-columns: 1fr; }
     .preview { position: relative; top: 0; height: 460px; order: -1; }
@@ -76,6 +79,10 @@
   .nav-editor-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--gz-line); border-radius: 8px; }
   .nav-editor-list li > span { flex: 1; min-width: 5rem; overflow-wrap: anywhere; }
   .nav-editor-list button[aria-disabled="true"] { opacity: .45; cursor: default; }
+  .nav-editor-list [draggable="true"] { cursor: grab; }
+  .nav-editor-list li[data-drop] { outline: 2px solid var(--gz-accent); }
+  #nav-link-icon-preview { width: 24px; height: 24px; flex: none; }
+  .nav-section-heading { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
   .swatch.bg-set::after { display: none; }
   .seg.wrap { flex-wrap: wrap; border-radius: 14px; }
   /* Fonts: one picker for three slots; each card is drawn in its own face. */
@@ -365,27 +372,39 @@
         <label class="check"><input type="checkbox" data-key="nav.collapsed"><span>Collapse the sidebar</span><span class="desc">Every link stays in the rail. Point at it or focus it to read its label.</span></label>
         <div class="group" id="ultra-nav-editor">
           <h3>Blackboard navigation</h3>
+          <div class="nav-section-heading"><h3>Dimensions</h3><button type="button" data-nav-reset="dimensions" aria-label="Reset dimensions">Reset</button></div>
           <label class="field"><span>Rail width</span><input type="range" data-key="nav.width" min="160" max="320" step="1"><output data-for="nav.width" data-format="px"></output></label>
           <label class="field"><span>Navigation icon size</span><input type="range" data-key="nav.icon" min="16" max="36" step="1"><output data-for="nav.icon" data-format="px"></output></label>
-          <label class="field"><span>Navigation label size</span><input type="range" data-key="nav.text" min="10" max="20" step="1"><output data-for="nav.text" data-format="px"></output></label>
           <label class="field"><span>Navigation item height</span><input type="range" data-key="nav.height" min="36" max="72" step="1"><output data-for="nav.height" data-format="px"></output></label>
           <label class="field"><span>Navigation item gap</span><input type="range" data-key="nav.gap" min="0" max="16" step="1"><output data-for="nav.gap" data-format="px"></output></label>
           <label class="field"><span>Navigation padding</span><input type="range" data-key="nav.padding" min="0" max="24" step="1"><output data-for="nav.padding" data-format="px"></output></label>
+          <div class="nav-section-heading"><h3>Labels</h3><button type="button" data-nav-reset="labels" aria-label="Reset labels">Reset</button></div>
+          <label class="field"><span>Navigation label size</span><input type="range" data-key="nav.text" min="10" max="20" step="1"><output data-for="nav.text" data-format="px"></output></label>
+          <label class="field"><span>Long labels</span><select data-key="nav.labelOverflow"><option value="ellipsis">Ellipsis</option><option value="wrap">Wrap</option><option value="shrink">Shrink</option></select></label>
+          <div class="nav-section-heading"><h3>Item appearance</h3><button type="button" data-nav-reset="appearance" aria-label="Reset item appearance">Reset</button></div>
+          <label class="field"><span>Item style</span><select data-key="nav.itemStyle"><option value="tile">Tile</option><option value="pill">Pill</option><option value="flat">Flat</option></select></label>
+          <label class="check"><input type="checkbox" data-key="nav.itemBackground"><span>Show item backgrounds</span></label>
+          <label class="field"><span>Active item indicator</span><select data-key="nav.activeIndicator"><option value="bar">Bar</option><option value="outline">Outline</option><option value="background">Background</option><option value="none">None</option></select></label>
+          <div class="nav-section-heading"><h3>Logo and footer</h3><button type="button" data-nav-reset="branding" aria-label="Reset logo and footer">Reset</button></div>
           <label class="field"><span>Navigation logo</span><select data-key="nav.brand"><option value="glaze">Glaze logo</option><option value="school">School logo</option><option value="custom">Custom logo</option></select></label>
           <div class="row"><button type="button" id="nav-logo-pick">Choose a logo</button><input id="nav-logo-file" type="file" accept="image/*" hidden><span id="nav-logo-note" class="desc"></span></div>
-          <h3>Custom links and item order</h3>
+          <label class="field"><span>Logo size</span><input type="range" data-key="nav.logoSize" min="24" max="96" step="1"><output data-for="nav.logoSize" data-format="px"></output></label>
+          <label class="field"><span>Logo alignment</span><select data-key="nav.logoAlign"><option value="start">Left</option><option value="center">Center</option><option value="end">Right</option></select></label>
+          <label class="check"><input type="checkbox" data-key="nav.footer"><span>Show navigation footer</span></label>
+          <div class="nav-section-heading"><h3>Custom links and item order</h3><button type="button" data-nav-reset="layout" aria-label="Reset item order and visibility">Reset</button></div>
           <p class="desc">Custom navigation links sync with Chrome. Images stay on this device.</p>
-          <ol id="nav-items" class="nav-editor-list"></ol>
+          <p class="desc" id="nav-reorder-note">Drag a handle to reorder, or focus it and use the arrow keys.</p>
+          <ol id="nav-items" class="nav-editor-list" aria-describedby="nav-reorder-note"></ol>
           <div id="nav-link-editor" class="group">
             <label class="field"><span>Name</span><input id="nav-link-name" type="text" maxlength="80"></label>
             <label class="field"><span>URL</span><input id="nav-link-url" type="url" maxlength="512" placeholder="https://…" translate="no" spellcheck="false"></label>
-            <label class="field"><span>Icon</span><select id="nav-link-icon"></select></label>
+            <label class="field"><span>Icon</span><select id="nav-link-icon"></select><svg id="nav-link-icon-preview" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path></path></svg></label>
             <label class="check"><input id="nav-link-tab" type="checkbox"><span>Open in a new tab</span></label>
             <div class="row"><button type="button" id="nav-link-save">Add link</button><button type="button" id="nav-link-cancel">Cancel</button></div>
           </div>
-          <h3>Navigation widgets</h3>
+          <div class="nav-section-heading"><h3>Navigation widgets</h3><button type="button" data-nav-reset="widgets" aria-label="Reset navigation widgets">Reset</button></div>
           <p class="desc">The rail uses the same focus timer and pet progress as your widgets. No extra activity is recorded.</p>
-          <ol id="nav-widgets" class="nav-editor-list"></ol>
+          <ol id="nav-widgets" class="nav-editor-list" aria-describedby="nav-reorder-note"></ol>
           <button type="button" id="nav-reset">Reset navigation</button>
         </div>
       </section>
@@ -743,6 +762,11 @@
     </main>
 
     <aside class="preview" aria-label="Preview">
+      <div class="preview-controls">
+        <label><span>Preview navigation</span><select id="nav-preview-mode"><option value="current">Current settings</option><option value="expanded">Expanded</option><option value="collapsed">Collapsed</option><option value="icons">Icons only</option></select></label>
+        <label><span>Preview palette</span><select id="nav-preview-scheme"><option value="current">Current settings</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+        <span class="desc">Fictional sample links and profile.</span>
+      </div>
       <iframe id="preview" src="preview.html" title="Preview of a Blackboard course page"></iframe>
     </aside>
   </div>
@@ -761,6 +785,7 @@
   <script src="defaults.js"></script>
   <script src="lib/cards.js"></script>
   <script src="lib/nav.js"></script>
+<script src="lib/nav-items.js"></script>
   <script src="lib/share.js"></script>
   <script src="lib/history.js"></script>
   <script src="lib/lookx.js"></script>

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const G = require('../defaults.js');
-const N = require('../lib/nav.js');
+const N = require('../lib/nav-items.js');
 const K = require('../lib/cards.js');
 const Store = require('../lib/nav-store.js');
 
@@ -153,6 +153,9 @@ test('the wrong-LMS-host fallback injects the nav schema before Ultra once with 
   assert.equal((await request(['content-ultra.js', 'lib/nav.js', 'content-ultra.js'])).ok, true);
   assert.deepEqual(JSON.parse(JSON.stringify(scripts[0].files)), ['lib/nav.js', 'content-ultra.js']);
   assert.deepEqual(JSON.parse(JSON.stringify(scripts[0].target)), { tabId: 8, documentIds: ['doc-1'] });
+  assert.equal((await request(['features/nav.js', 'lib/nav-items.js'])).ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(scripts[1].files)), ['lib/nav.js', 'lib/nav-items.js', 'features/nav.js']);
+  assert.deepEqual(JSON.parse(JSON.stringify(scripts[1].target)), { tabId: 8, documentIds: ['doc-1'] });
   const before = scripts.length;
   assert.equal((await request(['../../secret'])).ok, false); assert.equal(scripts.length, before);
   assert.equal((await request(['content-ultra.js'], { id: 'other', tab: { id: 8 }, frameId: 0 })).ok, false);

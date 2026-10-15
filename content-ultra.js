@@ -203,6 +203,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     gateTimer ||= setInterval(release, 50);
   };
   const gate = (n) => {
+    discoverNav(n);
     if (n.matches(GATE)) hold(n);
     else if (n.firstElementChild) for (const c of n.querySelectorAll(GATE)) hold(c);
   };
@@ -570,30 +571,76 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const p of document.querySelectorAll('[data-gz-real]')) if (!nickOf(p.dataset.gzCid)) unname(p);
   };
 
-  const renamed = new Map();
+  const navRoots = new Set(), renamed = new Map();
+  const navSelector = 'nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
+  let navDirty = true, navQueued = false;
   const syncDashboard = () => {
-    const on = I.links.length && I.settings.enabled && I.settings.enhance.dashboard;
-    for (const a of document.querySelectorAll(':is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a[href]')) {
-      if (GZ_NAV.native(a.getAttribute('href')) !== 'institution-page') continue;
-      const label = a.querySelector('.MuiTypography-root, .MuiListItemText-root, span:not(:has(svg))');
-      const text = label && document.createTreeWalker(label, NodeFilter.SHOW_TEXT).nextNode();
-      if (!text) continue;
-      let r = renamed.get(a);
-      if (r?.node !== text) { r = { node: text, text: text.data, aria: a.getAttribute('aria-label') }; renamed.set(a, r); }
-      const name = on ? t('Dashboard') : r.text;
-      if (text.data !== name) text.data = name;
-      a.classList.toggle('gz-nav-dashboard', !!on);
-      if (on) { if (a.getAttribute('aria-label') !== name) a.setAttribute('aria-label', name); }
-      else if (r.aria === null) a.removeAttribute('aria-label'); else a.setAttribute('aria-label', r.aria);
+    const enabled = I.links.length && I.settings.enabled, on = enabled && I.settings.enhance.dashboard;
+    if (navDirty) {
+      navDirty = false;
+      for (const root of navRoots) {
+        if (!root.isConnected) { navRoots.delete(root); continue; }
+        for (const a of root.querySelectorAll('a[href]')) {
+          const id = GZ_NAV.native(a.getAttribute('href'));
+          if (!id) continue;
+          const label = a.querySelector('.MuiTypography-root, .MuiListItemText-root, span:not(:has(svg))');
+          const text = label && document.createTreeWalker(label, NodeFilter.SHOW_TEXT).nextNode();
+          if (text && renamed.get(a)?.node !== text) renamed.set(a, { node: text, text: text.data, dashboard: id === 'institution-page', aria: a.getAttribute('aria-label'), title: a.getAttribute('title') });
+        }
+      }
     }
-    for (const a of renamed.keys()) if (!a.isConnected) renamed.delete(a);
+    for (const [a, r] of renamed) {
+      if (!a.isConnected) { renamed.delete(a); continue; }
+      const dash = on && r.dashboard, name = dash ? t('Dashboard') : r.text;
+      r.painted = name;
+      if (r.node.data !== name) r.node.data = name;
+      a.classList.toggle('gz-nav-dashboard', !!dash);
+      if (dash && !r.icon) {
+        r.icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        r.icon.classList.add('gz-nav-dashboard-icon'); r.icon.setAttribute('viewBox', '0 0 24 24'); r.icon.setAttribute('aria-hidden', 'true');
+        const path = document.createElementNS(r.icon.namespaceURI, 'path'); path.setAttribute('d', 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z'); r.icon.append(path);
+      }
+      if (dash && !r.icon.isConnected) a.prepend(r.icon); else if (!dash) r.icon?.remove();
+      for (const [key, value] of [['aria-label', r.aria], ['title', r.title]]) {
+        const next = dash ? name : key === 'title' && enabled && !r.dashboard ? value || name.trim() : value;
+        if (next === null) a.removeAttribute(key); else if (a.getAttribute(key) !== next) a.setAttribute(key, next);
+      }
+    }
   };
-  const navObserver = new MutationObserver(syncDashboard);
-  navObserver.observe(html, { childList: true, subtree: true, characterData: true });
+  const queueNav = () => { if (!navQueued) { navQueued = true; queueMicrotask(() => { navQueued = false; syncDashboard(); }); } };
+  const navObserver = new MutationObserver((changes) => {
+    for (const m of changes) {
+      const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
+      if (nodes.length && nodes.every((n) => n.nodeType === 1 && n.classList?.contains('gz-nav-dashboard-icon'))) continue;
+      const a = (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest('a[href]');
+      if (a && GZ_NAV.native(a.getAttribute('href'))) {
+        const r = renamed.get(a);
+        if (m.type === 'characterData' && r?.node === m.target) { if (m.target.data === r.painted) continue; r.text = m.target.data; }
+        navDirty = true; queueNav(); return;
+      }
+      if (m.type === 'childList' && [...m.addedNodes].some((n) => n.nodeType === 1 && (n.matches('a[href]') && GZ_NAV.native(n.getAttribute('href')) || [...n.querySelectorAll('a[href]')].some((a) => GZ_NAV.native(a.getAttribute('href')))))) { navDirty = true; queueNav(); return; }
+    }
+  });
+  // The existing core gate already sees added subtrees before paint; no second document-wide observer.
+  const discoverNav = (scope) => {
+    if ([...navRoots].some((root) => !root.isConnected)) {
+      navObserver.disconnect();
+      for (const root of navRoots) if (!root.isConnected) navRoots.delete(root); else navObserver.observe(root, { childList: true, subtree: true, characterData: true });
+      navDirty = true;
+    }
+    if (![...navRoots].some((root) => root.contains(scope))) {
+      const found = scope.matches?.(navSelector) ? [scope] : scope.querySelectorAll(navSelector);
+      for (const root of found) if (!navRoots.has(root)) { navRoots.add(root); navObserver.observe(root, { childList: true, subtree: true, characterData: true }); navDirty = true; }
+    }
+    if (navDirty) queueNav();
+  };
+  discoverNav(document);
   addEventListener('pagehide', () => navObserver.disconnect(), { once: true });
   const paintNav = (n, picture) => {
     if (!isPreview && window.top !== window) return;
     I.setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
+    for (const [key, value] of [['overflow', n.labelOverflow], ['style', n.itemStyle], ['background', n.itemBackground], ['indicator', n.activeIndicator], ['logo-align', n.logoAlign], ['footer-hidden', !n.footer]]) I.setAttr(`data-gz-nav-${key}`, value);
+    I.setVar('--gz-nav-logo-size', `${n.logoSize}px`);
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
     I.setAttr('data-gz-nav-brand', n.brand);
@@ -612,17 +659,17 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
     else if (I.links.length && navItems) {
       const n = I.worn.nav;
-      if (n.i || n.li || n.collapsed || n.labels === 'icons' || navItems.links.length || navItems.order.length || navItems.hidden.length || navItems.widgets.some((w) => w.on)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
+      if (n.i || n.li || n.labelOverflow === 'shrink' || n.collapsed || n.labels === 'icons' || ['links', 'order', 'hidden'].some((k) => Array.isArray(navItems[k]) && navItems[k].length) || (Array.isArray(navItems.widgets) && navItems.widgets.some((w) => w?.on === true))) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
     } else if (I.links.length && !navRead) {
       navRead = true;
       try { chrome.storage.sync.get('navItems', (r) => {
         navRead = false;
-        navItems ||= GZ_NAV.clean(r?.navItems); syncNav();
+        navItems ||= r?.navItems || {}; syncNav();
       }); } catch { navRead = false; }
     }
     if (isPreview || location.pathname === '/ultra/course' || globalThis.GZ_CARD_UI) need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => GZ_CARD_UI.paint(), () => {});
   };
-  chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && c.navItems) { navItems = GZ_NAV.clean(c.navItems.newValue); syncNav(); } });
+  chrome.storage.onChanged.addListener((c, area) => { if (area === 'sync' && c.navItems) { navItems = c.navItems.newValue || {}; syncNav(); } });
   // A host registered for another LMS may answer settings before Ultra's schema arrives.
   if (!('brand' in I.settings.nav)) {
     const nav = I.settings.nav;

@@ -34,16 +34,64 @@ test('bundled-logo CSS retains the original img accessible name', () => {
   assert.match(rule, /opacity: 0/); assert.doesNotMatch(rule, /visibility: hidden|display: none/);
 });
 
-test('Dashboard first-paint rename preserves its React text wrapper and restores when disabled', () => {
-  const src = source('content-ultra.js'), a = src.indexOf('  const renamed ='), b = src.indexOf('  const navObserver', a);
-  assert.ok(a >= 0 && b > a, 'Dashboard lives in the initial script');
-  const text = { data: 'Institution page' }, wrapper = { text }, classes = new Set(), attrs = new Map();
-  const link = { isConnected: true, getAttribute: (k) => k === 'href' ? 'https://school.test/ultra/institution-page' : attrs.get(k) ?? null, setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k), querySelector: () => wrapper, classList: { toggle: (k, on) => on ? classes.add(k) : classes.delete(k) } };
-  const I = { links: [1], settings: { enabled: true, enhance: { dashboard: true } } };
-  const c = vm.createContext({ I, GZ_NAV: moduleOf('lib/nav.js'), NodeFilter: { SHOW_TEXT: 4 }, t: (s) => s, document: { querySelectorAll: () => [link], createTreeWalker: (w) => ({ nextNode: () => w.text }) } });
-  const sync = vm.runInContext(src.slice(a, b) + '\nsyncDashboard;', c);
-  sync(); assert.equal(text.data, 'Dashboard'); assert.equal(wrapper.text, text); assert.ok(classes.has('gz-nav-dashboard'));
-  I.settings.enhance.dashboard = false; sync(); assert.equal(text.data, 'Institution page'); assert.ok(!classes.has('gz-nav-dashboard')); assert.equal(attrs.has('aria-label'), false);
+const dashboardFixture = () => {
+  const src = source('content-ultra.js'), a = Math.max(src.indexOf('  const navRoots ='), src.indexOf('  const renamed =')), b = src.indexOf('  const paintNav =', a);
+  const attrs = new Map(), classes = new Set(), text = { nodeType: 3, data: 'Institution page' }, wrapper = { text };
+  let scans = 0, globalScans = 0;
+  const link = { nodeType: 1, isConnected: true, getAttribute: (k) => k === 'href' ? 'https://school.test/ultra/institution-page' : attrs.get(k) ?? null, setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k), querySelector: () => wrapper, closest: () => link, prepend: (n) => { n.isConnected = true; }, classList: { toggle: (k, on) => on ? classes.add(k) : classes.delete(k) } };
+  text.parentElement = link;
+  const root = { isConnected: true, contains: (n) => n === link || n === root || n?.inRail, querySelectorAll: () => { scans++; return [link]; } };
+  const I = { links: [1], settings: { enabled: true, enhance: { dashboard: true } } }, callbacks = [], queued = [];
+  const c = vm.createContext({ I, GZ_NAV: moduleOf('lib/nav.js'), NodeFilter: { SHOW_TEXT: 4 }, t: (s) => s, html: {}, addEventListener() {}, queueMicrotask: (f) => queued.push(f), MutationObserver: class { constructor(cb) { callbacks.push(cb); } observe() {} disconnect() {} }, document: { querySelectorAll: (selector) => { globalScans++; return selector.endsWith(' a[href]') ? [link] : [root]; }, createTreeWalker: (w) => ({ nextNode: () => w.text }), createElementNS: () => ({ namespaceURI: 'svg', isConnected: false, classList: { add() {}, contains: () => true }, setAttribute() {}, append() {}, remove() { this.isConnected = false; } }) } });
+  const api = vm.runInContext(src.slice(a, b) + '\n({syncDashboard, discoverNav: typeof discoverNav === 'undefined' ? null : discoverNav});', c);
+  const flush = () => { let n = 0; while (queued.length && n++ < 10) queued.shift()(); assert.ok(n < 10, 'observer settles without a feedback loop'); };
+  return { ...api, text, wrapper, link, attrs, classes, I, root, callbacks, queued, flush, counts: () => ({ scans, globalScans }) };
+};
+
+test('Dashboard first-paint rename preserves its React wrapper, native icon and tooltip when disabled', () => {
+  const f = dashboardFixture(); f.syncDashboard();
+  assert.equal(f.text.data, 'Dashboard'); assert.equal(f.wrapper.text, f.text); assert.ok(f.classes.has('gz-nav-dashboard')); assert.equal(f.attrs.get('title'), 'Dashboard');
+  f.I.settings.enhance.dashboard = false; f.syncDashboard();
+  assert.equal(f.text.data, 'Institution page'); assert.ok(!f.classes.has('gz-nav-dashboard')); assert.equal(f.attrs.has('aria-label'), false); assert.equal(f.attrs.has('title'), false);
+});
+
+test('thirty unrelated widget text updates cause no navigation scans and own writes become idle', () => {
+  const f = dashboardFixture(); f.syncDashboard(); const before = f.counts();
+  const target = { nodeType: 3, parentElement: { closest: () => null }, inRail: true };
+  for (let n = 0; n < 30; n++) f.callbacks[0]([{ type: 'characterData', target, addedNodes: [], removedNodes: [] }]);
+  f.flush(); assert.deepEqual(f.counts(), before);
+  f.callbacks[0]([{ type: 'characterData', target: f.text, addedNodes: [], removedNodes: [] }]); f.flush();
+  assert.deepEqual(f.counts(), before); assert.equal(f.queued.length, 0);
+});
+
+test('native text replacement batches before paint while a replacement drawer is discovered', () => {
+  const f = dashboardFixture(); f.syncDashboard(); f.text.data = 'New institution';
+  f.callbacks[0]([{ type: 'characterData', target: f.text, addedNodes: [], removedNodes: [] }]);
+  assert.equal(f.queued.length, 1); f.flush(); assert.equal(f.text.data, 'Dashboard');
+  f.I.settings.enhance.dashboard = false; f.syncDashboard(); assert.equal(f.text.data, 'New institution');
+  assert.equal(f.callbacks.length, 1, 'only the rail has an observer; added subtrees come from the core gate');
+  f.root.isConnected = false;
+  const replacement = { ...f.root, isConnected: true, matches: () => true };
+  f.discoverNav(replacement); f.flush();
+  assert.ok(f.counts().scans >= 2);
+});
+
+test('an invalidated collapse listener leaves the native event untouched', () => {
+  const src = source('features/nav.js'), a = src.indexOf("  document.addEventListener('click'"), b = src.indexOf('  chrome.storage.onChanged', a);
+  let click, sends = 0, prevented = 0;
+  const c = vm.createContext({ X: { on: () => true, nav: () => ({ collapsed: true }) }, chrome: { runtime: { sendMessage: () => { sends++; return Promise.resolve(); } } }, document: { addEventListener: (_, fn) => { click = fn; } } });
+  vm.runInContext(src.slice(a, b), c);
+  click({ target: { closest: () => true }, preventDefault: () => prevented++, stopImmediatePropagation() {} });
+  assert.equal(sends, 0); assert.equal(prevented, 0);
+});
+
+test('all navigation customization values use one bounded first-paint spec', () => {
+  const N = moduleOf('lib/nav.js');
+  assert.deepEqual(N.SPEC.labelOverflow, ['ellipsis', ['ellipsis', 'wrap', 'shrink']]);
+  assert.deepEqual(N.SPEC.itemStyle, ['tile', ['tile', 'pill', 'flat']]);
+  assert.deepEqual(N.SPEC.activeIndicator, ['bar', ['bar', 'outline', 'background', 'none']]);
+  assert.deepEqual(N.SPEC.logoSize, [48, [24, 96]]); assert.deepEqual(N.SPEC.footer, [true, 'bool']);
+  for (const [size, height] of [['small', 40], ['medium', 44], ['large', 48]]) assert.equal(N.dimensions({ size, gap: 2, padding: 8 }).height, height);
 });
 
 test('absolute native links have the same item identity as relative links', () => {
@@ -128,4 +176,12 @@ test('the shared planner reuses only this account covered fresh cache, otherwise
     await U.page.planned(from, to, { ...cache, at: now - 600001 }); assert.equal(calls, 1);
     await U.page.planned(from + 1, to + 1, cache); assert.equal(calls, 2, 'uncovered range uses planner');
   } finally { U.page.profile = profile; U.page.due = due; delete global.location; }
+});
+
+
+test('item URL validation and ordering are loaded only when the rail UI is needed', () => {
+  const manifest = require('../manifest.json'), initial = manifest.content_scripts.find((c) => c.matches.includes('https://*/ultra')).js;
+  assert.ok(initial.includes('lib/nav.js')); assert.ok(!initial.includes('lib/nav-items.js'));
+  const src = source('lib/nav.js'); assert.ok(!src.includes('const link =')); assert.ok(!src.includes('const clean =')); assert.ok(!src.includes('const sequence ='));
+  const N = require('../lib/nav-items.js'); assert.equal(N.link({ id: 'aaaaaaaaaaaa', n: 'Safe', u: 'javascript:alert(1)' }), null); assert.equal(N.clean().widgets.length, 4);
 });
