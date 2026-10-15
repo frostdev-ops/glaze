@@ -1737,6 +1737,7 @@
   "Research resources and academic support": "Recursos de investigación y apoyo académico",
   "Left": "Izquierda",
   "Right": "Derecha",
+  "Auto short name": "Nombre corto automático",
   "Use precise navigation dimensions": "Usar dimensiones precisas de navegación",
   "Expand on hover": "Expandir al pasar el cursor",
   "Choose a name and items from one local account.": "Elige un nombre y elementos de una sola cuenta local.",

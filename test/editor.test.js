@@ -80,6 +80,13 @@ test('E1 every schema setting has one explicit owning section, including modules
   for (const key of Object.keys(OVERRIDE)) assert.ok(expected.includes(key), `Stale owner: ${key}`);
 });
 
+test('E1 course-tab label control exposes each accepted mode once and includes the default', () => {
+  const select = nodes.find((node) => node.tag === 'select' && node.attrs['data-key'] === 'tabs.label');
+  const options = nodes.filter((node) => node.tag === 'option' && node.parents.includes(select)).map((node) => node.attrs.value);
+  assert.deepEqual(options, D.GZ_SPEC.tabs.label[1]); assert.equal(D.GZ_SPEC.tabs.label[0], 'short');
+  assert.equal(options.filter((value) => value === 'short').length, 1);
+});
+
 test('E1 each setting has exactly one real control/group; radios, dynamic carriers and preview choices stay distinct', () => {
   const controls = new Map();
   const add = (key, id, route) => { if (!controls.has(key)) controls.set(key, new Map()); controls.get(key).set(id, route); };
