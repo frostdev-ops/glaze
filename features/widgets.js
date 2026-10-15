@@ -79,48 +79,52 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // stop() when the tile goes.
   const WIDGETS = {
     notes(body) {
-      let key = '', note = { text: '', at: 0 }, wait = 0, dirty = false, busy = false, tries = 0, typed = 0;
+      // note: the last saved (or stored) text; draft: the newest typed, stamped when typed, until a save confirms that very
+      // draft. Shown is the draft while there is one.
+      let key = '', note = { text: '', at: 0 }, draft = null, wait = 0, busy = false, tries = 0;
       const view = make('div', { className: 'gz-w-note-view', tabIndex: 0 });
       view.setAttribute('role', 'button');
       view.setAttribute('aria-label', t('Edit notes'));
       const text = make('textarea', { className: 'gz-w-note', placeholder: t('Notes for yourself. Links work.'), maxLength: W.NOTES_MAX, hidden: true });
       text.setAttribute('aria-label', t('Notes'));
       const status = make('p', { className: 'gz-w-status', role: 'status' });
+      const shown = () => (draft || note).text;
       const render = () => {
-        view.replaceChildren(...(note.text ? W.links(note.text).map((p) => (p.href ? make('a', { href: p.href, textContent: p.text, target: '_blank', rel: 'noopener noreferrer' }) : p.text))
+        view.replaceChildren(...(shown() ? W.links(shown()).map((p) => (p.href ? make('a', { href: p.href, textContent: p.text, target: '_blank', rel: 'noopener noreferrer' }) : p.text))
           : [make('span', { className: 'gz-w-faint', textContent: t('Notes for yourself. Links work.') })]));
       };
-      const edit = () => { view.hidden = true; text.hidden = false; text.value = note.text; text.focus(); text.setSelectionRange(text.value.length, text.value.length); };
-      // What was typed stays unsaved (dirty) until the worker says it's kept; a failed save is tried again on blur, on
-      // leaving the page and when the tile goes, three times per change at most. One save at a time.
+      const edit = () => { view.hidden = true; text.hidden = false; text.value = shown(); text.focus(); text.setSelectionRange(text.value.length, text.value.length); };
+      // A draft stays until the worker confirms that draft (a confirmation of an older one confirms only that); a failed
+      // save is tried again on blur, on leaving the page and when the tile goes, three times per draft at most. One save
+      // at a time: a draft typed while one is on its way goes as soon as it's answered.
       const fail = () => { status.textContent = t("Couldn't save your notes. They're still here; try again in a moment."); };
       const save = () => {
         clearTimeout(wait);
-        if (!dirty || busy || tries >= 3) return;
+        if (!draft || busy || tries >= 3) return;
         if (!key) { fail(); return; }
-        // Stamped when it was typed, so a later edit saved sooner (on blur, in another tab) still wins.
-        const sent = { text: text.value, at: typed };
+        const sent = draft;
         busy = true;
         tries++;
         send({ type: 'glaze:notes', key, text: sent.text, at: sent.at }).then((r) => {
           busy = false;
           if (!r?.ok) return fail();
           status.textContent = '';
-          if (text.value === sent.text || !r.kept) { dirty = false; tries = 0; }
           note = r.kept ? sent : r.note || note;
-          if (!r.kept && text.hidden) render();
+          // Done when this was the newest draft, or another tab's note is newer than it; else the newer draft goes now.
+          if (draft === sent || (!r.kept && note.at >= draft.at)) { draft = null; tries = 0; } else { tries = 0; save(); }
+          if (text.hidden) render();
         });
       };
       view.addEventListener('click', (e) => { if (!e.target.closest('a')) edit(); });
       view.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a')) { e.preventDefault(); edit(); } });
-      text.addEventListener('input', () => { dirty = true; tries = 0; typed = Date.now(); clearTimeout(wait); wait = setTimeout(save, 600); });
-      text.addEventListener('blur', () => { save(); note = { ...note, text: text.value }; render(); text.hidden = true; view.hidden = false; });
+      text.addEventListener('input', () => { draft = { text: text.value, at: Date.now() }; tries = 0; clearTimeout(wait); wait = setTimeout(save, 600); });
+      text.addEventListener('blur', () => { save(); render(); text.hidden = true; view.hidden = false; });
       const leave = () => save();
       addEventListener('pagehide', leave);
-      const onStore = (ch, a) => { if (a === 'local' && key && ch[key] && text.hidden && !dirty) { note = W.cleanNote(ch[key].newValue); render(); } };
+      const onStore = (ch, a) => { if (a === 'local' && key && ch[key] && text.hidden && !draft) { note = W.cleanNote(ch[key].newValue); render(); } };
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       const load = () => who().then(() => { key = W.notesKey(location.origin, me.uid); return get('local', key); })
-        .then((r) => { if (text.hidden && !dirty) { note = W.cleanNote(r[key]); render(); } }, () => {});
+        .then((r) => { if (text.hidden && !draft) { note = W.cleanNote(r[key]); render(); } }, () => {});
       load();
       render();
       body.append(view, text, status);
