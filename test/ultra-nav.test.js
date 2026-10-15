@@ -55,7 +55,11 @@ test('custom logos share image caps and keep the previous image when sync fails'
 test('first paint covers MUI and legacy nav, owns the logo image without replacing its link', () => {
   const css = fs.readFileSync(require.resolve('../theme.css'), 'utf8');
   assert.match(css, /makeStylesnavigation/); assert.match(css, /nav#base_tools/);
-  assert.match(css, /assets\/logo\.svg/); assert.match(css, /assets\/logo-dark\.svg/); assert.match(css, /icons\/icon\.svg/);
+  // The Glaze logos are inlined: a page can't load them by the extension's fixed address (use_dynamic_url), and a
+  // file it could load would tell a site Glaze is installed.
+  const logos = css.match(/url\("data:image\/svg\+xml,[^"]+"\)/g) || [];
+  assert.ok(logos.length >= 3, 'the logo, its dark version and the mark are inlined');
+  assert.doesNotMatch(css, /url\("(?:assets|icons)\/[^"]+\.svg"\)/, 'no logo by the extension address');
   assert.match(css, /data-gz-nav-brand/);
   const manifest = require('../manifest.json');
   const ultra = manifest.content_scripts.find((c) => c.matches.includes('https://*/ultra')).js;
