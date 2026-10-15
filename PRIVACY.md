@@ -116,7 +116,9 @@ animated backgrounds) are bundled. It makes requests in these cases:
   The course list includes each course's term (for the GPA). When you open the what-if calculator on a
   course's Grades page (or when you have something saved for that course), Glaze asks for that course's
   assignment groups with your submissions, and its grading periods or grading scheme where the course has
-  them; the answers stay in memory. Glaze never writes grades or what-if scores to Canvas.
+  them; the answers stay in memory. With the GPA on, a what-if grade for a course whose letter grade Canvas gives
+  asks once for that course's grading scheme, to read the what-if on the same scale. Glaze never writes grades or
+  what-if scores to Canvas.
   These requests are read-only GETs to your own Canvas site with your existing session. Only the due
   list, course details and badge records described above are stored; other answers stay in memory.
   For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking

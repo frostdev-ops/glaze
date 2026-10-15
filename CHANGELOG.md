@@ -31,8 +31,8 @@ All notable changes to Glaze are documented here. The format follows
 - **Canvas: GPA on the Dashboard** (off by default): your GPA for each term and across your current courses, on a
   4.0 or plus/minus scale, weighted for honors (+0.5) and AP or IB (+1) if you like, above or below the cards.
   Set credits, a grading scale of your own and a what-if grade for each course.
-- **Card grades:** click a grade on a Canvas Dashboard card to open that course's grades, or show card grades
-  only when you point at the card.
+- **Card grades:** click a grade on a Canvas Dashboard card to open that course's grades (with the keyboard, Tab to
+  the card's grade link), or show card grades only when you point at the card.
 
 ### Changed
 

@@ -499,4 +499,7 @@
   "Write a scale as letters and their lowest percent: A 93, A- 90, B+ 87.": "Schrijf een schaal als letters met hun laagste percentage: A 93, A- 90, B+ 87.",
   "Courses, credits and scales": "Cursussen, studiepunten en schalen",
   "From your current grades in Canvas. Credits and scales sync with your browser; what-if grades stay on this device.": "Uit je huidige cijfers in Canvas. Studiepunten en schalen worden met je browser gesynchroniseerd; wat-als-cijfers blijven op dit apparaat.",
+  "Grades for {course}: {grade}": "Cijfers voor {course}: {grade}",
+  "Try again": "Opnieuw proberen",
+  "Give {name} a grading scale below to count its what-if grade.": "Geef {name} hieronder een cijferschaal om het wat-als-cijfer mee te tellen.",
 };

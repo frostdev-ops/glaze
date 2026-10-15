@@ -21,6 +21,13 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const pct = (x) => GZ_I18N.pct(C.round2(x), locale());
   const two = (x) => (x == null ? '–' : new Intl.NumberFormat(GZ_I18N.locale(locale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x));
   const studentIn = (c) => c?.enrollments?.find((e) => e.type === 'student');
+  // Only while Glaze runs in this frame and is switched on: work that finishes after that draws nothing.
+  const live = () => X.on() && S().enabled !== false;
+  // Saved what-ifs go through one writer per user's item, so a clear can't be undone by a change already on its way.
+  let saver = null;
+  const saves = () => (saver ||= C.writer(chrome.storage.local));
+  // A course list that didn't come (content.js asks again a minute later) is tried again, three times at most.
+  const again = (s) => s.tries < 3 && Date.now() - s.at > 60000;
   const whatIfKey = (me) => `whatIf:${location.origin}:${me.user_id}`;
   // Puts a box in place of the old one (or moves it), keeping focus on the same control (its data-f) when redrawn.
   const put = (old, box, place) => {
@@ -51,9 +58,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // The course's row (Canvas's totals, your user id) and what you saved; the course's work is asked for only once
   // you open the calculator, or at once if something is saved (a grade may have arrived since).
   const begin = async (st) => {
+    st.status = 'asking';
     const row = (await canvasCourses()).find((c) => String(c.id) === st.cid);
     const me = studentIn(row);
-    if (!me) { st.status = 'none'; return; }
+    if (!me) { Object.assign(st, { status: 'none', at: Date.now(), tries: (st.tries || 0) + 1 }); return; }
     Object.assign(st, { row, me, key: whatIfKey(me), status: 'idle' });
     st.saved = (await getArea('local', st.key))?.[st.cid];
     if (st.saved) load(st); else whatIf();
@@ -88,22 +96,19 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   };
   const keep = (st) => {
     st.what = C.whatOf(st.rec);
-    try {
-      chrome.storage.local.get(st.key, (r) => {
-        const all = C.store(r?.[st.key], st.cid, st.rec);
-        if (Object.keys(all).length) chrome.storage.local.set({ [st.key]: all }); else chrome.storage.local.remove(st.key);
-      });
-    } catch { /* extension reloaded under the tab */ }
+    const rec = st.rec;
+    try { saves().change(st.key, (all) => C.store(all, st.cid, rec)); } catch { /* extension reloaded under the tab */ }
   };
 
   const whatIf = () => {
     const old = document.getElementById('gz-calc');
-    const table = S().enhance.calc && GRADES.test(location.pathname) && document.getElementById('grades_summary');
+    const table = live() && S().enhance.calc && GRADES.test(location.pathname) && document.getElementById('grades_summary');
     if (!table) return old?.remove();
     const cid = canvasCourseId();
     let st = W.get(cid);
     if (!st) { W.set(cid, (st = { cid, status: 'start', v: 0, open: false, target: '' })); begin(st); }
-    if (st.status === 'start' || st.status === 'none') return old?.remove();
+    if (st.status === 'none' && again(st)) begin(st);
+    if (['start', 'asking', 'none'].includes(st.status)) return old?.remove();
     const key = `${cid} ${st.v} ${locale()}`;
     if (old?.dataset.key === key && old.nextElementSibling === table) return;
     const box = old?.dataset.key === key ? old : drawWhatIf(st);
@@ -116,9 +121,16 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const summary = make('summary', { className: 'gz-calc-head' }, make('span', { textContent: t('What-if calculator') }), now);
     summary.dataset.f = 'summary';
     const box = label(make('details', { id: 'gz-calc', open: st.open }, summary), t('What-if grade calculator'));
-    box.addEventListener('toggle', () => { st.open = box.open; if (box.open && st.status === 'idle') load(st); });
+    // Opening it asks for the course's work; after a failure, opening it again (or Try again) asks once more.
+    box.addEventListener('toggle', () => { st.open = box.open; if (box.open && (st.status === 'idle' || st.status === 'failed')) load(st); });
     if (st.status !== 'ready') {
       box.append(make('p', { className: 'gz-calc-note', textContent: st.status === 'failed' ? t("Glaze couldn't load this course's scores.") : t('Loading your scores…') }));
+      if (st.status === 'failed') {
+        const retry = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Try again') });
+        retry.dataset.f = 'retry';
+        retry.addEventListener('click', () => { st.focus = 'summary'; load(st); });
+        box.append(retry);
+      }
       return box;
     }
     const { course, rec } = st;
@@ -158,7 +170,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const unit = (i) => rqd && i.possible > 0;
     for (const g of course.groups) {
       const items = g.items.filter((i) => i.counts && i.possible >= 0 && !(st.anon && i.anon) && (!st.period || i.period === st.period));
-      const pretend = rec.p.filter((p) => p.g === g.id);
+      const pretend = rec.p.filter((p) => p.g === g.id && (!st.period || (p.pd ?? course.last) === st.period));
       if (!items.length && !pretend.length && !g.weight) continue;
       const gOut = make('b');
       updates.push((r) => {
@@ -218,7 +230,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         // Scored at the group's share so far, so adding one changes nothing until you say how it went.
         const x = C.calc(course, st.what, opts).groups[g.id]?.current;
         const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-        rec.p.push({ id, g: g.id, n: t('Pretend assignment'), pp: 10, s: x?.possible > 0 ? C.round2((x.score / x.possible) * 10) : 10 });
+        rec.p.push({ id, g: g.id, n: t('Pretend assignment'), pp: 10, s: x?.possible > 0 ? C.round2((x.score / x.possible) * 10) : 10, pd: st.period });
         st.focus = `n:${id}`;
         redraw();
       });
@@ -249,11 +261,16 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     clear.addEventListener('click', () => { st.rec = { s: {}, h: [], p: [], c: null }; st.focus = 'summary'; redraw(); });
     const clearAll = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Clear all courses') });
     clearAll.addEventListener('click', () => {
-      try { chrome.storage.local.remove(st.key); } catch { /* reloaded */ }
-      st.rec = { s: {}, h: [], p: [], c: null };
-      st.what = C.whatOf(st.rec);
+      try { saves().clear(st.key); } catch { /* reloaded */ }
+      // Every course this page holds for that user is emptied with it.
+      for (const s of W.values()) {
+        if (s.key !== st.key || !s.rec) continue;
+        Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [] });
+        s.what = C.whatOf(s.rec);
+        s.v++;
+      }
+      if (D.wkey === st.key) D.wi = {};
       st.focus = 'summary';
-      st.v++;
       whatIf();
     });
     box.append(make('div', { className: 'gz-calc-actions' }, clear, clearAll),
@@ -267,19 +284,33 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // Your current courses as a student, from the course list content.js already has (with each course's term). A
   // course's letter: the scale you gave it, else Canvas's letter where the course has a scheme, else Canvas's
   // default scheme on its current score. Choices per course sync (gpaCourses); what-if grades stay on this device.
-  const D = { status: 'start', v: 0 };
+  const D = { status: 'start', v: 0, tries: 0, schemes: new Map() };
   const gpaBegin = async () => {
     D.status = 'loading';
     try {
       await calcIn();
       const list = (await canvasCourses()).filter((c) => studentIn(c));
+      if (!list.length) throw new Error('no courses');
       const me = studentIn(list[0]);
       D.wkey = me ? whatIfKey(me) : null;
       const [prefs, wi] = await Promise.all([getArea('sync', 'gpaCourses'), D.wkey ? getArea('local', D.wkey) : null]);
       Object.assign(D, { list, prefs: C.cleanGpa(prefs), wi: wi && typeof wi === 'object' ? wi : {}, status: 'ready' });
-    } catch { D.status = 'failed'; }
+    } catch { Object.assign(D, { status: 'failed', at: Date.now(), tries: D.tries + 1 }); }
     D.v++;
     gpa();
+  };
+  // A course's own grading scheme, asked for once a page, and only for a what-if grade under a letter Canvas gives:
+  // the what-if is read on the same scale as the grade. Until it comes there is no what-if letter for that course.
+  const schemeFor = (id) => {
+    if (D.schemes.has(id)) return;
+    D.schemes.set(id, null);
+    capi(`/courses/${id}?include[]=grading_scheme`).then((j) => {
+      const s = C.schemeOf(j?.grading_scheme);
+      if (!s) return;
+      D.schemes.set(id, s);
+      D.v++;
+      gpa();
+    }, () => { D.schemes.set(id, false); D.v++; gpa(); });
   };
   const rowsOf = () => {
     const e = S().enhance;
@@ -287,16 +318,11 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const me = studentIn(c);
       const key = `canvas:${location.origin}/${c.id}`;
       const p = D.prefs[key] || {};
-      const scale = p.s ? C.parseScheme(p.s) : null;
-      const score = me.computed_current_score ?? null;
-      const letter = scale ? C.letter(score, scale) : me.computed_current_grade || me.computed_current_letter_grade || C.letter(score);
       const wi = D.wi[c.id]?.c;
-      const whatIf = typeof wi === 'number' && Number.isFinite(wi) ? wi : null;
-      const at = (name) => ({ pts: C.points(name, e.gpaPlus), wpts: C.points(name, e.gpaPlus, p.l || 0) });
+      const r = C.gpaRow(me, p, typeof wi === 'number' && Number.isFinite(wi) ? wi : null, { plus: e.gpaPlus }, D.schemes.get(String(c.id)) || null);
+      if (r.needs) schemeFor(String(c.id));
       return {
-        c, key, p, score, letter, whatIf, rqd: !!c.restrict_quantitative_data, credits: p.c ?? C.CREDITS, out: p.x === 1, ...at(letter),
-        // With its what-if grade, on the same scale.
-        wi: whatIf == null ? at(letter) : at(C.letter(whatIf, scale || C.SCHEME)),
+        ...r, c, key, p, rqd: !!c.restrict_quantitative_data,
         term: c.term?.id != null ? String(c.term.id) : '', termName: c.term?.name || '', termAt: Date.parse(c.term?.start_at) || 0,
       };
     });
@@ -305,9 +331,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const e = S().enhance;
     const old = document.getElementById('gz-gpa');
     const shown = (id) => { const el = document.getElementById(id); return el && !/none/.test(el.style.display) ? el : null; };
-    const anchor = e.gpa && location.pathname === '/' && (shown('DashboardCard_Container') || shown('dashboard-planner') || shown('dashboard-activity'));
+    const anchor = live() && e.gpa && location.pathname === '/' && (shown('DashboardCard_Container') || shown('dashboard-planner') || shown('dashboard-activity'));
     if (!anchor) return old?.remove();
-    if (D.status === 'start') gpaBegin();
+    if (D.status === 'start' || (D.status === 'failed' && again(D))) gpaBegin();
     if (D.status !== 'ready') return;
     const key = `${D.v} ${locale()} ${e.gpaPlus} ${e.gpaWeighted}`;
     const placed = (e.gpaAfter ? anchor.nextElementSibling : anchor.previousElementSibling) === old;
@@ -337,7 +363,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         const wi = rows.map((r) => ({ ...r, ...r.wi }));
         out.push(fig(of(wi, 'pts').gpa, t('With your what-if grades'), weighted(wi)));
       }
-      figs.replaceChildren(...(out.length ? out : [make('p', { className: 'gz-gpa-note', textContent: t('No grade yet') })]));
+      // A what-if under Canvas's letter whose scheme didn't come: say so rather than read it on another scale.
+      const unread = rows.filter((r) => r.needs && D.schemes.get(String(r.c.id)) === false);
+      figs.replaceChildren(...(out.length ? out : [make('p', { className: 'gz-gpa-note', textContent: t('No grade yet') })]),
+        ...unread.map((r) => make('p', { className: 'gz-gpa-note', textContent: t('Give {name} a grading scale below to count its what-if grade.', { name: r.c.name || r.c.course_code || '' }) })));
       for (const f of cells) f();
     };
     const savePrefs = () => {
@@ -346,9 +375,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       figures();
     };
     const saveWhatIf = (id, c) => {
-      const rec = { s: {}, h: [], p: [], ...D.wi[id], c };
-      D.wi = C.store(D.wi, String(id), rec);
-      try { if (Object.keys(D.wi).length) chrome.storage.local.set({ [D.wkey]: D.wi }); else chrome.storage.local.remove(D.wkey); } catch { /* reloaded */ }
+      D.wi = C.withCourseGrade(D.wi, id, c);
+      try { saves().change(D.wkey, (all) => C.withCourseGrade(all, id, c)); } catch { /* reloaded */ }
       figures();
     };
 

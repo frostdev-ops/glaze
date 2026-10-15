@@ -499,4 +499,7 @@
   "Write a scale as letters and their lowest percent: A 93, A- 90, B+ 87.": "Écrivez un barème sous forme de lettres avec leur pourcentage minimum : A 93, A- 90, B+ 87.",
   "Courses, credits and scales": "Cours, crédits et barèmes",
   "From your current grades in Canvas. Credits and scales sync with your browser; what-if grades stay on this device.": "D'après vos notes actuelles dans Canvas. Les crédits et les barèmes se synchronisent avec votre navigateur ; les notes hypothétiques restent sur cet appareil.",
+  "Grades for {course}: {grade}": "Notes de {course} : {grade}",
+  "Try again": "Réessayer",
+  "Give {name} a grading scale below to count its what-if grade.": "Donnez un barème à {name} ci-dessous pour compter sa note hypothétique.",
 };

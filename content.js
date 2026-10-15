@@ -475,8 +475,16 @@
       for (const card of document.querySelectorAll('.ic-DashboardCard')) {
         const el = card.querySelector('.ic-DashboardCard__header-subtitle, .ic-DashboardCard__header-term');
         if (!el) continue;
-        const g = grades[card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/([^/?#]+)/)?.[1]];
+        const id = card.querySelector('a[href*="/courses/"]')?.getAttribute('href').match(/\/courses\/([^/?#]+)/)?.[1];
+        const g = grades[id];
         if (g) { el.setAttribute('data-gz-grade', g.label); el.setAttribute('data-gz-chip', g.tone); } else { el.removeAttribute('data-gz-grade'); el.removeAttribute('data-gz-chip'); }
+        // The same grade as a link of its own to the course's grades, for the keyboard and screen readers: right after
+        // the card's link (next in Tab order), not in it, and shown when focused (canvas.css). Written only on a change.
+        let a = card.querySelector('.gz-card-grade');
+        if (!g) { a?.remove(); continue; }
+        const name = t('Grades for {course}: {grade}', { course: card.getAttribute('aria-label') || id, grade: g.label });
+        if (!a) el.closest('a')?.after(a = Object.assign(document.createElement('a'), { className: 'gz-card-grade' }));
+        if (a.getAttribute('aria-label') !== name) { a.href = `/courses/${id}/grades`; a.textContent = g.label; a.setAttribute('aria-label', name); }
       }
     });
   };
@@ -1617,7 +1625,7 @@
   // Canvas: the what-if calculator (a course's Grades) and the GPA (Dashboard) are features/grades.js, asked for where on.
   const canvasGrades = () => {
     const e = settings.enhance;
-    if (globalThis.GZ_GRADES_UI || (observer && ((e.calc && /^\/courses\/\d+\/grades\/?$/.test(location.pathname)) || (e.gpa && location.pathname === '/')))) {
+    if (observer && (globalThis.GZ_GRADES_UI || (e.calc && /^\/courses\/\d+\/grades\/?$/.test(location.pathname)) || (e.gpa && location.pathname === '/'))) {
       need('features/grades.js', () => globalThis.GZ_GRADES_UI).then(() => GZ_GRADES_UI.render(), () => {});
     }
   };
@@ -3410,7 +3418,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     closeKeys();
     closeCmd();
     for (const id of ['gz-progress', 'gz-calc', 'gz-gpa']) document.getElementById(id)?.remove();
-    for (const p of document.querySelectorAll('.gz-new')) p.remove();
+    for (const p of document.querySelectorAll('.gz-new, .gz-card-grade')) p.remove();
     dropBars();
     for (const b of document.querySelectorAll('.gz-dl')) b.remove();
     unmenu();
@@ -3427,7 +3435,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   };
 
   // The helpers a file loaded by need() may use (Wave 1's features/*.js): this frame's, read through one name.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, settings: () => settings });
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourses, canvasCourseId, settings: () => settings, on: () => !!observer });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.

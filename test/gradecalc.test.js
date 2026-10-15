@@ -211,3 +211,92 @@ test('the GPA’s synced choices: sanitized, defaults left out, under 8 KB', () 
   assert.ok(Object.keys(out).length > 10);
   assert.deepEqual(G.cleanGpa(out), out, 'clean twice, same');
 });
+
+// ---- Codex review of W2 (each fails on c84efec) ----------------------------------------------------------------------
+test('halves round away from zero on both sides, as Canvas stores totals', () => {
+  assert.equal(G.round2(-69.125), -69.13);
+  assert.equal(G.round2(69.125), 69.13);
+  assert.equal(G.round2(-0.001), 0);
+  assert.deepEqual(two(run([g(0, [a(800, -553)])])), [-69.13, -69.13]);
+});
+
+test('a what-if typed against a negative real grade is kept while that grade stands', () => {
+  const items = [a(10, -2)];
+  const course = G.fromApi([g(0, items)]);
+  const r = G.reconcile({ s: { [items[0].id]: [5, -2] }, h: [], p: [] }, course);
+  assert.deepEqual(r.kept.s, { [items[0].id]: [5, -2] });
+  assert.deepEqual(r.gone, []);
+  assert.deepEqual(G.reconcile({ s: { [items[0].id]: [5, 'nonsense'] } }, course).kept.s, {}, 'a malformed baseline still goes');
+});
+
+test('a pretend assignment counts in the grading period it was added in', () => {
+  const groups = [g(0, [a(100, 50, { due_at: '2026-02-10T12:00:00Z' }), a(100, 90, { due_at: '2026-05-10T12:00:00Z' })])];
+  const course = G.fromApi(groups, { periods: [P1, P2] });
+  const gid = course.groups[0].id;
+  const rec = { s: {}, h: [], p: [{ id: 'p1', g: gid, n: 'Quiz', s: 100, pp: 100, pd: '1' }] };
+  const r = G.reconcile(rec, course);
+  assert.equal(r.kept.p[0].pd, '1');
+  assert.deepEqual(two(G.calc(course, r.what, { period: '1' })), [75, 75]);
+  assert.deepEqual(two(G.calc(course, r.what, { period: '2' })), [90, 90]);
+  assert.equal(G.reconcile({ ...rec, p: [{ ...rec.p[0], pd: '9' }] }, course).kept.p[0].pd, null, 'a period the course does not have');
+  assert.deepEqual(two(G.calc(course, G.reconcile({ ...rec, p: [{ ...rec.p[0], pd: null }] }, course).what, { period: '2' })), [95, 95], 'none named: the last period');
+});
+
+test('GPA: one scale turns any percentage into a letter, so a what-if equal to the grade changes nothing', () => {
+  const scheme = [['A', 90], ['B', 80], ['F', 0]]; // the course's own: A from 90
+  const e = { computed_current_score: 92, computed_current_grade: 'A' };
+  const known = G.gpaRow(e, {}, 92, { plus: true }, scheme);
+  assert.deepEqual([known.letter, known.pts, known.wiLetter, known.wi.pts], ['A', 4, 'A', 4]);
+  const unknown = G.gpaRow(e, {}, 92, { plus: true });
+  assert.equal(unknown.needs, true, 'Canvas has a letter but the scheme is not known yet: ask for it');
+  assert.equal(unknown.wiLetter, null, 'and no guess on another scale meanwhile');
+  const own = G.gpaRow(e, { s: 'A 95, B 85, F 0' }, 92, { plus: true });
+  assert.deepEqual([own.letter, own.wiLetter, own.needs], ['B', 'B', false], 'the student’s own scale wins, for both');
+  const plain = G.gpaRow({ computed_current_score: 92 }, { l: 1, c: 4 }, 85, { plus: true });
+  assert.deepEqual([plain.letter, plain.pts, plain.wpts, plain.wiLetter, plain.credits], ['A-', 3.7, 4.7, 'B', 4]);
+});
+
+test('storage writer: a clear drops every change asked for before it, even one already reading', async () => {
+  const data = { k: { 1: { s: {} }, 2: { s: {} } } };
+  const reads = [];
+  const area = {
+    get: (key, cb) => reads.push(() => cb({ [key]: data[key] })),
+    set: (o, cb) => { Object.assign(data, o); cb(); },
+    remove: (key, cb) => { delete data[key]; cb(); },
+  };
+  const w = G.writer(area);
+  const settle = () => new Promise(setImmediate);
+  w.change('k', (all) => ({ ...all, 3: { s: {} } }));
+  await settle();
+  assert.equal(reads.length, 1, 'the change is reading');
+  w.clear('k');
+  reads.shift()(); // the read answers after the clear was asked for
+  await settle();
+  assert.equal(data.k, undefined, 'nothing cleared comes back');
+  w.change('k', (all) => ({ ...all, 4: { s: {} } }));
+  await settle();
+  reads.shift()();
+  await settle();
+  assert.deepEqual(data.k, { 4: { s: {} } }, 'a change after the clear goes through');
+  w.change('k', () => ({}));
+  await settle();
+  reads.shift()();
+  await settle();
+  assert.equal(data.k, undefined, 'an empty result removes the item');
+});
+
+test('the Dashboard sets a course’s what-if grade without touching the rest of its record', () => {
+  const all = { 10: { s: { 1: [5, null] }, h: ['2'], p: [], c: null, at: 1 } };
+  const set = G.withCourseGrade(all, '10', 91);
+  assert.deepEqual([set['10'].s, set['10'].h, set['10'].c], [{ 1: [5, null] }, ['2'], 91]);
+  assert.deepEqual(G.withCourseGrade({ 11: { s: {}, h: [], p: [], c: 80 } }, '11', null), {}, 'cleared: nothing left, the course goes');
+  assert.equal(G.withCourseGrade({ 12: 'junk' }, '12', 70)['12'].c, 70);
+});
+
+test('drops match Canvas where sets tie or work is worth no points', () => {
+  // A zero-point entry scored 0 is kept over 8/9, as Canvas does (the group is then worth no points).
+  assert.deepEqual(G.drop([{ id: '1', possible: 0, score: 0 }, { id: '2', possible: 9, score: 8 }], { lo: 1, hi: 0, never: [] }).map((s) => s.id), ['1']);
+  // 12/14 and 15/17 both make 100% with a never-dropped 3/1: Canvas keeps 15/17.
+  const tie = [{ id: '1', possible: 14, score: 12 }, { id: '2', possible: 1, score: 3 }, { id: '3', possible: 17, score: 15 }];
+  assert.deepEqual(G.drop(tie, { lo: 2, hi: 0, never: ['2'] }).map((s) => s.id).sort(), ['2', '3']);
+});

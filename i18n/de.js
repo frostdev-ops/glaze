@@ -499,4 +499,7 @@
   "Write a scale as letters and their lowest percent: A 93, A- 90, B+ 87.": "Schreib eine Skala als Buchstaben mit ihrem niedrigsten Prozentwert: A 93, A- 90, B+ 87.",
   "Courses, credits and scales": "Kurse, Credits und Skalen",
   "From your current grades in Canvas. Credits and scales sync with your browser; what-if grades stay on this device.": "Aus deinen aktuellen Noten in Canvas. Credits und Skalen werden mit deinem Browser synchronisiert; Was-wäre-wenn-Noten bleiben auf diesem Gerät.",
+  "Grades for {course}: {grade}": "Noten für {course}: {grade}",
+  "Try again": "Erneut versuchen",
+  "Give {name} a grading scale below to count its what-if grade.": "Gib {name} unten eine Notenskala, damit seine Was-wäre-wenn-Note zählt.",
 };
