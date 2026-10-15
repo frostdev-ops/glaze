@@ -355,7 +355,7 @@ const histPage = (store, held = {}, list = CALC, groups = [], sync = {}) => {
   const need = (f, ready) => { if (!ready()) vm.runInContext(read(f), ctx); return ready() ? Promise.resolve() : Promise.reject(new Error('not loaded')); };
   const chrome = { runtime: { sendMessage: (m) => store.send(m, sender) }, storage: { local: store.tab(held), sync: shared(sync).tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
   ctx = vm.createContext({
-    document: doc, location: { pathname: '/', search: '', hash: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, GZ_I18N: I, chrome,
+    document: doc, location: { pathname: '/', search: '', hash: '', origin: ORIGIN }, CSS: { escape: (s) => s }, queueMicrotask, URLSearchParams, URL, Intl, AbortController, GZ_I18N: I, chrome,
     TextEncoder, fetch: () => Promise.resolve({ ok: true, text: async () => JSON.stringify(groups), headers: { get: () => '' } }),
     GZ_CTX: {
       t: (k, v) => I.t(k, v, 'en'), locale: () => 'en', capi: () => Promise.resolve(null), canvasCourses: () => Promise.resolve(list), canvasCourseId: () => undefined,
@@ -548,12 +548,14 @@ test('GPA: of two transcript files picked one after the other, the later one is 
   p.hist().fire('toggle');
   await settle(10);
   const later = [];
-  const file = (name, text) => ({ name, type: 'text/plain', size: text.length, text: () => new Promise((r) => later.push(() => r(text))) });
+  const file = (name, text) => ({ name, type: 'text/plain', size: text.length, slice: () => new Blob([text]), text: () => new Promise((r) => later.push(() => r(text))) });
   const input = p.f('imp:file');
   input.files = [file('fall.txt', 'Fall 2024\nBIO 101 Biology 4 A')];
   input.fire('change');
   p.f('imp:file').files = [file('spring.txt', 'Spring 2025\nENG 101 Writing 3 B')];
   p.f('imp:file').fire('change');
+  await settle(10); // both files are being read (features/import.js looks at their first bytes before their text)
+  assert.equal(later.length, 2);
   later[1]();
   await settle(10);
   later[0]();

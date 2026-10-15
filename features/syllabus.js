@@ -1,7 +1,8 @@
 // Syllabus import (W15), loaded on demand: content.js (syncSyl) on a course's home and Syllabus page while
 // enhance.syllabus is on, and the command palette's "Import a syllabus" on any page of a course. A syllabus (Canvas's own
-// Syllabus page as it's shown, a Word, PowerPoint, web page or text file, or pasted text) is read on this device by
-// lib/syllabus.js (lib/doctext.js for files), shown for review with every field editable and the line it came from, and
+// Syllabus page as it's shown, a PDF, a picture or screenshot (also pasted), a Word, PowerPoint, web page or text file,
+// or pasted text) is read on this device by lib/syllabus.js (features/import.js for files), shown for review with every
+// field editable and the line it came from (a line read from a picture the OCR engine wasn't sure of marks a guess), and
 // kept only when the student saves: in storage.local per Canvas site, user and course, through the worker
 // ('glaze:syllabus'). On save the scale can become the course's in the GPA (sync gpaCourses), the dates can become the
 // student's own To Do tasks ('glaze:todo'); the professor, class times and dates show on the course home, the weights
@@ -14,6 +15,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   let who = null; // { uid, cid, key, course }
   let rec = null; // what is kept for this course, or null
   let dlg = null, opener = null;
+  let reading = null; // the AbortController of a PDF or picture being read: another step or closing the dialog calls it off
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false && k !== '')); return e; };
   const attr = (el, a) => { for (const [k, v] of Object.entries(a)) el.setAttribute(k, v); return el; };
@@ -125,25 +127,14 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   // ---- reading ----------------------------------------------------------------------------------------------------
   const fromPage = () => open(null, true);
-  // An error whose words are for the student; any other (a broken file) reads as "couldn't read".
-  const oops = (msg) => Object.assign(new Error(msg), { mine: true });
-  const readFile = async (file) => {
-    const name = file.name.toLowerCase();
-    if (/\.pdf$/.test(name)) throw oops(t("Glaze can't read PDFs yet. Copy the text out of it and paste it here."));
-    if (file.size > 32 << 20) throw oops(t('That file is too large.'));
-    if (/\.(txt|md|text)$/.test(name) || file.type === 'text/plain') return file.text();
-    await docIn();
-    const D = globalThis.GZ_DOCTEXT;
-    if (/\.html?$/.test(name) || file.type === 'text/html') return D.html(await file.text());
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    if (/\.docx$/.test(name)) return D.docx(bytes);
-    if (/\.pptx$/.test(name)) return (await D.pptx(bytes)).map((s) => [s.text, s.notes].filter(Boolean).join('\n')).join('\n\n');
-    throw oops(t('Glaze reads Word (.docx), PowerPoint (.pptx), web pages (.html) and text files.'));
-  };
-  const extract = (text) => {
+  // ocr: what came from a picture (features/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
+  const extract = (text, ocr) => {
     const c = who.course;
     const startAt = Date.parse(c?.term?.start_at || c?.start_at || '');
-    return L.extract(text, { start: Number.isFinite(startAt) ? startAt : Date.now(), md: monthFirst(), hint: locale() });
+    const r = L.extract(text, { start: Number.isFinite(startAt) ? startAt : Date.now(), md: monthFirst(), hint: locale() });
+    if (!ocr) return r;
+    const d = (f) => (GZ_IMPORT.doubt(ocr, f.src) ? { ...f, conf: 'check' } : f);
+    return { ...r, ocr, prof: Object.fromEntries(Object.entries(r.prof).map(([k, f]) => [k, d(f)])), hours: r.hours.map(d), meetings: r.meetings.map(d), dates: r.dates.map(d), scale: d(r.scale), weights: d(r.weights) };
   };
 
   // ---- the dialog -------------------------------------------------------------------------------------------------
@@ -159,7 +150,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     opener = document.activeElement;
     dlg?.close();
     dlg = attr(make('dialog', { id: 'gz-syl-dlg' }), { 'aria-labelledby': 'gz-syl-title' });
-    dlg.addEventListener('close', () => { dlg?.remove(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
+    dlg.addEventListener('close', () => { reading?.abort(); dlg?.remove(); dlg = null; if (opener?.isConnected) opener.focus({ preventScroll: true }); });
     dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
     document.body.append(dlg);
     if (saved) review(fromSaved(saved), '');
@@ -168,6 +159,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     dlg.showModal();
   };
   const frame = (title, ...kids) => {
+    reading?.abort();
     const close = attr(make('button', { type: 'button', className: 'gz-syl-x', textContent: '×' }), { 'aria-label': t('Close') });
     close.addEventListener('click', () => dlg.close());
     dlg.replaceChildren(make('div', { className: 'gz-syl-in' }, make('div', { className: 'gz-syl-top' }, make('h2', { id: 'gz-syl-title', textContent: title }), close), ...kids));
@@ -176,23 +168,39 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   const source = () => {
     const say = status();
-    const file = make('input', { type: 'file', id: 'gz-syl-file', accept: '.docx,.pptx,.html,.htm,.txt,.md,.pdf' });
+    const file = make('input', { type: 'file', id: 'gz-syl-file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.docx,.pptx,.html,.htm,.txt,.md,application/pdf,image/*' });
     const paste = make('textarea', { id: 'gz-syl-paste', rows: 8 });
-    const go = async () => {
+    const stop = button(t('Stop reading'), 'stop', () => reading?.abort());
+    stop.hidden = true;
+    // pasted: a screenshot pasted into the text box, read instead of what's typed there.
+    const go = async (pasted) => {
+      const f = pasted instanceof File ? pasted : file.files[0];
       say.textContent = t('Reading…');
+      const ctl = reading = new AbortController();
+      stop.hidden = false;
       try {
-        const text = file.files[0] ? await readFile(file.files[0]) : paste.value;
+        let text = paste.value, ocr = null;
+        if (f) {
+          await need('features/import.js', () => globalThis.GZ_IMPORT);
+          ({ text, ocr } = await GZ_IMPORT.read(f, { signal: ctl.signal, progress: (s) => { say.textContent = s; } }));
+        }
+        if (ctl.signal.aborted) return;
         if (!text.trim()) { say.textContent = t('Choose a file or paste the text first.'); return; }
-        review(extract(text), text);
-      } catch (e) { say.textContent = e?.mine ? e.message : t("Glaze couldn't read that file."); }
+        review(extract(text, ocr), text);
+      } catch (e) { say.textContent = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); }
+      finally { if (reading === ctl) reading = null; stop.hidden = true; }
     };
+    paste.addEventListener('paste', (e) => {
+      const img = e.isTrusted && [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
+      if (img && !reading) { e.preventDefault(); go(img); }
+    });
     frame(t('Import a syllabus'),
       make('p', { className: 'gz-syl-desc', textContent: t('Glaze reads it on this device. Nothing is sent anywhere, and nothing is kept until you check it and save.') }),
       page()?.textContent.trim() && button(t("Read this course's Syllabus page"), 'page', async () => { await docIn().catch(() => {}); if (globalThis.GZ_DOCTEXT) { const text = pageText(); review(extract(text), text); } }),
       make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-file', textContent: t('A file') }), file,
-        make('small', { textContent: t('Word, PowerPoint, a web page or text. PDF not yet: copy its text and paste it below.') })),
-      make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-paste', textContent: t('Or paste the text') }), paste),
-      make('div', { className: 'gz-syl-actions' }, button(t('Read it'), 'go', go, 'gz-syl-main'), button(t('Cancel'), 'cancel', () => dlg.close())),
+        make('small', { textContent: t('A PDF, a picture or screenshot, Word, PowerPoint, a web page or text.') })),
+      make('div', { className: 'gz-syl-f' }, make('label', { htmlFor: 'gz-syl-paste', textContent: t('Or paste the text, or a screenshot') }), paste),
+      make('div', { className: 'gz-syl-actions' }, button(t('Read it'), 'go', () => go(), 'gz-syl-main'), stop, button(t('Cancel'), 'cancel', () => dlg.close())),
       say);
     first(file);
   };
@@ -322,6 +330,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     frame(t(saved ? 'Edit your syllabus' : 'Check what Glaze found'),
       make('p', { className: 'gz-syl-desc', textContent: saved ? t('Change anything, then save. It stays on this device.')
         : t('Every field can be changed. "Check this" marks a guess, and the line each value came from is shown under it. Nothing is kept until you save.') }), cut,
+      r.ocr && make('p', { className: 'gz-syl-issues', textContent: GZ_IMPORT.note(r.ocr) }),
       make('fieldset', { className: 'gz-syl-set' }, make('legend', { textContent: t('Professor') }),
         field(t('Name'), name, p.name, saved), field(t('E-mail'), email, p.email, saved), field(t('Office'), office, p.office, saved),
         field(t('Office hours, in words'), hoursNote, p.note, saved || !p.note.value)),
