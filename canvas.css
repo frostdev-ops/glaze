@@ -1482,11 +1482,11 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 #gz-todo .gz-todo-meta { display: flex; flex-wrap: wrap; gap: 0.15rem 0.45rem; margin-top: 0.1rem; font-size: 0.75rem; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-meta > :not(:first-child)::before { content: "·"; margin-inline-end: 0.45rem; color: var(--gz-ink-faint); }
 #gz-todo .gz-todo-meta > .gz-todo-chip::before, #gz-todo .gz-todo-meta > .gz-todo-chip + *::before { content: none; }
-#gz-todo .gz-todo-chip { padding: 0 0.45em; border-radius: 999px; font-weight: 600; color: var(--gz-accent); background: var(--gz-accent-soft); }
-#gz-todo .gz-todo-chip[data-tone="ok"] { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
-#gz-todo .gz-todo-chip[data-tone="warn"] { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
-#gz-todo .gz-todo-chip[data-tone="err"] { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
-html:not([data-gz-dark-theme]) #gz-todo .gz-todo-chip[data-tone] { color: color-mix(in srgb, currentColor 70%, var(--gz-ink)); }
+:is(#gz-todo, .gz-ct) .gz-todo-chip { padding: 0 0.45em; border-radius: 999px; font-weight: 600; color: var(--gz-accent); background: var(--gz-accent-soft); }
+:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="ok"] { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
+:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="warn"] { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
+:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="err"] { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { color: color-mix(in srgb, currentColor 70%, var(--gz-ink)); }
 #gz-todo .gz-todo-plan { color: var(--gz-accent); }
 #gz-todo .gz-todo-more, #gz-todo .gz-todo-small {
   padding: 0.05rem 0.5rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer;
@@ -1517,6 +1517,20 @@ html:not([data-gz-dark-theme]) #gz-todo .gz-todo-chip[data-tone] { color: color-
 #gz-todo .gz-todo-progress { display: grid; gap: 0.25rem; margin: 0 0 0.35rem; font-size: 0.75rem; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-progress i { height: 5px; border-radius: 999px; background: var(--gz-line); overflow: hidden; position: relative; }
 #gz-todo .gz-todo-progress i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--gz-pct); border-radius: inherit; background: linear-gradient(90deg, var(--gz-accent), var(--gz-ok)); }
+
+/* Tasks on course cards (features/cardtasks.js): the course's next items under the card's header, each a link with its
+   date and the To Do's status chip. Nothing moves, so there's nothing for reduced motion to stop. */
+#application .ic-DashboardCard > .gz-ct { margin: 0; padding: 0.4rem 0.6rem 0.2rem; list-style: none; font: 0.8125rem/1.35 var(--gz-font); color: var(--gz-ink); }
+#application .gz-ct li { margin: 0; }
+#application .gz-ct-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.4rem; padding: 0.2rem 0.3rem; border-radius: var(--gz-radius-sm); color: inherit; text-decoration: none; }
+#application a.gz-ct-row:hover { background: var(--gz-row-hover); }
+#application a.gz-ct-row:hover .gz-ct-t { color: var(--gz-accent); }
+#application .gz-ct-t { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#application .gz-ct-when { font-size: 0.92em; color: var(--gz-ink-muted); }
+#application .gz-ct [data-past] .gz-ct-when { color: var(--gz-err); }
+#application .gz-ct [data-done] :is(.gz-ct-t, .gz-ct-when) { text-decoration: line-through; font-weight: 400; color: var(--gz-ink-muted); }
+#application p.gz-ct { padding-block: 0.5rem; color: var(--gz-ink-muted); }
+#application .gz-ct .gz-todo-chip { font-size: 0.92em; }
 /* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
 #gz-cm .gz-cm-more {
   margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);

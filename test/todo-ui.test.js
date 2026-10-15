@@ -49,6 +49,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
     GZ_TODO: T, GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_CANVAS_DUE_WEEK: () => [],
     GZ_CTX: {
       t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', canvasCourseId: () => '', celebrate() {}, need: async () => {},
+      profile() { return this.capi('/users/self/profile'); },
       canvasCourses: async () => [{ id: '25', name: 'Biology', enrollments: [{ type: 'teacher' }] }],
       capi: async (url) => {
         calls.push(url);
@@ -145,6 +146,23 @@ test("a teacher's missing grading counts don't refetch the planner on every pass
   assert.equal(summaries(f.calls), 2);
   assert.deepEqual({ ...f.p.get().cache.sums['7'] }, { graded: 1, ungraded: 2 });
   assert.equal(f.p.get().cache.partial, false);
+});
+
+test("a teacher's fresh planner answer from the course cards (teach: null) is kept; only the grading is asked for", async () => {
+  const f = feature();
+  const now = Date.now();
+  const cards = { key: 'todo:https://canvas.test/3', at: now, ...T.fetchRange(O, now, 'America/New_York'), teach: null, progress: true, items: [T.slim({ plannable_type: 'assignment', plannable_id: 5, course_id: 25, plannable_date: new Date(now + 36e5).toISOString(), plannable: { title: 'Quiz' } })], grading: [], sums: {} };
+  f.p.seed({ prefs: O, cache: cards });
+  await f.p.refresh();
+  assert.equal(planner(f.calls), 0);
+  assert.ok(f.calls.includes('/users/self/todo?per_page=100'));
+  const c = f.p.get().cache;
+  assert.equal(c.teach, true);
+  assert.equal(c.items[0].title, 'Quiz');
+  assert.equal(c.grading.length, 1);
+  // Asked again on purpose (a refused tick): the planner too.
+  await f.p.refresh(true);
+  assert.equal(planner(f.calls), 1);
 });
 
 const item = () => T.slim({ plannable_type: 'assignment', plannable_id: 3, course_id: 25, plannable_date: new Date(Date.now() + 36e5).toISOString(), plannable: { title: 'Essay' } });
@@ -272,6 +290,19 @@ test("a list mounted again while the old one's planner request is out asks for i
   assert.equal(planner(f.calls), 2, 'the new list asked for itself');
   while (f.held.length) { f.held.shift()(); await settled(); }
   assert.ok(f.p.get().cache, 'and has its answer, not Loading');
+});
+
+test("the list's slow planner answer never replaces a newer one another tab or the cards kept meanwhile", async () => {
+  const f = feature({ holdPlanner: true });
+  f.p.seed({ prefs: O });
+  const p = f.p.refresh();
+  await settled();
+  const newer = { key: 'todo:https://canvas.test/3', at: Date.now() + 1000, ...T.fetchRange(O, Date.now(), 'America/New_York'), teach: true, progress: true, items: [], grading: [], sums: {}, mark: 'newer' };
+  f.store.todoCache = newer;
+  while (f.held.length) { f.held.shift()(); await settled(); }
+  await p;
+  assert.equal(f.store.todoCache.mark, 'newer');
+  assert.equal(f.p.get().cache.mark, 'newer');
 });
 
 test("two tabs adding tasks at once both keep theirs (the worker's one queue)", async () => {

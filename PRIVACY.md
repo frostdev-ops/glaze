@@ -155,6 +155,13 @@ animated backgrounds) are bundled. It makes requests in these cases:
   Other pages keep fetching the due list on their own schedule; the two aren't merged because the due list covers the
   next seven days from Blackboard or Canvas on every page, while To Do's window follows your settings and only runs
   where the list is.
+- **Tasks on course cards** (Canvas, off by default). On the Dashboard's card view, Glaze asks your own Canvas site
+  for your profile (user id and time zone; one request a page, shared with Better To Do) and uses Better To Do's copy
+  of your planner items. Only when that copy is missing or more than two minutes old and the To Do list isn't on the
+  page (or it left without an answer) does it ask for your planner items itself, the same read-only request with the
+  same window, and keeps the answer in that same copy (and the due list above), unless a newer one arrived meanwhile;
+  the list then uses it too (a teacher's list asks only for its grading items). It asks again when you come back to
+  the page after that, or change the To Do settings, and not within a minute of a failed ask. It never writes to Canvas.
 - **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). This is the only change Glaze
   makes to any site. When you tick or untick an item, Glaze writes Canvas's own planner mark for it, as Canvas's List
   View checkbox does: one request to your own Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark

@@ -65,7 +65,7 @@ const GZ_SPEC = {
     urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
-    download: [true, 'bool'], todo: [false, 'bool'],
+    download: [true, 'bool'], todo: [false, 'bool'], cardTasks: [false, 'bool'],
     // place: a course's content reopens where you left it (open folders, scroll).
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
