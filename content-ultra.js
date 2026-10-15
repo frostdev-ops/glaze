@@ -546,6 +546,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const navSelector = 'nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
   let navDirty = false, navQueued = false;
   const syncDashboard = () => {
+    if (!chrome.runtime?.id) return;
     const enabled = I.links.length && I.settings.enabled, on = enabled && I.settings.enhance.dashboard;
     if (navDirty) {
       navDirty = false;
@@ -590,6 +591,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   const queueNav = () => { if (!navQueued) { navQueued = true; queueMicrotask(() => { navQueued = false; syncDashboard(); }); } };
   const navObserver = new MutationObserver((changes) => {
+    if (!chrome.runtime?.id) { navObserver.disconnect(); return; }
     for (const m of changes) {
       const nodes = [...(m.addedNodes || []), ...(m.removedNodes || [])];
       if (nodes.length && nodes.every((n) => n.nodeType === 1 && n.classList?.contains('gz-nav-dashboard-icon'))) continue;

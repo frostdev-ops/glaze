@@ -42,11 +42,11 @@ const dashboardFixture = () => {
   text.parentElement = link;
   const root = { isConnected: true, contains: (n) => n === link || n === root || n?.inRail, querySelectorAll: () => { scans++; return [link]; } };
   const I = { links: [1], settings: { enabled: true, enhance: { dashboard: true } } }, callbacks = [], queued = [];
-  const globals = { I, GZ_NAV: moduleOf('lib/nav.js'), NodeFilter: { SHOW_TEXT: 4 }, t: (s) => s, html: {}, addEventListener() {}, queueMicrotask: (f) => queued.push(f), MutationObserver: class { constructor(cb) { callbacks.push(cb); } observe() {} disconnect() {} }, document: { querySelectorAll: (selector) => { globalScans++; return selector.endsWith(' a[href]') ? [link] : [root]; }, createTreeWalker: (w) => ({ nextNode: () => w.text }), createElementNS: () => ({ namespaceURI: 'svg', isConnected: false, classList: { add() {}, contains: () => true }, setAttribute() {}, append() {}, remove() { this.isConnected = false; } }) } };
+  const globals = { I, chrome: { runtime: { id: 'glaze' } }, GZ_NAV: moduleOf('lib/nav.js'), NodeFilter: { SHOW_TEXT: 4 }, t: (s) => s, html: {}, addEventListener() {}, queueMicrotask: (f) => queued.push(f), MutationObserver: class { constructor(cb) { callbacks.push(cb); } observe() {} disconnect() {} }, document: { querySelectorAll: (selector) => { globalScans++; return selector.endsWith(' a[href]') ? [link] : [root]; }, createTreeWalker: (w) => ({ nextNode: () => w.text }), createElementNS: () => ({ namespaceURI: 'svg', isConnected: false, classList: { add() {}, contains: () => true }, setAttribute() {}, append() {}, remove() { this.isConnected = false; } }) } };
   const c = vm.createContext({ ...globals });
   const api = vm.runInContext(src.slice(a, b) + `\n({syncDashboard, discoverNav: typeof discoverNav === 'undefined' ? null : discoverNav});`, c);
   const flush = () => { let n = 0; while (queued.length && n++ < 10) queued.shift()(); assert.ok(n < 10, 'observer settles without a feedback loop'); };
-  return { ...api, reload: () => vm.runInContext(src.slice(a, b) + '\nsyncDashboard;', vm.createContext({ ...globals })), text, wrapper, link, attrs, classes, I, root, callbacks, queued, flush, counts: () => ({ scans, globalScans }) };
+  return { ...api, chrome: globals.chrome, reload: () => vm.runInContext(src.slice(a, b) + '\nsyncDashboard;', vm.createContext({ ...globals })), text, wrapper, link, attrs, classes, I, root, callbacks, queued, flush, counts: () => ({ scans, globalScans }) };
 };
 
 test('Dashboard first-paint rename preserves its React wrapper, native icon and tooltip when disabled', () => {
@@ -69,6 +69,13 @@ test('thirty unrelated widget text updates cause no navigation scans and own wri
   f.flush(); assert.deepEqual(f.counts(), before);
   f.callbacks[0]([{ type: 'characterData', target: f.text, addedNodes: [], removedNodes: [] }]); f.flush();
   assert.deepEqual(f.counts(), before); assert.equal(f.queued.length, 0);
+});
+
+test('an invalidated native-label observer neither scans nor reclaims a new context name', () => {
+  const f = dashboardFixture(); f.syncDashboard(); f.flush(); const before = f.counts();
+  f.chrome.runtime.id = undefined; f.text.data = 'Institution page';
+  f.callbacks[0]([{ type: 'characterData', target: f.text, addedNodes: [], removedNodes: [] }]); f.flush(); f.syncDashboard();
+  assert.equal(f.text.data, 'Institution page'); assert.deepEqual(f.counts(), before);
 });
 
 test('native text replacement batches before paint while a replacement drawer is discovered', () => {
