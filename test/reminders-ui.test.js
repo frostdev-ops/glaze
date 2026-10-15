@@ -47,7 +47,9 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
   let turn = Promise.resolve();
   w.release = () => { for (const f of w.waiting.splice(0)) f(); };
   const Clock = class extends Date { static now() { return w.now(); } };
-  w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {}, cards = false } = {}) => {
+  // A tab's own hold: its answers wait for its release(). failConfirm: the worker can't keep its acknowledgements.
+  w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {}, cards = false, hold = false } = {}) => {
+    const own = { hold, waiting: [], failConfirm: false };
     const timers = [];
     const docOn = {};
     const body = new E('body');
@@ -77,7 +79,10 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
           sendMessage: (m, cb) => {
             sent.push(m);
             if (m.type !== 'glaze:remind') return cb?.(null);
-            turn = turn.then(() => R.change(m, area, w.now())).then((r) => (w.hold ? new Promise((y) => w.waiting.push(() => y(r))) : r)).then(cb);
+            const run = () => (m.op === 'confirm' && own.failConfirm ? { ok: false, error: 'write' } : R.change(m, area, w.now()));
+            // The worker's queue moves on; only this answer's delivery waits.
+            turn = turn.then(run);
+            turn.then((r) => (w.hold || own.hold ? new Promise((y) => (own.hold ? own.waiting : w.waiting).push(() => y(r))) : r)).then(cb);
           },
         },
         storage: { local: { get: (ks, cb) => area.local.get(ks).then(cb) }, sync: { get: (ks, cb) => cb({}) }, onChanged: { addListener() {} } },
@@ -88,7 +93,8 @@ const world = (dueIn, { cacheAge = 0 } = {}) => {
     const ui = vm.runInContext(read('features/reminders.js'), c);
     const toast = () => body.children[0]?.children[0] || null;
     const ops = (op) => sent.filter((m) => m.op === op);
-    return { ui, timers, sent, ops, fetched, toast, document, location, docOn, live: () => timers.filter((x) => !x.cleared) };
+    own.release = () => { own.hold = false; for (const f of own.waiting.splice(0)) f(); };
+    return { own, ui, timers, sent, ops, fetched, toast, document, location, docOn, live: () => timers.filter((x) => !x.cleared) };
   };
   w.box = box;
   w.area = area;
@@ -269,4 +275,95 @@ test("the Dashboard's planner view: card tasks run and ask, reminders don't: one
   const planner = (l) => l.filter((u) => u.includes('/api/v1/planner/items')).length;
   assert.equal(planner(fetched), 1, 'the card tasks asked');
   assert.equal(planner(r.fetched) + planner(fetched), 1);
+});
+
+test("a claim answered after its lease ended draws nothing: the tab that took it over showed it", async () => {
+  const w = world(2 * 36e5);
+  const a = w.tab({ hold: true });
+  a.ui.sync(true);
+  await settle();
+  assert.equal(a.ops('claim').length, 1);
+  // A's answer is held past its lease; B claims, draws and confirms meanwhile.
+  w.skew = R.LEASE + 1;
+  const b = w.tab();
+  b.ui.sync(true);
+  await settle();
+  assert.match(b.toast()?.text || '', /Lab report/);
+  assert.equal(Object.keys(w.box[KEY].seen).length, 1);
+  a.own.release();
+  await settle();
+  assert.equal(a.toast(), null, 'no second toast');
+  assert.equal(a.ops('confirm').length, 0);
+});
+
+test("an acknowledgement that wasn't kept is sent again, and the toast isn't drawn again", async () => {
+  const w = world(2 * 36e5);
+  const a = w.tab();
+  a.own.failConfirm = true;
+  a.ui.sync(true);
+  await settle();
+  const card = a.toast();
+  assert.match(card?.text || '', /Lab report/);
+  assert.deepEqual([a.ops('claim').length, a.ops('confirm').length], [1, 1]);
+  assert.deepEqual(w.box[KEY].seen, {});
+  // A lease later, the worker keeps it: only the acknowledgement goes again, under the same lease.
+  a.own.failConfirm = false;
+  w.skew = R.LEASE + 1;
+  a.live().at(-1).f();
+  await settle();
+  assert.deepEqual([a.ops('claim').length, a.ops('confirm').length], [1, 2]);
+  assert.equal(a.ops('confirm')[1].lease, a.ops('confirm')[0].lease);
+  assert.equal(a.toast(), card, 'the same toast, not announced again');
+  assert.equal(Object.keys(w.box[KEY].seen).length, 1);
+});
+
+test('an acknowledgement past the lease and its grace is not taken as one, and nothing this page drew is drawn again', async () => {
+  const w = world(2 * 36e5);
+  const a = w.tab();
+  a.own.failConfirm = true;
+  a.ui.sync(true);
+  await settle();
+  const card = a.toast();
+  assert.match(card?.text || '', /Lab report/);
+  // The worker comes back after the lease and its grace have gone: a confirm under the old lease keeps nothing.
+  a.own.failConfirm = false;
+  w.skew = 2 * R.LEASE + 1;
+  a.live().at(-1).f();
+  await settle();
+  assert.equal(a.toast(), card, 'drawn once');
+  assert.equal(Object.keys(w.box[KEY].seen).length, 1, 'acknowledged under a new, quiet lease');
+  // Passes after that draw nothing and claim nothing.
+  const claims = a.ops('claim').length;
+  a.docOn.visibilitychange();
+  await settle();
+  assert.equal(a.toast(), card);
+  assert.equal(a.ops('claim').length, claims);
+});
+
+test('a worker that never keeps the acknowledgement gets five retries, a lease apart, and then none from this page', async () => {
+  const w = world(2 * 36e5);
+  const a = w.tab();
+  a.own.failConfirm = true;
+  a.ui.sync(true);
+  await settle();
+  const card = a.toast();
+  assert.equal(a.ops('confirm').length, 1);
+  for (let i = 1; i <= 5; i++) {
+    const t = a.live().at(-1);
+    assert.ok(t && t.ms >= R.LEASE - 1000, `retry ${i} waits a lease`);
+    w.skew = i * (R.LEASE + 1);
+    t.f();
+    await settle();
+    assert.equal(a.ops('confirm').length, 1 + i);
+  }
+  // Given up: no more confirms, no claim, no second toast, whatever wakes the page however much later.
+  w.skew = 8 * (R.LEASE + 1);
+  a.docOn.visibilitychange();
+  await settle();
+  for (const t of a.live()) t.f();
+  await settle();
+  assert.equal(a.ops('confirm').length, 6);
+  assert.equal(a.ops('claim').length, 1);
+  assert.equal(a.toast(), card);
+  assert.deepEqual(w.box[KEY].seen, {});
 });
