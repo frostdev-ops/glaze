@@ -66,6 +66,8 @@ test('optional switch: list/export/import are offline; permission, key reads and
   d.permission(false);
   await assert.rejects(d.send('create', { kind: 'look', title: 'x' }), /permission/);
   assert.equal(d.local.data.shareOn, undefined);
+  const get = d.local.get; d.local.get = async () => { throw new Error('read failed'); };
+  await assert.rejects(d.send('list'), /read failed/); d.local.get = get;
   d.db.all = async () => { throw new Error('disk failed'); };
   await assert.rejects(d.send('exportKeys'), /disk failed/);
   assert.equal(d.requests.length, 0);
@@ -140,8 +142,19 @@ test('disk relay: encrypted retained-file re-upload publishes a fresh reference,
   await a.send('reupload', { sid });
   const after = (await a.send('read', { sid })).view;
   assert.notEqual(after[fe].file.id, before[fe].file.id);
+  // A newer encrypted reference is still untrusted: never label cached old bytes as the new file.
+  const record = await session(a, sid), c = G.session(record.st);
+  const changed = new TextEncoder().encode('newly shared bytes');
+  const ref = await c.put(changed), v = c.view(); v[fe] = { file: { ...ref, n: 'updated.txt', t: 'application/octet-stream' } };
+  await c.edit(v); await c.sync(); await a.db.put('sessions', sid, record); await sync(a, sid);
+  const cached = await a.db.get('files', `${sid}/${fe}`);
+  assert.equal(new TextDecoder().decode(cached.bytes), 'newly shared bytes');
+  const current = await N.run({ key: NK, op: 'load', id }, { local: a.local }, a.notes);
+  const currentFile = await N.run({ key: NK, op: 'getFile', id: [...N.refs(current.html)][0] }, { local: a.local }, a.notes);
+  assert.equal(new TextDecoder().decode(N.unb64(currentFile.data)), 'newly shared bytes');
   await b.send('join', { link: (await a.send('link', { sid })).link });
   await b.send('attach', { sid, key: NK });
+  assert.equal((await session(b, sid)).bind, null, 'a viewer gets a detached local app copy');
   const copied = clone(b.local.data[NK]);
   await b.send('leave', { sid }); assert.deepEqual(b.local.data[NK], copied);
   assert.deepEqual((await b.send('exportKeys')).keys, []);
