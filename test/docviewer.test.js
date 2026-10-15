@@ -20,8 +20,8 @@ test('canvadocs gets its own small script in every frame, and not the first cont
   assert.deepEqual(m.content_scripts[0].exclude_matches, DOCS);
 });
 
-// A ratchet, as the first script's: lib/ink.js and features/docviewer.js as W9 left them, plus about 2%.
-const DOCVIEWER_BASELINE = 29869;
+// A ratchet, as the first script's: lib/ink.js and features/docviewer.js as W9 left them (with the review's fixes), plus about 2%.
+const DOCVIEWER_BASELINE = 30857;
 test('the DocViewer script stays within its budget', () => {
   const total = entry.js.reduce((n, f) => n + fs.statSync(path.join(root, f)).size, 0);
   assert.ok(total <= Math.round(DOCVIEWER_BASELINE * 1.02), `${total} bytes in ${entry.js.join(', ')}: over ${DOCVIEWER_BASELINE} + 2%`);

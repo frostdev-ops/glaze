@@ -113,8 +113,10 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
 
   let mo = null, queued = 0;
   const schedule = () => { if (key && !queued) queued = requestAnimationFrame(() => { queued = 0; mountAll(); }); };
+  let opened = 0; // each file opened, or annotations turned off: what an import still reading belongs to
   const open = (k) => {
     key = k;
+    opened++;
     pages = {}; done = []; undone = [];
     gen++;
     setTool(null);
@@ -286,9 +288,12 @@ input[type="range"] { width: 72px; accent-color: var(--gz-accent, #2563eb); }
     const f = document.createElement('input');
     f.type = 'file';
     f.accept = '.json,application/json';
+    const was = opened;
     f.addEventListener('change', async () => {
       const file = f.files?.[0];
-      const r = file && file.size < 8e6 && I.importFile(await file.text(), pages);
+      const text = file && file.size < 8e6 ? await file.text().catch(() => '') : '';
+      if (was !== opened) return; // another file, or annotations off and on again, while it was read
+      const r = I.importFile(text, pages);
       if (!r) return say(t("That file isn't Glaze annotations"));
       pages = r.pages;
       done = []; undone = [];
@@ -325,7 +330,17 @@ input[type="range"] { width: 72px; accent-color: var(--gz-accent, #2563eb); }
     try { out.toBlob((b) => b && download(b, `page-${n}-${fileId()}.png`), 'image/png'); } catch { say(t("This page isn't drawn yet")); }
   };
 
+  // A stroke or erasing under way is dropped, its pointer let go: putting the tool down (Esc, a Canvas tool, another file)
+  // never leaves half a gesture holding the pointer.
+  const drop = () => {
+    if (!live) return;
+    try { live.svg.releasePointerCapture?.(live.id); } catch { /* already let go */ }
+    live = null;
+    gen++;
+    mountAll();
+  };
   const setTool = (x) => {
+    if (x !== tool) drop();
     tool = x;
     if (x) html.setAttribute('data-gz-tool', x);
     else html.removeAttribute('data-gz-tool');
@@ -400,8 +415,11 @@ input[type="range"] { width: 72px; accent-color: var(--gz-accent, #2563eb); }
     e.preventDefault();
     e.stopPropagation();
   }, true);
-  // One of Canvas's own tools, or anything else in its toolbar but paging and zoom, puts Glaze's down.
-  addEventListener('pointerdown', (e) => {
-    if (tool && e.target.closest?.('.ViewerControls') && !e.target.closest('.ViewerControls--page-controls, .DocumentControls')) setTool(null);
+  // Any of the viewer's own controls but paging, zoom and rotate (Canvas's annotation tools, wherever they sit), picked
+  // with the pointer or the keyboard (a click either way), puts Glaze's tool down and gives the pages back.
+  const NATIVE = 'button, input, select, [role="button"], [role="radio"], [role="menuitemradio"], [role="option"]';
+  const OURS = '#gz-ink-bar, .gz-ink, .ViewerControls--page-controls, .DocumentControls';
+  for (const type of ['pointerdown', 'click']) addEventListener(type, (e) => {
+    if (tool && e.target.closest?.(NATIVE) && !e.target.closest(OURS)) setTool(null);
   }, true);
 })();
