@@ -537,6 +537,24 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Floating: on Ultra, over every Blackboard page (lay.boards.pages, then on no board); on Canvas, over every page.
   const fl = (id) => (ultra ? !!lay.boards.pages.find((x) => x.id === id)?.on : !!lay.tiles.find((x) => x.id === id)?.float);
   // The tile as this page keeps it: floating on Ultra, the board's, or Canvas's.
+  // Better To Do's tile: as tall as the student drags it (its body's resize handle; kept per board, h), the list
+  // scrolling inside. A drag's height is saved once it settles.
+  const sizeTodo = (x, tile) => {
+    const want = tile.h ? `${tile.h}px` : '';
+    if (x.body.style.height !== want && !x.sizing) x.body.style.height = want;
+    if (x.watch) return;
+    let wait = 0;
+    x.watch = new ResizeObserver(() => {
+      const h = Math.round(parseFloat(x.body.style.height));
+      if (!board || !h || h === cur('todo')?.h) return;
+      x.sizing = true;
+      clearTimeout(wait);
+      wait = setTimeout(() => { x.sizing = false; if (board) change({ ops: [{ s: board, id: 'todo', set: { h: Math.min(3000, Math.max(120, h)) } }] }); }, 400);
+    });
+    x.watch.observe(x.body);
+    const stop = x.stop;
+    x.stop = () => { stop?.(); x.watch.disconnect(); clearTimeout(wait); };
+  };
   const cur = (id) => (ultra && fl(id) ? lay.boards.pages : board ? lay.boards[board] : lay.tiles).find((x) => x.id === id);
   const saveBoard = (id, patch) => change({ ops: [{ s: board, id, set: patch }] });
   // Ultra: a board's tile goes to float over every page, from the room's bottom right corner clear of the others (its
@@ -919,6 +937,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       x.el.draggable = editing && !ultra && !tile.float;
       x.el.toggleAttribute('data-float', !!tile.float);
       x.el.toggleAttribute('data-fold', !!tile.fold);
+      if (tile.id === 'todo' && board) sizeTodo(x, tile);
       toolsFor(x, tile);
       if (board && !tile.float) continue; // laid out below, in reading order
       // In order, moving only what is out of place: a moved element loses focus (a note being typed).
