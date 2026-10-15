@@ -407,6 +407,7 @@
   "On Canvas: how far down Modules you were and the item you opened last; Canvas keeps modules open or closed itself.": "Op Canvas: hoe ver je in Modules naar beneden was en het item dat je het laatst opende; welke modules open of dicht zijn, onthoudt Canvas zelf.",
   "On Canvas: from the course's module completion requirements; a course without any shows no bar.": "Op Canvas: uit de voltooiingsvereisten van de modules; een cursus zonder vereisten toont geen balk.",
   "On Canvas: the count follows Canvas's own unread grades.": "Op Canvas: het aantal volgt de ongelezen cijfers van Canvas zelf.",
+  "On Canvas: new items in Modules and a count on Dashboard cards.": "Op Canvas: nieuwe items in Modules en een aantal op Dashboard-kaarten.",
   "On Canvas: Canvas's own what-if scores, which it keeps for you.": "Op Canvas: de eigen wat-als-scores van Canvas, die het voor je bewaart.",
   "On Canvas: tint and look; the nickname and color are in Canvas's own card menu.": "Op Canvas: tint en uiterlijk; bijnaam en kleur staan in het eigen kaartmenu van Canvas.",
   "On Canvas: each module with files.": "Op Canvas: elke module met bestanden.",

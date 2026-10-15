@@ -329,6 +329,20 @@
   const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', headers: { accept } })
     .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
+  // Progress and new-content badges share this exact capped list; news can refresh after five minutes.
+  const canvasModuleLists = new Map();
+  const canvasModules = (cid) => {
+    let c = canvasModuleLists.get(cid);
+    if (!c || Date.now() - c.at >= 300000) {
+      c = { at: Date.now() };
+      c.p = capi(`/courses/${cid}/modules?include[]=items&per_page=100`).catch((e) => {
+        if (canvasModuleLists.get(cid) === c) canvasModuleLists.delete(cid);
+        throw e;
+      });
+      canvasModuleLists.set(cid, c);
+    }
+    return c.p;
+  };
   // The Canvas course this page is in (/courses/:id/...), or undefined.
   const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1];
   // One /users/me for everything that asks at once; asked again only if it failed.
@@ -668,6 +682,7 @@
     watchDrafts();
     recordCourses();
     syncCourseMenu();
+    if (!ultra) { paintCourses(); renderProgress(); }
   };
   const clearTags = (names) => { for (const a of names) for (const e of document.querySelectorAll(`[${a}]`)) e.removeAttribute(a); };
   const stopSweep = () => {
@@ -1028,12 +1043,12 @@
   const canvasProgress = () => {
     const old = document.getElementById('gz-progress');
     const cid = canvasCourseId();
-    const list = settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
+    const list = observer && settings.enabled && settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
     if (!list) return old?.remove();
     if (reqs?.cid !== cid) {
       const r = (reqs = { cid });
       // shortcut: hide incomplete module lists; follow Link and items_url if large-course progress is needed.
-      capi(`/courses/${cid}/modules?include[]=items&per_page=100`).then((mods) => {
+      canvasModules(cid).then((mods) => {
         r.progress = GZ_PAGE.canvasProgress(mods);
         if (reqs === r) renderProgress();
       }).catch(() => {});
@@ -1221,7 +1236,7 @@
     const key = canvasNewsKey(cid), kept = canvasNews[key]?.[kind], pending = `${key}/${kind}`;
     if (kept && Date.now() - kept.at < 300000 || canvasNewsPending.has(pending) || document.hidden) return kept;
     canvasNewsPending.add(pending);
-    const p = kind === 'items' ? capi(`/courses/${cid}/modules?include[]=items&per_page=100`).then(GZ_GRADES.canvasItems)
+    const p = kind === 'items' ? canvasModules(cid).then(GZ_GRADES.canvasItems)
       : fetch(`${location.origin}/courses/${cid}/grades`, { credentials: 'same-origin', headers: { accept: 'text/html' } })
         .then((r) => r.ok && new URL(r.url).origin === location.origin && new URL(r.url).pathname === `/courses/${cid}/grades` ? r.text() : Promise.reject())
         .then((text) => {
@@ -1229,7 +1244,8 @@
           // Restricted and upgraded React grade pages have no server-rendered table: fail closed.
           return doc.querySelector('#grades_summary') ? doc.querySelectorAll('#grades_summary .unread_dot.grade_dot').length : null;
         });
-    p.then((value) => saveCanvasNews(key, { [kind]: { at: Date.now(), value } }), () => saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } })).finally(() => {
+    const at = kind === 'items' ? canvasModuleLists.get(cid).at : null;
+    p.then((value) => saveCanvasNews(key, { [kind]: { at: at ?? Date.now(), value } }), () => saveCanvasNews(key, { [kind]: { at: Date.now(), value: null } })).finally(() => {
       canvasNewsPending.delete(pending);
       if (observer && settings.enhance[kind === 'items' ? 'newcontent' : 'newgrades']) renderNew();
     });
@@ -1403,7 +1419,7 @@
     setTimeout(canvasBack, 200);
   };
   const canvasPlace = () => {
-    const cid = window.top === window && observer && canvasCourseId();
+    const cid = window.top === window && observer && canvasCourseKey();
     if (!cid) return;
     // An item opened from Modules, or with its Next and Previous buttons, carries its module item id.
     const item = new URLSearchParams(location.search).get('module_item_id');
@@ -2428,6 +2444,7 @@
       // Stopped, as when opening: the search box (focused, now gone) would otherwise answer it with no palette left.
       if (cmd) { e.preventDefault(); e.stopPropagation(); closeCmd(); return; }
       if (typing(e.target)) return;
+      if (!ultra && e.target.closest?.('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       e.preventDefault();
       e.stopPropagation();
       openCmd();
@@ -2584,6 +2601,7 @@
   };
   const paintCourses = () => {
     if (!ultra) {
+      if (!observer || !settings.enabled) return;
       const changed = {};
       // A native color edit repaints the hero before a new API request would see it.
       for (const card of document.querySelectorAll('.ic-DashboardCard')) {
@@ -3254,9 +3272,11 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       });
     }
     applySettings();
-    onBody(() => {
+    onBody(async () => {
       if (!links.length) return;
       if (!(ultra ? isUltra() : isCanvas())) { disable(); notUltra = true; return; }
+      if (!ultra) await ready;
+      if (!settings.enabled || !links.length) return;
       syncFooter();
       startSweep();
       syncScene();
@@ -3302,13 +3322,13 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   if (!ultra) try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
   // Theme on before storage answers: most people leave it on, and this way the first paint is
   // already themed. If it turns out to be off, it comes straight back off.
-  enable();
-  load().then((s) => {
+  const ready = load().then((s) => {
     settings = s;
     tidyDrafts();
     if (!s.enabled) disable();
     else if (links.length) applySettings();
   });
+  enable();
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
   // save landing late can't undo an edit that is further along.
   if (isPreview) {

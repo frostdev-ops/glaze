@@ -407,6 +407,7 @@
   "On Canvas: how far down Modules you were and the item you opened last; Canvas keeps modules open or closed itself.": "Sur Canvas : jusqu'où tu étais descendu dans les Modules et le dernier élément ouvert ; Canvas retient lui-même quels modules sont ouverts ou fermés.",
   "On Canvas: from the course's module completion requirements; a course without any shows no bar.": "Sur Canvas : d'après les conditions d'achèvement des modules ; un cours qui n'en a pas n'affiche pas de barre.",
   "On Canvas: the count follows Canvas's own unread grades.": "Sur Canvas : le nombre suit les notes non lues de Canvas lui-même.",
+  "On Canvas: new items in Modules and a count on Dashboard cards.": "Sur Canvas : les nouveaux éléments dans les Modules et leur nombre sur les cartes du Tableau de bord.",
   "On Canvas: Canvas's own what-if scores, which it keeps for you.": "Sur Canvas : les notes hypothétiques de Canvas, qu'il garde pour toi.",
   "On Canvas: tint and look; the nickname and color are in Canvas's own card menu.": "Sur Canvas : teinte et apparence ; le surnom et la couleur sont dans le menu de carte de Canvas.",
   "On Canvas: each module with files.": "Sur Canvas : chaque module qui contient des fichiers.",
