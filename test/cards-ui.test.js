@@ -61,7 +61,7 @@ const computer = () => {
 };
 
 // One tab on that computer, with the editor loaded.
-const tab = (env) => {
+const tab = (env, site = 'canvas') => {
   const bitmaps = [];
   const chrome = {
     runtime: { lastError: undefined, getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => { env.worker(m).then(cb, () => cb({ ok: false, error: 'write' })); } },
@@ -82,6 +82,7 @@ const tab = (env) => {
     querySelectorAll: () => [], getElementById: () => null, addEventListener() {},
   };
   const context = vm.createContext({
+    location: { origin: 'https://bb.school.edu', pathname: '/ultra/course' },
     chrome, document, window: { top: {} }, setTimeout, clearTimeout, crypto: globalThis.crypto, structuredClone, URL, TextEncoder, Promise,
     MutationObserver: class { observe() {} },
     Option: class extends El { constructor(text, value) { super('option'); Object.assign(this, { text, value }); } },
@@ -89,7 +90,8 @@ const tab = (env) => {
     GZ_I18N: { num: (n) => String(n) },
   });
   context.globalThis = context;
-  context.GZ_CTX = { need: () => Promise.resolve(), t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), capi: () => Promise.resolve({}), locale: () => 'en' };
+  context.GZ_CTX = { site, need: () => Promise.resolve(), t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), capi: () => Promise.resolve({}), locale: () => 'en' };
+  if (site === 'ultra') { context.window = context; context.top = context; }
   for (const f of ['lib/color.js', 'lib/cards.js', 'features/cards.js']) vm.runInContext(read(f), context, { filename: f });
   const ui = vm.runInContext('GZ_CARD_UI', context);
   const dialog = () => body.children.find((e) => e.tagName === 'DIALOG');
@@ -99,7 +101,7 @@ const tab = (env) => {
     input.files = [file];
     return input.fire('change');
   };
-  return { ui, dialog, find, picture, bitmaps };
+  return { ui, dialog, find, picture, bitmaps, document };
 };
 const load = () => { const env = computer(); return { env, store: env.store, ...tab(env) }; };
 
@@ -207,7 +209,8 @@ test('two tabs picking at once can never pass the cap together, and neither lose
 
 test('the background worker takes card writes from this extension only, one at a time', async () => {
   const m = require('../manifest.json');
-  const store = { sync: {}, local: { 'cardImg:cccccccccccc': `data:image/webp;base64,${'C'.repeat(3491977)}` } };
+  // bb.school.edu is a site Glaze has found to be Ultra (content-ultra.js reported it; lib/background.js fromUltra).
+  const store = { sync: {}, local: { 'cardImg:cccccccccccc': `data:image/webp;base64,${'C'.repeat(3491977)}`, ultra: ['https://bb.school.edu'] } };
   store.sync.cards = { [C]: { k: 'image', i: 'cccccccccccc' } };
   const later = (fn) => new Promise((res) => setTimeout(() => res(fn())));
   const area = (s) => ({
@@ -247,6 +250,17 @@ test('the background worker takes card writes from this extension only, one at a
     [{ id: 'glaze', tab: {}, url: 'https://other.instructure.com/' }, "another site's course"],
     [{ id: 'glaze', tab: {}, url: 'https://evil.example/' }, 'a site Glaze does not run on'],
   ]) assert.deepEqual(await send(solid, sender), nope, why);
+  const ultra = { id: 'glaze', tab: {}, frameId: 0, url: 'https://bb.school.edu/ultra/course' };
+  const ultraStyle = { ...solid, key: 'ultra:https://bb.school.edu/_25_1' };
+  assert.deepEqual(await send(ultraStyle, ultra), { ok: true, id: null }, 'Ultra saves only its own origin course key');
+  for (const sender of [{ ...ultra, frameId: 1 }, { ...ultra, url: 'https://bb.other.edu/ultra/course' }, { ...ultra, url: 'https://bb.school.edu/login' }, { ...ultra, id: 'other' }]) assert.deepEqual(await send(ultraStyle, sender), nope);
+  for (const op of [{ ultra: true }, { reset: true }, { set: [] }, { replace: {} }, { nav: { collapsed: true } }]) assert.deepEqual(await send({ ...ultraStyle, ...op }, ultra), nope);
+  assert.deepEqual(await send(solid, ultra), nope, 'Ultra cannot edit Canvas styles');
+  assert.equal(store.sync.ucards[ultraStyle.key].c, '#123456');
+  assert.equal(store.sync.cards[ultraStyle.key], undefined, 'Ultra does not enter the old Canvas sync item');
+  assert.deepEqual(await send({ type: 'glaze:cards', ultra: true, reset: true }, editor), { ok: true }, 'the editor can reset the Ultra namespace');
+  assert.equal(store.sync.ucards, undefined);
+  assert.ok(store.sync.cards[C], 'an Ultra reset preserves Canvas pictures and styles');
   assert.deepEqual(await send({ type: 'glaze:cards', reset: true }), nope, 'a Canvas page cannot reset');
   assert.deepEqual(await send({ type: 'glaze:cards', set: [] }), nope, "or change a theme's set");
   assert.equal(await send({ type: 'glaze:toString', key: A }), 'ignored', 'only the kinds of write it names');
@@ -328,4 +342,29 @@ test('card and nav pictures share one cap and queue, retain each other, and roll
   env.failLocalRemove = false;
   await env.worker({ nav: { k: 'default' } });
   assert.deepEqual(pics(env.store.local), []);
+});
+
+
+test('Ultra paints its isolated styles on new cards and opens the same editor from a raw course id', async () => {
+  const env = computer();
+  const key = 'ultra:https://bb.school.edu/_25_1';
+  env.store.sync.ucards = { [key]: { k: 'gradient', c: '#123456', d: '#654321' } };
+  env.store.sync.card = { width: 262, height: 146, gap: -1 };
+  const { ui, document, dialog, find } = tab(env, 'ultra');
+  let cards = [];
+  document.documentElement.setAttribute('data-gz-motion', 'off');
+  document.querySelectorAll = () => cards;
+  await ui.paint();
+  const card = new El('article'); card.dataset.courseId = '_25_1'; card.className = 'course-element-card course-color-2';
+  const props = new Map(); card._style = { getPropertyValue: (k) => props.get(k) || '', setProperty: (k, v) => props.set(k, v), removeProperty: (k) => props.delete(k) };
+  const title = new El('h4'); title.textContent = 'Synthetic course';
+  card.querySelector = (s) => s === '.course-title' ? title : s === '.course-banner' ? { offsetHeight: 160 } : null;
+  cards = [card]; await ui.paint();
+  assert.equal(card.getAttribute('data-gz-card'), 'gradient');
+  assert.match(props.get('--gz-card-grad'), /#123456/);
+  for (const k of ['width', 'gap', 'height']) assert.equal(document.documentElement.hasAttribute('data-gz-card-' + k), false, 'untouched geometry is native');
+  await ui.open('_25_1'); assert.ok(dialog().open);
+  assert.equal(find((e) => e.type === 'radio' && e.value === 'gradient').checked, true);
+  document.documentElement.removeAttribute('data-gz-motion'); await ui.paint();
+  assert.equal(card.hasAttribute('data-gz-card'), false);
 });

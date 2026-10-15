@@ -395,7 +395,11 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const old = document.getElementById('gz-gpa');
     const shown = (id) => { const el = document.getElementById(id); return el && !/none/.test(el.style.display) ? el : null; };
     const anchor = live() && e.gpa && location.pathname === '/' && (shown('DashboardCard_Container') || shown('dashboard-planner') || shown('dashboard-activity'));
-    if (!anchor) return old?.remove();
+    if (!anchor) {
+      // The panel going (Glaze or the GPA turned off, another page): a transcript still being read in it stops now.
+      if (old) globalThis.GZ_GPA_TERMS?.stop();
+      return old?.remove();
+    }
     if (D.status === 'start' || (D.status === 'failed' && again(D))) gpaBegin();
     if (location.hash === '#gz-gpa' && !D.hashed) D.hist = D.hashed = D.scroll = true;
     if (D.status !== 'ready') return;

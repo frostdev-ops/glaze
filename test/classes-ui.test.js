@@ -53,12 +53,14 @@ const page = () => {
   document.body = new E('body');
   const box = {};
   const area = { local: { get: async (ks) => Object.fromEntries(ks.filter((k) => k in box).map((k) => [k, structuredClone(box[k])])), set: async (p) => { Object.assign(box, structuredClone(p)); return true; } } };
-  const sent = [], held = [], replies = [];
+  const sent = [], held = [], replies = [], imports = [];
   let hold = false, holdReplies = false;
   const c = {
     console, URL, Intl, AbortController, document, location: { origin: ORIGIN, host: 'canvas.test' },
     fetch: async (u) => { if (hold) await new Promise((res) => held.push(res)); return { ok: String(u).startsWith(ORIGIN), text: async () => ICS }; },
     GZ_I18N: { locale: () => 'en' }, GZ_TODO: T, GZ_CLASSES: C, GZ_ICS: I,
+    // features/import.js, held: a read is recorded and never answers.
+    GZ_IMPORT: { read: (file, opts) => { imports.push({ file, opts }); return new Promise(() => {}); }, note: () => '', doubt: () => false },
     GZ_CTX: {
       t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', need: async () => {},
       profile: async () => ({ id: 3, time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '25', name: 'Biology', course_code: 'BIO 1100' }],
@@ -74,7 +76,7 @@ const page = () => {
   const ui = vm.runInContext(read('features/classes.js'), c);
   const dialog = () => document.body.children.find((x) => x.tagName === 'DIALOG' && x.open) || null;
   const find = (text, tag = 'BUTTON') => dialog()?.all.find((n) => n.tagName === tag && n.textContent === text);
-  return { ui, box, sent, document, dialog, find, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); },
+  return { ui, box, sent, imports, document, dialog, find, hold: () => { hold = true; }, release: () => { hold = false; held.splice(0).forEach((r) => r()); },
     holdReplies: () => { holdReplies = true; }, stopHolding: () => { holdReplies = false; }, releaseReplies: () => { holdReplies = false; replies.splice(0).forEach((r) => r()); } };
 };
 
@@ -222,4 +224,17 @@ test('adding a day off with no date (or half a date) adds nothing and says so', 
   more.value = '2026-11-26';
   p.find('Add').fire('click');
   assert.equal(p.dialog().querySelectorAll('.gz-cl-chips li').length, 1);
+});
+
+test('a file in the import step is read only on the student\'s own click of Read schedule, never a script\'s', async () => {
+  const p = page();
+  await p.ui.open();
+  p.find('Import a schedule').fire('click');
+  p.dialog().querySelector('input').files = [{ name: 'made-by-the-page.pdf', type: 'application/pdf', size: 9 }];
+  p.find('Read schedule').fire('click', false);
+  await settle();
+  assert.equal(p.imports.length, 0, 'a script\'s click reads nothing');
+  p.find('Read schedule').fire('click');
+  await settle();
+  assert.equal(p.imports.length, 1, 'the student\'s click reads it');
 });

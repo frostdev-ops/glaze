@@ -589,7 +589,6 @@
   // Course cards (W4).
   "Cards": "Karten",
   "Course cards": "Kurskarten",
-  "Canvas's Dashboard cards. Give a card its own color, gradient or picture, and bookmarks, from its course menu on the Dashboard.": "Die Karten im Canvas-Dashboard. Eigene Farbe, Verlauf oder Bild und Lesezeichen gibst du einer Karte über ihr Kursmenü im Dashboard.",
   "Card width": "Kartenbreite",
   "Space between cards": "Abstand zwischen Karten",
   "Card corners": "Kartenecken",
@@ -696,8 +695,6 @@
   "Tasks for {course}": "Aufgaben für {course}",
   "Tasks on course cards: each Canvas course card lists what's due next, if you turn it on.": "Aufgaben auf Kurskarten: Jede Canvas-Kurskarte zeigt, was als Nächstes fällig ist, wenn du es einschaltest.",
   "Not cleared. Try again in a moment.": "Nicht geleert. Versuch es gleich noch einmal.",
-  "Canvas sidebar": "Canvas-Seitenleiste",
-  "Style Canvas's own global navigation. Links and the site's navigation still work as usual.": "Gestalte die globale Navigation von Canvas. Links und die Navigation der Website funktionieren wie gewohnt.",
   "Sidebar background": "Hintergrund der Seitenleiste",
   "Palette default": "Palettenstandard",
   "First color": "Erste Farbe",
@@ -1423,6 +1420,15 @@
   "Couldn't read that from Blackboard.": "Das konnte nicht aus Blackboard gelesen werden.",
   "Your notes and widgets. Edit widgets adds, orders and sizes them; any of them can float over every Blackboard page.": "Deine Notizen und Widgets. Mit „Widgets bearbeiten“ fügst du sie hinzu, ordnest sie und änderst ihre Größe; jedes kann über jeder Blackboard-Seite schweben.",
   "Press Ctrl+K (⌘K on a Mac) anywhere in Blackboard to jump to a course, a page or a Glaze setting.": "Drück überall in Blackboard Strg+K (⌘K auf dem Mac), um zu einem Kurs, einer Seite oder einer Glaze-Einstellung zu springen.",
+  // Blackboard appearance (B6).
+  "Use an https:// address or a path on this Blackboard site. Bookmark icons are drawn by Glaze.": "Verwende eine https://-Adresse oder einen Pfad auf dieser Blackboard-Seite. Lesezeichensymbole werden von Glaze gezeichnet.",
+  "Canvas and Blackboard navigation": "Navigation für Canvas und Blackboard",
+  "Style the global navigation on Canvas and Blackboard Ultra. Links and the site's navigation still work as usual.": "Gestalte die globale Navigation in Canvas und Blackboard Ultra. Links und die Navigation der Website funktionieren wie gewohnt.",
+  "Style Canvas Dashboard cards and Blackboard Ultra course cards from their course menu. Ultra list rows keep their layout; banner styles and roundness still apply.": "Gestalte Canvas-Dashboardkarten und Blackboard-Ultra-Kurskarten über ihr Kursmenü. Ultra-Listenzeilen behalten ihr Layout; Bannerstile und Rundungen gelten weiterhin.",
+
+  "Use course color for overlay": "Kursfarbe für die Überlagerung verwenden",
+  "Back to the course color": "Zurück zur Kursfarbe",
+
   "Stop reading": "Lesen abbrechen",
   "Stopped.": "Abgebrochen.",
   "A file: .ics calendar, PDF, picture or screenshot, saved web page (.html), Word (.docx) or text": "Eine Datei: .ics-Kalender, PDF, Bild oder Bildschirmfoto, gespeicherte Webseite (.html), Word (.docx) oder Text",
@@ -1504,4 +1510,5 @@
   "Reminders show only on Blackboard pages while one is open. They stay on this device and change nothing in Blackboard.": "Erinnerungen erscheinen nur auf Blackboard-Seiten, solange eine geöffnet ist. Sie bleiben auf diesem Gerät und ändern nichts in Blackboard.",
   "Couldn't refresh your To Do from Blackboard.": "Deine To-do-Liste konnte nicht aus Blackboard aktualisiert werden.",
   "Test": "Prüfung",
+  "Some of this course's content couldn't be listed.": "Ein Teil der Inhalte dieses Kurses konnte nicht aufgelistet werden.",
 };
