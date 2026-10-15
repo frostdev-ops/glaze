@@ -17,8 +17,8 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const OLD = 6e5;
   const H = 36e5;
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
-  const CATS = [['remind', 'Due-date reminders'], ['remindExam', 'Exam reminders'], ['remindPlan', 'Plan reminders'], ['streak', 'Streak']];
-  const KIND = { due: 'Due date', exam: 'Exam', day: 'Planned day', session: 'Focus session' };
+  const CATS = [['remind', 'Due-date reminders'], ['remindExam', 'Exam reminders'], ['remindPlan', 'Plan reminders'], ['remindClass', 'Class reminders'], ['streak', 'Streak']];
+  const KIND = { due: 'Due date', exam: 'Exam', day: 'Planned day', session: 'Focus session', class: 'Class' };
   let T = null, R = null, who = null, todoKey = '', key = '';
   let todoO = null, o = null, data = { tasks: [], items: {} }, cache = null, st = null, cids = null;
   let on = false, starting = null, asking = null, failed = 0, timer = 0, writing = false, sig = '';
@@ -29,6 +29,13 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   let live = null, hub = null, opener = null, run = null; // run: the streak as reckoned last
   let gs = null; // Gradescope's items for this site (lib/todo.js gradescope)
   const sources = new Map(); // reminders other packages add (class start W14, study W18): name -> () => events
+  // Class start (enhance.remindClass): the class schedule kept on this device (lib/classes.js, storage.local classes:<site>/<user>).
+  let classes = null, ckey = '';
+  sources.set('class', () => {
+    if (!en().remindClass || !classes) return [];
+    if (!globalThis.GZ_CLASSES) { ctx.need('lib/classes.js', () => globalThis.GZ_CLASSES).then(() => { if (on) arm(); }, () => {}); return []; }
+    return GZ_CLASSES.events(classes, { now: Date.now(), tz: who.tz, lead: +o.cls });
+  });
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
   const button = (text, act, label) => { const b = make('button', { type: 'button', textContent: text }); b.dataset.act = act; if (label) b.setAttribute('aria-label', label); return b; };
@@ -38,7 +45,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:remind', key, ...m }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const lang = () => GZ_I18N.locale(ctx.locale());
   const en = () => ctx.settings().enhance;
-  const reminding = () => en().remind || en().remindExam || en().remindPlan;
+  const reminding = () => en().remind || en().remindExam || en().remindPlan || en().remindClass;
   // A person did this (a trusted click or key), not a script on the page.
   const human = (e) => e.isTrusted && (navigator.userActivation?.isActive ?? true);
   const ns = 'http://www.w3.org/2000/svg';
@@ -190,6 +197,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     if (e.cat === 'exam') return t('Exam {when}', { when: rel });
     if (e.cat === 'day') return t('Planned for today');
     if (e.cat === 'session') return t('Focus session {when}', { when: rel });
+    if (e.cat === 'class') return t('Class {when}', { when: rel });
     return e.text || '';
   };
   // The region is on the page, empty, before anything is said in it, so a screen reader announces what comes.
@@ -328,6 +336,9 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
       e.remindExam && pick(t('Before an exam'), 'remind.exam', o.exam, [['1d', t('1 day')], ['2d', t('2 days')], ['3d', t('3 days')], ['1w', t('1 week')]]),
       check(t('Plan reminders'), 'enhance.remindPlan', e.remindPlan, t('Your "do on" days and focus sessions from Better To Do.')),
       e.remindPlan && pick(t('Before a focus session'), 'remind.plan', o.plan, [['0', t('At the start')], ['5', t('5 minutes')], ['15', t('15 minutes')], ['30', t('30 minutes')], ['60', t('1 hour')]]),
+      check(t('Class reminders'), 'enhance.remindClass', e.remindClass, t('Before each class in your class schedule.')),
+      e.remindClass && pick(t('Before a class'), 'remind.cls', o.cls, [['5', t('5 minutes')], ['10', t('10 minutes')], ['15', t('15 minutes')], ['30', t('30 minutes')]]),
+      e.remindClass && button(t('Class schedule'), 'classes'),
       check(t('Streak'), 'enhance.streak', e.streak),
       button(t('All Glaze settings'), 'options'));
     for (const el of set.querySelectorAll('[data-key]')) el.dataset.focus = el.dataset.key;
@@ -356,6 +367,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     if (!el) return;
     if (e.type === 'click' && el.dataset.act === 'close') return hub.close();
     if (e.type === 'click' && el.dataset.act === 'options') { try { Promise.resolve(chrome.runtime.sendMessage('options')).catch(() => {}); } catch { /* reloaded */ } return; }
+    if (e.type === 'click' && el.dataset.act === 'classes') { hub.close(); ctx.need('features/classes.js', () => globalThis.GZ_CLASSES_UI).then(() => GZ_CLASSES_UI.open()).catch(() => {}); return; }
     if (!human(e)) { if (e.type === 'change') drawHub(); return; }
     const done = (r) => { if (r?.data) st = R.clean(r.data); arm(); };
     if (e.type === 'click' && el.dataset.act === 'mute') send({ op: 'mute', item: el.dataset.item }).then(done);
@@ -378,7 +390,8 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     if (c?.key === todoKey && !(cache?.key === todoKey && cache.at > c.at)) cache = c;
     if (ch[todoKey]) data = T.clean(ch[todoKey].newValue);
     if (ch[key]) st = R.clean(ch[key].newValue);
-    if (ch[CACHE] || ch[todoKey] || ch[key]) arm();
+    if (ch[ckey]) classes = ch[ckey].newValue?.courses?.length ? ch[ckey].newValue : null;
+    if (ch[CACHE] || ch[todoKey] || ch[key] || ch[ckey]) arm();
   };
   const onShow = () => { if (on && st && document.visibilityState === 'visible') { refresh(); arm(); } };
   const start = async () => {
@@ -395,7 +408,9 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     cids = live.length ? new Set(live.map((c) => String(c.id))) : null;
     todoKey = T.storeKey(location.origin, who.uid);
     key = R.storeKey(location.origin, who.uid);
-    const r = await get([todoKey, key, CACHE]);
+    ckey = `classes:${location.origin}/${who.uid}`;
+    const r = await get([todoKey, key, CACHE, ckey]);
+    classes = r[ckey]?.courses?.length ? r[ckey] : null;
     data = T.clean(r[todoKey]);
     st = R.clean(r[key]);
     cache = r[CACHE]?.key === todoKey ? r[CACHE] : null;

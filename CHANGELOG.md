@@ -8,6 +8,21 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Class schedule (Canvas):** Ctrl+K, Class schedule (or the agenda widget's button) imports your timetable, read on
+  your device and never uploaded.
+  - From an `.ics` file or a calendar link on your own Canvas site (weekly rules, cancelled and moved meetings become
+    days off; one-off events such as exams are left out), a registrar's page saved as HTML, a Word file (.docx), or
+    pasted text: Banner, PeopleSoft and Workday copies, plain lists ("BIO 110 TR 1:30-2:45pm Life Sciences 120"),
+    24-hour times, "14h30", "Uhr", and day names and abbreviations in English, German, Spanish, French, Dutch and
+    Portuguese. Term dates and holidays ("Thanksgiving break: Nov 25–27") are picked up; office hours aren't classes.
+  - A review screen before anything is kept: each class matched to your Canvas course by code or name (labelled with
+    the site and code), or kept as not a Canvas course; days, times, place, first and last day and days off all
+    editable; what Glaze guessed is marked "Check this". Nothing is saved until you choose Save.
+  - View, edit and delete each course, add a class by hand, or delete all. Kept on this device per Canvas site and account.
+  - The agenda widget shows the day's classes with your work. Class reminders (off by default; Reminders hub or the
+    editor) remind 5, 10, 15 or 30 minutes before each class, inside Canvas like the others.
+  - Photos and PDFs aren't read yet.
+
 - **Canvas sidebar:** style Canvas's native global navigation with a solid color, two-color gradient or picture
   (an https link or local file), filters and an overlay. Choose text and icon colors, normal/small/icon-only labels,
   three sizes, logo visibility and a collapsed rail. Native links keep their labels and keyboard access. The

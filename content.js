@@ -365,7 +365,7 @@
   const widgetsHere = () => !ultra && !moodle && links.length && window.top === window && (settings.enhance.widgets || (settings.enhance.notes && location.pathname === '/'));
   const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
-  const remindHere = () => !ultra && !moodle && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'streak'].some((k) => settings.enhance[k]);
+  const remindHere = () => !ultra && !moodle && links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in

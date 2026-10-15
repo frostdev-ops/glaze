@@ -335,6 +335,22 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Strokes in the page's own unrotated frame (1000 units wide), drawn through an SVG matrix for the view's rotation; the pointer read back through `getScreenCTM()` | Pixel canvases per zoom | Zoom and re-render cost nothing (a viewBox), CSS transforms are handled by the browser, and export is plain numbers. Rotation is counted from the viewer's rotate button; a viewer that turns pages with CSS turns the layer with them. |
 | Stroke eraser (a touched stroke goes) and undoable Clear page, no confirm | Pixel eraser; a confirm dialog | Simple and exact; undo makes the dialog unnecessary. |
 
+## Class schedule import (W14, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Read on the device: `.ics` through `lib/ics.js`, HTML and Word through `lib/doctext.js`, then one text reader (`lib/classes.js`) | Sending the file and course list to a server (another extension) | Owner rule: everything local. The file never leaves the device; only what the student saves is kept. |
+| A calendar link only on the Canvas site the page is on; anything else is refused before a request | Fetching any `.ics` URL | No new destinations. Canvas's own feed is the common case; any other calendar can be downloaded and chosen as a file. |
+| `.ics`: occurrences expanded and read in the student's Canvas time zone, grouped by title into courses and by start, end and place into weekly periods; missing weeks become days off; a title that occurs once is left out | Reading RRULEs alone | One rule covers rules with EXDATEs, exports of separate events (Outlook, Canvas's feed) and moved meetings. ponytail: an every-other-week class shows as weekly with every second week off. |
+| Text: dates out first, then time ranges (meridiem from whichever side says it; a bare hour only beside one that does) paired with the day groups nearest them; a table's header row names its columns | A per-registrar parser; a language model | One reader for Banner, PeopleSoft, Workday, plain lists and European timetables. Days come in each of Glaze's six languages; the text's language is detected from day names, then the page's. A lone "M" or "Mo" counts only beside a time or as its own cell. |
+| Every guess is marked on the review screen ("Check this": a room read from position, a 6–7 o'clock without am/pm, a missing end time given 50 or 75 minutes), and nothing is kept without Save | Saving what was found | The heuristics can't be right on every school's page; the student sees each field before it reaches the agenda or reminders. |
+| Matched to a Canvas course by code, then by name, only when one course is clearly closest; else "Not a Canvas course" | Always picking the best score | A wrong course is worse than none; the select is one click. Labels are name · code · site, as Gradescope's mapping. |
+| Kept per Canvas site and account (`classes:<site>/<user>`) through the worker's queue ('glaze:classes'): add joins periods (the same one once), put replaces an edited course, drop and clear delete | Direct storage writes | Two tabs can't overwrite each other's saves; a page may only write its own site's records. |
+| Periods stored as wall-clock minutes with weekdays, first and last day and days off | Stored instances | Classes stay at 9:00 across daylight-saving changes; the agenda, reminders and the export work them out per day. `icsEvents()` gives W13's export one floating-time event per meeting. |
+| Class reminders are a new switch (`enhance.remindClass`, off) through W11's reminders, lead 5/10/15/30 minutes | A separate reminder system | Same toast, hub, mute and one-timer rules as the other reminders. |
+| Photos and PDFs left out, not shown as "coming" | A disabled option | Owner decisions #10 and #11 are pending; a greyed-out option would nag. |
+| `meetings(line)` is exported on its own | Private to the importer | W15's syllabus import reads meeting times with it. |
+
 ## Canvas global navigation (W8)
 
 | Choice | Alternative | Why |

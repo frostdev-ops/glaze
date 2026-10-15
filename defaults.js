@@ -83,7 +83,7 @@ const GZ_SPEC = {
     // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
     gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'],
     // Reminders and the streak, each opt-in (lib/remind.js has the rest).
-    remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], streak: [false, 'bool'],
+    remind: [false, 'bool'], remindExam: [false, 'bool'], remindPlan: [false, 'bool'], remindClass: [false, 'bool'], streak: [false, 'bool'],
   },
   // features/lookx.js. cursor 'own': a picture kept on this device.
   extras: { cursor: ['off', ['off', 'aqua', 'lilac', 'pearl', 'own']], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
