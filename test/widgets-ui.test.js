@@ -185,3 +185,40 @@ test('a save confirmed after a newer edit confirms only itself, and the newer ed
   await settle();
   assert.equal(p.sent.length, 2, 'nothing left to save, and A is never sent again');
 });
+
+test('a newer note from another tab, stored while a save is on its way, is not undone by that save\'s answer', async () => {
+  const clock = { t: 100 };
+  const p = page({ clock, hold: true });
+  const body = new E();
+  p.ui.probe.WIDGETS.notes(body);
+  p.answer();
+  await settle();
+  const text = find(body, (e) => e.tagName === 'TEXTAREA');
+  const view = find(body, (e) => e.className === 'gz-w-note-view');
+  view.fire('click');
+  text.value = 'A';
+  text.fire('input');
+  text.fire('blur');
+  assert.deepEqual(p.sent.map((m) => [m.text, m.at]), [['A', 100]]);
+  // Another tab's C@300 lands in storage before A's answer comes back.
+  const key = 'notes:https://canvas.test/3';
+  for (const f of [...p.listeners]) f({ [key]: { oldValue: { text: 'A', at: 100 }, newValue: { text: 'C', at: 300 } } }, 'local');
+  p.held.shift()();
+  await settle();
+  view.fire('click');
+  assert.equal(text.value, 'C', 'the newest stored note, not the older one just confirmed');
+  text.fire('blur');
+  await settle();
+  assert.equal(p.sent.length, 1, 'and nothing is sent over it');
+  // A local draft newer than C still wins over it.
+  clock.t = 400;
+  view.fire('click');
+  text.value = 'D';
+  text.fire('input');
+  text.fire('blur');
+  for (const f of [...p.listeners]) f({ [key]: { oldValue: null, newValue: { text: 'C', at: 300 } } }, 'local');
+  p.held.shift()();
+  await settle();
+  view.fire('click');
+  assert.equal(text.value, 'D');
+});

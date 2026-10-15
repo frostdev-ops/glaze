@@ -89,6 +89,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       text.setAttribute('aria-label', t('Notes'));
       const status = make('p', { className: 'gz-w-status', role: 'status' });
       const shown = () => (draft || note).text;
+      // The note only ever moves forward: whatever comes in (storage, another tab, a save's answer) replaces it only if newer.
+      const newer = (x) => { if (x && x.at > note.at) note = x; };
       const render = () => {
         view.replaceChildren(...(shown() ? W.links(shown()).map((p) => (p.href ? make('a', { href: p.href, textContent: p.text, target: '_blank', rel: 'noopener noreferrer' }) : p.text))
           : [make('span', { className: 'gz-w-faint', textContent: t('Notes for yourself. Links work.') })]));
@@ -109,9 +111,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           busy = false;
           if (!r?.ok) return fail();
           status.textContent = '';
-          note = r.kept ? sent : r.note || note;
-          // Done when this was the newest draft, or another tab's note is newer than it; else the newer draft goes now.
-          if (draft === sent || (!r.kept && note.at >= draft.at)) { draft = null; tries = 0; } else { tries = 0; save(); }
+          newer(r.kept ? sent : r.note);
+          // Done when this was the newest draft, or a stored note (another tab's) is as new; else the newer draft goes now.
+          tries = 0;
+          if (draft === sent || draft.at <= note.at) draft = null; else save();
           if (text.hidden) render();
         });
       };
@@ -121,10 +124,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       text.addEventListener('blur', () => { save(); render(); text.hidden = true; view.hidden = false; });
       const leave = () => save();
       addEventListener('pagehide', leave);
-      const onStore = (ch, a) => { if (a === 'local' && key && ch[key] && text.hidden && !draft) { note = W.cleanNote(ch[key].newValue); render(); } };
+      const onStore = (ch, a) => { if (a === 'local' && key && ch[key]) { newer(W.cleanNote(ch[key].newValue)); if (text.hidden && !draft) render(); } };
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       const load = () => who().then(() => { key = W.notesKey(location.origin, me.uid); return get('local', key); })
-        .then((r) => { if (text.hidden && !draft) { note = W.cleanNote(r[key]); render(); } }, () => {});
+        .then((r) => { newer(W.cleanNote(r[key])); if (text.hidden && !draft) render(); }, () => {});
       load();
       render();
       body.append(view, text, status);
