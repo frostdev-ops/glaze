@@ -5,7 +5,6 @@
 var GZ_KEYS = globalThis.GZ_KEYS || (() => {
   const ctx = globalThis.GZ_CTX;
   const ultra = ctx.site === 'ultra';
-  const moodle = ctx.site === 'moodle';
   const { t, typing } = ctx;
   const GO = ultra ? { c: ['/ultra/course', 'Courses'], a: ['/ultra/calendar', 'Calendar'], g: ['/ultra/grades', 'Grades'], m: ['/ultra/messages', 'Messages'], s: ['/ultra/stream', 'Activity stream'] } : { d: ['/', 'Dashboard'], c: ['/courses', 'Courses'], a: ['/calendar', 'Calendar'], g: ['/grades', 'Grades'], m: ['/conversations', 'Inbox'] };
   let gAt = 0;
@@ -59,20 +58,21 @@ var GZ_KEYS = globalThis.GZ_KEYS || (() => {
   const key = (e) => {
     if (!ultra && e.key === 'Escape' && keysBox && !typing(e.target)) { e.preventDefault(); closeKeys(); return; }
     if (!ultra && e.key === 'Shift') return; // g then Shift+? must keep its prefix.
-    if (!ctx.settings().enhance.keys || !ctx.on() || e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || (!ultra && (moodle || e.defaultPrevented || e.repeat || !GZ_PAGE.canvasKeys(location.pathname) || e.target.closest?.('[role="dialog"]:not(#gz-keys), [role="menu"], [role="listbox"], [role="grid"]')))) { gAt = 0; return; }
+    if (!ctx.keyOn(e)) { gAt = 0; return; }
+    const now = e.at || Date.now(); // a key pressed while this file loaded keeps its time
     if (e.key === 'Escape' && keysBox) { closeKeys(); return; }
-    if (!ultra && Date.now() - gAt < 1200 && e.key === '?') {
+    if (!ultra && now - gAt < 1200 && e.key === '?') {
       e.preventDefault(); e.stopImmediatePropagation(); gAt = 0;
       if (keysBox) closeKeys(); else openKeys();
       return;
     }
-    if (Date.now() - gAt < 1200 && GO[e.key]) {
+    if (now - gAt < 1200 && GO[e.key]) {
       e.preventDefault();
       gAt = 0;
       location.assign(location.origin + GO[e.key][0]);
       return;
     }
-    gAt = e.key === 'g' ? Date.now() : 0;
+    gAt = e.key === 'g' ? now : 0;
     if (!ultra) return; // Canvas owns both / and its global ? help dialog.
     if (e.key === '/') {
       // By Ultra's ids (courses-overview-filter-search, search-button…), which no language changes.

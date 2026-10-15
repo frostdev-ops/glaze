@@ -28,3 +28,16 @@ test('every manifest content script and stylesheet is in the package', () => {
   const roots = packaged();
   for (const cs of m.content_scripts) for (const f of [...(cs.js || []), ...(cs.css || [])]) assert.ok(inPackage(f, roots), `${f} is left out`);
 });
+
+test('every web-accessible resource is in the package, and only the stickers the extension uses', () => {
+  const m = JSON.parse(read('manifest.json'));
+  const roots = packaged();
+  for (const r of m.web_accessible_resources.flatMap((w) => w.resources)) {
+    // A pattern is covered by a packaged folder its fixed part is in.
+    assert.ok(inPackage(r.split('*')[0].replace(/\/$/, ''), roots) || inPackage(r, roots), `${r} is web-accessible but package.sh leaves it out`);
+    if (!r.includes('*')) assert.ok(fs.existsSync(path.join(root, r)), `${r} doesn't exist`);
+  }
+  // The study buddy's three pictures, not the whole sticker folder.
+  assert.deepEqual(roots.filter((p) => p.startsWith('assets/art/stickers')).sort(),
+    ['', '-happy', '-sleepy'].map((s) => `assets/art/stickers/critters/study-buddy${s}.webp`).sort());
+});

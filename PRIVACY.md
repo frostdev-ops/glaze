@@ -71,6 +71,12 @@ _Last updated: 2026-10-15_
   you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
+- **Dashboard notes and widgets** (Canvas, off by default), in `chrome.storage.local`, on this device only: your notes
+  (at most 20,000 characters) per Canvas site and signed-in user id, with when you last typed them, so a note typed later
+  in another tab wins; an emptied note keeps only the time it was emptied, so an older copy can't bring it back. The widgets' layout (which are on, their order and size, where a
+  floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
+  it ends, so it keeps running from page to page. The widgets' settings (timer
+  lengths, chime, quote choices, breathing lengths) are in `chrome.storage.sync` with your other settings (`widgets`).
 - **Reminders and streak** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site
   and signed-in user id: which reminders have been shown (so another tab doesn't show them again; while one tab is
   showing one, a random id for that tab holds it for 30 seconds), the ones you
@@ -85,10 +91,14 @@ _Last updated: 2026-10-15_
 - **Canvas course cards**, in `chrome.storage.sync` like your settings: your card settings (`card`), each course's
   card style (`cards`: colors, a gradient, a picture's `https://` link and how it is shown) and its bookmarks
   (`links`: their names, addresses and icons), by your Canvas site's address and course number.
-- **Pictures you choose for course cards from your computer**, in `chrome.storage.local`, on this device only:
+- **Canvas sidebar settings**, in `chrome.storage.sync`: background colors, an optional `https://` picture link
+  or a local picture identifier, filter/overlay, text color, logo visibility, labels, size and collapsed state.
+- **Pictures you choose for course cards or the Canvas sidebar from your computer**, in `chrome.storage.local`, on this device only:
   scaled down to at most 960 pixels and kept as WebP (JPEG in Safari), at most about 400 KB each and 4 MB in all.
-  They are never synced, exported or put in a theme code. Choosing another picture, or removing the card's style,
-  deletes the old one; Reset everything deletes them all.
+  They are never synced, exported or put in a theme code. Choosing another picture, removing the card's style,
+  or switching the sidebar away from its local picture deletes the old one; Reset everything deletes them all.
+  Sidebar pictures use a temporary blob URL while shown, rather than embedding their bytes in the page's
+  inline styles or sessionStorage. Canvas page code can still read a picture displayed on its page.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
@@ -210,6 +220,19 @@ animated backgrounds) are bundled. It makes requests in these cases:
   that already exists) with the item's type and id, your user id and done or not done, and the page's own CSRF token.
   Nothing is written at any other time, and nothing else is written. If Canvas refuses, the tick goes back and the
   list says so. Off, ticks stay on this device.
+- **Dashboard notes and widgets** (Canvas, off by default). They ask your own Canvas site for your profile (user id
+  and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
+  items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
+  day's planner items, a read-only GET, at most every two minutes per day you look at. Nothing is written to Canvas.
+- **Music widget** (Canvas, off by default). Glaze contacts no music service until you press **Load player**, on each
+  page. Then your browser loads that service's player inside the widget, from **Spotify** (`open.spotify.com`),
+  **YouTube** or **YouTube Music** (both from `www.youtube-nocookie.com`, YouTube's privacy-enhanced mode) or **Apple
+  Music** (`embed.music.apple.com`), and that service works as it does on any site that embeds its player: it sees
+  what you play, your IP address and its own cookies, under its own privacy policy. Spotify and Apple Music get no
+  referrer; YouTube's player won't play without one, so it gets your Canvas site's origin (`https://` and the host
+  name, no page path). The player's address is built by Glaze from the parts of your link it checked (a track,
+  album, playlist or video id); your link is not sent anywhere else. Glaze has no analytics, so nobody else learns
+  what you listen to.
 - **On Moodle.** At most every ten minutes, Glaze asks your own Moodle site for the activities due in the
   next seven days, with the same request Moodle's own Timeline block makes (`core_calendar_get_action_events_by_timesort`
   through Moodle's `/lib/ajax/service.php`, with your existing session and the page's own session key), and keeps
@@ -236,6 +259,9 @@ animated backgrounds) are bundled. It makes requests in these cases:
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
+- **Sidebar pictures.** A sidebar picture linked by `https://` is loaded by your browser from that host when
+  shown. The editor also reads it for its contrast warning when the host permits that; the preview of a theme
+  code names its sidebar image host before you apply it. Files selected from your device cause no upload.
 - **Course card pictures and bookmarks.** A card picture you give as an `https://` link is loaded by your browser
   like the background image. With condensed cards, the card editor reads that picture once more to measure how
   well text reads on it; a site that doesn't allow that gets an ordinary request and is just not measured. A
@@ -249,8 +275,12 @@ animated backgrounds) are bundled. It makes requests in these cases:
   connection information such as your IP address. The Mac App Store and iPhone/iPad apps include no
   Sparkle updater; their updates come through the App Store.
 
-The extension has two links, and you click each yourself: the footer link to the project's GitHub page, and "Open the
-gallery" in the editor (see below).
+The extension's own links are opened only when you click them: the footer link to the project's GitHub page, "Open the
+gallery" in the editor (see below), and **Report a problem** (the editor, and What Glaze can do on Canvas), which opens a
+new issue on `github.com/frostdev-ops/glaze` with your Glaze version, browser, system and language filled in, and nothing
+about your school. That text is part of the link, so GitHub receives it when the page opens, with ordinary connection
+information; nothing is posted until you submit the issue yourself, and you can change or delete any of it first. Web addresses in
+your Dashboard notes are links too, opened in a new tab without telling the site where you came from.
 
 ## The Looks gallery
 
@@ -270,7 +300,7 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 ## Permissions
 
 - `storage` — to save the settings, GPA choices, course names, places, what-if scores, due list, Better To Do's tasks and plans, reminder and streak state,
-  typed-text backups, Looks history and favorites, and Safari update-check timestamp described above.
+  typed-text backups, Looks history and favorites, Dashboard notes and widgets, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.
 - Host access to `https://*/ultra/*` — to apply the theme on Blackboard Ultra pages. Blackboard Ultra is

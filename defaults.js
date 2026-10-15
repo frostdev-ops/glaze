@@ -54,6 +54,11 @@ const GZ_SPEC = {
     style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
     scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins']], intensity: [50, [0, 100]],
   },
+  nav: {
+    k: ['default', ['default', 'solid', 'gradient', 'image']], c: ['#243447', 'hex'], d: ['#57748c', 'hex'], a: [135, [0, 360]],
+    u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', ['none', 'vivid', 'mono', 'noir', 'warm', 'cool', 'faded', 'dreamy']], ink: ['#ffffff', 'hex'],
+    logo: [true, 'bool'], labels: ['normal', ['normal', 'small', 'icons']], size: ['medium', ['small', 'medium', 'large']], collapsed: [false, 'bool'],
+  },
   motion: {
     level: ['subtle', ['off', 'subtle', 'expressive']],
     followSystem: [true, 'bool'],
@@ -66,6 +71,7 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [false, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
+    notes: [false, 'bool'], widgets: [false, 'bool'], // and lib/widgets.js
     // place: a course's content reopens where you left it (open folders, scroll).
     place: [true, 'bool'],
     // coursemenu: the button on each course card that opens a popover for its color, tint and look.
@@ -209,6 +215,8 @@ const cleanNicks = (raw, room) => {
 
 const cleanValue = (v, d, rule) => {
   if (rule === 'bool') return typeof v === 'boolean' ? v : d;
+  if (rule === 'hex') return typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : d;
+  if (rule === 'picture') return typeof v === 'string' && /^[a-z0-9]{12}$/.test(v) ? v : d;
   if (rule === 'time') return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : d;
   if (rule === 'name') return cleanName(v) || d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];

@@ -123,3 +123,10 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 .gs-map { list-style: none; margin: 0.25rem 0 0.75rem; padding: 0; display: grid; gap: 0.4rem; }
 .gs-map li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; }
 .gs-map li > span:first-child { min-width: 10em; font-weight: 600; }
+#nav-contrast.err { color: var(--gz-warn); }
+#nav-preview { isolation: isolate; position: relative; display: grid; width: 100px; min-height: 156px; margin-block: 12px; padding: 8px; box-sizing: border-box; background: var(--gz-nav-c); color: var(--gz-nav-ink); border-radius: 8px; overflow: hidden; }
+#nav-preview span { padding: 8px 2px; text-align: center; font-size: 11px; }
+#nav-preview[data-kind="gradient"] { background: var(--gz-nav-grad); }
+#nav-preview[data-kind="image"]::before, #nav-preview[data-kind="image"]::after { content: ""; position: absolute; inset: 0; z-index: -1; }
+#nav-preview[data-kind="image"]::before { background: var(--gz-nav-img) center/cover; filter: var(--gz-nav-filter); }
+#nav-preview[data-kind="image"]::after { background: var(--gz-nav-ov); opacity: var(--gz-nav-ov-a); }
