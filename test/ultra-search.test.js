@@ -278,3 +278,39 @@ test('review P3: warm queries fold only the query and never re-fold cached docum
   assert.ok(inputs.length > 0);
   assert.ok(inputs.every((value) => value === 'resume'), 'document titles and text are folded once while indexing');
 });
+
+// Opus B3 fix verification: NEW-1 (courses with no term), NEW-2 (an empty course list), NEW-3 (caches outlive "off").
+const lists = (p) => p.requests.filter((r) => /\/courses\/_\d+_\d+\//.test(new URL(r.url).pathname)).length;
+test('an open course with no term is searched from anywhere, as Canvas counts it this term', async () => {
+  const members = [101, 103].map((n, i) => ({ courseId: `_${n}_1`, courseCardColorIndex: i, course: { name: `Course ${n}`, displayId: `C${n}` } }));
+  const p = ui({ members });
+  await p.attach();
+  await p.type('lab');
+  assert.ok(lists(p) > 0, 'its lists are asked for');
+});
+
+test('an empty course list (a failed lookup) is not kept: the next search asks again', async () => {
+  const members = [];
+  const p = ui({ members });
+  await p.attach();
+  await p.type('lab');
+  assert.equal(lists(p), 0);
+  members.push({ courseId: '_101_1', courseCardColorIndex: 0, course: { name: 'Course 1', displayId: 'C1', term: { id: '_1_1', name: 'Current' } } });
+  await p.type('labs');
+  assert.ok(lists(p) > 0, 'the courses are looked up again');
+});
+
+test('switching search off with the palette closed drops what was cached', async () => {
+  const p = ui();
+  await p.attach();
+  await p.type('lab');
+  const before = lists(p);
+  assert.ok(before > 0);
+  p.cmd.box.isConnected = false;
+  p.change({ enhance: { newValue: { search: false } } });
+  p.change({ enhance: { newValue: { search: true } } });
+  Object.assign(p.cmd, { box: { isConnected: true }, stop: undefined, found: null }); // the palette opens anew
+  await p.attach();
+  await p.type('lab');
+  assert.ok(lists(p) > before, 'asked again after search was switched off');
+});

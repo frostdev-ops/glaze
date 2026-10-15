@@ -54,10 +54,10 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
     let wait = 0, ctl = null, last = '';
     cmd.stop = () => { clearTimeout(wait); ctl?.abort(); };
     quit = () => {
+      kept = sources = null; // switched off with the palette closed too: nothing cached outlives "off"
+      retry.clear();
       if (!cmd.box.isConnected) return;
       last = '';
-      kept = sources = null;
-      retry.clear();
       cmd.stop();
       cmd.found = null;
       cmd.seeking = false;
@@ -82,11 +82,11 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
             if (c.signal.aborted) return;
             courses = Object.entries(U.courses(mem, { terms })).filter(([, x]) => !x.org)
               .map(([id, x]) => ({ id, name: x.name, course_code: x.code, term: x.term, closed: x.closed }));
-            sources.set('courses', courses);
+            if (courses.length) sources.set('courses', courses); // a failed lookup answers [] (content-ultra.js myCourses): ask again
           }
           // shortcut: first 100 open current-term courses, so all three source lists fit the 301-entry cache.
           const now = Date.now(), here = ctx.courseId();
-          courses = S.order(courses.filter((x) => !x.closed && (x.id === here || x.term && S.current(x, now))), here, now, (id) => /^_\d+_\d+$/.test(id)).slice(0, 100);
+          courses = S.order(courses.filter((x) => !x.closed && (x.id === here || !x.term || S.current(x, now))), here, now, (id) => /^_\d+_\d+$/.test(id)).slice(0, 100);
           adapter = { kinds: U.SEARCH_KINDS, conc: 3, load: async (course, k) => {
             const key = `${course.id}|${k.kind}`;
             let rows = sources.get(key);
