@@ -113,7 +113,9 @@ const STYLE_READS = [
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.
   ['content.js', "querySelectorAll('*')", 2],
   ['content.js', 'getComputedStyle(e)', 2],
-  ['content.js', 'getComputedStyle(p)', 4], // a highlight's fill above an element; a scroller above one element (2); a course slot's probe
+  ['content.js', 'getComputedStyle(p)', 2], // a highlight's fill above an element; a course slot's probe
+  ['features/docs.js', 'getComputedStyle(p)', 1], // the scroller above the document in focus mode
+  ['features/place.js', 'getComputedStyle(p)', 1], // the scroller above a course's outline or Modules list
   ['content.js', 'getComputedStyle(document.documentElement)', 1], // the palette's ink, once per highlighted element
   // One element, on its first hover or focus; one element under the pointer, to see if its text is cut short.
   ['content.js', 'getComputedStyle(el)', 2],

@@ -102,9 +102,11 @@ test('success means the file ran to its end: an injection that fails, throws or 
 // What a feature file reads from content.js when it loads (features/*.js).
 const CTX = { t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}), site: 'canvas', wordsIn: new Set() };
 // What a feature file touches as it loads: the listeners it adds (features/keys.js, coursemenu.js, previews.js).
-const page = () => ({ document: { addEventListener() {} }, addEventListener() {}, GZ_COLOR: {} });
+const page = () => ({ document: { addEventListener() {}, documentElement: {} }, addEventListener() {}, GZ_COLOR: {}, IntersectionObserver: class {} });
 // Moved out of the first content script in W0c: the palette, the keys, the course menu, the previews and Download all.
-const W0C = [['features/palette.js', 'GZ_CMD'], ['features/keys.js', 'GZ_KEYS'], ['features/coursemenu.js', 'GZ_COURSE_MENU'], ['features/previews.js', 'GZ_PEEK'], ['features/download.js', 'GZ_DOWNLOAD']];
+// W0d: the draft backup, Ultra's what-if calculator, the document buttons and your place in a course.
+const W0C = [['features/palette.js', 'GZ_CMD'], ['features/keys.js', 'GZ_KEYS'], ['features/coursemenu.js', 'GZ_COURSE_MENU'], ['features/previews.js', 'GZ_PEEK'], ['features/download.js', 'GZ_DOWNLOAD'],
+  ['features/drafts.js', 'GZ_DRAFT_UI'], ['features/whatif.js', 'GZ_WHATIF'], ['features/docs.js', 'GZ_DOCS'], ['features/place.js', 'GZ_PLACE']];
 test('every loadable file ends on a value, which is how the worker knows it ran', () => {
   for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'i18n/de.js', 'lib/cards.js', 'lib/seek.js', 'features/search.js', 'lib/widgets.js', 'features/widgets.js', ...W0C.map(([f]) => f)]) {
     const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX, GZ_SPEC: {}, ...page() });

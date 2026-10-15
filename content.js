@@ -1372,177 +1372,26 @@
   };
 
   // ---- your place in a course (Extras) --------------------------------------------------------
-  // Ultra keeps a course's open folders and last-clicked item in memory only: gone with a reload, a
-  // new visit or another course's content. Glaze keeps them per course on this device (storage.local
-  // coursePlace, lib/page.js): a folder once it unfolds, forgotten once you fold it yourself (Ultra
-  // folds some itself), and how far down you were. Each time the outline comes back, folders still
-  // closed are unfolded as the jump above does, each once, then it scrolls back if nothing has moved
-  // it. Anything you do first (wheel, touch, a key, a click) ends that; given up after ten seconds.
-  const OUTLINE = /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/;
+  // Ultra: a course outline's open folders and how far down it you were; Canvas: how far down a course's Modules list,
+  // and the item opened last. Put back when you return: features/place.js, loaded where there is a place to keep or put
+  // back. Anything you do first (wheel, touch, a key, a click) ends putting it back, so that is watched from the start.
   const ROWS = '.content-list-item[data-content-id]';
-  let place = null; // { cid, open (folder ids), top, seen (id → open), away, loaded, back: { at, opened, clicked, quiet, scrolled, steady } | null }
   let tapped = null; // { id, at }: the row of your last click
-  const scrollerOf = (el) => {
-    for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) if (/auto|scroll|overlay/.test(getComputedStyle(p).overflowY)) return p;
-    return document.scrollingElement;
-  };
-  const outlineRows = (cid) => (OUTLINE.test(location.pathname) && courseId() === cid ? document.querySelectorAll(ROWS) : []);
-  // Also kept in this tab's sessionStorage, so a reload finds it even when storage.local can't be
-  // reached: an extension updated or reloaded under the tab leaves the tab's old script without it.
-  const tabPlace = (cid) => `gz-place:${cid}`;
-  const savePlace = () => {
-    const p = place;
-    if (!p?.loaded) return;
-    const v = { open: [...(p.open || [])], top: p.top };
-    const now = Date.now();
-    try { sessionStorage.setItem(tabPlace(p.cid), JSON.stringify(GZ_PAGE.place(null, p.cid, v, now)[p.cid])); } catch { /* blocked or full */ }
-    local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, { ...v, item: r?.coursePlace?.[p.cid]?.item }, now) })));
-  };
-  // Canvas keeps which modules you collapsed itself (per student, on its server), so here it's how far down
-  // the Modules list you were, measured from the list's top so a course home showing it agrees with the
-  // Modules page, and the item you opened last, marked when you come back. Every page change is a full
-  // load on Canvas; Back may bring a page back as it was (bfcache), and that is left alone.
-  const MODULES = 'context_modules_sortable_container';
-  const listTop = (list, sc) => list.getBoundingClientRect().top + sc.scrollTop - (sc === document.scrollingElement ? 0 : sc.getBoundingClientRect().top);
-  let noted = false; // this page's module item recorded
   let acted = false; // anything done on this page yet (Canvas: before the list is even there, it ends the restore too)
-  // Put back until it holds there a second running (a module Canvas collapses once the student's progress
-  // arrives moves the list), with the same rules as above: anything you do first ends it; ten seconds at most.
-  const canvasBack = () => {
-    const p = place;
-    const list = p?.back && p.top && document.getElementById(MODULES);
-    if (!list) { if (p) p.back = null; return; }
-    const sc = scrollerOf(list);
-    const want = listTop(list, sc) + p.top;
-    const there = Math.abs(sc.scrollTop - want) < 2;
-    p.back.steady = there ? (p.back.steady || 0) + 1 : 0;
-    if (p.back.steady >= 5 || Date.now() - p.back.at > 10000) { p.back = null; return; }
-    if (!there) sc.scrollTop = want;
-    setTimeout(canvasBack, 200);
-  };
-  const canvasPlace = () => {
-    const cid = window.top === window && observer && canvasCourseKey();
-    if (!cid) return;
-    // An item opened from Modules, or with its Next and Previous buttons, carries its module item id.
-    const item = new URLSearchParams(location.search).get('module_item_id');
-    if (item && !noted) {
-      noted = true;
-      local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, cid, { open: [], top: r?.coursePlace?.[cid]?.top, item }, Date.now()) })));
-    }
-    if (place || !/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) || !document.getElementById(MODULES)) return;
-    const p = (place = { cid, top: 0, back: !acted && { at: Date.now() } });
-    local((s) => s.get('coursePlace', (r) => {
-      const was = r?.coursePlace?.[cid];
-      p.top = +was?.top || 0;
-      p.loaded = true;
-      if (was?.item) document.getElementById(`context_module_item_${was.item}`)?.setAttribute('data-gz-last', '');
-      canvasBack();
-    }));
-  };
-  const backTo = () => {
-    const p = place;
-    const b = p?.back;
-    if (!b) return;
-    const rows = outlineRows(p.cid);
-    if (!rows.length) { p.back = null; return; }
-    if (b.ready && !held.size) {
-      let busy = false;
-      for (const row of rows) {
-        const id = row.dataset.contentId;
-        const tg = p.open.has(id) && toggleOf(row);
-        if (!tg || tg.getAttribute('aria-expanded') !== 'false') continue;
-        if (!b.opened.has(id)) { b.opened.add(id); b.clicked = Date.now(); tg.click(); }
-        // A folder that never opens (restricted, say) is waited for two seconds.
-        busy ||= Date.now() - b.clicked < 2000;
-      }
-      b.quiet = busy ? 0 : b.quiet + 1;
-      if (b.quiet >= 2 || Date.now() - b.at > 10000) {
-        const sc = scrollerOf(rows[0]);
-        // Anything you do ends this above, so what moved the outline meanwhile is Ultra (it scrolls a
-        // module it unfolds into view): the place kept wins.
-        if (!p.top) { p.back = null; return; }
-        // An unfolded module's contents slide open over ~0.4 s and rows can still arrive, so the outline
-        // grows under the scroll (clamping it, then anchoring shifts it): set again until it holds there
-        // twice running, for three seconds at most. Nothing is saved meanwhile.
-        b.scrolled ||= Date.now();
-        const there = Math.abs(sc.scrollTop - p.top) < 2;
-        b.steady = there ? (b.steady || 0) + 1 : 0;
-        if (b.steady >= 2 || Date.now() - b.scrolled > 3000) { p.back = null; return; }
-        if (!there) sc.scrollTop = p.top;
-      }
-    }
-    setTimeout(backTo, 200);
-  };
   const keepPlace = () => {
-    if (!settings.enhance.place) { place = null; return; }
-    if (!ultra) return canvasPlace();
-    const cid = window.top === window && observer && courseId();
-    const rows = cid ? outlineRows(cid) : [];
-    if (!rows.length) { if (place) place.away = true; return; }
-    if (!place || place.away || place.cid !== cid) {
-      const p = { cid, open: new Set(), top: 0, seen: new Map(), back: { at: Date.now(), opened: new Set(), clicked: 0, quiet: 0 } };
-      place = p;
-      // The newer of what this device and this tab kept.
-      let tab = null;
-      try { tab = JSON.parse(sessionStorage.getItem(tabPlace(cid))); } catch { /* none */ }
-      const got = (kept) => {
-        const was = tab?.at > (kept?.at || 0) ? tab : kept;
-        p.open = new Set([...(Array.isArray(was?.open) ? was.open : []), ...p.open]);
-        if (was?.top > 0) p.top = +was.top;
-        p.loaded = true;
-        if (p.back) { p.back.ready = true; backTo(); }
-      };
-      try { chrome.storage.local.get('coursePlace', (r) => got(r?.coursePlace?.[cid])); } catch { got(null); }
+    if (globalThis.GZ_PLACE) return GZ_PLACE.sync();
+    if (!settings.enhance.place || window.top !== window || !observer) return;
+    if (ultra ? courseId() && /^\/ultra\/courses\/_\d+_\d+\/outline\/?$/.test(location.pathname) && document.querySelector(ROWS)
+      : canvasCourseKey() && (new URLSearchParams(location.search).get('module_item_id') || (/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container')))) {
+      need('features/place.js', () => globalThis.GZ_PLACE).then(() => GZ_PLACE.sync(), () => {});
     }
-    let changed = false;
-    for (const row of rows) {
-      const tg = toggleOf(row);
-      if (!tg) continue;
-      const id = row.dataset.contentId;
-      const open = tg.getAttribute('aria-expanded') === 'true';
-      const was = place.seen.get(id);
-      place.seen.set(id, open);
-      if (was === open) continue;
-      if (open) place.open.add(id);
-      else if (was && tapped?.id === id && Date.now() - tapped.at < 3000) place.open.delete(id);
-      else continue;
-      changed = true;
-    }
-    if (changed) savePlace();
   };
   document.addEventListener('click', (e) => { if (e.isTrusted && e.target instanceof Element) tapped = { id: e.target.closest(ROWS)?.dataset.contentId, at: Date.now() }; }, true);
-  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (!e.isTrusted) return; acted = true; if (place) place.back = null; }, { capture: true, passive: true });
-  // How far down, read at most every half second while scrolling; not while being put back, or once the
-  // outline is gone (a page shrinking under it scrolls it too).
-  let placeTimer = 0;
-  document.addEventListener('scroll', () => {
-    if (!place || place.back || placeTimer) return;
-    placeTimer = setTimeout(() => {
-      placeTimer = 0;
-      if (!ultra) {
-        const list = place?.loaded && !place.back && document.getElementById(MODULES);
-        const sc = list && scrollerOf(list);
-        const top = list && Math.max(0, Math.round(sc.scrollTop - listTop(list, sc)));
-        if (list && top !== place.top) { place.top = top; savePlace(); }
-        return;
-      }
-      const rows = place && !place.back && !place.away ? outlineRows(place.cid) : [];
-      const top = rows.length && scrollerOf(rows[0]).scrollTop;
-      if (rows.length && top !== place.top) { place.top = top; savePlace(); }
-    }, 500);
-  }, { capture: true, passive: true });
+  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (!e.isTrusted) return; acted = true; globalThis.GZ_PLACE?.stop(); }, { capture: true, passive: true });
 
   // ---- what-if calculator (Extras) -----------------------------------------------------------
-  // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make,
-  // and a target gives the even share of the remaining points it needs. The recipe is the course's own
-  // overall grade (lib/gradecalc.js, on demand), and it must reproduce Blackboard's figure first; otherwise it says so.
-  // The scores are kept on this device (storage.local, whatIf) until cleared, or the item is graded or gone.
-  const whatIf = new Map(); // cid → { overrides: Map columnId → score, target }, or null while loading
-  const keepCalc = (cid, overrides) => {
-    try { chrome.storage.local.get('whatIf', (r) => chrome.storage.local.set({ whatIf: GZ_GRADECALC.storeScores(r?.whatIf, cid, overrides) })); } catch { /* extension reloaded under the tab */ }
-  };
-  // Cut, not rounded, to two places: how Ultra writes its own overall grade (82.456 is 82.45%).
-  const asPct = (p) => (p == null ? '–' : GZ_I18N.pct(Math.floor(p * 100 + 1e-9) / 100, locale()));
+  // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make, and a target what
+  // it takes. Ultra's is features/whatif.js (with lib/gradecalc.js), loaded on a course's Grades once its grades are in.
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   // Canvas: the what-if calculator (a course's Grades) and the GPA (Dashboard) are features/grades.js, asked for where on.
   const canvasGrades = () => {
@@ -1553,334 +1402,38 @@
   };
   const renderCalc = () => {
     if (!ultra) return moodle || canvasGrades();
-    const old = document.getElementById('gz-calc');
+    if (globalThis.GZ_WHATIF) return GZ_WHATIF.render();
     const cid = courseId();
-    const host = settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview');
-    if (!host) return old?.remove();
-    const b = bookFor(cid);
-    if (!b.results) return;
-    // Its arithmetic is in lib/gradecalc.js, on demand; this runs again once it is in.
-    if (!globalThis.GZ_GRADECALC) return void need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(renderCalc, () => {});
-    const key = `${cid} ${b.key} ${locale()}`;
-    if (old?.dataset.key === key && old.previousElementSibling === host) return;
-    if (!whatIf.has(cid)) {
-      whatIf.set(cid, null);
-      const got = (r) => whatIf.set(cid, { overrides: new Map(Object.entries(r?.whatIf?.[cid] || {})), target: '' });
-      try { chrome.storage.local.get('whatIf', (r) => { got(r); renderCalc(); }); } catch { got(); }
+    if (settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview') && bookFor(cid).results) {
+      need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(() => need('features/whatif.js', () => globalThis.GZ_WHATIF)).then(() => GZ_WHATIF.render(), () => {});
     }
-    const st = whatIf.get(cid);
-    if (!st) return;
-    const m = GZ_GRADECALC.model(b.results);
-    // Graded, exempted or gone since: its score goes.
-    const kept = GZ_GRADECALC.keptScores(st.overrides, m.items);
-    if (kept.size !== st.overrides.size) { st.overrides = kept; keepCalc(cid, kept); }
-    const now = make('b', { textContent: m.kind === 'unsupported' ? '' : asPct(m.percent()) });
-    const box = make('details', { id: 'gz-calc', open: !!old?.open },
-      make('summary', {}, make('span', { textContent: t('What-if calculator') }), now));
-    box.dataset.key = key;
-    box.setAttribute('aria-label', t('What-if grade calculator'));
-    if (m.note) box.append(make('p', { className: 'gz-calc-note', textContent: m.why ? t("Glaze can't work out this course's overall grade: {why}.", { why: t(m.why) }) : t(m.note) }));
-    if (m.kind !== 'unsupported') {
-      const left = m.items.filter((i) => i.score == null && i.possible > 0);
-      const out = make('p', { className: 'gz-calc-out' });
-      out.setAttribute('aria-live', 'polite');
-      const need = make('p', { className: 'gz-calc-out' });
-      need.setAttribute('aria-live', 'polite');
-      const target = make('input', { type: 'number', min: 0, max: 100, step: 'any', value: st.target, placeholder: '90' });
-      target.setAttribute('aria-label', t('Target overall grade, in percent'));
-      const clear = make('button', { type: 'button', className: 'gz-calc-clear', textContent: t('Clear scores') });
-      const update = () => {
-        clear.hidden = !st.overrides.size;
-        const p = m.percent(st.overrides);
-        out.textContent = st.overrides.size ? t('With those scores: {pct} overall.', { n: st.overrides.size, pct: asPct(p) }) : t(left.length ? 'Type a score to see where it would leave you.' : 'Everything here is graded.');
-        const goal = parseFloat(st.target);
-        if (!Number.isFinite(goal)) { need.textContent = ''; return; }
-        const r = m.need(goal, st.overrides);
-        need.textContent = !r.left ? t('Nothing left to change: {pct}.', { pct: asPct(p) })
-          : r.reachable === false ? t('Out of reach: full marks on the {n} items left would make {pct}.', { n: r.left, pct: asPct(r.best) })
-            : r.share === 0 ? t("You'd stay at {pct} or above even with zeros on what's left.", { pct: asPct(goal) })
-              : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: asPct(Math.ceil(r.share * 1000) / 10) });
-      };
-      const rows = left.map((i) => {
-        const input = make('input', { type: 'number', min: 0, step: 'any', value: st.overrides.get(i.id) ?? '', placeholder: '–' });
-        input.setAttribute('aria-label', t('Score for {name}, out of {n}', { name: i.name, n: i.possible }));
-        input.addEventListener('input', () => {
-          const v = parseFloat(input.value);
-          if (Number.isFinite(v) && v >= 0) st.overrides.set(i.id, v); else st.overrides.delete(i.id);
-          keepCalc(cid, st.overrides);
-          update();
-        });
-        return make('li', {}, make('span', { className: 'gz-calc-name', textContent: i.name }), make('span', { className: 'gz-calc-score' }, input, ` / ${GZ_I18N.num(i.possible, locale())}`));
-      });
-      target.addEventListener('input', () => { st.target = target.value; update(); });
-      clear.addEventListener('click', () => {
-        st.overrides.clear();
-        keepCalc(cid, st.overrides);
-        for (const r of rows) r.querySelector('input').value = '';
-        update();
-        rows[0].querySelector('input').focus(); // the button hides, so focus can't stay on it
-      });
-      if (rows.length) box.append(make('h3', { textContent: t('Not graded yet') }), make('ul', {}, ...rows));
-      // The box sits where {target} is in the sentence.
-      const [before, after] = t('Aim for {target}% overall').split('{target}');
-      box.append(out, clear, make('label', { className: 'gz-calc-target' }, before, target, after), need);
-      update();
-    }
-    if (old) old.replaceWith(box); else host.after(box);
   };
 
   // ---- draft backup (Extras) ------------------------------------------------------------------
-  // What you write in Ultra's editors (Quill) is copied to storage.local a second after you stop, keyed
-  // by the page and the editor. The copy goes once what you wrote shows on the page outside an editor
-  // (the post went through), when you clear the editor, or after 14 days. When that editor turns up
-  // empty again (a reload, a crash, a timed-out session) a bar above it offers the copy back. Restoring
-  // types it in through the browser's own editing, so Quill and Ultra take it as your edit.
-  const EDITOR = '.ql-editor[contenteditable="true"]';
-  const BBID = /_\d+_\d+/;
-  // shortcut: new messages to individual users in uniquely named courses; add stable thread/group ids before expanding.
-  const CANVAS_DRAFT = '#compose-message-modal textarea[data-testid="message-body"]';
-  let inboxAccount = null;
-  let inboxLoading = false;
-  let inboxRetry = 0;
-  let inboxWrites = new WeakMap();
-  const inboxPending = new Map();
-  const inboxSending = new Set();
-  const barKeys = new WeakMap();
-  const draftText = (ed) => ultra ? ed.textContent : ed.value;
-  const inboxIdentity = (ed) => {
-    const modal = ed.closest('#compose-message-modal');
-    const subject = modal?.querySelector('input[data-testid="subject-input"]')?.value;
-    const name = modal?.querySelector('input[data-testid="course-select-modal"]')?.value;
-    const courses = inboxAccount?.courses.filter((c) => c.name === name) || [];
-    const tags = [...(modal?.querySelectorAll('[data-testid="address-book-tag"]') || [])];
-    const to = tags.map((tag) => GZ_DRAFTS.canvasRecipient(tag.id));
-    if (courses.length !== 1 || !tags.length || to.some((id) => !id)) return null;
-    const m = { origin: location.origin, user: inboxAccount.user, course: String(courses[0].id), to, subject };
-    return GZ_DRAFTS.canvasKey(m) ? m : null;
-  };
-  // The nearest Blackboard id above the editor (a reply's post, say), and the editor's own id.
-  const draftKey = (ed) => {
-    if (!ultra) return GZ_DRAFTS.canvasKey(inboxIdentity(ed));
-    let near = '';
-    for (let p = ed.parentElement, i = 0; p && !near && i < 15; p = p.parentElement, i++) {
-      for (const a of p.attributes) if ((a.name === 'id' || a.name.startsWith('data-')) && BBID.test(a.value)) { near = a.value.match(BBID)[0]; break; }
-    }
-    return `draft:${location.pathname}#${near}/${ed.id}`;
-  };
+  // What you write in Ultra's editors, or in Canvas's Inbox compose, is kept on this device until it posts, and offered
+  // back when that editor turns up empty again: features/drafts.js (with lib/drafts.js), loaded once such an editor is on
+  // the page or written in. An editor written in before it arrives (one paste can be all there is) is taken up when it
+  // does, as if just written in; from then on it gets every keydown, input and paste, and the passes (watchDrafts).
+  const DRAFT_ED = ultra ? '.ql-editor[contenteditable="true"]' : '#compose-message-modal textarea[data-testid="message-body"]';
   const local = (fn) => { try { fn(chrome.storage.local); } catch { /* extension reloaded under the tab */ } };
-  const typed = new Map(); // key -> { ed, text, gone }: written here, watched until it posts
-  const saveTimers = new Map(); // editor -> timer
-  const offered = new WeakSet();
-  const bars = new Map(); // bar -> editor
-  // The modal can unmount before the debounce runs; retain the input's validated destination and body.
-  const captureInboxDraft = (ed) => {
-    const canvas = inboxIdentity(ed);
-    const key = GZ_DRAFTS.canvasKey(canvas);
-    if (!key) { inboxPending.delete(ed); return; }
-    const d = { html: ed.value, text: ed.value, at: Date.now(), canvas };
-    inboxPending.set(ed, { key, d });
-  };
-  const saveDraft = (ed) => {
-    if (!ultra) {
-      clearTimeout(saveTimers.get(ed));
-      saveTimers.delete(ed);
-      const pending = inboxPending.get(ed);
-      inboxPending.delete(ed);
-      if (!pending || !settings.enhance.drafts || !observer) return;
-      const { key, d } = pending;
-      if (ed.isConnected && draftKey(ed) !== key) return;
-      if (typed.get(key)?.at > d.at) return;
-      // Issue the storage request now: an async read's callback can disappear during navigation.
-      if (!GZ_DRAFTS.worth(d.text)) { typed.delete(key); local((s) => s.remove(key)); }
-      else { typed.set(key, { ed, ...d, gone: 0 }); local((s) => s.set({ [key]: d })); }
-      return;
-    }
-    saveTimers.delete(ed);
-    if (!ed.isConnected || !settings.enhance.drafts || (!ultra && !observer)) return;
-    const key = ultra ? draftKey(ed) : inboxWrites.get(ed);
-    if (!key || key !== draftKey(ed)) return;
-    const text = draftText(ed);
-    // Too short, or cleared: drop the copy, but only one written here. A copy still on offer stays
-    // until something worth keeping replaces it.
-    if (!GZ_DRAFTS.worth(text)) { if (typed.delete(key) || !ultra) local((s) => s.remove(key)); return; }
-    const d = { html: ultra ? ed.innerHTML : text, text, at: Date.now(), ...(!ultra && { canvas: inboxIdentity(ed) }) };
-    typed.set(key, { ed, ...d, gone: 0 });
-    local((s) => s.set({ [key]: d }));
-  };
-  // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
-  // lib/drafts.js comes once an editor it backs up is on the page (watchDrafts asks). An editor written in before it
-  // arrives (one paste can be all there is) is taken up when it does, as if just written in.
   const draftsWaiting = new Set();
-  const draftsIn = () => {
-    if (globalThis.GZ_DRAFTS) return true;
-    need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => {
-      const eds = [...draftsWaiting];
-      draftsWaiting.clear();
-      for (const ed of eds) if (ed.isConnected) onWrite({ type: 'input', target: ed });
-      if (observer) watchDrafts();
-    }, () => draftsWaiting.clear());
-    return false;
-  };
-  const onWrite = (e) => {
-    if (!ultra && e.type !== 'input') return;
-    const ed = settings.enhance.drafts && observer && e.target instanceof Element && e.target.closest(ultra ? EDITOR : CANVAS_DRAFT);
-    if (ed && !draftsIn()) { draftsWaiting.add(ed); return; }
-    if (!ed) {
-      // Controlled inputs can change value without a DOM mutation, so destination edits also run the pass.
-      if (!ultra && settings.enhance.drafts && observer && e.target.closest?.('#compose-message-modal')) watchInboxDrafts();
-      return;
-    }
-    if (!ultra) {
-      inboxWrites.set(ed, draftKey(ed));
-      captureInboxDraft(ed);
-      for (const [bar, editor] of bars) if (editor === ed) { bar.remove(); bars.delete(bar); }
-    }
-    clearTimeout(saveTimers.get(ed));
-    saveTimers.set(ed, setTimeout(() => saveDraft(ed), 1000));
-  };
-  for (const ev of ['keydown', 'input', 'paste']) document.addEventListener(ev, onWrite, true);
-  addEventListener('pagehide', () => { for (const [ed, t] of saveTimers) { clearTimeout(t); saveDraft(ed); } });
-  // The page's text outside the editors being written in: where a post shows up once it's sent.
-  // ponytail: walks the whole page, only while a draft's editor has just emptied or gone (a minute at most).
-  const pageText = () => {
-    const skip = `${EDITOR}, .ql-clipboard, .gz-draft`;
-    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeType === 3 ? 1 : n.matches(skip) ? 2 : 3) });
-    let out = '';
-    for (let n = walk.nextNode(); n; n = walk.nextNode()) out += n.data;
-    return out;
-  };
-  const restoreBar = (ed, key, d) => {
-    const bar = document.createElement('div');
-    bar.className = 'gz-draft';
-    bar.setAttribute('role', 'status');
-    const msg = document.createElement('span');
-    msg.textContent = t('Glaze kept a copy of what you wrote here ({when}).', { when: GZ_PAGE.describe(new Date(d.at), true, new Date(), locale()).rel });
-    // type=button: Ultra's editors sit in forms, where a plain button would submit.
-    const button = (label, fn) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = label;
-      b.addEventListener('click', () => { bar.remove(); fn(); });
-      return b;
-    };
-    bar.append(msg, button(t('Restore'), () => {
-      if (!ultra) {
-        if (draftKey(ed) !== key || draftText(ed).trim() || !settings.enhance.drafts || !observer) return;
-        // React's controlled textarea reads the native setter + input, rather than a visible-only DOM edit.
-        local((s) => s.get(key, (r) => {
-          if (r?.[key]?.at !== d.at || r[key].text !== d.text) { inboxWrites.delete(ed); return; }
-          if (!ed.isConnected || draftKey(ed) !== key || draftText(ed).trim() || !settings.enhance.drafts || !observer) return;
-          Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ed, d.text);
-          ed.dispatchEvent(new Event('input', { bubbles: true }));
-          ed.focus();
-        }));
-        return;
-      }
-      ed.focus();
-      const r = document.createRange();
-      r.selectNodeContents(ed);
-      getSelection().removeAllRanges();
-      getSelection().addRange(r);
-      document.execCommand('insertHTML', false, d.html);
-    }), button(t('Dismiss'), () => ultra ? local((s) => s.remove(key)) : forgetInboxDraft(key, d)));
-    (ed.closest('react-editor-wrapper') || ed.closest('.bb-editor-root') || ed.closest('[data-cid="TextArea"]') || ed).before(bar);
-    bars.set(bar, ed);
-    barKeys.set(bar, key);
-  };
-  const dropBars = () => {
-    for (const bar of bars.keys()) bar.remove();
-    bars.clear();
-    if (!ultra) {
-      inboxWrites = new WeakMap();
-      for (const ed of inboxPending.keys()) { clearTimeout(saveTimers.get(ed)); saveTimers.delete(ed); }
-      inboxPending.clear();
-    }
-  };
-  const forgetInboxDraft = (key, d) => local((s) => s.get(key, (r) => { if (r?.[key]?.at === d.at && r[key].text === d.text) s.remove(key); }));
-  const inboxPosted = async (d) => {
-    // Only after Send/close or a recovery offer, never sweep-poll the inbox. Detail GET must not mark mail read.
-    try {
-      const list = await capi('/conversations?scope=sent&per_page=20');
-      const c = list.find((c) => c.subject === d.canvas.subject && c.context_code === `course_${d.canvas.course}` && Date.parse(c.last_authored_message_at) >= d.at - 1000);
-      return !!c && GZ_DRAFTS.sent(d, await capi(`/conversations/${c.id}?auto_mark_as_read=false`));
-    } catch { return false; } // Offline or no exact match: keep the copy.
-  };
-  const offerDraft = (ed) => {
-    const key = draftKey(ed);
-    if (!key) return;
-    local((s) => s.get(key, async (r) => {
-      const d = r?.[key];
-      if (!ultra && (GZ_DRAFTS.canvasKey(d?.canvas) !== key || typeof d?.text !== 'string' || GZ_DRAFTS.stale({ [key]: d }, Date.now()).length)) return;
-      if (!d?.html || !settings.enhance.drafts || !observer || !ed.isConnected || draftKey(ed) !== key || draftText(ed).trim()) return;
-      const posted = ultra ? GZ_DRAFTS.posted(d.text, pageText()) : await inboxPosted(d);
-      if (posted) { if (ultra) s.remove(key); else forgetInboxDraft(key, d); }
-      else if (settings.enhance.drafts && observer && ed.isConnected && draftKey(ed) === key && !draftText(ed).trim()) {
-        if (ultra) restoreBar(ed, key, d);
-        else local((s) => s.get(key, (r) => {
-          if (r?.[key]?.at === d.at && r[key].text === d.text && settings.enhance.drafts && observer && ed.isConnected
-            && draftKey(ed) === key && !draftText(ed).trim() && ![...bars.values()].includes(ed)) restoreBar(ed, key, d);
-        }));
-      }
-    }));
-  };
-  const watchDrafts = () => {
-    // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
-    if (!ultra) { watchInboxDrafts(); return; }
-    if (!settings.enhance.drafts) return;
-    if (!globalThis.GZ_DRAFTS) { if (document.querySelector(EDITOR)) draftsIn(); return; }
-    const now = Date.now();
-    let page = null;
-    for (const [key, d] of typed) {
-      // Still being written in. An editor turned read-only shows the sent post, so it counts as gone.
-      if (d.ed.isConnected && d.ed.matches(EDITOR) && d.ed.textContent.trim()) { d.gone = 0; continue; }
-      d.gone ||= now;
-      page ??= pageText();
-      if (GZ_DRAFTS.posted(d.text, page)) { typed.delete(key); local((s) => s.remove(key)); }
-      else if (now - d.gone > 60000) typed.delete(key); // never posted: the copy stays
-    }
-    // A bar steps aside while its editor has text (Ultra's own saved draft, or you're writing), and goes with it.
-    for (const [bar, ed] of bars) {
-      if (!bar.isConnected || !ed.isConnected) { bar.remove(); bars.delete(bar); } else bar.hidden = !!ed.textContent.trim();
-    }
-    // An editor offers its copy once, after it has sat empty for a moment: Ultra may still be filling it.
-    for (const ed of document.querySelectorAll(EDITOR)) {
-      if (offered.has(ed)) continue;
-      offered.add(ed);
-      if (!ed.textContent.trim()) setTimeout(() => offerDraft(ed), 800);
-    }
-  };
-  const watchInboxDrafts = () => {
-    if (!settings.enhance.drafts || !/^\/conversations\/?$/.test(location.pathname)) return;
-    const ed = document.querySelector(CANVAS_DRAFT);
-    if (!globalThis.GZ_DRAFTS) { if (ed) draftsIn(); return; }
-    if (ed && !inboxAccount && !inboxLoading && Date.now() >= inboxRetry) {
-      inboxLoading = true;
-      Promise.all([profile(), canvasCourses()]).then(([user, courses]) => {
-        inboxAccount = { user: String(user.id), courses };
-      }).catch(() => { inboxRetry = Date.now() + 60000; }).finally(() => { inboxLoading = false; });
-    }
-    for (const ed of inboxPending.keys()) if (!ed.isConnected) saveDraft(ed);
-    for (const [key, d] of typed) if (!d.ed.isConnected) {
-      typed.delete(key);
-      if (inboxSending.delete(key)) setTimeout(() => { if (observer && settings.enhance.drafts) inboxPosted(d).then((sent) => { if (sent) forgetInboxDraft(key, d); }); }, 1000);
-    }
-    for (const [bar, editor] of bars) {
-      if (!bar.isConnected || !editor.isConnected || draftKey(editor) !== barKeys.get(bar)) { bar.remove(); bars.delete(bar); }
-      else bar.hidden = !!draftText(editor).trim();
-    }
-    // Identity changes are common in compose: offer only after the exact course, recipients and subject return.
-    const key = ed && draftKey(ed);
-    if (key && !ed.value.trim() && ![...bars.values()].includes(ed) && inboxWrites.get(ed) !== key) {
-      inboxWrites.set(ed, key);
-      setTimeout(() => { if (draftKey(ed) === key) offerDraft(ed); }, 800);
-    }
-  };
-  document.addEventListener('click', (e) => {
-    if (ultra || !settings.enhance.drafts || !observer || !globalThis.GZ_DRAFTS || !e.target.closest?.('#send-message-button')) return;
-    const ed = document.querySelector(CANVAS_DRAFT);
-    const key = ed && draftKey(ed);
-    if (key) { inboxWrites.set(ed, key); captureInboxDraft(ed); saveDraft(ed); inboxSending.add(key); }
+  const draftsIn = () => need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => need('features/drafts.js', () => globalThis.GZ_DRAFT_UI)).then(() => {
+    const eds = [...draftsWaiting];
+    draftsWaiting.clear();
+    for (const ed of eds) if (ed.isConnected) GZ_DRAFT_UI.write({ type: 'input', target: ed });
+    if (observer) watchDrafts();
+  }, () => draftsWaiting.clear());
+  for (const ev of ['keydown', 'input', 'paste']) document.addEventListener(ev, (e) => {
+    if (globalThis.GZ_DRAFT_UI) return GZ_DRAFT_UI.write(e);
+    if ((!ultra && e.type !== 'input') || !settings.enhance.drafts || !observer || !(e.target instanceof Element)) return;
+    const ed = e.target.closest(DRAFT_ED);
+    if (ed) { draftsWaiting.add(ed); draftsIn(); } else if (!ultra && e.target.closest('#compose-message-modal')) watchDrafts();
   }, true);
+  // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
+  const watchDrafts = () => {
+    if (globalThis.GZ_DRAFT_UI) return GZ_DRAFT_UI.watch();
+    if (settings.enhance.drafts && (ultra || /^\/conversations\/?$/.test(location.pathname)) && document.querySelector(DRAFT_ED)) draftsIn();
+  };
   // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
   const tidyDrafts = () => {
     if (window.top !== window) return;
@@ -1904,33 +1457,11 @@
   };
 
   // ---- document buttons (Extras) ---------------------------------------------------------------
-  // Round buttons in the bottom-right gutter, top frame only: dark documents while a file preview is
-  // on screen (dark palettes only), focus mode on a course document. Dark documents invert the
-  // preview's frame (extras.css), which works whatever its origin; where a frame is same-origin, its
-  // images and videos are turned back.
+  // Round buttons in the bottom-right gutter, top frame only: dark documents while a file preview is on screen (dark
+  // palettes only), focus mode on a course document. features/docs.js, loaded where they can appear: a course document
+  // with the switch on, or a file preview (on Ultra, in any frame: a same-origin preview's images are turned back).
   const PREVIEWS = ultra ? '#site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe' : '#doc_preview iframe, #file-preview-iframe, iframe.ef-file-preview-frame:not(.annotated-document-submission), .file_preview iframe';
   const DOC = ultra ? '#site-wrap .document-content-root' : '#wiki_page_show .show-content, #assignment_show .description';
-  const UNFLIP = 'img, video, picture, canvas { filter: invert(1) hue-rotate(180deg); }';
-  const framesShown = new Set();
-  const framesSeen = new WeakSet();
-  let docTools = null;
-  let focusAt = null; // the document focus mode is on for
-  let focusPath = '';
-  let readBar = null;
-  const unflip = (f) => {
-    if (!ultra) return; // Canvas viewers may contain annotations: invert the frame, never reach inside.
-    try {
-      const d = f.contentDocument;
-      const old = d?.getElementById('gz-unflip');
-      const on = html.matches('[data-gz-dark-theme][data-gz-enhance-darkDocs]'); // as extras.css
-      if (!d?.documentElement || on === !!old) return;
-      if (old) return old.remove();
-      const s = d.createElement('style');
-      s.id = 'gz-unflip';
-      s.textContent = UNFLIP;
-      d.documentElement.append(s);
-    } catch { /* another origin */ }
-  };
   const ICONS = { dark: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z', focus: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5', paint: 'M12 3.5c3.4 4 6 7 6 10.2a6 6 0 0 1-12 0c0-3.2 2.6-6.2 6-10.2z' };
   const docButton = (key, label, onClick) => {
     const b = document.createElement('button');
@@ -1948,33 +1479,6 @@
     b.addEventListener('click', onClick);
     return b;
   };
-  const onRead = () => {
-    if (!readBar) return;
-    let sc = ultra ? focusAt.parentElement : document.scrollingElement;
-    if (!ultra) for (let p = focusAt.parentElement; p; p = p.parentElement) {
-      if (/auto|scroll/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight) { sc = p; break; }
-    }
-    // On <html>, outside the observed body: a style write on the bar would wake the sweep every scroll.
-    setVar('--gz-read', GZ_PAGE.readShare(sc.scrollTop, sc.scrollHeight, sc.clientHeight));
-  };
-  const setFocus = (on) => {
-    const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
-    if ((doc || null) === focusAt) return;
-    focusAt = doc || null;
-    focusPath = focusAt ? location.pathname : '';
-    html.toggleAttribute('data-gz-focus', !!focusAt);
-    readBar?.remove();
-    readBar = null;
-    if (focusAt) {
-      readBar = document.createElement('div');
-      readBar.id = 'gz-read';
-      readBar.setAttribute('aria-hidden', 'true');
-      document.body.append(readBar);
-      onRead();
-    }
-    syncDocTools();
-    if (!ultra) docTools?.querySelector('[data-gz="focus"]')?.focus({ preventScroll: true });
-  };
   const setDark = (on) => {
     settings = { ...settings, enhance: { ...settings.enhance, darkDocs: on } };
     setAttr('data-gz-enhance-darkDocs', on);
@@ -1982,63 +1486,14 @@
     try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
-    const on = window.top === window && observer && settings.enhance.toggles;
-    const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
-    if (focusAt && (focusAt !== doc || focusPath !== location.pathname)) setFocus(false);
     globalThis.GZ_KEYS?.sync();
-    for (const f of document.querySelectorAll(PREVIEWS)) {
-      if (!framesSeen.has(f)) { framesSeen.add(f); frameIO.observe(f); f.addEventListener('load', () => unflip(f)); }
-      unflip(f);
+    if (globalThis.GZ_DOCS) return GZ_DOCS.sync();
+    if (observer && ((ultra && document.querySelector(PREVIEWS)) || (window.top === window && settings.enhance.toggles && document.querySelector(`${DOC}, ${PREVIEWS}`)))) {
+      need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
     }
-    for (const f of framesShown) if (!f.isConnected) { framesShown.delete(f); frameIO.unobserve(f); }
-    const visible = [...framesShown].find((f) => f.isConnected && f.getClientRects().length);
-    const dark = on && darkTheme && !!visible;
-    if (!doc && !dark) {
-      docTools?.remove();
-      docTools = null;
-      html.removeAttribute('data-gz-doc-tools');
-      return;
-    }
-    if (!docTools) {
-      docTools = document.createElement('div');
-      docTools.id = 'gz-doc-tools';
-      docTools.setAttribute('role', 'toolbar');
-      docTools.setAttribute('aria-label', t('Document'));
-      const time = document.createElement('span');
-      time.className = 'gz-doc-time';
-      docTools.append(time, docButton('dark', t('Dark documents'), () => setDark(!settings.enhance.darkDocs)), docButton('focus', t('Focus mode'), () => setFocus(!focusAt)));
-      document.body.append(docTools);
-    }
-    if (!ultra) {
-      // In the reading flow (including a modal's flow), so neither content nor Canvas controls sit under it.
-      const before = doc || visible?.closest('#doc_preview, .ef-file-preview-stretch, .file_preview') || visible;
-      if (before && docTools.nextElementSibling !== before) before.before(docTools);
-    }
-    const [time, darkB, focusB] = docTools.children;
-    const mins = focusAt && GZ_PAGE.readMinutes(ultra ? focusAt.querySelector('.bbml-editor')?.textContent : focusAt.textContent);
-    time.hidden = !mins;
-    // Only on change: a text write is itself a mutation the observer would hand back.
-    const read = mins && t('{n} min read', { n: mins });
-    if (mins && time.textContent !== read) time.textContent = read;
-    darkB.hidden = !dark;
-    darkB.setAttribute('aria-pressed', String(settings.enhance.darkDocs));
-    focusB.hidden = !doc;
-    focusB.setAttribute('aria-pressed', String(!!focusAt));
-    html.setAttribute('data-gz-doc-tools', '');
   };
-  const frameIO = new IntersectionObserver((es) => {
-    for (const e of es) if (e.isIntersecting) framesShown.add(e.target); else framesShown.delete(e.target);
-    syncDocTools();
-  });
-  document.addEventListener('scroll', onRead, { capture: true, passive: true });
-  // Esc leaves focus mode, and Ultra doesn't also act on it. An open menu or dialog gets its Esc as
-  // usual. Focus inside a preview's frame keeps the key there; the button still works.
-  addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !focusAt || (!ultra && typing(e.target)) || (e.target instanceof Element && e.target.closest('[role="menu"], [role="dialog"], [role="listbox"]'))) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    setFocus(false);
-  }, true);
+  // Here, so it is first to see the key: Esc leaves focus mode, and the site doesn't also act on it.
+  addEventListener('keydown', (e) => globalThis.GZ_DOCS?.esc(e), true);
 
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
   // "g" then a letter goes somewhere, "/" searches, "?" lists them: features/keys.js, loaded on the first key that
@@ -2602,7 +2057,7 @@
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
-    if (was.drafts && !s.enhance.drafts) { dropBars(); typed.clear(); tidyDrafts(); }
+    if (was.drafts && !s.enhance.drafts) { globalThis.GZ_DRAFT_UI?.drop(true); tidyDrafts(); }
     // Declutter: CSS hides by these.
     for (const k of ['help', 'banner', 'faculty']) setAttr(`data-gz-hide-${k}`, s.declutter[k]);
     for (const [slug] of GZ_TABS) setAttr(`data-gz-hide-tab-${slug}`, s.declutter.tabs.includes(slug));
@@ -2713,7 +2168,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     globalThis.GZ_CMD?.close();
     for (const id of ['gz-progress', 'gz-calc', 'gz-gpa']) document.getElementById(id)?.remove();
     for (const p of document.querySelectorAll('.gz-new, .gz-card-grade')) p.remove();
-    dropBars();
+    globalThis.GZ_DRAFT_UI?.drop();
     for (const b of document.querySelectorAll('.gz-dl')) b.remove();
     unmenu();
     for (const l of links) l.remove();
@@ -2738,7 +2193,10 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, myCourses, courseId, courseItems, toggleOf, canvasPeek, moduleItems,
     nickOf, courseList: () => courseList, courseColor, courseColors, varText, cardUI,
-    setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); } });
+    setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
+    // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
+    draftEditor: DRAFT_ED, bookFor, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
+    canvasCourseKey, ROWS, holding: () => held.size > 0, tapped: () => tapped, acted: () => acted });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
   // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.
