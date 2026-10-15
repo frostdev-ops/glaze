@@ -317,15 +317,15 @@ test('E1 editor relay caller is limited to the exact extension top frame and two
 });
 
 test('E1 synced relay changes refresh an open Sessions page without scheduling network work', async () => {
-  const changes = [], messages = [], area = localArea(); let connect, network = 0;
+  const changes = [], messages = [], connections = [], area = localArea(); let network = 0;
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ connect: () => () => {}, changed: () => network++ }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
-      onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => { connect = fn; } } },
+      onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => connections.push(fn) } },
       storage: { local: area, sync: area, onChanged: { addListener: (fn) => changes.push(fn) } } } });
   vm.runInContext(read('lib/background.js'), ctx);
-  connect({ name: 'glaze:sessions', sender: { id: 'glaze', url: 'chrome-extension://glaze/sharing/sessions.html', origin: 'chrome-extension://glaze', frameId: 0 },
+  for (const connect of connections) connect({ name: 'glaze:sessions', sender: { id: 'glaze', url: 'chrome-extension://glaze/sharing/sessions.html', origin: 'chrome-extension://glaze', frameId: 0 },
     onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, postMessage: (message) => messages.push(message), disconnect() {} });
   await new Promise(setImmediate);
   for (const fn of changes) fn({ shareRelay: { newValue: 'https://new-relay.example.edu' } }, 'sync');
