@@ -94,7 +94,7 @@ test('a Moodle host is injected now and registered from then on, apart from Canv
   const injected = [], registered = [], lists = {};
   let message;
   const none = { addListener() {} };
-  const context = vm.createContext({
+  const context = vm.createContext({ solo: false, tabFrame: '',
     URL, console, setTimeout, clearTimeout,
     importScripts: (file) => vm.runInContext(read(path.join('lib', file)), context),
     chrome: {
@@ -201,7 +201,7 @@ const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = []
     querySelector: (sel) => (sel.includes('logout.php') && logout ? { href: logout } : null),
     querySelectorAll: (sel) => (sel.includes('course-content') ? cardEls : []),
   };
-  const context = vm.createContext({
+  const context = vm.createContext({ solo: false, tabFrame: '',
     URL, Promise, JSON, Date, document, location: { origin: ORIGIN }, matchMedia: () => ({ matches: dark }),
     GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../lib/color.js'),
     GZ_MOODLE: M, GZ_PAGE: { score },
@@ -261,7 +261,7 @@ test('course cards get their total from the grades overview, asked once a page l
 test('Moodle\'s files load on demand, end on a value, and keep the first copy when loaded twice', () => {
   const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
   for (const f of ['lib/moodle.js', 'features/moodle.js']) assert.ok(list.includes(f) && !MOODLE_FIRST.includes(f), f);
-  const context = vm.createContext({ URL, document: {}, location: { origin: ORIGIN } });
+  const context = vm.createContext({ solo: false, tabFrame: '', URL, document: {}, location: { origin: ORIGIN } });
   context.globalThis = context;
   for (const [f, name] of [['lib/moodle.js', 'GZ_MOODLE'], ['features/moodle.js', 'GZ_MOODLE_PAGE']]) {
     const value = vm.runInContext(read(f), context);
@@ -448,7 +448,7 @@ const contentBlock = (start, end) => {
 const pageLoad = async ({ stored, root = ORIGIN, courses = [{ id: 16, fullname: 'BIO 1100', shortname: 'BIO 1100' }], now = Date.now() } = {}) => {
   const p = page({ stored, root, courses });
   const chrome = { storage: { local: { get: (k, cb) => cb(Object.fromEntries([k].flat().map((x) => [x, stored[x]]))), set: (o) => Object.assign(stored, o) } } };
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ solo: true, tabFrame: '',
     ultra: false, moodle: true, window: {}, chrome, Date: { now: () => now }, Promise, Object,
     location: { origin: new URL(root).origin }, moodleIn: () => Promise.resolve(p.api),
   });
@@ -504,7 +504,7 @@ test('a failed or empty course read changes nothing kept, and is asked again on 
 
 // content.js's recordCourses alone, over a module content.js is still waiting for (moodleIn).
 const recorder = (moodleIn) => {
-  const ctx = vm.createContext({ ultra: false, moodle: true, window: {}, moodleIn });
+  const ctx = vm.createContext({ solo: true, tabFrame: '', ultra: false, moodle: true, window: {}, moodleIn });
   ctx.window.top = ctx.window;
   vm.runInContext(`let canvasRecorded = false; ${contentBlock('  const recordCourses = () => {', '\n  };\n')} this.recordCourses = recordCourses;`, ctx);
   return ctx;
@@ -584,7 +584,7 @@ test('each course card wears its own course\'s Look and tint, painted only on ch
 const moodleKeys = ({ id = 'page-course-view-topics', sheet = `${ORIGIN}/theme/styles.php/boost/1/all`, origin = ORIGIN } = {}) => {
   const went = [];
   const document = { body: { id }, querySelector: (sel) => (sel.includes('/theme/styles') ? { href: sheet } : null), addEventListener() {} };
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ solo: false, tabFrame: '',
     document, location: { origin, pathname: '/course/view.php', assign: (u) => went.push(u) }, navigator: { platform: 'MacIntel' }, Date,
     GZ_CTX: { site: 'moodle', settings: () => ({ enhance: { keys: true } }), typing: () => false, keyOn: () => true, wordsIn: new Set(), t: (k) => k },
   });

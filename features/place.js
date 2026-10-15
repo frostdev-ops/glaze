@@ -73,7 +73,7 @@ var GZ_PLACE = globalThis.GZ_PLACE || (() => {
     }));
   };
   // While a place is being put back (data-gz-placing): a course tab's frame waits for it before it shows (features/coursetabs.js).
-  const placing = (on) => document.documentElement.toggleAttribute('data-gz-placing', on);
+  const placing = (on) => document.documentElement?.toggleAttribute('data-gz-placing', on);
   const backTo = () => {
     const p = place;
     const b = p?.back;

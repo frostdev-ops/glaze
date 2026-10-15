@@ -229,6 +229,7 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
     GZ_TODO_UI: { sync: (on) => asked.push(`todo ${on}`) }, GZ_CARD_TASKS: { sync: (on) => asked.push(`cards ${on}`) }, GZ_REMIND_UI: { sync: (on) => asked.push(`remind ${on}`) },
   };
   ctx.window.top = ctx.window;
+  ctx.solo = true;
   ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(`${decls}\nglobalThis.all = () => [syncTodo(), syncCardTasks(), syncRemind()];`, ctx);
@@ -239,6 +240,7 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   assert.deepEqual(await run('/ultra/courses/_101_1/grades'), ['todo false', 'cards false', 'features/reminders.js', 'remind true']);
   assert.deepEqual(await run('/ultra/coursesx'), ['todo false', 'cards false', 'features/reminders.js', 'remind true']);
   ctx.window.top = {}; // a frame inside the page
+  ctx.solo = false;
   assert.deepEqual(await run('/ultra/course'), ['todo false', 'cards false', 'remind false']);
 });
 
@@ -252,6 +254,7 @@ test('review (B2 1): a module that lands after Glaze or its switch went off stay
   const asked = [];
   const ctx = { I: { links: [1], settings: { enhance: { todo: true } } }, location: { pathname: '/ultra/course' }, window: {}, need: () => new Promise((r) => { arrive = r; }) };
   ctx.window.top = ctx.window;
+  ctx.solo = true;
   ctx.globalThis = ctx;
   vm.createContext(ctx);
   vm.runInContext(`${decls}\nglobalThis.syncTodo = syncTodo;`, ctx);
