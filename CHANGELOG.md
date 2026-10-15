@@ -380,6 +380,10 @@ All notable changes to Glaze are documented here. The format follows
     each course's own colour (Course colors'), in the editor's Course tabs section with a live preview. Ctrl+K turns the
     tabs on or off.
 
+### Fixed
+
+- Course tabs: sign-out now stays cleared through page exit and delayed work; worker cache writes and clears are serialized and bound to the account. Snapshot replay no longer relinks opaque stylesheets or reloads image/CSS resources, and custom elements cannot run while a copy is taken. Snapshot limits include ancestor metadata; 40 pinned tabs cannot grow the list without bound. A stalled switch still falls back after 2.5 seconds when Ultra removes its header. Still copies use readable styles and system fonts; unreadable CDN styling and tainted pictures are omitted until the live page arrives.
+
 ### Changed
 
 - **Blackboard's what-if calculator is the Canvas one now.** Scores you typed in the old one move over the first time

@@ -219,8 +219,10 @@ _Last updated: 2026-10-15_
   **Copies of course pages for instant switching** are kept in memory only and never written to disk: in the page while
   it is open, and in the browser's session storage (`chrome.storage.session`, which the browser holds in memory and
   which Blackboard pages can't read; Glaze's background worker keeps it), per site and account. A copy is what was
-  already on your screen when you left a course, without scripts, frames, form fields, media or pictures that hadn't
-  loaded, at most 1,000,000 characters each and 6,000,000 in all, the oldest dropped first. They are dropped when the
+  already on your screen when you left a course, without scripts, frames, form fields, media, handlers or arbitrary
+  data attributes. Loaded pictures become local bitmaps when the browser permits; unreadable pictures and stylesheet
+  resources are omitted. The serialized copy, including its ancestor metadata, is at most 1,000,000 characters each
+  and 6,000,000 in all, the oldest dropped first. They are dropped when the
   browser closes, when you turn the tabs or Glaze off, when another account turns up on the site, and when you use
   Blackboard's Sign Out.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
@@ -247,8 +249,10 @@ you import) are bundled. It makes requests in these cases:
   session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
 - **Course tabs.** To keep each account's tabs apart, Glaze asks your own Blackboard site who is signed in (Ultra's
   `/learn/api/v1/users/me`, which Ultra itself asks on every page), once a page, shared with the grade and course-list
-  reads above. Switching tabs asks for nothing: the copy shown is one already in memory, and Blackboard's own page does
-  the rest. Glaze never opens, loads or prefetches a course in the background.
+  reads above. Replaying the copy makes no requests: the page's existing stylesheets remain in place and unreadable
+  stylesheets are never linked again. Blackboard routes the selected course normally; if it fails to switch in place
+  within 2.5 seconds, Glaze loads that selected course's own-site address. Glaze never prefetches a course or opens one
+  in the background.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette

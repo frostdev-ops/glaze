@@ -4,8 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const D = require('../defaults.js');
-const L = require('../lib/coursetabs.js');
+const D = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '..'), 'defaults.js'));
+const L = require(path.join(process.env.GZ_B8_REPO || path.join(__dirname, '..'), 'lib/coursetabs.js'));
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const C = '/ultra/courses/_1_1';
@@ -98,6 +98,7 @@ test('the snapshot cache: the least recently kept go first past the total', () =
   assert.deepEqual(L.fit([['a', 3, 1], ['b', 3, 2], ['c', 3, 3]], 7), ['a']);
   assert.deepEqual(L.fit([['a', 3, 1], ['b', 3, 2]], 7), []);
   assert.deepEqual(L.fit([['a', 9, 5]], 7), ['a']);
+  assert.deepEqual(L.fit([['old', 3, 1], ['new', 3, 1]], 3), ['old'], 'same-millisecond captures still evict the older insertion');
   assert.ok(L.SNAP_ONE < L.SNAP_ALL && L.SNAP_ALL <= 6e6, 'the total fits storage.session (10 MB) with room to spare');
 });
 
@@ -106,7 +107,7 @@ test('a snapshot keeps nothing that runs, loads or takes input', () => {
   for (const tag of ['div', 'a', 'button', 'svg', 'img', 'section', 'course-page-header']) assert.ok(!L.DROP.has(tag), tag);
   for (const [k, v] of [['onclick', 'x()'], ['ONLOAD', 'x'], ['srcset', 'a.png 2x'], ['srcdoc', '<p>'], ['formaction', '/x'], ['ping', '/p'], ['tabindex', '0'], ['contenteditable', 'true'],
     ['href', 'javascript:alert(1)'], ['href', ' JavaScript:x'], ['xlink:href', 'javascript:x'], ['src', 'data:text/html,<script>'], ['data-gz-loading', ''], ['autofocus', '']]) assert.equal(L.keepAttr(k, v), false, `${k}=${v}`);
-  for (const [k, v] of [['class', 'a b'], ['href', '/ultra/courses/_1_1/outline'], ['src', 'https://cdn.example/x.png'], ['style', 'color: red'], ['aria-current', 'page'], ['data-content-id', '_1_1'], ['id', 'x']]) assert.equal(L.keepAttr(k, v), true, `${k}=${v}`);
+  for (const [k, v] of [['class', 'a b'], ['href', '/ultra/courses/_1_1/outline'], ['src', 'data:image/png;base64,AAAA'], ['style', 'color: red'], ['aria-current', 'page'], ['data-content-id', '_1_1'], ['id', 'x']]) assert.equal(L.keepAttr(k, v), true, `${k}=${v}`);
 });
 
 test('wired up: loadable on demand, in the worker and the editor, and only Ultra\'s first script holds the hook', () => {
@@ -118,4 +119,26 @@ test('wired up: loadable on demand, in the worker and the editor, and only Ultra
   const page = read('features/coursetabs.js').replace(/(^|\s)\/\/.*$/gm, '');
   assert.ok(!/storage\.session|indexedDB|localStorage/.test(page));
   assert.ok(/storage\.session/.test(bg));
+});
+
+
+test('snapshot attributes cannot load network resources or keep page credentials', () => {
+  for (const [name, value, tag] of [
+    ['src', 'https://cdn.school.test/image.png', 'img'], ['href', 'https://cdn.school.test/image.svg', 'image'],
+    ['href', '/sprite.svg#icon', 'use'], ['src', 'data:image/svg+xml,<svg/>', 'img'],
+    ['style', 'background:url(https://cdn.school.test/image.png)', 'div'], ['fill', 'url(https://cdn.school.test/s.svg#x)', 'path'],
+    ['style', 'background:u\\72l(https://cdn.school.test/image.png)', 'div'], ['background', 'https://cdn.school.test/x.png', 'table'],
+    ['data-token', 'private-token', 'div'], ['value', 'password', 'button'], ['is', 'live-widget', 'button'],
+  ]) assert.equal(L.keepAttr(name, value, tag), false, `${tag} ${name}=${value}`);
+  assert.equal(L.keepAttr('href', '#local-icon', 'use'), false, 'the page base may point at a CDN, even for fragments');
+  assert.equal(L.keepAttr('href', `${C}/grades`, 'a'), true);
+  assert.equal(L.keepAttr('data-content-id', '_1_1', 'div'), true);
+});
+
+test('the hard tab bound holds even if every existing tab is pinned', () => {
+  const pinned = Array.from({ length: L.MAX }, (_, i) => ({ cid: `_${i + 1}_1`, pin: true, at: i }));
+  const result = L.open(pinned, { cid: '_999_1', at: 100 }, 8);
+  assert.equal(result.tabs.length, L.MAX);
+  assert.deepEqual(result.tabs, pinned, 'never silently evict a pinned course');
+  assert.equal(result.full, true, 'the page can explain why no tab was added');
 });
