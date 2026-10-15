@@ -123,25 +123,13 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     value.addEventListener('change', keep);
     const out = [make('div', { className: 'gz-gpa-switches' }, make('label', {}, t('Goal GPA'), ' ', value), make('label', {}, t('Goal for'), ' ', kind))];
     if (!g) return out;
-    // This term: every course that counts, graded yet or not. The most it can make is an A in each, with its bonus.
-    const cur = rows.filter((r) => r.credits > 0);
+    // This term: every course with credits that counts, graded yet or not; a course whose letter has no grade points
+    // (Pass, Excellent) is no GPA course. The most each can make is the best letter it can still give (lib/gpa.js
+    // topOf: its scale, and what its work left reaches once asked), with its bonus.
+    const cur = rows.filter((r) => r.credits > 0 && (r.pts != null || !r.letter));
     const bonus = (r) => (w ? r.p.l || 0 : 0);
-    const credits = sum(cur, (r) => r.credits);
-    const done = past.t.flatMap((x) => G().rowsOf(x, w)).filter((x) => x.points != null && x.credits > 0);
-    const was = { points: sum(done, (x) => x.points * x.credits), credits: sum(done, (x) => x.credits) };
-    const r = G().goal({ past: was, credits, top: credits ? sum(cur, (c) => c.credits * C().points('A', plus, bonus(c))) / credits : 0 }, g.k, g.v);
-    const say = make('p', { className: 'gz-calc-out', role: 'status' });
-    out.push(say);
-    if (!r) { say.textContent = t('Give your courses this term credits to plan for a goal.'); return out; }
-    if (r.met) { say.textContent = t("You'll reach it whatever this term brings."); return out; }
-    if (r.reachable === false) {
-      say.textContent = g.k === 'cum' ? t("Out of reach this term: straight A's would bring your cumulative GPA to {gpa}.", { gpa: api.two(r.best) }) : t("Out of reach: straight A's make {gpa} this term.", { gpa: api.two(r.best) });
-      return out;
-    }
-    const avg = G().LADDER[!!plus].find((n) => C().points(n, plus) >= r.need - 1e-9) || 'A';
-    say.textContent = t('This term needs a GPA of {gpa}: about {letter} in every course.', { gpa: api.two(r.need), letter: avg });
-    // One way there. A course's lowest percent for a letter needs its scale: the student's own, else the course's own
-    // scheme where Canvas gives the letter (asked for once), else Canvas's default.
+    // A course's lowest percent for a letter needs its scale: the student's own, else the course's own scheme where
+    // Canvas gives the letter (asked for once), else Canvas's default.
     const scaleOf = (c) => {
       const own = c.p.s ? C().parseScheme(c.p.s) : null;
       const id = String(c.c.id);
@@ -151,9 +139,30 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       return api.schemes.get(id) || null;
     };
     // A course whose work left can't reach a letter (asked with What it takes) is held below it.
-    const plan = G().route(cur.map((c) => ({ credits: c.credits, letter: c.pts == null ? null : c.letter, score: c.rqd ? null : c.score, scale: c.rqd ? null : scaleOf(c), bonus: bonus(c), max: V.caps.get(String(c.c.id)) })), r.need, plus);
+    const courses = cur.map((c) => ({ credits: c.credits, letter: c.pts == null ? null : c.letter, score: c.rqd ? null : c.score, scale: c.rqd ? null : scaleOf(c), bonus: bonus(c), max: V.caps.get(String(c.c.id)) }));
+    const L = G().LADDER[!!plus];
+    const credits = sum(cur, (r) => r.credits);
+    const done = past.t.flatMap((x) => G().rowsOf(x, w)).filter((x) => x.points != null && x.credits > 0);
+    const was = { points: sum(done, (x) => x.points * x.credits), credits: sum(done, (x) => x.credits) };
+    const top = credits ? sum(courses, (c) => c.credits * C().points(L[Math.max(0, G().topOf(c, plus))], plus, c.bonus)) / credits : 0;
+    const r = G().goal({ past: was, credits, top }, g.k, g.v);
+    const say = make('p', { className: 'gz-calc-out', role: 'status' });
+    out.push(say);
+    if (!r) { say.textContent = t('Give your courses this term credits to plan for a goal.'); return out; }
+    if (r.met) { say.textContent = t("You'll reach it whatever this term brings."); return out; }
+    if (r.reachable === false) {
+      say.textContent = g.k === 'cum' ? t("Out of reach this term: the best grades your courses can still give would bring your cumulative GPA to {gpa}.", { gpa: api.two(r.best) }) : t("Out of reach: the best grades your courses can still give make {gpa} this term.", { gpa: api.two(r.best) });
+      return out;
+    }
+    const avg = L.find((n) => C().points(n, plus) >= r.need - 1e-9) || 'A';
+    say.textContent = t('This term needs a GPA of {gpa}: about {letter} in every course.', { gpa: api.two(r.need), letter: avg });
+    // One way there. "Your grades now get you there" only when every course has a grade now and none needs to rise.
+    const plan = G().route(courses, r.need, plus);
     if (!plan) { out.push(note(t("There's no way there with the work left in your courses."))); return out; }
-    out.push(note(plan.every((p) => !p.up) ? t('Your grades now get you there. To keep them:') : t('One way there, from your grades now:')));
+    const rise = plan.some((p) => p.up > 0);
+    const unknown = plan.some((p) => p.up == null);
+    out.push(note(!rise && !unknown ? t('Your grades now get you there. To keep them:')
+      : !rise ? t("Some courses have no grade yet, so whether your grades now get you there isn't known. One way there:") : t('One way there, from your grades now:')));
     const rowsOut = cur.map((c, i) => {
       const p = plan[i];
       const name = c.c.name || c.c.course_code || '';
@@ -164,7 +173,8 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       else if (p.min != null && c.score != null && !c.rqd) {
         const b = label(btn(t('What it takes'), `need:${key}`, () => {
           b.disabled = true;
-          api.needFor(c.c, p.min).then((x) => x, () => null).then((x) => {
+          // Aimed at the lowest raw percent that rounds to the letter's bound, as Canvas rounds (gradecalc reachFrom).
+          api.needFor(c.c, C().reachFrom(p.min)).then((x) => x, () => null).then((x) => {
             V.needs.set(key, x);
             if (x?.reachable === false || (x && !x.left)) V.caps.set(String(c.c.id), x.best ?? -1);
             V.focus = 'goal:v';
@@ -174,7 +184,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
         cell.append(b);
       }
       return make('tr', {}, make('th', { scope: 'row', textContent: name }), make('td', { textContent: c.pts == null ? '–' : c.letter }),
-        make('td', { className: p.up ? 'gz-gpa-up' : '', textContent: p.letter }), make('td', { textContent: p.min == null ? '–' : `${api.pct(p.min)}+` }), cell);
+        make('td', { className: p.up > 0 ? 'gz-gpa-up' : '', textContent: p.letter }), make('td', { textContent: p.min == null ? '–' : `${api.pct(p.min)}+` }), cell);
     });
     out.push(make('div', { className: 'gz-gpa-scroll' }, make('table', {}, make('thead', {}, make('tr', {}, ...['Course', 'Now', 'Aim for', 'Lowest percent', ''].map((h) => make('th', { scope: 'col', textContent: h ? t(h) : '' })))), make('tbody', {}, ...rowsOut))));
     return out;

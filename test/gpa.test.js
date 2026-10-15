@@ -91,10 +91,10 @@ test('a route: the cheapest steps up from the grades now', () => {
   // Need 3.4: B+ (4) is 13.2, B (3) 9, the new course at B+ (3.3 ≥ 3.4? no: A- 3.7) 11.1 → 33.3 ≥ 34? no: one step more.
   const r = G.route(courses, 3.4, true);
   assert.deepEqual(r.map((x) => x.letter), ['A-', 'B', 'A-']);
-  assert.deepEqual(r.map((x) => x.up), [1, 0, 0]);
+  assert.deepEqual(r.map((x) => x.up), [1, 0, null], 'no grade now: not "no change"');
   assert.deepEqual(r.map((x) => x.min), [90, 84, null]);
-  // Already enough: nothing moves.
-  assert.deepEqual(G.route(courses, 2, true).map((x) => x.up), [0, 0, 0]);
+  // Already enough: nothing moves (and the course without a grade stays unknown).
+  assert.deepEqual(G.route(courses, 2, true).map((x) => x.up), [0, 0, null]);
   // Straight A's fall short: no route.
   assert.equal(G.route(courses, 4.01, true), null);
   // Whole letters: A- is an A.
@@ -113,6 +113,45 @@ test('a route: the cheapest steps up from the grades now', () => {
   }
   // The floor of a letter on a scale with fewer steps.
   assert.equal(G.floor([['A', 90], ['B', 80], ['C', 70], ['F', 0]], 'B+', true), 90);
+});
+
+test('a route offers only letters a course can still give: by its scale, and by its work left as Canvas rounds', () => {
+  const S = require('../lib/gradecalc.js').SCHEME;
+  const B_TOP = [['B', 80], ['C', 60], ['F', 0]];
+  const c = { credits: 3, letter: 'B', score: 90, scale: B_TOP };
+  assert.equal(G.topOf(c, true), G.LADDER.true.indexOf('B'));
+  assert.equal(G.route([c], 4, true), null, 'no A to offer on a scale that has none');
+  assert.deepEqual(G.route([c, { credits: 3, letter: 'B', score: 84, scale: S }], 3.5, true).map((x) => x.letter), ['B', 'A'], 'the other course carries it');
+  // Work left that tops out at 88% ends on B+, even from an A- now.
+  assert.equal(G.topOf({ credits: 3, scale: S, max: 88 }, true), G.LADDER.true.indexOf('B+'));
+  assert.deepEqual(G.route([{ credits: 3, letter: 'A-', score: 91, scale: S, max: 88 }], 1, true), [{ letter: 'B+', min: 87, up: -1 }]);
+  assert.equal(G.topOf({ credits: 3, scale: S, max: 89.996 }, true), G.LADDER.true.indexOf('A-'), 'rounded as Canvas does');
+  assert.equal(G.topOf({ credits: 3, scale: null, max: 50 }, true), G.LADDER.true.length - 1, 'no scale known: no letter ruled out');
+  // An E now is an F; a course with no grade now has no known baseline.
+  assert.deepEqual(G.route([{ credits: 3, letter: 'E' }], 1, true), [{ letter: 'D', min: null, up: 2 }]);
+  assert.deepEqual(G.route([{ credits: 3, letter: null }], 3.5, true), [{ letter: 'A-', min: null, up: null }]);
+  // The lowest raw percent that reaches a bound.
+  const C = require('../lib/gradecalc.js');
+  assert.ok(C.reaches(C.reachFrom(90), 90) && !C.reaches(C.reachFrom(90) - 0.0001, 90));
+});
+
+test('a removed term stays removed, and an import does not replace a newer term of the same name', () => {
+  const term = (id, n, at) => ({ op: 'term', term: { id, n, c: [] }, at, base: 0 });
+  let rec = G.change(undefined, term('one', 'Fall 2024', 10));
+  rec = G.change(rec, { op: 'drop', id: 'one', at: 30 });
+  assert.deepEqual(rec, { t: [], d: { one: 30 } });
+  assert.deepEqual(G.change(rec, term('one', 'Fall 2024', 25)).t, [], 'an older put of it, arriving late, is dropped');
+  assert.equal(G.change(rec, { op: 'drop', id: 'one', at: 20 }).d.one, 30);
+  rec = G.change(rec, term('two', 'Spring 2025', 40));
+  const late = G.change(rec, { op: 'add', terms: [{ id: 'three', n: 'spring 2025', c: [] }], at: 35 });
+  assert.deepEqual(late.t.map((t) => t.id), ['two'], 'an import made before the term changed leaves it');
+  rec = G.change(rec, { op: 'add', terms: [{ id: 'three', n: 'spring 2025', c: [] }], at: 45 });
+  assert.deepEqual(rec.t.map((t) => t.id), ['three']);
+  assert.equal(rec.d.two, 45, 'the term an import replaced is removed for good');
+  assert.deepEqual(G.change(rec, term('two', 'Spring 2025', 42)).t.map((t) => t.id), ['three']);
+  const many = G.clean({ t: [], d: Object.fromEntries(Array.from({ length: 250 }, (_, i) => [`x${i}`, i + 1])) });
+  assert.equal(Object.keys(many.d).length, 200);
+  assert.ok(!('x0' in many.d) && 'x249' in many.d, 'the newest are kept');
 });
 
 test('a transcript as text: terms, courses, credits either side of the grade, and its own term GPA', () => {
