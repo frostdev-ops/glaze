@@ -44,13 +44,13 @@ const CODE = shipped();
 
 // Source without its comments: /* … */ blocks, and // to the end of a line where // starts a comment (not https://).
 const executable = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[\s;{}()])\/\/[^\n]*/gm, '$1');
-// Calls of `name`, however written: f(…), f (…), f/* … */(…), f // …⏎(…), f?.(…), obj.f(…), obj['f'](…), split over
+// Calls of `name`, however written: f(…), f (…), f/* … */(…), f // …⏎(…), f?.(…), f?./* … */(…), obj.f(…), obj['f'](…), split over
 // lines. Comments don't count. Each comes back as `name(args)` with its whitespace and comments squeezed out, so an
 // allowlist names the exact call. Out of reach: a renamed alias (const si = setInterval) and .call/.apply; review
 // catches those.
 const calls = (name, src) => {
   const out = [];
-  const head = new RegExp(`(?:(?<![\\w$])${name}|\\[\\s*(['"\`])${name}\\1\\s*\\])\\s*(?:(?:\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*)\\s*)*(?:\\?\\.\\s*)?\\(`, 'g');
+  const head = new RegExp(`(?:(?<![\\w$])${name}|\\[\\s*(['"\`])${name}\\1\\s*\\])\\s*(?:(?:\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*)\\s*)*(?:\\?\\.\\s*(?:(?:\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*)\\s*)*)?\\(`, 'g');
   for (const hit of src.matchAll(head)) {
     const before = src.slice(0, hit.index);
     const line = before.slice(before.lastIndexOf('\n') + 1);
@@ -128,7 +128,7 @@ test('the scans see the code they are meant to', () => {
   // The forms a change might use, each caught.
   const forms = ['setInterval(f, 10)', 'setInterval (f, 10)', 'setInterval/* x */(f, 10)', 'window.setInterval(f, 10)', "window['setInterval'](f, 10)",
     'globalThis[ "setInterval" ](f, 10)', 'setInterval(\n  f,\n  10\n)', 'setInterval // why\n(f, 10)', 'globalThis.setInterval?.(f, 10)',
-    "window['setInterval']?.(f, 10)", 'setInterval?.\n(f, 10)'];
+    "window['setInterval']?.(f, 10)", 'setInterval?.\n(f, 10)', 'globalThis.setInterval?. /* why */ (f, 10)'];
   for (const f of forms) assert.deepEqual(calls('setInterval', f).map((c) => c.call), ['setInterval(f, 10)'], f);
   for (const f of ['// setInterval(f, 10)', '/* setInterval(f, 10) */', 'mySetInterval(f, 10)', 'setIntervalX(f, 10)']) assert.deepEqual(calls('setInterval', f), [], f);
   assert.deepEqual(calls('getComputedStyle', 'x = getComputedStyle\n(el).color').map((c) => c.call), ['getComputedStyle(el)']);
