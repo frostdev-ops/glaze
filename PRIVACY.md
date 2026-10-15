@@ -8,6 +8,10 @@ _Last updated: 2026-10-15_
   background, motion, course colour and extras choices, and what you set for a course in its course menu:
   its colour, look, tint and the **nickname you type for it**. When Chrome sync is on, these follow
   your own account between devices. Safari keeps them on this device only.
+- **Your GPA choices** (Canvas, the GPA Extra), in `chrome.storage.sync` as their own small item: for each
+  course you change, its Canvas site's address and course id with the credits, honors/AP level, grading
+  scale you typed and whether it counts. Nothing is stored for a course you leave as it is. It follows
+  your account like your settings; Safari keeps it on this device only.
 - **Your courses**, in `chrome.storage.local`, on this device only: each course's name as Blackboard
   lists it and which of Ultra's ten colour slots it is in, so the editor can list them for you to
   recolour or tint. On Canvas this includes the site's address, course id, name, code and native color.
@@ -27,6 +31,12 @@ _Last updated: 2026-10-15_
 - **Scores you try in the what-if calculator**, in `chrome.storage.local`, on this device only: for up
   to 20 courses, the hypothetical scores you typed for work not graded yet. A score is removed once the
   item has a real grade or is gone, and "Clear scores" removes a course's.
+- **What-if on Canvas**, in `chrome.storage.local`, on this device only, per Canvas site and signed-in user id:
+  for up to 100 courses, the course id with the assignment ids and scores you typed (and the real grade each
+  was typed against), the ids of work you left out, your pretend assignments (the name you gave, points and
+  score) and a what-if grade per course for the GPA. A score goes once its real grade arrives or changes,
+  and the calculator says so; "Clear this course" and "Clear all courses" delete them. Nothing of this is
+  sent to Canvas or anywhere else.
 - **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
   time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner),
   and the address of the site it came from, so the popup can list them. It is replaced each time it's
@@ -42,7 +52,7 @@ _Last updated: 2026-10-15_
   messages to individual users in uniquely named courses, with a subject and selected recipients;
   replies and group recipients are not backed up. Copies are kept until a matching sent message is
   confirmed, the body is cleared or the offer dismissed, or 14 days pass. Switching the Extra off deletes
-  them. Canvas's own editor recovery and what-if scores stay with Canvas.
+  them. Canvas's own editor recovery and its own what-if scores stay with Canvas.
 - **Your Looks history and favorites**, in `chrome.storage.local`, on this device only: the last 20 themes
   you wore (palette, fonts, look and background, with when you last wore each), so Previous Look can take
   you back, and the theme codes you saved as favorites, with the name and GitHub username of a gallery Look.
@@ -103,6 +113,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
   asks for your active courses with their current scores and, inside a course, that course's navigation
   tabs. Extras also read native course colors, assignments and submission status, module completion
   requirements and items, folder and file metadata, and the server-rendered Grades page's unread dots.
+  The course list includes each course's term (for the GPA). When you open the what-if calculator on a
+  course's Grades page (or when you have something saved for that course), Glaze asks for that course's
+  assignment groups with your submissions, and its grading periods or grading scheme where the course has
+  them; the answers stay in memory. Glaze never writes grades or what-if scores to Canvas.
   These requests are read-only GETs to your own Canvas site with your existing session. Only the due
   list, course details and badge records described above are stored; other answers stay in memory.
   For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking
@@ -154,7 +168,7 @@ To recognize Canvas on any school's domain, Glaze checks the head of each https 
 
 ## Permissions
 
-- `storage` — to save the settings, course names, places, what-if scores, due list, typed-text backups,
+- `storage` — to save the settings, GPA choices, course names, places, what-if scores, due list, typed-text backups,
   Looks history and favorites, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.

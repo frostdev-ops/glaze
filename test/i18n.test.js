@@ -44,7 +44,7 @@ const fromJs = (js) => {
   }
   return out;
 };
-const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js'];
+const JS = ['content.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', ...fs.readdirSync(path.join(root, 'features')).map((f) => `features/${f}`)];
 const used = new Set([
   ...['options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
@@ -65,7 +65,7 @@ test('every language has every key, and nothing else', () => {
 });
 
 test('every key is still used', () => {
-  const src = squash([...JS, 'lib/grades.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html'].map(read).join(' '));
+  const src = squash([...JS, 'lib/grades.js', 'lib/gradecalc.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html'].map(read).join(' '));
   for (const k of keys) assert.ok(src.includes(k), `"${k}" is in no source file`);
 });
 

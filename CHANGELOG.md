@@ -16,11 +16,24 @@ All notable changes to Glaze are documented here. The format follows
 - **Looks history and Previous Look:** the last 20 themes you wore, from the popup, the editor or Ctrl+K,
   with one click back to the one before, in the editor and on the popup's Looks sheet. Free and unlimited;
   kept on this device.
+- **Canvas: a what-if calculator** above a course's grades (the What-if calculator Extra, now on Canvas too). It
+  works out your grade by Canvas's own rules: weighted groups, dropped lowest and highest scores (the set that
+  helps most, not just the lowest percentages), excused and omitted work, grading periods and letters-only
+  courses, and it matches the totals Canvas shows. Try scores for work not graded yet, change real ones, leave
+  work out, add pretend assignments, and see the even score you'd need on what's left for a target. What you
+  change is kept on this device, per course, until the real grade arrives (Glaze tells you when one goes), and
+  is never sent to Canvas.
+- **Canvas: GPA on the Dashboard** (off by default): your GPA for each term and across your current courses, on a
+  4.0 or plus/minus scale, weighted for honors (+0.5) and AP or IB (+1) if you like, above or below the cards.
+  Set credits, a grading scale of your own and a what-if grade for each course.
+- **Card grades:** click a grade on a Canvas Dashboard card to open that course's grades, or show card grades
+  only when you point at the card.
 
 ### Changed
 
 - **Lighter on every page:** Glaze loads about 38% less code on Canvas and Blackboard pages. Its words in your
   language, Download all and draft backup now load only on the pages that use them.
+- **Blackboard's what-if calculator** now loads only on a gradebook, like Canvas's.
 
 ### Fixed
 

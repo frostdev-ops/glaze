@@ -445,8 +445,20 @@
   // serves every card, asked once a page load; the command palette's course list is that answer too.
   // ponytail: the first 100 courses, no paging.
   let canvasList = null;
-  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&per_page=100')
+  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
     .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
+  // The chip is drawn after the course code (canvas.css), inside the card's link: a click on it opens the grades.
+  if (!ultra) addEventListener('click', (e) => {
+    const el = settings.enhance.overall && e.target.closest?.('.ic-DashboardCard [data-gz-grade]');
+    const r = el && document.createRange();
+    if (!r) return;
+    r.selectNodeContents(el);
+    const b = r.getBoundingClientRect();
+    if (html.dir === 'rtl' ? e.clientX >= b.left : e.clientX <= b.right) return; // on the code, not the chip
+    e.preventDefault();
+    const url = `${el.closest('a').href}/grades`;
+    if (e.ctrlKey || e.metaKey) open(url); else location.assign(url);
+  }, true);
   const tagCanvasCards = () => {
     if (!document.querySelector('.ic-DashboardCard')) return;
     canvasCourses().then((list) => {
@@ -1584,24 +1596,32 @@
   // ---- what-if calculator (Extras) -----------------------------------------------------------
   // On a course's gradebook: scores typed for work not graded yet give the overall grade they'd make,
   // and a target gives the even share of the remaining points it needs. The recipe is the course's own
-  // overall grade (lib/grades.js), and it must reproduce Blackboard's figure first; otherwise it says so.
+  // overall grade (lib/gradecalc.js, on demand), and it must reproduce Blackboard's figure first; otherwise it says so.
   // The scores are kept on this device (storage.local, whatIf) until cleared, or the item is graded or gone.
   const whatIf = new Map(); // cid → { overrides: Map columnId → score, target }, or null while loading
   const keepCalc = (cid, overrides) => {
-    try { chrome.storage.local.get('whatIf', (r) => chrome.storage.local.set({ whatIf: GZ_GRADES.storeScores(r?.whatIf, cid, overrides) })); } catch { /* extension reloaded under the tab */ }
+    try { chrome.storage.local.get('whatIf', (r) => chrome.storage.local.set({ whatIf: GZ_GRADECALC.storeScores(r?.whatIf, cid, overrides) })); } catch { /* extension reloaded under the tab */ }
   };
   // Cut, not rounded, to two places: how Ultra writes its own overall grade (82.456 is 82.45%).
   const asPct = (p) => (p == null ? '–' : GZ_I18N.pct(Math.floor(p * 100 + 1e-9) / 100, locale()));
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  // Canvas: the what-if calculator (a course's Grades) and the GPA (Dashboard) are features/grades.js, asked for where on.
+  const canvasGrades = () => {
+    const e = settings.enhance;
+    if (globalThis.GZ_GRADES_UI || (observer && ((e.calc && /^\/courses\/\d+\/grades\/?$/.test(location.pathname)) || (e.gpa && location.pathname === '/')))) {
+      need('features/grades.js', () => globalThis.GZ_GRADES_UI).then(() => GZ_GRADES_UI.render(), () => {});
+    }
+  };
   const renderCalc = () => {
-    // Canvas already saves what-if scores and offers Show Saved / Revert. Theme its own controls in canvas.css.
-    if (!ultra) return;
+    if (!ultra) return canvasGrades();
     const old = document.getElementById('gz-calc');
     const cid = courseId();
     const host = settings.enhance.calc && observer && cid && /^\/ultra\/courses\/_\d+_\d+\/grades/.test(location.pathname) && document.querySelector('.grades-list > aside.student-grade-overview');
     if (!host) return old?.remove();
     const b = bookFor(cid);
     if (!b.results) return;
+    // Its arithmetic is in lib/gradecalc.js, on demand; this runs again once it is in.
+    if (!globalThis.GZ_GRADECALC) return void need('lib/gradecalc.js', () => globalThis.GZ_GRADECALC).then(renderCalc, () => {});
     const key = `${cid} ${b.key} ${locale()}`;
     if (old?.dataset.key === key && old.previousElementSibling === host) return;
     if (!whatIf.has(cid)) {
@@ -1611,9 +1631,9 @@
     }
     const st = whatIf.get(cid);
     if (!st) return;
-    const m = GZ_GRADES.model(b.results);
+    const m = GZ_GRADECALC.model(b.results);
     // Graded, exempted or gone since: its score goes.
-    const kept = GZ_GRADES.keptScores(st.overrides, m.items);
+    const kept = GZ_GRADECALC.keptScores(st.overrides, m.items);
     if (kept.size !== st.overrides.size) { st.overrides = kept; keepCalc(cid, kept); }
     const now = make('b', { textContent: m.kind === 'unsupported' ? '' : asPct(m.percent()) });
     const box = make('details', { id: 'gz-calc', open: !!old?.open },
@@ -2360,10 +2380,10 @@
     ['/ultra/stream', 'Activity stream'], ['/ultra/organizations', 'Organizations'], ['/ultra/profile', 'Profile'], ['/ultra/tools', 'Tools']];
   const EXTRAS = { urgency: 'Due-date urgency', clamp: 'Shorter descriptions', scores: 'Score bars', reading: 'Reading width', inline: 'Due-date status and percentages',
     previews: 'Folder previews', progress: 'Course progress', keys: 'Keyboard shortcuts', newgrades: 'New-grade badges', newcontent: 'New-content badges', calc: 'What-if calculator', coursemenu: 'Course menu' };
-  // Canvas's global navigation, and the same switches plus the card grades; not the calculator, as Canvas has its own what-if.
+  // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
-  const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards' };
-  delete CANVAS_EXTRAS.calc;
+  const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', gradeHover: 'Card grades only on hover', gpa: 'Grade point average',
+    gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -3371,7 +3391,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     if (!ultra) { for (const j of jobs.values()) j.ctl.abort(); canvasDlChecked = new WeakMap(); }
     closeKeys();
     closeCmd();
-    for (const id of ['gz-progress', 'gz-calc']) document.getElementById(id)?.remove();
+    for (const id of ['gz-progress', 'gz-calc', 'gz-gpa']) document.getElementById(id)?.remove();
     for (const p of document.querySelectorAll('.gz-new')) p.remove();
     dropBars();
     for (const b of document.querySelectorAll('.gz-dl')) b.remove();
