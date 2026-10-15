@@ -72,9 +72,10 @@ All notable changes to Glaze are documented here. The format follows
   beside it. Ctrl+K turns it on or off.
 - **Search in your courses (Canvas, on by default; Extras, under Command palette):** from two typed characters, the
   Ctrl+K palette also finds pages, assignments, discussions, announcements, modules and files in your active courses
-  by title, each labelled with its type and course: the course you're in first, then this term's, then the rest (which
-  are skipped once enough is found). Results join the list as they arrive without moving what's under the cursor, and
-  screen readers hear the count when the search is done. It waits for a 150 ms pause, cancels what's still running on
+  by title, each labelled with its type and course: the course you're in first, then this term's, then the rest, up to
+  24 results. Results join the list below what's already shown as they arrive, so nothing moves under the pointer or
+  the keyboard's choice; looser matches of Glaze's own commands follow once it's done. Screen readers hear the count
+  when the search is done. Turning it off while the palette is open stops it at once. It waits for a 150 ms pause, cancels what's still running on
   the next keystroke, asks six lists at a time, and keeps answers in memory for five minutes. Read-only, to your own
   Canvas only.
 

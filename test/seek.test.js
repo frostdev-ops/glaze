@@ -28,7 +28,6 @@ test('the course you are in first, then this term\'s, then the rest; never a cou
   ];
   const o = S.order(courses, '5', NOW);
   assert.deepEqual(o.map((c) => c.id), ['5', '2', '3', '1', '4']);
-  assert.deepEqual(o.map((c) => c.now), [true, true, true, false, false]);
   assert.equal(o[2].name, 'Advising', 'a course without a code goes by its name');
 });
 
@@ -80,7 +79,7 @@ const canvas = (answer = () => []) => {
   };
   return { get, asked, most: () => most };
 };
-const course = (id, now = true) => ({ id, name: `C${id}`, now });
+const course = (id) => ({ id, name: `C${id}` });
 
 test('every course is asked for every kind, this course first, a few requests at a time, each kind arriving best first', async () => {
   const cv = canvas((p) => (p.includes('/pages?') ? [{ page_id: '1', url: 'a', title: 'Intro to lab' }, { page_id: '2', url: 'b', title: 'Lab' }] : []));
@@ -111,11 +110,21 @@ test('a thing found twice (a graded discussion) is given once', async () => {
   assert.deepEqual(got.map((r) => r.kind), ['Assignment']);
 });
 
-test('once enough is found, courses outside this term are not asked; this term\'s always are', async () => {
-  const cv = canvas((p) => (p.includes('/pages?') ? [{ page_id: '1', url: 'a', title: 'week' }, { page_id: '2', url: 'b', title: 'week 2' }] : []));
-  const n = await S.search({ term: 'week', courses: [course('1'), course('2'), course('3', false), course('4', false)], get: cv.get, onBatch() {}, limit: 3, conc: 1 });
-  assert.equal(n, 4);
-  assert.deepEqual([...new Set(cv.asked.map((p) => p.split('/')[2]))], ['1', '2']);
+test('once enough is found nothing more is asked, in this term or any other, and nothing past it is given', async () => {
+  // Six courses this term, every kind with matches: before, all 36 lists were asked and 144 results given.
+  const four = (p) => Array.from({ length: 4 }, (_, i) => ({ id: String(i + 1), page_id: String(i + 1), url: `p${i}`, name: `week ${i}`, title: `week ${i}`, display_name: `week ${i}` }));
+  const cv = canvas(four);
+  const got = [];
+  const courses = ['1', '2', '3', '4', '5', '6'].map((id) => course(id));
+  const n = await S.search({ term: 'week', courses, get: cv.get, onBatch: (rs) => got.push(...rs) });
+  assert.equal(n, 24);
+  assert.equal(got.length, 24, 'never past the limit');
+  assert.ok(cv.asked.length <= 6 + 6, `${cv.asked.length} lists asked: the first course, and one more round already going`);
+  assert.deepEqual([...new Set(got.map((r) => r.course))], ['C1', 'C2'], 'the first courses in order fill it (C1 has 20: its announcements are its discussions here)');
+  // Answers already on their way when the limit is reached are cut to fit.
+  const cut = [];
+  assert.equal(await S.search({ term: 'week', courses, get: canvas(four).get, onBatch: (rs) => cut.push(...rs), limit: 10, conc: 4 }), 10);
+  assert.equal(cut.length, 10);
 });
 
 test('a kind that fails (files hidden from students) is skipped, and not kept', async () => {
@@ -163,8 +172,12 @@ const palette = () => {
   const cmd = { box: { isConnected: true }, input: { value: '', addEventListener: (e, f) => { listeners[e] = f; } }, list: { after: (x) => { cmd.live = x; } } };
   const shows = [];
   const requests = [];
+  const settings = { enhance: { search: true } };
+  const changed = [];
   const ctx = vm.createContext({
+    chrome: { storage: { onChanged: { addListener: (f) => changed.push(f) } } },
     GZ_CTX: {
+      on: () => true, settings: () => settings,
       t: (k, v) => k.replace('{n}', v?.n), need: () => Promise.resolve(), canvasCourseId: () => '2',
       canvasCourses: () => Promise.resolve([{ id: '1', course_code: 'ENG', term: {} }, { id: '2', course_code: 'BIO', term: {} }]),
     },
@@ -176,7 +189,7 @@ const palette = () => {
       o.signal.addEventListener('abort', () => r.reject(new DOMException('aborted', 'AbortError')));
       return r;
     },
-    setTimeout: (f, ms) => { timers.push({ f, ms }); return timers.length; }, clearTimeout: (i) => { if (timers[i - 1]) timers[i - 1].f = null; },
+    setTimeout: (f, ms) => { const x = { f, ms }; timers.push(x); return x; }, clearTimeout: (x) => { if (x) x.f = null; },
     AbortController, DOMException, Promise, URL, Date,
   });
   vm.runInContext('globalThis.globalThis = this;', ctx);
@@ -186,7 +199,8 @@ const palette = () => {
   const tick = () => { const due = timers.splice(0); for (const x of due) x.f?.(); };
   const answer = (pred, body) => { for (const q of requests.filter((x) => !x.done && pred(x.url))) { q.done = true; q.r.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(body)) }); } };
   const answerAll = (body = []) => answer(() => true, body);
-  return { ctx, cmd, shows, requests, type, tick, answer, answerAll, timers, attach: () => ctx.GZ_SEARCH.attach(cmd, (keep) => shows.push(keep === true ? 'keep' : 'reset')) };
+  const change = (ch) => { for (const f of changed) f(ch, 'sync'); };
+  return { ctx, cmd, shows, requests, type, tick, answer, answerAll, timers, settings, change, attach: () => ctx.GZ_SEARCH.attach(cmd, (keep) => shows.push(keep === true ? 'keep' : 'reset')) };
 };
 const pump = async (p, rounds = 10) => { for (let i = 0; i < rounds; i++) { p.answerAll(); await settle(); } };
 
@@ -249,4 +263,102 @@ test('palette: nothing found is said, and closing cancels', async () => {
   assert.ok(out.length);
   p.cmd.stop();
   assert.ok(out.every((q) => q.signal.aborted));
+});
+
+test('palette: turned off while it is open, nothing more is asked, and what was running stops', async () => {
+  const p = palette();
+  await p.attach();
+  p.type('la');
+  p.tick();
+  await settle();
+  await settle();
+  const out = p.requests.slice();
+  assert.ok(out.length);
+  // The popup or the editor turns it off: storage says so before content.js's own copy of the settings does.
+  p.change({ enhance: { newValue: { search: false }, oldValue: { search: true } } });
+  assert.ok(out.every((q) => q.signal.aborted), 'in flight, cancelled');
+  assert.equal(p.cmd.found, null);
+  assert.equal(p.cmd.seeking, false);
+  // Then content.js has it too: typing asks for nothing.
+  p.settings.enhance.search = false;
+  p.type('lab');
+  p.tick();
+  await settle();
+  await settle();
+  assert.equal(p.requests.length, out.length, 'no new requests');
+  assert.equal(p.cmd.found, null);
+  // Off between the keystroke and the pause: the search doesn't start.
+  p.settings.enhance.search = true;
+  p.type('labs');
+  p.settings.enhance.search = false;
+  p.tick();
+  await settle();
+  await settle();
+  assert.equal(p.requests.length, out.length);
+  assert.equal(p.cmd.seeking, false);
+  // Back on: searching again.
+  p.settings.enhance.search = true;
+  p.type('lab report');
+  p.tick();
+  await settle();
+  await settle();
+  assert.ok(p.requests.length > out.length);
+});
+
+// content.js's palette list (showCmd), sliced from the source with a stand-in DOM: where search results go.
+const rows = () => {
+  const src = fs.readFileSync(path.join(__dirname, '../content.js'), 'utf8');
+  const a = src.indexOf('  let cmd = null; // {'), b = src.indexOf('  const openCmd = () => {', a);
+  assert.ok(a > 0 && b > a, 'palette markers');
+  const el = () => ({
+    children: [], attrs: {}, id: '', textContent: '', className: '',
+    setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; }, addEventListener() {}, scrollIntoView() {},
+    append(...c) { this.children.push(...c); }, replaceChildren(...c) { this.children = c; },
+    insertBefore(c, ref) { const i = this.children.indexOf(ref); this.children.splice(i < 0 ? this.children.length : i, 0, c); },
+    querySelector(sel) { return sel === '[aria-selected="true"]' ? this.children.find((c) => c.attrs['aria-selected'] === 'true') || null : null; },
+  });
+  const ctx = vm.createContext({ document: { createElement: el }, GZ_PAGE: require('../lib/page.js'), t: (k) => k });
+  vm.runInContext(`${src.slice(a, b)}; globalThis.api = { showCmd, set: (c) => { cmd = c; } };`, ctx);
+  const cmd = { input: el(), list: el(), all: [], shown: [], active: 0 };
+  ctx.api.set(cmd);
+  const text = () => cmd.list.children.map((li) => li.children[0]?.textContent ?? `(${li.textContent})`);
+  return { cmd, show: ctx.api.showCmd, text };
+};
+const cmdOf = (label, group = 'Glaze', hint = 'Glaze') => ({ label, hint, group, run() {} });
+
+test('palette: search results arrive below what is shown, so no row moves under a still pointer; loose matches come after', () => {
+  const p = rows();
+  p.cmd.all = [cmdOf('Unit 2 quiz', 'Due this week', 'tomorrow'), cmdOf('Turn on grade point average'), cmdOf('Turn off what-if calculator')];
+  p.cmd.input.value = 'unit';
+  p.cmd.found = [];
+  p.cmd.seeking = true;
+  p.show();
+  assert.deepEqual(p.text(), ['Unit 2 quiz', '(Searching your courses…)']);
+  // Three arrivals: each lands below the rows already there.
+  for (const label of ['Unit 1: Cells', 'Unit 2: Energy', 'Unit 1 quiz']) {
+    const was = p.text().filter((x) => !x.startsWith('('));
+    p.cmd.found.push(cmdOf(label, 'Module', 'BIO 1100'));
+    p.show(true);
+    assert.deepEqual(p.text().slice(0, was.length), was, `rows kept their places when ${label} came`);
+  }
+  // Done: the looser matches join at the end.
+  p.cmd.seeking = false;
+  p.show(true);
+  assert.deepEqual(p.text().slice(0, 4), ['Unit 2 quiz', 'Unit 1: Cells', 'Unit 2: Energy', 'Unit 1 quiz']);
+  assert.ok(p.text().length > 4 && p.text().slice(4).every((x) => x.startsWith('Turn')), 'loose matches last');
+});
+
+test('palette: the keyboard choice stays on the same item as results arrive', () => {
+  const p = rows();
+  p.cmd.all = [cmdOf('Lab safety rules'), cmdOf('Lab notes')];
+  p.cmd.input.value = 'lab';
+  p.cmd.found = [];
+  p.cmd.seeking = true;
+  p.show();
+  p.cmd.active = 1;
+  const chosen = p.cmd.shown[1].label;
+  p.cmd.found.push(cmdOf('Lab report 1', 'Assignment', 'BIO 1100'));
+  p.show(true);
+  assert.equal(p.cmd.shown[p.cmd.active].label, chosen);
+  assert.equal(p.cmd.list.children[p.cmd.active].attrs['aria-selected'], 'true');
 });

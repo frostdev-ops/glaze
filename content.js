@@ -2498,14 +2498,15 @@
     cmd.shown = q.trim()
       ? cmd.all.map((c) => [c, Math.max(GZ_PAGE.fuzzy(q, c.label), GZ_PAGE.fuzzy(q, `${c.hint} ${c.label}`) - 2)]).filter(([, s]) => s >= 0).sort((a, b) => b[1] - a[1]).slice(0, cmd.found ? 12 : 40).map(([c]) => c)
       : [...cmd.all.filter((c) => c.group !== 'In this course' && c.group !== 'Glaze'), ...cmd.all.filter((c) => c.group === 'In this course').slice(0, 8)];
-    // Searching your courses too (features/search.js): what it finds goes after what has the query as typed and before the
-    // looser matches (its letters in order), which arrivals push down. Its "Searching…" row is where the next ones go.
+    // Searching your courses too (features/search.js): what has the query as typed, then what it finds, each arrival below
+    // the last, so no row moves under the pointer; the looser matches (its letters in order) follow once it's done.
+    // Its "Searching…" row is where the next ones go.
     let at = -1;
     if (q.trim() && cmd.found) {
       const near = (c) => `${c.hint} ${c.label}`.toLowerCase().includes(q.trim().toLowerCase());
       const close = cmd.shown.filter(near);
       at = close.length + cmd.found.length;
-      cmd.shown = [...close, ...cmd.found, ...cmd.shown.filter((c) => !near(c))];
+      cmd.shown = [...close, ...cmd.found, ...(cmd.seeking ? [] : cmd.shown.filter((c) => !near(c)))];
     }
     cmd.active = Math.max(0, was ? cmd.shown.indexOf(was) : 0);
     cmd.list.replaceChildren(...cmd.shown.map((c, i) => {
