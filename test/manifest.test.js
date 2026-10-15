@@ -33,9 +33,11 @@ test('the first content script is Glaze, and the detector covers the rest of htt
   assert.equal(detector.run_at, 'document_start');
 });
 
-test('injecting and registering need scripting and host access', () => {
+test('injecting and registering need scripting and host access; course tabs\' pictures need <all_urls>', () => {
   assert.ok(m.permissions.includes('scripting'));
-  assert.deepEqual(m.host_permissions, ['https://*/*']);
+  // chrome.tabs.captureVisibleTab takes <all_urls> or activeTab (owner, 2026-10-15); it covers every optional host too.
+  assert.deepEqual(m.host_permissions, ['<all_urls>']);
+  assert.equal(m.optional_host_permissions, undefined, 'Chrome flags and drops optional hosts the required ones cover');
 });
 
 test('Chrome retains exactly its existing permissions without native messaging', () => {

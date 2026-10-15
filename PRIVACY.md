@@ -282,11 +282,12 @@ you import) are bundled. It makes requests in these cases:
   session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
 - **Course tabs.** To keep each account's tabs apart, Glaze asks your own Blackboard site who is signed in (Ultra's
   `/learn/api/v1/users/me`, which Ultra itself asks on every page), once a page, shared with the grade and course-list
-  reads above. Replaying the copy makes no requests: the page's existing stylesheets remain in place and unreadable
-  stylesheets are never linked again. Blackboard routes the selected course normally; if it fails to switch in place
+  reads above. What a tab shows the instant you click it is a picture of that course's page as you left it: Glaze's
+  worker takes it of the Blackboard tab on screen (checking before and after that it still is), keeps it in memory
+  (storage.session, never on disk), and shows it over the page until Blackboard's live page has finished drawing under
+  it. Showing it makes no requests. Blackboard routes the selected course normally; if it fails to switch in place
   within 2.5 seconds, Glaze loads that selected course's own-site address. Glaze never prefetches a course or opens one
-  in the background. Assignment overviews require a positive classification from the gradebook already held by the
-  native grade features; tabs make no request to classify them and recheck before recording or replaying a copy.
+  in the background.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette
@@ -613,7 +614,12 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 - Host access to `https://*.instructure.com/*` — to apply the theme on Canvas, which Instructure hosts
   for most schools under that domain, and in Canvas's document viewer on `canvadocs.instructure.com`, where a
   separate small script applies the palette and, if you switch them on, your marks on documents.
-- Host access to `https://*/*` and `scripting` — Canvas also runs on schools' own domains, and Moodle always does.
+- Host access to all sites (`<all_urls>`) and `scripting` — Canvas also runs on schools' own domains, and Moodle always does.
+  Content scripts still match HTTPS pages only. The wider form is what Chrome requires for one thing: course tabs on
+  Blackboard Ultra take a picture of the Blackboard tab you're on (only while it is the tab on screen) and show it the
+  instant you click back to that course, while Blackboard opens the live page under it. Pictures stay in memory
+  (storage.session), are never written to disk or sent anywhere, and go when the browser closes, on sign-out, or when
+  Glaze or course tabs are switched off.
   The check described above runs on https pages for that reason; when it finds Canvas or Moodle, Glaze styles that
   site, and only that site, the same way. The hostname is kept in the extension's local storage on your device.
   The same host access lets the gallery script above run on `https://frostdev.io/glaze/looks`, and, only while
