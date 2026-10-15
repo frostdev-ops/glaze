@@ -108,9 +108,11 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
       if (!b) {
         b = button(); b.className = 'gz-folder-eye'; b.id = `gz-folder-eye-${id}`;
         b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); if (e.isTrusted && b.isConnected && current() && row.isConnected && row.dataset.contentId === id && toggleOf(row)) send({ id, hidden: !data?.ids.includes(id) }, b, e.detail === 0); });
-        const heading = row.querySelector('h3');
-        if (heading) heading.after(b); else row.append(b);
       }
+      // Beside the folder's title: after its heading, or a nested folder's title itself (it has no heading of its own;
+      // the row's end is below the folder and what it holds).
+      const at = toggle.closest('h1, h2, h3, h4, h5, h6') || toggle;
+      if (row.contains(at) && b.previousElementSibling !== at) at.after(b);
       b.disabled = !data;
       if (hidden && data.show) markHidden(toggle, row, id);
       const label = t(hidden ? 'Unhide folder: {title}' : 'Hide folder: {title}', { title: titleOf(toggle) });
