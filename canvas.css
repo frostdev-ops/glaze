@@ -314,6 +314,8 @@ html[data-gz-nav] #header .ic-icon-svg { fill: currentColor; }
 html[data-gz-nav] #header .ic-app-header__menu-list-link:is(:hover, :focus, :active),
 html[data-gz-nav] #header .ic-app-header__menu-list-item--active > .ic-app-header__menu-list-link { background: transparent; }
 html[data-gz-nav] #header .ic-app-header__menu-list-link:is(:hover, :focus) .menu-item__text { text-decoration: underline; }
+/* Canvas's collapsed label and arrow use the accent, independently of the rail's chosen ink. */
+body:not(.primary-nav-expanded) #header .ic-app-header__menu-list-link .menu-item__text { color: var(--gz-accent-ink) !important; }
 html[data-gz-nav] #header .ic-app-header__menu-list-link:focus { box-shadow: inset 0 0 0 2px var(--gz-nav-ink); }
 html[data-gz-nav] #header .ic-app-header__menu-list-item--active > a::before { background: var(--gz-nav-ink); box-shadow: none; }
 html[data-gz-nav-collapsed] #primaryNavToggle .ic-icon-svg--navtoggle { transform: none; }
@@ -1526,11 +1528,11 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 #gz-todo .gz-todo-meta { display: flex; flex-wrap: wrap; gap: 0.15rem 0.45rem; margin-top: 0.1rem; font-size: 0.75rem; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-meta > :not(:first-child)::before { content: "·"; margin-inline-end: 0.45rem; color: var(--gz-ink-faint); }
 #gz-todo .gz-todo-meta > .gz-todo-chip::before, #gz-todo .gz-todo-meta > .gz-todo-chip + *::before { content: none; }
-#gz-todo .gz-todo-chip { padding: 0 0.45em; border-radius: 999px; font-weight: 600; color: var(--gz-accent); background: var(--gz-accent-soft); }
-#gz-todo .gz-todo-chip[data-tone="ok"] { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
-#gz-todo .gz-todo-chip[data-tone="warn"] { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
-#gz-todo .gz-todo-chip[data-tone="err"] { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
-html:not([data-gz-dark-theme]) #gz-todo .gz-todo-chip[data-tone] { color: color-mix(in srgb, currentColor 70%, var(--gz-ink)); }
+:is(#gz-todo, .gz-ct) .gz-todo-chip { padding: 0 0.45em; border-radius: 999px; font-weight: 600; color: var(--gz-accent); background: var(--gz-accent-soft); }
+:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="ok"] { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
+:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="warn"] { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
+:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="err"] { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { color: color-mix(in srgb, currentColor 70%, var(--gz-ink)); }
 #gz-todo .gz-todo-plan { color: var(--gz-accent); }
 #gz-todo .gz-todo-more, #gz-todo .gz-todo-small {
   padding: 0.05rem 0.5rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer;
@@ -1561,6 +1563,77 @@ html:not([data-gz-dark-theme]) #gz-todo .gz-todo-chip[data-tone] { color: color-
 #gz-todo .gz-todo-progress { display: grid; gap: 0.25rem; margin: 0 0 0.35rem; font-size: 0.75rem; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-progress i { height: 5px; border-radius: 999px; background: var(--gz-line); overflow: hidden; position: relative; }
 #gz-todo .gz-todo-progress i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--gz-pct); border-radius: inherit; background: linear-gradient(90deg, var(--gz-accent), var(--gz-ok)); }
+
+/* Tasks on course cards (features/cardtasks.js): the course's next items under the card's header, each a link with its
+   date and the To Do's status chip. Nothing moves, so there's nothing for reduced motion to stop. */
+#application .ic-DashboardCard > .gz-ct { margin: 0; padding: 0.4rem 0.6rem 0.2rem; list-style: none; font: 0.8125rem/1.35 var(--gz-font); color: var(--gz-ink); }
+#application .gz-ct li { margin: 0; }
+#application .gz-ct-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.4rem; padding: 0.2rem 0.3rem; border-radius: var(--gz-radius-sm); color: inherit; text-decoration: none; }
+#application a.gz-ct-row:hover { background: var(--gz-row-hover); }
+#application a.gz-ct-row:hover .gz-ct-t { color: var(--gz-accent); }
+#application .gz-ct-t { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#application .gz-ct-when { font-size: 0.92em; color: var(--gz-ink-muted); }
+#application .gz-ct [data-past] .gz-ct-when { color: var(--gz-err); }
+#application .gz-ct [data-done] :is(.gz-ct-t, .gz-ct-when) { text-decoration: line-through; font-weight: 400; color: var(--gz-ink-muted); }
+#application p.gz-ct { padding-block: 0.5rem; color: var(--gz-ink-muted); }
+#application .gz-ct .gz-todo-chip { font-size: 0.92em; }
+
+/* Reminders and streak (features/reminders.js): the streak and the bell in the To Do header, one toast in the page's
+   corner (it never takes focus; it doesn't slide in under reduced motion), and the hub, a dialog. */
+#gz-todo .gz-rm-head { display: inline-flex; align-items: center; gap: 0.15rem; }
+#gz-todo .gz-rm-head button {
+  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border: 1px solid transparent; border-radius: 999px;
+  background: none; cursor: pointer; font-size: 0.75rem; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums;
+}
+#gz-todo .gz-rm-head button:hover { color: var(--gz-accent); border-color: var(--gz-line); }
+.gz-rm-bell svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gz-rm-live { position: fixed; inset-inline-end: 16px; inset-block-end: 16px; z-index: 9999; width: min(340px, calc(100vw - 32px)); }
+.gz-rm-toast {
+  box-sizing: border-box; padding: 0.6rem 0.75rem 0.7rem; font: 0.875rem/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-inline-start: 3px solid var(--gz-accent); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+@media (prefers-reduced-motion: no-preference) { html:not([data-gz-motion="off"]) .gz-rm-toast { animation: gz-rm-in 0.22s ease-out; } }
+@keyframes gz-rm-in { from { opacity: 0; transform: translateY(8px); } }
+.gz-rm-toast p { margin: 0; }
+.gz-rm-toast .gz-rm-what { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; font-weight: 600; color: var(--gz-accent); }
+.gz-rm-toast .gz-rm-title { display: block; margin-top: 0.1rem; font-weight: 600; color: var(--gz-ink); }
+.gz-rm-toast a.gz-rm-title:hover { color: var(--gz-accent); }
+.gz-rm-toast .gz-rm-course { font-size: 0.75rem; color: var(--gz-ink-muted); }
+.gz-rm-toast .gz-rm-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+:is(.gz-rm-toast, #gz-rm) button {
+  margin: 0; padding: 0.25rem 0.65rem; font: inherit; font-size: 0.8125rem; color: var(--gz-ink); background: var(--gz-surface-2);
+  border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; box-shadow: none;
+}
+:is(.gz-rm-toast, #gz-rm) button:hover { border-color: var(--gz-accent); }
+:is(.gz-rm-toast, #gz-rm) :is([data-act="hide"], [data-act="close"]) { flex: none; width: 1.75rem; height: 1.75rem; padding: 0; font-size: 16px; line-height: 1; }
+:is(.gz-rm-toast, #gz-rm, #gz-todo .gz-rm-head) :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-rm {
+  box-sizing: border-box; width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface);
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+#gz-rm::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-rm .gz-rm-in { display: grid; gap: 0.9rem; padding: 1rem 1.1rem 1.1rem; }
+#gz-rm .gz-rm-top { display: flex; align-items: center; gap: 0.75rem; }
+#gz-rm h2 { flex: 1; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); }
+#gz-rm h3 { margin: 0 0 0.35rem; font: 600 11px/1.3 var(--gz-font); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-muted); }
+#gz-rm section > p { margin: 0 0 0.35rem; }
+#gz-rm .gz-rm-desc { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-rm .gz-rm-list { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; }
+#gz-rm .gz-rm-list li { display: flex; align-items: center; gap: 0.6rem; padding: 0.3rem 0.4rem; border-radius: var(--gz-radius-sm); }
+#gz-rm .gz-rm-list li:hover { background: var(--gz-row-hover); }
+#gz-rm .gz-rm-at { flex: none; width: 7.5rem; font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); }
+#gz-rm .gz-rm-main { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
+#gz-rm .gz-rm-kind { font-size: 11px; font-weight: 600; color: var(--gz-accent); }
+#gz-rm .gz-rm-set { display: grid; gap: 0.35rem; }
+#gz-rm .gz-rm-check { display: grid; grid-template-columns: auto 1fr; column-gap: 0.5rem; align-items: start; cursor: pointer; }
+#gz-rm .gz-rm-check small { grid-column: 2; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-rm input[type="checkbox"] { margin: 0.15rem 0 0; accent-color: var(--gz-accent); }
+#gz-rm fieldset { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; min-width: 0; margin: 0 0 0 1.5rem; padding: 0; border: 0; }
+#gz-rm legend { float: left; width: 100%; margin: 0; padding: 0; border: 0; font-size: 12px; line-height: 1.45; color: var(--gz-ink-muted); }
+#gz-rm .gz-rm-pick { display: flex; align-items: center; gap: 0.5rem; margin-inline-start: 1.5rem; color: var(--gz-ink-muted); }
+#gz-rm select { width: auto; max-width: 100%; margin: 0; padding: 0.2rem 0.4rem; height: auto; font: inherit; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); }
+#gz-rm .gz-rm-set > button { justify-self: start; margin-top: 0.3rem; }
 /* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
 #gz-cm .gz-cm-more {
   margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);

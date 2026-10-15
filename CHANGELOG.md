@@ -70,15 +70,60 @@ All notable changes to Glaze are documented here. The format follows
     planner, as Canvas's List View does; Glaze's first and only write to Canvas: opt-in, only from your own tick, and a tick Canvas doesn't confirm goes back and is checked with Canvas again.
   - For teachers: work waiting to be graded, and how much of it you've graded.
   - Ctrl+K: turn it on or off, and Add task. Ticking off bursts in Expressive motion.
+- **Tasks on course cards (Canvas, off by default; Extras, under Better To Do):** each Dashboard card lists its
+  course's next items, soonest first, each a link, with its date (relative or exact) and status (submitted, graded,
+  late, missing, excused). 1 to 10 per card (4 by default); done items can stay crossed out. It follows Better To Do's
+  timeframe, past-due window and done rules, ticks and Canvas marks included, and shares its planner copy: the
+  planner is asked once, whether or not the list is on. Every card style and the card grade fit
+  beside it. Ctrl+K turns it on or off.
+- **Reminders and streak (Canvas, every part off by default; Extras, Reminders and streak):** each its own opt-in:
+  - Due-date reminders at any of 15 minutes, 1 hour, 3 hours, 1 day and 2 days before (several at once, free); a day
+    before means the same time the day before, in your Canvas time zone, across daylight-saving changes.
+  - Exam reminders: quizzes, and titles with exam, test, midterm, final, Klausur, Prüfung, examen, parcial, partiel,
+    contrôle, tentamen, toets, prova and the like in Glaze's six languages, 1 day to 1 week ahead.
+  - Plan reminders: Better To Do's "do on" days (at the start of the day) and focus sessions (up to an hour before).
+  - Shown only inside Canvas, in the tab you're looking at: one small toast in the corner that never takes focus,
+    is announced politely to screen readers, can be dismissed (Esc too) or snoozed for an hour, and doesn't slide in
+    under reduced motion. Never on a quiz you're taking or a tool's page. No notifications permission, no badge, no sound.
+  - What came due while no Canvas page was open shows once, as one toast that says how many more there are, not a pile;
+    a reminder shown in one tab doesn't show in another.
+  - A hub (the bell in the To Do header, or Ctrl+K "Reminders") lists what's coming up, what was shown in the last
+    three days and what's snoozed, lets you mute an item and bring it back, and has the settings. A reminder counts
+    as shown only once a tab has drawn it: one that closes or goes quiet first leaves it for the next.
+  - Streak: days in a row with nothing missed, and your best, in the To Do header. Work past due and not handed in, or
+    handed in late (ticked or not), ends a run; excused work and work with nothing to hand in never count. Two free restores a month
+    put back a run. Never a guilt message.
+  - One timer to the next reminder, set again when the page is shown and at most ten minutes long: no polling. It
+    reuses Better To Do's planner copy. What's seen, snoozed, muted and the streak stay on this device, apart from
+    Canvas's own read state, which Glaze never changes.
+- **Moodle:** Glaze restyles Moodle (the Boost theme of Moodle 5, and 4.x where its markup is the same) on any
+  school's domain, with the same palettes, Looks, fonts, backgrounds and motion: the Dashboard and My courses,
+  course and activity pages, grades, the calendar, messages and the login page, in light and dark palettes.
+  Course cards show your course total from Moodle's grades overview; what's due this week comes from your
+  Timeline, in the popup and the command palette, which also lists Moodle's pages, your courses and the
+  course's tabs. Read-only: Glaze asks your own Moodle what its own pages ask.
+- **Search in your courses (Canvas, on by default; Extras, under Command palette):** from two typed characters, the
+  Ctrl+K palette also finds pages, assignments, discussions, announcements, modules and files in your active courses
+  by title, each labelled with its type and course: the course you're in first, then this term's, then the rest, up to
+  24 results. Results join the list in that order (a slow course doesn't lose its place) below what's already shown, so nothing moves under the pointer or
+  the keyboard's choice; looser matches of Glaze's own commands follow once it's done. Screen readers hear the count
+  when the search is done. Turning it off while the palette is open stops it at once. It waits for a 150 ms pause, cancels what's still running on
+  the next keystroke, asks six lists at a time, and keeps answers in memory for five minutes. Read-only, to your own
+  Canvas only.
 
 ### Changed
 
 - **Lighter on every page:** Glaze loads about 38% less code on Canvas and Blackboard pages. Its words in your
   language, Download all and draft backup now load only on the pages that use them.
 - **Blackboard's what-if calculator** now loads only on a gradebook, like Canvas's.
+- **Pages load less code until you use a feature:** the command palette, keyboard shortcuts, the course menu's
+  popover, folder previews and Download all's buttons now load the first time you use them (or, for Download all, on
+  a course page with folders), so every other page starts with about 46 KB less. They work as before.
 
 ### Fixed
 
+- **Dark palettes:** a page with a form holding a field named "id" no longer stops Glaze's pass that darkens
+  what the stylesheet can't reach.
 - **Canvas, dark palettes:** text that was too faint is now readable:
   - the list view's item labels, due times, points and status pills;
   - its course titles, which now show in each course's color;

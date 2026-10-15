@@ -100,10 +100,14 @@ test('success means the file ran to its end: an injection that fails, throws or 
 });
 
 // What a feature file reads from content.js when it loads (features/*.js).
-const CTX = { t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}) };
+const CTX = { t: (k) => k, locale: () => 'en', capi() {}, canvasCourses() {}, canvasCourseId() {}, need() {}, settings: () => ({}), site: 'canvas', wordsIn: new Set() };
+// What a feature file touches as it loads: the listeners it adds (features/keys.js, coursemenu.js, previews.js).
+const page = () => ({ document: { addEventListener() {} }, addEventListener() {}, GZ_COLOR: {} });
+// Moved out of the first content script in W0c: the palette, the keys, the course menu, the previews and Download all.
+const W0C = [['features/palette.js', 'GZ_CMD'], ['features/keys.js', 'GZ_KEYS'], ['features/coursemenu.js', 'GZ_COURSE_MENU'], ['features/previews.js', 'GZ_PEEK'], ['features/download.js', 'GZ_DOWNLOAD']];
 test('every loadable file ends on a value, which is how the worker knows it ran', () => {
-  for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'i18n/de.js', 'lib/cards.js']) {
-    const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX });
+  for (const f of ['lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'i18n/de.js', 'lib/cards.js', 'lib/seek.js', 'features/search.js', ...W0C.map(([f]) => f)]) {
+    const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX, ...page() });
     assert.ok(vm.runInContext(read(f), context), `${f}: no last value`);
   }
 });
@@ -122,9 +126,18 @@ test('every loadable file exists, is left out of the first content script, and i
   for (const f of ['lib/zip.js', 'lib/drafts.js']) assert.ok(read('preview.html').includes(`<script src="${f}"></script>`), `preview.html: ${f}`);
 });
 
+// A loaded file's `var GZ_X` shares the frame's global scope with the first script's `const`s: the same name there
+// (defaults.js has GZ_PALETTE) makes the file throw as it loads.
+test('no loadable file declares a name the first content script already declares', () => {
+  const list = JSON.parse(read('lib/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
+  const names = (src) => [...src.matchAll(/^(?:const|let|var|function|class)\s+([\w$]+)/gm)].map((m) => m[1]);
+  const first = new Set(manifest.content_scripts[0].js.flatMap((f) => names(read(f))));
+  for (const f of list) for (const n of names(read(f))) assert.ok(!first.has(n), `${f} declares ${n}, which the first content script has`);
+});
+
 test('a file loaded twice into one frame keeps the first', () => {
-  for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS'], ['lib/gradecalc.js', 'GZ_GRADECALC'], ['features/grades.js', 'GZ_GRADES_UI'], ['lib/cards.js', 'GZ_CARDS']]) {
-    const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX });
+  for (const [file, name] of [['lib/zip.js', 'GZ_ZIP'], ['lib/drafts.js', 'GZ_DRAFTS'], ['lib/gradecalc.js', 'GZ_GRADECALC'], ['features/grades.js', 'GZ_GRADES_UI'], ['lib/cards.js', 'GZ_CARDS'], ['lib/seek.js', 'GZ_SEEK'], ['features/search.js', 'GZ_SEARCH'], ...W0C]) {
+    const context = vm.createContext({ TextEncoder, Uint8Array, Uint32Array, DataView, Blob: class {}, btoa, atob, GZ_CTX: CTX, ...page() });
     vm.runInContext('globalThis.globalThis = this;', context);
     vm.runInContext(read(file), context);
     const first = vm.runInContext(name, context);

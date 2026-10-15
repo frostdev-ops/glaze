@@ -331,3 +331,23 @@ test('drops match Canvas where sets tie or work is worth no points', () => {
   const tie = [{ id: '1', possible: 14, score: 12 }, { id: '2', possible: 1, score: 3 }, { id: '3', possible: 17, score: 15 }];
   assert.deepEqual(G.drop(tie, { lo: 2, hi: 0, never: ['2'] }).map((s) => s.id).sort(), ['2', '3']);
 });
+
+test('a damaged stored what-if record is cleaned before any change keeps it', () => {
+  const huge = 8.64e15;
+  const stored = { 30: {
+    at: 100,
+    s: { 175: [90, null, huge], 'bad id!': [1, null, 100], 176: ['x', null, 100], ...Object.fromEntries(Array.from({ length: 600 }, (_, i) => [`a${i}`, [1, null, 100]])) },
+    h: ['ok1', 'bad id!'], ht: { ok1: huge },
+    p: [{ id: 'p1', g: 'g1', n: 'x', s: 1, pp: 2, t: huge }, { id: 'nope', g: 'g1', s: 1, pp: 2 }],
+    c: 95, ct: huge,
+  } };
+  const r = G.applyWhatIf({ op: 'grade', cid: '31', c: 80, at: 300 }, stored, 0);
+  const rec = r.all[30];
+  assert.ok(Object.keys(rec.s).length <= 500, 'over-limit scores dropped');
+  assert.ok(!('bad id!' in rec.s) && !('176' in rec.s), 'malformed scores dropped');
+  assert.deepEqual(rec.h, ['ok1']);
+  assert.deepEqual(rec.p.map((x) => x.id), ['p1']);
+  // A time from the future counts as now, so a later clear still takes it.
+  const later = G.applyWhatIf({ op: 'clear', at: Date.now() + 1000 }, r.all, r.cleared);
+  assert.equal(later.all[30], undefined);
+});

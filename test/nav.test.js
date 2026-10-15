@@ -105,6 +105,16 @@ test('Canvas keeps ownership of native collapsed-label overflow and rail positio
   assert.doesNotMatch(css, /html\[data-gz-nav-size\][^{]*\.ic-app-header__(main|secondary)-navigation\s*\{/);
 });
 
+test('native collapsed labels use text on accent, even on a custom rail', () => {
+  const css = fs.readFileSync(require.resolve('../canvas.css'), 'utf8');
+  assert.match(css, /body:not\(\.primary-nav-expanded\) #header \.ic-app-header__menu-list-link \.menu-item__text\s*\{\s*color:\s*var\(--gz-accent-ink\) !important;/);
+  const C = require('../lib/color.js');
+  for (const name of ['Frost', 'Paper']) {
+    const colors = G.GZ_PRESET(name);
+    assert.ok(C.contrast(colors['--gz-accent-ink'], colors['--gz-accent']) >= 4.5, name);
+  }
+});
+
 test('CSS sidebar filters stay equal to the shared on-demand image filters', () => {
   const css = fs.readFileSync(require.resolve('../canvas.css'), 'utf8');
   for (const [key, value] of Object.entries(K.FILTERS)) if (key !== 'none') {
@@ -119,7 +129,7 @@ test('late words start the sidebar once; ordinary mutation passes do not repeat 
   const chunk = source.slice(source.indexOf('  const flush = () => {'), source.indexOf('  // ---- page loads'));
   let ready = false, calls = 0;
   const ctx = { timer: 1, dirty: new Set(), full: false, wordsLate: true, document: { body: {} }, tip: null, tinted: null, looked: null, words: () => ready, outermost: () => [], tintKey: () => null, lookHere: () => null, syncNav: () => calls++ };
-  for (const name of ['sweepAll','sweepRoots','tagExtras','themeEditors','paintCourses','applySettings','placeScene','renderProgress','renderNew','keepPlace','renderCalc','watchDrafts','syncDownloads','syncDocTools','syncCourseMenu','syncTodo']) ctx[name] = () => {};
+  for (const name of ['sweepAll','sweepRoots','tagExtras','themeEditors','paintCourses','applySettings','placeScene','renderProgress','renderNew','keepPlace','renderCalc','watchDrafts','syncDownloads','syncDocTools','syncCourseMenu','syncTodo','syncCardTasks','syncRemind']) ctx[name] = () => {};
   const c = vm.createContext(ctx);
   vm.runInContext(chunk + '\nglobalThis.flushNow = flush;', c);
   c.flushNow(); assert.equal(calls, 0);
