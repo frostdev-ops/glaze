@@ -884,8 +884,9 @@ GZ_UI.load().then((s) => {
     save(Object.keys(s));
     // Card styles and bookmarks too, and the pictures kept for them on this computer.
     cardsOp({ reset: true, nav: GZ_DEFAULTS.nav }).then((ok) => { if (!ok) hint(t('Not saved. Try again in a moment.'), true); });
-    // Stickers, your sticker pictures and pointer, and Look rotation's list (lib/lookx.js): this computer's, gone too.
-    local.get(null, (all) => local.remove(Object.keys(all || {}).filter((k) => /^(stk:|stkImg:)/.test(k) || ['stkImgs', 'cursorImg', 'rotateLooks', 'rotateState'].includes(k))));
+    // Stickers, your sticker pictures and pointer, and Look rotation's list (lib/lookx.js): this computer's, gone too,
+    // through the worker's queue, so a tab's sticker change still on its way can't bring one back.
+    chrome.runtime.sendMessage({ type: 'glaze:stickers', reset: true }, (r) => { if (chrome.runtime.lastError || !r?.ok) hint(t('Not saved. Try again in a moment.'), true); });
     fill();
     hint(t('Everything is back to the defaults. Your presets are kept.'));
 

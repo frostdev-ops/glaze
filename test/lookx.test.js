@@ -6,24 +6,36 @@ const path = require('node:path');
 const L = require('../lib/lookx.js');
 const G = require('../defaults.js');
 
-test('placements: bundled or own stickers only, numbers clamped, junk dropped, capped per page', () => {
+test('placements: bundled or own stickers only, with an id each, numbers clamped, junk dropped, capped per page', () => {
   assert.deepEqual(L.clean([
-    { s: 'study/coffee', x: 50, y: 300, w: 120, r: 0 },
-    { s: 'critters/study-buddy-happy', x: 140, y: -5, w: 9000, r: 90 },
-    { s: 'own:3f2a-11', x: 10.04, y: 20, w: 24, r: -3 },
-    { s: 'study/not-a-sticker', x: 1, y: 1, w: 50 },
-    { s: '../../evil', x: 1, y: 1, w: 50 },
-    { s: 'study/pencil', x: '5', y: 1, w: 50 },
-    { s: 'study/pencil', x: NaN, y: 1, w: 50 },
+    { id: 'a', s: 'study/coffee', x: 50, y: 300, w: 120, r: 0 },
+    { id: 'b', s: 'critters/study-buddy-happy', x: 140, y: -5, w: 9000, r: 90 },
+    { id: 'c', s: 'own:3f2a-11', x: 10.04, y: 20, w: 24, r: -3 },
+    { id: 'a', s: 'study/pencil', x: 1, y: 1, w: 50 },
+    { s: 'study/pencil', x: 1, y: 1, w: 50 },
+    { id: 'no spaces', s: 'study/pencil', x: 1, y: 1, w: 50 },
+    { id: 'd', s: 'study/not-a-sticker', x: 1, y: 1, w: 50 },
+    { id: 'e', s: '../../evil', x: 1, y: 1, w: 50 },
+    { id: 'f', s: 'study/pencil', x: '5', y: 1, w: 50 },
+    { id: 'g', s: 'study/pencil', x: NaN, y: 1, w: 50 },
     null, 'study/coffee',
   ]), [
-    { s: 'study/coffee', x: 50, y: 300, w: 120, r: 0 },
-    { s: 'critters/study-buddy-happy', x: 100, y: 0, w: 480, r: 45 },
-    { s: 'own:3f2a-11', x: 10, y: 20, w: 24, r: -3 },
+    { id: 'a', s: 'study/coffee', x: 50, y: 300, w: 120, r: 0 },
+    { id: 'b', s: 'critters/study-buddy-happy', x: 100, y: 0, w: 480, r: 45 },
+    { id: 'c', s: 'own:3f2a-11', x: 10, y: 20, w: 24, r: -3 },
   ]);
   assert.deepEqual(L.clean('nope'), []);
-  assert.equal(L.clean(Array.from({ length: 500 }, () => ({ s: 'study/sun', x: 1, y: 1, w: 50 }))).length, 0);
-  assert.equal(L.clean(Array.from({ length: 500 }, () => ({ s: 'space-sky/sun', x: 1, y: 1, w: 50 }))).length, L.MAX_ON_PAGE);
+  assert.equal(L.clean(Array.from({ length: 500 }, (_, i) => ({ id: `s${i}`, s: 'space-sky/sun', x: 1, y: 1, w: 50 }))).length, L.MAX_ON_PAGE);
+});
+
+test('placement changes: add once per id, set moves without changing the sticker, del removes', () => {
+  const a = { id: 'a', s: 'study/coffee', x: 50, y: 10, w: 100, r: 0 };
+  assert.deepEqual(L.apply(undefined, { op: 'add', p: a }), [a]);
+  assert.deepEqual(L.apply([a], { op: 'add', p: { ...a, x: 1 } }), [a]);
+  assert.deepEqual(L.apply([a], { op: 'set', id: 'a', p: { x: 7, s: 'own:x', id: 'z' } }), [{ ...a, x: 7 }]);
+  assert.deepEqual(L.apply([a], { op: 'set', id: 'a', p: { x: 'bad' } }), [a]);
+  assert.deepEqual(L.apply([a], { op: 'del', id: 'a' }), []);
+  assert.deepEqual(L.apply([a], { op: 'what' }), [a]);
 });
 
 test('a page\'s stickers are keyed by origin and path, a trailing slash ignored', () => {
@@ -34,6 +46,13 @@ test('a page\'s stickers are keyed by origin and path, a trailing slash ignored'
   // content.js works out the same key without loading lib/lookx.js.
   const content = fs.readFileSync(path.join(__dirname, '../content.js'), 'utf8');
   assert.ok(content.includes("`stk:${location.origin}${location.pathname.replace(/(.)\\/+$/, '$1')}`"));
+});
+
+test('no stickers on a quiz being taken or reviewed, or a tool\'s page: Canvas, Ultra and Moodle', () => {
+  for (const p of ['/courses/1/quizzes/2/take', '/courses/1/quizzes/2/take/questions/3', '/courses/1/quizzes/2/history', '/courses/1/external_tools/9',
+    '/ultra/courses/_1_1/outline/assessment/_2_1/overview/attempt/_3_1', '/mod/quiz/attempt.php', '/moodle/mod/quiz/summary.php', '/mod/quiz/review.php', '/mod/lti/view.php', '/mod/lti/launch.php']) assert.ok(L.quiet(p), p);
+  for (const p of ['/', '/courses/1', '/courses/1/quizzes/2', '/courses/1/quizzes', '/ultra/course', '/mod/quiz/view.php', '/course/view.php', '/mod/lti/index.php']) assert.ok(!L.quiet(p), p);
+  assert.ok(L.quiet('/courses/1/assignments/2', { getElementById: (id) => (id === 'tool_content' ? {} : null) }), 'a tool in the page');
 });
 
 test('every bundled sticker is a file, named after its pack and name', () => {
@@ -61,7 +80,9 @@ test('own pictures: scaled down only, data URLs of bitmaps only, each and all ca
   assert.ok(!L.DATA.test('data:image/svg+xml;base64,PHN2Zz4='));
   assert.ok(L.roomFor({}, 1000));
   assert.ok(!L.roomFor({}, L.IMG_MAX + 1));
-  assert.ok(!L.roomFor({ a: L.IMGS_MAX - 10 }, 11));
+  assert.ok(!L.roomFor({ 'stkImg:a': 'x'.repeat(L.IMGS_MAX - 10), other: 'y'.repeat(L.IMGS_MAX) }, 11));
+  assert.ok(L.roomFor({ 'stkImg:a': 'x'.repeat(L.IMGS_MAX - 11) }, 11));
+  assert.deepEqual(L.imgIds({ 'stkImg:a': 1, 'stk:x': 2, cursorImg: 3 }), ['a']);
 });
 
 test('rotation: every 6/12/24 hours or a week after the last turn, or daily at a local time', () => {
@@ -73,6 +94,27 @@ test('rotation: every 6/12/24 hours or a week after the last turn, or daily at a
   assert.equal(L.nextTurn('daily', '09:30', at), new Date(2026, 9, 16, 9, 30).getTime(), 'not the moment just turned');
   assert.equal(L.nextTurn('off', '08:00', at), null);
   assert.equal(L.nextTurn('6h', '08:00', undefined), null);
+});
+
+test('daily rotation: a time a clock change skips moves later that day only, not on the days after', () => {
+  const was = process.env.TZ;
+  try {
+    for (const [tz, at, y, mo, d, skipped] of [['America/New_York', '02:30', 2025, 2, 9, '03:30'], ['Australia/Lord_Howe', '02:15', 2025, 9, 5, '02:45']]) {
+      process.env.TZ = tz;
+      const hm = (t) => new Date(t).toTimeString().slice(0, 5);
+      // The day before, after its turn: the next is the skipped time, moved later.
+      let t = L.nextTurn('daily', at, new Date(y, mo, d - 1, 12).getTime());
+      assert.equal(hm(t), skipped, `${tz} on the change day`);
+      assert.equal(new Date(t).getDate(), d);
+      // From then on, the chosen time again.
+      t = L.nextTurn('daily', at, t);
+      assert.equal(hm(t), at, `${tz} the day after`);
+      assert.equal(new Date(t).getDate(), d + 1);
+      assert.equal(hm(L.nextTurn('daily', at, t)), at);
+    }
+  } finally {
+    if (was === undefined) delete process.env.TZ; else process.env.TZ = was;
+  }
 });
 
 test('rotation turns: a new schedule starts its clock without changing; then one turn per due time, in order, wrapping', () => {

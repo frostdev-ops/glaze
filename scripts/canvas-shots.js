@@ -17,7 +17,7 @@
 //                     '{card:{pet:"cat"},cards:{"canvas:{origin}/{bio}":{k:"solid",c:"#e11d48"}}}'; {origin} is the
 //                     local Canvas, {bio} and the others its course ids
 //   --local <json>     storage.local items saved before the pages load, such as stickers (lib/lookx.js):
-//                     '{"stk:{origin}/courses/{bio}":[{s:"study/coffee",x:80,y:200,w:120,r:-6}]}'
+//                     '{"stk:{origin}/courses/{bio}":[{id:"a",s:"study/coffee",x:80,y:200,w:120,r:-6}]}'
 //   --width, --height  viewport, 1440x900 by default;  --full  captures the whole page
 //   --user <who>       student (default), teacher or admin
 //   --html <dir>       also save each page's DOM as <dir>/canvas-<page>.html, a test fixture: script bodies

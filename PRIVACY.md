@@ -96,6 +96,8 @@ _Last updated: 2026-10-15_
   your own pointer picture (scaled to 32 pixels), and which Looks rotation takes turns with and when it last changed.
   None of it is synced, exported or put in a theme code; the pointer and rotation choices themselves sync with your
   settings. Remove deletes a sticker, Delete your picture deletes a picture; Reset everything deletes all of it.
+  Your own pictures are shown on a page through temporary blob addresses, not written into it, though the LMS page's
+  own code can still read a picture shown on it.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
