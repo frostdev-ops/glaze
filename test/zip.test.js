@@ -80,3 +80,9 @@ test('duplicate names are numbered, case-insensitively', () => {
   assert.equal(Z.unique('b.tar.gz', taken), 'b.tar.gz');
   assert.equal(Z.unique('b.tar.gz', taken), 'b.tar (2).gz');
 });
+
+test('Canvas downloads use unique accessible File ids and same-origin metadata URLs', () => {
+  assert.deepEqual(Z.canvasFiles([{type:'Page',content_id:1},{type:'File',content_id:'2'},{type:'File',content_id:2},{type:'File',content_id:'3',content_details:{locked_for_user:true}},{type:'File',content_id:'../4'}]), ['2']);
+  for (const file of [null, {}, {url:'https://cdn.example/file'}, {url:'//cdn.example/file'}, {url:'javascript:alert(1)'}, {url:'http://user:password@localhost:3000/file'}, {url:'/files/2/download',locked_for_user:true}]) assert.equal(Z.canvasURL(file,'http://localhost:3000'),null);
+  assert.equal(Z.canvasURL({url:'/files/2/download?download_frd=1'},'http://localhost:3000'),'http://localhost:3000/files/2/download?download_frd=1');
+});

@@ -748,13 +748,57 @@
     peeks.set(key, { at: Date.now(), p });
     return p;
   };
+  // Canvas paginates these lists; cache complete answers, shared by previews and module downloads.
+  const canvasPeekList = async (path) => {
+    const out = [];
+    for (let page = 1; ; page++) {
+      const rows = await capi(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+      if (!Array.isArray(rows)) throw new Error('Invalid list');
+      out.push(...rows);
+      if (rows.length < 100) return out;
+    }
+  };
+  const canvasPeek = (path) => {
+    const key = `canvas:${path}`;
+    const hit = peeks.get(key);
+    if (hit && Date.now() - hit.at < 60000) return hit.p;
+    const p = canvasPeekList(path).catch((e) => { peeks.delete(key); throw e; });
+    peeks.set(key, { at: Date.now(), p });
+    return p;
+  };
+  const moduleItems = (cid, mid) => canvasPeek(`/courses/${cid}/modules/${mid}/items?include[]=content_details`);
+  const canvasPeekFor = async (item) => {
+    const cid = canvasCourseId();
+    const mid = item.closest('.context_module[data-module-id]')?.dataset.moduleId;
+    if (mid) return (await moduleItems(cid, mid)).map((c) => ({ title: c.title,
+      state: c.content_details?.locked_for_user ? 'Locked' : c.completion_requirement?.completed ? 'Completed' : c.completion_requirement ? 'Todo' : 'None',
+      genericReadOnlyData: { dueDate: c.content_details?.due_at } }));
+    const url = new URL(item.href, location.origin);
+    if (url.origin !== location.origin || !url.pathname.startsWith(`/courses/${cid}/files/folder/`)) return null;
+    let path;
+    try { path = decodeURIComponent(url.pathname.split('/files/folder/')[1]).replace(/&#37;/g, '%').replace(/\/$/, ''); } catch { return null; }
+    const folders = await canvasPeek(`/courses/${cid}/folders`);
+    const folder = folders.find((f) => f.full_name.replace(/^[^/]+\/?/, '') === path);
+    if (!folder || folder.locked_for_user || folder.hidden_for_user) return null;
+    const [dirs, files] = await Promise.all([canvasPeek(`/folders/${folder.id}/folders`), canvasPeek(`/folders/${folder.id}/files`)]);
+    return [...dirs, ...files].filter((f) => !f.hidden_for_user).map((f) => ({ title: f.display_name || f.name, state: f.locked_for_user ? 'Locked' : 'None' }));
+  };
   let peek = null;
   let peekFor = null;
   let peekTimer = 0;
-  const hidePeek = () => { clearTimeout(peekTimer); peek?.remove(); peek = null; peekFor = null; };
-  const STATE = { Completed: 'done', Started: 'started' };
+  const hidePeek = () => {
+    clearTimeout(peekTimer);
+    if (!ultra && peekFor) {
+      const ids = (peekFor.getAttribute('aria-describedby') || '').split(/\s+/).filter((id) => id && id !== 'gz-peek');
+      if (ids.length) peekFor.setAttribute('aria-describedby', ids.join(' ')); else peekFor.removeAttribute('aria-describedby');
+    }
+    peek?.remove(); peek = null; peekFor = null;
+  };
+  const STATE = { Completed: 'done', Started: 'started', None: 'none', Locked: 'locked' };
   const showPeek = (item, list) => {
-    if (!list?.length || peekFor !== item || !item.isConnected) return;
+    if (!list?.length || peekFor !== item || !item.isConnected || !settings.enhance.previews || !observer) return;
+    const r = item.getBoundingClientRect();
+    if (!ultra && (r.bottom < 0 || r.top > innerHeight)) return;
     peek?.remove();
     peek = document.createElement('div');
     peek.id = 'gz-peek';
@@ -762,16 +806,16 @@
     const done = list.filter((c) => c.state === 'Completed').length;
     const head = document.createElement('div');
     head.className = 'gz-peek-head';
-    head.textContent = t('{n} items · {done} done', { n: list.length, done });
+    head.textContent = t(!ultra && list.every((c) => c.state === 'None' || c.state === 'Locked') ? '{n} items' : '{n} items · {done} done', { n: list.length, done });
     const ul = document.createElement('ul');
     const now = new Date();
     for (const c of list.slice(0, 8)) {
       const li = document.createElement('li');
       li.dataset.state = STATE[c.state] || 'todo';
-      const t = document.createElement('span');
-      t.className = 'gz-peek-title';
-      t.textContent = c.title;
-      li.append(t);
+      const title = document.createElement('span');
+      title.className = 'gz-peek-title';
+      title.textContent = c.title;
+      li.append(title);
       const due = c.genericReadOnlyData?.dueDate;
       if (due) {
         const d = document.createElement('span');
@@ -779,6 +823,7 @@
         d.textContent = GZ_PAGE.describe(new Date(due), true, now, locale()).rel;
         li.append(d);
       }
+      if (!ultra && c.state !== 'None') li.setAttribute('aria-label', `${c.title} · ${t(c.state === 'Completed' ? 'Done' : c.state === 'Locked' ? 'Locked' : 'Not complete')}${due ? ` · ${li.querySelector('.gz-peek-due').textContent}` : ''}`);
       ul.append(li);
     }
     peek.append(head, ul);
@@ -789,14 +834,23 @@
       peek.append(more);
     }
     document.body.append(peek);
-    const r = item.getBoundingClientRect();
+    if (!ultra) item.setAttribute('aria-describedby', `${item.getAttribute('aria-describedby') || ''} gz-peek`.trim());
     const w = peek.getBoundingClientRect();
     const right = r.right + 12 + w.width < innerWidth;
     peek.style.left = `${right ? r.right + 12 : Math.max(8, r.right - w.width)}px`;
     peek.style.top = `${Math.min(Math.max(8, right ? r.top : r.bottom + 8), innerHeight - w.height - 8)}px`;
   };
-  document.addEventListener('pointerover', (e) => {
-    if (!ultra || !settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
+  const onPeek = (e) => {
+    if (!settings.enhance.previews || !observer || !(e.target instanceof Element)) return;
+    if (!ultra) {
+      const item = e.target.closest('.context_module .expand_module_link, a[href*="/files/folder/"]');
+      if (item === peekFor) return;
+      hidePeek();
+      if (!canvasCourseId() || !item || !item.getClientRects().length || (item.matches('.expand_module_link') && !item.closest('.context_module').classList.contains('collapsed_module'))) return;
+      peekFor = item;
+      peekTimer = setTimeout(() => canvasPeekFor(item).then((list) => showPeek(item, list)).catch(() => {}), e.type === 'focusin' ? 150 : 550);
+      return;
+    }
     const item = e.target.closest('.content-list-item[data-content-id]');
     if (item === peekFor) return;
     hidePeek();
@@ -806,8 +860,19 @@
     peekFor = item;
     const fid = item.getAttribute('data-content-id');
     peekTimer = setTimeout(() => children(cid, fid).then((list) => showPeek(item, list)), 550);
+  };
+  document.addEventListener('pointerover', onPeek, { capture: true, passive: true });
+  document.addEventListener('focusin', (e) => { if (!ultra) onPeek(e); }, true);
+  document.addEventListener('pointerout', (e) => { if (!ultra && peekFor && !peekFor.contains(e.relatedTarget)) hidePeek(); }, true);
+  document.addEventListener('focusout', (e) => { if (!ultra && e.target === peekFor) hidePeek(); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hidePeek(); }, true);
+  for (const ev of ['pointerdown', 'wheel']) document.addEventListener(ev, hidePeek, { capture: true, passive: true });
+  document.addEventListener('scroll', () => {
+    // Tabbing to a header can scroll it into view after focusin; let its preview settle there.
+    const target = !ultra && peekFor === document.activeElement && peekFor;
+    hidePeek();
+    if (target) onPeek({ target, type: 'focusin' });
   }, { capture: true, passive: true });
-  for (const ev of ['pointerdown', 'scroll', 'wheel']) document.addEventListener(ev, hidePeek, { capture: true, passive: true });
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
@@ -1337,7 +1402,8 @@
   // A button on each folder and learning module in course content saves the files inside, subfolders
   // included, as one zip named after it. Listed with the content API, fetched from the site you are on
   // (Blackboard redirects the bytes to its file CDN, which allows it), zipped here, saved through a blob
-  // link. Items you haven't opened are left out: downloading is never what marks them viewed.
+  // link. Ultra items you haven't opened are left out, so downloading never marks those viewed.
+  // Canvas module downloads follow its native file semantics: an explicit download can satisfy must-view.
   const MAX_ZIP = 250 * 2 ** 20; // ponytail: the whole zip is built in memory; stream to disk if folders outgrow it
   const jobs = new Map(); // folder id -> { ctl, label, pct, done }
   const paintDl = (fid) => {
@@ -1352,7 +1418,7 @@
     b.style.setProperty('--gz-pct', `${j?.done ? 0 : j?.pct || 0}%`);
   };
   const download = async (fid, title) => {
-    const cid = courseId();
+    const cid = ultra ? courseId() : canvasCourseId();
     const ctl = new AbortController();
     const job = { ctl, label: t('Finding files · Cancel'), pct: 0 };
     jobs.set(fid, job);
@@ -1363,6 +1429,7 @@
     const found = [];
     const seen = new Set();
     let skipped = 0;
+    let unavailable = 0;
     // A folder or module is a directory; an Ultra document is a folder too (isBbPage), whose blocks hold its files.
     // ponytail: first 200 children of each folder.
     const walk = async (id, dir) => {
@@ -1378,16 +1445,24 @@
     const mb = (n) => new Intl.NumberFormat(GZ_I18N.locale(locale()), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 0 }).format(n / 2 ** 20);
     const tooBig = (label) => Object.assign(new Error(label), { said: true });
     try {
-      await walk(fid, '');
+      if (ultra) await walk(fid, '');
+      else for (const id of GZ_ZIP.canvasFiles(await moduleItems(cid, fid))) {
+        ctl.signal.throwIfAborted();
+        const f = await capi(`/files/${id}`).catch(() => null);
+        ctl.signal.throwIfAborted();
+        const url = GZ_ZIP.canvasURL(f, location.origin);
+        if (!url) { unavailable++; continue; }
+        found.push({ name: f.display_name || f.filename, size: f.size, url, dir: '' });
+      }
       const known = found.reduce((n, f) => n + (f.size || 0), 0);
       if (known > MAX_ZIP) throw tooBig(t('Too big: {size}, over {max}', { size: mb(known), max: mb(MAX_ZIP) }));
       const out = [];
       const taken = new Set();
       let bytes = 0;
-      let failed = 0;
+      let failed = unavailable;
       for (const [i, f] of found.entries()) {
         say(t('{i} of {n} · Cancel', { i: i + 1, n: found.length }), (i / found.length) * 100);
-        const r = await fetch(f.url, { credentials: 'same-origin', signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
+        const r = await fetch(f.url, { credentials: 'same-origin', ...(ultra ? {} : { mode: 'same-origin' }), signal: ctl.signal }).catch((e) => { if (ctl.signal.aborted) throw e; return null; });
         if (!r?.ok) { failed += 1; continue; }
         const data = new Uint8Array(await r.arrayBuffer());
         bytes += data.length;
@@ -1395,7 +1470,7 @@
         out.push({ name: GZ_ZIP.unique(f.dir + GZ_ZIP.safeName(f.name), taken), data });
       }
       const left = skipped ? ` · ${t('{n} unopened left out', { n: skipped })}` : '';
-      if (!out.length) return say((found.length ? t('Download failed') : t(skipped ? 'No files you have opened' : 'No files')) + left);
+      if (!out.length) return say((found.length || unavailable ? t('Download failed') : t(skipped ? 'No files you have opened' : 'No files')) + left);
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob(GZ_ZIP.zip(out), { type: 'application/zip' }));
       a.download = `${GZ_ZIP.safeName(title)}.zip`;
@@ -1410,8 +1485,41 @@
       setTimeout(() => { if (jobs.get(fid) === job) { jobs.delete(fid); paintDl(fid); } }, 6000);
     }
   };
+  let canvasDlChecked = new WeakMap();
   const syncDownloads = () => {
-    if (!ultra) return;
+    if (!settings.enhance.previews || (peekFor && !peekFor.isConnected)) hidePeek();
+    if (!ultra) {
+      const cid = canvasCourseId();
+      if (!settings.enhance.download || !cid || !/^\/courses\/\d+\/modules\/?$/.test(location.pathname)) {
+        for (const j of jobs.values()) j.ctl.abort();
+        for (const b of document.querySelectorAll('.gz-dl')) b.remove();
+        for (const item of document.querySelectorAll('.context_module')) canvasDlChecked.delete(item);
+        return;
+      }
+      for (const item of document.querySelectorAll('.context_module[data-module-id]')) {
+        const fid = item.dataset.moduleId;
+        if (!/^\d+$/.test(fid)) continue;
+        const header = item.querySelector('.ig-header');
+        if (!header || Date.now() - (canvasDlChecked.get(item) || 0) < 60000) continue;
+        canvasDlChecked.set(item, Date.now());
+        // A collapsed or paginated module need not have its File rows in the DOM yet.
+        moduleItems(cid, fid).then((list) => {
+          if (!observer || !settings.enhance.download || !item.isConnected || canvasCourseId() !== cid) { canvasDlChecked.delete(item); return; }
+          const old = document.getElementById(`gz-dl-${fid}`);
+          if (!list.some((c) => c.type === 'File')) return old?.remove();
+          if (old) return;
+          const b = document.createElement('button');
+          b.type = 'button'; b.id = `gz-dl-${fid}`; b.className = 'gz-dl'; b.title = t('Download all');
+          b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const j = jobs.get(fid);
+            if (j && !j.done) j.ctl.abort(); else download(fid, item.querySelector('.name')?.textContent.trim());
+          });
+          header.append(b); paintDl(fid);
+        }).catch(() => {});
+      }
+      return;
+    }
     const on = settings.enhance.download && courseId();
     if (!on) { for (const b of document.querySelectorAll('.gz-dl')) b.remove(); return; }
     for (const item of document.querySelectorAll('.content-list-item[data-content-id]')) {
@@ -2575,6 +2683,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   const disable = () => {
     hideTip();
     hidePeek();
+    if (!ultra) { for (const j of jobs.values()) j.ctl.abort(); canvasDlChecked = new WeakMap(); }
     closeKeys();
     closeCmd();
     for (const id of ['gz-progress', 'gz-calc']) document.getElementById(id)?.remove();

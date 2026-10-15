@@ -398,4 +398,7 @@
   "its overall grade uses rules Glaze can't read": 'elle utilise des règles que Glaze ne sait pas lire',
   "its overall grade uses rules Glaze can't read, like dropped scores or single weighted items": 'elle utilise des règles que Glaze ne sait pas lire, comme des notes écartées ou des éléments pondérés à part',
   "its overall grade names a category Glaze can't find": 'elle cite une catégorie que Glaze ne trouve pas',
+  'Locked': 'Verrouillé',
+  'Not complete': 'Non terminé',
+  '{n} items': '{n} éléments',
 };

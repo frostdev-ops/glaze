@@ -398,4 +398,7 @@
   "its overall grade uses rules Glaze can't read": 'su nota global usa reglas que Glaze no sabe leer',
   "its overall grade uses rules Glaze can't read, like dropped scores or single weighted items": 'su nota global usa reglas que Glaze no sabe leer, como descartar notas o ponderar elementos sueltos',
   "its overall grade names a category Glaze can't find": 'su nota global cita una categoría que Glaze no encuentra',
+  'Locked': 'Bloqueado',
+  'Not complete': 'Sin completar',
+  '{n} items': '{n} elementos',
 };
