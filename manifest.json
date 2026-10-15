@@ -18,6 +18,9 @@
       "https://www.googleapis.com/auth/calendar.app.created"
     ]
   },
+  "optional_host_permissions": [
+    "https://share.frostdev.io/*"
+  ],
   "host_permissions": [
     "https://*/*"
   ],

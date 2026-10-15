@@ -45,9 +45,9 @@ const fromJs = (js) => {
   return out;
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/todo.js', 'lib/ultra.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+const JS = ['sharing/sessions.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/todo.js', 'lib/ultra.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 const used = new Set([
-  ...['options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
+  ...['sharing/sessions.html', 'options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
   ...D.GZ_COLORS.map(([, label]) => label),
   ...D.GZ_TABS.map(([, label]) => label),
@@ -66,7 +66,7 @@ test('every language has every key, and nothing else', () => {
 });
 
 test('every key is still used', () => {
-  const src = squash([...JS, 'lib/lookx.js', 'lib/grades.js', 'lib/gradecalc.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html'].map(read).join(' '));
+  const src = squash([...JS, 'lib/lookx.js', 'lib/grades.js', 'lib/gradecalc.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html', 'sharing/sessions.html'].map(read).join(' '));
   for (const k of keys) assert.ok(src.includes(k), `"${k}" is in no source file`);
 });
 
@@ -93,7 +93,7 @@ test('every catalogue is loaded wherever Glaze speaks', () => {
   for (const f of files) {
     assert.ok(!content.includes(`i18n/${f}`), `manifest: i18n/${f} loads on demand, not with every page`);
     assert.ok(read('lib/background.js').includes(`'i18n/${f}'`), `lib/background.js LOADABLE: i18n/${f}`);
-    for (const page of ['options.html', 'popup.html']) assert.ok(read(page).includes(`<script src="i18n/${f}"></script>`), `${page}: i18n/${f}`);
+    for (const page of ['options.html', 'popup.html', 'sharing/sessions.html']) assert.ok(read(page).includes(`<script src="${page.startsWith('sharing/') ? '../' : ''}i18n/${f}"></script>`), `${page}: i18n/${f}`);
   }
   assert.equal(I.file('de-AT'), 'i18n/de.js');
   assert.equal(I.file('pt-PT'), 'i18n/pt-BR.js');
