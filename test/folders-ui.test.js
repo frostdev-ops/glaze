@@ -22,29 +22,30 @@ const fixture = () => {
   const html = new E('html'), head = new E('head'), body = new E('body'), outline = new E(); html.append(head, body); body.append(outline);
   const row = (id, title, module = false) => {
     const r = new E(); r.className = 'content-list-item'; r.dataset.contentId = id;
-    const h = new E('h3'), toggle = new E('button'); toggle.textContent = title; toggle.id = `${module ? 'learning-module' : 'folder'}-title-${id}`; h.append(toggle); r.append(h); return r;
+    const h = new E('h3'), toggle = new E('button'); toggle.textContent = title; toggle.id = `${module ? 'learning-module' : 'folder'}-title-${id}`; h.append(toggle); const content = new E(); content.append(h); r.append(content); return r;
   };
   const parent = row('_101_1', 'Parent'), child = row('_102_1', 'Nested'), module = row('_104_1', 'Module', true), plain = new E(); plain.dataset.contentId = '_103_1'; plain.className = 'content-list-item';
   parent.append(child, plain); outline.append(parent, module);
   let on = true, enabled = true, cid = '_800_1', mutations, failed = false, held = null;
   const location = { origin: 'https://bb.example.edu', pathname: '/ultra/courses/_800_1/outline' };
-  const store = {}, sent = [], changed = [];
+  const store = {}, sent = [], changed = [], frames = [], watched = { on: false };
   const local = { get: async (keys) => { if (failed) throw Error('storage'); if (held) return held; return structuredClone(keys === null ? store : typeof keys === 'string' ? { [keys]: store[keys] } : Object.fromEntries(keys.map((k) => [k, store[k]]))); }, set: async (p) => { if (failed) return false; Object.assign(store, structuredClone(p)); return true; } };
   const chrome = { storage: { local, onChanged: { addListener: (f) => changed.push(f) } }, runtime: { sendMessage: async (m) => { sent.push(m); return F.change(m, { local }); } } };
   const document = { head, body, createElement: (t) => new E(t), querySelectorAll: (s) => html.querySelectorAll(s), getElementById: (id) => html.querySelector(`#${id}`) };
   const ctx = { on: () => on, settings: () => ({ enhance: { hideFolders: enabled } }), courseId: () => cid,
     toggleOf: (r) => r.querySelector(`#folder-title-${r.dataset.contentId}`) || r.querySelector(`#learning-module-title-${r.dataset.contentId}`), t: (k, args) => k.replace(/\{(\w+)\}/g, (_, p) => args[p]) };
-  const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { constructor(f) { mutations = f; } observe() {} } });
-  vm.runInContext(fs.readFileSync(require.resolve('../features/folders.js'), 'utf8'), c);
+  const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { constructor(f) { mutations = f; } observe() { watched.on = true; } disconnect() { watched.on = false; } }, requestAnimationFrame: (f) => frames.push(f) });
+  vm.runInContext(fs.readFileSync(process.env.GZ_B9_FEATURE || require.resolve('../features/folders.js'), 'utf8'), c);
   const ui = c.GZ_FOLDER_UI;
   const click = async (el, type = 'click') => { const e = { preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }; el.listeners[type](e); await settle(); return e; };
-  return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => mutations(),
+  return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => { mutations(); while (frames.length) frames.shift()(); }, watched, frames,
     identity: Promise.resolve('_900_1'), setOn: (v) => { on = v; }, setEnabled: (v) => { enabled = v; }, fail: (v) => { failed = v; }, hold: (v) => { held = v; }, change: (v) => { cid = v; location.pathname = `/ultra/courses/${v}/outline`; }, path: (v) => { location.pathname = v; }, changed: () => changed.forEach((f) => f({ [F.key(location.origin, '_900_1', cid)]: {} }, 'local')) };
 };
-const eye = (row) => row.querySelector(':scope > .gz-folder-eye');
+const eye = (row) => row.querySelector(`#gz-folder-eye-${row.dataset.contentId}`);
 test('nested folder and learning module controls hide, show, unhide and reapply after redraw', async () => {
   const e = fixture(); e.ui.sync(true, e.identity); await settle();
   assert.ok(eye(e.parent)); assert.ok(eye(e.child)); assert.ok(eye(e.module)); assert.equal(eye(e.plain), null);
+  e.redraw(); e.redraw(); assert.equal(e.document.querySelectorAll('.gz-folder-eye').length, 3, 'wrapped Ultra headings do not accumulate duplicate buttons');
   assert.equal(eye(e.parent).getAttribute('aria-label'), 'Hide folder: Parent');
   assert.equal((await e.click(eye(e.child), 'keydown')).stopped, true);
   assert.equal((await e.click(eye(e.child))).stopped, true);
@@ -92,4 +93,24 @@ test('a storage result arriving after course navigation cannot hide the new outl
   release({ [F.key('https://bb.example.edu', '_900_1', '_800_1')]: { ids: ['_101_1'], show: false } }); await settle();
   assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
   assert.ok(eye(e.parent)); assert.equal(e.sent.length, 0);
+});
+test('a cross-tab storage change invalidates an older in-flight read', async () => {
+  const e = fixture(); let release; e.hold(new Promise((r) => { release = r; }));
+  e.ui.sync(true, e.identity); await settle();
+  const key = F.key('https://bb.example.edu', '_900_1', '_800_1');
+  e.store[key] = { ids: ['_102_1'], show: true };
+  e.hold(null); e.changed(); await settle();
+  release({ [key]: { ids: ['_101_1'], show: false } }); await settle();
+  assert.equal(e.parent.getAttribute('data-gz-folder-hidden'), null);
+  assert.equal(e.child.getAttribute('data-gz-folder-hidden'), 'show');
+});
+
+test('the page is watched only on a course outline, and a burst of changes costs one pass', async () => {
+  const p = fixture();
+  p.ui.sync(true, p.identity);
+  await settle();
+  assert.equal(p.watched.on, true, 'on the outline');
+  p.path('/ultra/course');
+  p.ui.sync(true, p.identity);
+  assert.equal(p.watched.on, false, 'off the outline, nothing watches the page');
 });
