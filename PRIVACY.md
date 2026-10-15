@@ -289,7 +289,8 @@ animated backgrounds) are bundled. It makes requests in these cases:
   isn't kept. If Glaze, the Gradescope switch or your Gradescope answer changes, or the dialog closes, while Canvas
   answers, no file is saved. With Gradescope in
   To Do on, the Gradescope work comes from what's already kept on this device; nothing is asked of Gradescope.
-- **Google Calendar sync** (Chrome, off until you connect). The only destinations are Google's Calendar API at
+- **Google Calendar sync** (Chrome, off until you connect; not in released builds until Google verifies Glaze, and
+  those builds can't make any of these requests). The only destinations are Google's Calendar API at
   `https://www.googleapis.com` and Google's token revocation at `https://oauth2.googleapis.com`; requests carry the
   access token Chrome gives Glaze, never cookies, and never follow a redirect. There is no Glaze server.
   - **Connect** (your click in Glaze's settings): Chrome asks for the `identity` permission and shows Google's own

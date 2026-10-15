@@ -556,7 +556,7 @@
             <label>Range <select data-key="todo.icsRange"><option value="2w">Next 2 weeks</option><option value="4w">Next 4 weeks</option><option value="8w">Next 8 weeks</option><option value="16w">Next 16 weeks</option><option value="term">This term</option></select></label>
           </div>
         </div>
-        <div class="group" id="gcal">
+        <div class="group" id="gcal" hidden>
           <h3>Google Calendar sync</h3>
           <p class="desc">Keeps a calendar named Glaze in your Google account up to date with Canvas: the events Export calendar (.ics) would save, with the choices above. Off until you connect. Chrome signs you in with Google; Glaze asks only to manage calendars it makes, and touches nothing else in your Google Calendar. There's no Glaze server: your calendar goes only between this browser and Google.</p>
           <p class="desc" id="gcal-other" hidden>Google Calendar sync works in Google Chrome. In this browser, save your calendar with Export calendar (.ics) and import the file into your calendar.</p>
@@ -727,6 +727,7 @@
   <script src="lib/widgets.js"></script>
   <script src="lib/remind.js"></script>
   <script src="lib/gradescope.js"></script>
+  <script src="lib/gcal.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>

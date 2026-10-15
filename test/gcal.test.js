@@ -260,8 +260,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const worker = (mock) => {
-  const store = { local: {}, sync: { enabled: true } };
+// on: the build-time switch (lib/gcal.js ON) turned on in the worker's copy, as scripts/dev-gcal.sh does.
+const switched = (src, on) => (on ? src.replace('  const ON = false;\n', '  const ON = true;\n') : src);
+const worker = (mock, { on = true, local = {} } = {}) => {
+  const store = { local, sync: { enabled: true } };
   const area = (s) => ({
     get: async (k) => structuredClone(k == null ? s : Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))),
     set: async (v) => { Object.assign(s, structuredClone(v)); },
@@ -283,23 +285,23 @@ const worker = (mock) => {
       assert.ok(url.startsWith(`${G.API}/`) || url === G.REVOKE, `only Google's two addresses: ${url}`);
       return fetch(url.replace(G.API, mock.api).replace(G.REVOKE, mock.revoke), init);
     },
-    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(switched(read(`lib/${f}`), on && f === 'gcal.js'), context); },
     chrome: {
       runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => require('../manifest.json'), onMessage: { addListener: (f) => listeners.push(f) },
-        onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+        onInstalled: { addListener: (f) => listeners.installed = f }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
       identity,
       tabs: { query: async () => [] },
       scripting: {
         getRegisteredContentScripts: async () => registered,
         registerContentScripts: async (l) => { registered.push(...l); },
-        unregisterContentScripts: async ({ ids }) => { registered = registered.filter((s) => !ids.includes(s.id)); },
+        unregisterContentScripts: async ({ ids } = {}) => { registered = ids ? registered.filter((s) => !ids.includes(s.id)) : []; },
       },
     },
   });
   vm.runInContext(read('lib/background.js'), context);
   const send = (m, sender) => new Promise((res) => { for (const f of listeners) f(structuredClone(m), sender, (r) => res(structuredClone(r))); });
-  return { store, identity, asked, send, registered: () => registered };
+  return { store, identity, asked, send, registered: () => registered, install: () => listeners.installed() };
 };
 const EDITOR = { id: 'glaze', url: 'chrome-extension://x/options.html#gcal' };
 const PAGE = { id: 'glaze', tab: { id: 4 }, frameId: 0, url: 'https://school.instructure.com/courses/7' };
@@ -363,4 +365,53 @@ withMock('worker: disconnect deletes the calendar when asked, revokes the grant,
   assert.ok(w.store.local.gcal?.cal && mock.revoked.length === 1);
   assert.deepEqual(await w.send({ type: 'glaze:gcal', op: 'disconnect' }, EDITOR), { ok: true, revoked: true, had: true });
   assert.equal(mock.calendars.size, 1, 'kept, as chosen');
+});
+
+// ---- the build-time switch (lib/gcal.js ON): off in the repo and the store package until Google verifies the app ----
+test('switch off (the repo as it is): no settings section, no sync, no page script, even with a connection left from a dev build', async () => {
+  assert.equal(G.ON, false, 'lib/gcal.js ON stays false until Google verifies the app (DECISIONS.md, W13)');
+  // The section is hidden in the page itself, and only the switch shows it; the editor loads the switch.
+  assert.match(read('options.html'), /<div class="group" id="gcal" hidden>/);
+  assert.match(read('options.html'), /<script src="lib\/gcal\.js"><\/script>[\s\S]*<script src="options\.js"><\/script>/);
+  const js = read('options.js');
+  const gate = js.indexOf('if (GZ_GCAL.ON) {');
+  assert.ok(gate > 0 && js.indexOf("$('#gcal').hidden = false") > gate && js.indexOf("type: 'glaze:gcal'") > gate, 'everything for it sits behind the switch');
+  assert.ok(!/gcal|Google Calendar/i.test(read('features/palette.js')), 'no palette entry');
+  const mock = await M.start();
+  try {
+    const w = worker(mock, { on: false, local: { gcal: { gen: 'g', cal: 'c_1@group.calendar.google.com', last: {} }, canvas: [] } });
+    for (const [m, sender] of [[{ op: 'connect' }, EDITOR], [{ op: 'disconnect' }, EDITOR], [{ op: 'sync', src: SITE_SRC, events: EVENTS, from: FROM, first: FIRST }, PAGE]]) {
+      assert.deepEqual(await w.send({ type: 'glaze:gcal', ...m }, sender), { ok: false, error: 'off' }, m.op);
+    }
+    w.install();
+    await settle();
+    assert.ok(!w.registered().some((s) => s.id === 'gz-gcal'), 'features/gcal.js never registered');
+    const on = worker(mock, { local: { gcal: { gen: 'g', cal: 'c_1@group.calendar.google.com', last: {} }, canvas: [] } });
+    on.install();
+    await settle();
+    assert.ok(on.registered().some((s) => s.id === 'gz-gcal'), 'and with the switch on, the same install registers it');
+    assert.deepEqual([w.asked, mock.log], [[], []], 'no request at all');
+  } finally { await mock.stop(); }
+});
+
+test('the store package leaves Google sync out while the switch is off; scripts/dev-gcal.sh turns it on in its copy only', () => {
+  const { execFileSync } = require('node:child_process');
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-gcal-pkg-'));
+  try {
+    const keyFile = path.join(dir, 'key.txt');
+    fs.writeFileSync(keyFile, require('node:crypto').randomBytes(294).toString('base64'));
+    const env = { ...process.env, DIST: path.join(dir, 'dist') };
+    execFileSync(path.join(__dirname, '../scripts/dev-gcal.sh'), [keyFile, path.join(dir, 'dev')], { env, stdio: 'pipe' });
+    const repo = require('../manifest.json');
+    const zip = path.join(dir, 'dist', `glaze-v${repo.version}.zip`);
+    const packed = JSON.parse(execFileSync('unzip', ['-p', zip, 'manifest.json']));
+    const { oauth2, optional_permissions: _, ...rest } = repo;
+    assert.deepEqual(packed, rest, 'the store manifest: the same, without oauth2 and the optional identity permission');
+    assert.match(execFileSync('unzip', ['-p', zip, 'lib/gcal.js']).toString(), /\n {2}const ON = false;\n/);
+    const dev = JSON.parse(fs.readFileSync(path.join(dir, 'dev/manifest.json')));
+    assert.deepEqual([dev.oauth2, dev.optional_permissions, dev.key], [oauth2, ['identity'], fs.readFileSync(keyFile, 'utf8')]);
+    assert.match(fs.readFileSync(path.join(dir, 'dev/lib/gcal.js'), 'utf8'), /\n {2}const ON = true;\n/);
+    assert.equal(G.ON, false, "the repo's switch is untouched");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

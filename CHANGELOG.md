@@ -73,7 +73,9 @@ All notable changes to Glaze are documented here. The format follows
   the same events where the calendar supports it. Made on the device, downloaded by the browser (no new permission);
   the choices are remembered and also in the options page. No subscribe link: that would need a server.
 - **Google Calendar sync** (Chrome, off until you connect; Glaze's settings, Google Calendar sync): a calendar named
-  Glaze in your Google account, kept up to date with the same events and choices as Export calendar (.ics).
+  Glaze in your Google account, kept up to date with the same events and choices as Export calendar (.ics). Built in,
+  but behind a build-time switch (`lib/gcal.js` `ON`) that stays off until Google verifies the app: released builds
+  show nothing of it, and their manifest has no `identity` permission or `oauth2` client.
   - Chrome's own Google sign-in (`chrome.identity.getAuthToken`, an optional `identity` permission asked for on your
     click, with no install warning) and one scope, `calendar.app.created`: Glaze can manage only calendars it makes,
     and never sees your others. No Glaze server; requests go only to `www.googleapis.com` and, to revoke access,
