@@ -82,6 +82,7 @@ const MODES = {
       });
       const tag = `${name} ${preset} ${width}px`;
       ok(g.cards.every((c) => c.list.bottom <= c.card.bottom + 1), `${tag}: every list ends inside its card`);
+      ok(g.cards.every((c) => c.list.right <= c.card.right + 1 && c.list.left >= c.card.left - 1), `${tag}: every list stays within its card's width (Ultra's card is a wrapping row)`);
       const over = g.heads.slice(1).map((top) => Math.max(0, ...g.cards.filter((c) => c.card.top < top).map((c) => Math.max(c.card.bottom, c.list.bottom) - top)));
       ok(over.every((o) => o <= 0), `${tag}: every term heading starts below the cards and lists above it (overlap ${over.map(Math.round)}px)`);
       ok(g.cards.every((c) => c.empty < 24), `${tag}: no empty band in a card (most ${Math.round(Math.max(...g.cards.map((c) => c.empty)))}px)`);

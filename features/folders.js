@@ -78,6 +78,7 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
   };
   const sync = (on, cached) => {
     active = !!on;
+    watch(current());
     if (!current()) {
       if (/\/ultra\/(?:profile|logout|login)(?:\/|$)/.test(location.pathname)) { revoked = identity; user = ''; }
       epoch++; key = ''; data = null; loading = false; clear(); return;
@@ -96,8 +97,11 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
   };
   chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && key && Object.hasOwn(changes, key)) { epoch++; loading = false; data = null; read(); } });
   // Mutation callbacks run before paint, including rows inserted when a folder is unfolded.
-  const observer = new MutationObserver(() => { if (active) sync(active, identity); });
-  observer.observe(document.body, { subtree: true, childList: true });
+  // Ultra changes its page all the time: watched only while on a course's outline, and at most once a frame (a frame's
+  // callback still runs before that frame paints, so a hidden folder never shows).
+  let frame = 0;
+  const observer = new MutationObserver(() => { if (active && !frame) frame = requestAnimationFrame(() => { frame = 0; if (active) sync(active, identity); }); });
+  const watch = (on) => { if (on) observer.observe(document.body, { subtree: true, childList: true }); else observer.disconnect(); };
   return { sync };
 })();
 GZ_FOLDER_UI;
