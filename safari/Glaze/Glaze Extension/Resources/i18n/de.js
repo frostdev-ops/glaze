@@ -414,4 +414,7 @@
   "On Canvas: g then d, c, a, g or m for Dashboard, Courses, Calendar, Grades, Inbox; g then ? for the list.": "Auf Canvas: g, dann d, c, a, g oder m für Dashboard, Kurse, Kalender, Noten, Posteingang; g, dann ? für die Liste.",
   "On Canvas: new Inbox messages; Canvas recovers its own editors.": "Auf Canvas: neue Nachrichten im Posteingang; seine eigenen Editoren stellt Canvas selbst wieder her.",
   "On Canvas: a bar above pages, assignments and file previews.": "Auf Canvas: eine Leiste über Seiten, Aufgaben und Dateivorschauen.",
+  "Glaze works on Canvas now, on your school's own address or on instructure.com.": "Glaze funktioniert jetzt auch auf Canvas, unter der Adresse deiner Schule oder auf instructure.com.",
+  "The extras come along, on Canvas's Modules, Assignments, Grades and To Do.": "Die Extras kommen mit, in die Module, Aufgaben, Noten und To-do von Canvas.",
+  "Two Looks for Halloween, Graveyard and Pumpkin Patch, each with its own animated scene.": "Zwei Looks für Halloween, Friedhof und Kürbisfeld, jeder mit eigener animierter Szene.",
 };

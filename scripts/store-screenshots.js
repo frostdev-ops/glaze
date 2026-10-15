@@ -19,13 +19,10 @@ const clock = new Date('2026-10-11T12:00:00-04:00');
 
 const enhance = { urgency: true, inline: true, scores: true, progress: true };
 const lagoon = ['#22d3ee', '#6366f1', '#34d399'];
-const dusk = ['#f472b6', '#a78bfa', '#fb923c'];
 const shots = [
-  ['1-course-frost', 'preview.html', { preset: 'Frost', enhance }],
-  ['2-backgrounds-editor', 'options.html#background', { preset: 'Frost', bg: { kind: 'gradient', style: 'mesh', colors: lagoon, dim: 45 }, enhance }],
-  ['3-extras-paper', 'options.html#extras', { preset: 'Paper', look: { font: 'atkinson' }, enhance }],
-  ['4-horizon-midnight', 'preview.html', { preset: 'Midnight', bg: { kind: 'scene', scene: 'horizon', colors: dusk, intensity: 80 }, look: { glass: 16 }, enhance }],
-  ['5-popup-ember', 'popup', { preset: 'Ember', bg: { kind: 'gradient', angle: 160 }, enhance }],
+  ['1-blackboard-frost', 'preview.html', { preset: 'Frost', enhance }],
+  ['4-halloween-pumpkin-patch', 'preview.html', { lookName: 'Pumpkin Patch', enhance }],
+  ['5-backgrounds-editor', 'options.html#background', { preset: 'Frost', bg: { kind: 'gradient', style: 'mesh', colors: lagoon, dim: 45 }, enhance }],
 ];
 const promos = [['marquee', { width: 1400, height: 560 }], ['small-tile', { width: 440, height: 280 }]];
 
@@ -51,10 +48,11 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
   fs.mkdirSync(out, { recursive: true });
 
   // Saved settings are the real extension storage, written through the extension's own sanitizer.
-  const apply = (opts) => page.evaluate(async ({ preset, ...rest }) => {
-    const colors = { ...GZ_PRESETS.find(([name]) => name === preset)[1] };
+  const apply = (opts) => page.evaluate(async ({ preset, lookName, ...rest }) => {
+    const theme = lookName ? GZ_LOOK_APPLY(GZ_DEFAULTS, GZ_LOOKS.find((look) => look.name === lookName))
+      : { preset, colors: { ...GZ_PRESETS.find(([name]) => name === preset)[1] } };
     await chrome.storage.sync.clear();
-    await chrome.storage.sync.set(GZ_SANITIZE({ ...rest, preset, colors }));
+    await chrome.storage.sync.set(GZ_SANITIZE({ ...theme, ...rest }));
   }, opts);
   // Long enough for three.js to load and draw when a scene is on.
   const settle = () => page.evaluate(() => document.fonts.ready).then(() => page.waitForTimeout(1500));
@@ -63,35 +61,19 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
     await page.goto(`${base}/options.html`);
     await apply(opts);
     const file = path.join(out, `${name}.jpg`);
-    if (target === 'popup') {
-      // The popup is a 360px page; show it over a themed course, where Chrome would open it. Its due
-      // tile reads what the content script last saw: the sample course's own items.
-      await page.evaluate((now) => chrome.storage.local.set({
-        dueWeekAt: now,
-        seenCourses: { _1_1: { name: 'FA26-CS101-01', slot: '2' } },
-        dueWeek: [['Quiz: Programs and Apps', 1], ['Assignment 1: Creating a Presentation with Pictures', 3], ['Discussion: Software Piracy', 5]]
-          .map(([title, days]) => ({ title, due: now + days * 864e5, cid: '_1_1' })),
-      }), clock.getTime());
-      await page.goto(`${base}/preview.html`);
-      await settle();
-      const course = path.join(tmp, 'course.png');
-      await page.screenshot({ path: course });
-      await page.setViewportSize({ width: 360, height: 800 });
-      await page.goto(`${base}/popup.html`);
-      await settle();
-      const popup = path.join(tmp, 'popup.png');
-      await page.locator('body').screenshot({ path: popup });
-      await page.setViewportSize(size);
-      fs.writeFileSync(path.join(tmp, 'frame.html'), `<!doctype html><body style="margin:0;position:relative">
-        <img src="course.png" style="display:block">
-        <img src="popup.png" style="position:absolute;top:12px;right:16px;border-radius:12px;
-          box-shadow:0 18px 48px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08)">`);
-      await page.goto(`file://${path.join(tmp, 'frame.html')}`);
-      await page.waitForTimeout(200);
-    } else {
-      await page.goto(`${base}/${target}`);
-      await settle();
-    }
+    await page.goto(`${base}/${target}`);
+    await settle();
+    await page.screenshot({ path: file, type: 'jpeg', quality: 92 });
+    console.log(`wrote ${path.relative(root, file)}`);
+  }
+
+  // The same local Canvas seed and real extension as the Canvas QA harness; fake student only.
+  const canvas = path.join(tmp, 'canvas');
+  execFileSync(process.execPath, [path.join(__dirname, 'canvas-shots.js'), '--look', 'Frost',
+    '--out', canvas, '--width', '1280', '--height', '800', '--course-menu', '/courses/{bio}/modules', '/'], { cwd: root, stdio: 'inherit' });
+  for (const [source, name] of [['frost-courses-bio-modules.png', '2-canvas-modules'], ['frost-dashboard.png', '3-canvas-dashboard']]) {
+    await page.goto(`file://${path.join(canvas, source)}`);
+    const file = path.join(out, `${name}.jpg`);
     await page.screenshot({ path: file, type: 'jpeg', quality: 92 });
     console.log(`wrote ${path.relative(root, file)}`);
   }
@@ -111,6 +93,9 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
     const file = path.join(root, `assets/store/${name}.png`);
     await page.screenshot({ path: file });
     console.log(`wrote ${path.relative(root, file)}`);
+  }
+  for (const name of ['1-course-frost', '2-backgrounds-editor', '3-extras-paper', '4-horizon-midnight', '5-popup-ember']) {
+    fs.rmSync(path.join(out, `${name}.jpg`), { force: true });
   }
   await context.close();
   fs.rmSync(tmp, { recursive: true, force: true });
