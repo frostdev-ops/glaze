@@ -4,3 +4,6 @@ release/
 safari/**/xcuserdata/
 *.xcuserstate
 assets/ads/
+
+# Local secrets (e.g. cloudflare-r2.env for the share relay)
+*.env
