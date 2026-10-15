@@ -295,3 +295,47 @@ test('a plan never hides a deadline: planned for another day, an item shows unde
   const done = groups(T.build({ items: ITEMS, data: { items: { 'assignment:6': { on: '2026-11-01', done: true } } }, o, now: NOW, tz: NY, cids: new Set(['25']) }));
   assert.ok(!Object.values(done).flat().includes('assignment:6'));
 });
+
+test('one rule for local times in every zone: skipped times land past the gap, repeated ones are the earlier', () => {
+  const at2 = (d, t, z) => new Date(T.typed(d, t, z)).toISOString();
+  // Spring forward: the time doesn't happen; it is read with the offset from before, landing past the gap.
+  assert.equal(at2('2026-03-08', '02:30', NY), '2026-03-08T07:30:00.000Z'); // 3:30 EDT
+  assert.equal(at2('2026-03-29', '02:30', 'Europe/Berlin'), '2026-03-29T01:30:00.000Z'); // 3:30 CEST
+  assert.equal(at2('2026-10-04', '02:30', 'Australia/Sydney'), '2026-10-03T16:30:00.000Z'); // 3:30 AEDT
+  assert.equal(at2('2026-10-04', '02:15', 'Australia/Lord_Howe'), '2026-10-03T15:45:00.000Z'); // 2:45, a half-hour gap
+  // Fall back: the time happens twice; the first one.
+  assert.equal(at2('2026-11-01', '01:30', NY), '2026-11-01T05:30:00.000Z'); // 1:30 EDT
+  assert.equal(at2('2026-10-25', '02:30', 'Europe/Berlin'), '2026-10-25T00:30:00.000Z'); // 2:30 CEST
+  assert.equal(at2('2026-04-05', '02:30', 'Australia/Sydney'), '2026-04-04T15:30:00.000Z'); // 2:30 AEDT
+  assert.equal(at2('2026-04-05', '01:45', 'Australia/Lord_Howe'), '2026-04-04T14:45:00.000Z'); // 1:45 at +11
+  // And ordinary times either side.
+  assert.equal(at2('2026-10-04', '04:00', 'Australia/Sydney'), '2026-10-03T17:00:00.000Z');
+  assert.equal(at2('2026-03-29', '01:30', 'Europe/Berlin'), '2026-03-29T00:30:00.000Z');
+});
+
+test('a backup is imported whole or not at all', async () => {
+  const area = (start, fail) => {
+    const s = { ...start };
+    return {
+      s,
+      get: async (keys) => Object.fromEntries(keys.filter((k) => k in s).map((k) => [k, s[k]])),
+      set: async (v) => { if (fail) throw new Error('QUOTA_BYTES_PER_ITEM'); Object.assign(s, v); },
+      remove: async (keys) => { for (const k of keys) delete s[k]; },
+    };
+  };
+  const old = { tasks: [{ id: 'a', title: 'Old' }], items: {} };
+  const tasks = { 'todo:https://x.test/3': { tasks: [], items: {} }, 'todo:https://x.test/4': { tasks: [], items: {} } };
+  // Settings refused: the tasks those keys held come back, and a key that wasn't there goes.
+  const local = area({ 'todo:https://x.test/3': old, other: 1 });
+  await assert.rejects(T.restore(tasks, { version: 2 }, local, area({}, true)));
+  assert.deepEqual(local.s, { 'todo:https://x.test/3': old, other: 1 });
+  // Tasks refused: settings untouched.
+  const sync = area({ version: 2, colors: 'mine' });
+  await assert.rejects(T.restore(tasks, { version: 2, colors: 'theirs' }, area({}, true), sync));
+  assert.equal(sync.s.colors, 'mine');
+  // Both take.
+  const l2 = area({}), s2 = area({});
+  await T.restore(tasks, { version: 2, colors: 'theirs' }, l2, s2);
+  assert.deepEqual(Object.keys(l2.s), Object.keys(tasks));
+  assert.equal(s2.s.colors, 'theirs');
+});

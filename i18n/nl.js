@@ -532,5 +532,5 @@
   "Better To Do on Canvas: your To Do by day, with your own tasks and focus sessions.": "Better To Do op Canvas: je taken per dag, met je eigen taken en focussessies.",
   "Couldn't save that on this device, so nothing changed.": "Dat kon niet op dit apparaat worden opgeslagen, dus er is niets veranderd.",
   "Canvas didn't confirm that, so your list is checking with Canvas again.": "Canvas heeft dat niet bevestigd, dus je lijst vraagt het Canvas opnieuw.",
-  "Couldn't store the Better To Do tasks in {file}, so nothing was imported.": "De Better To Do-taken uit {file} konden niet worden opgeslagen, dus er is niets geïmporteerd.",
+  "Couldn't import {file}, so nothing changed.": "{file} kon niet worden geïmporteerd, dus er is niets veranderd.",
 };

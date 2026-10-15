@@ -532,5 +532,5 @@
   "Better To Do on Canvas: your To Do by day, with your own tasks and focus sessions.": "Better To Do en Canvas: tus tareas por día, con tus propias tareas y sesiones de concentración.",
   "Couldn't save that on this device, so nothing changed.": "No se pudo guardar en este dispositivo, así que no ha cambiado nada.",
   "Canvas didn't confirm that, so your list is checking with Canvas again.": "Canvas no lo confirmó, así que tu lista está consultando a Canvas de nuevo.",
-  "Couldn't store the Better To Do tasks in {file}, so nothing was imported.": "No se pudieron guardar las tareas de Better To Do de {file}, así que no se importó nada.",
+  "Couldn't import {file}, so nothing changed.": "No se pudo importar {file}, así que no ha cambiado nada.",
 };

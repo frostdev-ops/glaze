@@ -34,29 +34,40 @@ class E {
   focus() {}
 }
 
-const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true } = {}) => {
+const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, defer = false, profile = async () => ({ id: '3', time_zone: 'America/New_York' }) } = {}) => {
   const calls = [];
   const kept = [];
+  const waiting = []; // storage callbacks held back (defer), to answer in order
+  const native = new E();
+  const activation = { isActive: true };
   const runtime = { lastError: undefined };
   const c = {
     console, URL, Intl, Date, Set, Map, JSON, Promise, CSS: { escape: (x) => x }, crypto: { randomUUID: () => '12345678-abcd-ef00' },
     GZ_TODO: T, GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_CANVAS_DUE_WEEK: () => [],
     GZ_CTX: {
-      t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', canvasCourseId: () => '', celebrate() {},
+      t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', canvasCourseId: () => '', celebrate() {}, need: async () => {},
       canvasCourses: async () => [{ id: '25', name: 'Biology', enrollments: [{ type: 'teacher' }] }],
       capi: async (url) => {
         calls.push(url);
+        if (url === '/users/self/profile') return profile();
         if (url.includes('submission_summary')) return summary(url);
         return [{ type: 'grading', course_id: 25, needs_grading_count: 2, assignment: { id: 7, name: 'Lab report' } }];
       },
     },
     location: { origin: 'https://canvas.test', pathname: '/' },
-    document: { cookie: '_csrf_token=abc%3D', activeElement: null, documentElement: new E('html'), visibilityState: 'visible', createElement: (t) => new E(t), querySelector: () => null, addEventListener() {}, removeEventListener() {} },
+    navigator: { userActivation: activation },
+    document: { cookie: '_csrf_token=abc%3D', activeElement: null, documentElement: new E('html'), visibilityState: 'visible', createElement: (t) => new E(t), querySelector: () => native, addEventListener() {}, removeEventListener() {} },
     addEventListener() {}, removeEventListener() {},
     chrome: {
       runtime,
       storage: {
-        local: { set: (v, cb) => { if (setOk) kept.push(v); else runtime.lastError = { message: 'QUOTA_BYTES' }; cb(); runtime.lastError = undefined; } },
+        local: {
+          set: (v, cb) => {
+            const answer = () => { if (setOk) kept.push(JSON.parse(JSON.stringify(v))); else runtime.lastError = { message: 'QUOTA_BYTES' }; cb(); runtime.lastError = undefined; };
+            if (defer) waiting.push(answer); else answer();
+          },
+          get: (k, cb) => cb({}),
+        },
         sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {}, removeListener() {} },
       },
     },
@@ -68,14 +79,14 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true } 
   };
   c.globalThis = c;
   const src = read('features/todo.js').replace('  return { sync, add, cmds };', `  return { sync, add, cmds, probe: {
-    refresh, onChange, onShow, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent }),
+    refresh, onChange, onShow, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
       box = new E('section'); head = new E(); line = new E('p'); body = new E(); },
   } };`).replace('var GZ_TODO_UI = globalThis.GZ_TODO_UI ||', 'var GZ_TODO_UI =');
   vm.createContext(c);
   vm.runInContext(`${E}\n${src}`, c);
-  return { c, calls, kept, p: c.GZ_TODO_UI.probe };
+  return { c, calls, kept, waiting, activation, p: c.GZ_TODO_UI.probe };
 };
 const planner = (calls) => calls.filter((u) => u.includes('/planner/items')).length;
 const summaries = (calls) => calls.filter((u) => u.includes('submission_summary')).length;
@@ -152,4 +163,53 @@ test('whatever the list shows can be acted on, however long the timeframe', () =
   f.p.seed({ prefs: { ...O, span: 'custom', n: 60, unit: 'weeks' }, cache: { key: 'todo:https://canvas.test/3', at: Date.now(), items: [far], grading: [], sums: {} } });
   f.p.render(true);
   assert.equal(f.p.rowOf({ closest: () => ({ dataset: { key: 'assignment:5' } }) })?.title, 'Far off');
+});
+
+test('a start that was superseded (off, then on again) can neither kill nor overwrite the newer list', async () => {
+  const answers = [];
+  const f = feature({ profile: () => new Promise((res, rej) => answers.push({ res, rej })) });
+  f.c.GZ_TODO_UI.sync(true); // start A asks for the profile
+  await settle();
+  f.c.GZ_TODO_UI.sync(false); // turned off while it waits
+  f.c.GZ_TODO_UI.sync(true); // and on again: start B
+  await settle();
+  assert.equal(answers.length, 2);
+  answers[1].res({ id: '3', time_zone: 'America/New_York' }); // B succeeds
+  await settle(); await settle();
+  answers[0].rej(new Error('network')); // A fails late
+  await settle(); await settle();
+  assert.equal(f.p.get().dead, false);
+  assert.ok(f.p.get().box, 'the newer list is still on the page');
+  assert.equal(f.p.get().who.uid, '3');
+});
+
+test('changes saved one after another all stay, each applied to what the one before left', async () => {
+  const f = feature({ defer: true });
+  f.p.seed({ prefs: O });
+  const pick = (k, value) => f.p.onChange({ target: { dataset: { act: 'on' }, value, closest: () => ({ dataset: { key: k } }) }, isTrusted: true });
+  pick('assignment:1', '2026-10-20');
+  pick('assignment:2', '2026-10-21'); // asked for while the first is still being stored
+  await settle();
+  f.waiting.shift()(); // the first lands
+  await settle();
+  pick('assignment:3', '2026-10-22');
+  while (f.waiting.length) { f.waiting.shift()(); await settle(); }
+  await settle();
+  const want = { 'assignment:1': { on: '2026-10-20' }, 'assignment:2': { on: '2026-10-21' }, 'assignment:3': { on: '2026-10-22' } };
+  assert.deepEqual(JSON.parse(JSON.stringify(f.kept.at(-1)['todo:https://canvas.test/3'].items)), want);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.p.get().data.items)), want);
+});
+
+test("a trusted event without the student's activation (a script's .click()) writes nothing", async () => {
+  const f = feature();
+  f.p.seed({ prefs: { ...O, sync: true }, cache: { key: 'todo:https://canvas.test/3', at: Date.now(), items: [item()], grading: [], sums: {} } });
+  f.p.render(true);
+  f.activation.isActive = false;
+  f.p.onChange({ target: tick(), isTrusted: true });
+  await settle();
+  assert.deepEqual(f.calls, []);
+  f.activation.isActive = true; // a click or Space just now
+  f.p.onChange({ target: tick(), isTrusted: true });
+  await settle();
+  assert.deepEqual(f.calls, ['POST /api/v1/planner/overrides']);
 });

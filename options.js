@@ -672,16 +672,16 @@ GZ_UI.load().then((s) => {
     if (!raw || typeof raw !== 'object' || !['colors', 'look', 'bg', 'motion', 'presets'].some((k) => k in raw)) {
       return hint(t('No Glaze settings found in {file}.', { file: file.name }), true);
     }
-    // All of it is cleaned before any of it is applied, and the tasks are stored first: a file that can't be taken
-    // whole changes nothing.
+    // All of it is cleaned before any of it is applied, then stored whole (GZ_TODO.restore): a file that can't be
+    // taken whole changes nothing, and success is said only once both stores have it.
     const next = GZ_SANITIZE(raw);
-    if (raw.tasks && typeof raw.tasks === 'object') {
-      const tasks = Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)]));
-      const kept = await new Promise((res) => chrome.storage.local.set(tasks, () => res(!chrome.runtime.lastError)));
-      if (!kept) return hint(t("Couldn't store the Better To Do tasks in {file}, so nothing was imported.", { file: file.name }), true);
+    const tasks = raw.tasks && typeof raw.tasks === 'object'
+      ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
+    flush(); // an edit still waiting goes out first, so it can't land on top of the import
+    try { await GZ_TODO.restore(tasks, { version: 2, ...next }, chrome.storage.local, chrome.storage.sync); } catch {
+      return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
     }
     Object.assign(s, next);
-    save(Object.keys(s));
     fill();
     hint(t('Imported {file}.', { file: file.name }));
   });

@@ -125,10 +125,11 @@ animated backgrounds) are bundled. It makes requests in these cases:
   submission counts. It asks when such a page opens and its copy is more than two minutes old, when you come back to
   the page (shown or focused) after that, and when you change the list's settings; a grading count that didn't
   come is asked for again when you come back. These are read-only GETs with your existing session. The answer also
-  replaces the due list above, and on these pages the due list's own ten-minute fetch is skipped, so a page asks once.
-  Other pages keep fetching the due list on their own schedule (at most every ten minutes); the two aren't merged
-  because the due list covers the next seven days from Blackboard or Canvas on every page, while To Do's window
-  follows your settings and only runs where the list is.
+  replaces the due list above, and on these pages the due list's start-of-page fetch is skipped. Opening the command
+  palette before the list has its first answer can still ask for the due list once more (at most every ten minutes).
+  Other pages keep fetching the due list on their own schedule; the two aren't merged because the due list covers the
+  next seven days from Blackboard or Canvas on every page, while To Do's window follows your settings and only runs
+  where the list is.
 - **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). This is the only change Glaze
   makes to any site. When you tick or untick an item, Glaze writes Canvas's own planner mark for it, as Canvas's List
   View checkbox does: one request to your own Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark
