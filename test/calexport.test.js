@@ -248,3 +248,10 @@ test('review: a script\'s requestSubmit() (trusted, but no activation) starts no
   assert.equal(person.asked.length > 0, true);
   assert.deepEqual(person.downloads, ['glaze-calendar-2026-10-15.ics']);
 });
+
+test('review: a plan on a Gradescope item that isn\'t allowed (or on a kind that never goes in) stays out, even untitled', () => {
+  const data = { items: { 'gradescope:55': { on: '2026-10-16', sessions: [{ at: Date.parse('2026-10-16T18:00:00Z'), min: 30 }] }, 'announcement:9': { on: '2026-10-16' }, 'calendar_event:4': { on: '2026-10-16' } } };
+  assert.deepEqual(run({ gs: [], data }), [], 'consent refused: no Gradescope items allowed');
+  const gs = [item({ type: 'gradescope', id: '55', title: 'HW 3', url: 'https://www.gradescope.com/courses/1/assignments/55', course: '' })];
+  assert.deepEqual(run({ gs, data }).map((e) => e.summary).sort(), ['Do: HW 3', 'Focus: HW 3', 'HW 3'], 'allowed: its plans go in, with its deadline');
+});
