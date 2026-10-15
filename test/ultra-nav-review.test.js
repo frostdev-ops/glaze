@@ -99,11 +99,11 @@ test('a default Ultra grade page does not load the nav UI, but saved custom link
 
 test('successful backup restore cleans logos only after settings commit; failed restore retains them', async () => {
   const src = source('lib/background.js');
-  const c = vm.createContext({ GZ_TODO: { change: async (m) => ({ ok: m.good }) }, GZ_NAV_STORE: { cleanup: async () => { c.cleaned++; return true; } }, cleaned: 0 });
+  const c = vm.createContext({ GZ_TODO: { change: async (m) => ({ ok: m.good }) }, GZ_FOLDERS: { restore: async () => ({ ok: c.good }) }, GZ_NAV_STORE: { cleanup: async () => { c.cleaned++; return true; } }, cleaned: 0, good: false });
   const body = src.match(/\n  todo: \{([\s\S]*?)\n  \},/)[1];
   const handler = vm.runInContext(`({${body}})`, c);
   await handler.run({ restore: {}, good: false }, {}); assert.equal(c.cleaned, 0);
-  await handler.run({ restore: {}, good: true }, {}); assert.equal(c.cleaned, 1);
+  c.good = true; await handler.run({ restore: {}, good: true }, {}); assert.equal(c.cleaned, 1);
 });
 
 test('the shared planner reuses only this account covered fresh cache, otherwise a bounded shared memo', async () => {

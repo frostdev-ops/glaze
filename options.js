@@ -1038,8 +1038,9 @@ GZ_UI.load().then((s) => {
   // card styles and bookmarks go too; a picture kept on this computer stays here.
   $('#export').addEventListener('click', () => chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks', 'navItems'], (r) => chrome.storage.local.get(null, (all) => {
     const tasks = Object.fromEntries(Object.entries(all || {}).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
+    const folders = GZ_FOLDERS.backup(all);
     const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
-    const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), ucards: GZ_CARDS.styles(r?.ucards), ulinks: GZ_CARDS.links(r?.ulinks), tasks }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), cards: GZ_CARDS.styles(r?.cards), links: GZ_CARDS.links(r?.links), ucards: GZ_CARDS.styles(r?.ucards), ulinks: GZ_CARDS.links(r?.ulinks), tasks, folders }, null, 2)], { type: 'application/json' });
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -1062,7 +1063,7 @@ GZ_UI.load().then((s) => {
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
     flush(); // an edit still waiting goes out first, so it can't land on top of the import
-    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, settings: { version: 2, ...next, navItems: N.clean(raw.navItems) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
+    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, folders: GZ_FOLDERS.backup(raw.folders), settings: { version: 2, ...next, navItems: N.clean(raw.navItems) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
     if (!r.ok) {
       // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
       if (r.undone === false) {

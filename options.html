@@ -468,6 +468,8 @@
         <label class="check"><input type="checkbox" data-key="enhance.place"><span>Remember your place</span>
           <span class="desc">Coming back to a course, its content opens the folders you left open and scrolls back to where you were. Kept on this device.</span>
           <span class="desc">On Canvas: how far down Modules you were and the item you opened last; Canvas keeps modules open or closed itself.</span></label>
+        <label class="check"><input type="checkbox" data-key="enhance.hideFolders"><span>Hide folders</span>
+          <span class="desc">Hide folders and learning modules in Blackboard course outlines on this device.</span></label>
         <label class="check"><input type="checkbox" data-key="enhance.progress"><span>Course progress</span>
           <span class="desc">A bar at the top of course content adding up how much of the course you have completed.</span>
           <span class="desc">On Canvas: from the course's module completion requirements; a course without any shows no bar.</span></label>
@@ -623,7 +625,11 @@
           <label class="check"><input type="checkbox" data-key="enhance.notes"><span>Notes</span>
             <span class="desc">On Canvas and Blackboard Ultra: a box for your own notes on Canvas's Dashboard or Ultra's Courses page (small, medium or large; web addresses in them become links) and a notes app with folders, formatting, checklists, pictures, attachments and links to your courses' content. Open the app from Ctrl+K, the notes box, a Canvas course card's + menu, or Course notes on a Canvas course's home or an Ultra course's outline. Kept on this device only, for each site and account, in Glaze's own storage, which the school's site can't read. Deleted notes stay in the trash for 30 days; export everything as a zip at any time.</span></label>
           <label class="check"><input type="checkbox" data-key="enhance.widgets"><span>Widgets</span>
-            <span class="desc">On Canvas's Dashboard, and in Glaze's panel on Blackboard Ultra's Courses page: an agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. Edit widgets to add, order and size them; any of them can float over every page of the site, where you drag it or move it with the arrow keys.</span></label>
+            <span class="desc">An agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. On Canvas's Dashboard, Edit widgets adds, orders and sizes them, and any of them can float over every Canvas page. On Blackboard Ultra they float on the Courses page and on Glaze's Dashboard (the Institution page, with Better To Do), each with a layout of its own, and any of them can float over every Blackboard page: Edit layout lets you drag them anywhere or move them with the arrow keys; they snap to a grid, the edges and each other, and Alt places them freely.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.dashboard"><span>Glaze Dashboard</span>
+            <span class="desc">On by default. Blackboard Ultra's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Ultra's own page, one click away.</span></label>
+          <label class="check"><input type="checkbox" data-key="widgets.land"><span>Open Blackboard on the dashboard</span>
+            <span class="desc">Off by default. When Blackboard Ultra opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></label>
           <div class="row">
             <label class="field"><span>Focus minutes</span><input type="range" data-key="widgets.work" min="1" max="120" step="1"><output data-for="widgets.work"></output></label>
             <label class="field"><span>Break minutes</span><input type="range" data-key="widgets.rest" min="1" max="60" step="1"><output data-for="widgets.rest"></output></label>
@@ -760,6 +766,7 @@
   <script src="lib/news.js"></script>
   <script src="lib/search.js"></script>
   <script src="lib/todo.js"></script>
+  <script src="lib/folders.js"></script>
   <script src="lib/widgets.js"></script>
   <script src="lib/remind.js"></script>
   <script src="lib/gradescope.js"></script>

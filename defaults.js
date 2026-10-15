@@ -68,7 +68,7 @@ const GZ_SPEC = {
   },
   enhance: {
     urgency: [false, 'bool'], clamp: [false, 'bool'], scores: [true, 'bool'], reading: [false, 'bool'],
-    inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
+    inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], hideFolders: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
     notes: [false, 'bool'], widgets: [false, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'],
