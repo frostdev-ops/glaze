@@ -8,6 +8,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Pet habitat**, opt-in and local: the study buddy earns XP from already-stored handed-in work, verified W11 streak days and W17 kept do-on plans, with five levels, unlockable looks and a keyboard-friendly habitat editor. The Canvas widget and palette share one renderer and the shared widget registration supports the Ultra panel. No XP from focus sessions; no notifications or missed-day losses. Rewards reconcile idempotently through the background broker per site and account, including untick and submission-state corrections. Added original matching bandana artwork (9,760-byte transparent WebP), all six languages and table tests for the XP rules.
+
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
   notes on a course's home (there as soon as Notes is turned on), or a class reminder. It opens and acts only on your own

@@ -16,7 +16,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
     gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', gradescope: 'Gradescope in To Do', search: 'Search in your courses',
-    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak',
+    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', pet: 'Pet habitat',
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
     notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
@@ -77,6 +77,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
         { label: t('New note'), hint: cid ? t('This course') : 'Glaze', group: 'Glaze', run: (e) => notes({ create: true, course: cid, event: e }) },
         ...(cid ? [{ label: t('Course notes'), hint: t('This course'), group: 'Glaze', run: (e) => notes({ course: cid, event: e }) }] : []),
       ] : []),
+      ...(ctx.settings().enhance.pet ? [{ label: t('Pet habitat'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => need('features/pet.js', () => globalThis.GZ_PET_UI)).then(() => GZ_PET_UI.open(), () => {}) }] : []),
       ...glazeCmds(),
       // Every Canvas extra with its switch (features/widgets.js), whether or not the widgets are on.
       { label: t('What Glaze can do'), hint: 'Glaze', group: 'Glaze', run: () => need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.hub(), () => {}) },

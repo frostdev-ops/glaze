@@ -200,3 +200,15 @@ test('study buddy: happy after a win, awake while the timer runs or after a pat,
   assert.equal(W.ticks({ items: { 'assignment:1': { done: true }, 'quiz:2': { done: false }, 'quiz:3': {} }, tasks: [{ done: 5 }, { done: 0 }] }), 2);
   assert.equal(W.ticks(undefined), 0);
 });
+
+test('declared widgets keep layout and float settings without changing built-in order or defaults', () => {
+  const more = { pet: { size: 'm' }, '../bad': { size: 'l' }, buddy: { size: 'l' } };
+  const fresh = W.layout(null, more);
+  assert.deepEqual(fresh.tiles.map((x) => x.id), [...W.TILES, 'pet']);
+  assert.deepEqual(fresh.tiles.at(-1), { id: 'pet', on: false, size: 'm', float: false, x: null, y: null });
+  const saved = W.layout({ tiles: [{ id: 'pet', on: true, size: 'l', float: true, x: .2, y: .3 }] }, more);
+  assert.equal(saved.tiles[0].id, 'pet');
+  assert.deepEqual(saved.tiles[0], { id: 'pet', on: true, size: 'l', float: true, x: .2, y: .3 });
+  assert.equal(W.set(saved, 'pet', { size: 's' }).tiles[0].size, 's');
+  assert.equal(W.layout(saved).tiles.some((x) => x.id === 'pet'), false);
+});

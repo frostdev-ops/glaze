@@ -57,7 +57,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
   c.globalThis = c;
   vm.createContext(c);
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, hub: open };', '  return { sync, hub: open, probe: { WIDGETS, set: (w, s, m) => { W = w; o = s; me = m; } } };');
+  const src = read('features/widgets.js').replace('  return { sync, hub: open, register };', '  return { sync, hub: open, probe: { WIDGETS, set: (w, s, m) => { W = w; o = s; me = m; } } };');
   assert.notEqual(src, read('features/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: '3', tz: 'UTC' });

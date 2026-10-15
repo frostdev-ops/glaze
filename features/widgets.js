@@ -10,7 +10,9 @@
 var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const ctx = globalThis.GZ_CTX;
   const t = (k, v) => ctx.t(k, v);
-  const NAMES = { notes: 'Notes', agenda: 'Agenda', timer: 'Focus timer', quotes: 'Quote', music: 'Music', breathe: 'Breathe', buddy: 'Study buddy' };
+  const MORE = { pet: { file: 'features/pet.js', name: 'Pet habitat', size: 'm' } };
+  const factories = new Map();
+  const NAMES = { notes: 'Notes', agenda: 'Agenda', timer: 'Focus timer', quotes: 'Quote', music: 'Music', breathe: 'Breathe', buddy: 'Study buddy', ...Object.fromEntries(Object.entries(MORE).map(([id, x]) => [id, x.name])) };
   const SIZE_NAMES = { s: 'Small', m: 'Medium', l: 'Large' };
   // Written for Glaze (original, not quoted from anyone), each in every language Glaze speaks.
   const QUOTES = [
@@ -27,7 +29,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const HUB = [
     ['Dashboard', ['notes', 'widgets', 'todo', 'cardTasks', 'overall', 'gradeHover', 'gpa', 'insights', 'newgrades', 'newcontent', 'coursemenu']],
     ['Course pages', ['progress', 'place', 'download', 'calc', 'syllabus', 'inline', 'scores', 'urgency', 'previews', 'toggles', 'darkDocs', 'reading', 'clamp']],
-    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak']],
+    ['Reminders and streak', ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak', 'pet']],
     ['Everywhere', ['palette', 'search', 'keys', 'drafts', 'quizLight']],
   ];
   const EXTRA = {
@@ -36,7 +38,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     progress: 'Course progress', place: 'Remember your place', download: 'Download all', calc: 'What-if calculator', syllabus: 'Syllabus import', inline: 'Due-date status and percentages',
     scores: 'Score bars', urgency: 'Due-date urgency', previews: 'Folder previews', toggles: 'Document buttons', darkDocs: 'Dark documents',
     reading: 'Reading width', clamp: 'Shorter descriptions', palette: 'Command palette', search: 'Search in your courses',
-    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', keys: 'Keyboard shortcuts', drafts: 'Back up what you type', quizLight: 'Keep quizzes light',
+    remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', pet: 'Pet habitat', keys: 'Keyboard shortcuts', drafts: 'Back up what you type', quizLight: 'Keep quizzes light',
   };
 
   let W = null; // lib/widgets.js
@@ -62,7 +64,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const shown = () => document.visibilityState === 'visible';
   const lang = () => GZ_I18N.locale(ctx.locale());
   const dash = () => location.pathname === '/';
-  const allowed = (id) => (id === 'notes' ? ctx.settings().enhance.notes : ctx.settings().enhance.widgets);
+  const allowed = (id) => (id === 'pet' ? ctx.settings().enhance.pet : id === 'notes' ? ctx.settings().enhance.notes : ctx.settings().enhance.widgets);
   const saveLayout = (next) => { lay = next; put({ widgetLayout: lay }); draw(); };
   // Who's signed in (their id names their notes; their Canvas time zone counts the agenda's days), asked only when a
   // tile needs it: a page with nothing of theirs to show asks Canvas nothing. A failed ask is asked again next time.
@@ -552,8 +554,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     for (const tile of want) {
       let x = tiles.get(tile.id);
       if (!x) {
+        const fill = WIDGETS[tile.id] || factories.get(tile.id);
+        if (!fill) { ctx.need(MORE[tile.id].file, () => factories.has(tile.id)).then(draw, () => {}); continue; }
         x = tileEl(tile.id);
-        Object.assign(x, WIDGETS[tile.id](x.body) || {});
+        Object.assign(x, fill(x.body, { who: () => who().then(() => me), site: ctx.site, size: () => lay.tiles.find((t) => t.id === tile.id)?.size }) || {});
         tiles.set(tile.id, x);
       }
       x.el.dataset.size = tile.size;
@@ -673,7 +677,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const onStore = (ch, a) => {
     if (a === 'sync' && ch.widgets) readPrefs().then(() => { for (const x of tiles.values()) x.update?.(); });
     if (a === 'local' && ch.widgetLayout && !echo('widgetLayout', ch.widgetLayout)) {
-      const next = W.layout(ch.widgetLayout.newValue);
+      const next = W.layout(ch.widgetLayout.newValue, MORE);
       if (JSON.stringify(next) !== JSON.stringify(lay)) { lay = next; draw(); }
     }
   };
@@ -683,7 +687,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
     W = globalThis.GZ_WIDGETS;
     const [r] = await Promise.all([get('local', 'widgetLayout'), readPrefs()]);
-    lay = W.layout(r.widgetLayout);
+    lay = W.layout(r.widgetLayout, MORE);
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
     document.addEventListener('visibilitychange', onShow);
     addEventListener('resize', onResize);
@@ -713,7 +717,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // The hub can open with the widgets off: it needs only this file and lib/widgets.js.
   const open = () => ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(() => { W ||= globalThis.GZ_WIDGETS; hub(); });
 
-  return { sync, hub: open };
+  const register = (id, fill) => {
+    if (!Object.hasOwn(MORE, id) || factories.has(id) || typeof fill !== 'function') return;
+    factories.set(id, fill);
+  };
+  return { sync, hub: open, register };
 })();
 
 GZ_WIDGETS_UI;

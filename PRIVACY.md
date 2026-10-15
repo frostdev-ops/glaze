@@ -4,6 +4,8 @@ _Last updated: 2026-10-15_
 
 ## What Glaze stores
 
+- **Pet habitat** (off by default), in `chrome.storage.local`, per site and confirmed signed-in account (`pet:<origin>/<uid>`): the XP contribution for each rewarded work/plan id and the existing cache timestamp used to reconcile it, the day numbers already credited from the existing streak, the selected buddy look and the habitat's decoration positions. The worker reads existing Better To Do, planner-cache, Insights and reminder/streak records; it creates no assignment requests or new activity tracking. The ordinary shared identity helper may read the signed-in profile once for the page. Missing or expired caches preserve earned progress; an explicit untick or corrected submission removes its credit. The game has no focus timer rewards, analytics, network service, notifications or sad-pet/missed-day penalty. Progress is not synced. Removing the extension or clearing its local storage removes it. Moodle has no supported stored account-scoped completion source yet, so no game is shown there.
+
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
   background, motion, light/dark schedule, course colour and extras choices, and what you set for a course in its course menu:
   its colour, look, tint and the **nickname you type for it**. When Chrome sync is on, these follow
