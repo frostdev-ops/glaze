@@ -556,10 +556,11 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     }
   };
   // Where the list goes: right before this. Canvas: its list, the React one, or (a teacher's, server-drawn) a heading and
-  // a list. Ultra: its own To Do on the Courses page (anything Glaze puts first in that column stays above), or, on a
-  // course's outline, the right column's Details & Actions block.
+  // a list. Ultra: its own To Do on the Courses page (anything Glaze puts first in that column stays above), the To Do
+  // tile's spot on Glaze's Dashboard (B7b, features/widgets.js), or, on a course's outline, the right column's Details &
+  // Actions block.
   const anchor = () => {
-    if (ultra) return document.querySelector(here() ? 'aside.outline-actions > .js-details-and-actions' : 'div.todo-panel > bb-todo');
+    if (ultra) return here() ? document.querySelector('aside.outline-actions > .js-details-and-actions') : document.querySelector('#gz-dash .gz-w-todo-spot') || document.querySelector('div.todo-panel > bb-todo');
     const native = document.querySelector('#right-side .Sidebar__TodoListContainer') || document.querySelector('#right-side ul.to-do-list');
     return native?.previousElementSibling?.matches('.todo-list-header') ? native.previousElementSibling : native;
   };

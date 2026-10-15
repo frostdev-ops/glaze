@@ -18,6 +18,18 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
 
 ## What Glaze stores
 
+- **Blackboard navigation:** precise size/spacing and logo choices sync in `nav`; up to eight custom link names,
+  http/https URLs, built-in icon choices, new-tab preferences, native-item order/hidden choices and rail-widget
+  switches/order/position sync in the separate capped `navItems` item. A link is contacted only when you click it;
+  icons and the default Glaze logo are bundled. Custom logos are resized on this device and stored as `navLogo:<id>`
+  in local storage (960 px longest side, 400,000 characters each, within the existing 4,000,000-character combined
+  picture cap). Replacement/reset deletes unused custom-logo pictures after the new setting is saved; failed saves
+  retain the old picture. A displayed local picture is readable by the school page, like other displayed images.
+  Export all carries navigation settings/links but removes local picture ids and restores the bundled logo on import;
+  Look/share codes exclude personal navigation links, layout and logos. Rail widgets are off by default. The timer
+  shares the existing device `widgetTimer`; next due uses the same-origin due cache and the pet reads existing progress
+  for a fresh cached same-origin account, without fetching a profile, awarding XP or recording extra activity.
+
 - **Pet habitat** (off by default), in `chrome.storage.local`, per site and confirmed signed-in account (`pet:<origin>/<uid>`): settled XP contributions for rewarded work/plan ids, existing source-cache timestamps, the provider hand-in timestamp saved when work credit settles, credited streak day numbers, the selected buddy look and decoration positions. The broker reads existing Better To Do, planner-cache, Insights and W11 streak records, plus the existing To Do/Streak switches; it adds no assignment requests or activity tracking. The ordinary shared identity helper may read the signed-in profile once for the page. Saved W11 `[streak.start, min(today, streak.asOf))` is the only source of streak days while Streak is on, including free restores; no days are guessed from its all-time best. With Streak off, no saved streak, or no valid saved calculation day (`asOf`), no new streak XP is awarded and existing XP stays. Missing/cleared caches and deleting finished task or plan history preserve settled rewards. With Canvas tick sync on, historical hand-ins and kept plans can receive first rewards without a planner row. A missing row preserves settled work/plan values; work credit can update if a fresh existing source proves a hand-in newer than the saved provider hand-in timestamp. A refreshed source timestamp alone cannot override a native untick. Ultra always follows local ticks. Visible unticks (local or synced), manual done mode and newer submission corrections revoke the associated work/plan XP; a still-present plan moved to a future day or with a known missed completion also loses plan credit. Each contribution/version/provider-baseline/day collection is capped at 4,096 entries. An unreadable, oversized or full record is left untouched and the view explains that its update was refused; existing earned history is never silently truncated or reset. No focus timer rewards, analytics, remote game service, notifications or missed-day penalties. Progress is not synced; removing the extension or clearing its local storage deletes it. Moodle has no supported stored account-scoped completion source yet, so no game is shown there.
 
 - **Your settings**, in `chrome.storage.sync`: the on/off switch, your colors and saved palettes, look,
@@ -133,7 +145,13 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
   it ends, so it keeps running from page to page. The widgets' settings (timer
   lengths, chime, quote choices, breathing lengths) are in `chrome.storage.sync` with your other settings (`widgets`).
-  On Ultra, whether you folded Glaze's panel on the Courses page away (`panelShut`) is kept there too.
+  On Ultra, whether you folded Glaze's panel on the Courses page away (`panelShut`) is kept there too, and so are the
+  Courses page's and the Dashboard's own layouts and the widgets floating over every Blackboard page (in the same
+  `widgetLayout`: which tiles are on, their size, where each sits, folded or not, which is on top, and how wide the page
+  was when you placed them) and which Dashboard tab you chose last (`dashTab`). With **Open Blackboard on the dashboard**
+  on (`widgets.land`, off by default), Glaze's background page remembers which browser tabs already went on to the
+  Dashboard (their tab number, in its session storage: in memory, never written to disk, gone when the browser closes or
+  the tab does), so it happens once in a tab; the school's site sees nothing of it.
 - **Notes** (Canvas and Blackboard Ultra, the notes app; the Notes switch, off by default), on this device only, per site and signed-in user id. The
   library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name the site showed),
   when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'
@@ -581,3 +599,7 @@ project's GitHub repository at
 ## Contact
 
 admin@frostdev.io
+
+### Hidden Ultra folders
+
+Hidden folder/module IDs and the Show hidden folders switch are stored in `storage.local`, separately for each HTTPS site, known Ultra account and course. No titles or content are stored. Limits are 500 IDs per course, 200 account/course records and 256 KiB across them. Unknown identity or failed storage leaves the outline untouched. The feature makes no requests, including no profile request; it reuses only the existing page identity cache. Export all includes validated records; imports retain their account/site/course keys. Search, Download all, progress and new-item counts are unaffected.
