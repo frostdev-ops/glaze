@@ -295,6 +295,15 @@ What 2.0 chose, what it turned down, and why. Newest last.
 | Search in the command palette asks each course's REST lists with `search_term` (pages, assignments, discussions, announcements, modules, files: six GETs a course), six at a time, the course you're in and this term's first, and stops at 24 results | One GraphQL query over `allCourses` (another extension's `SearchByTerm`: top 3 pages and assignments per course) | Canvas's GraphQL `Course` has pages, assignments and discussions connections with a search filter but no files (local Canvas source, `app/graphql/types/course_type.rb`); the query is a POST that needs the CSRF token; and one query for every course, past ones included, can't be ordered, cut short or cancelled per course. GETs are cached per course, kind and term for five minutes in memory. |
 | Content results go after the palette's matches that contain the query as typed, each arrival below the last; its looser matches (letters in order) are held back until the search is done, then added at the end. The keyboard's choice stays on the same item | Appending them after everything; inserting them above the loose matches; ranking them in with the rest | Arrivals would otherwise land under a dozen weak matches, and inserting or re-ranking moves rows under a still pointer, so a click hits something else (Codex W6 review). |
 
+## Past terms, GPA trends and goal (W16, Oct 2026)
+
+| Decision | Considered | Why |
+|---|---|---|
+| Past terms live in `storage.local` per site and user (`gpaTerms:<origin>:<user>`), changed one term at a time through the broker ('glaze:gpaterms'), with a Remove-all watermark | `storage.sync`; whole-record writes from the page | Transcripts are device data and too big for sync. Per-term changes from two tabs both land; a change made before Remove all can't bring a term back. |
+| Transcripts are read as text (pasted, HTML or DOCX through `lib/doctext.js`) by heuristics in `lib/gpa.js`, and always reviewed before anything is kept | another extension's server-side AI parse; PDF and photos now | Everything stays on the device. PDF (pdf.js), photos (OCR) and AI extraction wait on owner decisions #1, #10 and #11; they would feed the same review screen. |
+| Withdrawn grades, WF included, are left out and listed; the student can change a WF to F | Counting WF as F | Schools differ; leaving it visible and editable is honest either way. |
+| The route starts from each course's letter now and takes the cheapest steps up (percentage points to the next letter on the course's scale, over grade points gained, credits counted). What it takes asks the course's work left (the calculator's own `need`) and a letter it can't reach caps that course | Equal letters everywhere; asking every course's work up front | One request per course only when asked; the plan stays possible once Canvas data says a letter is out of reach. |
+
 ## Dashboard notes, widgets and What Glaze can do (W7, Oct 2026)
 
 | Decision | Considered | Why |

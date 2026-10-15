@@ -39,6 +39,13 @@ _Last updated: 2026-10-15_
   courses" everything, and the time of the last Clear all is kept per site and user so a change from another open
   tab can't bring them back. Nothing of this
   is sent to Canvas or anywhere else.
+- **Past terms and a GPA goal** (Canvas, the GPA Extra), in `chrome.storage.local`, on this device only, per Canvas
+  site and signed-in user id: up to 40 terms you typed in or imported, each with its name, plus/minus or whole-letter
+  scale and up to 40 courses (the name, credits, grade as written, honors/AP level, left out or not), and your goal
+  (cumulative or this term's GPA). A transcript you paste or pick (text, a web page or a Word file) is read in the page
+  on this device; only the terms you review and add are kept, never the transcript itself. Glaze sends none of it
+  anywhere: no upload, no AI service. "Remove this term" and "Remove all past terms" delete it, and the time of the
+  last Remove all is kept so a change from another open tab can't bring terms back.
 - **What's due this week**, in `chrome.storage.local`, on this device only: the title, course and due
   time of each item due in the next seven days, from Blackboard's own To Do list (or Canvas's planner, or Moodle's Timeline),
   and the address of the site it came from, so the popup can list them. It is replaced each time it's
@@ -193,8 +200,10 @@ animated backgrounds) are bundled. It makes requests in these cases:
   course's Grades page (or when you have something saved for that course), Glaze asks for that course's
   assignment groups with your submissions, and its grading periods or grading scheme where the course has
   them; the answers stay in memory. With the GPA on, a what-if grade for a course whose letter grade Canvas gives
-  asks once for that course's grading scheme, to read the what-if on the same scale. Glaze never writes grades or
-  what-if scores to Canvas.
+  asks once for that course's grading scheme, to read the what-if on the same scale. With a GPA goal set, a course
+  whose letter grade Canvas gives asks once for its grading scheme (the lowest percent for each letter), and
+  **What it takes** asks for that course's assignment groups with your submissions, as the what-if calculator does.
+  Glaze never writes grades or what-if scores to Canvas.
   These requests are read-only GETs to your own Canvas site with your existing session (Better To Do's opt-in tick, below, is the one write). Only the due
   list, course details and badge records described above are stored; other answers stay in memory.
   For supported Inbox draft recovery, Glaze reads your profile id and, when offering a copy or checking
@@ -337,7 +346,7 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 
 ## Permissions
 
-- `storage` — to save the settings, GPA choices, course names, places, what-if scores, due list, Better To Do's tasks and plans, reminder and streak state, marks on documents,
+- `storage` — to save the settings, GPA choices, past terms and goal, course names, places, what-if scores, due list, Better To Do's tasks and plans, reminder and streak state, marks on documents,
   typed-text backups, Looks history and favorites, Dashboard notes and widgets, and Safari update-check timestamp described above.
 - `nativeMessaging` (Safari only) — to ask the containing Mac app to check for updates. The App Store
   apps ignore this request. Chrome does not request this permission.

@@ -6,7 +6,8 @@
 //   is left as Canvas has it: it resets when the page reloads, and its total is Canvas's sidebar Total, labelled
 //   "NOT your official score" by Canvas; Glaze's figures are labelled as its own.
 // - The GPA on the Dashboard (enhance.gpa): per term and cumulative over your current courses, 4.0 or plus/minus,
-//   weighted for honors and AP, with credits, a scale of your own and a what-if grade per course.
+//   weighted for honors and AP, with credits, a scale of your own and a what-if grade per course. Past terms, trends
+//   and a goal are features/gpaterms.js (lib/gpa.js), loaded when there are past terms or that view is opened.
 // The arithmetic is lib/gradecalc.js (tested against Canvas's own totals). Canvas's helpers come through GZ_CTX.
 var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const X = globalThis.GZ_CTX;
@@ -30,6 +31,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // A Clear all from any tab empties what this tab shows for that user too.
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && D.tkey && changes[D.tkey]) pastIn(changes[D.tkey].newValue);
       const marks = area === 'local' && changes.whatIfCleared?.newValue;
       if (!marks) return;
       const was = changes.whatIfCleared.oldValue || {};
@@ -86,12 +88,12 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (st.saved) load(st); else whatIf();
   };
   const load = (st) => {
-    if (st.status === 'loading' || st.status === 'ready') return;
+    if (st.status === 'loading' || st.status === 'ready') return st.p;
     st.status = 'loading';
     st.v++;
     whatIf();
     const { cid, row } = st;
-    Promise.all([
+    return (st.p = Promise.all([
       getAll(`/courses/${cid}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`),
       row.has_grading_periods ? capi(`/courses/${cid}/grading_periods`).then((j) => j.grading_periods) : null,
       row.restrict_quantitative_data ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j.grading_scheme) : null,
@@ -100,7 +102,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       st.course = C.fromApi(groups, { weighted: row.apply_assignment_group_weights, periods, weightedPeriods: row.has_weighted_grading_periods });
       st.scheme = C.schemeOf(scheme) || C.SCHEME;
       // The page's grading period: the one picked, or Canvas's current one; 0 is all of them.
-      const picked = new URLSearchParams(location.search).get('grading_period_id') ?? (row.has_grading_periods ? st.me.current_grading_period_id : null);
+      const picked = st.whole ? null : new URLSearchParams(location.search).get('grading_period_id') ?? (row.has_grading_periods ? st.me.current_grading_period_id : null);
       st.period = picked && picked !== '0' ? String(picked) : null;
       const me = st.me;
       st.truth = !st.period ? [me.computed_current_score, me.computed_final_score]
@@ -111,7 +113,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const r = C.reconcile(st.saved, st.course);
       Object.assign(st, { rec: r.kept, what: r.what, gone: r.gone, status: 'ready' });
       if (r.gone.length) { st.open = true; keep(st); }
-    }, () => { st.status = 'failed'; }).then(() => { st.v++; whatIf(); });
+    }, () => { st.status = 'failed'; }).then(() => { st.v++; whatIf(); }));
   };
   const keep = (st) => {
     st.what = C.whatOf(st.rec);
@@ -316,7 +318,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       if (!list.length) throw new Error('no courses');
       const me = studentIn(list[0]);
       D.wkey = me ? whatIfKey(me) : null;
-      const [prefs, wi] = await Promise.all([getArea('sync', 'gpaCourses'), D.wkey ? getArea('local', D.wkey) : null]);
+      D.tkey = me ? `gpaTerms:${location.origin}:${me.user_id}` : null;
+      const [prefs, wi, terms] = await Promise.all([getArea('sync', 'gpaCourses'), D.wkey ? getArea('local', D.wkey) : null, D.tkey ? getArea('local', D.tkey) : null]);
+      await pastIn(terms);
       Object.assign(D, { list, prefs: C.cleanGpa(prefs), wi: wi && typeof wi === 'object' ? wi : {}, status: 'ready' });
     } catch { Object.assign(D, { status: 'failed', at: Date.now(), tries: D.tries + 1 }); }
     D.v++;
@@ -334,6 +338,34 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       gpa();
     }, () => { D.schemes.set(id, false); D.v++; gpa(); });
   };
+  // Past terms and the goal (lib/gpa.js), as stored: asked for only when there are some or their view is open. A change
+  // from any tab redraws; this tab's own (already shown) doesn't.
+  const gpaIn = () => X.need('lib/gpa.js', () => globalThis.GZ_GPA);
+  const pastIn = (raw) => (raw?.t?.length || raw?.g || D.hist ? gpaIn() : Promise.resolve()).then(() => {
+    const rec = globalThis.GZ_GPA ? GZ_GPA.clean(raw) : { t: [] };
+    if (JSON.stringify(rec) === JSON.stringify(D.past)) return;
+    D.past = rec;
+    D.refresh?.();
+  }, () => {});
+  // One change to them (lib/gpa.js change), shown at once and kept by the service worker's queue ('glaze:gpaterms').
+  const savePast = (m) => {
+    const at = Date.now();
+    D.past = GZ_GPA.change(D.past, { ...m, at });
+    D.refresh?.();
+    try {
+      return Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:gpaterms', key: D.tkey, at, ...m })).then((r) => !!r?.ok, () => false);
+    } catch { return Promise.resolve(false); }
+  };
+  // What a course's work left needs for `goal` (%), over the whole course and with its saved what-ifs: the calculator's
+  // own answer (C.need), or null when the course's work can't be had.
+  const needFor = (c, goal) => {
+    const cid = String(c.id);
+    if (!W.has(cid)) W.set(cid, { cid, status: 'idle', v: 0, open: false, target: '', row: c, me: studentIn(c), key: D.wkey, saved: D.wi[cid], whole: true });
+    const st = W.get(cid);
+    return Promise.resolve(st.status === 'ready' || st.status === 'none' || load(st))
+      .then(() => (st.status === 'ready' ? C.need(st.course, st.what, goal, { period: st.period, anon: st.anon }) : null));
+  };
+
   const rowsOf = () => {
     const e = S().enhance;
     return D.list.map((c) => {
@@ -356,6 +388,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const anchor = live() && e.gpa && location.pathname === '/' && (shown('DashboardCard_Container') || shown('dashboard-planner') || shown('dashboard-activity'));
     if (!anchor) return old?.remove();
     if (D.status === 'start' || (D.status === 'failed' && again(D))) gpaBegin();
+    if (location.hash === '#gz-gpa' && !D.hashed) D.hist = D.hashed = D.scroll = true;
     if (D.status !== 'ready') return;
     const key = `${D.v} ${locale()} ${e.gpaPlus} ${e.gpaWeighted}`;
     const placed = (e.gpaAfter ? anchor.nextElementSibling : anchor.previousElementSibling) === old;
@@ -363,7 +396,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const box = old?.dataset.key === key ? old : drawGpa(e);
     box.dataset.key = key;
     put(old, box, (b) => (e.gpaAfter ? anchor.after(b) : anchor.before(b)));
+    if (D.scroll) { D.scroll = false; box.querySelector('.gz-gpa-hist summary')?.focus(); box.scrollIntoView({ block: 'start' }); }
   };
+  // The command palette's "GPA: past terms, trends and goal", on the Dashboard.
+  const open = () => { D.hist = D.scroll = true; D.v++; gpa(); };
 
   const drawGpa = (e) => {
     const figs = make('div', { className: 'gz-gpa-figs' });
@@ -381,6 +417,11 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const weighted = (list) => (e.gpaWeighted ? t('Weighted {gpa}', { gpa: two(of(list, 'wpts').gpa) }) : '');
       const out = terms.map((term) => { const list = rows.filter((r) => r.term === term); return fig(of(list, 'pts').gpa, list[0].termName || t('Your courses'), weighted(list)); });
       if (terms.length > 1) out.push(fig(of(rows, 'pts').gpa, t('Cumulative'), weighted(rows)));
+      // Past terms and these, as one GPA.
+      if (D.past?.t.length) {
+        const all = (k) => [...D.past.t.flatMap((x) => GZ_GPA.rowsOf(x, k === 'wpts')).map((r) => ({ ...r, [k]: r.points })), ...rows];
+        out.push(fig(of(all('pts'), 'pts').gpa, t('Overall, with past terms'), weighted(all('wpts'))));
+      }
       if (rows.some((r) => r.whatIf != null)) {
         const wi = rows.map((r) => ({ ...r, ...r.wi }));
         out.push(fig(of(wi, 'pts').gpa, t('With your what-if grades'), weighted(wi)));
@@ -390,7 +431,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       figs.replaceChildren(...(out.length ? out : [make('p', { className: 'gz-gpa-note', textContent: t('No grade yet') })]),
         ...unread.map((r) => make('p', { className: 'gz-gpa-note', textContent: t('Give {name} a grading scale below to count its what-if grade.', { name: r.c.name || r.c.course_code || '' }) })));
       for (const f of cells) f();
+      drawHist();
     };
+    D.refresh = () => { if (box.isConnected) figures(); };
     const savePrefs = () => {
       D.prefs = C.cleanGpa(D.prefs);
       try { chrome.storage.sync.set({ gpaCourses: D.prefs }, () => { note.textContent = chrome.runtime.lastError ? t('Not saved. Try again in a moment.') : ''; }); } catch { /* reloaded */ }
@@ -450,13 +493,27 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       make('p', { className: 'gz-gpa-note', textContent: t('From your current grades in Canvas. Credits and scales sync with your browser; what-if grades stay on this device.') }));
     more.addEventListener('toggle', () => { D.more = more.open; });
     more.open = !!D.more;
-    box.append(note, more);
+    // Past terms, trends and the goal (features/gpaterms.js), drawn while open.
+    const histBody = make('div', { className: 'gz-gpa-hist-body' });
+    const histHead = make('summary', { textContent: t('Past terms, trends and goal') });
+    histHead.dataset.f = 'hist';
+    const hist = make('details', { className: 'gz-gpa-more gz-gpa-hist' }, histHead, histBody);
+    function drawHist() {
+      if (!hist.open) return;
+      Promise.all([gpaIn(), X.need('features/gpaterms.js', () => globalThis.GZ_GPA_TERMS)]).then(() => {
+        D.past ||= GZ_GPA.clean(null);
+        if (hist.open && hist.isConnected) GZ_GPA_TERMS.draw(histBody, { rows: () => rowsOf().filter((r) => !r.out), past: () => D.past, save: savePast, needFor, schemeFor, schemes: D.schemes, two, pct });
+      }, () => { histBody.textContent = t("Glaze couldn't load this. Try again in a moment."); });
+    }
+    hist.addEventListener('toggle', () => { D.hist = hist.open; drawHist(); });
+    hist.open = !!D.hist;
+    box.append(note, more, hist);
     figures();
     return box;
   };
 
   const render = () => { whatIf(); gpa(); };
-  return { render };
+  return { render, open };
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how

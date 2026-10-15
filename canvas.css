@@ -559,6 +559,35 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 #application #gz-gpa tbody th small { display: block; font-weight: 400; color: var(--gz-ink-muted); }
 #application #gz-gpa .gz-gpa-grade { white-space: nowrap; color: var(--gz-ink); }
 #application #gz-gpa td input[type="text"] { width: 14em; }
+/* Past terms, trends and goal (features/gpaterms.js): the chart in the palette's accent and muted ink. */
+#application #gz-gpa h3 { margin: 1rem 0 0.4rem; font-size: 0.95rem; font-weight: 600; color: var(--gz-ink); }
+#application #gz-gpa h4 { margin: 0.6rem 0 0.3rem; font-size: 0.875rem; color: var(--gz-ink); }
+#application #gz-gpa caption { padding: 0.3rem 0; text-align: start; font-weight: 600; color: var(--gz-ink-muted); }
+#application #gz-gpa .gz-gpa-chart { display: block; width: 100%; max-width: 44rem; height: auto; overflow: visible; }
+#application #gz-gpa .gz-gpa-chart .gz-grid { stroke: var(--gz-line); }
+#application #gz-gpa .gz-gpa-chart text { fill: var(--gz-ink-muted); font: 11px var(--gz-font); }
+#application #gz-gpa .gz-gpa-chart polyline { fill: none; stroke-width: 2.5; stroke-linejoin: round; }
+#application #gz-gpa .gz-gpa-chart .gz-term { stroke: var(--gz-accent); }
+#application #gz-gpa .gz-gpa-chart .gz-cum { stroke: var(--gz-ink-muted); stroke-dasharray: 6 4; stroke-width: 2; }
+#application #gz-gpa .gz-gpa-chart circle { fill: var(--gz-accent); stroke: var(--gz-panel); stroke-width: 2; }
+#application #gz-gpa .gz-gpa-chart circle.gz-now { fill: var(--gz-panel); stroke: var(--gz-accent); }
+#application #gz-gpa .gz-gpa-key { display: flex; gap: 1.25rem; margin: 0.2rem 0 0.4rem; }
+#application #gz-gpa .gz-gpa-key span::before { content: ""; display: inline-block; width: 1.4em; margin-inline-end: 0.4em; vertical-align: middle; border-top: 3px solid var(--gz-accent); }
+#application #gz-gpa .gz-gpa-key .gz-cum::before { border-top: 2px dashed var(--gz-ink-muted); }
+#application #gz-gpa :is(.gz-gpa-term, .gz-gpa-review) { margin: 0.4rem 0; padding: 0.2rem 0.75rem; border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); }
+#application #gz-gpa .gz-gpa-term > summary { cursor: pointer; padding: 0.35rem 0; color: var(--gz-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+#application #gz-gpa .gz-gpa-term legend { padding: 0 0.3rem; font-weight: 600; color: var(--gz-ink); }
+#application #gz-gpa .gz-gpa-review { border-color: var(--gz-accent); padding-bottom: 0.6rem; }
+#application #gz-gpa .gz-gpa-edit td input[type="text"] { width: 16em; }
+#application #gz-gpa h4[tabindex="-1"]:focus { outline: none; }
+#application #gz-gpa .gz-gpa-hist-body select { width: auto; }
+#application #gz-gpa .gz-gpa-edit td.gz-gpa-grade input[type="text"] { width: 4em; }
+#application #gz-gpa .gz-gpa-why { display: block; color: var(--gz-ink-muted); white-space: normal; }
+#application #gz-gpa .gz-gpa-up { font-weight: 700; color: var(--gz-accent); }
+#application #gz-gpa .gz-gpa-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+#application #gz-gpa textarea { display: block; width: 100%; box-sizing: border-box; margin: 0.3rem 0; padding: 0.4rem 0.5rem; font: 13px/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 6px; }
+#application #gz-gpa :is(textarea, input[type="file"]):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#application #gz-gpa .gz-calc-out { margin: 0.4rem 0; color: var(--gz-ink); }
 /* Your place: the module item you opened last in this course (content.js), an accent edge on its row. */
 html[data-gz-enhance-place] #application .context_module_item[data-gz-last] > .ig-row { box-shadow: inset 3px 0 0 var(--gz-accent); }
 /* Stagger the cards like Ultra's course cards. */
