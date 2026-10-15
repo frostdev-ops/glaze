@@ -193,6 +193,25 @@ test('review: the end record is found past an archive comment, even one holding 
   assert.equal(await tricky.text('a.xml'), '<x>hello</x>');
 });
 
+test('review: a look-alike zip64 end record inside a comment is skipped; a real zip64 one is refused', async () => {
+  const z = zipOf({ 'a.xml': '<x>hello</x>' });
+  const fake = Buffer.alloc(22);
+  fake.writeUInt32LE(0x06054b50, 0);
+  fake.writeUInt16LE(0xffff, 8); // zip64 markers: entry counts…
+  fake.writeUInt16LE(0xffff, 10);
+  fake.writeUInt32LE(0xffffffff, 12); // …directory size and offset
+  fake.writeUInt32LE(0xffffffff, 16);
+  const ok = D.unzip(withComment(z, Buffer.concat([Buffer.from('note: '), fake])));
+  assert.deepEqual(ok.names, ['a.xml']);
+  assert.equal(await ok.text('a.xml'), '<x>hello</x>');
+  // A real zip64 archive: the end record carries the markers and the zip64 locator sits right before it.
+  const at = eocd(z);
+  const locator = Buffer.alloc(20);
+  locator.writeUInt32LE(0x07064b50, 0);
+  const real = Buffer.concat([Buffer.from(z.subarray(0, at)), locator, fake]);
+  assert.throws(() => D.unzip(new Uint8Array(real)), /zip64/);
+});
+
 test('review: local headers, descriptors and member positions must agree with the central directory', async () => {
   const bad = async (mutate) => { const z = zipOf({ 'a.xml': '<x>hello</x>' }); mutate(z); await assert.rejects((async () => D.unzip(z).text('a.xml'))(), /damaged|multi-disk/); };
   await bad((z) => { z[30] = 'b'.charCodeAt(0); }); // local name differs
