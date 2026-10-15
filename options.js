@@ -120,7 +120,7 @@ GZ_UI.load().then((s) => {
   let courses = {}; // course id -> { name, slot, org }, from the content script
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
   const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs'], canvas: ['courses', 'outline', 'dashboard', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
-  let previewSite = 'ultra', previewPage = 'outline', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
+  let previewSite = 'ultra', previewPage = 'outline', previewCourse = '', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
   const sizePreview = () => {
     const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;
     const stage = $('.preview-stage'), available = stage.clientWidth, scale = Math.min(1, available / width);
@@ -128,12 +128,22 @@ GZ_UI.load().then((s) => {
     stage.style.height = `${Math.ceil(height * scale)}px`; $('#preview-size-label').textContent = `${width} × ${height} CSS px`;
   };
   const preview = () => {
-    const settings = offer || s, mode = $('#nav-preview-mode').value, scheme = $('#nav-preview-scheme').value;
+    const belongs = (course) => course && (course.canvas ? 'canvas' : course.moodle ? 'moodle' : 'ultra') === previewSite;
+    const base = offer || s, id = belongs(courses[previewCourse]) ? previewCourse : base.courses.tinted.find((id) => belongs(courses[id])), course = courses[id];
+    const settings = offer || (previewPage === 'outline' ? GZ_COURSE_LOOK(s, id) : s), mode = $('#nav-preview-mode').value, scheme = $('#nav-preview-scheme').value;
+    // The real Ultra painter reads the first tinted course's slot and variables from its mock section.
+    const section = frame.contentDocument?.querySelector('section.course');
+    if (section) {
+      section.className = `course course-color-${course?.slot || 1}`;
+      section.style.cssText = course ? Object.entries(GZ_COURSE_VARS(GZ_COURSE_COLORS(courses, settings.courses.colors)[id])).map(([key, value]) => `${key}:${value}`).join(';') : '';
+      if (course) section.querySelector('.pv-course').textContent = settings.courses.names[id] || course.name;
+    }
     const nav = { ...settings.nav };
     if (mode !== 'current') { nav.collapsed = mode === 'collapsed'; nav.labels = mode === 'icons' ? 'icons' : nav.labels === 'icons' ? 'normal' : nav.labels; }
     const colors = scheme === 'current' ? null : GZ_PRESET(scheme === 'light' ? 'Paper' : 'Frost');
+    const shown = previewSite === 'ultra' && course ? { ...settings, courses: { ...settings.courses, tinted: GZ_COURSE_TINTED(settings.courses, id, courses) ? [id] : [] } } : settings;
     frame.contentWindow?.postMessage({ gzPreviewContext: { site: previewSite, page: previewPage, viewport: $('#preview-size').value } }, location.origin);
-    frame.contentWindow?.postMessage({ gzPreview: { ...settings, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) } }, location.origin);
+    frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) } }, location.origin);
     renderNav(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
   };
   const contextPreview = (site, page) => {
@@ -142,7 +152,7 @@ GZ_UI.load().then((s) => {
     $('#preview-site').value = site; $('#preview-page').value = page;
     for (const option of $('#preview-page').options) option.disabled = !supportedPages[site].includes(option.value);
     $('#nav-preview-control').hidden = site !== 'ultra';
-    if (reload) frame.src = `preview.html?site=${site}`;
+    if (reload) frame.contentWindow.location.replace(chrome.runtime.getURL(`preview.html?site=${site}`));
     frame.title = t('Live preview: {site}, {page}', { site: $('#preview-site').selectedOptions[0].textContent, page: $('#preview-page').selectedOptions[0].textContent });
     preview();
   };
@@ -151,7 +161,8 @@ GZ_UI.load().then((s) => {
     if (route.startsWith('blackboard/')) { site = 'ultra'; page = route.endsWith('/tabs') ? 'tabs' : route.endsWith('/dashboard') ? 'dashboard' : 'outline'; }
     else if (route.startsWith('canvas/')) { site = 'canvas'; page = route.endsWith('/documents') ? 'document' : route.endsWith('/quizzes') ? 'quiz' : 'courses'; }
     else if (route.startsWith('moodle/')) { site = 'moodle'; page = 'courses'; }
-    else if (/\/(cards|courses|palette|background)$/.test(route)) page = 'courses';
+    else if (route === 'look/courses') { site = 'ultra'; page = 'outline'; }
+    else if (/\/(cards|palette|background)$/.test(route)) page = 'courses';
     else if (route === 'study/widgets' || route === 'study/todo' || route === 'study/grades') { if (site === 'moodle') site = 'ultra'; page = 'dashboard'; }
     contextPreview(site, page);
   };
@@ -321,6 +332,7 @@ GZ_UI.load().then((s) => {
     outputs();
     for (const el of $$('#ultra-nav-editor input[type="range"][data-key]')) el.value = get(el.dataset.key);
     $('[data-key="auto.on"]').checked = s.auto.on;
+    $('[data-key="nav.detailed"]').checked = s.nav.detailed;
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
     document.body.classList.toggle('off', !s.enabled);
@@ -751,12 +763,13 @@ GZ_UI.load().then((s) => {
     const colors = GZ_COURSE_COLORS(courses, cc.colors);
     const row = ([id, c]) => {
       const li = document.createElement('li');
-      // A nickname (set from the course's card on Blackboard) heads the row, with Blackboard's name under it.
-      // Canvas and Moodle courses wear their site's own color (Moodle's has no nickname either).
+      li.addEventListener('focusin', () => { previewCourse = id; contextPreview(c.canvas ? 'canvas' : c.moodle ? 'moodle' : 'ultra', 'outline'); });
+      // Ultra nicknames share the card menu's sanitizer; Canvas and Moodle keep their native names and colors.
       const own = c.canvas ? t('Change the colour and nickname in Canvas’s own card menu.') : c.moodle ? t('The colour is Moodle’s own for this course.') : '';
       const nick = (!own && s.enhance.coursemenu && cc.names[id]) || '';
       c = { ...c, real: c.name, name: nick || c.name };
       const input = Object.assign(document.createElement('input'), { type: 'color', value: own ? c.color || '#808080' : colors[id].color });
+      input.dataset.settingControl = 'courses.colors';
       input.setAttribute('aria-label', t('Colour for {name}', { name: c.name }));
       if (own) { input.disabled = true; input.title = own; }
       const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Reset'), hidden: !cc.colors[id] });
@@ -764,11 +777,26 @@ GZ_UI.load().then((s) => {
       input.addEventListener('change', () => save(['courses']));
       reset.addEventListener('click', () => { delete cc.colors[id]; renderCourses(); refresh(); save(['courses']); });
       const name = Object.assign(document.createElement('span'), { className: 'name', textContent: c.name, title: nick ? c.real : c.name });
+      if (!own) {
+        const nickname = Object.assign(document.createElement('input'), { type: 'text', maxLength: GZ_NICK_MAX, value: cc.names[id] || '', placeholder: c.real });
+        nickname.dataset.settingControl = 'courses.names';
+        nickname.setAttribute('aria-label', `${t('Nickname')}: ${c.real}`);
+        nickname.addEventListener('change', async () => {
+          flush();
+          try {
+            const result = await chrome.runtime.sendMessage({ type: 'glaze:courseName', id, name: nickname.value });
+            if (!result?.ok) return hint(t('Too much to sync. Shorten a nickname or clear one.'), true);
+            s.courses = result.courses; renderCourses(); refresh(); hint(t('Saved'));
+          } catch { hint(t('Not saved. Try again in a moment.'), true); }
+        });
+        name.replaceChildren(nickname);
+      }
       if (own) name.append(Object.assign(document.createElement('small'), { textContent: own }));
       if (nick) name.append(Object.assign(document.createElement('small'), { textContent: c.real }));
       const tint = Object.assign(document.createElement('label'), { className: 'check', hidden: !cc.tint });
       tint.dataset.tint = '';
       const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: cc.tinted.includes(id) });
+      box.dataset.settingControl = 'courses.tinted';
       box.setAttribute('aria-label', t('Tint inside {name}', { name: c.name }));
       box.addEventListener('change', () => {
         cc.tinted = box.checked ? [...cc.tinted, id] : cc.tinted.filter((n) => n !== id);
@@ -778,11 +806,13 @@ GZ_UI.load().then((s) => {
       tint.append(box, t('Tint'));
       // Its own look on its pages, or the student's theme. Look names are names: not translated.
       const look = Object.assign(document.createElement('select'), { title: t('Look for {name}', { name: c.name }) });
+      look.dataset.settingControl = 'courses.looks';
       look.setAttribute('aria-label', look.title);
       look.append(new Option(t('Your theme'), ''), ...GZ_LOOKS.map((L) => Object.assign(new Option(L.name, L.name), { translate: false })));
       look.value = cc.looks[id] || '';
       look.addEventListener('change', () => {
         if (look.value) cc.looks[id] = look.value; else delete cc.looks[id];
+        refresh();
         save(['courses']);
       });
       li.append(input, name, look, tint);

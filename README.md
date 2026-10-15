@@ -31,7 +31,7 @@ Its animated scene also stops and releases its rendering resources.
   <a href="https://github.com/frostdev-ops/glaze/releases/download/v2.2.0/glaze-2.2.0-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
 </p>
 
-The settings editor has eight tabs: **Look, Blackboard, Canvas, Moodle, Study tools, Sharing and sync, Backup and privacy, and About**. Search works across tabs; section links such as `#blackboard/nav` and older editor links reveal the right tab. Section resets change their own preferences; resetting preferences keeps your palettes, pictures, local notes/tasks, bookmarks and share keys. The live preview uses fictional local pages at real desktop or phone CSS widths, with site/page/appearance controls. Sharing and sync includes the Relay origin and an explicit connection test; saving stays offline.
+The settings editor has eight tabs: **Look, Blackboard, Canvas, Moodle, Study tools, Sharing and sync, Backup and privacy, and About**. Search works across tabs; section links such as `#blackboard/nav` and older editor links reveal the right tab. Section resets change their own preferences; resetting preferences keeps your palettes, pictures, local notes/tasks, bookmarks and share keys. The live preview uses fictional local pages at real desktop or phone CSS widths, with site/page/appearance controls. Focusing a Blackboard course's editor controls previews that course's appearance; Blackboard nicknames can be edited here as well as on its course cards. Sharing and sync includes the Relay origin and an explicit connection test; saving stays offline.
 
 ## Features
 

@@ -1736,6 +1736,7 @@
   "Research resources and academic support": "Onderzoeksbronnen en studieondersteuning",
   "Left": "Links",
   "Right": "Rechts",
+  "Use precise navigation dimensions": "Precieze navigatieafmetingen gebruiken",
   "Expand on hover": "Uitklappen bij aanwijzen",
   "Choose a name and items from one local account.": "Kies een naam en items uit één lokaal account.",
   "Edit access": "Bewerktoegang",

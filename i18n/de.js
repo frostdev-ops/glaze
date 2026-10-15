@@ -1736,6 +1736,7 @@
   "Research resources and academic support": "Forschungsressourcen und Studienberatung",
   "Left": "Links",
   "Right": "Rechts",
+  "Use precise navigation dimensions": "Genaue Navigationsmaße verwenden",
   "Expand on hover": "Beim Darüberfahren ausklappen",
   "Choose a name and items from one local account.": "Wähle einen Namen und Elemente aus einem lokalen Konto.",
   "Edit access": "Bearbeitungszugriff",

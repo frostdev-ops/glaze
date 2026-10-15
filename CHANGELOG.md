@@ -7,6 +7,7 @@ All notable changes to Glaze are documented here. The format follows
 ## [Unreleased]
 
 ### Fixed
+- Settings Back/Forward survives preview site changes. Precise navigation dimensions and Blackboard nicknames have usable editor controls; course edits repaint the preview, and open Share sessions pages follow relay preference saves without connecting.
 - Ultra route changes show immediately instead of waiting behind Glaze's separate loading gate. Internal widget
   updates no longer trigger native-page sweeps, and an unchanged gradebook keeps its successful empty late-status answer.
 - Tabs left open across an extension reload stop feature work immediately; Google sync and Download all close orphaned
@@ -19,7 +20,7 @@ All notable changes to Glaze are documented here. The format follows
   unavailable widget files leave the native Institution page reachable.
 
 ### Added
-- **Custom share relay.** Share sessions can save an HTTPS origin (or localhost HTTP for testing) for new sessions, test `/health` with a bounded deadline, and explicitly confirm custom invite hosts before joining. Existing sessions and restored keys keep their original server. HTTP requests omit browser credentials and refuse redirects; device-local host consent stays separate from browser permissions and sync. A public self-host guide covers Node/Docker, TLS proxies, disk/R2 storage, backups, limits and updates. The tabbed-editor/preview design is recorded in `parity/spikes/E1.md`; its editor restructure follows the shared-file handoff.
+- **Tabbed settings and custom share relay.** Eight tabs provide cross-tab search, section links and safe preference resets, with a local preview at desktop or phone widths. Share sessions can save an HTTPS origin (or localhost HTTP for testing) for new sessions, test `/health` with a bounded deadline, and explicitly confirm custom invite hosts before joining. Existing sessions and restored keys keep their original server. HTTP requests omit browser credentials and refuse redirects; device-local host consent stays separate from browser permissions and sync. A public self-host guide covers Node/Docker, TLS proxies, disk/R2 storage, backups, limits and updates.
 - Blackboard Ultra: hide folders and learning modules locally, with **Show hidden folders (N)** / **Hide them again (N)**, a pressed eye toggle, dimmed **Hidden** badges included in accessible names, and brief saved-action feedback with keyboard-friendly **Undo**. Choices stay separate by account and course and are included in Export all; imports preserve existing choices when records are malformed.
 
 - **Blackboard navigation:** the newer MUI drawer and legacy rail now share Glaze's styling, with a bundled Glaze logo

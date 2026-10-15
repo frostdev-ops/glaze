@@ -30,7 +30,7 @@ const SPECIAL = {
   enabled: ['enabled'], preset: ['presets'], presets: ['mine'],
   'look.font': ['font-grid'], 'look.head': ['font-grid'], 'look.mono': ['font-grid'],
   'bg.image': ['bg-image'], 'bg.colors': ['bg-colors'],
-  'nav.u': ['nav-url'], 'nav.i': ['nav-file'], 'nav.li': ['nav-logo-file'], 'nav.detailed': ['ultra-nav-editor'],
+  'nav.u': ['nav-url'], 'nav.i': ['nav-file'], 'nav.li': ['nav-logo-file'],
   'declutter.tabs': ['declutter-tabs'],
   ...Object.fromEntries(D.GZ_COLORS.map(([key]) => [`colors.${key}`, ['colors']])),
   ...Object.fromEntries(['colors', 'tinted', 'looks', 'names'].map((key) => [`courses.${key}`, ['course-list', 'org-list']])),
@@ -137,6 +137,58 @@ test('E1 section and global preference resets preserve pictures, preset librarie
   const js = fs.readFileSync(path.join(root, 'options.js'), 'utf8').split("$('#reset-all').addEventListener")[1];
   assert.doesNotMatch(js, /cardsOp\(\{[^}]*reset: true|glaze:stickers[^\n]*reset: true/);
   assert.ok(js.includes('GZ_EDITOR.reset'));
+});
+
+test('E1 Ultra preview carries the chosen course color and nickname without saving a pending Look', () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const preview = source.slice(source.indexOf('  const preview = () => {') + '  const preview = '.length, source.indexOf('\n  const contextPreview =')).replace(/;\s*$/, '');
+  const state = D.GZ_SANITIZE({ courses: { tint: true, tinted: ['_1_1'], names: { '_1_1': 'My course' }, colors: { '_1_1': '#c03050' } } });
+  const offer = D.GZ_SANITIZE({ ...state, courses: { ...state.courses, colors: { '_1_1': '#20a080' } } });
+  const name = {}, section = { style: {}, querySelector: () => name }, messages = [];
+  const context = vm.createContext({ s: state, offer: null, courses: { '_1_1': { name: 'Original course', slot: '2' }, '_2_1': { name: 'Other course', slot: '2' } },
+    frame: { contentDocument: { querySelector: () => section }, contentWindow: { postMessage: (m) => messages.push(m) } },
+    $: (selector) => ({ value: selector === '#preview-size' ? 'desktop' : 'current' }), location: { origin: 'chrome-extension://fixture' },
+    previewSite: 'ultra', previewPage: 'outline', previewCourse: '', renderNav() {}, sizePreview() {}, previewItems: () => ({}),
+    GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_COURSE_COLORS: D.GZ_COURSE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_COURSE_TINTED: D.GZ_COURSE_TINTED,
+  });
+  vm.runInContext(`(${preview})()`, context);
+  assert.equal(section.className, 'course course-color-2'); assert.equal(name.textContent, 'My course');
+  assert.ok(section.style.cssText.includes('#c03050'));
+  state.courses.looks._1_1 = D.GZ_LOOKS[0].name;
+  vm.runInContext(`(${preview})()`, context);
+  assert.equal(messages.at(-2).gzPreview.colors['--gz-surface'], D.GZ_LOOKS[0].colors['--gz-surface']);
+  context.previewCourse = '_2_1'; vm.runInContext(`(${preview})()`, context);
+  assert.equal(messages.at(-2).gzPreview.courses.tinted.length, 0, 'A selected untinted course must not borrow another course’s tint');
+  context.previewCourse = '_1_1';
+  context.offer = offer; vm.runInContext(`(${preview})()`, context);
+  assert.ok(section.style.cssText.includes('#20a080')); assert.ok(messages.at(-2).gzPreview);
+  assert.equal(state.courses.colors._1_1, '#c03050'); assert.equal(context.offer, offer);
+});
+
+test('E1 preview site changes replace the frame history so editor Back and Forward remain intact', () => {
+  const source = fs.readFileSync(path.join(root, 'options.js'), 'utf8');
+  const change = source.slice(source.indexOf('  const contextPreview = (site, page) => {') + '  const contextPreview = '.length, source.indexOf('\n  followSection =')).replace(/;\s*$/, '');
+  const navigations = [], controls = new Map();
+  const control = (selector) => { if (!controls.has(selector)) controls.set(selector, { options: [], selectedOptions: [{ textContent: selector }] }); return controls.get(selector); };
+  const frame = { contentWindow: { location: { replace: (url) => navigations.push(url) } } };
+  Object.defineProperty(frame, 'src', { set() { assert.fail('Iframe src would create an extra history entry'); } });
+  const context = vm.createContext({ frame, $: control, supportedPages: { ultra: ['outline'], canvas: ['courses'] }, previewSite: 'ultra', previewPage: 'outline',
+    chrome: { runtime: { getURL: (path) => `chrome-extension://fixture/${path}` } }, t: (s) => s, preview() {},
+  });
+  vm.runInContext(`(${change})('canvas', 'courses')`, context);
+  vm.runInContext(`(${change})('ultra', 'outline')`, context);
+  assert.deepEqual(navigations, ['chrome-extension://fixture/preview.html?site=canvas', 'chrome-extension://fixture/preview.html?site=ultra']);
+});
+
+test('E1 switching an open phone preview to desktop removes modal semantics', () => {
+  const source = fs.readFileSync(path.join(root, 'lib/editor-preview.js'), 'utf8');
+  const apply = source.slice(source.indexOf('  const applyContext = () => {') + '  const applyContext = '.length, source.indexOf("\n  addEventListener('message'")).replace(/;\s*$/, '');
+  const drawer = { role: 'dialog', 'aria-modal': 'true', removeAttribute(key) { delete this[key]; } }, menu = { setAttribute() {} };
+  const context = vm.createContext({ site: 'ultra', context: { viewport: 'desktop', page: 'outline' }, html: { dataset: {}, removeAttribute() {} },
+    document: { querySelectorAll: () => [], querySelector: (selector) => selector === '#preview-menu' ? menu : drawer },
+  });
+  vm.runInContext(`(${apply})()`, context);
+  assert.equal(drawer.role, undefined); assert.equal(drawer['aria-modal'], undefined);
 });
 
 test('E1 routes, remembered tabs, legacy entry points and tab-only keyboard handling reveal the owning panel', async () => {

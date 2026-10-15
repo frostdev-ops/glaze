@@ -316,6 +316,43 @@ test('E1 editor relay caller is limited to the exact extension top frame and two
   assert.deepEqual(handled, ['relaySave', 'relayTest']);
 });
 
+test('E1 synced relay changes refresh an open Sessions page without scheduling network work', async () => {
+  const changes = [], messages = [], area = localArea(); let connect, network = 0;
+  const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
+    GZ_SESSIONS: { make: () => ({ connect: () => () => {}, changed: () => network++ }) },
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => { connect = fn; } } },
+      storage: { local: area, sync: area, onChanged: { addListener: (fn) => changes.push(fn) } } } });
+  vm.runInContext(read('lib/background.js'), ctx);
+  connect({ name: 'glaze:sessions', sender: { id: 'glaze', url: 'chrome-extension://glaze/sharing/sessions.html', origin: 'chrome-extension://glaze', frameId: 0 },
+    onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, postMessage: (message) => messages.push(message), disconnect() {} });
+  await new Promise(setImmediate);
+  for (const fn of changes) fn({ shareRelay: { newValue: 'https://new-relay.example.edu' } }, 'sync');
+  assert.equal(messages.length, 1); assert.equal(messages[0].changed, true); assert.equal(network, 0);
+});
+
+test('E1 editor nickname writes sanitize one course against current stored preferences', async () => {
+  const listeners = [], area = localArea({ courses: { ...require('../defaults.js').GZ_SANITIZE().courses, colors: { '_2_1': '#123456' }, names: { '_2_1': 'Keep me' } } });
+  const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
+    importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
+      storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
+  vm.runInContext(read('lib/background.js'), ctx);
+  const sender = { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 };
+  const send = (name, extra = {}) => new Promise((resolve) => {
+    for (const f of listeners) if (f({ type: 'glaze:courseName', id: '_1_1', name }, { ...sender, ...extra }, resolve) === true) return;
+    resolve({ ok: false, error: 'unhandled' });
+  });
+  assert.equal((await send('  New\n name  ')).ok, true);
+  assert.equal(area.data.courses.names._1_1, 'New name'); assert.equal(area.data.courses.names._2_1, 'Keep me'); assert.equal(area.data.courses.colors._2_1, '#123456');
+  assert.equal((await send('denied', { frameId: 1 })).error, 'sender');
+  assert.equal((await send('denied', { url: 'chrome-extension://glaze/preview.html' })).error, 'sender');
+  for (const extra of [{ origin: 'https://school.instructure.com' }, { id: 'other' }, { url: 'chrome-extension://glaze/options.html.evil' }, { url: 'https://school.instructure.com/options.html' }]) assert.equal((await send('denied', extra)).error, 'sender');
+  assert.equal((await send('')).ok, true); assert.equal(area.data.courses.names._1_1, undefined); assert.equal(area.data.courses.names._2_1, 'Keep me');
+});
+
 test('Pause interrupts a running sync before waiting for the shared storage queue', async () => {
   const listeners = [], area = localArea();
   let release, entered, stopped = 0, syncs = 0;
