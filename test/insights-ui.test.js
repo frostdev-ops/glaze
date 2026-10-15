@@ -138,7 +138,7 @@ const ultraPage = () => {
   const tools = new El('div'), bar = new El('div');
   bar.append(Object.assign(new El('button'), { textContent: 'What Glaze can do' }));
   const doc = { body: new El('body'), activeElement: null, createElement: (t) => new El(t), createElementNS: (ns, t) => new El(t),
-    querySelector: (sel) => ({ 'div.base-courses-header-container div.base-header-tools': tools, '#gz-panel .gz-dash-bar': bar })[sel] || null };
+    querySelector: (sel) => ({ 'div.base-courses-header-container div.base-header-tools': tools, '#gz-toolbar': bar })[sel] || null };
   const books = { _101_1: ufix('grades'), _102_1: ufix('grades-status') };
   const context = vm.createContext({
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => true, settings: () => S, need: () => Promise.resolve(), myCourses: async () => ufix('memberships').results },

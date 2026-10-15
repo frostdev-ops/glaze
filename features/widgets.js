@@ -66,7 +66,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let lay = null; // the layout (storage.local widgetLayout)
   let on = false, starting = null, editing = false;
   let me = null; // { uid, tz }
-  let grid = null, floats = null, panel = null;
+  // bar: a board's buttons (Edit layout, Reminders, Insights, What Glaze can do; on the Courses page, Hide widgets too),
+  // in the Courses page's header (#gz-toolbar) or atop the Dashboard's grid. hidden: Hide widgets, on this device.
+  let grid = null, floats = null, panel = null, bar = null, hidden = false;
   // Ultra's boards: which one this page is ('courses', 'dash' or null), the one drawn, and the Courses page's layer the
   // tiles float in (the Dashboard's tiles are in its own room, the grid).
   let board = null, drawn = null, room = null;
@@ -76,7 +78,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const button = (text, run, props = {}) => { const b = make('button', { type: 'button', className: 'gz-w-btn', textContent: text, ...props }); b.addEventListener('click', run); return b; };
   const area = (a) => { try { return chrome.storage[a]; } catch { return null; } };
   const get = (a, keys, failed = {}) => new Promise((res) => { try { area(a).get(keys, (r) => res(chrome.runtime.lastError ? failed : r || {})); } catch { res(failed); } });
-  // This device's own small items (panelShut, widgetBuddy); the layout and the timer go through the worker.
+  // This device's own small items (panelShut, widgetsHidden, widgetBuddy); the layout and the timer go through the worker.
   const put = (v) => { try { area('local').set(v); } catch { /* reloaded under the tab */ } };
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   // A reload can invalidate a callback before the core sees its first DOM mutation.
@@ -100,7 +102,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const roomHost = (h) => h.closest('.route-view-container') || h.parentElement;
   // Ultra's Reminders button, shown while the reminders (features/reminders.js, which may load after the panel) have a hub.
   const remindIn = () => {
-    const rm = grid?.querySelector('.gz-dash-remind');
+    const rm = bar?.querySelector('.gz-dash-remind');
     const off = !globalThis.GZ_REMIND_UI?.cmds().length;
     if (rm && rm.hidden !== off) rm.hidden = off;
   };
@@ -736,14 +738,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // screen reader as it starts and ends; Esc ends it too.
   const setEditing = (v) => {
     editing = v;
-    const edit = grid?.querySelector('.gz-dash-edit');
+    const edit = bar?.querySelector('.gz-dash-edit');
     if (edit) { edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
-    const reset = grid?.querySelector('.gz-dash-reset');
+    const reset = bar?.querySelector('.gz-dash-reset');
     if (reset) reset.hidden = !editing;
     if (board) say(t(editing ? 'Editing the layout. Drag a widget by its heading, or use the arrow keys on its handle; Alt places it freely.' : 'Layout saved.'));
     draw();
   };
-  const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); grid?.querySelector('.gz-dash-edit')?.focus(); } };
+  const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); bar?.querySelector('.gz-dash-edit')?.focus(); } };
   const gridEl = () => {
     const edit = button(t(board ? 'Edit layout' : 'Edit widgets'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
@@ -754,30 +756,32 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
     // Ultra: the reminders' hub (features/reminders.js) from here too, when it has one to open (Canvas's is in its To Do's head).
     const remind = ultra && button(t('Reminders'), () => globalThis.GZ_REMIND_UI?.cmds()[0]?.run(), { className: 'gz-w-small gz-dash-remind', hidden: true });
+    // Hide widgets: every widget on the Courses page (its board's and the ones floating everywhere) away at once.
+    const hide = board === 'courses' && button(t('Hide widgets'), () => { hidden = !hidden; put({ widgetsHidden: hidden }); draw(); }, { className: 'gz-w-small gz-dash-hide' });
     const add = make('div', { className: 'gz-dash-add' });
     const area = make('div', { className: 'gz-dash-grid' });
-    const box = make('section', { id: 'gz-dash' }, make('div', { className: 'gz-dash-bar' }, !ultra && make('h2', { className: 'screenreader-only', textContent: t('Notes and widgets') }), edit, reset, remind, hubBtn),
-      ...(board ? [add, area] : [area, add]));
+    bar = make('div', { className: 'gz-dash-bar' }, !ultra && make('h2', { className: 'screenreader-only', textContent: t('Notes and widgets') }), hide, edit, reset, remind, hubBtn);
+    if (board === 'courses') { bar.id = 'gz-toolbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Glaze'); bar.addEventListener('keydown', escape); }
+    const box = make('section', { id: 'gz-dash' }, ...(board === 'courses' ? [] : [bar]), ...(board ? [add, area] : [area, add]));
     if (board) box.dataset.board = board;
     box.setAttribute('aria-label', t(board === 'dash' ? 'Dashboard' : 'Notes and widgets'));
     box.addEventListener('keydown', escape);
     return box;
   };
-  // Ultra's panel: a heading whose button folds it away (kept on this device, storage.local panelShut), then the grid.
-  // Folded, the Courses page's tiles go too.
+  // Ultra's panel: a heading whose button folds the widgets in its column (kept on this device, storage.local panelShut),
+  // then the grid, whose height keeps the column's widgets clear of Ultra's To Do. Widgets elsewhere on the page stay;
+  // Hide widgets in the toolbar takes them all. With no widget in the column, there's no heading.
   let shut = false;
   const panelEl = () => {
     const toggle = make('button', { type: 'button', className: 'gz-panel-toggle', textContent: t('Notes and widgets') });
-    const body = make('div', { id: 'gz-panel-body', hidden: shut }, grid);
+    const body = make('div', { id: 'gz-panel-body' }, grid);
     toggle.setAttribute('aria-controls', body.id);
     toggle.setAttribute('aria-expanded', String(!shut));
     toggle.addEventListener('click', () => {
       shut = !shut;
-      body.hidden = shut;
-      if (room) room.hidden = shut;
       toggle.setAttribute('aria-expanded', String(!shut));
       put({ panelShut: shut });
-      if (!shut) layoutBoard();
+      layoutBoard();
     });
     const box = make('section', { id: 'gz-panel' }, make('h2', { className: 'gz-panel-head' }, toggle), body);
     box.setAttribute('aria-label', 'Glaze');
@@ -800,14 +804,17 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const placeGrid = () => {
     const h = home();
     // Off this page: Ultra's panel goes with the grid still in it, so it comes back whole.
-    if (!h) { for (const e of [panel, grid, room]) e?.remove(); return false; }
+    if (!h) { for (const e of [panel, grid, room, bar]) e?.remove(); return false; }
     grid ||= gridEl();
     if (board === 'courses') {
       panel ||= panelEl();
       const body = panel.querySelector('#gz-panel-body');
       if (grid.parentNode !== body) body.append(grid);
       if (h.firstElementChild !== panel) h.prepend(panel);
-      if (!room) { room = make('div', { id: 'gz-room', hidden: shut }); room.addEventListener('keydown', escape); }
+      // The toolbar: in the page's header, where Ultra keeps its own (empty) header tools; else atop the grid.
+      const tools = document.querySelector('div.base-courses-header-container div.base-header-tools');
+      if (tools ? bar.parentNode !== tools : bar.parentNode !== grid) { if (tools) tools.prepend(bar); else grid.prepend(bar); }
+      if (!room) { room = make('div', { id: 'gz-room' }); room.addEventListener('keydown', escape); }
       if (roomHost(h).firstElementChild !== room) roomHost(h).prepend(room);
     } else if (board === 'dash') {
       if (!placed(h)) { const ip = [...h.children].find((e) => e.tagName === 'INSTITUTION-PAGE-HOME'); if (ip) ip.before(grid); else h.append(grid); }
@@ -826,8 +833,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     floatWatched.clear();
     cancelAnimationFrame(floatFrame);
     globalThis.GZ_DASH_UI?.tabs(null);
-    for (const e of [grid, panel, room, all && floats]) e?.remove?.();
-    grid = panel = room = null;
+    for (const e of [grid, panel, room, bar, all && floats]) e?.remove?.();
+    grid = panel = room = bar = null;
     if (all) floats = null;
     editing = false;
     lastAt = {};
@@ -869,6 +876,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       last.set(home, x.el);
       if (!tile.float) x.el.removeAttribute('style');
     }
+    // Hide widgets (the Courses page only; editing shows them all).
+    const away = board === 'courses' && hidden && !editing;
+    for (const e of [room, panel, floats]) if (e && e.hidden !== away) e.hidden = away;
+    const hb = bar?.querySelector('.gz-dash-hide');
+    if (hb) { hb.textContent = t(hidden ? 'Show widgets' : 'Hide widgets'); hb.setAttribute('aria-pressed', String(hidden)); }
     if (board) layoutBoard();
     placeFloats();
     if (grid) {
@@ -893,7 +905,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const layoutBoard = () => {
     const area = grid?.querySelector('.gz-dash-grid');
     const host = roomEl();
-    if (!board || !area || !host?.isConnected || (board === 'courses' && shut)) return;
+    if (!board || !area || !host?.isConnected || (board === 'courses' && hidden && !editing)) return;
     const list = wanted(true).filter((x) => !x.float && tiles.has(x.id));
     const dims = {};
     for (const x of list) {
@@ -917,10 +929,16 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     stacked = !side || res.stack;
     area.toggleAttribute('data-stack', stacked);
     const parent = stacked || board === 'dash' ? area : room;
+    // The Courses page's column (where the panel is): its widgets fold with the panel; the others stay where they are.
+    const inCol = (id) => board === 'courses' && (stacked || (res.at[id].left + dims[id].w > lines[0] && res.at[id].left < lines[1]));
+    const fold = shut && !editing;
+    if (panel) panel.toggleAttribute('data-empty', !editing && !res.order.some(inCol));
     const focus = document.activeElement;
     let prev = null;
     for (const id of res.order) {
       const { el } = tiles.get(id);
+      const away = fold && inCol(id);
+      if (el.hidden !== away) el.hidden = away;
       if (el.parentNode !== parent || el.previousElementSibling !== prev) { if (prev) prev.after(el); else parent.prepend(el); }
       prev = el;
       const a = res.at[id];
@@ -931,7 +949,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (el.style.zIndex !== z) el.style.zIndex = z;
     }
     if (focus !== document.activeElement && focus?.isConnected) focus.focus({ preventScroll: true });
-    const keep = stacked ? '' : `${board === 'courses' ? W.reserve(Object.values(res.at), lines[0], lines[1], col.top) : res.bottom + W.GAP}px`;
+    const keep = stacked ? '' : board === 'courses' && fold ? '0px' : `${board === 'courses' ? W.reserve(Object.values(res.at), lines[0], lines[1], col.top) : res.bottom + W.GAP}px`;
     if (area.style.height !== keep) area.style.height = keep;
   };
 
@@ -1088,9 +1106,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const start = async () => {
     await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
     W = globalThis.GZ_WIDGETS;
-    const [r] = await Promise.all([get('local', ['widgetLayout', 'panelShut']), readPrefs()]);
+    const [r] = await Promise.all([get('local', ['widgetLayout', 'panelShut', 'widgetsHidden']), readPrefs()]);
     lay = W.layout(r.widgetLayout, MORE);
     shut = r.panelShut === true;
+    hidden = r.widgetsHidden === true;
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
     document.addEventListener('visibilitychange', onShow);
     addEventListener('resize', onResize);

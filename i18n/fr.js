@@ -1676,6 +1676,8 @@
   "Custom navigation links sync with Chrome. Images stay on this device.": "Les liens de navigation personnalisés sont synchronisés avec Chrome. Les images restent sur cet appareil.",
   "The rail uses the same focus timer and pet progress as your widgets. No extra activity is recorded.": "La barre utilise le même minuteur de concentration et la même progression du compagnon d’étude que vos widgets. Aucune activité supplémentaire n’est enregistrée.",
   "Edit layout": "Modifier la disposition",
+  "Hide widgets": "Masquer les widgets",
+  "Show widgets": "Afficher les widgets",
   "Reset layout": "Réinitialiser la disposition",
   "Layout reset.": "Disposition réinitialisée.",
   "Layout saved.": "Disposition enregistrée.",

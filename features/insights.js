@@ -55,12 +55,13 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
 
   // ---- the Dashboard's button --------------------------------------------------------------------------------------
   let btn = null;
-  // Ultra: in Glaze's panel on the Courses page (features/widgets.js), beside What Glaze can do, where the panel is on
-  // (notes or widgets); otherwise in the page's header, where Ultra keeps its own header tools (B4 [M]: empty but for a
-  // hidden catalog link). Chosen by the switches, so the button never moves once the panel arrives.
+  // Ultra: in Glaze's toolbar on the Courses page (features/widgets.js, in the page's header), beside What Glaze can do,
+  // where the board is on (notes, widgets or the pet); otherwise in the page's header, where Ultra keeps its own header
+  // tools (B4 [M]: empty but for a hidden catalog link). Chosen by the switches, so the button never moves once the
+  // toolbar arrives.
   const ultraBar = () => {
     const e = ctx.settings().enhance;
-    return document.querySelector(e.widgets || e.notes ? '#gz-panel .gz-dash-bar' : 'div.base-courses-header-container div.base-header-tools');
+    return document.querySelector(e.widgets || e.notes || e.pet ? '#gz-toolbar' : 'div.base-courses-header-container div.base-header-tools');
   };
   const sync = () => {
     const on = alive();

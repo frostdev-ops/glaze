@@ -1676,6 +1676,8 @@
   "Custom navigation links sync with Chrome. Images stay on this device.": "Eigen navigatielinks worden gesynchroniseerd met Chrome. Afbeeldingen blijven op dit apparaat.",
   "The rail uses the same focus timer and pet progress as your widgets. No extra activity is recorded.": "De balk gebruikt dezelfde focustimer en voortgang van je studiemaatje als je widgets. Er wordt geen extra activiteit vastgelegd.",
   "Edit layout": "Indeling bewerken",
+  "Hide widgets": "Widgets verbergen",
+  "Show widgets": "Widgets tonen",
   "Reset layout": "Indeling herstellen",
   "Layout reset.": "Indeling hersteld.",
   "Layout saved.": "Indeling opgeslagen.",
