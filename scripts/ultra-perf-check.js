@@ -14,7 +14,7 @@ const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest(
 
 // This runs FIRST in the extension's isolated world, never as a page script. It is added only to a temporary copy.
 function instrument() {
-  const metrics = { observers: [], selectors: {}, styleReads: 0, storage: [], loads: [] };
+  const metrics = { observers: [], selectors: {}, styleReads: 0, storage: [], loads: [], glDraws: 0 };
   const site = () => new Error().stack.split('\n').find((s) => /chrome-extension:/.test(s) && !/perf-shim/.test(s))?.trim();
   const MO = MutationObserver;
   globalThis.MutationObserver = class extends MO {
@@ -39,6 +39,10 @@ function instrument() {
   }
   const computed = getComputedStyle;
   globalThis.getComputedStyle = (...args) => { metrics.styleReads++; return computed.apply(globalThis, args); };
+  for (const name of ['WebGLRenderingContext', 'WebGL2RenderingContext']) for (const method of ['drawArrays', 'drawElements']) {
+    const prototype = globalThis[name]?.prototype, draw = prototype?.[method];
+    if (draw) prototype[method] = function (...args) { metrics.glDraws++; return draw.apply(this, args); };
+  }
   for (const area of ['local', 'sync']) {
     const get = chrome.storage[area].get.bind(chrome.storage[area]);
     chrome.storage[area].get = (...args) => { metrics.storage.push({ area, keys: args[0] }); return get(...args); };
@@ -172,6 +176,8 @@ const listeners = async (cdp) => {
           const before = await listeners(cdp), beforeSnapshot = await snapshot(page, instrumented);
           for (let cycle = 0; cycle < 3; cycle++) { await settle(page, 'outline'); await settle(page, 'grades'); }
           lifecycle = { routes: 6, before, after: await listeners(cdp), beforeSnapshot, afterSnapshot: await snapshot(page, instrumented) };
+          assert.deepEqual(lifecycle.after, lifecycle.before, 'six route replacements do not add global listeners');
+          if (instrumented) assert.equal(lifecycle.afterSnapshot.observers.length, lifecycle.beforeSnapshot.observers.length, 'six route replacements reuse observer instances');
           await cdp.detach();
         }
         let scene = null;
@@ -182,10 +188,14 @@ const listeners = async (cdp) => {
           const cdp = await context.newCDPSession(page);
           await cdp.send('Performance.enable');
           const before = (await cdp.send('Performance.getMetrics')).metrics;
+          const beforeDraws = (await snapshot(page, instrumented))?.glDraws;
           await page.waitForTimeout(2000);
           const after = (await cdp.send('Performance.getMetrics')).metrics;
           const value = (list, name) => list.find((m) => m.name === name)?.value || 0;
-          scene = { canvas: await page.locator('#gz-scene').count(), duration: 2000, taskMs: 1000 * (value(after, 'TaskDuration') - value(before, 'TaskDuration')), snapshot: await snapshot(page, instrumented) };
+          const sceneSnapshot = await snapshot(page, instrumented);
+          scene = { canvas: await page.locator('#gz-scene').count(), duration: 2000, taskMs: 1000 * (value(after, 'TaskDuration') - value(before, 'TaskDuration')), draws: instrumented ? sceneSnapshot.glDraws - beforeDraws : null, snapshot: sceneSnapshot };
+          assert.equal(scene.canvas, 1, 'the bundled scene actually started');
+          if (instrumented) assert.ok(scene.draws > 0, 'the bundled scene drew frames during the sample');
           await cdp.detach();
           await opts.evaluate(async ({ bg, motion }) => chrome.storage.sync.set({ bg, motion }), D.GZ_DEFAULTS);
         }
