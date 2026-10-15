@@ -122,6 +122,18 @@ test('a course page shows that course only; the Dashboard skips hidden and past 
   assert.ok(keys(any.groups.flat(2).filter((r) => r.key)).includes('planner_note:20'));
 });
 
+test("a card's tasks: that course's open items with a date, soonest first, up to n; done ones crossed out only if asked", () => {
+  const b = T.build({ items: ITEMS, o: O, now: NOW, tz: NY, course: '25' });
+  assert.deepEqual(keys(T.card(b, 4, false)), ['assignment:1', 'assignment:3', 'quiz:4', 'assignment:5']);
+  // Crossed out: done and not yet past (12 and 21), in date order with the rest; done last week (9, 10, 11) stays off.
+  assert.deepEqual(keys(T.card(b, 10, true)), ['assignment:1', 'assignment:3', 'assessment_request:21', 'quiz:4', 'assignment:5', 'assignment:6', 'assignment:12', 'assignment:14', 'discussion_topic:7']);
+  assert.equal(T.card(b, 10, true).find((r) => r.key === 'assignment:12').done, true);
+  // Another course's, a note with no course, and a task with no date are not on this card.
+  const own = T.build({ items: ITEMS, data: { tasks: [{ id: 'a', title: 'Read', cid: '25' }, { id: 'b', title: 'Lab', cid: '25', due: { day: '2026-10-15' } }] }, o: O, now: NOW, tz: NY, course: '25' });
+  assert.deepEqual(keys(T.card(own, 4, false)), ['assignment:1', 'assignment:3', 'quiz:4', 'task:b']);
+  assert.deepEqual(T.card(T.build({ items: ITEMS, o: O, now: NOW, tz: NY, course: '99' }), 4, true), []);
+});
+
 test('settings: past-due window, timeframe, week start, manual completion, grouping off', () => {
   const g = (o) => groups(T.build({ items: ITEMS, o: { ...O, ...o }, now: NOW, tz: NY, cids: new Set(['25']) }));
   assert.equal(g({ past: 'never' }).past, undefined);
@@ -248,7 +260,8 @@ test('planner items are kept small and on their own site', () => {
 test('its settings join GZ_SPEC from here, so the first content script carries only the switch', () => {
   assert.equal(D.GZ_SPEC.enhance.todo[0], false); // off until the student turns it on
   assert.equal(D.GZ_SPEC.todo, T.SPEC);
-  assert.deepEqual(D.GZ_SANITIZE({}).todo, { span: 'week', n: 7, unit: 'days', start: 'rolling', past: 'week', rel: false, urgent: true, teacher: true, progress: true, done: 'auto', group: true, sync: false });
+  assert.deepEqual(D.GZ_SANITIZE({}).todo, { span: 'week', n: 7, unit: 'days', start: 'rolling', past: 'week', rel: false, urgent: true, teacher: true, progress: true, done: 'auto', group: true, sync: false, cardN: 4, cardStatus: true, cardCross: false });
+  assert.equal(D.GZ_SPEC.enhance.cardTasks[0], false); // tasks on cards: off too
   assert.deepEqual(D.GZ_SANITIZE({ todo: { span: 'custom', n: 90, unit: 'weeks', past: 'forever', sync: 'yes' } }).todo, { ...D.GZ_SANITIZE({}).todo, span: 'custom', unit: 'weeks' });
 });
 

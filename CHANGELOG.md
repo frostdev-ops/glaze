@@ -64,6 +64,12 @@ All notable changes to Glaze are documented here. The format follows
     planner, as Canvas's List View does; Glaze's first and only write to Canvas: opt-in, only from your own tick, and a tick Canvas doesn't confirm goes back and is checked with Canvas again.
   - For teachers: work waiting to be graded, and how much of it you've graded.
   - Ctrl+K: turn it on or off, and Add task. Ticking off bursts in Expressive motion.
+- **Tasks on course cards (Canvas, off by default; Extras, under Better To Do):** each Dashboard card lists its
+  course's next items, soonest first, each a link, with its date (relative or exact) and status (submitted, graded,
+  late, missing, excused). 1 to 10 per card (4 by default); done items can stay crossed out. It follows Better To Do's
+  timeframe, past-due window and done rules, ticks and Canvas marks included, and shares its planner copy: the
+  planner is asked once, whether or not the list is on. Every card style and the card grade fit
+  beside it. Ctrl+K turns it on or off.
 
 ### Changed
 

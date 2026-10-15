@@ -352,6 +352,9 @@
   // Better To Do (features/todo.js)
   const todoHere = () => !ultra && links.length && settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
   const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
+  // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
+  const cardsHere = () => !ultra && links.length && settings.enhance.cardTasks && location.pathname === '/';
+  const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
   // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
   // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
   // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
@@ -688,6 +691,7 @@
     syncDocTools();
     syncCourseMenu();
     syncTodo();
+    syncCardTasks();
   };
   // ---- page loads ------------------------------------------------------------------------------
   // Ultra builds a page in view: a spinner, then parts arriving and pushing each other down, with
@@ -757,7 +761,7 @@
     sweepAll();
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
-    if (window.top === window && !todoHere()) dueWeek();
+    if (window.top === window && !todoHere() && !cardsHere()) dueWeek();
     if (!ultra) liftCourses();
     recordCourses();
     if (!ultra) paintCourses();
@@ -2404,7 +2408,7 @@
   // Canvas's global navigation, and the same switches plus the card grades and the GPA.
   const CANVAS_TOOLS = [['/', 'Dashboard'], ['/courses', 'Courses'], ['/calendar', 'Calendar'], ['/conversations', 'Inbox'], ['/grades', 'Grades']];
   const CANVAS_EXTRAS = { ...EXTRAS, overall: 'Grades on course cards', quizLight: 'Keep quizzes light', gradeHover: 'Card grades only on hover',
-    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do' };
+    gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards' };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
@@ -3313,7 +3317,7 @@
     // Waiting for the page's words: the pass that brings them in draws all of this.
     const said = observer && words();
     if (said && ['scores', 'urgency', 'inline', 'overall'].some((k) => s.enhance[k] && !was[k])) tagExtras([document.body]);
-    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); }
+    if (said) { renderProgress(); renderCalc(); syncDownloads(); syncCourseMenu(); syncTodo(); syncCardTasks(); }
     if (!s.enhance.newgrades) { clearTags(['data-gz-new']); for (const p of document.querySelectorAll('.gz-new[data-kind="grades"]')) p.remove(); }
     if (!s.enhance.newcontent) for (const p of document.querySelectorAll('.gz-new:not([data-kind="grades"])')) p.remove();
     if (said) renderNew();
@@ -3435,6 +3439,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     links = [];
     armFlip();
     syncTodo();
+    syncCardTasks();
     themeEditors();
     syncPageFade();
     stopScene();
