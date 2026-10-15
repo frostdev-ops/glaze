@@ -4,10 +4,44 @@
   "limit": 50,
   "nextPage": "",
   "previousPage": "",
-  "count": 4,
+  "count": 5,
   "offset": 0
  },
  "results": [
+  {
+   "itemSourceId": "_605_1",
+   "itemSourceType": "blackboard.platform.gradebook2.GradableItem",
+   "calendarId": "_101_1",
+   "calendarNameLocalizable": {
+    "rawValue": "FA26-_101_1"
+   },
+   "title": "Discussion: Cells",
+   "location": null,
+   "startDate": "2026-09-14T03:59:00.000Z",
+   "endDate": "2026-09-14T03:59:00.000Z",
+   "modifiedDate": null,
+   "color": "#670033",
+   "disableResizing": true,
+   "createdByUser": null,
+   "userCreated": false,
+   "dynamicCalendarItemProps": {
+    "eventType": "Discussion Message",
+    "gradable": false,
+    "hasEngagementAssociated": false,
+    "isEngagement": false,
+    "categoryId": "_203_1",
+    "handle": "resource/x-bb-forumlink",
+    "attemptable": true,
+    "isDateRangeLimited": false
+   },
+   "permissions": {
+    "create": false,
+    "edit": false,
+    "delete": false
+   },
+   "visibility": "VISIBLE",
+   "description": ""
+  },
   {
    "itemSourceId": "_603_1",
    "itemSourceType": "blackboard.platform.gradebook2.GradableItem",
@@ -26,7 +60,7 @@
    "userCreated": false,
    "dynamicCalendarItemProps": {
     "eventType": "Test",
-    "gradable": true,
+    "gradable": false,
     "hasEngagementAssociated": false,
     "isEngagement": false,
     "categoryId": "_201_1",
@@ -60,7 +94,7 @@
    "userCreated": false,
    "dynamicCalendarItemProps": {
     "eventType": "Test",
-    "gradable": true,
+    "gradable": false,
     "hasEngagementAssociated": false,
     "isEngagement": false,
     "categoryId": "_201_1",
@@ -94,7 +128,7 @@
    "userCreated": false,
    "dynamicCalendarItemProps": {
     "eventType": "Manual Grade Column",
-    "gradable": true,
+    "gradable": false,
     "hasEngagementAssociated": false,
     "isEngagement": false,
     "categoryId": "_204_1",
@@ -111,7 +145,7 @@
    "description": ""
   },
   {
-   "itemSourceId": "_730_1",
+   "itemSourceId": "_605_1",
    "itemSourceType": "blackboard.data.discussionboard.Engagement",
    "calendarId": "_101_1",
    "calendarNameLocalizable": {
@@ -128,7 +162,7 @@
    "userCreated": false,
    "dynamicCalendarItemProps": {
     "eventType": "Discussion Message",
-    "gradable": true,
+    "gradable": false,
     "hasEngagementAssociated": true,
     "isEngagement": true,
     "categoryId": "_203_1",

@@ -47,4 +47,22 @@ test("submission state: Ultra's own Grades page rows carry status, the attempt a
   assert.equal(GZ_GRADES.late(waiting.lastAttempt.attemptDate, waiting.column.dueDate), true);
   assert.equal(GZ_GRADES.late(rows[0].lastAttempt.attemptDate, rows[0].column.dueDate), false);
   assert.equal(load('attempt').attemptReceipt.submissionDate, waiting.lastAttempt.attemptDate);
+  // As measured: created, then submitted (attemptDate, equal to the receipt's submissionDate), then graded.
+  const t = Date.parse;
+  for (const { lastAttempt: a, column } of rows.filter((r) => r.lastAttempt)) {
+    assert.equal(a.attemptReceipt.submissionDate, a.attemptDate);
+    assert.ok(t(a.creationDate) <= t(a.attemptDate));
+    if (a.attemptFirstGradedDate) assert.ok(t(a.attemptDate) <= t(a.attemptFirstGradedDate) && t(a.attemptFirstGradedDate) <= t(a.attemptLastGradedDate));
+    assert.equal(GZ_GRADES.late(a.attemptDate, column.dueDate), GZ_GRADES.late(a.attemptReceipt.submissionDate, column.dueDate));
+  }
+});
+
+test('calendar items join the gradebook by column id; a graded discussion appears twice', () => {
+  const columns = new Set([...load('grades').results, ...load('grades-status').results].map((r) => r.columnId));
+  const items = load('calendar-items').results;
+  for (const i of items) assert.ok(columns.has(i.itemSourceId), `${i.itemSourceId} (${i.itemSourceType}) joins no column`);
+  const discussion = items.filter((i) => i.itemSourceId === '_605_1').map((i) => i.itemSourceType.split('.').pop()).sort();
+  assert.deepEqual(discussion, ['Engagement', 'GradableItem']);
+  assert.equal(load('discussions').results[0].gradebookColumnId, '_605_1');
+  assert.equal(new Set(items.map((i) => i.itemSourceId)).size, items.length - 1); // dedupe by column id
 });

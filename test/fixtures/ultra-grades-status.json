@@ -111,12 +111,12 @@
     "overrideStatus": "NO_OVERRIDE",
     "gradeId": "_911_1",
     "exempt": false,
-    "modifiedDate": "2026-10-10T12:00:00.000Z",
+    "modifiedDate": "2026-09-30T15:00:00.000Z",
     "attemptDate": "2026-09-24T22:00:00.000Z",
     "readyToPost": true,
     "id": "_811_1",
     "submissionHasFilePartsWithErrors": false,
-    "creationDate": "2026-10-09T20:00:00.000Z",
+    "creationDate": "2026-09-24T21:30:00.000Z",
     "status": "COMPLETED",
     "displayGrade": {
      "requiresSchemaKnowledgeToDisplay": false,
@@ -125,7 +125,7 @@
     "@id": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/attempts/_811_1",
     "attemptReceipt": {
      "receiptId": "r-0001",
-     "submissionDate": "2026-10-10T02:15:00.000Z",
+     "submissionDate": "2026-09-24T22:00:00.000Z",
      "submissionTotalSize": 20480,
      "submissionType": "MANUALLY_SUBMITTED"
     },
