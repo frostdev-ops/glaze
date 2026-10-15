@@ -62,6 +62,15 @@ _Last updated: 2026-10-15_
   submission status, your planner marks) and, for teachers, the work waiting to be graded with its counts. Two
   minutes is how long that copy counts as fresh, not how long it is kept: it stays until the next fetch replaces it,
   or until Glaze is removed.
+- **Gradescope in To Do** (off by default), in `chrome.storage.local`, on this device only: which Canvas course each
+  of your Gradescope courses goes with (by its Gradescope course id and short name, or "not a Canvas course"), and for
+  each one placed with a Canvas course, the assignments read from its Gradescope course page (id, title, due and late
+  due dates, whether you handed it in, the score if graded, whether it was late), the time they were read and how many
+  rows couldn't be read; whether you said "Don't ask again" on Gradescope; and, with the daily check on, when each
+  course was last tried. They show only on the Canvas site of the course they're placed with (and only for courses
+  you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
+  Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
+  for it.
 - **Reminders and streak** (Canvas, off by default), in `chrome.storage.local`, on this device only, per Canvas site
   and signed-in user id: which reminders have been shown (so another tab doesn't show them again; while one tab is
   showing one, a random id for that tab holds it for 30 seconds), the ones you
@@ -183,6 +192,18 @@ animated backgrounds) are bundled. It makes requests in these cases:
   that same copy. It asks again when you come back to the page after that, not within a minute of a failed ask, and
   never on a timer. Reminders are drawn inside the Canvas page only: Glaze has no notifications permission and sends
   nothing to any other place. It never writes to Canvas.
+- **Gradescope in To Do** (off by default). Gradescope has no API for students, so Glaze reads your Gradescope course
+  pages, signed in as you, and nothing else of Gradescope's. While the switch is on, and only then, Glaze runs on
+  `https://www.gradescope.com` pages. Each time you open a Gradescope page, it reads again every course you've placed
+  with a Canvas course and that wasn't read in the last ten minutes: the page you're on if it's that course's, else
+  `https://www.gradescope.com/courses/<id>` (a read-only GET from that page, with your existing Gradescope session).
+  With "Also check Gradescope once a day from Canvas" on (off by default), a Canvas page showing your To Do, card tasks
+  or reminders also has Glaze's background worker GET each of that site's placed courses' Gradescope page, at most
+  once a day per course, whether or not it worked (signed out, Gradescope sends its sign-in page, which counts as no
+  answer); the request carries your Gradescope cookies, as visiting the page would, and the page is read on the Canvas
+  page and kept on this device as above. Nothing read on Gradescope is sent to Canvas or anywhere else, and Glaze never
+  writes to Gradescope. To suggest a Canvas course on Gradescope, Glaze uses the course names it already keeps on this
+  device (above); the bar on Gradescope sits in a closed shadow root, so Gradescope's own scripts can't read that list.
 - **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). This is the only change Glaze
   makes to any site. When you tick or untick an item, Glaze writes Canvas's own planner mark for it, as Canvas's List
   View checkbox does: one request to your own Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark
@@ -260,8 +281,9 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 - Host access to `https://*/*` and `scripting` — Canvas also runs on schools' own domains, and Moodle always does.
   The check described above runs on https pages for that reason; when it finds Canvas or Moodle, Glaze styles that
   site, and only that site, the same way. The hostname is kept in the extension's local storage on your device.
-  The same host access lets the gallery script above run on `https://frostdev.io/glaze/looks`; it adds no
-  permission.
+  The same host access lets the gallery script above run on `https://frostdev.io/glaze/looks`, and, only while
+  "Gradescope in To Do" is on, Glaze's Gradescope script run on `https://www.gradescope.com` and its background worker
+  read Gradescope course pages; neither adds a permission.
 
 ## Hosting
 

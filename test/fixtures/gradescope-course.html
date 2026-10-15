@@ -1,0 +1,44 @@
+<!-- Glaze test fixture: a Gradescope student course page (/courses/900001), hand-written from public knowledge of its markup (the assignments table, its status cell and time chart); invented data, no account. Check against a real account before release. -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>MATH 1350 | Gradescope</title></head>
+<body>
+<main class="courseContent">
+  <header class="courseHeader">
+    <h1 class="courseHeader--title">MATH 1350</h1>
+    <div class="courseHeader--term">Fall 2026</div>
+  </header>
+  <table class="table" id="assignments-student-table">
+    <thead><tr role="row"><th scope="col">Name</th><th scope="col">Status</th><th scope="col">Released / Due (PDT)</th></tr></thead>
+    <tbody>
+      <tr role="row">
+        <th class="table--primaryLink" role="rowheader" scope="row"><a aria-label="View Problem Set 1" href="/courses/900001/assignments/5100001/submissions/7000001">Problem Set 1</a></th>
+        <td class="submissionStatus"><div class="submissionStatus--score">8.5 / 10.0</div></td>
+        <td><div class="submissionTimeChart"><time class="submissionTimeChart--releaseDate" datetime="2026-09-01 08:00:00 -0700">Sep 01</time><time class="submissionTimeChart--dueDate" datetime="2026-09-08 23:59:00 -0700">Due Sep 08 at 11:59PM</time></div></td>
+      </tr>
+      <tr role="row">
+        <th class="table--primaryLink" role="rowheader" scope="row"><a aria-label="View Problem Set 2" href="/courses/900001/assignments/5100002/submissions/7000002">Problem Set 2</a></th>
+        <td class="submissionStatus submissionStatus-complete"><div class="submissionStatus--bullet" aria-hidden="true"></div><div class="submissionStatus--text">Submitted</div><span class="submissionStatus--warning">Late</span></td>
+        <td><div class="submissionTimeChart"><time class="submissionTimeChart--dueDate" datetime="2026-09-15 23:59:00 -0700">Due Sep 15</time><time class="submissionTimeChart--dueDate" datetime="2026-09-17 23:59:00 -0700">Late Due Date: Sep 17</time></div></td>
+      </tr>
+      <tr role="row">
+        <th class="table--primaryLink" role="rowheader" scope="row"><button class="js-submitAssignment" data-assignment-id="5100003" data-post-url="/courses/900001/assignments/5100003/submissions" type="button">Problem Set 3</button></th>
+        <td class="submissionStatus"><div class="submissionStatus--bullet" aria-hidden="true"></div><div class="submissionStatus--text">No Submission</div></td>
+        <td><div class="submissionTimeChart"><time class="submissionTimeChart--dueDate" datetime="2026-12-01 23:59:00 -0800">Due Dec 01</time></div></td>
+      </tr>
+      <tr role="row">
+        <th class="table--primaryLink" role="rowheader" scope="row">Midterm 1 (paper)</th>
+        <td class="submissionStatus"><div class="submissionStatus--text">No Submission</div></td>
+        <td><div class="submissionTimeChart"></div></td>
+      </tr>
+      <tr role="row">
+        <th class="table--primaryLink" role="rowheader" scope="row"><button class="js-submitAssignment" data-assignment-id="5100004" type="button">Bonus (odd date)</button></th>
+        <td class="submissionStatus"><div class="submissionStatus--text">No Submission</div></td>
+        <td><div class="submissionTimeChart"><time class="submissionTimeChart--dueDate" datetime="sometime soon">soon</time></div></td>
+      </tr>
+      <tr role="row"><td colspan="3"></td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

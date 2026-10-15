@@ -518,10 +518,40 @@ GZ_UI.load().then((s) => {
   const cardsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:cards', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)));
   $('#card-set-clear').addEventListener('click', async () => { const ok = await cardsOp({ set: [] }); hint(ok ? t('Saved') : t('Not saved. Try again in a moment.'), !ok); });
 
+  // ---- Gradescope (lib/gradescope.js): which Canvas course each Gradescope course goes with, changed here too ----
+  // Writes go through the worker's queue ('glaze:gradescope'), as the bar's on Gradescope do.
+  let gsSeen = {};
+  const gsOp = (op) => new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:gradescope', ...op }, (r) => res(!chrome.runtime.lastError && r?.ok)))
+    .then((ok) => hint(ok ? t('Saved') : t('Not saved. Try again in a moment.'), !ok));
+  const renderGradescope = (raw) => {
+    const d = GZ_GRADESCOPE.clean(raw);
+    const canvas = Object.entries(gsSeen).filter(([k, c]) => k.startsWith('canvas:') && c?.canvas && c.name).sort(([, a], [, b]) => a.name.localeCompare(b.name));
+    const ids = Object.keys(d.map);
+    $('#gs-map').hidden = !ids.length && !d.hide;
+    $('#gs-ask').hidden = !d.hide;
+    $('#gs-map ul').replaceChildren(...ids.map((gid) => {
+      const m = d.map[gid];
+      const c = d.courses[gid];
+      const sel = document.createElement('select');
+      sel.append(...[['', t('Not a Canvas course')], ...canvas.map(([k, x]) => [k, x.name]), ['?', t('Forget it (ask again on Gradescope)')]]
+        .map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label, selected: value === m.to })));
+      sel.setAttribute('aria-label', t('Canvas course for {course}', { course: m.name || gid }));
+      sel.addEventListener('change', () => gsOp({ op: 'map', list: [{ gid, to: sel.value === '?' ? null : sel.value }] }));
+      const li = document.createElement('li');
+      const read = c ? [t('Read {when}', { when: when(c.at) }), c.bad ? t('Unreadable rows: {n}', { n: c.bad }) : ''].filter(Boolean).join(' · ') : '';
+      li.append(Object.assign(document.createElement('span'), { textContent: m.name || gid }), sel, Object.assign(document.createElement('span'), { className: 'desc', textContent: read }));
+      return li;
+    }));
+  };
+  const gsLoad = () => chrome.storage.local.get(['gradescope', 'seenCourses'], (r) => { gsSeen = r?.seenCourses || {}; renderGradescope(r?.gradescope); });
+  gsLoad();
+  $('#gs-ask').addEventListener('click', () => gsOp({ op: 'hide', hide: false }));
+
   // Another surface (the popup, another options tab) changed something: take it, unless it is
   // only our own save coming back.
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.seenCourses) renderCourses(changes.seenCourses.newValue);
+    if (area === 'local' && (changes.gradescope || changes.seenCourses)) gsLoad();
     if (area === 'sync' && changes.cards) renderCardSet(changes.cards.newValue);
     if (area !== 'sync' || pending.size) return;
     GZ_UI.load().then((next) => {

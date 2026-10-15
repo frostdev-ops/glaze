@@ -452,6 +452,15 @@
             <span class="desc">Submitted, graded, late, missing or excused, beside each item.</span></label>
           <label class="check"><input type="checkbox" data-key="todo.cardCross"><span>Cross out done tasks</span>
             <span class="desc">Done items stay on the card, crossed out, until their due date passes. Off: they leave it.</span></label>
+          <label class="check"><input type="checkbox" data-key="enhance.gradescope"><span>Gradescope in To Do</span>
+            <span class="desc">Assignments from your Gradescope courses join Better To Do, the course cards and reminders, marked Gradescope, with a link to each. On gradescope.com Glaze asks once which Canvas course each Gradescope course belongs to, then reads your assignments whenever you visit, signed in as you. It only reads, and what it reads stays on this device.</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.gsDaily"><span>Also check Gradescope once a day from Canvas</span>
+            <span class="desc">New Gradescope work shows without a visit to Gradescope: once a day at most, a Canvas page has Glaze read each course's Gradescope page, with your Gradescope sign-in in this browser.</span></label>
+          <div id="gs-map" hidden>
+            <p class="desc" id="gs-map-note">Your Gradescope courses and the Canvas course each goes with:</p>
+            <ul class="gs-map" aria-labelledby="gs-map-note"></ul>
+            <button type="button" id="gs-ask">Ask on Gradescope again</button>
+          </div>
         </div>
         <div class="group" id="remind">
           <h3>Reminders and streak</h3>
@@ -544,6 +553,7 @@
   <script src="lib/search.js"></script>
   <script src="lib/todo.js"></script>
   <script src="lib/remind.js"></script>
+  <script src="lib/gradescope.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>

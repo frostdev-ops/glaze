@@ -14,6 +14,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   let L = null; // lib/todo.js
   let tz, key = '', o = null, data = null, cache = null;
   let on = false, starting = null, asking = null, failed = 0, listed = false;
+  let gs = null; // Gradescope's items for this site (lib/todo.js gradescope)
 
   const get = (keys) => new Promise((res) => { try { chrome.storage.local.get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
   const readPrefs = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } })
@@ -75,7 +76,8 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       const cid = el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
       const was = el.querySelector(':scope > .gz-ct');
       if (!head || !cid || !cache) { was?.remove(); continue; }
-      const rows = L.card(L.build({ items: cache.items || [], data, o, now, tz, course: cid, sync: o.sync }), o.cardN, o.cardCross, tz).map((r) => {
+      gs ||= L.gradescope(paint);
+      const rows = L.card(L.build({ items: [...(cache.items || []), ...gs(now)], data, o, now, tz, course: cid, sync: o.sync }), o.cardN, o.cardCross, tz).map((r) => {
         // Undated work planned for a day (a "do on" day or a focus session) reads as planned for that day.
         const w = L.label(r.at === null ? { allDay: true, day: r.plan } : r, now, tz, lang);
         const text = o.rel ? w.rel : w.abs;
@@ -89,6 +91,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
           const li = make('li', {}, make(r.url ? 'a' : 'span', { className: 'gz-ct-row', ...(r.url && { href: r.url }) },
             make('span', { className: 'gz-ct-t', textContent: r.title }),
             make('span', { className: 'gz-ct-when', title: r.other, textContent: r.when }),
+            r.type === 'gradescope' && make('span', { className: 'gz-todo-chip', textContent: 'Gradescope' }),
             r.status && (o.cardStatus ? chip(r.status) : r.done && make('span', { className: 'screenreader-only', textContent: t(r.status) }))));
           if (r.done) li.dataset.done = '';
           if (r.past) li.dataset.past = '';

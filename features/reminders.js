@@ -27,6 +27,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const drawn = new Set(); // every reminder this page has drawn, for the page's life
   const tab = crypto.randomUUID(); // this page, to the worker's leases (lib/remind.js claim and confirm)
   let live = null, hub = null, opener = null, run = null; // run: the streak as reckoned last
+  let gs = null; // Gradescope's items for this site (lib/todo.js gradescope)
   const sources = new Map(); // reminders other packages add (class start W14, study W18): name -> () => events
 
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
@@ -92,7 +93,8 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   // ---- what's due when ----------------------------------------------------------------------------------------
   // The list over the next eight days and the past month, as Better To Do counts it (lib/todo.js build).
   const reckon = (now) => {
-    const b = T.build({ items: cache?.items || [], data, o: { ...todoO, span: 'custom', unit: 'days', n: 8, start: 'rolling', past: 'month', group: false }, now, tz: who.tz, cids, sync: todoO.sync });
+    gs ||= T.gradescope(() => { if (on) arm(); });
+    const b = T.build({ items: [...(cache?.items || []), ...gs(now)], data, o: { ...todoO, span: 'custom', unit: 'days', n: 8, start: 'rolling', past: 'month', group: false }, now, tz: who.tz, cids, sync: todoO.sync });
     const extra = [...sources.values()].flatMap((f) => { try { return f() || []; } catch { return []; } });
     return { b, evs: R.events({ rows: b.groups.flatMap(([, l]) => l), cats: { due: en().remind, exam: en().remindExam, plan: en().remindPlan }, o, tz: who.tz, extra }) };
   };
@@ -211,7 +213,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     const snooze = e.until > now + H && button(t('Snooze 1 hour'), 'snooze');
     const card = make('section', { className: 'gz-rm-toast' },
       make('p', { className: 'gz-rm-what' }, make('span', { textContent: what(e, now) }), button('×', 'hide', t('Dismiss'))),
-      title, e.course && make('p', { className: 'gz-rm-course', textContent: e.course }),
+      title, (e.course || e.key.startsWith('gradescope:')) && make('p', { className: 'gz-rm-course', textContent: [e.course, e.key.startsWith('gradescope:') && 'Gradescope'].filter(Boolean).join(' · ') }),
       make('div', { className: 'gz-rm-row' }, snooze, button(more > 0 ? t('All reminders ({n} more)', { n: more }) : t('All reminders'), 'hub')));
     card.setAttribute('aria-label', t('Glaze reminder'));
     card.dataset.id = e.id;

@@ -118,3 +118,8 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
   button:hover { color: var(--gz-ink-muted); border-color: var(--gz-line-strong); }
   button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: transparent; }
 }
+
+/* Gradescope courses and their Canvas course (options, Better To Do). */
+.gs-map { list-style: none; margin: 0.25rem 0 0.75rem; padding: 0; display: grid; gap: 0.4rem; }
+.gs-map li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; }
+.gs-map li > span:first-child { min-width: 10em; font-weight: 600; }

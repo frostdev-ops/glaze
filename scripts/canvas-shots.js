@@ -16,6 +16,7 @@
 //   --sync <json>      more sync items saved beside the settings, such as the course cards' (lib/cards.js):
 //                     '{card:{pet:"cat"},cards:{"canvas:{origin}/{bio}":{k:"solid",c:"#e11d48"}}}'; {origin} is the
 //                     local Canvas, {bio} and the others its course ids
+//   --local <json>     storage.local items set the same way (merged, not cleared), such as Gradescope's (lib/gradescope.js)
 //   --width, --height  viewport, 1440x900 by default;  --full  captures the whole page
 //   --user <who>       student (default), teacher or admin
 //   --html <dir>       also save each page's DOM as <dir>/canvas-<page>.html, a test fixture: script bodies
@@ -94,7 +95,7 @@ const parse = () => {
   try {
     parsed = parseArgs({ allowPositionals: true, options: {
       look: { type: 'string', multiple: true }, settings: { type: 'string' }, out: { type: 'string' },
-      width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' }, full: { type: 'boolean' }, 'course-menu': { type: 'boolean' }, sync: { type: 'string' }, help: { type: 'boolean', short: 'h' },
+      width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' }, full: { type: 'boolean' }, 'course-menu': { type: 'boolean' }, sync: { type: 'string' }, local: { type: 'string' }, help: { type: 'boolean', short: 'h' },
       user: { type: 'string', default: 'student' }, html: { type: 'string' }, audit: { type: 'boolean' }, perf: { type: 'string' },
       eval: { type: 'string' }, wait: { type: 'string', default: '0' }, lms: { type: 'string', default: 'canvas' },
     } });
@@ -120,8 +121,11 @@ const parse = () => {
   let sync = {};
   try { if (opt.sync) sync = new Function(`return (${opt.sync})`)(); } catch (e) { die(`--sync: ${e.message}`); }
   if (!plain(sync)) die('--sync must be an object.');
+  let local = {};
+  try { if (opt.local) local = new Function(`return (${opt.local})`)(); } catch (e) { die(`--local: ${e.message}`); }
+  if (!plain(local)) die('--local must be an object.');
   if (!(+opt.wait >= 0)) die('--wait takes seconds.');
-  return { evalJs: opt.eval, wait: +opt.wait * 1000, size, positionals, full: !!opt.full, courseMenu: !!opt['course-menu'], out, looks, user: opt.user, html, audit: !!opt.audit, perf, sync };
+  return { evalJs: opt.eval, wait: +opt.wait * 1000, size, positionals, full: !!opt.full, courseMenu: !!opt['course-menu'], out, looks, user: opt.user, html, audit: !!opt.audit, perf, sync, local };
 };
 
 // The extension as it is in the working copy, with localhost added to where it runs and what it exposes.
@@ -427,7 +431,7 @@ const eachTab = async (tabs, items, fn) => {
 };
 
 (async () => {
-  const { evalJs, wait, size, positionals, full, courseMenu, out, looks, user, html, audit, perf, sync } = parse();
+  const { evalJs, wait, size, positionals, full, courseMenu, out, looks, user, html, audit, perf, sync, local } = parse();
   fs.mkdirSync(out, { recursive: true });
   if (html) fs.mkdirSync(html, { recursive: true });
   console.log(`Screenshots go to ${out}`);
@@ -482,6 +486,7 @@ const eachTab = async (tabs, items, fn) => {
       await first.goto(`${base}/options.html`).catch((e) => die(`Glaze did not load from ${ext}: ${e.message}`));
       const more = JSON.parse(fill(JSON.stringify(sync).replace(/\{origin\}/g, BASE), found.ids));
       await first.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); }, { ...settings, ...more });
+      if (Object.keys(local).length) await first.evaluate((l) => chrome.storage.local.set(l), JSON.parse(fill(JSON.stringify(local).replace(/\{origin\}/g, BASE), found.ids)));
       console.log(`\n${label}: ${settings.enabled ? `preset ${settings.preset ?? 'custom'}, bg ${settings.bg.kind}` : 'Glaze off'}`);
       if (perf) {
         for (const [name, url] of pages) for (const next of [false, true]) for (let i = 0; i < perf; i++) {
