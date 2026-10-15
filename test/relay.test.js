@@ -485,22 +485,28 @@ test('keys from Export all bring a share back on a new computer, delete rights i
   assert.deepEqual(await a.pump(), { gone: true });
 });
 
-// A store whose first put waits until the test lets it go (a slow R2 or disk write), then works or fails.
-const slow = (s = memory()) => {
-  const put = s.put;
+// A store whose first put waits until the test lets it go (a slow R2 or disk write), then works, fails (true), or
+// lands and then throws ('landed': the bucket kept it but the reply was lost). A copy over `base`, which keeps its
+// objects, so one relay's view of a shared store can misbehave on its own.
+const slow = (base = memory()) => {
+  const s = { ...base };
   let go, first = true;
   s.started = new Promise((resolve) => { s.start = resolve; });
   const gate = new Promise((resolve) => { go = resolve; });
   s.put = async (k, b) => {
-    if (!first) return put(k, b);
+    if (!first) return base.put(k, b);
     first = false;
     s.start();
-    if (await gate) throw new Error('store down');
-    return put(k, b);
+    const how = await gate;
+    if (how === 'landed') { await base.put(k, b); throw new Error('reply lost'); }
+    if (how) throw new Error('store down');
+    return base.put(k, b);
   };
-  s.release = (fail = false) => go(fail);
+  s.release = (how = false) => go(how);
   return s;
 };
+const doomed = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM doomed WHERE sid = ?').get(sid).c;
+const booked = (r) => r.db.prepare('SELECT blob FROM totals').get().blob;
 const blobRows = (r, sid) => r.db.prepare('SELECT count(*) AS c FROM blobs WHERE sid = ?').get(sid).c;
 
 test('a file upload still in flight when its share is deleted (by the creator or by expiry) leaves nothing behind', async (t) => {
@@ -524,33 +530,41 @@ test('a file upload still in flight when its share is deleted (by the creator or
   }
 });
 
-test('a failed upload frees its room; one left by a relay that stopped mid-upload is cleaned at the next start', async (t) => {
-  const dir = tmp(t);
-  const db = path.join(dir, 'share.db');
-  const store = slow();
-  let r = await up({ db, store, maxBlobBytes: 5000 });
-  const a = make(r);
-  a.local = { n1: { title: 'x', html: '' } };
-  await a.pump();
-  const upload = a.s.put(new Uint8Array(3000)).then(() => 'stored', (e) => e.status);
-  await store.started;
-  store.release(true);
-  assert.equal(await upload, 500);
-  assert.equal(blobRows(r, a.st.sid), 0);
-  await a.s.put(new Uint8Array(4000)); // the room the failed one held is back
-  // A relay that dies between counting an upload and storing it leaves a pending row it owned (and maybe the object).
-  const port = r.port;
-  r.db.prepare('INSERT INTO blobs (sid, id, size, at, owner) VALUES (?, ?, ?, ?, ?)').run(a.st.sid, 'P'.repeat(22), 100, Date.now(), 'a-relay-that-died');
-  store.m.set(`${a.st.sid}/${'P'.repeat(22)}`, Buffer.alloc(100));
-  await r.close();
-  r = await up({ db, store, maxBlobBytes: 5000, grace: 150 }, port);
-  t.after(() => r.close());
-  // At start its object goes, but its row (and room) stays until no write of its can still land; then it goes too.
-  await r.expire();
-  assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [1, 2]);
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  await r.expire();
-  assert.deepEqual([store.m.size, blobRows(r, a.st.sid)], [1, 1]);
+test('a failed upload, even one that landed before failing, is doomed: deleted, its room back after the grace', async (t) => {
+  for (const how of [true, 'landed']) {
+    const dir = tmp(t);
+    const db = path.join(dir, 'share.db');
+    const store = slow();
+    let r = await up({ db, store, maxBlobBytes: 5000, grace: 150 });
+    const a = make(r);
+    a.local = { n1: { title: 'x', html: '' } };
+    await a.pump();
+    const upload = a.s.put(new Uint8Array(3000)).then(() => 'stored', (e) => e.status);
+    await store.started;
+    store.release(how);
+    assert.equal(await upload, 500);
+    // No row, nothing in the store (a put that threw may still have landed: it's deleted all the same), and its room
+    // held until the first scheduled delete.
+    assert.deepEqual([blobRows(r, a.st.sid), doomed(r, a.st.sid), store.m.size, booked(r)], [0, 1, 0, 4124], `${how}`);
+    await assert.rejects(a.s.put(new Uint8Array(4000)), (e) => e.status === 507);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await r.expire();
+    assert.equal(booked(r), 0);
+    await a.s.put(new Uint8Array(4000));
+    // A relay that dies between counting an upload and storing it leaves a pending row it owned (and maybe the object).
+    const port = r.port;
+    r.db.prepare('INSERT INTO blobs (sid, id, size, at, owner) VALUES (?, ?, ?, ?, ?)').run(a.st.sid, 'P'.repeat(22), 100, Date.now(), 'a-relay-that-died');
+    store.m.set(`${a.st.sid}/${'P'.repeat(22)}`, Buffer.alloc(100));
+    await r.close();
+    r = await up({ db, store, maxBlobBytes: 5000, grace: 150 }, port);
+    t.after(() => r.close());
+    // At start its row becomes a doomed key: the object goes, its room stays booked until the first scheduled delete.
+    await r.expire();
+    assert.deepEqual([store.m.size, blobRows(r, a.st.sid), booked(r)], [1, 1, 4124 + 100]);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await r.expire();
+    assert.deepEqual([store.m.size, blobRows(r, a.st.sid), booked(r)], [1, 1, 4124]);
+  }
 });
 
 // The relay's own command line, as the owner runs it beside a serving relay (a separate process).
@@ -642,19 +656,19 @@ test('one serving relay per database: a second waits out the lease and refuses; 
   const fourth = await up({ db, store, lease: 300, grace: 150 });
   t.after(() => fourth.close());
   assert.ok(Date.now() - t1 >= 250, `took over after ${Date.now() - t1} ms`);
-  // A late write from the dead relay (a bucket finishing a request it already had) lands after the first reclaim step;
-  // the second step, after the grace, deletes it with the row.
-  assert.deepEqual([store.m.size, blobRows(fourth, a.sid)], [0, 1]);
+  // Its row became a doomed key, its object deleted and its room still booked. A late write from the dead relay (a bucket
+  // finishing a request it already had) lands afterwards; the next scheduled delete takes it.
+  assert.deepEqual([store.m.size, blobRows(fourth, a.sid), doomed(fourth, a.sid), booked(fourth)], [0, 0, 1, 100]);
   store.m.set(`${a.sid}/${'D'.repeat(22)}`, Buffer.alloc(100));
   await new Promise((resolve) => setTimeout(resolve, 200));
   await fourth.expire();
-  assert.deepEqual([store.m.size, blobRows(fourth, a.sid)], [0, 0]);
+  assert.deepEqual([store.m.size, doomed(fourth, a.sid), booked(fourth)], [0, 1, 0]); // kept, and deleted again, for a week
 });
 
 test('a relay whose lease was taken over commits nothing after its wait: no row, no room, and the object it wrote goes', async (t) => {
   // Codex's witness: an old relay's upload waits in the store while its renewals stall past the lease (the test ages
   // the lease, a controlled clock rather than a real 60-second stall), and a replacement takes over.
-  for (const fail of [false, true]) {
+  for (const fail of [false, true, 'landed']) {
     const dir = tmp(t);
     const db = path.join(dir, 'share.db');
     const shared = memory();
@@ -685,6 +699,77 @@ test('a relay whose lease was taken over commits nothing after its wait: no row,
     assert.equal((await b.s.get(ref)).length, 4000);
     await assert.rejects(make(next).s.put(new Uint8Array(4000)), (e) => e.status === 507);
   }
+});
+
+test('a late write landing after the grace is still reconciled: recorded by the old relay, deleted by the holder, across restarts', async (t) => {
+  // Codex's verification 4: the old upload lands after the replacement's first scheduled delete, and either the old
+  // relay's own delete fails (store briefly down for it), or its put lands and then throws (the reply was lost).
+  for (const [how, delFails] of [[false, true], ['landed', false]]) {
+    const dir = tmp(t);
+    const db = path.join(dir, 'share.db');
+    const shared = memory();
+    const store = slow(shared);
+    const old = await up({ db, store, maxBlobBytes: 5000 });
+    t.after(() => old.close());
+    const a = make(old);
+    a.local = { n1: { title: 'x', html: '' } };
+    await a.pump();
+    const upload = a.s.put(new Uint8Array(4000)).then(() => 'stored', (e) => e.status ?? e.message);
+    await store.started;
+    old.db.prepare('UPDATE lease SET seen = seen - 61000').run();
+    let next = await up({ db, store: shared, maxBlobBytes: 5000, grace: 150 });
+    const first = next;
+    t.after(() => first.close());
+    // Past the grace: the replacement's first scheduled delete has run, the room is free, and it is spent.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await next.expire();
+    const b = make(next);
+    await b.s.put(new Uint8Array(4000));
+    assert.deepEqual([shared.m.size, booked(next)], [1, 4124]);
+    if (delFails) store.del = async () => { throw new Error('store down'); };
+    store.release(how);
+    assert.equal(await upload, 503);
+    // The late object is on the books (honestly over the cap) and in the doomed list, whatever happened to its delete.
+    assert.equal(booked(next), delFails ? 8248 : 8248, `${how} ${delFails}: the late object is on the books`);
+    assert.equal(doomed(next, a.st.sid), 1);
+    await assert.rejects(make(next).s.put(new Uint8Array(4000)), (e) => e.status === 507);
+    // The holder's sweep deletes it on schedule, after a restart too.
+    const port = next.port;
+    await next.close();
+    next = await up({ db, store: shared, maxBlobBytes: 5000, grace: 150 }, port);
+    t.after(() => next.close());
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await next.expire();
+    assert.deepEqual([shared.m.size, booked(next), blobRows(next, a.st.sid)], [1, 4124, 0], `${how} ${delFails}`);
+  }
+});
+
+test('a relay that loses its lease cuts connections after the drain, and still dooms what its uploads wrote', async (t) => {
+  const dir = tmp(t);
+  const db = path.join(dir, 'share.db');
+  const shared = memory();
+  const store = slow(shared);
+  const old = await up({ db, store, lease: 300, drain: 100 });
+  t.after(() => old.close());
+  const a = make(old);
+  a.local = { n1: { title: 'x', html: '' } };
+  await a.pump();
+  const upload = a.s.put(new Uint8Array(3000)).then(() => 'stored', (e) => e.status ?? e.message);
+  await store.started;
+  old.db.prepare("UPDATE lease SET boot = 'someone-else', seen = ?").run(Date.now()); // another relay took over
+  // The store hasn't answered; after the drain the connection is cut, without an answer.
+  const t0 = Date.now();
+  const got = await upload;
+  const cut = Date.now() - t0;
+  assert.notEqual(got, 'stored');
+  store.release(); // the write lands only now, after the connection is gone
+  await old.close(); // ends once the upload's handler has run: its key is doomed and its object deleted
+  assert.equal(shared.m.size, 0, 'the late object was deleted after the connection was cut');
+  assert.ok(cut < 2000, `cut after ${cut} ms`);
+  const { DatabaseSync } = require('node:sqlite');
+  const d = new DatabaseSync(db, { readOnly: true });
+  assert.equal(d.prepare('SELECT count(*) AS c FROM doomed WHERE sid = ?').get(a.st.sid).c, 1);
+  d.close();
 });
 
 test('a live holder\'s upload completes however long it takes; a relay that loses its lease stops taking work at once', async (t) => {
