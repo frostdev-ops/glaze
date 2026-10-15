@@ -7,6 +7,7 @@ All notable changes to Glaze are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Blackboard Ultra: hide folders and learning modules locally, with a Show hidden folders count and per-account/course choices included in Export all.
 
 - **Blackboard navigation:** the newer MUI drawer and legacy rail now share Glaze's styling, with a bundled Glaze logo
   at first paint, school/device-only custom logos, precise sizes and spacing, custom http/https links with built-in

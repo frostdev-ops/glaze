@@ -1620,4 +1620,9 @@
   "Glaze Dashboard": "Glaze-dashboard",
   "On by default. Blackboard Ultra's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Ultra's own page, one click away.": "Standaard aan. De instellingspagina van Blackboard Ultra wordt het dashboard van Glaze: je widgets en Better To Do, in een eigen indeling. Het tabblad Instellingspagina toont de eigen pagina van Ultra, één klik verderop.",
   "Nothing here yet. Edit layout adds widgets.": "Hier staat nog niets. Met Indeling bewerken voeg je widgets toe.",
+  "Hide folders": "Mappen verbergen",
+  "Hide folders and learning modules in Blackboard course outlines on this device.": "Verberg mappen en leermodules in Blackboard-cursusoverzichten op dit apparaat.",
+  "Hide folder: {title}": "Map verbergen: {title}",
+  "Unhide folder: {title}": "Map tonen: {title}",
+  "Show hidden folders ({n})": "Verborgen mappen tonen ({n})",
 };

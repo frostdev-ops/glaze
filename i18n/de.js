@@ -1620,4 +1620,9 @@
   "Glaze Dashboard": "Glaze-Dashboard",
   "On by default. Blackboard Ultra's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Ultra's own page, one click away.": "Standardmäßig an. Die Institutionsseite von Blackboard Ultra wird zu Glazes Dashboard: deine Widgets und Better To Do, mit eigenem Layout. Der Tab „Institutionsseite“ zeigt Ultras eigene Seite, nur einen Klick entfernt.",
   "Nothing here yet. Edit layout adds widgets.": "Hier ist noch nichts. Mit „Layout bearbeiten“ fügst du Widgets hinzu.",
+  "Hide folders": "Ordner ausblenden",
+  "Hide folders and learning modules in Blackboard course outlines on this device.": "Ordner und Lernmodule in Blackboard-Kursübersichten auf diesem Gerät ausblenden.",
+  "Hide folder: {title}": "Ordner ausblenden: {title}",
+  "Unhide folder: {title}": "Ordner einblenden: {title}",
+  "Show hidden folders ({n})": "Ausgeblendete Ordner anzeigen ({n})",
 };

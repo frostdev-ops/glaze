@@ -1620,4 +1620,9 @@
   "Glaze Dashboard": "Tablero de Glaze",
   "On by default. Blackboard Ultra's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Ultra's own page, one click away.": "Activado por defecto. La página de la institución de Blackboard Ultra se convierte en el Tablero de Glaze: tus widgets y Better To Do, con su propio diseño. Su pestaña Página de la institución muestra la página propia de Ultra, a un clic.",
   "Nothing here yet. Edit layout adds widgets.": "Aún no hay nada. Editar diseño añade widgets.",
+  "Hide folders": "Ocultar carpetas",
+  "Hide folders and learning modules in Blackboard course outlines on this device.": "Oculta carpetas y módulos de aprendizaje en los esquemas de cursos de Blackboard en este dispositivo.",
+  "Hide folder: {title}": "Ocultar carpeta: {title}",
+  "Unhide folder: {title}": "Mostrar carpeta: {title}",
+  "Show hidden folders ({n})": "Mostrar carpetas ocultas ({n})",
 };
