@@ -129,7 +129,14 @@ animated backgrounds) are bundled. It makes requests in these cases:
   asks for your active courses with their current scores and, inside a course, that course's navigation
   tabs. Extras also read native course colors, assignments and submission status, module completion
   requirements and items, folder and file metadata, and the server-rendered Grades page's unread dots.
-  The course list includes each course's term (for the GPA). When you open the what-if calculator on a
+  The course list includes each course's term (for the GPA and to search this term's courses first).
+  **Search in your courses** (on by default, under the command palette): once you have typed two characters
+  in the command palette and paused, Glaze sends what you typed to your own Canvas site, and only there, asking
+  each of your active courses for pages, assignments, discussions, announcements, modules and files whose titles
+  match (Canvas's own `search_term` lists). The next keystroke cancels the requests still running. The answers are
+  kept in memory on that page for five minutes, filed by course, kind and what you typed in lower case (so typing it
+  again in any case asks nothing new), and are gone when you leave the page; none of it, what you typed included, is
+  stored. When you open the what-if calculator on a
   course's Grades page (or when you have something saved for that course), Glaze asks for that course's
   assignment groups with your submissions, and its grading periods or grading scheme where the course has
   them; the answers stay in memory. With the GPA on, a what-if grade for a course whose letter grade Canvas gives
