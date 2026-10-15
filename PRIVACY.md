@@ -230,6 +230,14 @@ animated backgrounds) are bundled. It makes requests in these cases:
   shares the answer), and on the Courses and Grades pages for each course you've opened before whose
   card is on screen: at most once every five minutes per course, with your existing session. The list
   is kept in memory; only the items' ids are stored, as above. Nothing is sent anywhere else.
+- **Search in your courses on Blackboard Ultra** (on by default): after two typed characters and a 150 ms pause,
+  Glaze reads your own site's public recursive content, announcement and discussion topic lists with GETs through
+  its Ultra reader. Only titles, availability and public body text are requested; no private content details, LTI
+  fields, discussion threads, attempts or messages. HTML becomes text locally and never loads its images or scripts.
+  Your query stays on the device. Results and the course/term list stay in memory for five minutes, never in storage.
+  At most three lists run together, 30 requests per query and two pages of up to 200 items per list. New input,
+  closing the palette, or switching search or Glaze off cancels pending reads. Content links use the native redirect;
+  announcement/discussion results open the course tool list only after you choose one. Search itself marks nothing read.
 - **On Canvas.** At most every ten minutes, Glaze asks your own Canvas site for your planner items for the
   next seven days, the same list Canvas's own planner and To Do list show, and keeps what's still to do as
   the due list above. On the Dashboard (Grades on course cards) and when you open the command palette, it

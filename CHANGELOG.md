@@ -8,6 +8,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Search in your courses on Blackboard Ultra:** the same Ctrl/⌘K search and switch as Canvas, now finding available
+  content titles and public document, announcement and discussion topic text. Current course and term first, up to
+  24 results; nothing stored, five-minute memory cache, cancellation on typing, closing or disabling. Read-only public
+  lists only, bounded to 30 requests per query and two pages per list. No addition to any site's first content script.
+
 - **Notes** (Canvas, off by default; the Dashboard notes' switch, now called Notes, turns on both): a notes app over
   the page, from Ctrl+K (Notes, New note, Course notes), the Dashboard notes tile, a course card's create menu, Course
   notes on a course's home (there as soon as Notes is turned on), or a class reminder. It opens and acts only on your own

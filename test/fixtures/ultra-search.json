@@ -1,0 +1,23 @@
+{
+  "_note": "Synthetic public Ultra search lists; no account values. Shapes: parity/spikes/B0.md #19, #21, #22.",
+  "contents": [
+    { "id": "_700_1", "title": "Laboratory", "availability": { "available": "Yes" } },
+    { "id": "_701_1", "parentId": "_700_1", "title": "Reading: Cell membrane", "availability": { "available": "Yes" }, "body": "<p>Résumé &amp; safety notes: mitochondria.</p><img src=\"https://outside.invalid/never-request\"><script>forbiddenword()</script>" },
+    { "id": "_702_1", "parentId": "_700_1", "title": "Lab report", "availability": { "available": "Yes" } },
+    { "id": "_703_1", "title": "Hidden unit", "availability": { "available": "No" } },
+    { "id": "_704_1", "parentId": "_703_1", "title": "Lab hidden child", "availability": { "available": "Yes" }, "body": "<p>Hidden material.</p>" },
+    { "id": "_705_1", "title": "Lab unknown availability" },
+    { "id": "_706_1", "parentId": "_707_1", "title": "Lab cycle", "availability": { "available": "Yes" } },
+    { "id": "_707_1", "parentId": "_706_1", "title": "Lab cycle", "availability": { "available": "Yes" } }
+  ],
+  "announcements": [
+    { "id": "_801_1", "title": "Lab moved", "body": "<p>Meet in the laboratory.</p>", "availability": { "duration": { "type": "Permanent" } } },
+    { "id": "_802_1", "title": "Lab next year", "body": "<p>Not yet.</p>", "availability": { "duration": { "type": "Restricted", "start": "2027-01-01T00:00:00Z" } } },
+    { "id": "_803_1", "title": "Lab expired", "availability": { "duration": { "type": "Restricted", "end": "2025-01-01T00:00:00Z" } } }
+  ],
+  "discussions": [
+    { "id": "_901_1", "title": "Cell questions", "available": true, "topic": { "status": "Published", "body": "<p>Share laboratory safety questions.</p>", "isRead": false } },
+    { "id": "_902_1", "title": "Lab unavailable", "available": false, "topic": { "status": "Published", "body": "<p>Hidden.</p>" } },
+    { "id": "_903_1", "title": "Lab draft", "available": true, "topic": { "status": "Draft", "body": "<p>Hidden.</p>" } }
+  ]
+}
