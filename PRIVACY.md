@@ -120,11 +120,12 @@ _Last updated: 2026-10-15_
   it ends, so it keeps running from page to page. The widgets' settings (timer
   lengths, chime, quote choices, breathing lengths) are in `chrome.storage.sync` with your other settings (`widgets`).
   On Ultra, whether you folded Glaze's panel on the Courses page away (`panelShut`) is kept there too, and so are the
-  Courses page's and the Dashboard's own layouts (in the same `widgetLayout`: which tiles are on, their size, where each
-  sits, folded or not, which is on top, and how wide the page was when you placed them) and which Dashboard tab you
-  chose last (`dashTab`). With **Open Blackboard on the dashboard** on (`widgets.land`, off by default), the tab that
-  went on to the Dashboard is marked in that tab's own session storage on your Blackboard site (`gz-landed: 1`, which
-  the page can read; it holds nothing else), so it happens once, and is gone when the tab closes.
+  Courses page's and the Dashboard's own layouts and the widgets floating over every Blackboard page (in the same
+  `widgetLayout`: which tiles are on, their size, where each sits, folded or not, which is on top, and how wide the page
+  was when you placed them) and which Dashboard tab you chose last (`dashTab`). With **Open Blackboard on the dashboard**
+  on (`widgets.land`, off by default), Glaze's background page remembers which browser tabs already went on to the
+  Dashboard (their tab number, in its session storage: in memory, never written to disk, gone when the browser closes or
+  the tab does), so it happens once in a tab; the school's site sees nothing of it.
 - **Notes** (Canvas and Blackboard Ultra, the notes app; the Notes switch, off by default), on this device only, per site and signed-in user id. The
   library's index is in `chrome.storage.local`: each note's title, folder, course (its id and the name the site showed),
   when it was made and last changed, its first 140 characters for the list, and when it went to the trash; your folders'

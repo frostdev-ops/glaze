@@ -311,3 +311,25 @@ test('the timer asks the worker to start, pause and reset it, and shows its answ
   assert.match(status.textContent, /Nothing changed/, 'no answer at all: the same');
   assert.ok(!('widgetTimer' in p.local), 'the page itself never writes the timer');
 });
+
+// Codex B7b 6 (P2 4): Start's answer comes back after the nav reset the timer through the same queue. The stored state
+// (idle) is newer than that answer, so the tile keeps showing it: Start, not Pause.
+test("the timer never shows an answer older than what's stored since: a late Start after the nav's Reset stays reset", async () => {
+  const clock = { t: 1e12 };
+  const running = { phase: 'work', end: clock.t + 25 * 6e4, left: 0 };
+  const p = page({ clock, hold: true, replies: [{ ok: true, timer: running }] });
+  const body = new E();
+  p.ui.probe.WIDGETS.timer(body);
+  p.answer();
+  await settle();
+  const start = find(body, (e) => e.className === 'gz-w-btn gz-w-main');
+  start.fire('click');
+  // The worker stored Start's running timer, then the nav's Reset made it idle; both changes arrive first.
+  for (const f of [...p.listeners]) f({ widgetTimer: { oldValue: W.IDLE, newValue: running } }, 'local');
+  for (const f of [...p.listeners]) f({ widgetTimer: { oldValue: running, newValue: W.IDLE } }, 'local');
+  assert.equal(start.textContent, 'Start');
+  p.held.shift()(); // Start's answer, late
+  await settle();
+  assert.equal(start.textContent, 'Start', 'what is stored, not the late answer');
+  assert.equal(body.dataset.running, 'no');
+});

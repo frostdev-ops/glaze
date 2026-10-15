@@ -4,7 +4,9 @@
 // nowhere. It checks that the Courses page's tiles float where the panel was without covering Ultra's To Do; that
 // they move only in Edit layout, by pointer (snapped, with a guide; Alt: free) and by keys (announced), and are where
 // they were after a reload; that a narrow window stacks them and keeps the layout; the Dashboard's tabs (arrow keys,
-// remembered); and the opt-in landing (once, never on a reload). Screenshots: both boards, light and dark, 1280 and 375.
+// remembered, headed Dashboard, with Better To Do and no overlap when fresh); a widget floating over every page, once, on
+// a course's page clear of the nav and its top bar, and an old (B5) float carried over; and the opt-in landing (once,
+// never on a reload). Screenshots: both boards and a course page, light and dark, 1280 and 375.
 //   NODE_PATH=/path/to/node_modules node scripts/ultra-boards-check.js [out dir for screenshots]   (needs playwright)
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -71,6 +73,11 @@ const INSTITUTION = SHELL('Institution Page', `<section class="institution-page-
 <div class="black-panel-header base-header"><h1 id="main-heading" class="page-title">Institution Page</h1><div class="base-header-tools-transclude"></div></div>
 <institution-page-home><div class="ip-app">${['Library hours', 'IT help desk', 'Campus news', 'Writing center'].map((n) => `<div class="ip-module"><h3>${n}</h3><p>Synthetic module for the check.</p></div>`).join('')}</div></institution-page-home></section>`);
 // Ultra's start: it routes on to its stream once it has loaded (here, a moment later).
+// A course's page (B8.md): its sticky two-row top bar (94px), then the outline.
+const OUTLINE = SHELL('Course', `<div class="course-content-container"><div class="panel-wrap modern">
+<div class="bb-course-navigation" style="position:sticky;top:0;z-index:10;height:94px;box-sizing:border-box;padding:12px 30px;background:#fff;border-bottom:1px solid #d8d8d8"><b>BIO 1100: Biology I</b><nav><a class="js-course-outline-tool">Content</a> · <a class="js-course-calendar-tool">Calendar</a> · <a class="js-course-grades-tool">Gradebook</a></nav></div>
+<section class="course-outline-content" style="display:flex;gap:24px;padding:24px 30px"><div class="outline-column" style="flex:1">${['Week 1: Cells', 'Week 2: Genetics', 'Lab report 4', 'Midterm review'].map((n, i) => `<div class="content-list-item" data-content-id="_${300 + i}_1" style="border:1px solid #d8d8d8;padding:14px;margin-bottom:8px">${n}</div>`).join('')}</div>
+<aside class="outline-actions" style="width:300px"><div class="outline-action-block js-details-and-actions" style="border:1px solid #d8d8d8;padding:14px"><h3 id="detailsActionsHeader">Details &amp; Actions</h3><a id="course-outline-roster-link">Roster</a></div></aside></section></div></div>`);
 const STREAM = SHELL('Activity Stream', '<section class="js-base-stream-container route-view-container"><div class="base-header"><h1 id="main-heading">Activity Stream</h1></div><div id="activity-stream" style="padding:24px 30px">Nothing new.</div></section>',
   "if (/^\\/ultra\\/?$/.test(location.pathname)) setTimeout(() => history.replaceState(null, '', location.origin + '/ultra/stream'), 50);");
 
@@ -101,7 +108,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       if (u.protocol === 'chrome-extension:') return route.continue();
       if (u.origin !== O || route.request().method() !== 'GET') return route.abort();
       if (u.pathname.startsWith('/learn/api/')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(api(u)) });
-      const page = { '/ultra/course': COURSES, '/ultra/institution-page': INSTITUTION, '/ultra': STREAM, '/ultra/': STREAM, '/ultra/stream': STREAM }[u.pathname];
+      const page = { '/ultra/course': COURSES, '/ultra/institution-page': INSTITUTION, '/ultra': STREAM, '/ultra/': STREAM, '/ultra/stream': STREAM, '/ultra/courses/_101_1/outline': OUTLINE }[u.pathname];
       return page ? route.fulfill({ contentType: 'text/html', body: page }) : route.fulfill({ status: 404, body: '' });
     });
     const opts = await ctx.newPage();
@@ -148,6 +155,13 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       if (width === 1280) {
         ok(await page.evaluate(() => getComputedStyle(document.querySelector('institution-page-home')).display === 'none'), "Dashboard: Ultra's own page is hidden under it");
         ok(await page.evaluate(() => document.querySelector('div.base-header-tools-transclude [role="tablist"] [role="tab"][aria-selected="true"]')?.textContent === 'Dashboard'), 'Dashboard: its tab, chosen, in the header');
+        ok(await page.evaluate(() => document.querySelector('h1#main-heading').textContent === 'Dashboard'), 'Dashboard: the page is headed Dashboard');
+        await page.waitForSelector('section.gz-w[data-tile="todo"] #gz-todo', { timeout: 10000 }).catch(() => {});
+        ok(await page.evaluate(() => !!document.querySelector('section.gz-w[data-tile="todo"] #gz-todo')), 'Dashboard: Better To Do in its tile');
+        const boxes = await page.evaluate(() => [...document.querySelectorAll('#gz-dash section.gz-w')].map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }));
+        ok(boxes.length === 5 && boxes.every((a) => boxes.every((b) => a === b || a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t)), `Dashboard, fresh: ${boxes.length} widgets, none over another`);
+        const used = await page.evaluate(() => { const g = document.querySelector('#gz-dash .gz-dash-grid').getBoundingClientRect(); const t = [...document.querySelectorAll('#gz-dash section.gz-w')].map((e) => e.getBoundingClientRect()); return { left: Math.min(...t.map((r) => r.left)) - g.left, right: g.right - Math.max(...t.map((r) => r.right)) }; });
+        ok(Math.abs(used.left - used.right) <= 1, `Dashboard, fresh: in the middle of its room (${Math.round(used.left)} | ${Math.round(used.right)})`);
       } else ok(await page.evaluate(() => document.querySelector('#gz-dash .gz-dash-grid').hasAttribute('data-stack')), 'Dashboard, 375px: stacked');
       await shot(`dash-light-${width}`);
     }
@@ -237,11 +251,53 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await page.mouse.down();
     await page.mouse.move(nd.left + 200 + 60, nd.top + 90 + 40, { steps: 8 });
     await page.mouse.up();
+    await page.waitForTimeout(300); // the worker stores the change
     const lay = await layout();
-    ok(lay.boards.dash.find((x) => x.id === 'agenda').x !== null && JSON.stringify(lay.boards.courses) === JSON.stringify(JSON.parse(saved).boards.courses), 'the Dashboard moves alone; the Courses page keeps its layout');
+    const differ = lay.boards.courses.filter((x, i) => JSON.stringify(x) !== JSON.stringify(JSON.parse(saved).boards.courses[i]));
+    ok(lay.boards.dash.find((x) => x.id === 'agenda').x !== null && !differ.length, `the Dashboard moves alone; the Courses page keeps its layout${differ.length ? `: ${JSON.stringify(differ)} was ${JSON.stringify(JSON.parse(saved).boards.courses.filter((x) => differ.some((d) => d.id === x.id)))}` : ''}`);
     ok(await page.evaluate(() => !document.querySelector('#gz-dash .gz-dash-grid').hasAttribute('data-stack')), 'tiles laid over each other on purpose stay laid out (no stack)');
     await shot('dash-overlap-edit-light-1280');
     await page.click('#gz-dash .gz-dash-edit');
+
+    // ---- floating over every page ----------------------------------------------------------------------------
+    const arranged = await layout();
+    await open('/ultra/course', 1280, 1400);
+    await page.click('#gz-panel .gz-dash-edit');
+    await page.click(`${tile('timer')} button[aria-label="Float Focus timer on every Blackboard page"]`);
+    await page.waitForTimeout(400);
+    ok(await page.evaluate(() => document.querySelectorAll('section.gz-w[data-tile="timer"]').length === 1 && !!document.querySelector('#gz-float section.gz-w[data-tile="timer"]')), 'Float on every page: the timer floats, once');
+    await page.click('#gz-panel .gz-dash-edit');
+    for (const width of [1280, 375]) {
+      await page.setViewportSize({ width, height: width < 768 ? 860 : 860 });
+      await page.goto(`${O}/ultra/courses/_101_1/outline`);
+      await page.waitForSelector(tile('timer'), { timeout: 15000 });
+      await page.waitForTimeout(500);
+      const g = await page.evaluate(() => { const t = document.querySelector('section.gz-w[data-tile="timer"]').getBoundingClientRect(); const bar = document.querySelector('div.bb-course-navigation').getBoundingClientRect(); const nav = document.querySelector('.MuiDrawer-paper').getBoundingClientRect(); return { t: { l: t.left, tp: t.top, r: t.right, b: t.bottom }, bar: bar.bottom, nav: nav.width ? nav.right : 0, w: innerWidth, h: innerHeight, others: document.querySelectorAll('section.gz-w').length }; });
+      ok(g.t.l >= g.nav && g.t.tp >= g.bar && g.t.r <= g.w && g.t.b <= g.h, `a course page, ${width}px: the timer floats clear of the nav and the course's top bar, on screen`);
+      ok(g.others === 1, `a course page, ${width}px: only the floating widget, not the Courses page's`);
+      await page.screenshot({ path: path.join(out, `outline-float-light-${width}.png`) });
+    }
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await page.click(`${tile('timer')} button[aria-label="Put Focus timer back on the Courses page"]`);
+    await page.waitForTimeout(300);
+    await open('/ultra/course', 1280);
+    ok(await page.evaluate(() => !!document.querySelector('#gz-room section.gz-w[data-tile="timer"]') && !document.querySelector('#gz-float section.gz-w')), 'back on the Courses page, at its place');
+    // An old layout (B5): music floating over every Ultra page at the top left of the window.
+    const old = { tiles: ['notes', 'agenda', 'timer', 'quotes', 'music', 'breathe', 'buddy'].map((id) => ({ id, on: id === 'music' || id === 'notes', float: id === 'music', x: id === 'music' ? 0 : null, y: id === 'music' ? 0 : null })) };
+    await opts.evaluate((l) => chrome.storage.local.set({ widgetLayout: l }), old);
+    await page.goto(`${O}/ultra/courses/_101_1/outline`);
+    await page.waitForSelector(tile('music'), { timeout: 15000 });
+    const mus = await page.evaluate(() => document.querySelector('section.gz-w[data-tile="music"]').getBoundingClientRect().toJSON());
+    ok(Math.abs(mus.left - (200 + 12)) <= 1 && Math.abs(mus.top - (94 + 12)) <= 1, `an old float still floats, at its place in the room (${Math.round(mus.left)}, ${Math.round(mus.top)})`);
+    await store(settingsFor('Frost'));
+    await page.reload();
+    await page.waitForSelector(tile('music'), { timeout: 15000 });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: path.join(out, 'outline-float-dark-1280.png') });
+    await page.setViewportSize({ width: 375, height: 860 });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(out, 'outline-float-dark-375.png') });
+    await opts.evaluate((l) => chrome.storage.local.set({ widgetLayout: l }), arranged);
 
     // ---- dark: the moved layouts, wide and narrow -------------------------------------------------------------
     await store(settingsFor('Frost'));

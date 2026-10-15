@@ -21,15 +21,15 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
     notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
   // Ultra's: its own, and the planning switches, which work on both sites.
-  const ULTRA_EXTRAS = { ...EXTRAS, pet: 'Pet habitat', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
+  const ULTRA_EXTRAS = { ...EXTRAS, pet: 'Pet habitat', dashboard: 'Glaze Dashboard', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.
   const go = (url) => () => {
     let u;
     try { u = new URL(url, location.origin); } catch { return; }
     if (u.protocol === 'https:' || u.protocol === 'http:') location.assign(u.href);
   };
-  // Ultra's Institution page is Glaze's Dashboard while notes, widgets or the pet are on (features/dashboard.js).
-  const dash = () => { const e = ctx.settings().enhance; return e.widgets || e.notes || e.pet ? [['/ultra/institution-page', 'Dashboard']] : []; };
+  // Ultra's Institution page is Glaze's Dashboard while its switch is on (features/dashboard.js).
+  const dash = () => (ctx.settings().enhance.dashboard ? [['/ultra/institution-page', 'Dashboard']] : []);
   const pages = () => (moodle ? [] : ultra ? [...dash(), ...TOOLS] : CANVAS_TOOLS).map(([path, label]) => ({ label: t(label), hint: ultra ? 'Blackboard' : 'Canvas', group: 'Go to', run: go(path) }));
   const store = (patch) => () => { try { chrome.storage.sync.set({ version: 2, ...patch }); } catch { /* extension reloaded under the tab */ } };
   const paletteItems = (cid) => courseItems(cid).p.then((all) => {
