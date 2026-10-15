@@ -8,6 +8,24 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Planning on Blackboard Ultra.** Better To Do (on by default), tasks on course cards, reminders and the streak, Export
+  calendar (.ics), the class schedule, Gradescope in To Do and Google Calendar sync now work on Blackboard Ultra too: the
+  same features, settings and words as on Canvas.
+  - Better To Do takes the place of Ultra's own To Do on the Courses page (Ultra's comes back the moment Glaze's list goes)
+    and is a block beside a course's content on its outline, with that course's work. Your own tasks, steps, "do on" days
+    and focus sessions work as on Canvas; ticks stay on your device (Glaze never writes to Blackboard).
+  - What's due comes from Ultra's To Do list and calendar, read in the parts Ultra allows, and what you handed in, late,
+    missing or excused from each course's gradebook; an item Ultra can't place in a gradebook shows with no status. If
+    Ultra can't send the calendar whole, the list (and a saved export) says some work may be missing. Days are in your
+    browser's time zone. One read serves the list, the cards and the reminders.
+  - Tasks show under each card on the Courses page; a task's link opens the task, not the course.
+  - Reminders show on Blackboard pages, never on a test, assignment or tool page.
+  - The class schedule matches classes to your Blackboard courses by code, then name, and reads a calendar link only on
+    your own Blackboard site. Glaze never reads or makes Ultra's own "Share calendar" link.
+  - Gradescope courses can be placed with Blackboard courses (not yet checked against a real school with Gradescope).
+  - Google Calendar sync also runs from Blackboard pages, behind the same build switch (still off).
+  - The planning features' styles moved to `features/apps.css`, linked on Canvas and Blackboard.
+
 - **Search in your courses on Blackboard Ultra:** the same Ctrl/⌘K search and switch as Canvas, now finding available
   content titles and released public document, announcement and discussion topic text, with native type labels. Current course and term first, up to
   24 results; open current-term courses only, nothing stored, five-minute cache reuse, cancellation on typing, closing or disabling. Unknown release conditions are omitted and transient errors retry after backoff. Read-only public

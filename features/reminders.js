@@ -1,14 +1,15 @@
-// Reminders and streak (Canvas, W11): the student's own opt-in, every part off by default (enhance.remind, remindExam,
-// remindPlan, streak). content.js loads this (need) in the top frame of a Canvas page only while one of them is on, and
-// calls sync(on) from its passes; the logic is lib/remind.js. Nothing leaves the page: no notifications permission, no
-// badge, no sound. A reminder is a toast in the page's corner (one at a time, never taking focus, shown only in the tab
-// being looked at, never on a quiz being taken or a tool's page) and a hub from the To Do header and the command palette.
-// One setTimeout to the next reminder, set again when the page is shown or focused, and at most ten minutes long (a
-// timer stalls while the computer sleeps): never a poll.
-// It reads the shared planner answer (storage.local todoCache) and asks Canvas's planner itself only when that is missing
-// or ten minutes old and neither the To Do list nor the card tasks are on the page to ask. What's seen, snoozed, muted
-// and the streak are kept on this device (storage.local remind:<site>/<user>) through the worker's queue
-// (lib/background.js 'glaze:remind'), apart from Canvas's own read state, which nothing here touches.
+// Reminders and streak (W11), on Canvas and Blackboard Ultra: the student's own opt-in, every part off by default
+// (enhance.remind, remindExam, remindPlan, remindClass, streak). The site's part loads this (need) in the top frame of its
+// pages only while one of them is on, and calls sync(on) from content.js's passes; the logic is lib/remind.js. Nothing
+// leaves the page: no notifications permission, no badge, no sound. A reminder is a toast in the page's corner (one at a
+// time, never taking focus, shown only in the tab being looked at, never on a quiz or test being taken or a tool's page)
+// and a hub from the To Do header and the command palette. One setTimeout to the next reminder, set again when the page is
+// shown or focused, and at most ten minutes long (a timer stalls while the computer sleeps): never a poll.
+// It reads the shared planner answer (storage.local todoCache) and asks the site itself (Canvas's planner; Ultra's To
+// Do, calendar and gradebooks, lib/ultra.js page.due) only when that is missing or ten minutes old and neither the To Do
+// list nor the card tasks are on the page to ask. What's seen, snoozed, muted and the streak are kept on this device
+// (storage.local remind:<site>/<user>) through the worker's queue (lib/background.js 'glaze:remind'), apart from the
+// site's own read state, which nothing here touches.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -17,6 +18,9 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const OLD = 6e5;
   const H = 36e5;
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
+  const ultra = ctx.site === 'ultra';
+  // A class reminder's course on Ultra is a path, and Ultra's <base href> is its CDN: links are made absolute.
+  const abs = (url) => new URL(url, location.origin).href;
   const CATS = [['remind', 'Due-date reminders'], ['remindExam', 'Exam reminders'], ['remindPlan', 'Plan reminders'], ['remindClass', 'Class reminders'], ['streak', 'Streak']];
   const KIND = { due: 'Due date', exam: 'Exam', day: 'Planned day', session: 'Focus session', class: 'Class' };
   let T = null, R = null, who = null, todoKey = '', key = '';
@@ -76,10 +80,19 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const load = async () => {
     const now = Date.now();
     const { start, end } = T.fetchRange(todoO, now, who.tz);
-    const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
-    const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
-    const c = { key: todoKey, at: now, start, end, teach: todoO.teacher && teaches ? null : todoO.teacher, progress: todoO.progress, items: raw.map(T.slim), grading: [], sums: {} };
-    const r = await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key: todoKey, cache: c, due: GZ_CANVAS_DUE_WEEK(raw, now) }, (x) => res(chrome.runtime.lastError ? null : x)); } catch { res(null); } });
+    let c, due;
+    if (ultra) {
+      await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
+      if (!on) throw new Error('off'); // turned off while it loaded: nothing is read
+      const u = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
+      c = { key: todoKey, at: now, start, end, teach: todoO.teacher, progress: todoO.progress, items: u.items, complete: u.complete, grading: [], sums: {} };
+    } else {
+      const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
+      const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
+      c = { key: todoKey, at: now, start, end, teach: todoO.teacher && teaches ? null : todoO.teacher, progress: todoO.progress, items: raw.map(T.slim), grading: [], sums: {} };
+      due = GZ_CANVAS_DUE_WEEK(raw, now);
+    }
+    const r = await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key: todoKey, cache: c, due }, (x) => res(chrome.runtime.lastError ? null : x)); } catch { res(null); } });
     const best = r?.cache || c;
     if (!(cache?.key === todoKey && cache.at > best.at)) cache = best;
     arm();
@@ -87,8 +100,10 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   // The To Do list and the card tasks ask for themselves where they run, if they're on: by content.js's own gates
   // (todoHere; cardsHere with Canvas's course cards on the page, as syncCardTasks), not by whether they've drawn yet.
   // The Dashboard without cards (its list view) has no card tasks, so there this asks for itself.
+  // Ultra: the Courses page and a course's outline (content-ultra.js syncTodo and syncCardTasks).
   const theyAsk = () => {
     const e = en(), p = location.pathname;
+    if (ultra) return (e.todo && /^\/ultra\/(course\/?$|courses\/_\d+_\d+\/outline)/.test(p)) || (e.cardTasks && /^\/ultra\/course\/?$/.test(p) && !!document.querySelector('article[id^="course-list-course-"]'));
     return (e.todo && /^\/(courses\/\d+\/?)?$/.test(p)) || (e.cardTasks && p === '/' && !!document.querySelector('.ic-DashboardCard'));
   };
   // Class reminders alone (the class schedule kept on this device) never ask Canvas for the planner.
@@ -103,12 +118,14 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   // The list over the next eight days and the past month, as Better To Do counts it (lib/todo.js build).
   const reckon = (now) => {
     gs ||= T.gradescope(() => { if (on) arm(); });
-    const b = T.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], data, o: { ...todoO, span: 'custom', unit: 'days', n: 8, start: 'rolling', past: 'month', group: false }, now, tz: who.tz, cids, sync: todoO.sync });
+    // Ultra has no planner to tick in: its ticks are this device's, as Better To Do's there.
+    const b = T.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], data, o: { ...todoO, span: 'custom', unit: 'days', n: 8, start: 'rolling', past: 'month', group: false }, now, tz: who.tz, cids, sync: !ultra && todoO.sync });
     const extra = [...sources.values()].flatMap((f) => { try { return f() || []; } catch { return []; } });
     return { b, evs: R.events({ rows: b.groups.flatMap(([, l]) => l), cats: { due: en().remind, exam: en().remindExam, plan: en().remindPlan }, o, tz: who.tz, extra }) };
   };
-  // Not over a quiz being taken or a tool's page (New Quizzes), and only in the tab being looked at: it waits for the next.
-  const quiet = () => document.visibilityState !== 'visible' || /\/quizzes\/\d+\/take|\/external_tools\//.test(location.pathname);
+  // Not over a quiz being taken or a tool's page (New Quizzes; on Ultra, any test or assignment page, an attempt, and an
+  // LTI tool), and only in the tab being looked at: it waits for the next.
+  const quiet = () => document.visibilityState !== 'visible' || (ultra ? /\/(assessment|attempt|lti)(\/|$)/ : /\/quizzes\/\d+\/take|\/external_tools\//).test(location.pathname);
   const arm = () => {
     clearTimeout(timer);
     timer = 0;
@@ -221,7 +238,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const notesFor = (e) => (e.cat === 'class' && en().notes && e.url?.match(/^\/courses\/(\d+)$/)?.[1]) || '';
   const toast = (e, more) => {
     const now = Date.now();
-    const title = e.url ? make('a', { href: e.url, className: 'gz-rm-title', textContent: e.title }) : make('strong', { className: 'gz-rm-title', textContent: e.title });
+    const title = e.url ? make('a', { href: abs(e.url), className: 'gz-rm-title', textContent: e.title }) : make('strong', { className: 'gz-rm-title', textContent: e.title });
     const snooze = e.until > now + H && button(t('Snooze 1 hour'), 'snooze');
     const card = make('section', { className: 'gz-rm-toast' },
       make('p', { className: 'gz-rm-what' }, make('span', { textContent: what(e, now) }), button('×', 'hide', t('Dismiss'))),
@@ -321,7 +338,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
           const at = e.snoozed ? t('Snoozed until {when}', { when: when(e.snoozed, now).abs }) : when(e.seen, now).abs;
           return make('li', {}, make('span', { className: 'gz-rm-at', textContent: at }),
             make('span', { className: 'gz-rm-main' }, make('span', { className: 'gz-rm-kind', textContent: what(e, now) }),
-              e.url ? make('a', { href: e.url, textContent: e.title }) : make('span', { textContent: e.title })), mute);
+              e.url ? make('a', { href: abs(e.url), textContent: e.title }) : make('span', { textContent: e.title })), mute);
         }))));
       }
       const muted = Object.keys(st.mute).filter((k) => titles.has(k));
@@ -348,7 +365,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
       check(t('Streak'), 'enhance.streak', e.streak),
       button(t('All Glaze settings'), 'options'));
     for (const el of set.querySelectorAll('[data-key]')) el.dataset.focus = el.dataset.key;
-    parts.push(set, make('p', { className: 'gz-rm-desc', textContent: t('Reminders show only on Canvas pages while one is open. They stay on this device and change nothing in Canvas.') }));
+    parts.push(set, make('p', { className: 'gz-rm-desc', textContent: ultra ? t('Reminders show only on Blackboard pages while one is open. They stay on this device and change nothing in Blackboard.') : t('Reminders show only on Canvas pages while one is open. They stay on this device and change nothing in Canvas.') }));
     hub.firstChild.replaceChildren(...parts.filter(Boolean));
     if (was) (hub.querySelector(`[data-focus="${CSS.escape(was)}"]`) || hub.querySelector('[data-act="close"]'))?.focus({ preventScroll: true });
   };
@@ -406,11 +423,11 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     T = globalThis.GZ_TODO;
     R = globalThis.GZ_REMIND;
     const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
-    if (!/^\d+$/.test(String(p?.id))) throw new Error('no profile');
+    if (!T.ID.test(String(p?.id))) throw new Error('no profile');
     who = { uid: String(p.id), tz: T.zone(p.time_zone) };
     // Active courses only, as the To Do's Dashboard list: a concluded course's work reminds of nothing. An empty answer
     // (none, or the request failed) filters nothing.
-    const live = list.filter((c) => /^\d+$/.test(String(c.id)) && !c.access_restricted_by_date);
+    const live = list.filter((c) => T.ID.test(String(c.id)) && !c.access_restricted_by_date);
     cids = live.length ? new Set(live.map((c) => String(c.id))) : null;
     todoKey = T.storeKey(location.origin, who.uid);
     key = R.storeKey(location.origin, who.uid);
