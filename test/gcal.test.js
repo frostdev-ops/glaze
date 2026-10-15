@@ -558,3 +558,46 @@ withMock('review (P1): the Gradescope answer taken back while the token is await
   assert.equal((await send(next)).ok, true);
   assert.deepEqual(mock.live(cal).map((e) => e.summary), ['Lab 1']);
 });
+
+// Blackboard Ultra pages are a source too (B2): the page composes from Ultra's due items (lib/ultra.js pageDue, as
+// content-ultra.js gives them: links whole, on the site), and the worker takes the batch only from an Ultra page of that
+// account's own site.
+const ULTRA = 'https://bb.example.edu', ULTRA_SRC = `${ULTRA}/_900_1`;
+const ultraComposer = (store) => {
+  const get = (area) => (keys, cb) => { const all = structuredClone(store[area]); cb(keys === null ? all : Object.fromEntries([keys].flat().filter((k) => k in all).map((k) => [k, all[k]]))); };
+  const items = [{ type: 'assignment', id: '_603_1', cid: '_101_1', course: 'Biology', title: 'Lab 1', at: Date.parse('2026-10-20T03:59:00Z'), allDay: false, sub: null, ov: null,
+    url: `${ULTRA}/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_1003_1` }];
+  const asked = [];
+  const c = vm.createContext({
+    TextEncoder, URL, Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
+    location: { origin: ULTRA, host: 'bb.example.edu' },
+    chrome: { runtime: {}, storage: { sync: { get: get('sync') }, local: { get: get('local') } } },
+    fetch: async () => { throw new Error('an Ultra page asks lib/ultra.js, never Canvas'); },
+    GZ_ULTRA: { pageDue: async (ctx, from, to) => { asked.push([from, to]); return { items: items.filter((i) => i.at >= from && i.at < to), complete: true }; } },
+    GZ_CTX: { site: 'ultra', t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]), need: async () => {}, settings: () => D.GZ_SANITIZE(store.sync),
+      profile: async () => ({ id: '_900_1', time_zone: 'America/New_York' }), canvasCourses: async () => [{ id: '_101_1', name: 'Biology' }] },
+  });
+  vm.runInContext('globalThis.globalThis = this; Date.UTC = Object.getPrototypeOf(Date).UTC; Date.parse = Object.getPrototypeOf(Date).parse;', c);
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/todo.js', 'lib/ics.js', 'lib/calexport.js', 'lib/gradescope.js', 'lib/classes.js', 'features/calexport.js']) vm.runInContext(read(f), c);
+  return { compose: () => c.GZ_CAL_UI.compose(null, () => true), asked };
+};
+
+withMock('Ultra pages sync too: the page composes from Ultra\'s due items, and the worker takes it from an Ultra page of that account\'s site only', async (mock) => {
+  const w = worker(mock);
+  await w.send({ type: 'glaze:gcal', op: 'connect' }, EDITOR);
+  const cal = w.store.local.gcal.cal;
+  const { compose, asked } = ultraComposer(w.store);
+  const c = await compose();
+  assert.ok(asked.length > 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(c.events.map((e) => [e.summary, e.url]))), [['Lab 1', `${ULTRA}/ultra/redirect?redirectType=nautilus&courseId=_101_1&contentId=_1003_1`]]);
+  const page = { id: 'glaze', tab: { id: 5 }, frameId: 0, url: `${ULTRA}/ultra/course` };
+  const send = (src, sender) => w.send({ type: 'glaze:gcal', op: 'sync', src, events: c.events, from: c.from, first: c.first, consent: consentOf(w, src) }, sender);
+  assert.deepEqual(await send('https://other.example.edu/_900_1', page), { ok: false, error: 'sender' }, "another site's account");
+  assert.deepEqual(await send(ULTRA_SRC, { ...page, url: 'http://bb.example.edu/ultra/course' }), { ok: false, error: 'sender' }, 'not over https');
+  assert.deepEqual(await send(ULTRA_SRC, { ...page, url: `${ULTRA}/webapps/login/` }), { ok: false, error: 'sender' }, 'not an Ultra page');
+  assert.equal((await send(ULTRA_SRC, page)).ok, true);
+  assert.deepEqual(mock.live(cal).map((e) => e.summary), ['Lab 1']);
+  assert.ok(w.store.local.gcal.last[ULTRA_SRC] > 0);
+  // The page side runs there too, by the site's part and its _N_N account (features/gcal.js).
+  assert.match(read('features/gcal.js'), /ctx\.site !== 'canvas' && ctx\.site !== 'ultra'/);
+});
