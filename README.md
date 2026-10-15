@@ -78,10 +78,19 @@ Its animated scene also stops and releases its rendering resources.
 
 Blackboard Ultra's base navigation supports both its newer MUI drawer and legacy rail. In the editor, choose a Glaze,
 school or device-only custom logo, set precise rail/icon/label sizes and spacing, and add up to eight http/https links
-with built-in icons. Native items can be reordered or hidden and restored with Reset navigation; the Institution page
-entry reads Dashboard with its original destination. Optional clock/date, cached next-due item, shared focus timer and
+with built-in icons. Compact rows use ellipsis and full labels on hover/focus, with optional two-line word wrap or a bounded smaller font.
+Choose tile/pill/flat items, backgrounds, active indicators, logo size/alignment and footer visibility. Each editor section
+has its own reset; drag or arrow-key handles reorder items and widgets. The real nav preview follows the current Look,
+with expanded/collapsed/icons-only and light/dark views. Native items can be reordered or hidden and restored with Reset navigation; the Institution page
+entry reads Dashboard with its original destination while Glaze's Dashboard is enabled. Optional clock/date, next-due item, shared focus timer and
 pet-level widgets can be ordered at the top or bottom. Export all includes the navigation settings and links; local
 pictures remain on their device, and Look codes carry only the existing appearance fields.
+Next due shares the agenda/Better To Do planner and account/cache rules, refreshing only while enabled and visible,
+with a one-minute backoff after a failed read.
+The bundled logo, sizes and Dashboard naming apply on the initial path; custom local pixels use that logo until ready. Optional order/hiding, links and widgets settle after
+their on-demand module arrives. A collapsed rail expands over the page on hover (optional), keyboard focus or its touch
+control; leaving it or tapping outside closes that temporary overlay without changing the saved collapsed preference.
+Narrow modal drawers keep Ultra's native width.
 
 ## Install
 

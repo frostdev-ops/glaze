@@ -24,9 +24,13 @@ All notable changes to Glaze are documented here. The format follows
 
 - **Blackboard navigation:** the newer MUI drawer and legacy rail now share Glaze's styling, with a bundled Glaze logo
   at first paint, school/device-only custom logos, precise sizes and spacing, custom http/https links with built-in
-  icons, reversible native-item order/hiding and Reset. Institution page reads Dashboard at the same link. Optional
-  clock/date, cached next-due item, shared focus timer and pet level can sit at the top or bottom. The editor previews
-  the real Ultra nav rules; navigation settings and custom links are included in Export all.
+  icons, reversible native-item order/hiding and Reset. Institution page reads Dashboard at the same link while
+  Glaze's Dashboard is enabled. Optional clock/date, planner-backed next-due item, shared focus timer and pet level can sit at the top or bottom. The editor previews
+  the real Ultra nav rules, with compact rows, ellipsis/wrap/shrink labels, tile/pill/flat items, active indicators,
+  logo alignment and footer controls, section resets, drag/keyboard reordering and a collapsed-rail hover/focus/touch overlay
+  that keeps page content in place. Navigation settings and custom links
+  are included in Export all. Next due stops pending reads when its widget or page changes and backs off failed reads
+  for a minute; callbacks from an invalidated extension stop scheduling.
 
 - **Optional encrypted share sessions.** Create/join by pasted invite, copy view/edit invites, see encrypted editing-device last-seen information, pause/resume, leave locally, creator deletion and opt-in one-year expiry. Selected notes/folders and encrypted files, the current Look, and selected custom tasks/plans stay copied locally and catch up when reopened. Looks apply only by explicit choice; joined data never replaces existing app items. Recovery can re-upload retained files after a relay restore. Notes import/Export all now use an extension-only backup surface; all settings/notes backups always include session keys and creator delete tokens with a private-backup warning. On-demand only, with no LMS first-script increase or new dependencies. Relay deployment and native Safari/Firefox live checks remain separate.
 
