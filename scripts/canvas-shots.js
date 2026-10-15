@@ -139,7 +139,12 @@ const devCopy = (dest) => {
   // The parts of assets/ the extension ships (package.sh): the card pets, the stickers and the pointer sets.
   for (const d of ['assets/art/pets', 'assets/art/stickers', 'assets/art/cursors']) fs.cpSync(path.join(root, d), path.join(dest, d), { recursive: true });
   const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-  for (const e of [...(m.content_scripts || []), ...(m.web_accessible_resources || [])]) e.matches.push('http://localhost/*');
+  // Glaze's first script is one entry per site, each with its own part (content-ultra.js, content-canvas.js): localhost
+  // gets the one the LMS under test runs, as lib/background.js would register it (Moodle's: Canvas's without its part).
+  const glaze = (m.content_scripts || []).filter((e) => e.js.at(-1) === 'content.js');
+  for (const e of [...(m.content_scripts || []).filter((x) => !glaze.includes(x)), ...(m.web_accessible_resources || [])]) e.matches.push('http://localhost/*');
+  const canvas = glaze.find((e) => e.matches.includes('https://*.instructure.com/*'));
+  m.content_scripts.push({ ...canvas, matches: ['http://localhost/*'], exclude_matches: undefined, js: canvas.js.filter((f) => LMS === 'canvas' || f !== 'content-canvas.js') });
   // And to inject there: Glaze's on-demand files (lib/background.js 'glaze:load') need host access.
   m.host_permissions = [...(m.host_permissions || []), 'http://localhost/*'];
   fs.writeFileSync(path.join(dest, 'manifest.json'), JSON.stringify(m, null, 2));

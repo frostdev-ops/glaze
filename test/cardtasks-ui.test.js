@@ -194,7 +194,7 @@ test("a list that goes without an answer (it failed) leaves the cards to ask for
 });
 
 test('one profile request a page, whoever asks (Better To Do and the cards)', async () => {
-  const decl = read('content.js').match(/ {2}let mine = null;\n {2}const profile = .*\n/)[0];
+  const decl = read('content-canvas.js').match(/ {2}let mine = null;\n {2}const profile = .*\n/)[0];
   const asked = [];
   const ctx = { capi: (u) => { asked.push(u); return Promise.resolve({ id: '3' }); } };
   vm.createContext(ctx);

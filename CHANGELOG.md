@@ -247,6 +247,11 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Changed
 
+- **Blackboard (for what comes next):** Glaze can now read Ultra's courses and terms, what's due (To Do in two-week
+  slices and the calendar), where each piece of work stands (on time, late, missing, excused, or unknown, never
+  guessed) and the gradebook, in the same shapes its Canvas planning and grade features use. Courses with no overall
+  formula Glaze can read get a share-of-points estimate, labelled as one. Nothing new is shown yet, and nothing is
+  read until a feature asks; when one does, only GETs to your own Blackboard site, one at a time.
 - **Better To Do is on by default** on Canvas (owner decision). One switch in the editor turns it off and brings back
   Canvas's own To Do; What's new says so once.
 - **Rose palette:** its accent is a little darker (#c026d3 → #b31fc4), so links and active labels pass 4.5:1 on Rose's
@@ -265,6 +270,9 @@ All notable changes to Glaze are documented here. The format follows
 - **And about 30 KB less again:** draft backup, Blackboard's what-if calculator, the document buttons (focus mode,
   reading time, dark file previews) and remembering your place in a course now load only on the pages where they
   appear. They work as before.
+- **Each LMS loads only its own code:** Blackboard, Canvas and Moodle pages no longer start with each other's
+  extras. A page now starts with about 21 KB less code on Blackboard, 27 KB less on Canvas and 57 KB less on Moodle.
+  Everything looks and works as before.
 
 ### Fixed
 
@@ -282,6 +290,11 @@ All notable changes to Glaze are documented here. The format follows
 - **Canvas:** quiz preview notices use the palette.
 - **Canvas, dark palettes:** an instructor's text in a dark colour (navy, dark green, deep red) is lifted to a
   light shade of the same colour.
+- **Blackboard, folder previews and Download all:** Glaze no longer receives or keeps the launch credentials (`key`
+  and `secret`) Blackboard includes for some course tool links in its content answers. Both ask only for the fields
+  they use, and folder previews keep only each item's title, state and due date. They were never stored, logged or
+  sent, but folder previews held them in memory for the page's life. Download all now reads a File item's file
+  through Blackboard's public content API, and whether an item is a document from the course's public content list.
 
 ## [2.2.0] — 2026-10-15
 

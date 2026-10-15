@@ -1,4 +1,4 @@
-// The Canvas grades extras as they behave on a page (features/grades.js, and content.js's card grades), run in a VM
+// The Canvas grades extras as they behave on a page (features/grades.js, and content-canvas.js' card grades), run in a VM
 // on a small stand-in for the DOM and chrome.storage, with Canvas's answers from the local Canvas fixture.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -564,8 +564,8 @@ test('GPA: of two transcript files picked one after the other, the later one is 
   assert.doesNotMatch(p.hist().textContent, /Fall 2024/);
 });
 
-// ---- content.js: the Dashboard cards' grade, as a link of its own ----
-const source = read('content.js');
+// ---- content-canvas.js: the Dashboard cards' grade, as a link of its own ----
+const source = read('content-canvas.js');
 const block = (from, to) => { const a = source.indexOf(from), b = source.indexOf(to, a); assert.ok(a > 0 && b > a, `${from} … ${to}`); return source.slice(a, b); };
 const dashboard = () => {
   const doc = page();
@@ -576,7 +576,7 @@ const dashboard = () => {
   card.append(el(doc, 'div', { className: 'ic-DashboardCard__header' }, link));
   doc.body.append(card);
   const list = [{ id: '27', enrollments: [{ type: 'student', computed_current_score: 83.5 }] }];
-  const ctx = vm.createContext({ document: doc, observer: {}, GZ_PAGE: require('../lib/page.js'), locale: () => 'en', t: (k, v) => I.t(k, v, 'en'), canvasCourses: () => Promise.resolve(list) });
+  const ctx = vm.createContext({ document: doc, I: { observer: {} }, GZ_PAGE: require('../lib/page.js'), locale: () => 'en', t: (k, v) => I.t(k, v, 'en'), canvasCourses: () => Promise.resolve(list) });
   vm.runInContext(`${block('  const tagCanvasCards = () => {', '  // Canvas: its course colors come inline')}; globalThis.tag = tagCanvasCards;`, ctx);
   return { doc, card, list, tag: ctx.tag };
 };

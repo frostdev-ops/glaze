@@ -64,6 +64,20 @@
 		3B8EDC31307C30D500B0DD77 /* motion.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA7307C30D500B0DD77 /* motion.css */; };
 		3B8EDC32307C30D500B0DD77 /* defaults.js in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA8307C30D500B0DD77 /* defaults.js */; };
 		3B8EDC33307C30D500B0DD77 /* canvas.css in Resources */ = {isa = PBXBuildFile; fileRef = 3B8EDAA9307C30D600B0DD77 /* canvas.css */; };
+		B0B1000000000000000000A1 /* content-ultra.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F1 /* content-ultra.js */; };
+		B0B1000000000000000000C1 /* content-ultra.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F1 /* content-ultra.js */; };
+		B0B1000000000000000000A2 /* content-canvas.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F2 /* content-canvas.js */; };
+		B0B1000000000000000000C2 /* content-canvas.js in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F2 /* content-canvas.js */; };
+		B0B1000000000000000000A3 /* moodle.css in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F3 /* moodle.css */; };
+		B0B1000000000000000000C3 /* moodle.css in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F3 /* moodle.css */; };
+		D230000000000000000000A1 /* reader.html in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F1 /* reader.html */; };
+		D230000000000000000000C1 /* reader.html in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F1 /* reader.html */; };
+		D230000000000000000000A2 /* reader.js in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F2 /* reader.js */; };
+		D230000000000000000000C2 /* reader.js in Resources */ = {isa = PBXBuildFile; fileRef = D230000000000000000000F2 /* reader.js */; };
+		B0B1000000000000000000A4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
+		B0B1000000000000000000C4 /* features in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F4 /* features */; };
+		B0B1000000000000000000A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
+		B0B1000000000000000000C5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = B0B1000000000000000000F5 /* assets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -143,6 +157,13 @@
 		3B8EDC06307C30D500B0DD77 /* Main.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Main.html; sourceTree = "<group>"; };
 		3B8EDC07307C30D500B0DD77 /* iOS.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = iOS.css; sourceTree = "<group>"; };
 		3B8EDC08307C30D500B0DD77 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B0B1000000000000000000F1 /* content-ultra.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-ultra.js"; path = "Resources/content-ultra.js"; sourceTree = "<group>"; };
+		B0B1000000000000000000F2 /* content-canvas.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "content-canvas.js"; path = "Resources/content-canvas.js"; sourceTree = "<group>"; };
+		B0B1000000000000000000F3 /* moodle.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; name = moodle.css; path = Resources/moodle.css; sourceTree = "<group>"; };
+		D230000000000000000000F1 /* reader.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = reader.html; path = Resources/reader.html; sourceTree = "<group>"; };
+		D230000000000000000000F2 /* reader.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = reader.js; path = Resources/reader.js; sourceTree = "<group>"; };
+		B0B1000000000000000000F4 /* features */ = {isa = PBXFileReference; lastKnownFileType = folder; name = features; path = Resources/features; sourceTree = "<group>"; };
+		B0B1000000000000000000F5 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = Resources/assets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -246,6 +267,13 @@
 				3B8EDAA7307C30D500B0DD77 /* motion.css */,
 				3B8EDAA8307C30D500B0DD77 /* defaults.js */,
 				3B8EDAA9307C30D600B0DD77 /* canvas.css */,
+				B0B1000000000000000000F1 /* content-ultra.js */,
+				B0B1000000000000000000F2 /* content-canvas.js */,
+				B0B1000000000000000000F3 /* moodle.css */,
+				D230000000000000000000F1 /* reader.html */,
+				D230000000000000000000F2 /* reader.js */,
+				B0B1000000000000000000F4 /* features */,
+				B0B1000000000000000000F5 /* assets */,
 			);
 			name = Resources;
 			path = "Glaze Extension";
@@ -421,6 +449,13 @@
 				3B8EDAB8307C30D500B0DD77 /* defaults.js in Resources */,
 				3B8EDAB9307C30D500B0DD77 /* canvas.css in Resources */,
 				3B8EDAB4307C30D500B0DD77 /* options.html in Resources */,
+				B0B1000000000000000000A1 /* content-ultra.js in Resources */,
+				B0B1000000000000000000A2 /* content-canvas.js in Resources */,
+				B0B1000000000000000000A3 /* moodle.css in Resources */,
+				D230000000000000000000A1 /* reader.html in Resources */,
+				D230000000000000000000A2 /* reader.js in Resources */,
+				B0B1000000000000000000A4 /* features in Resources */,
+				B0B1000000000000000000A5 /* assets in Resources */,
 			);
 		};
 		3B8EDC0D307C30D500B0DD77 /* Resources */ = {
@@ -456,6 +491,13 @@
 				3B8EDC31307C30D500B0DD77 /* motion.css in Resources */,
 				3B8EDC32307C30D500B0DD77 /* defaults.js in Resources */,
 				3B8EDC33307C30D500B0DD77 /* canvas.css in Resources */,
+				B0B1000000000000000000C1 /* content-ultra.js in Resources */,
+				B0B1000000000000000000C2 /* content-canvas.js in Resources */,
+				B0B1000000000000000000C3 /* moodle.css in Resources */,
+				D230000000000000000000C1 /* reader.html in Resources */,
+				D230000000000000000000C2 /* reader.js in Resources */,
+				B0B1000000000000000000C4 /* features in Resources */,
+				B0B1000000000000000000C5 /* assets in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */

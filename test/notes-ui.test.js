@@ -357,7 +357,8 @@ test('turning Notes on puts the Course notes hook into course homes already open
   injected.length = 0;
   for (const f of listeners) f('canvas', { tab: { id: 8 }, frameId: 0, url: 'https://canvas.new.edu/courses/3' }, () => {});
   await wait(20);
-  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, require('../manifest.json').content_scripts[0].js.join()], [8, 'features/notes-home.js']]);
+  const canvasFirst = require('../manifest.json').content_scripts.find((c) => c.matches.includes('https://*.instructure.com/*')).js; // Canvas's first script (B0b)
+  assert.deepEqual(injected.map(([tab, , files]) => [tab, files]), [[8, canvasFirst.join()], [8, 'features/notes-home.js']]);
   assert.ok(registered.find((s) => s.id === 'gz-notes-home').matches.includes('https://canvas.new.edu/courses/*'));
 });
 
