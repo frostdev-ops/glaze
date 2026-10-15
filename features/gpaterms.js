@@ -1,8 +1,8 @@
 // The GPA's past terms, trends and goal, loaded on demand: features/grades.js draws it in the Dashboard's GPA (Ultra: on its
 // Grades page), under "Past terms, trends and goal", while that is open (and asks for it from the command palette).
-// - Past terms: typed in, or read on this device from a transcript's text, a web page or a Word file (lib/doctext.js),
-//   and always shown for review before they are kept. Pass/fail, withdrawn and transfer rows are listed, not counted.
-//   PDF and photo transcripts wait on the owner's decision (DECISIONS.md), as does any AI reading.
+// - Past terms: typed in, or read on this device from a transcript's text, a PDF, a picture or screenshot (also
+//   pasted), a web page or a Word file (features/import.js), and always shown for review before they are kept.
+//   Pass/fail, withdrawn and transfer rows are listed, not counted. Any AI reading waits on the owner (DECISIONS.md).
 // - Trends: term and cumulative GPA over time, an inline chart in the palette's colors, with the same figures as a
 //   table for screen readers and keyboards.
 // - Goal: a cumulative or term GPA to reach; what this term needs, and one way there from the grades now, with the
@@ -23,8 +23,11 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   const docIn = () => X.need('lib/doctext.js', () => globalThis.GZ_DOCTEXT);
   // What the view keeps between draws: terms in review, the import's text, a word for the student, the terms open, the
   // goal kind picked before a value, the courses' answers, and where focus goes next.
-  const V = { review: null, text: '', note: '', open: new Set(), importOpen: false, kind: 'cum', needs: new Map(), caps: new Map(), focus: null, gen: 0 };
+  // reading: the AbortController and words of a PDF or picture being read, until it ends or another read starts; ocr:
+  // what came from a picture, for the review's note.
+  const V = { review: null, text: '', note: '', open: new Set(), importOpen: false, kind: 'cum', needs: new Map(), caps: new Map(), focus: null, gen: 0, reading: null, ocr: null };
   let body, api;
+  const hooked = new WeakSet();
   const redraw = () => { if (body?.isConnected) draw(body, api); };
   const saved = (ok) => { if (!ok) { V.note = t('Not saved. Try again in a moment.'); redraw(); } };
   const stat = (term, w) => C().gpa(G().rowsOf(term, w));
@@ -203,30 +206,50 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
   // ---- importing a transcript --------------------------------------------------------------------------------------
   // Read here, never sent anywhere; what it finds goes to review first. Each read (a file picked, Read it, Cancel) is a
   // new generation: a file still being read when another read starts is dropped, not shown over it.
-  const review = (text) => {
+  const review = (text, ocr = null) => {
     const found = G().parse(text);
     V.note = found.length ? '' : t('Glaze found no terms or courses in that. Paste the part with your courses and grades, or add terms by hand.');
     V.review = found.length ? found.map((x) => ({ ...x, id: G().newId() })) : null;
+    V.ocr = found.length ? ocr : null;
     V.focus = found.length ? 'rev:h' : 'imp:text';
     redraw();
   };
+  // A PDF or picture is read while "Past terms, trends and goal" is open: closing it (draw's hook), the view gone from
+  // the page, Stop reading or another read calls it off, and what it found is shown only if the view is still open.
+  const shown = () => !!body?.isConnected && body.closest('details')?.open !== false;
   const readFile = async (file) => {
     const gen = ++V.gen;
-    const show = (text) => { if (gen === V.gen) review(text); };
+    V.reading?.ctl.abort();
+    const ctl = new AbortController();
+    // Kept from the start, so it can be called off before it has said anything.
+    V.reading = { ctl, say: '' };
+    const show = (text, ocr) => { if (gen === V.gen && shown()) review(text, ocr); };
+    // Only a PDF or picture says how far it has got: its first word draws the progress line and Stop reading.
+    const prog = (s) => {
+      if (!shown() || gen !== V.gen || V.reading?.ctl !== ctl) return ctl.abort();
+      const first = !V.reading.say;
+      V.reading.say = s;
+      const el = body.querySelector('[data-f="imp:prog"]');
+      if (first || !el) redraw(); else el.textContent = s;
+    };
     try {
-      const name = file.name.toLowerCase();
-      if (/\.(pdf|png|jpe?g|gif|webp|heic|tiff?)$/.test(name) || /^(image\/|application\/pdf)/.test(file.type)) { V.note = t("PDF and photo transcripts can't be read yet: open it, copy its text and paste it here."); return redraw(); }
-      if (file.size > 5e6) throw new Error('too large');
-      if (/\.docx$/.test(name)) { await docIn(); return show(await GZ_DOCTEXT.docx(new Uint8Array(await file.arrayBuffer()))); }
-      if (/\.html?$/.test(name) || file.type === 'text/html') { await docIn(); return show(GZ_DOCTEXT.html(await file.text())); }
-      return show(await file.text());
-    } catch { if (gen === V.gen) { V.note = t("Glaze couldn't read that file."); V.focus = 'imp:file'; redraw(); } }
+      await X.need('features/import.js', () => globalThis.GZ_IMPORT);
+      const r = await GZ_IMPORT.read(file, { signal: ctl.signal, progress: prog });
+      if (V.reading?.ctl === ctl) V.reading = null;
+      show(r.text, r.ocr);
+    } catch (e) {
+      if (V.reading?.ctl === ctl) V.reading = null;
+      if (gen === V.gen) { V.note = e?.cancelled ? t('Stopped.') : e?.mine ? e.message : t("Glaze couldn't read that file."); V.focus = 'imp:file'; redraw(); }
+    }
   };
   const importer = () => {
     const area = f(label(make('textarea', { rows: 5, value: V.text, placeholder: 'Fall 2024\nBIO 101  Introduction to Biology  4.0  A-' }), t("Your transcript's text")), 'imp:text');
     area.addEventListener('input', () => { V.text = area.value; });
     // A table copied from a web page keeps its rows when its HTML is read (lib/doctext.js).
     area.addEventListener('paste', (e) => {
+      // A screenshot of the transcript, read like a picture file.
+      const img = e.isTrusted && [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith('image/'));
+      if (img) { e.preventDefault(); if (!V.reading) readFile(img); return; }
       const html = e.clipboardData?.getData('text/html');
       const plain = e.clipboardData?.getData('text/plain') || '';
       if (!html) return;
@@ -234,12 +257,14 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       const [a, b] = [area.selectionStart, area.selectionEnd];
       docIn().then(() => GZ_DOCTEXT.html(html), () => plain).catch(() => plain).then((text) => { area.setRangeText(text, a, b, 'end'); V.text = area.value; });
     });
-    const file = f(label(make('input', { type: 'file', accept: '.txt,.htm,.html,.docx,text/plain,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), t('A transcript file: text, a web page or Word')), 'imp:file');
+    const file = f(label(make('input', { type: 'file', accept: '.pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.txt,.htm,.html,.docx,application/pdf,image/*,text/plain,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), t('A transcript file: a PDF, a picture or screenshot, text, a web page or Word')), 'imp:file');
     file.addEventListener('change', () => { if (file.files?.[0]) readFile(file.files[0]); });
-    const go = btn(t('Read it'), 'imp:go', () => { V.gen++; review(V.text); });
-    const box = make('details', { className: 'gz-gpa-more', open: !!V.text || !!V.importOpen }, make('summary', { textContent: t('Import from a transcript') }),
-      note(t("Read on this device; nothing is uploaded. Text, web pages and Word files work. PDF and photo transcripts can't be read yet: copy the text and paste it here.")),
-      area, make('div', { className: 'gz-gpa-actions' }, go, file));
+    const go = btn(t('Read it'), 'imp:go', () => { V.gen++; V.reading?.ctl.abort(); review(V.text); });
+    const busy = V.reading?.say && make('div', { className: 'gz-gpa-actions' }, f(make('span', { className: 'gz-gpa-note', role: 'status', textContent: V.reading.say }), 'imp:prog'),
+      btn(t('Stop reading'), 'imp:stop', () => V.reading?.ctl.abort()));
+    const box = make('details', { className: 'gz-gpa-more', open: !!V.text || !!V.importOpen || !!V.reading?.say }, make('summary', { textContent: t('Import from a transcript') }),
+      note(t('Read on this device; nothing is uploaded. PDFs, pictures and screenshots (paste one into the box), text, web pages and Word files work.')),
+      area, make('div', { className: 'gz-gpa-actions' }, go, file), busy || '');
     box.addEventListener('toggle', () => { V.importOpen = box.open; });
     return box;
   };
@@ -264,12 +289,17 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
       api.save({ op: 'add', terms }).then(saved);
     });
     const cancel = btn(t('Cancel'), 'rev:cancel', () => { Object.assign(V, { review: null, focus: 'imp:text', gen: V.gen + 1 }); redraw(); });
-    return label(make('section', { className: 'gz-gpa-review' }, h, ...terms, make('div', { className: 'gz-gpa-actions' }, add, cancel)), t('Review'));
+    // Read from a picture: every grade and credit is the OCR engine's reading, so the note says to check them.
+    const ocr = V.ocr && globalThis.GZ_IMPORT && note(GZ_IMPORT.note(V.ocr));
+    return label(make('section', { className: 'gz-gpa-review' }, h, ocr || '', ...terms, make('div', { className: 'gz-gpa-actions' }, add, cancel)), t('Review'));
   };
 
   // ---- the view ----------------------------------------------------------------------------------------------------
   const draw = (el, a) => {
     [body, api] = [el, a];
+    // Closing the panel this view is in stops a read at once, not at its next word.
+    const host = el.closest('details');
+    if (host && !hooked.has(host)) { hooked.add(host); host.addEventListener('toggle', () => { if (!host.open) V.reading?.ctl.abort(); }); }
     const focus = V.focus || (el.contains(document.activeElement) && document.activeElement.dataset.f);
     V.focus = null;
     const e = X.settings().enhance;
