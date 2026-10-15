@@ -8,6 +8,12 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
+- **Export calendar (.ics)** (Canvas): Better To Do's Export button, or Export calendar (.ics) in Ctrl+K, saves an
+  .ics file of your Canvas deadlines, your own tasks with a due date, "do on" days and focus sessions, and Gradescope
+  work (for a Canvas account that said yes to it), each part optional, for the next 2, 4, 8 or 16 weeks or the current
+  term. Import it into Google Calendar, Outlook or Apple Calendar; stable event identifiers mean a newer file updates
+  the same events where the calendar supports it. Made on the device, downloaded by the browser (no new permission);
+  the choices are remembered and also in the options page. No subscribe link: that would need a server.
 - **Canvas sidebar:** style Canvas's native global navigation with a solid color, two-color gradient or picture
   (an https link or local file), filters and an overlay. Choose text and icon colors, normal/small/icon-only labels,
   three sizes, logo visibility and a collapsed rail. Native links keep their labels and keyboard access. The

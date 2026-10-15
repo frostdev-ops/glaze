@@ -531,6 +531,18 @@
             </div>
           </div>
         </div>
+        <div class="group" id="ics">
+          <h3>Export calendar (.ics)</h3>
+          <p class="desc"><span>On Canvas: Export in Better To Do, or Export calendar (.ics) in Ctrl+K.</span> <span>Made on this device. The file holds your course and assignment names: import it into Google Calendar, Outlook or Apple Calendar yourself. Importing a newer file updates the same events where your calendar supports it.</span></p>
+          <label class="check"><input type="checkbox" data-key="todo.icsDue"><span>Canvas due dates</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.icsTasks"><span>Your tasks with a due date</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.icsPlan"><span>Do-on days and focus sessions</span></label>
+          <label class="check"><input type="checkbox" data-key="todo.icsGs"><span>Gradescope work</span>
+            <span class="desc">With Gradescope in To Do on, for a Canvas account that said yes to showing it.</span></label>
+          <div class="row">
+            <label>Range <select data-key="todo.icsRange"><option value="2w">Next 2 weeks</option><option value="4w">Next 4 weeks</option><option value="8w">Next 8 weeks</option><option value="16w">Next 16 weeks</option><option value="term">This term</option></select></label>
+          </div>
+        </div>
         <div class="group" id="widgets">
           <h3>Notes and widgets</h3>
           <label class="check"><input type="checkbox" data-key="enhance.notes"><span>Dashboard notes</span>
