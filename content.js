@@ -31,6 +31,7 @@
     document.addEventListener('DOMContentLoaded', look);
     look();
   });
+  if (site !== 'ultra') globalThis.GZ_SITE_ULTRA?.sheets?.forEach((l) => l.remove());
   if (!site) return;
   const ultra = site === 'ultra';
   const moodle = site === 'moodle';
@@ -1292,20 +1293,23 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     if (notUltra) return;
     if (!links.length) {
       links = SHEETS.map((f) => {
-        const l = document.createElement('link');
-        l.rel = 'stylesheet';
-        l.href = chrome.runtime.getURL(f);
-        // Hold the first paint until the sheets are in. A script-inserted sheet does not block rendering
-        // on its own, so a page's first paint was Canvas's own, white. Chrome 105+, Safari 18.2+; ignored
-        // elsewhere, and only counts while the document has no body (as here, at document_start). A sheet that
-        // fails lets go at once; one that never answers would hold the page forever, so it lets go after 1 s.
-        if (!document.body) {
-          l.setAttribute('blocking', 'render');
-          setTimeout(() => l.removeAttribute('blocking'), 1000);
-        }
+        const l = (ultra && globalThis.GZ_SITE_ULTRA?.sheets?.shift()) || document.createElement('link');
         // The tint reads the course color theme.css resolves: none before it loads.
         l.addEventListener('load', () => { if (tintKey() !== tinted) reapply(); }, { once: true });
-        (document.head || html).appendChild(l);
+        // Moving/reassigning an early Ultra sheet restarts its load and can release its render blocker.
+        if (!l.isConnected) {
+          l.rel = 'stylesheet';
+          l.href = chrome.runtime.getURL(f);
+          // Hold the first paint until the sheets are in. A script-inserted sheet does not block rendering
+          // on its own, so a page's first paint was Canvas's own, white. Chrome 105+, Safari 18.2+; ignored
+          // elsewhere, and only counts while the document has no body (as here, at document_start). A sheet that
+          // fails lets go at once; one that never answers would hold the page forever, so it lets go after 1 s.
+          if (!document.body) {
+            l.setAttribute('blocking', 'render');
+            setTimeout(() => l.removeAttribute('blocking'), 1000);
+          }
+          (document.head || html).appendChild(l);
+        }
         return l;
       });
     }
