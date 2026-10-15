@@ -337,4 +337,6 @@ test('your place in a course: the latest 30 courses, the last 100 open folders e
   assert.equal(out._5_1.top, 813);
   assert.equal(out._5_1.at, 9999);
   assert.deepEqual(P.place(undefined, '_1_1', { open: ['_2_1'], top: -5 }, 1), { _1_1: { open: ['_2_1'], top: 0, at: 1 } });
+  assert.deepEqual(P.place(undefined, '25', { open: [], top: 40, item: '271' }, 1), { 25: { open: [], top: 40, item: '271', at: 1 } });
+  assert.equal(P.place(undefined, '25', { open: [], top: 0, item: '1"><b>' }, 1)['25'].item, undefined);
 });

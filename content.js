@@ -219,6 +219,30 @@
     document.body.append(b);
     setTimeout(() => b.remove(), 900);
   };
+  // Canvas: a module item's "Mark as done" button (the page's own, or the newer assignment page's) and the
+  // planner's checkboxes (the dashboard's List View). Canvas flips either once its request succeeds, so a
+  // click is followed for five seconds and bursts there if it turns done; only a click starts one, so a page
+  // that loads done never does. A module item's icon on the Modules page only changes as that page loads.
+  const DONE_BY = '#mark-as-done-checkbox, #set-module-item-completion-button, input[data-testid="planner-item-completed-checkbox"]';
+  const isDone = (el) => (el.matches('input') ? el.checked : el.classList.contains('btn-success') || !!el.querySelector('svg[name="IconComplete"]'));
+  let following = null;
+  document.addEventListener('click', (e) => {
+    if (ultra || !e.isTrusted || html.getAttribute('data-gz-motion') !== 'expressive' || !(e.target instanceof Element)) return;
+    const box = e.target.closest('label')?.control;
+    const el = e.target.closest(DONE_BY) || (box?.matches(DONE_BY) && box);
+    // A label's click passes on to its checkbox: one follow. A checkbox clicked itself has already
+    // flipped when the click reaches it; through its label, or a button, flips after.
+    if (!el || el === following || (e.target === el && el.matches('input') ? !el.checked : isDone(el))) return;
+    following = el;
+    const at = Date.now();
+    const look = () => {
+      const now = el.isConnected ? el : el.id && document.getElementById(el.id); // React may draw it anew
+      if (now && isDone(now)) celebrate(now.labels?.[0] || now);
+      else if (Date.now() - at < 5000) return setTimeout(look, 150);
+      following = null;
+    };
+    setTimeout(look, 150);
+  }, true);
 
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
@@ -813,8 +837,32 @@
   // One bar above the course outline adding up what the outline already says: each folder's
   // "N of M completed" (in any language: lib/page.js) plus each top-level item's review circle. Redrawn
   // only when the numbers move. The Content page only: other course tabs (Discussions) list items too.
+  // On Canvas the outline with a done state is Modules: the bar adds up the completion requirements the
+  // course sets, done or not as Canvas's own API has them for this student (asked once a page), above the
+  // Modules list, also on a course home that shows it. A course that sets none gets no bar: Canvas calls
+  // a module without requirements "completed", and it hides that itself, as nothing there was asked of you.
+  let reqs = null; // Canvas: { cid, done, total }, done and total once known
+  const canvasProgress = () => {
+    const old = document.getElementById('gz-progress');
+    const cid = canvasCourseId();
+    const list = settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
+    if (!list) return old?.remove();
+    if (reqs?.cid !== cid) {
+      const r = (reqs = { cid });
+      // ponytail: one page of 100 modules, and Canvas leaves a module's items out past its inline limit;
+      // follow the Link header and items_url if a course ever has that many.
+      capi(`/courses/${cid}/modules?include[]=items&per_page=100`).then((mods) => {
+        const cr = mods.flatMap((m) => m.items || []).map((i) => i.completion_requirement).filter(Boolean);
+        Object.assign(r, { total: cr.length, done: cr.filter((c) => c.completed).length });
+        if (reqs === r) renderProgress();
+      }).catch(() => {});
+      return;
+    }
+    if (!reqs.total) return old?.remove();
+    drawProgress(old, reqs.done, reqs.total, list);
+  };
   const renderProgress = () => {
-    if (!ultra) return;
+    if (!ultra) return canvasProgress();
     const old = document.getElementById('gz-progress');
     if (!settings.enhance.progress || !/^\/ultra\/courses\/_\d+_\d+\/outline(\/|$)/.test(location.pathname)) return old?.remove();
     const top = [...document.querySelectorAll('.content-list-item[data-content-id]')].filter((e) => !e.parentElement.closest('.content-list-item'));
@@ -829,6 +877,10 @@
       if (rs) { total += 1; if (rs.getAttribute('aria-checked') === 'true') done += 1; }
     }
     if (!total) return old?.remove();
+    drawProgress(old, done, total, top[0].parentElement);
+  };
+  // The bar, drawn before `before` (the list it adds up), or brought up to date.
+  const drawProgress = (old, done, total, before) => {
     const key = `${done}/${total} ${locale()}`;
     if (old?.dataset.v === key && old.isConnected) return;
     const bar = old || document.createElement('div');
@@ -843,7 +895,7 @@
     num.textContent = GZ_I18N.pct(pct, locale());
     const track = document.createElement('i');
     bar.append(label, num, track);
-    if (!old) top[0].parentElement.before(bar);
+    if (!old) before.before(bar);
   };
 
   // ---- new grades (Extras) --------------------------------------------------------------------
@@ -1039,10 +1091,51 @@
   const savePlace = () => {
     const p = place;
     if (!p?.loaded) return;
-    const v = { open: [...p.open], top: p.top };
+    const v = { open: [...(p.open || [])], top: p.top };
     const now = Date.now();
     try { sessionStorage.setItem(tabPlace(p.cid), JSON.stringify(GZ_PAGE.place(null, p.cid, v, now)[p.cid])); } catch { /* blocked or full */ }
-    local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, v, now) })));
+    local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, p.cid, { ...v, item: r?.coursePlace?.[p.cid]?.item }, now) })));
+  };
+  // Canvas keeps which modules you collapsed itself (per student, on its server), so here it's how far down
+  // the Modules list you were, measured from the list's top so a course home showing it agrees with the
+  // Modules page, and the item you opened last, marked when you come back. Every page change is a full
+  // load on Canvas; Back may bring a page back as it was (bfcache), and that is left alone.
+  const MODULES = 'context_modules_sortable_container';
+  const listTop = (list, sc) => list.getBoundingClientRect().top + sc.scrollTop - (sc === document.scrollingElement ? 0 : sc.getBoundingClientRect().top);
+  let noted = false; // this page's module item recorded
+  let acted = false; // anything done on this page yet (Canvas: before the list is even there, it ends the restore too)
+  // Put back until it holds there a second running (a module Canvas collapses once the student's progress
+  // arrives moves the list), with the same rules as above: anything you do first ends it; ten seconds at most.
+  const canvasBack = () => {
+    const p = place;
+    const list = p?.back && p.top && document.getElementById(MODULES);
+    if (!list) { if (p) p.back = null; return; }
+    const sc = scrollerOf(list);
+    const want = listTop(list, sc) + p.top;
+    const there = Math.abs(sc.scrollTop - want) < 2;
+    p.back.steady = there ? (p.back.steady || 0) + 1 : 0;
+    if (p.back.steady >= 5 || Date.now() - p.back.at > 10000) { p.back = null; return; }
+    if (!there) sc.scrollTop = want;
+    setTimeout(canvasBack, 200);
+  };
+  const canvasPlace = () => {
+    const cid = window.top === window && observer && canvasCourseId();
+    if (!cid) return;
+    // An item opened from Modules, or with its Next and Previous buttons, carries its module item id.
+    const item = new URLSearchParams(location.search).get('module_item_id');
+    if (item && !noted) {
+      noted = true;
+      local((s) => s.get('coursePlace', (r) => s.set({ coursePlace: GZ_PAGE.place(r?.coursePlace, cid, { open: [], top: r?.coursePlace?.[cid]?.top, item }, Date.now()) })));
+    }
+    if (place || !/^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) || !document.getElementById(MODULES)) return;
+    const p = (place = { cid, top: 0, back: !acted && { at: Date.now() } });
+    local((s) => s.get('coursePlace', (r) => {
+      const was = r?.coursePlace?.[cid];
+      p.top = +was?.top || 0;
+      p.loaded = true;
+      if (was?.item) document.getElementById(`context_module_item_${was.item}`)?.setAttribute('data-gz-last', '');
+      canvasBack();
+    }));
   };
   const backTo = () => {
     const p = place;
@@ -1079,8 +1172,8 @@
     setTimeout(backTo, 200);
   };
   const keepPlace = () => {
-    if (!ultra) return;
     if (!settings.enhance.place) { place = null; return; }
+    if (!ultra) return canvasPlace();
     const cid = window.top === window && observer && courseId();
     const rows = cid ? outlineRows(cid) : [];
     if (!rows.length) { if (place) place.away = true; return; }
@@ -1116,7 +1209,7 @@
     if (changed) savePlace();
   };
   document.addEventListener('click', (e) => { if (e.isTrusted && e.target instanceof Element) tapped = { id: e.target.closest(ROWS)?.dataset.contentId, at: Date.now() }; }, true);
-  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (e.isTrusted && place) place.back = null; }, { capture: true, passive: true });
+  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) document.addEventListener(ev, (e) => { if (!e.isTrusted) return; acted = true; if (place) place.back = null; }, { capture: true, passive: true });
   // How far down, read at most every half second while scrolling; not while being put back, or once the
   // outline is gone (a page shrinking under it scrolls it too).
   let placeTimer = 0;
@@ -1124,6 +1217,13 @@
     if (!place || place.back || placeTimer) return;
     placeTimer = setTimeout(() => {
       placeTimer = 0;
+      if (!ultra) {
+        const list = place?.loaded && !place.back && document.getElementById(MODULES);
+        const sc = list && scrollerOf(list);
+        const top = list && Math.max(0, Math.round(sc.scrollTop - listTop(list, sc)));
+        if (list && top !== place.top) { place.top = top; savePlace(); }
+        return;
+      }
       const rows = place && !place.back && !place.away ? outlineRows(place.cid) : [];
       const top = rows.length && scrollerOf(rows[0]).scrollTop;
       if (rows.length && top !== place.top) { place.top = top; savePlace(); }

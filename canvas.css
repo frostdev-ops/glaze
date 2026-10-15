@@ -362,6 +362,24 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 /* The "Complete All Items" pill. */
 #application ul.pill { border-color: var(--gz-line-strong); background: var(--gz-accent-soft); }
 #application ul.pill li { color: var(--gz-accent); }
+/* Course progress (content.js): the course's completion requirements added up, above the Modules list.
+   As Ultra's in extras.css, which Canvas doesn't load. */
+#application #gz-progress {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem 0.75rem; align-items: baseline;
+  margin: calc(1.25rem * var(--gz-space)) 0 0; padding: 0.7rem 1rem 0.8rem;
+  background: var(--gz-panel); border: 1px solid var(--gz-line); border-radius: var(--gz-radius);
+  font-size: 0.85rem; color: var(--gz-ink-muted);
+}
+#application #gz-progress b { color: var(--gz-ink); font-variant-numeric: tabular-nums; }
+#application #gz-progress i { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--gz-line); overflow: hidden; position: relative; }
+#application #gz-progress i::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: var(--gz-pct); border-radius: inherit;
+  background: linear-gradient(90deg, var(--gz-accent), var(--gz-ok));
+  animation: gz-grow-x var(--gz-t-slow) var(--gz-ease) both; transform-origin: left;
+}
+@keyframes gz-grow-x { from { transform: scaleX(0); } }
+/* Your place: the module item you opened last in this course (content.js), an accent edge on its row. */
+html[data-gz-enhance-place] #application .context_module_item[data-gz-last] > .ig-row { box-shadow: inset 3px 0 0 var(--gz-accent); }
 /* Stagger the cards like Ultra's course cards. */
 #application :is(.context_module, .assignment_group, .ic-DashboardCard):nth-child(2) { animation-delay: calc(var(--gz-stagger) * 1); }
 #application :is(.context_module, .assignment_group, .ic-DashboardCard):nth-child(3) { animation-delay: calc(var(--gz-stagger) * 2); }
