@@ -725,6 +725,24 @@ html :is(body > .event-details, .ui-kyle-menu) { background-color: var(--gz-surf
    white that the sweep would otherwise read as paper and make opaque, hiding the page. */
 .ui-widget-overlay, [class*="css-"][class$="-mask"] { background: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 45%) 70%, transparent) !important; opacity: 1 !important; }
 
+/* Canvas owns draft recovery. Its portal is outside #application; give the native prompt the same
+   palette in both light and dark looks, including the expandable saved-content preview. */
+[data-testid="RCE_RestoreAutoSaveModal"] {
+  background: var(--gz-surface) !important; color: var(--gz-ink) !important;
+  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+}
+[data-testid="RCE_RestoreAutoSaveModal"] :is([data-cid="ModalHeader"], [data-cid="ModalBody"], [data-cid="ModalFooter"], [data-cid="ToggleGroup"], [data-cid="ToggleGroup"] *) {
+  background-color: transparent !important; color: var(--gz-ink) !important; border-color: var(--gz-line) !important;
+}
+[data-testid="RCE_RestoreAutoSaveModal"] :is(h2, [class*="-alert"], [class*="-alert"] *) { color: var(--gz-ink) !important; }
+[data-testid="RCE_RestoreAutoSaveModal"] [data-cid="ModalFooter"] button {
+  background: var(--gz-surface) !important; color: var(--gz-ink) !important; border-color: var(--gz-line-strong) !important;
+}
+[data-testid="RCE_RestoreAutoSaveModal"] [data-cid="ModalFooter"] button:last-child {
+  background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; border-color: var(--gz-accent) !important;
+}
+[data-testid="RCE_RestoreAutoSaveModal"] button :where(*) { color: inherit !important; }
+
 /* ---- user content: what instructors write (pages, assignments, syllabus, topics) ---- */
 .user_content { color: var(--gz-ink); }
 /* Art stays around the reading areas; their ink needs the palette's solid surface behind it. */
@@ -1171,3 +1189,20 @@ html[data-gz-enhance-calc] #application #grades_summary .student_assignment :is(
 html[data-gz-enhance-calc] #application #grades_summary .grade.changed { background: var(--gz-accent-soft); border-radius: var(--gz-radius-sm); padding: 0.2em 0.4em; }
 html[data-gz-enhance-calc] #application :is(#student-grades-whatif, #student-grades-revert, #whatif-score-description) { background: var(--gz-band); border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); padding: 0.7rem; }
 html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surface-2); color: var(--gz-ink); border-color: var(--gz-accent); border-radius: var(--gz-radius-sm); box-shadow: 0 0 0 2px var(--gz-accent-soft); }
+/* Recovery for Canvas’s plain-text new Inbox messages; RCE recovery stays native. */
+.gz-draft {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem;
+  margin: 0 0 0.5rem; padding: 0.45rem 0.5rem 0.45rem 0.85rem;
+  font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
+  background: color-mix(in srgb, var(--gz-accent) 12%, var(--gz-surface));
+  border: 1px solid color-mix(in srgb, var(--gz-accent) 40%, var(--gz-line)); border-radius: var(--gz-radius);
+  animation: var(--gz-enter);
+}
+.gz-draft[hidden] { display: none; }
+.gz-draft span { flex: 1 1 12rem; }
+.gz-draft button {
+  padding: 0.25rem 0.8rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
+  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-line-strong); border-radius: 999px;
+}
+.gz-draft button:first-of-type { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+.gz-draft button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
