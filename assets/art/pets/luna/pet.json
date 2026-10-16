@@ -1,0 +1,9 @@
+{
+  "id": "luna",
+  "name": "Luna",
+  "description": "A curious midnight-blue plush owl with soft cream markings and warm amber eyes.",
+  "spriteVersionNumber": 2,
+  "spritesheet": "spritesheet.webp",
+  "displayName": "Luna",
+  "spritesheetPath": "spritesheet.webp"
+}

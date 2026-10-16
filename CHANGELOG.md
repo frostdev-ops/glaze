@@ -6,6 +6,10 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Shared surface controls for Blackboard Ultra, Canvas and Moodle: opacity, existing glass blur/depth, custom color, accent/course tint, shadow strength and color, fine frost and border strength. The Look tab has a searchable, linked Surfaces section with individual and section resets and the real previews. Surface backgrounds follow global corner radius.
+- Animated local pets, with five original companions, the owner’s existing Rime, an animated Glaze droplet, and local import of ChatGPT v1/v2 sprite sheets or ZIP packages. The habitat keeps existing XP/decorations; animation stops while hidden and respects reduced motion and Glaze Motion off. Imports are validated and re-encoded in Glaze’s editor, never fetched from a link or uploaded.
+
 ## [3.0.0] — 2026-10-15
 
 Glaze 3.0 makes Blackboard Ultra as capable as Canvas, all on your device: a Glaze Dashboard, widgets you place

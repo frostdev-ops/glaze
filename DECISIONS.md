@@ -847,3 +847,18 @@ not listed grant triggers. This would add an activation step to every new browse
 the granted origin; replacing pictures with a spinner would also remove the approved pixel capture behavior.
 [`activeTab` documentation](https://developer.chrome.com/docs/extensions/develop/concepts/activeTab) describes those
 triggers and same-origin lifetime. Keep the owner's approved permission for the current automatic behavior.
+
+## 3.0.1 surfaces and pet animation
+
+| Decision | Reason |
+|---|---|
+| One shared surface schema and pure CSS-variable painter, used by pages, editor previews and document tools | Existing Looks gain safe defaults through sanitization; per-course Looks, history and share codes use the same values. The editor and pet modules remain outside the first content script. |
+| Automatic opacity preserves role-specific fills; explicit opacity requires blur and a non-solid backdrop | Prevent text over text and preserve existing Looks. Frost is a static, radius-clipped background layer. Small rows do not add backdrop filters. |
+| Content radii derive from the global Look radius; circular affordances keep their functional shape | Backgrounds must follow corner changes, including zero radius. Minor differences caused by fixing formerly constant radii are reported separately from unchanged defaults. |
+| Local ChatGPT v1/v2 sprite compatibility, without ChatGPT account access | A selected file supplies pixels, never code or a URL to execute/fetch. ZIP decoding reuses the bounded document ZIP reader. Import/delete is extension-editor-only, serialized through the worker; display reads require an eligible site and the pet switch. |
+| Pet selection is separate from earned XP and decorations | Existing progress survives importing, changing or removing artwork. Bundled pets have no network service; custom artwork stays local and outside settings/share backups. |
+| A validated cached course colour at page roots, forwarded through the existing document-viewer reply | Course-source surface tint works independently of whole-palette tint without another storage or API read; unknown colours use the accent and stale tokens clear. |
+| Startup guards referenced to published measurements (Ultra 225,195 B; Moodle 172,222 B), with Canvas’s original guard retained | The complete change adds 3,080 B per site; current totals are 228,275 / 205,228 / 175,302 B. The stale Moodle reference is corrected, not raised to the candidate; all remain within the 2% guard. |
+| Eight frames per second with visibility/intersection/context teardown and a reduced-motion/Motion-off still | Motion remains readable without a page-wide animation loop or hidden-tab work. |
+
+First-paint and package measurements, default-image comparisons and browser evidence are recorded in [the 3.0.1 implementation notes](docs/3.0.1-surfaces-pets.md).

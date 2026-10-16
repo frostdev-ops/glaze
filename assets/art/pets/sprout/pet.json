@@ -3,5 +3,7 @@
   "name": "Sprout",
   "description": "A tiny sage-green plush dragon with a cream belly, rounded horns, and friendly leaf-like wings.",
   "spriteVersionNumber": 2,
-  "spritesheet": "spritesheet.webp"
+  "spritesheet": "spritesheet.webp",
+  "displayName": "Sprout",
+  "spritesheetPath": "spritesheet.webp"
 }
