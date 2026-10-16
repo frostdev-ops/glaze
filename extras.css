@@ -601,3 +601,5 @@ html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #
    layer under it is GPU memory. Hidden, not removed: it keeps its layout, scroll and state. The ground shows until the
    frame paints. */
 html[data-gz-ctab-framed]::before, html[data-gz-ctab-framed] :is(#site-wrap, #gz-scene) { visibility: hidden !important; }
+/* Native dialogs and notices can live inside the covered app and still sit above the frame. */
+html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"], .MuiModal-root, .MuiPopover-root, .MuiSnackbar-root):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }

@@ -15,6 +15,7 @@ var GZ_LIGHT = globalThis.GZ_LIGHT || (() => {
       light(lit = el, last);
     });
   }, { passive: true });
-  return true;
+  const unlit = (s) => (s || '').replace(/(^|;)\s*--gz-m[xy]:[^;]*/g, '').replace(/;\s*$/, '').trim();
+  return { owns: (r) => r.attributeName === 'style' && unlit(r.oldValue) === unlit(r.target.getAttribute('style')) };
 })();
 GZ_LIGHT;

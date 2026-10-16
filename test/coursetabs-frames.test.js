@@ -85,6 +85,117 @@ test('a clean frame hidden for IDLE is dropped; an edited one, or one shown agai
   assert.ok(frames.has('_3_1'));
 });
 
+// Exercise the real drop/show pair: a stubbed drop would hide a nested asynchronous show('').
+const switching = () => {
+  const frame = (dirty = false) => ({ at: 1, dirty, ready: true, el: { style: {}, focus() {}, remove() {} } });
+  const frames = new Map([['_1_1', frame()], ['_2_1', frame(true)]]), timers = new Map();
+  let n = 0;
+  const context = vm.createContext({
+    showTurn: 0, picking: '', showing: '_1_1', shownFrom: '', shooting: null, on: true, frames,
+    host: { toggleAttribute() {} }, strip: null, list: null, LIVE: 2, IDLE: 600000, Date, Promise,
+    location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
+    setTimeout: (fn, ms) => { timers.set(++n, { fn, ms }); return n; }, clearTimeout: (id) => timers.delete(id),
+    html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
+    open: (cid) => { const f = frame(); frames.set(cid, f); return f; },
+    lay() {}, unpicture() {}, picture() {}, draw() {}, later() {},
+  });
+  const show = vm.runInContext(part('  const drop = ', '  // A frame is shown once')
+    + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', context);
+  const fire = (id) => { const t = timers.get(id); timers.delete(id); t?.fn(); };
+  return { frames, timers, context, show, fire };
+};
+
+test('evicting the current clean frame during a slow snapshot cannot later hide the replacement', async () => {
+  const p = switching();
+  p.context.shooting = new Promise(() => {});
+  const shown = p.show('_3_1');
+  p.fire([...p.timers].find(([, t]) => t.ms === 200)[0]);
+  await shown;
+  for (const [id, t] of [...p.timers]) if (t.ms === 200) p.fire(id);
+  await new Promise(setImmediate);
+  assert.equal(p.context.showing, '_3_1', 'eviction must not schedule a second show that uncovers the page');
+  assert.ok(p.frames.has('_2_1'), 'the edited frame stays protected');
+});
+
+test('an idle deadline during the snapshot wait preserves the frame being picked', async () => {
+  const p = switching();
+  p.frames.get('_2_1').dirty = false;
+  await p.show('');
+  const target = p.frames.get('_2_1'), deadline = target.idle;
+  p.context.shooting = new Promise(() => {});
+  const shown = p.show('_2_1');
+  p.fire(deadline);
+  assert.equal(p.frames.get('_2_1'), target, 'picking a frame must reserve its live document before awaiting a picture');
+  p.fire([...p.timers].find(([, t]) => t.ms === 200)[0]);
+  await shown;
+  assert.equal(p.context.showing, '_2_1');
+  assert.equal(target.idle, 0);
+});
+
+test('the 15-second guard counts successful pictures and follows the frame address', async () => {
+  let current = '/ultra/courses/_2_1/outline', success = false, pictures = 0, n = 0;
+  const timers = new Map();
+  const later = vm.runInNewContext(part('  let capTimer = ', '  // Leaving through Ultra') + '\nlater;', {
+    showing: '_2_1', framed: '', surface: () => ({ path: current }), location: { href: origin + '/ultra/course' },
+    Date: { now: () => 100000 }, requestIdleCallback: (fn) => fn(),
+    setTimeout: (fn) => { timers.set(++n, fn); return n; },
+    shoot: async () => { pictures++; return success ? { path: current } : null; },
+  });
+  const fire = async () => { const [id, fn] = timers.entries().next().value; timers.delete(id); fn(); await new Promise(setImmediate); };
+  later(700); await fire(); // The native page is still loading: no picture was taken.
+  success = true;
+  later(700);
+  assert.equal(timers.size, 1, 'a skipped capture must not suppress the first ready picture for 15 seconds');
+  await fire();
+  later(700);
+  assert.equal(timers.size, 0, 'the short-delay path obeys the guard after success');
+  current = '/ultra/courses/_2_1/grades';
+  later(700); await fire();
+  assert.equal(pictures, 3, 'navigation inside the same course frame gets a new picture');
+});
+
+test('an already queued idle capture rechecks the 15-second guard before taking another picture', async () => {
+  const timers = [], idle = [];
+  let pictures = 0;
+  const later = vm.runInNewContext(part('  let capTimer = ', '  // Leaving through Ultra') + '\nlater;', {
+    showing: '_2_1', framed: '', surface: () => ({ path: '/ultra/courses/_2_1/outline' }), location: {},
+    Date: { now: () => 100000 }, requestIdleCallback: (fn) => idle.push(fn),
+    setTimeout: (fn) => { timers.push(fn); return 1; }, shoot: async () => { pictures++; return {}; },
+  });
+  later(700); timers.shift()();
+  later(700); timers.shift()();
+  idle.shift()(); await new Promise(setImmediate);
+  idle.shift()(); await new Promise(setImmediate);
+  assert.equal(pictures, 1, 'a successful capture must suppress callbacks that were queued before it');
+});
+
+test('same-course frame navigation reports a move without needing a scroll', () => {
+  let moves = 0;
+  const location = { pathname: '/ultra/courses/_2_1/outline', search: '' };
+  const context = vm.createContext({
+    on: true, framed: '_2_1', preview: false, showing: '', loaded: true, restored: true,
+    last: '_2_1', lastPath: location.pathname, location, frames: new Map(), tabs: [{ cid: '_2_1' }],
+    here: () => '_2_1', observeView() {}, notePlace() {}, flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved: () => moves++,
+  });
+  const pass = vm.runInContext(part('  const pass = ', '  const sync = ') + '\npass;', context);
+  pass();
+  assert.equal(moves, 0);
+  location.pathname = '/ultra/courses/_2_1/grades';
+  pass();
+  assert.equal(moves, 1, 'a new frame page must reach the owner snapshot scheduler');
+  pass();
+  assert.equal(moves, 1, 'unchanged passes must not restart the move debounce');
+});
+
+test('covered-page CSS restores visibility for its strip, footer, native dialogs and notifications', () => {
+  const css = fs.readFileSync(path.join(root, 'extras.css'), 'utf8');
+  // Visibility inherits through #site-wrap even into high-z-index and top-layer descendants.
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*\bvisibility\s*:\s*visible[^{}]*)\}/g)];
+  for (const selector of ['#gz-ctabs', '#gz-footer', 'dialog[open]', '[role="dialog"]', '[role="alertdialog"]', '[role="alert"]', '[role="status"]', '.MuiModal-root', '.MuiSnackbar-root']) {
+    assert.ok(rules.some(([, head]) => head.includes('html[data-gz-ctab-framed] #site-wrap ') && head.includes(selector)), `${selector} must escape the covered page's inherited hidden visibility`);
+  }
+});
+
 test('the worker takes a course tab\'s frame as its Ultra page: its origin stands in for the about:blank it reports', () => {
   const bg = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
   const block = bg.slice(bg.indexOf('const addressOf = '), bg.indexOf('const fromUltra = '));

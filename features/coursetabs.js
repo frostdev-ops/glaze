@@ -357,11 +357,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   let capAt = 0;
   // The page on screen: a frame's own address, which moves without this page's.
   const where = () => `${showing ? surface().path : location.href} ${showing}`;
+  const capped = () => capWhere === where() && Date.now() - capAt < 15000;
   const later = (wait = 1500) => {
-    if (framed || capTimer || (capWhere === where() && Date.now() - capAt < 15000)) return;
+    if (framed || capTimer || capped()) return;
     capTimer = setTimeout(() => {
       capTimer = 0;
-      (globalThis.requestIdleCallback || setTimeout)(() => { capWhere = where(); capAt = Date.now(); shoot(); }, { timeout: 1000 });
+      (globalThis.requestIdleCallback || setTimeout)(() => {
+        if (capped()) return;
+        const at = where();
+        shoot().then((snap) => { if (snap) { capWhere = at; capAt = Date.now(); } });
+      }, { timeout: 1000 });
     }, wait);
   };
   // Leaving through Ultra's own header (home, the course switcher), or a link out of the course: a picture first, taken on
@@ -395,7 +400,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const frames = new Map(); // cid → { el, at (last shown), ready, dirty, idle (its timer while hidden) }
   let showing = ''; // the course whose frame is on screen; '' for this page
   let shownFrom = ''; // this page's address when a frame covered it: if it changes, the student went somewhere here
-  let host = null, pic = null, showTurn = 0;
+  let host = null, pic = null, showTurn = 0, picking = '';
   const toTop = (op, m = {}) => { try { window.top.postMessage({ gzCtab: op, ...m }, location.origin); } catch { /* gone */ } };
   let movedTimer = 0;
   const moved = () => { clearTimeout(movedTimer); movedTimer = setTimeout(() => toTop('moved'), 500); };
@@ -404,12 +409,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const foot = document.getElementById('gz-footer');
     host.style.bottom = `${shown(foot) ? Math.max(0, Math.round(innerHeight - foot.getBoundingClientRect().top)) : 0}px`;
   };
-  const drop = (cid) => {
+  const drop = (cid, replacing = false) => {
     const f = frames.get(cid);
     if (!f) return;
+    clearTimeout(f.idle);
     f.el.remove();
     frames.delete(cid);
-    if (showing === cid) show('');
+    if (showing === cid && !replacing) show('');
   };
   // A frame is shown once its page is built and has been still for 0.3 s (its place put back: data-gz-placing), 8 s at most.
   const watch = (cid, f) => {
@@ -488,6 +494,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const show = async (cid) => {
     const me = ++showTurn;
+    picking = cid;
     if (cid === showing) return;
     // A picture of what goes under, if one is being taken (the press on a tab starts one), finishes first: taken after the
     // switch, it would be of the wrong page.
@@ -502,7 +509,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (cid && !frames.has(cid) && frames.size >= LIVE) {
       const old = [...frames].filter(([, f]) => !f.dirty).sort((a, b) => a[1].at - b[1].at)[0];
       if (!old) { say(t('Close a course tab before opening another to keep your unsaved work.')); return; }
-      drop(old[0]);
+      drop(old[0], true);
     }
     const f = cid && (frames.get(cid) || open(cid));
     if (cid && !f) return;
@@ -510,7 +517,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     shownFrom = location.pathname + location.search;
     for (const [k, g] of frames) {
       if (k === cid) { g.at = Date.now(); clearTimeout(g.idle); g.idle = 0; }
-      else g.idle ||= setTimeout(() => { g.idle = 0; if (frames.get(k) === g && showing !== k && !g.dirty) drop(k); }, IDLE);
+      else g.idle ||= setTimeout(function expire() {
+        g.idle = 0;
+        if (frames.get(k) !== g || showing === k || g.dirty) return;
+        if (picking === k) g.idle = setTimeout(expire, IDLE);
+        else drop(k);
+      }, IDLE);
       g.el.style.visibility = k === cid && g.ready ? '' : 'hidden';
       g.el.inert = k !== cid;
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid }, location.origin);
@@ -770,7 +782,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         if (P().place && x?.top && x.path === location.pathname + location.search) scrollBack(x.top);
       }
     }
-    if (cid !== last) { last = cid; if (framed) moved(); }
+    if (cid !== last || lastPath !== location.pathname + location.search) { last = cid; if (framed) moved(); }
     lastPath = location.pathname + location.search;
     flag();
     place();

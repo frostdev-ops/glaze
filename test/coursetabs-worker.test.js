@@ -12,7 +12,7 @@ const shot = (c = cid, extra = {}) => ({ op: 'shot', cid: c, path: `/ultra/cours
 const flush = () => new Promise(setImmediate);
 function worker({ keys = false } = {}) {
   const data = {}, notices = [], pages = new Map([[1, site + '/ultra/course'], [2, site + '/ultra/course'], [3, site + '/ultra/course']]);
-  const active = new Set([1, 2, 3]), shots = { size: 1000, calls: 0, during() {} };
+  const active = new Set([1, 2, 3]), shots = { size: 1000, calls: 0, failStore: false, during() {} };
   const born = Date.now() - 10000, epochs = new Map();
   let message, changed;
   const source = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
@@ -21,7 +21,11 @@ function worker({ keys = false } = {}) {
   const area = {
     async get(k) { await flush(); if (k === null) reads.all++; return structuredClone(k === null ? data : { [k]: data[k] }); },
     ...(keys && { async getKeys() { await flush(); return Object.keys(data); } }),
-    async set(patch) { await flush(); Object.assign(data, structuredClone(patch)); },
+    async set(patch) {
+      await flush();
+      if (shots.failStore && Object.keys(patch).some((k) => k.startsWith('snap:'))) { shots.failStore = false; throw new Error('quota'); }
+      Object.assign(data, structuredClone(patch));
+    },
     async remove(keys) { await flush(); for (const k of [].concat(keys)) delete data[k]; },
   };
   let on = true;
@@ -133,6 +137,20 @@ test('with getKeys, the total cap is kept from the sizes recorded, without readi
   assert.deepEqual(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 2, 'a forgotten picture no longer counts');
   w.change(false); await w.drain();
   assert.equal(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 0);
+});
+
+test('a failed picture overwrite cannot undercount the retained picture and exceed the total cap', async () => {
+  const w = worker({ keys: true });
+  await w.send({ op: 'hello' });
+  w.shots.size = 2_900_000;
+  await w.send(shot());
+  w.shots.size = 100_000;
+  w.shots.failStore = true;
+  await w.send(shot());
+  w.shots.size = 2_900_000;
+  await w.send(shot('_2_1')); await w.send(shot('_3_1'));
+  const copies = Object.entries(w.data).filter(([k]) => k.startsWith('snap:')).map(([, s]) => s);
+  assert.ok(copies.reduce((n, s) => n + s.n, 0) <= L.SNAP_ALL, 'size bookkeeping must describe the successfully stored pictures');
 });
 
 test('closing a course forgets its worker picture without dropping another course\'s', async () => {

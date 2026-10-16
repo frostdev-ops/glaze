@@ -386,11 +386,12 @@
   const hid = () => tabFrame && html.hasAttribute('data-gz-ctab-framed');
   const flush = () => {
     timer = 0;
+    if (hid()) { dirty.clear(); full = true; return; }
     const roots = outermost(dirty);
     dirty.clear();
     const said = words();
     const all = full || (said && wordsLate);
-    if (full) { full = false; sweepAll(); } else sweepRoots(roots);
+    if (full) { full = false; if (ultra) X.gate(document.body); sweepAll(); } else sweepRoots(roots);
     if (said) { tagExtras(all ? [document.body] : roots); wordsLate = false; } else wordsLate = true;
     // Every site runs the same list; what a site doesn't do is a default that does nothing (X).
     themeEditors();
@@ -423,7 +424,7 @@
     // A course tab's hidden frame: no sweep until it is shown (GZ_CTX scene), then one full pass.
     if (hid()) { dirty.clear(); full = true; return; }
     // Native-parent removals still need remount/teardown; only changes inside our UI and the light's are irrelevant.
-    records = records.filter((r) => !r.oldValue?.includes('--gz-mx') && !(ultra && r.target.closest?.('[id^="gz-"]')));
+    records = records.filter((r) => !globalThis.GZ_LIGHT?.owns(r) && !(ultra && r.target.closest?.('[id^="gz-"]')));
     if (!records.length) return;
     X.lift();
     for (const r of records) {
@@ -799,14 +800,14 @@
     for (const [ed] of draftsWaiting) if (ed.isConnected) draftWait(ed);
     if (settings.enhance.drafts && (ultra || /^\/conversations\/?$/.test(location.pathname)) && document.querySelector(DRAFT_ED)) draftsIn();
   };
-  // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
+  // Expired copies go; with backup off, all copies go. Top frame only.
   const tidyDrafts = () => {
     if (window.top !== window) return;
-    // lib/drafts.js only when there are copies to look at; only they are read where keys can be listed.
-    local((s) => Promise.resolve(s.getKeys?.()).then((ks) => s.get(ks?.filter((k) => k.startsWith('draft:')) || null, (all) => {
+    // Only drafts are read where keys can be listed.
+    local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => s.get(ks?.filter((k) => k.startsWith('draft:')) || null, (all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
       need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
-    })));
+    })).catch(() => {}));
   };
 
   // ---- download all (Extras) -------------------------------------------------------------------
