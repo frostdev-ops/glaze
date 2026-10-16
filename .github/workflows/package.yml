@@ -13,8 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the zip
-        run: ./package.sh
+      - name: Build the Chrome and Firefox zips
+        run: sh scripts/package-firefox.sh
 
       - name: Attach it to the release
         uses: softprops/action-gh-release@v2

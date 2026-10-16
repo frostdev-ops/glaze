@@ -166,3 +166,45 @@ test('the scans see the code they are meant to', () => {
   assert.match(executable('if (closed) { clearInterval(ping); }'), clear);
   for (const gone of ['/* clearInterval(ping); */ closed = true;', '// clearInterval(ping);\nclosed = true;', '/*\n * clearInterval(ping)\n */']) assert.doesNotMatch(executable(gone), clear, gone);
 });
+
+// ---- :has() on Ultra ----------------------------------------------------------------------------------------------
+// Chrome flags every element a :has() is tried on, and checks the flagged ancestors of anything that changes whose
+// features appear inside any :has() (a class test there: every class Ultra changes); a flagged ancestor holding a :has()
+// before a combinator restyles its descendants by one invalidation set shared by all such rules. A :has() tried on any
+// element (body's, or a bare div's) before a combinator, with a class test in some :has(), made every MUI ripple restyle
+// the whole page (measured: 95 ms of style per press on a 9,400-element outline; 0.2 ms without those rules). Ultra's sheets:
+// no class tests or descendant `*` in a :has(), and a :has() before a combinator sits on a class, id or attribute, or a tag
+// that is not a page container.
+const ULTRA_SHEETS = ['theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css'];
+// The containers a page is built of: flagged, one may hold the whole page.
+const BROAD = new Set(['', '*', 'html', 'body', 'div', 'span', 'section', 'main']);
+const hasRules = (css) => {
+  css = css.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
+  const out = [];
+  for (let i = css.indexOf(':has('); i !== -1; i = css.indexOf(':has(', i + 5)) {
+    let depth = 0, j = i + 4;
+    for (; j < css.length; j++) { if (css[j] === '(') depth++; else if (css[j] === ')' && --depth === 0) break; }
+    const arg = css.slice(i + 5, j).trim();
+    // The compound it is on: back to the last combinator outside parentheses.
+    let k = i - 1;
+    for (depth = 0; k >= 0; k--) { const c = css[k]; if (c === ')') depth++; else if (c === '(') { if (!depth) break; depth--; } else if (!depth && /[\s>+~,{}]/.test(c)) break; }
+    const compound = css.slice(k + 1, i);
+    // Before a combinator: what follows it in the same complex selector (up to a comma, a brace or the parenthesis around it).
+    let m = j + 1, rest = '';
+    for (depth = 0; m < css.length; m++) { const c = css[m]; if (c === '(') depth++; else if (c === ')') { if (!depth) break; depth--; } else if (!depth && /[,{]/.test(c)) break; rest += depth ? '' : c; }
+    const line = css.slice(0, i).split('\n').length;
+    out.push({ arg, compound, nonSubject: /^\s*[>+~]|\s\S/.test(rest.replace(/::?[\w-]+(\([^)]*\))?/g, '').trimEnd()), line });
+  }
+  return out;
+};
+test('Ultra\'s :has() rules keep a small change from restyling the whole page', () => {
+  for (const f of ULTRA_SHEETS) for (const h of hasRules(read(f))) {
+    // A class test down a child chain (`> x > y[class*=…]`) is checked a fixed number of levels up: no walk up the page.
+    const parts = h.arg.split(/,(?![^(]*\))/).map((x) => x.trim()).filter((x) => /\[class\s*[*^$~|]?=/.test(x) && !/^>\s*[^\s>+~]+(\s*>\s*[^\s>+~]+)*$/.test(x));
+    assert.ok(!parts.length, `${f}:${h.line} :has(${h.arg}): a class test inside :has() makes every class change check it`);
+    assert.ok(!/(^|[\s(,])\*(?=[\s),]|$)/.test(h.arg.replace(/^>\s*\*$/, '')), `${f}:${h.line} :has(${h.arg}): a descendant * makes every added node check it; :has(> *) only checks its parent`);
+    if (!h.nonSubject) continue;
+    const anchor = h.compound.replace(/:(is|where|not)\([^)]*\)/g, '');
+    assert.ok(/[.#[]/.test(anchor) || !BROAD.has(anchor.trim().toLowerCase()), `${f}:${h.line} ${h.compound}:has(${h.arg}) before a combinator is tried on every ${anchor.trim() || 'element'}`);
+  }
+});

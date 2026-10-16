@@ -51,7 +51,7 @@ test('at most four frames stay running: the least recently shown go, never the o
   const dropped = [];
   const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
-    LIVE: 4, IDLE: 1, Date, Promise, setTimeout() {}, clearTimeout() {}, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
+    LIVE: 4, Date, Promise, setTimeout() {}, clearTimeout() {}, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
     open: (cid) => { const f = frame(6); frames.set(cid, f); return f; }, lay() {}, unpicture() {}, picture() {}, draw() {}, later() {}, drop: (k) => { dropped.push(k); frames.delete(k); },
   });
@@ -63,26 +63,21 @@ test('at most four frames stay running: the least recently shown go, never the o
   assert.equal(frames.get('_2_1').el.inert, true, 'a hidden frame takes no input');
 });
 
-test('a clean frame hidden for IDLE is dropped; an edited one, or one shown again, stays', async () => {
-  const frame = (at, dirty = false) => ({ at, dirty, ready: true, el: { style: {}, inert: false, focus() {} } });
-  const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(2, true)], ['_3_1', frame(3)]]);
-  const timers = new Map(), dropped = [];
-  let n = 0;
-  const context = vm.createContext({
+test('a hidden frame stays live however long it is hidden: no timer closes it', async () => {
+  const frame = (at) => ({ at, ready: true, el: { style: {}, inert: false, focus() {} } });
+  const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(2)], ['_3_1', frame(3)]]);
+  const timers = [];
+  const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
     showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
-    LIVE: 4, IDLE: 600000, Date, Promise, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
-    setTimeout: (fn) => { timers.set(++n, fn); return n; }, clearTimeout: (id) => timers.delete(id),
+    LIVE: 4, Date, Promise, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
+    setTimeout: (fn, ms) => timers.push(ms), clearTimeout() {},
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
-    lay() {}, unpicture() {}, picture() {}, draw() {}, later() {}, drop: (k) => { dropped.push(k); frames.delete(k); },
+    lay() {}, unpicture() {}, picture() {}, draw() {}, later() {}, drop() { throw new Error('nothing is dropped under the cap'); },
   });
-  const show = vm.runInContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', context);
   await show('_1_1');
-  assert.equal(timers.size, 2, 'every hidden frame has its timer, the shown one none');
   await show('_3_1');
-  assert.equal(timers.size, 2, 'a hidden frame keeps its first timer; the one shown again loses its own');
-  for (const fn of [...timers.values()]) fn();
-  assert.deepEqual(dropped, ['_1_1'], 'the edited frame is never dropped');
-  assert.ok(frames.has('_3_1'));
+  assert.deepEqual(timers, [], 'switching sets no timer on the hidden frames');
+  assert.deepEqual([...frames.keys()], ['_1_1', '_2_1', '_3_1']);
 });
 
 // Exercise the real drop/show pair: a stubbed drop would hide a nested asynchronous show('').
@@ -91,8 +86,8 @@ const switching = () => {
   const frames = new Map([['_1_1', frame()], ['_2_1', frame(true)]]), timers = new Map();
   let n = 0;
   const context = vm.createContext({
-    showTurn: 0, picking: '', showing: '_1_1', shownFrom: '', shooting: null, on: true, frames,
-    host: { toggleAttribute() {} }, strip: null, list: null, LIVE: 2, IDLE: 600000, Date, Promise,
+    showTurn: 0, showing: '_1_1', shownFrom: '', shooting: null, on: true, frames,
+    host: { toggleAttribute() {} }, strip: null, list: null, LIVE: 2, Date, Promise,
     location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     setTimeout: (fn, ms) => { timers.set(++n, { fn, ms }); return n; }, clearTimeout: (id) => timers.delete(id),
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
@@ -115,21 +110,6 @@ test('evicting the current clean frame during a slow snapshot cannot later hide 
   await new Promise(setImmediate);
   assert.equal(p.context.showing, '_3_1', 'eviction must not schedule a second show that uncovers the page');
   assert.ok(p.frames.has('_2_1'), 'the edited frame stays protected');
-});
-
-test('an idle deadline during the snapshot wait preserves the frame being picked', async () => {
-  const p = switching();
-  p.frames.get('_2_1').dirty = false;
-  await p.show('');
-  const target = p.frames.get('_2_1'), deadline = target.idle;
-  p.context.shooting = new Promise(() => {});
-  const shown = p.show('_2_1');
-  p.fire(deadline);
-  assert.equal(p.frames.get('_2_1'), target, 'picking a frame must reserve its live document before awaiting a picture');
-  p.fire([...p.timers].find(([, t]) => t.ms === 200)[0]);
-  await shown;
-  assert.equal(p.context.showing, '_2_1');
-  assert.equal(target.idle, 0);
 });
 
 test('the 15-second guard counts successful pictures and follows the frame address', async () => {
@@ -339,4 +319,26 @@ test('native edits protect a live frame before window load and after a new docum
   handlers.change({ isTrusted: true });
   handlers.submit({ isTrusted: true });
   assert.deepEqual(sent, ['loaded', 'edited', 'edited', 'edited']);
+});
+
+test('the strip check in the mutation callback reads no layout until the bar, the strip\'s place or a size changes', () => {
+  let reads = 0, visible = true, placed = 0, ro = null;
+  const box = (name) => ({ name, getClientRects: () => { reads++; return visible ? [{}] : []; }, contains: () => true });
+  let bar = box('bar');
+  const strip = { isConnected: true, parentElement: bar };
+  const held = vm.runInNewContext(part('  const shown = (e)', '  const safePath') + part('  let seenBar = null', "  // The first paint's reservation") + '\nheld;', {
+    on: true, strip, courseBar: () => bar, routed: () => null, place: () => { placed++; strip.parentElement = bar; },
+    ResizeObserver: class { constructor(cb) { ro = this; this.cb = cb; this.seen = []; } observe(e) { this.seen.push(e); } disconnect() { this.seen = []; } },
+  });
+  held();
+  assert.equal(placed, 1, 'the first check places the strip in the bar');
+  assert.deepEqual(ro.seen.map((e) => e.name), ['bar'], 'and watches the bar\'s size');
+  const before = reads;
+  for (let i = 0; i < 30; i++) held();
+  assert.equal(reads, before, 'thirty unrelated changes read no layout');
+  visible = false; ro.cb();
+  assert.equal(placed, 2, 'the bar hidden without a node added: seen by its size, and the strip placed again');
+  visible = true; bar = box('new bar'); held();
+  assert.equal(placed, 3, 'a new bar: checked at once');
+  assert.deepEqual(ro.seen.map((e) => e.name), ['new bar']);
 });

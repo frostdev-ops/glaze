@@ -37,7 +37,10 @@ case "${SAFARI_UPDATE_PUBLIC_KEY:-}" in
   ''|REPLACE_*) echo "build-safari: set SAFARI_UPDATE_PUBLIC_KEY from Sparkle generate_keys before releasing." >&2; exit 1 ;;
 esac
 
-mkdir -p release
+# Everything for this version goes in release/<version>/: downloads in github/, the app and logs in build/.
+out=release/$version
+logs=$out/build/logs
+mkdir -p "$logs" "$out/github"
 if ! xcodebuild -project "$stage/Glaze/Glaze.xcodeproj" \
   -scheme Glaze -configuration Release -derivedDataPath "$stage/DerivedData" \
   -destination 'generic/platform=macOS' \
@@ -45,8 +48,8 @@ if ! xcodebuild -project "$stage/Glaze/Glaze.xcodeproj" \
   CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   'CODE_SIGN_ENTITLEMENTS=$(SRCROOT)/$(TARGET_NAME)/Release.entitlements' \
   'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO MACOSX_DEPLOYMENT_TARGET=12.0 \
-  MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$version" build > release/safari-build.log 2>&1; then
-  tail -n 60 release/safari-build.log >&2
+  MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$version" build > "$logs/safari-build.log" 2>&1; then
+  tail -n 60 "$logs/safari-build.log" >&2
   exit 1
 fi
 
@@ -84,20 +87,20 @@ archive="$stage/glaze-safari.zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
 if [ -n "${NOTARY_PROFILE:-}" ]; then
   xcrun notarytool submit "$archive" --keychain-profile "$NOTARY_PROFILE" \
-    --wait --output-format json > release/safari-notarization.json
+    --wait --output-format json > "$logs/safari-notarization.json"
 elif [ -n "${ASC_KEY_PATH:-}" ]; then
   : "${ASC_KEY_ID:?ASC_KEY_ID is required with ASC_KEY_PATH}"
   : "${ASC_ISSUER_ID:?ASC_ISSUER_ID is required with ASC_KEY_PATH}"
   xcrun notarytool submit "$archive" --key "$ASC_KEY_PATH" \
     --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
-    --wait --output-format json > release/safari-notarization.json
+    --wait --output-format json > "$logs/safari-notarization.json"
 fi
 if [ -n "${NOTARY_PROFILE:-}${ASC_KEY_PATH:-}" ]; then
-  python3 - <<'PY'
+  python3 - "$logs/safari-notarization.json" <<'PY'
 import json, sys
-result = json.load(open('release/safari-notarization.json'))
+result = json.load(open(sys.argv[1]))
 if result.get('status') != 'Accepted':
-    sys.exit('build-safari: notarization was not accepted; see release/safari-notarization.json')
+    sys.exit(f'build-safari: notarization was not accepted; see {sys.argv[1]}')
 PY
   xcrun stapler staple "$app"
   xcrun stapler validate "$app"
@@ -110,14 +113,14 @@ else
 fi
 
 # Replace only the generated release app, after all requested checks pass.
-rm -rf release/Glaze.app
-ditto "$app" release/Glaze.app
-ditto -c -k --sequesterRsrc --keepParent release/Glaze.app "release/$name.zip"
-(cd release && shasum -a 256 "$name.zip" > "$name.sha256")
-echo "Built release/Glaze.app and release/$name.zip"
+rm -rf "$out/build/Glaze.app"
+ditto "$app" "$out/build/Glaze.app"
+ditto -c -k --sequesterRsrc --keepParent "$out/build/Glaze.app" "$out/github/$name.zip"
+(cd "$out/github" && shasum -a 256 "$name.zip" > "$name.sha256")
+echo "Built $out/build/Glaze.app and $out/github/$name.zip"
 if [ -n "${NOTARY_PROFILE:-}${ASC_KEY_PATH:-}" ]; then
-  sh scripts/make-dmg.sh release/Glaze.app "release/$name.dmg"
+  sh scripts/make-dmg.sh "$out/build/Glaze.app" "$out/github/$name.dmg"
 fi
 # Keep the release copy out of Safari's Extensions list too (making the disk image registers it).
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
-  -u release/Glaze.app >/dev/null 2>&1 || true
+  -u "$out/build/Glaze.app" >/dev/null 2>&1 || true

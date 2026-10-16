@@ -521,7 +521,7 @@ html[data-gz-ctabs~="large"] { --gz-ctabs-h: 48px; }
 html[data-gz-ctabs] div.bb-course-navigation { height: auto !important; max-height: none !important; }
 html[data-gz-ctabs~="above"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
 html[data-gz-ctabs~="below"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h) !important; }
-html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) :has(> .js-course-navigation) { margin-top: var(--gz-ctabs-h) !important; }
+html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) div:has(> .js-course-navigation) { margin-top: var(--gz-ctabs-h) !important; }
 html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
 /* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. */
 html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }

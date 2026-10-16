@@ -26,15 +26,16 @@ sh scripts/safari-manifest.sh "$resources/manifest.json"
 node scripts/safari-resources.js "$resources"
 
 auth="-allowProvisioningUpdates -authenticationKeyPath $ASC_KEY_PATH -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
-mkdir -p release
+out=release/$version
+mkdir -p "$out/build/logs" "$out/app-store"
 # shellcheck disable=SC2086
 if ! xcodebuild archive -project "$stage/Glaze/Glaze.xcodeproj" -scheme Glaze -configuration Release \
   -archivePath "$stage/Glaze.xcarchive" -destination 'generic/platform=macOS' $auth \
   CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="$team" CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   'CODE_SIGN_ENTITLEMENTS=$(SRCROOT)/$(TARGET_NAME)/Release.entitlements' \
   'ARCHS=arm64 x86_64' ONLY_ACTIVE_ARCH=NO MACOSX_DEPLOYMENT_TARGET=12.0 \
-  MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" > release/appstore-build.log 2>&1; then
-  tail -n 60 release/appstore-build.log >&2
+  MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$build" > $out/build/logs/appstore-build.log 2>&1; then
+  tail -n 60 $out/build/logs/appstore-build.log >&2
   exit 1
 fi
 
@@ -56,13 +57,13 @@ EOF
 # shellcheck disable=SC2086
 if ! xcodebuild -exportArchive -archivePath "$stage/Glaze.xcarchive" \
   -exportOptionsPlist "$stage/ExportOptions.plist" -exportPath "$stage/export" $auth \
-  >> release/appstore-build.log 2>&1; then
-  tail -n 40 release/appstore-build.log >&2
+  >> $out/build/logs/appstore-build.log 2>&1; then
+  tail -n 40 $out/build/logs/appstore-build.log >&2
   exit 1
 fi
 if [ "$destination" = export ]; then
-  cp "$stage"/export/*.pkg "release/glaze-$version-appstore.pkg"
-  echo "Built release/glaze-$version-appstore.pkg (build $build); not uploaded."
+  cp "$stage"/export/*.pkg "$out/app-store/glaze-$version-appstore.pkg"
+  echo "Built $out/app-store/glaze-$version-appstore.pkg (build $build); not uploaded."
 else
   echo "Uploaded Glaze $version (build $build) to App Store Connect."
 fi

@@ -121,6 +121,8 @@ function GZ_ULTRA_OVERLAY(X, repaint) {
     button?.setAttribute('aria-expanded', String(on));
     if (button) button.setAttribute('aria-label', X.t(on ? 'Collapse the sidebar' : 'Expand global navigation'));
     if (on) {
+      // A tip already up for a nav item's title repeats the label the nav now shows: hidden while it is expanded (theme.css).
+      if (paper.querySelector('[data-gz-title]')) document.querySelector('body > .gz-tip')?.setAttribute('data-gz-nav-tip', '');
       hintStyle = document.createElement('style'); document.head.append(hintStyle);
       for (const el of paper.querySelectorAll('a, button, [title], [data-gz-title]')) suppress(el);
       portalHints(); titleObserver.observe(paper, { attributes: true, subtree: true, attributeFilter: ['title', 'aria-describedby'] });

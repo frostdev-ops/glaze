@@ -4,6 +4,7 @@ const F = require(process.env.GZ_B9_LIB || '../lib/folders.js');
 const ROW = '.content-list-item[data-content-id]';
 class E {
   constructor(tag = 'div') { this.tagName = tag; this.children = []; this.dataset = {}; this.attrs = {}; this.listeners = {}; this._text = ''; }
+  get nodeType() { return 1; }
   setOwner(doc) { this.ownerDocument = doc; for (const c of this.children) c.setOwner(doc); }
   append(...xs) { for (const x of xs) { x.remove(); this.children.push(x); x.parentElement = this; if (this.ownerDocument) x.setOwner(this.ownerDocument); } }
   get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); }
@@ -47,7 +48,7 @@ const fixture = () => {
   vm.runInContext(fs.readFileSync(process.env.GZ_B9_FEATURE || require.resolve('../features/folders.js'), 'utf8'), c);
   const ui = c.GZ_FOLDER_UI;
   const click = async (el, type = 'click', isTrusted = true, detail = 0) => { const e = { isTrusted, detail, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }; el.listeners[type](e); await settle(); return e; };
-  return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => { mutations(); while (frames.length) frames.shift()(); }, mutate: () => mutations(), watched, frames,
+  return { ui, parent, child, module, plain, outline, document, store, sent, click, redraw: () => { mutations([{ type: 'attributes', target: outline }]); while (frames.length) frames.shift()(); }, mutate: (records = [{ type: 'attributes', target: outline }]) => mutations(records), watched, frames,
     timers, expire: () => { const [id, f] = timers.entries().next().value; timers.delete(id); f(); }, emitWrites: () => { emit = true; }, holdReply: (v) => { reply = v; }, identity: Promise.resolve('_900_1'), setOn: (v) => { on = v; }, setEnabled: (v) => { enabled = v; }, fail: (v) => { failed = v; }, hold: (v) => { held = v; }, change: (v) => { cid = v; location.pathname = `/ultra/courses/${v}/outline`; }, path: (v) => { location.pathname = v; }, changed: () => changed.forEach((f) => f({ [F.key(location.origin, '_900_1', cid)]: {} }, 'local')) };
 };
 const eye = (row) => row.querySelector(`#gz-folder-eye-${row.dataset.contentId}`);
@@ -165,6 +166,17 @@ test('the page is watched only on a course outline, and a burst of changes costs
   for (let i = 0; i < 100; i++) p.mutate();
   assert.equal(p.frames.length, 1, 'a mutation burst schedules one frame');
   p.redraw(); assert.equal(p.frames.length, 0);
+  // A button's ripple: nothing paint reads. No frame, and the page's own passes leave the outline as it is.
+  const ripple = new E('span'); ripple.className = 'MuiTouchRipple-root';
+  p.mutate([{ type: 'childList', target: eye(p.parent), addedNodes: [ripple], removedNodes: [] }]);
+  assert.equal(p.frames.length, 0, 'a ripple schedules no pass');
+  const label = eye(p.parent).getAttribute('aria-label');
+  eye(p.parent).setAttribute('aria-label', 'stale'); p.ui.sync(true, p.identity);
+  assert.equal(eye(p.parent).getAttribute('aria-label'), 'stale', 'a pass with nothing new does not repaint');
+  eye(p.parent).setAttribute('aria-label', label);
+  const row = new E(); row.className = 'content-list-item'; row.dataset.contentId = '_105_1';
+  p.mutate([{ type: 'childList', target: p.outline, addedNodes: [row], removedNodes: [] }]);
+  assert.equal(p.frames.length, 1, 'an added row schedules one');
   p.path('/ultra/course');
   p.ui.sync(true, p.identity);
   assert.equal(p.watched.on, false, 'off the outline, nothing watches the page');

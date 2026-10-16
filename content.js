@@ -449,6 +449,7 @@
   };
   const startSweep = () => {
     if (observer) return;
+    if (ultra) X.gate(document.body); // what Ultra drew before the observer
     sweepAll();
     observer = new MutationObserver(schedule);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['class', 'style', 'aria-checked'] });
@@ -1091,8 +1092,8 @@
   // Everything set goes through these two, so clearSettings removes exactly what was set.
   const vars = new Set();
   const attrs = new Set();
-  const setVar = (k, v) => { vars.add(k); html.style.setProperty(k, v); };
-  const setAttr = (k, v) => { attrs.add(k); if (v === false) html.removeAttribute(k); else html.setAttribute(k, v === true ? '' : v); };
+  const setVar = (k, v) => { vars.add(k); if (html.style.getPropertyValue(k) !== String(v)) html.style.setProperty(k, v); };
+  const setAttr = (k, v) => { attrs.add(k); if (v === false) html.removeAttribute(k); else if (html.getAttribute(k) !== (v === true ? '' : String(v))) html.setAttribute(k, v === true ? '' : v); };
 
   // sanitize only lets https URLs through, as URL.href (quotes percent-encoded), so the string is
   // safe inside url("…").
@@ -1385,22 +1386,18 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => { syncScene(); if (full && !timer && !hid()) timer = setTimeout(flush); },
     ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
-  // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
-  // reloaded or updated under a live tab. Fall back to the defaults rather than breaking the page.
+  // Independent card/widget stores aren't theme settings; don't transfer them on every page load.
   const load = () => new Promise((res) => {
-    try {
-      chrome.storage.sync.get(null, (raw) => res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw)));
-    } catch { res(GZ_SANITIZE()); }
+    try { chrome.storage.sync.get(Object.keys(GZ_DEFAULTS), (raw) => res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw))); }
+    catch { res(GZ_SANITIZE()); }
   }).then((s) => {
     // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
-    if (!ultra) try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
+    try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
     return s;
   });
-  // Canvas: the settings are kept in this tab's sessionStorage too, and the next page starts from them. Its
-  // first paint waits for the sheets (enable), and storage can answer after that: a light look's page
-  // flashed the default dark palette first.
+  // The previous palette covers storage latency, avoiding a dark flash with a light look.
   const KEPT = 'gz-settings';
-  if (!ultra) try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
+  try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
   // Keep quizzes light: no Glaze on a quiz being taken or a tool's page (New Quizzes; seen once the body is in).
   const on = (s) => s.enabled && (ultra || !s.enhance.quizLight || !(/\/quizzes\/\d+\/(take|history)(\/|$)|\/external_tools\//.test(location.pathname) || document.getElementById('tool_content')));
   // Theme on before storage answers: most people leave it on, and this way the first paint is

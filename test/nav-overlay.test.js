@@ -11,18 +11,20 @@ const fixture = () => {
   const el = () => { const attrs = new Map(); return { attrs, isConnected: true, setAttribute: (k, v) => attrs.set(k, v), getAttribute: (k) => attrs.get(k) ?? null, hasAttribute: (k) => attrs.has(k), removeAttribute: (k) => attrs.delete(k), closest: () => null, addEventListener: (k, fn) => listeners.set(k, fn), removeEventListener: (k) => listeners.delete(k), remove() { this.isConnected = false; }, focus() { document.activeElement = this; } }; };
   const anchor = el(); anchor.setAttribute('title', 'Full native name');
   const header = { append: (b) => { button = b; } };
+  const tip = el(); // Glaze's tip, up for a nav item's title (the paper answers [data-gz-title] with the anchor)
   const paper = { contains: (n) => n === anchor || n === button, querySelectorAll: (s) => s === '[aria-describedby]' ? [] : [anchor], querySelector: (s) => s === 'header' ? header : anchor, addEventListener: (k, fn) => listeners.set(k, fn), removeEventListener: (k) => listeners.delete(k) };
-  const document = { activeElement: null, head: { append() {} }, documentElement: { toggleAttribute: (k, on) => on ? htmlAttrs.set(k, '') : htmlAttrs.delete(k) }, querySelector: () => ({ closest: () => paper }), createElement: () => el(), addEventListener: (k, fn) => globalListeners.set(k, fn), removeEventListener: (k) => globalListeners.delete(k) };
+  const document = { activeElement: null, head: { append() {} }, documentElement: { toggleAttribute: (k, on) => on ? htmlAttrs.set(k, '') : htmlAttrs.delete(k) }, querySelector: (s) => (s === 'body > .gz-tip' ? tip : { closest: () => paper }), createElement: () => el(), addEventListener: (k, fn) => globalListeners.set(k, fn), removeEventListener: (k) => globalListeners.delete(k) };
   const nav = { collapsed: true, expandOnHover: true }, chrome = { runtime: { id: 'glaze' } }, X = { on: () => true, settings: () => ({ enabled: true }), nav: () => nav, t: (s) => s };
   const c = vm.createContext({ document, chrome, matchMedia: () => ({ matches: true }), addEventListener() {}, MutationObserver: class { observe() {} disconnect() {} }, setTimeout: (fn, ms) => { const id = ++serial; timers.set(id, { fn, at: clock + ms }); return id; }, clearTimeout: (id) => timers.delete(id) });
   const make = vm.runInContext(src.slice(a, b) + '\nGZ_ULTRA_OVERLAY;', c), api = make(X, () => paints++); api.sync(true);
   const tick = (ms) => { clock += ms; for (const [id, t] of [...timers]) if (t.at <= clock) { timers.delete(id); t.fn(); } };
-  return { api, nav, chrome, document, anchor, paper, listeners, globalListeners, htmlAttrs, tick, button: () => button, paints: () => paints };
+  return { api, nav, chrome, document, anchor, paper, tip, listeners, globalListeners, htmlAttrs, tick, button: () => button, paints: () => paints };
 };
 
 test('hover opens after 150 ms and closes after 300 ms without changing the saved collapse preference', () => {
   const f = fixture(); f.listeners.get('pointerenter')({ pointerType: 'mouse' }); f.tick(149); assert.equal(f.api.open(), false); f.tick(1); assert.equal(f.api.open(), true);
   assert.equal(f.anchor.getAttribute('title'), ''); assert.equal(f.button().getAttribute('aria-expanded'), 'true');
+  assert.equal(f.tip.getAttribute('data-gz-nav-tip'), '', 'a nav title\'s tip already up is tagged, for theme.css to hide while expanded');
   f.listeners.get('pointerleave')({ pointerType: 'mouse' }); f.tick(299); assert.equal(f.api.open(), true); f.tick(1); assert.equal(f.api.open(), false);
   assert.equal(f.anchor.getAttribute('title'), 'Full native name'); assert.equal(f.nav.collapsed, true); assert.ok(f.paints() > 0);
 });

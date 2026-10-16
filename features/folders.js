@@ -88,7 +88,10 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     for (const ev of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'keydown', 'keyup']) b.addEventListener(ev, (e) => e.stopPropagation());
     return b;
   };
+  // What the last paint drew from: a sync with nothing new (each of the page's passes) leaves the outline as it is.
+  let dirty = true, painted, words = '';
   const paint = () => {
+    dirty = false; painted = data; words = t('Hidden');
     if (!current() || !data) return clear();
     if (!style.isConnected) document.head.append(style);
     const ids = new Set(data?.ids || []), rows = [...document.querySelectorAll(ROW)];
@@ -165,14 +168,23 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     const next = expected() || '';
     if (next !== key) { generation++; epoch++; key = next; data = null; loading = false; clear(); }
     if (!data) read();
-    paint();
+    if (dirty || data !== painted || words !== t('Hidden')) paint();
   };
   chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && key && Object.hasOwn(changes, key)) { epoch++; loading = false; data = null; read(); } });
   // Mutation callbacks run before paint, including rows inserted when a folder is unfolded.
   // Ultra changes its page all the time: watched only while on a course's outline, and at most once a frame (a frame's
-  // callback still runs before that frame paints, so a hidden folder never shows).
+  // callback still runs before that frame paints, so a hidden folder never shows). Only what paint reads counts: rows,
+  // folder titles and their text, headings and Glaze's own controls; a button's ripple redrew every row each frame.
+  const TOGGLE = '[id^="folder-title-"], [id^="learning-module-title-"]';
+  const SEEN = `${ROW}, ${TOGGLE}, h1, h2, h3, h4, h5, h6, .gz-folder-eye, .gz-folder-badge, #gz-progress, #gz-folders-toggle, #gz-folder-status`;
+  const matters = (r) => r.type === 'attributes' || [...r.addedNodes, ...r.removedNodes].some((n) => (n.nodeType === 1 && (n.matches(SEEN) || !!n.querySelector(SEEN)))
+    || (!!n.textContent.trim() && !!r.target.closest?.(TOGGLE))); // a title's text, however Ultra swaps it
   let frame = 0;
-  const observer = new MutationObserver(() => { if (active && !frame) frame = requestAnimationFrame(() => { frame = 0; if (active) sync(active, identity); }); });
+  const observer = new MutationObserver((records) => {
+    if (!active || !records.some(matters)) return;
+    dirty = true;
+    frame ||= requestAnimationFrame(() => { frame = 0; if (active) sync(active, identity); });
+  });
   const watch = (on) => { if (on) observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-content-id', 'id', 'aria-label', 'aria-labelledby'] }); else observer.disconnect(); };
   return { sync };
 })();

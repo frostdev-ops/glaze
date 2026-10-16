@@ -1926,4 +1926,6 @@
   "Seven animated pets, plus local ChatGPT pet imports. Your XP and decorations stay.": "Sept compagnons animés et import local de compagnons ChatGPT. Votre XP et vos décorations sont conservés.",
   "Lighter Blackboard course tabs: hidden pages rest and snapshots update less often.": "Les onglets Blackboard s’allègent : les pages masquées se reposent et les captures sont moins fréquentes.",
   "Solid backgrounds skip glass blur. Expressive pointer light loads only when needed.": "Les fonds unis évitent le flou. La lumière expressive du pointeur ne se charge qu’en cas de besoin.",
+  "Faster Blackboard Ultra: clicks, hovers and page changes no longer restyle the whole page.": "Blackboard Ultra plus rapide : les clics, les survols et les changements de page ne recalculent plus le style de toute la page.",
+  "Course tabs keep up to four pages live on every computer again, and no longer close when idle.": "Les onglets de cours gardent de nouveau jusqu’à quatre pages actives sur chaque ordinateur et ne se ferment plus après inactivité.",
 };

@@ -7,7 +7,9 @@
 
 # Glaze
 
-**New in 3.0.1:** **Look → Surfaces** controls content-panel opacity, blur, palette/custom color, accent/course tint, shadow strength/color, frost, depth and borders. Panels, native content rows, navigation, menus, tooltips and Glaze’s own apps share those controls across Blackboard Ultra, Canvas and Moodle. Surface backgrounds follow the Look’s corner radius. Automatic defaults retain each Look’s existing fills; custom transparency needs blur and a non-solid background. Small rows get no additional backdrop blur.
+**New in 3.0.2:** Blackboard Ultra is much faster with Glaze on: clicks, hovers and page changes no longer restyle the whole page, and pages are themed sooner. Course tabs keep up to four live pages on every computer again. There is a Firefox package too (Firefox 140 or newer).
+
+**From 3.0.1:** **Look → Surfaces** controls content-panel opacity, blur, palette/custom color, accent/course tint, shadow strength/color, frost, depth and borders. Panels, native content rows, navigation, menus, tooltips and Glaze’s own apps share those controls across Blackboard Ultra, Canvas and Moodle. Surface backgrounds follow the Look’s corner radius. Automatic defaults retain each Look’s existing fills; custom transparency needs blur and a non-solid background. Small rows get no additional backdrop blur.
 
 **Animated pets:** the optional habitat keeps its existing XP and decorations. Choose Ember the fox, Luna the owl, Mochi the cat, Sprout the dragon, Pebble the capybara, Rime the arctic fox or the animated Glaze droplet, or import a local ChatGPT pet under **Study tools → Pet habitat**. Choose its `pet.json` and PNG/WebP sprite sheet together, a ZIP containing them, or the sprite sheet alone. Existing v1 (`1536 × 1872`) and v2 (`1536 × 2288`) sheets are supported; v2 adds sixteen gaze directions. Click a pet to wave, or focus it and press Enter/Space to jump. Animation pauses offscreen and in hidden pages, and reduced motion or Glaze Motion off shows a still frame. No account connection, pet service or upload is needed.
 
@@ -32,7 +34,7 @@ Its animated scene also stops and releases its rendering resources.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
-  <a href="https://github.com/frostdev-ops/glaze/releases/download/v3.0.1/glaze-3.0.1-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
+  <a href="https://github.com/frostdev-ops/glaze/releases/download/v3.0.2/glaze-3.0.2-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
 </p>
 
 The settings editor has eight tabs: **Look, Blackboard, Canvas, Moodle, Study tools, Sharing and sync, Backup and privacy, and About**. Search works across tabs; section links such as `#blackboard/nav` and older editor links reveal the right tab. Section resets change their own preferences; resetting preferences keeps your palettes, pictures, local notes/tasks, bookmarks and share keys. The live preview uses fictional local pages at real desktop or phone CSS widths, with site/page/appearance controls. Focusing a Blackboard course's editor controls previews that course's appearance; Blackboard nicknames can be edited here as well as on its course cards. Sharing and sync includes the Relay origin and an explicit connection test; saving stays offline.
@@ -112,9 +114,22 @@ Narrow modal drawers keep Ultra's native width.
 4. Click **Load unpacked** and select the repository folder.
 5. Open your Blackboard Ultra, Canvas or Moodle site and click the Glaze icon.
 
+## Firefox
+
+Glaze for Firefox needs Firefox 140 or newer. Until it is listed on Firefox Add-ons, try it from a build:
+run `sh scripts/package-firefox.sh`, open `about:debugging#/runtime/this-firefox`, click **Load Temporary
+Add-on…** and pick `dist/glaze-v<version>-firefox.zip`. A temporary add-on is removed when Firefox quits.
+
+The Firefox package is the Chrome package with a rewritten manifest: Firefox has no extension service
+worker, so the background runs as an event page that loads every script the worker imports. Google
+Calendar sync needs Chrome's sign-in and isn't in the Firefox build; the calendar export is.
+
+For the dedicated Firefox for Android emulator, launcher and validation checklist, see
+[Firefox for Android testing](docs/firefox-android.md).
+
 ## Safari
 
-[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.0.1/glaze-3.0.1-safari-macos.dmg): signed and notarized, attached to each release on
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.0.2/glaze-3.0.2-safari-macos.dmg): signed and notarized, attached to each release on
 [GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
 on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
 the frosted-glass blur needs Safari 18.
@@ -140,7 +155,7 @@ sh scripts/build-safari.sh
 ```
 
 That packages the extension, copies it into a temporary copy of the project, and builds a universal
-app in `release/Glaze.app`, signed with the configured Developer ID. Override `SAFARI_SIGN_IDENTITY`
+app in `release/<version>/build/Glaze.app`, signed with the configured Developer ID. Override `SAFARI_SIGN_IDENTITY`
 and `SAFARI_TEAM_ID` to use a different identity. Safari only installs apps from outside the App Store
 when they are notarized, so pass a saved `notarytool` Keychain profile:
 
@@ -150,7 +165,7 @@ NOTARY_PROFILE=your-profile sh scripts/build-safari.sh
 
 or set `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID` for an App Store Connect API key. The script
 then notarizes the app, staples the ticket, checks Gatekeeper, and writes
-`release/glaze-<version>-safari-macos.zip` and a notarized `.dmg`, each with its SHA-256 checksum. Without credentials the zip is
+`release/<version>/github/glaze-<version>-safari-macos.zip` and a notarized `.dmg`, each with its SHA-256 checksum. Without credentials the zip is
 marked `unnotarized` and is for development only.
 
 For the Mac App Store, `scripts/appstore-safari.sh` archives the same project with App Store signing
@@ -184,7 +199,7 @@ After building and notarizing a release, generate its signed update entry locall
 `<version>` with the manifest version):
 
 ```sh
-sh scripts/safari-appcast.sh "release/glaze-<version>-safari-macos.dmg" /path/to/Sparkle/bin
+sh scripts/safari-appcast.sh "release/<version>/github/glaze-<version>-safari-macos.dmg" /path/to/Sparkle/bin
 ```
 
 The helper verifies the notarized DMG and app, checks that the Keychain signing key matches the
@@ -211,7 +226,7 @@ Extensions › Glaze › Settings.
 
 The iOS app is two more targets in the same Xcode project (`Glaze iOS` and `Glaze iOS Extension`), sharing
 the extension's resources and native handler with the Mac targets. `scripts/appstore-ios.sh` archives it
-with App Store signing into `release/Glaze-iOS.xcarchive` and `release/glaze-<version>-ios.ipa`. It uses
+with App Store signing into `release/<version>/build/Glaze-iOS.xcarchive` and `release/<version>/app-store/glaze-<version>-ios.ipa`. It uses
 the App Store profiles already on the Mac; set `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID` to let Xcode
 create them. It never uploads unless `APPSTORE_UPLOAD=1` is set. To try it in the Simulator, run the
 `Glaze iOS` scheme in Xcode.
@@ -238,6 +253,8 @@ grade calculators, loads on demand from `features/` the first time a page needs 
 ```
 
 Writes `dist/glaze-v<version>.zip`, ready for the Chrome Web Store. Requires `node` and `zip`.
+`sh scripts/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons.
+For a release, `sh scripts/release.sh` builds everything into `release/<version>/`; see [RELEASING.md](RELEASING.md).
 
 ```sh
 node --test

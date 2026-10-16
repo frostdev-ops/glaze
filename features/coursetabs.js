@@ -154,14 +154,24 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (strip.dataset.at !== w.at) strip.dataset.at = w.at;
   };
   // From content-ultra.js's mutation callback: only when Ultra replaced the bar or took the strip away with the old one.
-  let seenBar = null;
+  // While neither the bar nor the strip's place changed it reads no layout: it runs on every change Ultra makes, and a
+  // read there made the browser restyle and lay out the page each time, before Ultra's next frame. A bar or page hidden
+  // or shown with no node added (a class) is seen by its size, once laid out and still before that frame is painted.
+  let seenBar = null, lastBar, lastParent, sized = [];
+  const sizes = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { lastBar = undefined; held(); }) : null;
   const held = () => {
     if (!on || !strip) return;
     const bar = courseBar();
-    if (strip.isConnected && (shown(bar) ? bar === seenBar : shown(seenBar) && seenBar.contains(strip))) return;
-    seenBar = shown(bar) ? bar : routed();
-    place();
-    seenBar ||= strip.parentElement;
+    if (strip.isConnected && bar === lastBar && strip.parentElement === lastParent) return;
+    lastBar = bar;
+    if (!strip.isConnected || !(shown(bar) ? bar === seenBar : shown(seenBar) && seenBar.contains(strip))) {
+      seenBar = shown(bar) ? bar : routed();
+      place();
+      seenBar ||= strip.parentElement;
+    }
+    lastParent = strip.parentElement;
+    const boxes = [...new Set([bar, seenBar])].filter(Boolean);
+    if (sizes && (boxes.length !== sized.length || boxes.some((e, i) => e !== sized[i]))) { sizes.disconnect(); sized = boxes; for (const e of boxes) sizes.observe(e); }
   };
   // The first paint's reservation (extras.css, set by content-ultra.js from this tab's sessionStorage before this file is in):
   // the strip's place and size, and whether pages outside a course show it.
@@ -390,17 +400,15 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // ---- live tabs ------------------------------------------------------------------------------------------------
   // A tab picked from the strip runs in a frame of its own (#gz-ctabs-frames, over the whole window as a course in Ultra
   // is, above Glaze's footer), named gz-ctab:<course> so Glaze there works as on a page of its own (content.js solo). Ultra draws no menu
-  // in a frame. Frames stay running while hidden; at most LIVE of them, the least recently shown going first, and a
-  // closed tab's at once; an unedited one hidden for IDLE goes too, opened again behind its picture when picked. This page's
-  // own course is shown as itself. The strip in a frame sends its picks here (toTop):
-  // a tab, a close, its page leaving its course (then this page goes there), its page changing (a fresh picture).
-  // Each frame is a whole Ultra: two where the machine has few cores (deviceMemory stops at 8, so it can't tell).
-  const LIVE = navigator.hardwareConcurrency <= 6 ? 2 : 4;
-  const IDLE = 600000;
-  const frames = new Map(); // cid → { el, at (last shown), ready, dirty, idle (its timer while hidden) }
+  // in a frame. Frames stay running while hidden, however long; at most LIVE of them, the least recently shown going
+  // first, and a closed tab's at once. This page's own course is shown as itself. The strip in a frame sends its picks
+  // here (toTop): a tab, a close, its page leaving its course (then this page goes there), its page changing (a fresh picture).
+  // Each frame is a whole Ultra in this tab's one renderer and heap: the cap keeps the tab clear of running out of memory.
+  const LIVE = 4;
+  const frames = new Map(); // cid → { el, at (last shown), ready, dirty }
   let showing = ''; // the course whose frame is on screen; '' for this page
   let shownFrom = ''; // this page's address when a frame covered it: if it changes, the student went somewhere here
-  let host = null, pic = null, showTurn = 0, picking = '';
+  let host = null, pic = null, showTurn = 0;
   const toTop = (op, m = {}) => { try { window.top.postMessage({ gzCtab: op, ...m }, location.origin); } catch { /* gone */ } };
   let movedTimer = 0;
   const moved = () => { clearTimeout(movedTimer); movedTimer = setTimeout(() => toTop('moved'), 500); };
@@ -412,7 +420,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const drop = (cid, replacing = false) => {
     const f = frames.get(cid);
     if (!f) return;
-    clearTimeout(f.idle);
     f.el.remove();
     frames.delete(cid);
     if (showing === cid && !replacing) show('');
@@ -494,7 +501,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const show = async (cid) => {
     const me = ++showTurn;
-    picking = cid;
     if (cid === showing) return;
     // A picture of what goes under, if one is being taken (the press on a tab starts one), finishes first: taken after the
     // switch, it would be of the wrong page.
@@ -516,13 +522,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     showing = cid;
     shownFrom = location.pathname + location.search;
     for (const [k, g] of frames) {
-      if (k === cid) { g.at = Date.now(); clearTimeout(g.idle); g.idle = 0; }
-      else g.idle ||= setTimeout(function expire() {
-        g.idle = 0;
-        if (frames.get(k) !== g || showing === k || g.dirty) return;
-        if (picking === k) g.idle = setTimeout(expire, IDLE);
-        else drop(k);
-      }, IDLE);
+      if (k === cid) g.at = Date.now();
       g.el.style.visibility = k === cid && g.ready ? '' : 'hidden';
       g.el.inert = k !== cid;
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid }, location.origin);
@@ -803,6 +803,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       clearTimeout(sayTimer);
       saveNow();
       strip?.remove();
+      sizes?.disconnect(); sized = []; lastBar = undefined;
       // Every tab's frame stops; this page shows again.
       for (const k of [...frames.keys()]) drop(k);
       unpicture(true);

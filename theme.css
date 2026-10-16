@@ -368,11 +368,11 @@ html[data-gz-font-mono] :is(code, pre, kbd, samp, .ql-code-block, .ql-code-block
    that a font-size change can't reach. Without typed calc() division the zoom is invalid and falls
    back to 1. */
 html { --gz-doc-w: 50rem; --gz-doc-zoom: clamp(1, calc(100cqi / 92.5rem), 1.5); }
-#site-wrap :has(> .document-content-root) { container-type: inline-size; }
+#site-wrap [data-gz-doc] { container-type: inline-size; }
 #site-wrap .document-body { max-width: none !important; grid-template-columns: 0 minmax(0, 1fr) !important; }
 #site-wrap .bbml-editor-parent { background: transparent !important; width: 100%; max-width: var(--gz-doc-w); margin-inline: auto; padding-top: 1.5rem !important; zoom: var(--gz-doc-zoom); }
 /* Scoped to the document's own panel: other item pages (assignments) share the h1 class. */
-#site-wrap :has(> .document-content-root) div:has(> div > h1.js-header-text) { max-width: calc(var(--gz-doc-w) - 3rem); margin-inline: auto !important; zoom: var(--gz-doc-zoom); }
+#site-wrap [data-gz-doc] div:has(> div > h1.js-header-text) { max-width: calc(var(--gz-doc-w) - 3rem); margin-inline: auto !important; zoom: var(--gz-doc-zoom); }
 /* The card: the document's paper, and an assignment's instructions and details. The instructions
    are a MuiPaper, so the Paper surface rule further down outranks the see-through fill there and
    that card stays opaque; the rest of the recipe (edge, radius, shadow) applies to all three. */
@@ -579,12 +579,12 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
 /* ---- portals: MUI popovers, menus and dialogs mount on <body>, OUTSIDE #site-wrap, so the page-scoped
    inherit/border rules above never reach them. Same rules, portal scope. ---- */
 .MuiModal-root, .MuiPopper-root, .MuiPopover-root, .MuiDialog-root { color: var(--gz-ink) !important; }
-:is(.MuiModal-root, .MuiPopper-root) *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)) { color: inherit !important; }
-:is(.MuiModal-root, .MuiPopper-root) * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
-:is(.MuiModal-root, .MuiPopper-root) :is(a, .MuiLink-root) { color: var(--gz-accent) !important; }
-:is(.MuiModal-root, .MuiPopper-root) :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root) { color: var(--gz-ink-muted) !important; }
-:is(.MuiModal-root, .MuiPopper-root) .Mui-checked { color: var(--gz-accent) !important; }
-:is(.MuiModal-root, .MuiPopper-root) :is(fieldset, legend, legend *, .MuiFormControlLabel-root, .MuiMenuItem-root, .MuiListItem-root, [class*="popover-container"]) { background: transparent !important; }
+.MuiModal-root *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)), .MuiPopper-root *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)) { color: inherit !important; }
+.MuiModal-root *, .MuiPopper-root * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
+.MuiModal-root :is(a, .MuiLink-root), .MuiPopper-root :is(a, .MuiLink-root) { color: var(--gz-accent) !important; }
+.MuiModal-root :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root), .MuiPopper-root :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root) { color: var(--gz-ink-muted) !important; }
+.MuiModal-root .Mui-checked, .MuiPopper-root .Mui-checked { color: var(--gz-accent) !important; }
+.MuiModal-root :is(fieldset, legend, legend *, .MuiFormControlLabel-root, .MuiMenuItem-root, .MuiListItem-root, [class*="popover-container"]), .MuiPopper-root :is(fieldset, legend, legend *, .MuiFormControlLabel-root, .MuiMenuItem-root, .MuiListItem-root, [class*="popover-container"]) { background: transparent !important; }
 .MuiPaper-root:not(.MuiDrawer-paper) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 
 /* ---- footer bar (content.js appends it; every rule here is gated on the popup's Footer switch) ----
@@ -721,7 +721,7 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
    for an empty placeholder (Ultra's course schedule without one), and no stray space inside a panel's edges. */
 #site-wrap aside.outline-actions { gap: calc(0.75rem * var(--gz-space, 1)); border-left: 0 !important; }
 #site-wrap aside.outline-actions > * { margin-block: 0 !important; }
-#site-wrap aside.outline-actions > .conditional-block:not(:has(*)) { display: none; }
+#site-wrap aside.outline-actions > .conditional-block:not(:has(> *)) { display: none; }
 #site-wrap .outline-action-block > :first-child { margin-top: 0 !important; }
 #site-wrap .outline-action-block > :last-child { margin-bottom: 0 !important; }
 /* A discussion's side column: Details & Information and Participation as panels like the outline's; the rules under
@@ -900,7 +900,7 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 #site-wrap :where(a, .MuiLink-root) { text-underline-offset: 0.2em; text-decoration-thickness: 1px; transition: color var(--gz-t) var(--gz-ease), text-decoration-color var(--gz-t) var(--gz-ease); }
 
 /* Keyboard focus: always the accent, whatever ring Ultra draws. */
-#site-wrap :focus-visible, :is(.MuiModal-root, .MuiPopper-root) :focus-visible { outline-color: var(--gz-accent) !important; }
+#site-wrap :focus-visible, .MuiModal-root :focus-visible, .MuiPopper-root :focus-visible { outline-color: var(--gz-accent) !important; }
 
 /* ---- tooltips: every flavour Ultra ships (Foundation .tooltip, enhanced-tooltip, MUI, Fluent,
    keyboard hints) and Glaze's own (.gz-tip, which replaces native title tooltips) ---- */
@@ -957,38 +957,38 @@ html:not([data-gz-card-icons]) #site-wrap .gz-bm { display: none; }
 #site-wrap .gz-bm a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #site-wrap .gz-bm svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* Base navigation: no changes to the course tab bar or other navigation regions. */
-html[data-gz-nav] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools) { isolation: isolate; background: var(--gz-nav-c) !important; }
+html[data-gz-nav] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools) { isolation: isolate; background: var(--gz-nav-c) !important; }
 html[data-gz-nav] nav#base_tools { position: relative; }
-html[data-gz-nav="gradient"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools) { background: linear-gradient(var(--gz-nav-a), var(--gz-nav-c), var(--gz-nav-d)) !important; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before,
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before { z-index: -2; background: var(--gz-nav-img) center / cover no-repeat; }
-html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::after { z-index: -1; background: var(--gz-nav-c); opacity: var(--gz-nav-o); }
+html[data-gz-nav="gradient"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools) { background: linear-gradient(var(--gz-nav-a), var(--gz-nav-c), var(--gz-nav-d)) !important; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before,
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { z-index: -2; background: var(--gz-nav-img) center / cover no-repeat; }
+html[data-gz-nav="image"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::after { z-index: -1; background: var(--gz-nav-c); opacity: var(--gz-nav-o); }
 html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { color: var(--gz-nav-ink) !important; background: transparent !important; }
 html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) :is(span, svg) { color: inherit !important; }
 html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link):is(:hover, :focus-visible) { text-decoration: underline; outline: 2px solid var(--gz-nav-ink); outline-offset: -2px; }
 html[data-gz-nav] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link).Mui-selected::before { background: var(--gz-nav-ink) !important; }
-html[data-gz-nav-no-logo] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill :is(img, [analytics-id="baseLayout.logo.link"]) { display: none; }
+html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill :is(img, [analytics-id="baseLayout.logo.link"]) { display: none; }
 html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { min-height: 40px; padding-block: 6px !important; font-size: 12px; }
 html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { min-height: 58px; padding-block: 14px !important; font-size: 17px; }
 html[data-gz-nav-labels="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { font-size: 11px; }
 html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { justify-content: center; min-height: 44px; }
-html[data-gz-nav-f="vivid"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before { filter: saturate(1.6) contrast(1.08); }
-html[data-gz-nav-f="mono"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before { filter: grayscale(1); }
-html[data-gz-nav-f="noir"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before { filter: grayscale(1) contrast(1.45) brightness(0.85); }
-html[data-gz-nav-f="warm"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before { filter: sepia(0.35) saturate(1.35) hue-rotate(-10deg); }
-html[data-gz-nav-f="cool"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before { filter: saturate(0.8) hue-rotate(12deg) brightness(1.05); }
-html[data-gz-nav-f="faded"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before { filter: contrast(0.78) saturate(0.7) brightness(1.12); }
-html[data-gz-nav-f="dreamy"] :is(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), nav#base_tools)::before { filter: blur(1.5px) saturate(1.25) brightness(1.08); }
+html[data-gz-nav-f="vivid"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: saturate(1.6) contrast(1.08); }
+html[data-gz-nav-f="mono"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: grayscale(1); }
+html[data-gz-nav-f="noir"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: grayscale(1) contrast(1.45) brightness(0.85); }
+html[data-gz-nav-f="warm"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: sepia(0.35) saturate(1.35) hue-rotate(-10deg); }
+html[data-gz-nav-f="cool"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: saturate(0.8) hue-rotate(12deg) brightness(1.05); }
+html[data-gz-nav-f="faded"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: contrast(0.78) saturate(0.7) brightness(1.12); }
+html[data-gz-nav-f="dreamy"] :is(.MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]), nav#base_tools)::before { filter: blur(1.5px) saturate(1.25) brightness(1.08); }
 
 
-html[data-gz-nav] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(nav, ul) { background: transparent !important; }
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(nav, ul) { background: transparent !important; }
 html[data-gz-nav-size="small"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) svg { width: 20px; height: 20px; }
 html[data-gz-nav-size="large"] :is(nav:has(> #base_tools), nav#base_tools, nav[class*="makeStylesnavigation"]) svg { width: 30px; height: 30px; }
 @media (min-width: 900px) {
-  html[data-gz-nav-size="small"] .MuiDrawer-root:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), html[data-gz-nav-size="small"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { width: 204px; flex-basis: 204px; }
-  html[data-gz-nav-size="large"] .MuiDrawer-root:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), html[data-gz-nav-size="large"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { width: 280px; flex-basis: 280px; }
-  html[data-gz-nav-collapsed] .MuiDrawer-root:has(:is(#base_tools, nav[class*="makeStylesnavigation"])), html[data-gz-nav-collapsed] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { width: 88px !important; flex-basis: 88px !important; }
+  html[data-gz-nav-size="small"] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]), html[data-gz-nav-size="small"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { width: 204px; flex-basis: 204px; }
+  html[data-gz-nav-size="large"] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]), html[data-gz-nav-size="large"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { width: 280px; flex-basis: 280px; }
+  html[data-gz-nav-collapsed] .MuiDrawer-root:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]), html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { width: 88px !important; flex-basis: 88px !important; }
 }
 html[data-gz-card-hover="none"] #site-wrap article:is(.course-element-card, .gz-course-card):hover { transform: none; }
 @media (hover: hover) {
@@ -1049,7 +1049,7 @@ html[data-gz-card-condensed] #site-wrap .gz-pet { top: 2px; right: calc(50% - 32
 
 #site-wrap article.course-element-card:not(.multi-column-view *) > .gz-pet { display: none; }
 
-html[data-gz-nav] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill { background: transparent !important; }
+html[data-gz-nav] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill { background: transparent !important; }
 
 /* Ultra base rails only: the first-paint values also cover the newer MUI drawer. */
 :root { --gz-nav-width: 200px; --gz-nav-icon: 24px; --gz-nav-text: 14px; --gz-nav-height: 44px; --gz-nav-gap: 2px; --gz-nav-padding: 8px; }
@@ -1083,21 +1083,21 @@ html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="
 /* Glaze settings, last in the nav (content-ultra.js): Glaze's drop for its icon, at the nav's icon size. */
 .gz-nav-glaze-icon { display: inline-block; flex: none; width: var(--gz-nav-icon, 24px); height: var(--gz-nav-icon, 24px); background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22 viewBox=%2214 17 100 100%22%3E%3Cdefs%3E%3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230d1b2e%22/%3E%3Cstop offset=%221%22 stop-color=%22%23060d18%22/%3E%3C/linearGradient%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z%22 fill=%22%23060d18%22 opacity=%220.28%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.55%22/%3E%3C/svg%3E") center / contain no-repeat; }
 @media (min-width: 900px) {
-  html[data-gz-nav-brand] :is(.MuiDrawer-root, .MuiDrawer-paper):has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { box-sizing: border-box; width: var(--gz-nav-width) !important; flex-basis: var(--gz-nav-width) !important; max-width: 100vw; }
+  html[data-gz-nav-brand] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]) { box-sizing: border-box; width: var(--gz-nav-width) !important; flex-basis: var(--gz-nav-width) !important; max-width: 100vw; }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="small"] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 204px !important; flex-basis: 204px !important; }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="large"] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 280px !important; flex-basis: 280px !important; }
-  html[data-gz-nav-collapsed] :is(.MuiDrawer-root, .MuiDrawer-paper):has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { width: 80px !important; flex-basis: 80px !important; }
+  html[data-gz-nav-collapsed] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]) { width: 80px !important; flex-basis: 80px !important; }
   html[data-gz-nav-collapsed] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools) { width: 88px !important; flex-basis: 88px !important; }
 }
 html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(.MuiListItemText-root, .MuiTypography-root, a > span:not(:has(svg)), .gz-nav-label) { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 html:is([data-gz-nav-labels="icons"], [data-gz-nav-collapsed]):not([data-gz-nav-expanded]) :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a { justify-content: center; gap: 0 !important; }
-html[data-gz-nav-brand] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img) { display: grid; position: relative; min-height: calc(var(--gz-nav-logo-size, 48px) + 16px); }
-html[data-gz-nav-brand]:not([data-gz-nav-brand="school"]) .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill img { opacity: 0; }
-html:is([data-gz-nav-brand="glaze"], [data-gz-nav-brand="custom"]) .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img)::after { content: ""; position: absolute; inset: 8px; background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E") center / contain no-repeat; }
-html[data-gz-dark-theme][data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%23eaf6ff%22%3EGlaze%3C/text%3E%3C/svg%3E"); }
-html[data-gz-nav-brand="custom"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img)::after { background-image: var(--gz-nav-logo, url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E")); }
-html[data-gz-nav-collapsed]:not([data-gz-nav-expanded])[data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22 viewBox=%220 0 128 128%22%3E%3Cdefs%3E%3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230d1b2e%22/%3E%3Cstop offset=%221%22 stop-color=%22%23060d18%22/%3E%3C/linearGradient%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 rx=%2228%22 fill=%22url(%23bg)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z%22 fill=%22%23060d18%22 opacity=%220.28%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.55%22/%3E%3C/svg%3E"); }
-html[data-gz-nav-no-logo] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img) { display: none; }
+html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img) { display: grid; position: relative; min-height: calc(var(--gz-nav-logo-size, 48px) + 16px); }
+html[data-gz-nav-brand]:not([data-gz-nav-brand="school"]) .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill img { opacity: 0; }
+html:is([data-gz-nav-brand="glaze"], [data-gz-nav-brand="custom"]) .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { content: ""; position: absolute; inset: 8px; background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E") center / contain no-repeat; }
+html[data-gz-dark-theme][data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%23eaf6ff%22%3EGlaze%3C/text%3E%3C/svg%3E"); }
+html[data-gz-nav-brand="custom"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: var(--gz-nav-logo, url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22420%22 height=%22120%22 viewBox=%220 0 420 120%22%3E%3Cdefs%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg transform=%22translate(8,4) scale(0.72)%22%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.5%22/%3E%3C/g%3E%3Ctext x=%22110%22 y=%2276%22 font-family=%22system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif%22 font-size=%2254%22 font-weight=%22700%22 fill=%22%230d1b2e%22%3EGlaze%3C/text%3E%3C/svg%3E")); }
+html[data-gz-nav-collapsed]:not([data-gz-nav-expanded])[data-gz-nav-brand="glaze"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22 viewBox=%220 0 128 128%22%3E%3Cdefs%3E%3ClinearGradient id=%22bg%22 x1=%220%22 y1=%220%22 x2=%220%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%230d1b2e%22/%3E%3Cstop offset=%221%22 stop-color=%22%23060d18%22/%3E%3C/linearGradient%3E%3ClinearGradient id=%22ac%22 x1=%220.1%22 y1=%220%22 x2=%220.9%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%236fdcff%22/%3E%3Cstop offset=%221%22 stop-color=%22%2317c8f4%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width=%22128%22 height=%22128%22 rx=%2228%22 fill=%22url(%23bg)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z%22 fill=%22url(%23ac)%22/%3E%3Cpath d=%22M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z%22 fill=%22%23060d18%22 opacity=%220.28%22/%3E%3Cellipse cx=%2279%22 cy=%2276%22 rx=%2210%22 ry=%2215%22 transform=%22rotate(20 79 76)%22 fill=%22%23ffffff%22 opacity=%220.55%22/%3E%3C/svg%3E"); }
+html[data-gz-nav-no-logo] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img) { display: none; }
 .gz-nav-dashboard :is(svg:not(.gz-nav-dashboard-icon), .MuiListItemIcon-root) { display: none !important; }
 .gz-nav-dashboard > svg.gz-nav-dashboard-icon { fill: currentColor !important; stroke: none !important; }
 .gz-nav-widgets { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
@@ -1119,36 +1119,37 @@ html:not([data-gz-nav]) :is(#site-wrap, .MuiDrawer-paper) nav[class*="makeStyles
 .gz-nav-link > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html[data-gz-nav-collapsed]:not([data-gz-nav-expanded]) .gz-nav-widget .gz-nav-pet-level { display: inline; font-size: 10px; }
 
-html[data-gz-nav-brand] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill img { width: 100%; max-width: 100%; height: var(--gz-nav-logo-size, 48px); object-fit: contain; object-position: var(--gz-nav-logo-position, center); }
-html[data-gz-nav-brand] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header.themed-logo-background-primary-fill a:has(img)::after { background-position: var(--gz-nav-logo-position, center); }
+html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill img { width: 100%; max-width: 100%; height: var(--gz-nav-logo-size, 48px); object-fit: contain; object-position: var(--gz-nav-logo-position, center); }
+html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header.themed-logo-background-primary-fill a:has(img)::after { background-position: var(--gz-nav-logo-position, center); }
 html[data-gz-nav-logo-align="start"] { --gz-nav-logo-position: left; }
 html[data-gz-nav-logo-align="end"] { --gz-nav-logo-position: right; }
-html[data-gz-nav-brand] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(footer, [class*="makeStylesfooter"]) a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; overflow-wrap: normal; hyphens: none; font-size: var(--gz-nav-text); }
-html[data-gz-nav-footer-hidden] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(footer, [class*="makeStylesfooter"]) { display: none !important; }
+html[data-gz-nav-brand] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) a { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; overflow-wrap: normal; hyphens: none; font-size: var(--gz-nav-text); }
+html[data-gz-nav-footer-hidden] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) { display: none !important; }
 
-html[data-gz-nav-overflow="wrap"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(footer, [class*="makeStylesfooter"]) a { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.3; max-height: 2.6em; }
+html[data-gz-nav-overflow="wrap"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) a { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.3; max-height: 2.6em; }
 
 .gz-nav-expand { position: absolute; z-index: 1; inset-block-end: 4px; inset-inline: 0; display: grid; place-items: center; width: 30px; height: 30px; margin: 0 auto; padding: 0; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); cursor: pointer; }
 .gz-nav-expand svg { display: block; }
 .gz-nav-expand:dir(rtl) svg { transform: scaleX(-1); }
 .gz-nav-expand:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 html[data-gz-nav-expanded] .gz-nav-expand { transform: rotate(180deg); }
-html[data-gz-nav-expanded] body:has(.MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) [data-gz-title]) > .gz-tip { visibility: hidden !important; }
+/* A nav item's title tip up as the nav expands repeats the label it now shows (features/nav.js tags it). */
+html[data-gz-nav-expanded] body > .gz-tip[data-gz-nav-tip] { visibility: hidden !important; }
 @media (min-width: 900px) {
   /* Over the page, as Ultra's own paper is (fixed): an in-flow full-height drawer pushes the page a screen down where Ultra stacks the side menu above it. */
-  html[data-gz-nav-collapsed][data-gz-nav-expanded] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 1300; width: var(--gz-nav-width) !important; box-shadow: var(--gz-shadow); }
+  html[data-gz-nav-collapsed][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 1300; width: var(--gz-nav-width) !important; box-shadow: var(--gz-shadow); }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="small"][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools) { width: 204px !important; }
   html:not([data-gz-nav-detailed])[data-gz-nav-size="large"][data-gz-nav-expanded] .MuiDrawer-paper:has(#base_tools) { width: 280px !important; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  html:not([data-gz-motion="off"])[data-gz-nav-collapsed] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { transition: width 150ms ease; }
+  html:not([data-gz-motion="off"])[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { transition: width 150ms ease; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html[data-gz-nav-collapsed] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { transition: none !important; }
+  html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { transition: none !important; }
 }
-html[data-gz-motion="off"][data-gz-nav-collapsed] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) { transition: none !important; }
+html[data-gz-motion="off"][data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) { transition: none !important; }
 
-html[data-gz-nav-collapsed] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) header { position: relative; padding-block-end: 38px !important; }
+html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header { position: relative; padding-block-end: 38px !important; }
 
-html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(footer, [class*="makeStylesfooter"]) a { font-size: var(--gz-nav-fit, 10px); }
+html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) a { font-size: var(--gz-nav-fit, 10px); }

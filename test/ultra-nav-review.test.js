@@ -72,7 +72,7 @@ const dashboardFixture = () => {
   let scans = 0, globalScans = 0, ownedIcon;
   const link = { nodeType: 1, isConnected: true, hasAttribute: (k) => attrs.has(k), getAttribute: (k) => k === 'href' ? 'https://school.test/ultra/institution-page' : attrs.get(k) ?? null, setAttribute: (k, v) => attrs.set(k, v), removeAttribute: (k) => attrs.delete(k), querySelector: (s) => s.startsWith(':scope') ? ownedIcon?.isConnected ? ownedIcon : null : wrapper, closest: () => link, prepend: (n) => { n.isConnected = true; ownedIcon = n; }, classList: { contains: (k) => classes.has(k), toggle: (k, on) => on ? classes.add(k) : classes.delete(k) } };
   text.parentElement = link;
-  const root = { isConnected: true, contains: (n) => n === link || n === root || n?.inRail, querySelectorAll: () => { scans++; return [link]; } };
+  const root = { isConnected: true, setAttribute: (k, v) => { root.tagged = k; }, contains: (n) => n === link || n === root || n?.inRail, querySelectorAll: () => { scans++; return [link]; } };
   const I = { links: [1], settings: { enabled: true, enhance: { dashboard: true } } }, callbacks = [], queued = [];
   const globals = { I, chrome: { runtime: { id: 'glaze' } }, GZ_NAV: moduleOf('lib/nav.js'), NodeFilter: { SHOW_TEXT: 4 }, t: (s) => s, html: {}, addEventListener() {}, queueMicrotask: (f) => queued.push(f), MutationObserver: class { constructor(cb) { callbacks.push(cb); } observe() {} disconnect() {} }, document: { querySelectorAll: (selector) => { globalScans++; return selector.endsWith(' a[href]') ? [link] : [root]; }, createTreeWalker: (w) => ({ nextNode: () => w.text }), createElementNS: () => ({ namespaceURI: 'svg', isConnected: false, classList: { add() {}, contains: () => true }, setAttribute() {}, append() {}, remove() { this.isConnected = false; } }) } };
   const c = vm.createContext({ ...globals });
@@ -97,10 +97,10 @@ test('a new extension context restores the native Dashboard name and icon metada
 test('the merged synchronous gate discovers native navigation and preserves the course-tab callback return', () => {
   const line = source('content-ultra.js').split('\n').find((s) => s.includes('const gate = ')), calls = [], scope = {};
   assert.ok(line, 'the merged gate is explicit');
-  const c = vm.createContext({ discoverNav: (n) => { assert.equal(n, scope); calls.push('nav'); }, GZ_CTABS: { held: () => { calls.push('tabs'); return true; } } });
+  const c = vm.createContext({ discoverNav: (n) => { assert.equal(n, scope); calls.push('nav'); }, tagDocs: (n) => { assert.equal(n.length, 1); assert.equal(n[0], scope); calls.push('docs'); }, GZ_CTABS: { held: () => { calls.push('tabs'); return true; } } });
   const gate = vm.runInContext(line + '\ngate;', c);
-  assert.equal(gate(scope), true); assert.deepEqual(calls, ['nav', 'tabs']);
-  c.GZ_CTABS = undefined; assert.equal(gate(scope), undefined); assert.deepEqual(calls, ['nav', 'tabs', 'nav']);
+  assert.equal(gate(scope), true); assert.deepEqual(calls, ['nav', 'docs', 'tabs']);
+  c.GZ_CTABS = undefined; assert.equal(gate(scope), undefined); assert.deepEqual(calls, ['nav', 'docs', 'tabs', 'nav', 'docs']);
 });
 
 test('thirty unrelated widget text updates cause no navigation scans and own writes become idle', () => {
@@ -129,6 +129,7 @@ test('native text replacement batches before paint while a replacement drawer is
   const replacement = { ...f.root, isConnected: true, matches: () => true };
   f.discoverNav(replacement); f.flush();
   assert.ok(f.counts().scans >= 2);
+  assert.equal(f.root.tagged, 'data-gz-nav-root', 'a discovered nav is tagged for theme.css, which keeps class tests out of its :has()');
 });
 
 test('an invalidated collapse listener leaves the native event untouched', () => {
@@ -239,4 +240,15 @@ test('item URL validation and ordering are loaded only when the rail UI is neede
   assert.ok(initial.includes('lib/nav.js')); assert.ok(!initial.includes('lib/nav-items.js'));
   const src = source('lib/nav.js'); assert.ok(!src.includes('const link =')); assert.ok(!src.includes('const clean =')); assert.ok(!src.includes('const sequence ='));
   const N = require('../lib/nav-items.js'); assert.equal(N.link({ id: 'aaaaaaaaaaaa', n: 'Safe', u: 'javascript:alert(1)' }), null); assert.equal(N.clean().widgets.length, 4);
+});
+
+test('the document view\'s column is tagged as it is drawn and untagged once its document goes', () => {
+  const src = source('content-ultra.js'), a = src.indexOf('  const docs = new Set();'), b = src.indexOf('  // Keep the course strip attached', a);
+  const parent = { attrs: new Set(), isConnected: true, child: null, setAttribute(k) { this.attrs.add(k); }, removeAttribute(k) { this.attrs.delete(k); }, querySelector() { return this.child; } };
+  const doc = { parentElement: parent }; parent.child = doc;
+  const tagDocs = vm.runInNewContext(src.slice(a, b) + '\ntagDocs;', {});
+  tagDocs([{ matches: () => false, getElementsByClassName: (c) => (c === 'document-content-root' ? [doc] : []) }]);
+  assert.ok(parent.attrs.has('data-gz-doc'));
+  parent.child = null; tagDocs([]);
+  assert.ok(!parent.attrs.has('data-gz-doc'), 'its document removed, nothing added: untagged on the next pass, which has no roots');
 });

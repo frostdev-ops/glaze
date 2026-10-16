@@ -6,6 +6,18 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.2] — 2026-10-16
+
+### Changed
+- Course tabs keep up to four live course pages on every machine again, and a hidden page no longer closes after ten idle minutes: picking any open tab is instant.
+- Faster Blackboard Ultra. Every button press, hover and menu used to make the browser restyle the whole page, because a few of Glaze's `:has()` rules matched broadly and tested Ultra's generated class names. The nav, the document view and the tooltips now use attributes Glaze sets as Ultra draws them. Measured on a large synthetic course outline: main-thread work while clicking around fell from 3.0 s to 0.4 s per 3 s, and the browser draws about 2.5× as many frames. Pages are themed in 0.4 s instead of 1.0 s, and route changes take a third less work.
+- The course-tab strip no longer forces a layout on every change Ultra makes; it re-checks when the course bar or its own place changes, or when the bar's size does.
+- Hide folders repaints only when a row, a folder title or one of its own controls changes, not on every ripple or tooltip.
+- Startup reads only Glaze's own settings, reuses this tab's last palette on Ultra (no default-dark flash before storage answers), and lets the browser cache font files. The background worker loads the grade, GPA, Insights, syllabus and class-schedule code when a page first asks for it (32% less script on every wake).
+
+### Added
+- A Firefox package (Firefox 140 or newer), built from the Chrome one by `scripts/package-firefox.sh`. Google Calendar sync is not included, as in Safari.
+
 ## [3.0.1] — 2026-10-16
 
 ### Changed

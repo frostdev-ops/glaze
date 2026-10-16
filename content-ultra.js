@@ -116,6 +116,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
 
   // ---- extras that read page text (score bars, due-date urgency), only while switched on ----
   const tagPage = (roots) => {
+    tagDocs(roots); // a document removed, or a class lost or gained, with nothing added
     const { scores, urgency, inline } = I.settings.enhance;
     if (!scores && !urgency && !inline) return;
     const now = new Date();
@@ -170,8 +171,18 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
+  // The document view's column (theme.css [data-gz-doc]): what holds .document-content-root, tagged here, before it
+  // is painted. A :has() reaching it from any element made every change on the page restyle the whole page.
+  const docs = new Set();
+  const tagDocs = (scopes) => {
+    for (const d of docs) if (!d.isConnected || !d.querySelector(':scope > .document-content-root')) { d.removeAttribute('data-gz-doc'); docs.delete(d); }
+    for (const scope of scopes) {
+      const found = scope.matches?.('.document-content-root') ? [scope] : scope.getElementsByClassName?.('document-content-root') || [];
+      for (const d of found) { const p = d.parentElement; if (p && !docs.has(p)) { p.setAttribute('data-gz-doc', ''); docs.add(p); } }
+    }
+  };
   // Keep the course strip attached when Ultra replaces its header; no route paint hold.
-  const gate = (scope) => { discoverNav(scope); return globalThis.GZ_CTABS?.held(); };
+  const gate = (scope) => { discoverNav(scope); tagDocs([scope]); return globalThis.GZ_CTABS?.held(); };
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // One bar above the course outline adding up what the outline already says: each folder's
@@ -651,7 +662,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
     if (![...navRoots].some((root) => root.contains(scope))) {
       const found = scope.matches?.(navSelector) ? [scope] : scope.querySelectorAll(navSelector);
-      for (const root of found) if (!navRoots.has(root)) { navRoots.add(root); navObserver.observe(root, { childList: true, subtree: true, characterData: true }); navDirty = true; }
+      // Tagged for theme.css (.MuiDrawer-paper:has([data-gz-nav-root])): matching the class there would put a class
+      // test in a :has(), and then every class Ultra changes anywhere would restyle the page.
+      for (const root of found) if (!navRoots.has(root)) { navRoots.add(root); root.setAttribute('data-gz-nav-root', ''); navObserver.observe(root, { childList: true, subtree: true, characterData: true }); navDirty = true; }
     }
     if (navDirty) queueNav();
   };
