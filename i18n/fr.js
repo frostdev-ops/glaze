@@ -1922,4 +1922,8 @@
   "Pet library could not be read.": "Impossible de lire la collection de compagnons.",
   "Pet library is full.": "La collection de compagnons est pleine.",
   "Choose pet.json and its sprite sheet, or a ZIP containing them.": "Choisis pet.json et sa planche de sprites, ou un ZIP les contenant.",
+  "Surface opacity, tint, frost, shadows and borders now follow your Look and rounded corners.": "L’opacité, la teinte, le grain, les ombres et les bordures suivent votre Look et ses coins arrondis.",
+  "Seven animated pets, plus local ChatGPT pet imports. Your XP and decorations stay.": "Sept compagnons animés et import local de compagnons ChatGPT. Votre XP et vos décorations sont conservés.",
+  "Lighter Blackboard course tabs: hidden pages rest and snapshots update less often.": "Les onglets Blackboard s’allègent : les pages masquées se reposent et les captures sont moins fréquentes.",
+  "Solid backgrounds skip glass blur. Expressive pointer light loads only when needed.": "Les fonds unis évitent le flou. La lumière expressive du pointeur ne se charge qu’en cas de besoin.",
 };

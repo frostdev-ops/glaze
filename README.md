@@ -7,7 +7,7 @@
 
 # Glaze
 
-**Preparing 3.0.1:** **Look → Surfaces** controls content-panel opacity, blur, palette/custom color, accent/course tint, shadow strength/color, frost, depth and borders. Panels, native content rows, navigation, menus, tooltips and Glaze’s own apps share those controls across Blackboard Ultra, Canvas and Moodle. Surface backgrounds follow the Look’s corner radius. Automatic defaults retain each Look’s existing fills; custom transparency needs blur and a non-solid background. Small rows get no additional backdrop blur.
+**New in 3.0.1:** **Look → Surfaces** controls content-panel opacity, blur, palette/custom color, accent/course tint, shadow strength/color, frost, depth and borders. Panels, native content rows, navigation, menus, tooltips and Glaze’s own apps share those controls across Blackboard Ultra, Canvas and Moodle. Surface backgrounds follow the Look’s corner radius. Automatic defaults retain each Look’s existing fills; custom transparency needs blur and a non-solid background. Small rows get no additional backdrop blur.
 
 **Animated pets:** the optional habitat keeps its existing XP and decorations. Choose Ember the fox, Luna the owl, Mochi the cat, Sprout the dragon, Pebble the capybara, Rime the arctic fox or the animated Glaze droplet, or import a local ChatGPT pet under **Study tools → Pet habitat**. Choose its `pet.json` and PNG/WebP sprite sheet together, a ZIP containing them, or the sprite sheet alone. Existing v1 (`1536 × 1872`) and v2 (`1536 × 2288`) sheets are supported; v2 adds sixteen gaze directions. Click a pet to wave, or focus it and press Enter/Space to jump. Animation pauses offscreen and in hidden pages, and reduced motion or Glaze Motion off shows a still frame. No account connection, pet service or upload is needed.
 
@@ -32,7 +32,7 @@ Its animated scene also stops and releases its rendering resources.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
-  <a href="https://github.com/frostdev-ops/glaze/releases/download/v3.0.0/glaze-3.0.0-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
+  <a href="https://github.com/frostdev-ops/glaze/releases/download/v3.0.1/glaze-3.0.1-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
 </p>
 
 The settings editor has eight tabs: **Look, Blackboard, Canvas, Moodle, Study tools, Sharing and sync, Backup and privacy, and About**. Search works across tabs; section links such as `#blackboard/nav` and older editor links reveal the right tab. Section resets change their own preferences; resetting preferences keeps your palettes, pictures, local notes/tasks, bookmarks and share keys. The live preview uses fictional local pages at real desktop or phone CSS widths, with site/page/appearance controls. Focusing a Blackboard course's editor controls previews that course's appearance; Blackboard nicknames can be edited here as well as on its course cards. Sharing and sync includes the Relay origin and an explicit connection test; saving stays offline.
@@ -114,7 +114,7 @@ Narrow modal drawers keep Ultra's native width.
 
 ## Safari
 
-[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.0.0/glaze-3.0.0-safari-macos.dmg): signed and notarized, attached to each release on
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.0.1/glaze-3.0.1-safari-macos.dmg): signed and notarized, attached to each release on
 [GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
 on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
 the frosted-glass blur needs Safari 18.

@@ -6,6 +6,12 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.1] — 2026-10-16
+
+### Changed
+- Lighter Blackboard course tabs: machines with six or fewer CPU cores keep up to two live course pages; other machines keep up to four. Clean hidden frames can close after ten idle minutes, while edited pages remain protected. Hidden frames pause covered work and the page below a shown frame is not drawn.
+- Course-tab pictures use lower JPEG quality and a fifteen-second capture guard. Snapshot bookkeeping reads keys and sizes without loading all pictures. Solid backgrounds skip panel glass blur, and the Expressive pointer light loads only on demand.
+
 ### Added
 - Shared surface controls for Blackboard Ultra, Canvas and Moodle: opacity, existing glass blur/depth, custom color, accent/course tint, shadow strength and color, fine frost and border strength. The Look tab has a searchable, linked Surfaces section with individual and section resets and the real previews. Surface backgrounds follow global corner radius.
 - Animated local pets, with five original companions, the owner’s existing Rime, an animated Glaze droplet, and local import of ChatGPT v1/v2 sprite sheets or ZIP packages. The habitat keeps existing XP/decorations; animation stops while hidden and respects reduced motion and Glaze Motion off. Imports are validated and re-encoded in Glaze’s editor, never fetched from a link or uploaded.
@@ -861,6 +867,7 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
+[3.0.1]: https://github.com/frostdev-ops/glaze/releases/tag/v3.0.1
 [3.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v3.0.0
 [2.2.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.2.0
 [2.1.4]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.4

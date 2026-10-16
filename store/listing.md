@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.0.0
+# Chrome Web Store listing — Glaze 3.0.1
 
 ## Name
 
@@ -15,6 +15,12 @@ Productivity
 ## Detailed description
 
 Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain. What Glaze keeps stays on your device.
+
+NEW IN 3.0.1
+
+• Control surface opacity, tint, frost, shadow color and strength, and borders. Every content surface follows your Look’s rounded corners, including course-specific Looks and document controls.
+• Seven animated pets, including the Glaze droplet and Rime, plus local import of ChatGPT pet packages. Existing XP and decorations stay. Motion pauses while hidden and follows reduced motion and Glaze Motion off.
+• Lighter Blackboard course tabs and fewer background updates. Smaller machines keep fewer live pages; edited pages stay protected. Solid backgrounds skip glass blur.
 
 NEW IN 3.0
 
@@ -86,11 +92,11 @@ Open source (MIT): https://github.com/frostdev-ops/glaze
 
 Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Anthology Inc. Moodle is a registered trademark of Moodle Pty Ltd. Glaze is an independent project and is not affiliated with or endorsed by any of these companies or any school.
 
-## What's new in 3.0.0
+## What's new in 3.0.1
 
 Prepared release copy; the Chrome Web Store has no separate What's New field.
 
-Blackboard Ultra gets a Glaze Dashboard, widgets you place anywhere (Better To Do and your course cards among them), course tabs that stay live like browser tabs, search in your courses, hidden folders, navigation styling, planning, reminders and Insights. Moodle joins Blackboard and Canvas. Settings move into eight tabs with search, and optional encrypted share sessions can use frostdev.io's relay or your own.
+Glaze 3.0.1 adds shared surface controls that follow your Look and rounded corners, seven animated local pets and ChatGPT pet-file import, and lighter Blackboard course tabs. Hidden pages rest, clean idle frames can close, snapshots are less frequent and solid backgrounds avoid glass blur. Existing pet XP, decorations, coursework and local data are preserved.
 
 ## Single-purpose statement
 

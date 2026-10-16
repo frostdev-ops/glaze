@@ -1922,4 +1922,8 @@
   "Pet library could not be read.": "Die Begleitersammlung konnte nicht gelesen werden.",
   "Pet library is full.": "Die Begleitersammlung ist voll.",
   "Choose pet.json and its sprite sheet, or a ZIP containing them.": "Wähle pet.json und das zugehörige Sprite-Sheet oder eine ZIP-Datei mit beiden.",
+  "Surface opacity, tint, frost, shadows and borders now follow your Look and rounded corners.": "Deckkraft, Tönung, Körnung, Schatten und Ränder folgen jetzt deinem Look und den abgerundeten Ecken.",
+  "Seven animated pets, plus local ChatGPT pet imports. Your XP and decorations stay.": "Sieben animierte Begleiter und lokale ChatGPT-Pet-Importe. XP und Dekorationen bleiben erhalten.",
+  "Lighter Blackboard course tabs: hidden pages rest and snapshots update less often.": "Leichtere Blackboard-Kurstabs: Versteckte Seiten ruhen und Vorschaubilder werden seltener aktualisiert.",
+  "Solid backgrounds skip glass blur. Expressive pointer light loads only when needed.": "Einfarbige Hintergründe ohne Glasunschärfe. Das expressive Zeigerlicht lädt nur bei Bedarf.",
 };

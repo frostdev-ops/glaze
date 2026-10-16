@@ -1922,4 +1922,8 @@
   "Pet library could not be read.": "Je verzameling huisdiertjes kon niet worden gelezen.",
   "Pet library is full.": "Je verzameling huisdiertjes is vol.",
   "Choose pet.json and its sprite sheet, or a ZIP containing them.": "Kies pet.json en het bijbehorende spriteblad, of een ZIP met beide.",
+  "Surface opacity, tint, frost, shadows and borders now follow your Look and rounded corners.": "Dekking, tint, korrel, schaduwen en randen volgen nu je Look en afgeronde hoeken.",
+  "Seven animated pets, plus local ChatGPT pet imports. Your XP and decorations stay.": "Zeven geanimeerde huisdiertjes en lokale ChatGPT-import. Je XP en decoraties blijven behouden.",
+  "Lighter Blackboard course tabs: hidden pages rest and snapshots update less often.": "Lichtere Blackboard-cursustabs: verborgen pagina’s rusten en voorbeelden worden minder vaak vernieuwd.",
+  "Solid backgrounds skip glass blur. Expressive pointer light loads only when needed.": "Effen achtergronden slaan glasvervaging over. Expressief aanwijzerlicht laadt alleen wanneer nodig.",
 };
