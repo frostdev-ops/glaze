@@ -12,7 +12,7 @@ const shot = (c = cid, extra = {}) => ({ op: 'shot', cid: c, path: `/ultra/cours
 const flush = () => new Promise(setImmediate);
 function worker() {
   const data = {}, notices = [], pages = new Map([[1, site + '/ultra/course'], [2, site + '/ultra/course'], [3, site + '/ultra/course']]);
-  const active = new Set([1, 2, 3]), shots = { size: 1000, during() {} };
+  const active = new Set([1, 2, 3]), shots = { size: 1000, calls: 0, during() {} };
   const born = Date.now() - 10000, epochs = new Map();
   let message, changed;
   const source = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
@@ -29,7 +29,7 @@ function worker() {
     switchOn: async () => on,
     chrome: { tabs: {
       async get(id) { return { url: pages.get(id), active: active.has(id), windowId: 1 }; },
-      async captureVisibleTab() { shots.during(); return `data:image/jpeg;base64,${'A'.repeat(shots.size)}`; },
+      async captureVisibleTab() { shots.calls++; shots.during(); return `data:image/jpeg;base64,${'A'.repeat(shots.size)}`; },
       async sendMessage(tab, value, target) { notices.push({ tab, value, target }); },
     }, storage: { session: area, onChanged: { addListener(f) { changed = f; } } }, runtime: { onMessage: { addListener(f) { message = f; } } } },
   });
@@ -180,4 +180,13 @@ test('a tolerated birth-time skew never creates a future account boundary', asyn
   await w.send({ op: 'hello', uid: '_43_1', born: future }, { tab: { id: 2 }, documentId: 'skewed-document' });
   assert.ok(w.data[`snapwho:${site}`]?.floor <= Date.now());
   assert.ok((await w.send({ op: 'hello', born: Date.now() + 1 }, { tab: { id: 3 }, documentId: 'fresh-document' }))?.ok);
+});
+
+
+test('a queued screenshot never calls capture on a tab that has already left Ultra', async () => {
+  const w = worker();
+  await w.send({ op: 'hello' });
+  w.pages.set(1, 'https://other.test/private');
+  assert.equal(await w.send(shot()), null);
+  assert.equal(w.shots.calls, 0);
 });

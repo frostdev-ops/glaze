@@ -49,8 +49,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const readPrefs = () => new Promise((res) => { try { if (chrome.runtime?.id) chrome.storage.sync.get('tabs', (r) => res(r?.tabs)); else res(); } catch { res(); } })
     .then((raw) => { prefs = GZ_SANITIZE({ tabs: raw }).tabs; });
   let saveTimer = 0;
-  const saveNow = () => { clearTimeout(saveTimer); if (who && loaded && !preview) local((s) => s.set({ [key()]: { tabs } })); };
-  const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); };
+  const saveNow = () => {
+    clearTimeout(saveTimer);
+    if (!who || !loaded || preview) return;
+    if (framed) { const x = tabs.find((x) => x.cid === framed); if (x) toTop('place', { uid: who, path: x.path, top: x.top }); }
+    else local((s) => s.set({ [key()]: { tabs } }));
+  };
+  const save = () => { if (framed) return saveNow(); clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); };
   const framed = ctx.tabFrame; // in a tab's own frame: its course; '' on the page itself
   const here = () => (preview ? demo : ctx.courseId());
   const shown = (e) => !!e && e.getClientRects().length > 0;
@@ -258,7 +263,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // The strip's word: why a tab closed. Gone again after a few seconds.
   let sayTimer = 0;
-  const say = (msg) => { if (!note || note.textContent === msg) return; note.textContent = msg; clearTimeout(sayTimer); sayTimer = setTimeout(() => { note.textContent = ''; }, 6000); };
+  const say = (msg) => {
+    if (!framed && showing) frames.get(showing)?.el.contentWindow?.postMessage({ gzCtab: 'note', text: msg }, location.origin);
+    if (!note || note.textContent === msg) return;
+    note.textContent = msg; clearTimeout(sayTimer); sayTimer = setTimeout(() => { note.textContent = ''; }, 6000);
+  };
 
   // ---- the student's courses ------------------------------------------------------------------------------------
   // The course shown: its tab (made if new; past the cap the least recently used unpinned one goes, with a word), and its
@@ -266,7 +275,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const visitTab = (cid) => {
     const c = ctx.courseList()[cid];
     const name = c?.name || courseBar()?.querySelector('course-page-header [class*="courseName"], course-page-header h1')?.textContent.trim() || '';
-    const r = L.open(tabs, { cid, at: Date.now(), ...(name && { name: name.slice(0, 200) }), ...(c?.code && { code: c.code }) }, P().cap);
+    const r = L.open(tabs, { cid, at: Date.now(), ...(name && { name: name.slice(0, 200) }), ...(c?.code && { code: c.code }) }, framed ? L.MAX : P().cap, (id) => frames.get(id)?.dirty);
     tabs = r.tabs;
     if (r.full) say(t('Close or unpin a tab to open another course tab.'));
     if (r.gone.length) {
@@ -326,9 +335,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // Glaze's tip is not part of the page: hidden for the moment of the picture, a frame before it is taken.
     const tips = [...document.querySelectorAll('.gz-tip'), ...doc.querySelectorAll('.gz-tip')];
     for (const tip of tips) tip.style.visibility = 'hidden';
+    const same = () => { const next = surface(); return on && next.cid === cid && next.path === path && next.doc === doc; };
     shooting = new Promise((ok) => requestAnimationFrame(() => setTimeout(ok)))
-      .then(() => send({ op: 'shot', cid, path, strip: null, size: [innerWidth, innerHeight] }))
-      .then((x) => { if (x?.snap?.cid === cid && x.snap.path === path) keep(x.snap); return x?.snap || null; }, () => null)
+      .then(() => same() ? send({ op: 'shot', cid, path, strip: null, size: [innerWidth, innerHeight] }) : null)
+      .then((x) => {
+        if (!same()) { if (x?.snap) send({ op: 'forget', cid }); return null; }
+        if (x?.snap?.cid === cid && x.snap.path === path) keep(x.snap);
+        return x?.snap || null;
+      }, () => null)
       .finally(() => { shooting = null; for (const tip of tips) tip.style.visibility = ''; });
     return shooting;
   };
@@ -429,7 +443,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     el.title = x.name || t('Course');
     el.allow = 'fullscreen; clipboard-write; autoplay; camera; microphone; display-capture';
     el.src = location.origin + url; // absolute: Ultra's <base href> is its CDN
-    const f = { el, at: Date.now(), ready: false, url };
+    const f = { el, at: Date.now(), ready: false, url, dirty: false };
     frames.set(cid, f);
     host.prepend(el);
     watch(cid, f);
@@ -480,6 +494,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       host.id = 'gz-ctabs-frames';
       document.body.append(host);
     }
+    if (cid && !frames.has(cid) && frames.size >= LIVE) {
+      const old = [...frames].filter(([, f]) => !f.dirty).sort((a, b) => a[1].at - b[1].at)[0];
+      if (!old) { say(t('Close a course tab before opening another to keep your unsaved work.')); return; }
+      drop(old[0]);
+    }
     const f = cid && (frames.get(cid) || open(cid));
     if (cid && !f) return;
     showing = cid;
@@ -488,6 +507,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (k === cid) g.at = Date.now();
       g.el.style.visibility = k === cid && g.ready ? '' : 'hidden';
       g.el.inert = k !== cid;
+      g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid }, location.origin);
     }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
     unpicture(true);
@@ -495,8 +515,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     ctx.scene();
     try { if (cid) sessionStorage.setItem('gz-ctabs-shown', cid); else sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
-    // The least recently shown frames past LIVE stop.
-    for (const [k] of [...frames].filter(([k]) => k !== cid).sort((a, b) => b[1].at - a[1].at).slice(LIVE - 1)) drop(k);
     // Keyboard focus goes with it: into the frame, or back to this page's strip.
     if (f) f.el.focus();
     else if (back) list?.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
@@ -520,9 +538,29 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const id = typeof cid === 'string' && /^_\d+_\d+$/.test(cid) ? cid : null;
     if (op === 'visit' && id) visit(id);
     else if (op === 'shut' && id) shut(id, e.data.keys === true);
+    else if (op === 'account' && who && /^_\d+_\d+$/.test(e.data.uid) && e.data.uid !== who) { send({ op: 'drop', signout: true }); revoke(); }
+    else if (op === 'edited') frames.get(from).dirty = true;
+    else if (op === 'pin' && id) pinTab(id);
+    else if (op === 'move' && id && Number.isInteger(e.data.to)) moveTab(id, e.data.to);
+    else if (op === 'place' && e.data.uid === who) {
+      const x = tabs.find((x) => x.cid === from), kept = L.clean([{ cid: from, path: e.data.path, top: e.data.top }])[0];
+      if (x && kept && (x.path !== kept.path || x.top !== kept.top)) { x.path = kept.path; x.top = kept.top; save(); }
+    }
+    else if (op === 'loaded') frames.get(from).el.contentWindow.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin);
     else if (op === 'moved' && from === showing) later(700);
     else if (op === 'away' && typeof url === 'string' && url.length < 1300 && /^\/ultra(\/|$)/.test(url)) { drop(from); show(''); route(url); }
   });
+  if (framed && !preview) {
+    // Track before load: slow native resources must not leave usable editors unprotected.
+    // shortcut: native work without edit/submit events is unknown; use an LMS save-state API when available.
+    for (const event of ['input', 'change', 'submit']) document.addEventListener(event, (e) => { if (on && e.isTrusted) toTop('edited'); }, true);
+    addEventListener('message', (e) => {
+      if (e.origin !== location.origin || e.source !== window.top) return;
+      if (e.data?.gzCtab === 'visible' && typeof e.data.on === 'boolean') { html.toggleAttribute('data-gz-ctab-framed', !e.data.on); ctx.scene(); }
+      else if (e.data?.gzCtab === 'note' && typeof e.data.text === 'string' && e.data.text.length <= 500) say(e.data.text);
+    });
+    toTop('loaded');
+  }
   // Ultra routes without reloading: the address goes in history, and the page hears it as Forward. Absolute: Ultra's
   // <base href> is its CDN, another origin.
   const route = (url) => {
@@ -568,16 +606,20 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     save();
     if (cid === cur) {
       if (preview) demo = r.next;
-      // This page's own course: this page goes to the next tab's place (or the Courses page), so it doesn't come back.
-      else if (cid === ctx.courseId()) { const n = tabs.find((y) => y.cid === r.next); drop(r.next); route(n ? L.target(n, P().place) : '/ultra/course'); }
+      // Leave the closed course's route; an existing next frame keeps its native state.
+      else if (cid === ctx.courseId()) {
+        const n = tabs.find((y) => y.cid === r.next);
+        if (frames.has(r.next)) { route('/ultra/course'); visit(r.next); }
+        else route(n ? L.target(n, P().place) : '/ultra/course');
+      }
       else if (r.next) visit(r.next);
     }
     draw();
     if (keys) list.querySelector(`[data-course-id="${r.next}"]`)?.focus();
     if (!tabs.length) flag();
   };
-  const pinTab = (cid) => { tabs = L.pin(tabs, cid, !tabs.find((x) => x.cid === cid)?.pin); save(); draw(); };
-  const moveTab = (cid, to) => { tabs = L.move(tabs, cid, to); save(); draw(); };
+  const pinTab = (cid) => { if (framed) return toTop('pin', { cid }); tabs = L.pin(tabs, cid, !tabs.find((x) => x.cid === cid)?.pin); save(); draw(); };
+  const moveTab = (cid, to) => { if (framed) return toTop('move', { cid, to }); tabs = L.move(tabs, cid, to); save(); draw(); };
   const tabOf = (e) => e.target instanceof Element && e.target.closest('.gz-ctab');
   let dragged = 0;
   const onClick = (e) => {
@@ -659,7 +701,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const got = L.clean(c[key()].newValue?.tabs);
       if (JSON.stringify(got) === JSON.stringify(tabs)) return;
       const mine = tabs.find((x) => x.cid === ctx.courseId());
-      tabs = got.map((x) => (mine && x.cid === mine.cid ? mine : x));
+      tabs = got.map((x) => (mine && x.cid === mine.cid ? { ...x, path: mine.path, top: mine.top } : x));
+      for (const cid of [...frames.keys()]) if (!tabs.some((x) => x.cid === cid)) drop(cid);
       pass();
     }
   };
@@ -682,6 +725,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (!on) return;
       if (typeof uid !== 'string' || !/^_\d+_\d+$/.test(uid)) { loaded = true; pass(); return; }
       who = uid;
+      if (framed) toTop('account', { uid });
       hello().then(() => {
         if (!on || signedOut || who !== uid) return;
         local((s) => s.get(key(), (r) => {

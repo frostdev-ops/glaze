@@ -245,20 +245,23 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   so when there were more.
 - **Course tabs** (Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
-  pinned, when it was last used, and where you were in the course: the address of a course tool, document, folder or
-  positively cached Assignment overview and how far down. Tests, unknown assessments, attempts, discussions and
-  messages are never reopened. Classification only checks an existing cached gradebook column; tabs do not fetch one.
-  Closing a tab removes it.
-  **Copies of course pages for instant switching** are kept in memory only and never written to disk: in the page while
-  it is open, and in the browser's session storage (`chrome.storage.session`, which the browser holds in memory and
-  which Blackboard pages can't read; Glaze's background worker keeps it), per site and account. A copy is what was
-  already on your screen when you left a course, without scripts, frames, form fields, media, handlers or arbitrary
-  data attributes. Loaded pictures become local bitmaps when the browser permits; unreadable pictures and stylesheet
-  resources are omitted. The serialized copy, including its ancestor metadata, is at most 1,000,000 characters each
-  and 6,000,000 in all, the oldest dropped first. They are dropped when the
-  browser closes, when you turn the tabs or Glaze off, when another account turns up on the site, and when you use
-  Blackboard's Sign Out. Session-only account/cache metadata also keeps up to 64 known document ids and tab ids per
-  site, with document birth times and a cache generation, so an old page cannot restore a previous account's copies.
+  pinned, when it was last used, its own-course URL including query parameters, and scroll position. Any previously
+  opened course page can reopen, including a test, attempt, discussion or message. Glaze does not press controls there.
+  Closing a tab removes its entry and live frame. The surrounding page owns list writes; live frames report only their
+  own place so a late frame save cannot overwrite another tab's pin, order or closure.
+  **Live pages** run as ordinary same-origin Blackboard frames, up to four frames alongside the surrounding page, with their scripts, form values and native
+  requests still active while hidden. Edited pages are excluded from automatic eviction after trusted input, change
+  or submit events; if all four are protected, another page waits until you explicitly close one. Protection is
+  conservative until closure and does not identify every native operation. Closing, reloading, signing out or disabling
+  tabs can discard unsaved native work. A clean older frame can stop to make room; reopening restores its URL and saved
+  scroll, not arbitrary native state. These frames are not isolated from the surrounding Blackboard page.
+  **Pictures for first load** are JPEG captures of the visible Blackboard browser tab, kept only in page memory and
+  `chrome.storage.session` (the browser's in-memory extension storage), or worker memory where that API is unavailable.
+  Captures can include visible form text, media, Glaze tools and other content on that tab; they are blurred while shown.
+  Each picture is at most 3,000,000 data-URL characters and all pictures together at most 8,000,000, oldest first.
+  No picture is written to `storage.local`, sent to a server or prefetched. They are cleared on browser close, sign-out,
+  account change or disabling tabs/Glaze. Session-only account metadata keeps up to 64 document/tab ids per site with
+  birth times and a cache generation, so an old top-level page cannot restore a previous account's pictures.
 - **The last Safari update-check attempt**, in `chrome.storage.local`, on this device only: a timestamp
   that limits requests to the native app to once every 24 hours when Safari starts Glaze's background worker.
 
