@@ -25,7 +25,7 @@
 #gz-float .gz-w-head { cursor: grab; touch-action: none; }
 #gz-float .gz-w[data-dragging] { cursor: grabbing; opacity: 0.92; }
 .gz-w :is(button, input, select, textarea) { font: inherit; }
-.gz-w [hidden], #gz-hub [hidden], .gz-tour [hidden] { display: none !important; }
+.gz-w [hidden], .gz-game-dialog [hidden], #gz-hub [hidden], .gz-tour [hidden] { display: none !important; }
 .gz-w :is(button, input, select, textarea, a, [tabindex]):focus-visible, :is(#gz-hub, .gz-tour) :is(button, input, a):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 .gz-w-head { display: flex; align-items: center; gap: 0.35rem; min-width: 0; padding-inline-end: 4.5rem; }
 :is(#gz-dash, #gz-float, #gz-room) .gz-w-head h3 { margin: 0; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
