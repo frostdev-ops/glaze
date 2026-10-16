@@ -489,7 +489,8 @@ test('class start (W14): a class in the class schedule reminds its lead time bef
   const on = w.tab({ enhance: { remind: false, remindClass: true } });
   on.ui.sync(true);
   await settle();
-  assert.match(on.toast()?.text || '', /Class in .*Biology/);
+  // The lead time can cross midnight; this checks the class reminder, not its relative-date wording.
+  assert.match(on.toast()?.text || '', /Class .*Biology Room 9/);
   assert.equal(on.ops('confirm').length, 1);
   // Class reminders alone ask Canvas for nothing (Codex W14 review): not the planner, however old its copy.
   assert.deepEqual(on.fetched, []);
