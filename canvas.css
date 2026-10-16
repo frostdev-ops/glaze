@@ -206,8 +206,9 @@ html[data-gz-bg="aurora"]::before {
     var(--gz-surface-2);
   animation: gz-aurora 42s ease-in-out infinite alternate;
   animation-play-state: var(--gz-ambient);
-  will-change: transform;
 }
+/* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
+html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: transform; }
 @keyframes gz-aurora {
   0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
   50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
@@ -225,6 +226,9 @@ html[data-gz-bg="aurora"]::before {
   pointer-events: none;
   filter: blur(var(--gz-bg-blur, 0px));
 }
+/* No blur set, no filter: even blur(0) gives the layer an offscreen copy on the GPU. Every element is a style
+   container, so this reads the --gz-bg-blur content.js sets on <html>. */
+@container style(--gz-bg-blur: 0px) { html::before, #gz-scene { filter: none; } }
 
 /* ---- ground ---- */
 html, body, #drawer-layout-content, #drawer-layout-mount-point, #application, #wrapper, #main, #not_right_side,
