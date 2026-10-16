@@ -1,11 +1,11 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 const S = require('../lib/petsprites.js');
 const page = () => {
-  const timers = new Map(), docEvents = new Map(), winEvents = new Map(), motionEvents = new Map(); let n = 0, observer, motionObserver, image, draws = 0, revoked = 0, motionLevel = 'subtle';
-  const canvas = { isConnected: true, getContext: () => ({ clearRect() {}, drawImage() { draws++; } }) };
+  const timers = new Map(), docEvents = new Map(), winEvents = new Map(), motionEvents = new Map(); let n = 0, observer, motionObserver, image, draws = 0, revoked = 0, now = 0, lastFrame = [], motionLevel = 'subtle';
+  const canvas = { isConnected: true, getContext: () => ({ clearRect() {}, drawImage(...args) { draws++; lastFrame = args.slice(1, 3); } }) };
   const context = { GZ_PET_SPRITES: S, console, document: { documentElement: { getAttribute: () => motionLevel }, hidden: false, addEventListener: (k, f) => docEvents.set(k, f), removeEventListener: (k) => docEvents.delete(k) },
     window: { addEventListener: (k, f) => winEvents.set(k, f), removeEventListener: (k) => winEvents.delete(k) },
-    performance: { now: () => 0 }, setTimeout: (f) => { timers.set(++n, f); return n; }, clearTimeout: (id) => timers.delete(id),
+    performance: { now: () => now }, setTimeout: (f) => { timers.set(++n, f); return n; }, clearTimeout: (id) => timers.delete(id),
     matchMedia: () => motion, Image: class { constructor() { image = this; } },
     IntersectionObserver: class { constructor(f) { observer = f; } observe() {} disconnect() {} },
     MutationObserver: class { constructor(f) { motionObserver = f; } observe() {} disconnect() {} },
@@ -14,7 +14,7 @@ const page = () => {
   };
   const motion = { matches: false, addEventListener: (k, f) => motionEvents.set(k, f), removeEventListener: (k) => motionEvents.delete(k) };
   vm.createContext(context); const player = vm.runInContext(fs.readFileSync(require.resolve('../lib/petplayer.js'), 'utf8'), context);
-  return { context, timers, docEvents, winEvents, motionEvents, motion, canvas, setMotion: (value) => { motionLevel = value; motionObserver(); }, player, load: () => image.onload(), observer: (v) => observer([{ isIntersecting: v }]), draws: () => draws, revoked: () => revoked };
+  return { context, timers, docEvents, winEvents, motionEvents, motion, canvas, setMotion: (value) => { motionLevel = value; motionObserver(); }, player, load: () => image.onload(), observer: (v) => observer([{ isIntersecting: v }]), draws: () => draws, revoked: () => revoked, frame: () => lastFrame, tick: (ms) => { now = ms; [...timers.values()][0](); } };
 };
 test('pet clock pauses offscreen/hidden/reduced-motion and cleans all listeners on removal', () => {
   const p = page(), live = p.player.mount(p.canvas, { path: 'x.webp', spriteVersionNumber: 2 }); p.load();
@@ -54,4 +54,10 @@ test('Glaze Motion off stops the sprite clock and resumes live when enabled', ()
   live.set('jumping'); assert.equal(p.timers.size, 0);
   p.setMotion('subtle'); assert.equal(p.timers.size, 1);
   live.stop(); p.setMotion('expressive'); assert.equal(p.timers.size, 0);
+});
+
+test('the renderer keeps a compatible imported seventh idle frame', () => {
+  const p = page(); p.player.mount(p.canvas, { path: 'rime.webp', spriteVersionNumber: 2, frameCounts: [7, ...S.COUNTS.slice(1)] }); p.load();
+  p.tick(750); assert.deepEqual(p.frame(), [1152, 0]);
+  p.tick(875); assert.deepEqual(p.frame(), [0, 0]);
 });

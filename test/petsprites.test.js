@@ -16,10 +16,10 @@ test('frame addressing respects each state count and clockwise gaze order', () =
   assert.deepEqual([S.direction(0, -1), S.direction(1, 0), S.direction(0, 1), S.direction(-1, 0)], [0, 4, 8, 12]);
   assert.equal(S.frame('look', 8).y, 2080); assert.equal(S.frame('look', 8, 1).y, 0);
 });
-test('every required frame must have pixels, unused cells must stay transparent', () => {
+test('required frames and trailing cells are contiguous and transparent gaps are refused', () => {
   const rgba = new Uint8ClampedArray(1536 * 2288 * 4);
   for (let row = 0; row < 11; row++) for (let frame = 0; frame < S.COUNTS[row]; frame++) rgba[((row * 208 + 10) * 1536 + frame * 192 + 10) * 4 + 3] = 255;
-  assert.equal(S.pixels(rgba, 2), true);
+  assert.deepEqual(S.pixels(rgba, 2), S.COUNTS);
   rgba[(10 * 1536 + 7 * 192 + 10) * 4 + 3] = 255;
   assert.throws(() => S.pixels(rgba, 2));
   rgba[(10 * 1536 + 7 * 192 + 10) * 4 + 3] = 0; rgba[(10 * 1536 + 10) * 4 + 3] = 0;
@@ -64,4 +64,40 @@ test('pet library writes are restricted to the top-level editor; LMS reads need 
   assert.equal(await allow({ op: 'list', key }, site), false);
   sync.enhance.pet = true; sync.enabled = false;
   assert.equal(await allow({ op: 'list', key }, site), false);
+});
+
+test('existing app metadata and a seventh idle frame survive safe import addressing', () => {
+  const raw = require('../assets/art/pets/rime/pet.json');
+  assert.equal(S.meta(raw, 1536, 2288).name, 'Rime');
+  assert.equal(S.meta({ name: '\u0000', displayName: ' Rime ' }, 1536, 2288).name, 'Rime');
+  const rgba = new Uint8ClampedArray(1536 * 2288 * 4), frameCounts = [7, ...S.COUNTS.slice(1)];
+  for (let row = 0; row < 11; row++) for (let col = 0; col < frameCounts[row]; col++) rgba[((row * 208 + 10) * 1536 + col * 192 + 10) * 4 + 3] = 255;
+  assert.deepEqual(S.pixels(rgba, 2), frameCounts);
+  assert.equal(S.frame('idle', 750, 2, frameCounts).x, 1152);
+  assert.equal(S.frame('idle', 875, 2, frameCounts).x, 0);
+  assert.deepEqual(S.BUILTIN.rime.frameCounts, frameCounts); assert.equal(S.BUILTIN.glaze.name, 'Glaze');
+  for (const invalid of [[5, ...S.COUNTS.slice(1)], [9, ...S.COUNTS.slice(1)], [6], Array(11).fill(7), [6.5, ...S.COUNTS.slice(1)]]) assert.throws(() => S.counts(invalid, 2));
+  assert.deepEqual(S.counts(undefined, 1), S.COUNTS.slice(0, 9));
+});
+
+test('normalization derives counts from decoded alpha and the broker preserves them after re-encoding', async () => {
+  const fs = require('node:fs'), vm = require('node:vm'), raw = require('../assets/art/pets/rime/pet.json');
+  const rgba = new Uint8ClampedArray(1536 * 2288 * 4), frameCounts = [7, ...S.COUNTS.slice(1)];
+  for (let row = 0; row < 11; row++) for (let col = 0; col < frameCounts[row]; col++) rgba[((row * 208 + 10) * 1536 + col * 192 + 10) * 4 + 3] = 255;
+  const encoded = new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]);
+  const lib = vm.runInNewContext(fs.readFileSync(require.resolve('../lib/petsprites.js'), 'utf8'), {
+    GZ_DOCTEXT: { imageSize: () => ({ w: 1536, h: 2288 }) }, Uint8Array, Blob, TextDecoder, atob, btoa, crypto: globalThis.crypto,
+    createImageBitmap: async () => ({ width: 1536, height: 2288, close() {} }),
+    OffscreenCanvas: class { getContext() { return { drawImage() {}, getImageData: () => ({ data: rgba }) }; } convertToBlob() { return Promise.resolve(new Blob([encoded], { type: 'image/webp' })); } },
+  });
+  const png = new Uint8Array(24); png.set([137, 80, 78, 71]);
+  const data = S.dataURL(png, 'image/png'), store = {}, local = { get: async () => store, set: async (patch) => { Object.assign(store, patch); return true; } };
+  const imported = await lib.change({ op: 'import', data, meta: { ...raw, frameCounts: Array(11).fill(8), spritesheetPath: 'https://bad.test/not-used' } }, { local });
+  assert.equal(imported.ok, true);
+  const pet = (await lib.change({ op: 'get', id: imported.id }, { local })).pet;
+  assert.equal(pet.name, 'Rime'); assert.deepEqual(Array.from(pet.frameCounts), frameCounts);
+  assert.equal(pet.data, S.dataURL(encoded, 'image/webp')); assert.notEqual(pet.data, data);
+  assert.equal(pet.spritesheetPath, undefined);
+  store.petSprites[imported.id].frameCounts[0] = 9;
+  await assert.rejects(lib.change({ op: 'get', id: imported.id }, { local }), /Invalid sprite pixels/);
 });
