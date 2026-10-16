@@ -58,6 +58,7 @@ test('the editor and popup keep a solid readable ground and apply global depth',
   assert.equal(style['--gz-surface-opacity'], '100%');
   assert.equal(style['--gz-glass'], '3px');
   assert.equal(attrs['data-gz-depth'], '0');
+  assert.equal(attrs['data-gz-motion'], 'subtle');
 });
 
 test('Sessions surface reads preserve role defaults, reject stale answers, and fail closed', async () => {
@@ -84,4 +85,10 @@ test('Sessions permits the local frost texture without allowing network connecti
   assert.match(csp, /(?:^|; )img-src 'self' data:(?:;|$)/);
   assert.match(csp, /(?:^|; )connect-src 'none'(?:;|$)/);
   assert.doesNotMatch(csp, /https?:|\*/);
+});
+
+test('Moodle cards layer local frost over the shared panel fill', () => {
+  const css = fs.readFileSync(require.resolve('../moodle.css'), 'utf8');
+  const card = css.match(/html \.card \{([^}]+)\}/)[1];
+  assert.match(card, /background: var\(--gz-surface-grain, none\), var\(--gz-panel\)/);
 });

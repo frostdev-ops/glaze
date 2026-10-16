@@ -266,14 +266,14 @@ html, body, #page-wrapper, #page, #page.drawers, #page-content, #region-main-box
 :is(code, pre, kbd) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); border-color: var(--gz-border-line, var(--gz-line)); }
 html :is(hr) { border-color: var(--gz-border-line, var(--gz-line)); opacity: 1; }
 /* Bootstrap's rgb() utilities, which the variables above can't reach. Its dark ones stay dark: they are meant to stand out. */
-html :is(.bg-white, .bg-body, .bg-light, .bg-body-tertiary, .bg-body-secondary) { background-color: var(--gz-panel) !important; }
-html .bg-secondary { background-color: var(--gz-band) !important; }
+html :is(.bg-white, .bg-body, .bg-light, .bg-body-tertiary, .bg-body-secondary) { background: var(--gz-surface-grain, none), var(--gz-panel) !important; }
+html .bg-secondary { background: var(--gz-surface-grain, none), var(--gz-band) !important; }
 html .bg-primary { background-color: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
 html .bg-success { background-color: var(--gz-ok) !important; color: var(--gz-accent-ink) !important; }
 html .bg-warning { background-color: var(--gz-warn) !important; color: var(--gz-accent-ink) !important; }
 html .bg-danger { background-color: var(--gz-err) !important; color: var(--gz-accent-ink) !important; }
 html .bg-info { background-color: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
-html :is(.text-bg-secondary, .text-bg-light) { background-color: var(--gz-band) !important; color: var(--gz-ink) !important; }
+html :is(.text-bg-secondary, .text-bg-light) { background: var(--gz-surface-grain, none), var(--gz-band) !important; color: var(--gz-ink) !important; }
 html :is(.text-bg-primary, .text-bg-info) { background-color: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
 html .text-bg-success { background-color: var(--gz-ok) !important; color: var(--gz-accent-ink) !important; }
 html .text-bg-warning { background-color: var(--gz-warn) !important; color: var(--gz-accent-ink) !important; }
@@ -293,7 +293,7 @@ html .border-primary { border-color: var(--gz-accent) !important; }
 
 /* ---- the top bar: glass over the ground; the page scrolls under it ---- */
 html .navbar.fixed-top {
-  background: var(--gz-glass-bar) !important;
+  background: var(--gz-surface-grain, none), var(--gz-glass-bar) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
   border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important;
   --bs-navbar-color: var(--gz-ink-muted); --bs-navbar-hover-color: var(--gz-ink); --bs-navbar-active-color: var(--gz-ink);
@@ -313,7 +313,7 @@ html .sr-only-focusable:focus, html .visually-hidden-focusable:focus { backgroun
 
 /* ---- drawers: the course index (left) and the blocks (right) are glass panels at the edge ---- */
 html .drawer {
-  background: var(--gz-glass-bar) !important; color: var(--gz-ink);
+  background: var(--gz-surface-grain, none), var(--gz-glass-bar) !important; color: var(--gz-ink);
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
 }
 html .drawer.drawer-left { border-right: 1px solid var(--gz-border-line, var(--gz-line)); }
@@ -344,14 +344,14 @@ html .breadcrumb-item, html .breadcrumb-item a { color: var(--gz-ink-muted); }
 html .breadcrumb-item a:hover { color: var(--gz-accent); }
 html .breadcrumb-item.active, html .breadcrumb-item [aria-current="page"] { color: var(--gz-ink); }
 html .secondary-navigation .navigation {
-  background: var(--gz-glass-bar) !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
+  background: var(--gz-surface-grain, none), var(--gz-glass-bar) !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
 }
 html :is(.nav-tabs:not(.more-nav), .nav-pills) { background-color: transparent; }
 html .moremenu .nav-link { color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0; }
 html .moremenu .nav-link:is(:hover, :focus) { background-color: var(--gz-row-hover); color: var(--gz-ink); }
 html .moremenu .nav-link.active { background-color: transparent; color: var(--gz-ink); border-bottom-color: var(--gz-accent); }
-html .nav-tabs .nav-link.active { background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)) var(--gz-border-line, var(--gz-line)) var(--gz-panel); }
+html .nav-tabs .nav-link.active { background: var(--gz-surface-grain, none), var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)) var(--gz-border-line, var(--gz-line)) var(--gz-panel); }
 html .nav-tabs { border-color: var(--gz-border-line, var(--gz-line)); --bs-nav-tabs-link-active-color: var(--gz-ink); --bs-nav-tabs-link-active-bg: var(--gz-panel); --bs-nav-tabs-link-active-border-color: var(--gz-border-line, var(--gz-line)) var(--gz-border-line, var(--gz-line)) var(--gz-panel); --bs-nav-tabs-link-hover-border-color: transparent; }
 html .nav-pills { --bs-nav-pills-link-active-color: var(--gz-on-soft); --bs-nav-pills-link-active-bg: var(--gz-accent-soft); }
 /* Moodle 5's menus are pills drawn from the tokens above; the open page's pill reads in the accent, as Glaze marks it. */
@@ -364,7 +364,7 @@ html .nav-link:is(:hover, :focus) { color: var(--gz-accent-hi); }
 /* The properties as well as Bootstrap 5's variables: Bootstrap 4 (Moodle 4.x) writes these surfaces as literals. */
 html .card {
   --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-border-line, var(--gz-line)); --bs-card-cap-bg: var(--gz-band); --bs-card-color: var(--gz-ink);
-  background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+  background: var(--gz-surface-grain, none), var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
 }
 html .card .card-title { color: var(--gz-ink); }
 html .card-footer, html .card-header { background-color: transparent; border-color: var(--gz-border-line, var(--gz-line)); }
@@ -417,15 +417,15 @@ html .automatic-completion-conditions .badge.alert-success, html .badge.bg-succe
 html .generalbox, html .box.py-3, html .box.generalbox { background: transparent; color: inherit; border-color: var(--gz-border-line, var(--gz-line)); }
 /* Assignment status: Moodle prints its states on literal greens, yellows and pinks with black text. */
 html .path-mod-assign :is(td, div, a:link):is(.submissionstatus, .submissionstatusdraft, .submissionstatussubmitted, .submissionlocked, .submissionreopened, .submissiongraded, .submissionnotgraded, .latesubmission, .earlysubmission, .gradingreminder) {
-  color: var(--gz-ink); background-color: var(--gz-panel);
+  color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-panel);
 }
 html .path-mod-assign :is(.submissionstatussubmitted, .submissiongraded, .earlysubmission) { background-color: color-mix(in srgb, var(--gz-ok) 16%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 html .path-mod-assign :is(.submissionstatusdraft, .submissionlocked) { background-color: color-mix(in srgb, var(--gz-warn) 16%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 html .path-mod-assign :is(.latesubmission, .gradingreminder) { background-color: color-mix(in srgb, var(--gz-err) 16%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 html .path-mod-assign :is(.submittedlate, td.submissioneditable, .overdue) { color: var(--gz-err); }
 /* Quiz: the summary of attempts, its navigation buttons and its feedback boxes (literal tints in Boost). */
-html .path-mod-quiz #mod_quiz_navblock .qnbutton { background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
-html .path-mod-quiz #mod_quiz_navblock .qnbutton .trafficlight { background-color: var(--gz-panel); }
+html .path-mod-quiz #mod_quiz_navblock .qnbutton { background: var(--gz-surface-grain, none), var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html .path-mod-quiz #mod_quiz_navblock .qnbutton .trafficlight { background: var(--gz-surface-grain, none), var(--gz-panel); }
 html .path-mod-quiz #mod_quiz_navblock .qnbutton.thispage { border-color: var(--gz-accent); }
 /* An answered question's button is tinted by its result (literal pale greens, pinks and yellows in Boost). */
 html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton.correct { --gz-state: var(--gz-ok); }
@@ -436,7 +436,7 @@ html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.correct, .incor
   background-color: color-mix(in srgb, var(--gz-state) 22%, var(--gz-surface-paint, var(--gz-surface))); color: var(--gz-ink);
 }
 html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.correct, .incorrect, .notanswered, .partiallycorrect) .thispageholder { border-color: var(--gz-state); }
-html .que :is(.info) { background-color: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink); }
+html .que :is(.info) { background: var(--gz-surface-grain, none), var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink); }
 html .que .formulation { background-color: color-mix(in srgb, var(--gz-accent) 10%, var(--gz-surface-paint, var(--gz-surface))); border-color: color-mix(in srgb, var(--gz-accent) 35%, var(--gz-surface)); color: var(--gz-ink); }
 html .que :is(.outcome, .comment) { background-color: color-mix(in srgb, var(--gz-warn) 12%, var(--gz-surface-paint, var(--gz-surface))); border-color: color-mix(in srgb, var(--gz-warn) 40%, var(--gz-surface)); color: var(--gz-ink); }
 html .que :is(.formulation, .outcome, .comment) a { color: var(--gz-on-soft); }
@@ -472,7 +472,7 @@ html .user-grade :is(.column-itemname, .column-itemname a) { color: var(--gz-ink
 html .user-grade .baggt, html .user-grade .baggb { background: var(--gz-band) !important; }
 html .path-grade-report :is(.gradeitemheader, .rowtitle) { color: var(--gz-ink); }
 html .gradeparent :is(.cell, th, td) { background-color: transparent !important; border-color: var(--gz-border-line, var(--gz-line)) !important; color: var(--gz-ink); }
-html .gradeparent :is(.heading .cell, .cell.category, .avg .cell) { background-color: var(--gz-band) !important; }
+html .gradeparent :is(.heading .cell, .cell.category, .avg .cell) { background: var(--gz-surface-grain, none), var(--gz-band) !important; }
 
 /* ---- buttons ---- */
 html .btn { border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), filter var(--gz-t) var(--gz-ease), scale var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease); }
@@ -510,12 +510,12 @@ html .btn-primary:hover { filter: var(--gz-hover-filter); }
 
 /* ---- forms: fields are surfaces with an edge, the accent ring while you type ---- */
 html :is(.form-control, .form-select, .custom-select, select, textarea, input:not([type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="file"], [type="range"], [type="color"], [type="image"], [type="hidden"])):not(#gz-cmd *) {
-  background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong));
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong));
 }
 html :is(.form-control, .form-select, .custom-select, select, textarea, input):not(#gz-cmd *):focus { border-color: var(--gz-accent); box-shadow: 0 0 0 3px var(--gz-accent-soft); outline: 0; }
 html ::placeholder { color: var(--gz-ink-faint) !important; opacity: 1; }
-html :is(.form-control:disabled, .form-control[readonly], .form-select:disabled) { background-color: var(--gz-band); color: var(--gz-ink-muted); }
-html .input-group-text { background-color: var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html :is(.form-control:disabled, .form-control[readonly], .form-select:disabled) { background: var(--gz-surface-grain, none), var(--gz-band); color: var(--gz-ink-muted); }
+html .input-group-text { background: var(--gz-surface-grain, none), var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--gz-accent); }
 html .form-check-input { --bs-form-check-bg: var(--gz-surface); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .form-check-input:checked { background-color: var(--gz-accent); border-color: var(--gz-accent); }
@@ -526,9 +526,9 @@ html :is(label, legend, .col-form-label) { color: var(--gz-ink); }
 html .mform fieldset { border-color: var(--gz-border-line, var(--gz-line)); }
 html .mform .ftoggler, html .collapsible-actions a { color: var(--gz-ink); }
 html .form-text, html .form-text.text-muted { color: var(--gz-ink-muted) !important; }
-html :is(.form-autocomplete-suggestions, .simplesearchform .collapse.show) { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html :is(.form-autocomplete-suggestions, .simplesearchform .collapse.show) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .form-autocomplete-suggestions li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-on-soft); }
-html .simplesearchform .btn-submit { background-color: var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html .simplesearchform .btn-submit { background: var(--gz-surface-grain, none), var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 
 /* ---- badges, alerts and notices ---- */
 html .badge { --bs-badge-color: var(--gz-accent-ink); }
@@ -550,16 +550,16 @@ html .dropdown-menu {
   --bs-dropdown-link-color: var(--gz-ink); --bs-dropdown-link-hover-color: var(--gz-ink); --bs-dropdown-link-hover-bg: var(--gz-hover-fill);
   --bs-dropdown-link-active-color: var(--gz-on-soft); --bs-dropdown-link-active-bg: var(--gz-accent-soft); --bs-dropdown-divider-bg: var(--gz-line);
   --bs-dropdown-header-color: var(--gz-ink-faint); --bs-dropdown-link-disabled-color: var(--gz-ink-faint);
-  background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); border-radius: var(--gz-radius-sm);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); border-radius: var(--gz-radius-sm);
   animation: var(--gz-tip-in);
 }
 html .dropdown-item { color: var(--gz-ink); }
 html .dropdown-item:is(:hover, :focus) { background-color: var(--gz-hover-fill); color: var(--gz-ink); }
 html .dropdown-item:is(.active, :active, [aria-current="true"]) { background-color: var(--gz-accent-soft); color: var(--gz-on-soft); }
 html .moremenu .dropdownmoremenu > .dropdown-menu .dropdown-item, html .dropdownmoremenu > .dropdown-menu .dropdown-submenu > .dropdown-menu .dropdown-item { background-color: transparent; }
-html .popover { --bs-popover-bg: var(--gz-surface); --bs-popover-border-color: var(--gz-border-strong, var(--gz-line-strong)); --bs-popover-header-bg: var(--gz-band); --bs-popover-header-color: var(--gz-ink); --bs-popover-body-color: var(--gz-ink); --bs-popover-arrow-border: var(--gz-border-strong, var(--gz-line-strong)); background-color: var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); }
+html .popover { --bs-popover-bg: var(--gz-surface); --bs-popover-border-color: var(--gz-border-strong, var(--gz-line-strong)); --bs-popover-header-bg: var(--gz-band); --bs-popover-header-color: var(--gz-ink); --bs-popover-body-color: var(--gz-ink); --bs-popover-arrow-border: var(--gz-border-strong, var(--gz-line-strong)); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); }
 html :is(.popover-header, .popover-body) { color: var(--gz-ink); }
-html .popover-header { background-color: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
+html .popover-header { background: var(--gz-surface-grain, none), var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
 html .popover-region-container { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); color: var(--gz-ink); }
 html .popover-region-header-container, html .popover-region-footer-container { background: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
 html .popover-region .content-item-container { border-color: var(--gz-border-line, var(--gz-line)); }
@@ -568,11 +568,11 @@ html .popover-region .content-item-container:hover { background: var(--gz-hover-
 html .tooltip { --bs-tooltip-bg: var(--gz-tip-bg); --bs-tooltip-color: var(--gz-ink); --bs-tooltip-opacity: 1; }
 html .tooltip .tooltip-inner { border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); }
 html .modal { --bs-modal-bg: var(--gz-surface); --bs-modal-color: var(--gz-ink); --bs-modal-border-color: var(--gz-border-strong, var(--gz-line-strong)); --bs-modal-header-border-color: var(--gz-border-line, var(--gz-line)); --bs-modal-footer-border-color: var(--gz-border-line, var(--gz-line)); }
-html .modal-content { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-enter-panel); }
+html .modal-content { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-enter-panel); }
 html :is(.modal-header, .modal-footer) { border-color: var(--gz-border-line, var(--gz-line)); }
-html .modal-backdrop { --bs-backdrop-bg: var(--gz-surface-2); background-color: var(--gz-surface-fill-2, var(--gz-surface-2)); }
+html .modal-backdrop { --bs-backdrop-bg: var(--gz-surface-2); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
 html .modal-backdrop.show { opacity: 0.7; }
-html :is(.toast, .toast-header) { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html :is(.toast, .toast-header) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .toast { --bs-toast-bg: var(--gz-surface); --bs-toast-color: var(--gz-ink); --bs-toast-border-color: var(--gz-border-strong, var(--gz-line-strong)); --bs-toast-header-bg: var(--gz-band); --bs-toast-header-color: var(--gz-ink-muted); box-shadow: var(--gz-shadow); }
 html .list-group-item { background-color: transparent; color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)); }
 html .list-group-item.active { background-color: var(--gz-accent-soft); color: var(--gz-on-soft); border-color: var(--gz-accent); }
@@ -619,11 +619,11 @@ html .maincalendar .calendar-controls :is(a, .current) { color: var(--gz-ink); }
 html .maincalendar .header { color: var(--gz-ink); }
 
 /* ---- messages: the drawer and the full page. Moodle's bubbles are literal greys and blues ---- */
-html :is(.message-app, .message-drawer) { background-color: var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink); }
-html .message-app :is(.panel-header-container, .footer-container, .header-container) { background-color: var(--gz-band) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
+html :is(.message-app, .message-drawer) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink); }
+html .message-app :is(.panel-header-container, .footer-container, .header-container) { background: var(--gz-surface-grain, none), var(--gz-band) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
 html .message-app .list-group-item { background: transparent; border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink); }
 html .message-app .list-group-item:is(:hover, :focus) { background: var(--gz-row-hover); }
-html .message-app .message.received { background-color: var(--gz-band); color: var(--gz-ink); }
+html .message-app .message.received { background: var(--gz-surface-grain, none), var(--gz-band); color: var(--gz-ink); }
 html .message-app .message.received .tail { border-bottom-color: var(--gz-band); }
 html .message-app .message.send { background-color: var(--gz-accent-soft); color: var(--gz-ink); }
 html .message-app .message.send .tail { border-bottom-color: var(--gz-accent-soft); }
@@ -637,10 +637,10 @@ html .message-app .btn.btn-link:hover { color: var(--gz-accent); }
 html .pagelayout-login #page { background-color: var(--gz-ground) !important; }
 html .login-container { background: var(--gz-surface-grain, none), var(--gz-panel); color: var(--gz-ink); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
 html .login-container :is(.login-heading, h1, h2) { color: var(--gz-ink); }
-html .login-container .login-form .login-input-wrapper .form-control { background-color: var(--gz-surface-fill, var(--gz-surface)) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html .login-container .login-form .login-input-wrapper .form-control { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .login-container .login-form .login-input-wrapper .login-input-icon { color: var(--gz-ink-faint); }
 html .login-container .login-form .toggle-sensitive-wrapper .toggle-sensitive-btn { --bs-btn-bg: var(--gz-surface); --bs-btn-hover-bg: var(--gz-hover-fill); --bs-btn-active-bg: var(--gz-surface); --bs-btn-border-color: var(--gz-border-strong, var(--gz-line-strong)); color: var(--gz-ink-muted); }
-html .login-container .login-identityprovider-btn { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html .login-container .login-identityprovider-btn { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .login-divider { border-color: var(--gz-border-line, var(--gz-line)); }
 html .login-layout-left::after { color: #fff; }
 
@@ -650,14 +650,14 @@ html .tox :is(.tox-editor-header, .tox-menubar, .tox-toolbar, .tox-toolbar__prim
 html .tox :is(.tox-tbtn, .tox-mbtn, .tox-statusbar a, .tox-statusbar__path-item, .tox-statusbar__wordcount, .tox-split-button) { color: var(--gz-ink) !important; background: transparent; }
 html .tox :is(.tox-tbtn, .tox-split-button__chevron) svg { fill: var(--gz-ink) !important; }
 html .tox :is(.tox-tbtn, .tox-mbtn):hover, html .tox .tox-tbtn--enabled { background: var(--gz-hover-fill) !important; }
-html .tox .tox-edit-area__iframe { background-color: var(--gz-surface-fill, var(--gz-surface)); }
+html .tox .tox-edit-area__iframe { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
 html .tox :is(.tox-menu, .tox-collection--list, .tox-dialog, .tox-dialog__header, .tox-dialog__footer, .tox-dialog__body) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 html .tox .tox-collection__item { color: var(--gz-ink) !important; }
 html .tox .tox-collection__item--active { background: var(--gz-hover-fill) !important; }
 html .tox .tox-collection__item svg { fill: var(--gz-ink) !important; }
 /* Moodle 4.x's older editor. */
-html :is(.editor_atto_content_wrap, .editor_atto_content) { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); }
-html .editor_atto_toolbar { background-color: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
+html :is(.editor_atto_content_wrap, .editor_atto_content) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); }
+html .editor_atto_toolbar { background: var(--gz-surface-grain, none), var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
 html .editor_atto_toolbar button { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink-muted); border-color: var(--gz-border-line, var(--gz-line)); }
 /* File pickers. */
 html :is(.fp-panel-button, .file-picker .fp-content, .filemanager-container, .filepicker-filelist, .fp-iconview .fp-thumbnail, .fp-iconview .fp-filename-field .fp-filename) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)); }
@@ -669,7 +669,7 @@ html :is(.filepicker-filelist .dndupload-target, .filemanager-container .dnduplo
 html[data-gz-dark-theme] :is(.no-overflow, .activity-description, .summarytext, .box.generalbox) img:not(:hover) { filter: brightness(0.9); }
 
 /* ---- the long tail: content.js tags anything still painted light / with dark text (on a dark palette) ---- */
-[data-gz-light] { background-color: var(--gz-surface-fill, var(--gz-surface)) !important; }
+[data-gz-light] { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 [data-gz-dark] { color: var(--gz-ink) !important; }
 [data-gz-hover]:is(:hover, :focus, :focus-visible) { background-color: var(--gz-hover-fill) !important; }
 html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg); opacity: 0.5; }
@@ -817,6 +817,6 @@ html [data-region="course-content"][data-gz-course-look] {
   --bs-secondary-color: var(--gz-ink-muted); --bs-tertiary-color: var(--gz-ink-faint); --bs-primary: var(--gz-accent);
   --bs-link-color: var(--gz-on-soft); --bs-link-hover-color: var(--gz-on-soft); --bs-border-color: var(--gz-border-line, var(--gz-line));
   --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-border-line, var(--gz-line)); --bs-card-color: var(--gz-ink);
-  color: var(--gz-ink); background-color: var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)) !important;
+  color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)) !important;
 }
 html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft: var(--gz-accent-hi); }
