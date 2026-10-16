@@ -78,6 +78,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     const p = on ? K.page(card) : { vars: {}, attrs: {} };
     for (const v of ['--gz-card-w', '--gz-card-gap', '--gz-card-r', '--gz-card-h']) prop(html, v, p.vars[v] || '');
     for (const a of ['hover', 'particles', 'pet', 'condensed', 'icons', 'plain']) attr(html, `data-gz-card-${a}`, p.attrs[a]);
+    for (const [node, live] of petViews) if (!node.isConnected) { live.stop(); petViews.delete(node); }
     if (ultra) for (const k of ['width', 'gap', 'height']) attr(html, `data-gz-card-${k}`, on && card[k] !== K.SPEC[k][0] ? '' : false);
     // A theme's set goes round the courses in the order they first show.
     const order = new Map();
@@ -118,17 +119,27 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     }));
   };
 
-  // ---- the pet: on the first card only, drawn by canvas.css from its sheet ----
+  // ---- the selected companion: on the first card only ----
+  const petViews = new Map();
   const pet = (card, kind) => {
     let p = card.querySelector(':scope > .gz-pet');
-    if (!kind) { p?.remove(); return; }
+    if (!kind) { if (p) { petViews.get(p)?.stop(); petViews.delete(p); p.remove(); } return; }
     if (!p) {
       p = Object.assign(document.createElement('i'), { className: 'gz-pet' });
       p.setAttribute('aria-hidden', 'true');
+      p.style.animation = 'none'; p.style.background = 'none';
       card.append(p);
+      const node = p;
+      need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => {
+        if (!chrome.runtime?.id || !node.isConnected) return;
+        const live = GZ_WIDGETS_UI.avatar(node, { interactive: false });
+        const hover = (e) => { if (e.pointerType !== 'touch' && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-hover')) live.play('waving'); };
+        card.addEventListener('pointerenter', hover);
+        petViews.set(node, { stop: () => { card.removeEventListener('pointerenter', hover); live.stop(); } });
+      }).catch(() => {});
     }
-    prop(p, '--gz-pet-sheet', `url("${chrome.runtime.getURL(`assets/art/pets/${kind}/sprites.webp`)}")`);
   };
+  window.addEventListener?.('pagehide', () => { for (const live of petViews.values()) live.stop(); petViews.clear(); }, { once: true });
 
   // ---- create: what a student can start for this course, in Canvas ----
   const PLUS = 'M12 5v14M5 12h14';

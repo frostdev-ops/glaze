@@ -5,10 +5,10 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const button = (text, run) => { const b = make('button', { type: 'button', textContent: text }); b.addEventListener('click', run); return b; };
   const NAMES = { books: 'Books', plant: 'Mushroom', moon: 'Moon', stars: 'Stars', plain: 'Classic buddy', bandana: 'Mint bandana', happy: 'Happy buddy' };
   let ready;
-  const start = () => (ready ||= Promise.all([ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO)]).catch((e) => { ready = null; throw e; }));
+  const start = () => (ready ||= Promise.all([ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO), ctx.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI)]).catch((e) => { ready = null; throw e; }));
   const send = (m) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'glaze:pet', ...m }, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const mount = (body, api) => {
-    let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, generation = 0, pets = [];
+    let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, pets = [];
     const waiting = [];
     const tile = body.closest('.gz-w');
     if (tile) tile.hidden = true;
@@ -18,7 +18,6 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     const paint = () => {
       if (!alive || !data || !chrome.runtime?.id) return;
       player?.stop(); player = null;
-      const turn = ++generation;
       const P = GZ_PET, d = data;
       const active = pet.contains(document.activeElement) && document.activeElement.dataset.control;
       const wasOpen = [...pet.querySelectorAll('details')].map((e) => e.open);
@@ -29,17 +28,10 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         for (const [id, at] of Object.entries(d.decor)) if (at === i) cell.append(art(P.DECOR[id].art, 'gz-game-decor'));
         if (i === 4) {
           const old = art(`critters/${P.WEAR[d.wear].art}`, 'gz-game-buddy'); cell.append(old);
-          if (d.sprite) Promise.all([ctx.need('lib/petsprites.js', () => globalThis.GZ_PET_SPRITES), ctx.need('lib/petplayer.js', () => globalThis.GZ_PET_PLAYER)])
-            .then(() => send({ type: 'glaze:petSprites', key, op: 'get', id: d.sprite })).then((r) => {
-              if (!alive || turn !== generation || !chrome.runtime?.id || !r?.pet) return;
-              const canvas = make('canvas', { className: 'gz-game-buddy', tabIndex: 0 });
-              canvas.setAttribute('role', 'button'); canvas.setAttribute('aria-label', t('Play with {name}', { name: r.pet.name }));
-              old.replaceWith(canvas); player = GZ_PET_PLAYER.mount(canvas, r.pet);
-              canvas.addEventListener('click', (e) => { if (e.isTrusted) player?.set('waving'); });
-              canvas.addEventListener('keydown', (e) => { if (e.isTrusted && ['Enter', ' '].includes(e.key)) { e.preventDefault(); e.stopPropagation(); player?.set('jumping'); } });
-              canvas.addEventListener('pointermove', (e) => { if (!e.isTrusted || r.pet.spriteVersionNumber !== 2) return; const rect = canvas.getBoundingClientRect(); player?.set('look', GZ_PET_SPRITES.direction(e.clientX - rect.left - rect.width / 2, e.clientY - rect.top - rect.height / 2)); });
-              canvas.addEventListener('pointerleave', () => player?.set('idle'));
-            }).catch(() => {});
+          if (globalThis.GZ_WIDGETS_UI?.avatar) {
+            const host = make('div', { className: 'gz-game-avatar' }); old.replaceWith(host);
+            player = GZ_WIDGETS_UI.avatar(host);
+          }
         }
         stage.append(cell);
       }
@@ -76,7 +68,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         make('label', {}, make('span', { textContent: t('Pet character') }), sprite), outfit, decor, rules);
       if (active) [...pet.querySelectorAll('[data-control]')].find((e) => e.dataset.control === active)?.focus({ preventScroll: true });
     };
-    const stop = () => { alive = false; generation++; player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
+    const stop = () => { alive = false; player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
     const update = async (patch = { op: 'read' }) => {
       if (!alive || !key) return;
       if (!chrome.runtime?.id) { stop(); return; }
@@ -99,12 +91,13 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       if (!alive || !key) return;
       if (area === 'sync' && (ch.todo || ch.enhance)) { update(); return; }
       if (area !== 'local') return;
-      if (ch.petSprites) { library(); return; }
+      if (ch.petSprites) library();
+      if (ch.petCharacter) update();
       const suffix = key.slice(4);
       if (ch[`todo:${suffix}`] || ch[`insights:${suffix}`] || ch[`remind:${suffix}`] || ch.todoCache) update();
       if (ch[key]?.newValue) { data = GZ_PET.view(ch[key].newValue); paint(); }
     };
-    const show = () => { clearTimeout(timer); if (document.visibilityState === 'visible') update(); else player?.sleep(); };
+    const show = () => { clearTimeout(timer); if (document.visibilityState === 'visible') { player?.wake(); update(); } else player?.sleep(); };
     const library = () => send({ type: 'glaze:petSprites', key, op: 'list' }).then((r) => { if (alive && chrome.runtime?.id && r?.ok && Array.isArray(r.pets)) { pets = r.pets; paint(); } });
     document.addEventListener('visibilitychange', show);
     body.append(pet, status);

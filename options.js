@@ -350,7 +350,7 @@ GZ_UI.load().then((s) => {
       if (el.type === 'checkbox') el.checked = v;
       else el.value = v;
     }
-    for (const r of $$('.seg input[type="radio"]:not([data-local])')) r.checked = String(get(r.name)) === r.value;
+    for (const r of $$('.seg input[type="radio"]:not([data-local])')) r.checked = String(r.name === 'card.pet' && get(r.name) !== 'none' ? 'selected' : get(r.name)) === r.value;
     $('#bg-image').value = s.bg.image;
     for (const [slug, box] of tabBoxes) box.checked = s.declutter.tabs.includes(slug);
     renderFonts();

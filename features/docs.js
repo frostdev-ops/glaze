@@ -30,6 +30,39 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
       d.documentElement.append(s);
     } catch { /* another origin */ }
   };
+  // Ultra's file preview is Blackboard's document viewer, at an address holding a ticket good for about two minutes. Ultra
+  // keeps the address it got with the page and opens the viewer with it whenever the preview is expanded, so later on the
+  // viewer is refused and says the file can't be shown; one taken while an upload converts says so until a reload. Such a
+  // frame gets a fresh address: a request that brought one (content-ultra.js notes them), asked again, and the same
+  // document's address in the answer; while the file converts, asked again every 15 seconds for five minutes.
+  const VIEWER = /^https:\/\/annotate[\w.-]*\.blackboard\.com\/ui\/pdf-viewer\//;
+  const ticket = (src) => {
+    try {
+      const u = new URL(src);
+      const j = JSON.parse(atob(u.searchParams.get('ticket').split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return VIEWER.test(src) && typeof j.document_id === 'string' && j.document_id && Number.isFinite(j.exp) && { doc: j.document_id, exp: j.exp * 1000, done: u.searchParams.get('status') === 'complete' };
+    } catch { return null; }
+  };
+  const renew = async (f, tries = 0) => {
+    if (!f.isConnected || !ctx.on() || (typeof chrome !== 'undefined' && !chrome.runtime?.id)) return;
+    const old = ticket(f.src);
+    if (!old || (old.done && old.exp > Date.now() + 20000)) return;
+    for (const url of [...new Set(globalThis.GZ_ASKS)].slice(0, 5)) { // newest first
+      if (!url.startsWith(`${location.origin}/learn/api/`)) continue;
+      const found = [];
+      try {
+        const r = await fetch(url, { credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json' } });
+        // Wherever it is in the answer: a field, or an attachment in a document's HTML.
+        if (r.ok) JSON.parse(await r.text(), (_, v) => { if (typeof v === 'string') for (const m of v.replace(/&quot;/g, '"').replace(/&amp;/g, '&').matchAll(/https:\/\/annotate[^"'\s<>\\]+/g)) found.push(m[0]); return v; });
+      } catch { /* signed out, or not JSON */ }
+      const src = found.find((s) => ticket(s)?.doc === old.doc);
+      if (!f.isConnected || !ctx.on() || (typeof chrome !== 'undefined' && !chrome.runtime?.id)) return;
+      if (!src) continue;
+      if (ticket(src).done || old.exp < Date.now() + 20000) f.src = src; // a converting one only replaces an expired one
+      break;
+    }
+    if (f.isConnected && !ticket(f.src)?.done && tries < 20) setTimeout(() => renew(f, tries + 1), 15000);
+  };
   const onRead = () => {
     if (!readBar) return;
     let sc = ultra ? focusAt.parentElement : document.scrollingElement;
@@ -63,7 +96,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     const doc = on && !(!ultra && document.querySelector('.ef-file-preview-overlay, #file-preview-modal-alert')) && document.querySelector(DOC);
     if (focusAt && (focusAt !== doc || focusPath !== location.pathname)) setFocus(false);
     for (const f of document.querySelectorAll(PREVIEWS)) {
-      if (!framesSeen.has(f)) { framesSeen.add(f); frameIO.observe(f); f.addEventListener('load', () => unflip(f)); }
+      if (!framesSeen.has(f)) { framesSeen.add(f); frameIO.observe(f); f.addEventListener('load', () => unflip(f)); if (ultra) renew(f); }
       unflip(f);
     }
     for (const f of framesShown) if (!f.isConnected) { framesShown.delete(f); frameIO.unobserve(f); }

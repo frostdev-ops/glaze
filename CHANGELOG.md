@@ -6,6 +6,20 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.3] — 2026-10-16
+
+### Changed
+- The pet habitat, Study buddy widget, Blackboard navigation badge and course-card pet share one character choice on this device. Their visibility switches stay separate; XP, outfits and decorations stay with each school's signed-in account.
+- All pet displays react to the focus timer and completed To Do tasks. Interactive pets respond to clicks and keyboard play; animation pauses while hidden and follows reduced motion and Glaze Motion off.
+- The original Cat and Bunny can be selected in the pet habitat alongside the animated companions and local imports. Removing a selected imported pet returns to Classic buddy and preserves progress and decorations.
+
+### Fixed
+- Blackboard file previews refresh expired viewer tickets for the same document. Previews opened while an uploaded file is still converting retry for up to five minutes.
+- The Blackboard navigation pet's level comes from the signed-in account's pet record, independently of the planner cache. Late storage reads cannot replace newer character or timer changes.
+
+### Added
+- A dedicated Firefox for Android emulator launcher and testing guide. Android runtime acceptance and physical-device testing remain separate from desktop release validation.
+
 ## [3.0.2] — 2026-10-16
 
 ### Changed
