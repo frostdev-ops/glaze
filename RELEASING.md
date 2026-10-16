@@ -16,17 +16,22 @@ Everything a release builds goes in `release/<version>/` (gitignored), one folde
 ## Steps
 
 1. Bump `version` in `manifest.json`, add the `CHANGELOG.md` entry, commit.
-2. `sh scripts/release.sh` runs the tests and builds the Chrome and Firefox zips. With `MAC=1` and notarization
+2. `sh scripts/release.sh` runs the tests and builds the Chrome zip. With `MAC=1` and notarization
    credentials (`NOTARY_PROFILE`, or `ASC_KEY_PATH`/`ASC_KEY_ID`/`ASC_ISSUER_ID`) it also builds the notarized
    Mac app and DMG.
 3. `sh scripts/safari-appcast.sh release/<v>/github/glaze-<v>-safari-macos.dmg /path/to/Sparkle/bin` signs the
    update entry into `release/appcast.xml`.
-4. Tag `v<v>` and push it. CI (`.github/workflows/package.yml`) builds both extension zips and attaches them to
-   the GitHub release; upload the DMG, Mac zip and their checksums from `release/<v>/github/`.
+4. Tag `v<v>` and push it. CI (`.github/workflows/package.yml`) builds the Chrome zip into a draft GitHub release.
+   Merge the same main release commit into the permanent `dev/firefox` branch, retaining its compatibility fixes,
+   and require its tests and zero-warning Firefox lint to pass. Build the Firefox upload and reviewer source ZIPs
+   from that exact Firefox commit (`sh scripts/package-firefox.sh`, then `git archive --format=zip -o <source.zip> HEAD`).
+   Copy its Firefox package into `release/<v>/github/` and `release/<v>/firefox/`, with the source ZIP in `firefox/`.
+   Upload the Firefox package, notarized DMG, Mac zip and matching checksums, then publish the completed draft.
+   Never publish a Firefox package built from main alone. Do not rebase, force-push or delete `dev/firefox`.
 5. Publish the appcast on frostdev.io at `/projects/glaze/appcast.xml`, only after the DMG is on GitHub.
 6. Stores, each from its folder:
    - Chrome Web Store: `sh scripts/publish-chrome.sh release/<v>/chrome-web-store/glaze-v<v>.zip`, or upload it in the dashboard.
    - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
-     code, upload `glaze-v<v>-source.zip` from the same folder: the vendored pdf.js gets a one-line shim and three.js
-     is a custom build, and reviewers rebuild both with `scripts/vendor-pdfjs.sh` and `scripts/vendor-three.sh`.
+     code, upload `glaze-v<v>-source.zip` from the same Firefox commit: pdf.js has fixed local imports and a compatibility
+     shim, and three.js is a custom build. Reviewers rebuild both with `scripts/vendor-pdfjs.sh` and `scripts/vendor-three.sh`.
    - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.

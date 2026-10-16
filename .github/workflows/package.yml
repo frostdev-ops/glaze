@@ -13,12 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the Chrome and Firefox zips
-        run: sh scripts/package-firefox.sh
+      - name: Build the Chrome zip
+        run: ./package.sh
 
       - name: Attach it to the release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
+          draft: true
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-rc') }}
