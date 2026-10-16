@@ -41,7 +41,7 @@ const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', 
     URL, URLSearchParams, JSON, Object, String, Array, location: new URL(href), window: {}, IntersectionObserver: class { observe() {} },
     GZ_COLORS: [['--gz-surface'], ['--gz-ink']], GZ_COURSE_LOOK: D.GZ_COURSE_LOOK,
     document: {
-      documentElement: { style: { getPropertyValue: (v) => ({ '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa' })[v] }, matches: () => false, removeAttribute() {} },
+      documentElement: { style: { getPropertyValue: (v) => ({ '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa', '--gz-surface-course': '#445566' })[v] }, matches: () => false, removeAttribute() {} },
       getElementsByTagName: () => [iframe], querySelector: () => null, querySelectorAll: () => [], addEventListener() {},
     },
   });
@@ -78,7 +78,7 @@ test('a canvadocs frame of this page is told the palette, the switches, the file
   assert.equal(sent.length, 1);
   assert.equal(sent[0].origin, 'https://canvadocs.instructure.com', 'never "*"');
   assert.deepEqual(JSON.parse(JSON.stringify(sent[0].msg)), {
-    gz: 'docs', on: true, dark: true, look: D.GZ_DEFAULTS.look, colors: { '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa' }, theme: true, pages: 'dim', ink: true,
+    gz: 'docs', on: true, dark: true, look: D.GZ_DEFAULTS.look, colors: { '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa', '--gz-surface-course': '#445566' }, theme: true, pages: 'dim', ink: true,
     file: '21', user: '170000000000042', words: { Pen: 'Stift', Eraser: 'Eraser' },
   });
 });
@@ -186,6 +186,7 @@ test('a DocViewer receives its containing course Look rather than global surface
   p.settings.look.surfaceCustom = true; p.settings.look.surfaceColor = '#ff0000'; p.settings.look.radius = 24;
   p.settings.courses.looks['canvas:https://school.instructure.com/1'] = 'Terminal';
   p.ask({ gz: 'docs?' });
+  assert.equal(p.sent[0].msg.colors['--gz-surface-course'], '#445566');
   const look = p.sent[0].msg.look;
   assert.equal(look.radius, 2); assert.equal(look.glass, 0); assert.equal(look.depth, 0);
   assert.equal(look.surfaceCustom, false); assert.equal(look.surfaceFrost, 0);

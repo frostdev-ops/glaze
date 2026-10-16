@@ -82,6 +82,10 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
     const on = s.enabled && GZ_CTX.on();
     for (const card of document.querySelectorAll('[data-region="course-content"][data-course-id]')) {
       const key = GZ_CTX.canvasCourseKey(card.dataset.courseId);
+      const course = on ? GZ_COURSE_COLOR(s, list, key) : '';
+      if (card.style.getPropertyValue('--gz-course') !== course) {
+        if (course) card.style.setProperty('--gz-course', course); else card.style.removeProperty('--gz-course');
+      }
       const color = on && s.courses.tint && s.courses.tinted.includes(key) && list[key]?.color;
       const look = on && s.courses.looks[key];
       const worn = GZ_COURSE_LOOK(s, key);

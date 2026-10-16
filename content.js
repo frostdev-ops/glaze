@@ -395,7 +395,7 @@
     themeEditors();
     if (tip && ultraTipShown()) hideTip();
     X.paintCourses();
-    if (tintKey() !== tinted || lookHere() !== looked) applySettings();
+    if (tintKey() !== tinted || lookHere() !== looked || surfaceCourse() !== html.style.getPropertyValue('--gz-surface-course')) applySettings();
     placeScene();
     if (!said) return;
     if (all) X.syncNav();
@@ -468,6 +468,7 @@
     dirty.clear();
     full = false;
     X.stop();
+    globalThis.GZ_MOODLE_PAGE?.paint();
     clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
     liftable.clear();
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
@@ -999,6 +1000,7 @@
   // the slot is remembered per course id, on this device. flush() re-checks on every page change.
   const courseSlots = {};
   let courseList = {};
+  const surfaceCourse = () => chrome.runtime?.id ? GZ_COURSE_COLOR(settings, courseList, ultra ? courseId() : canvasCourseKey()) : '';
   const courseColors = () => GZ_COURSE_COLORS(courseList, settings.courses.colors);
   try {
     chrome.storage.local.get(['courseSlots', 'seenCourses'], (r) => {
@@ -1134,6 +1136,7 @@
   const applySettings = () => {
     looked = lookHere();
     const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey()) : settings);
+    setVar('--gz-surface-course', surfaceCourse());
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);

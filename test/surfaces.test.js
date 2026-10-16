@@ -92,3 +92,24 @@ test('Moodle cards layer local frost over the shared panel fill', () => {
   const card = css.match(/html \.card \{([^}]+)\}/)[1];
   assert.match(card, /background: var\(--gz-surface-grain, none\), var\(--gz-panel\)/);
 });
+
+test('course surface colors use only known valid records, with picks winning independently of palette tint', () => {
+  const key = 'canvas:https://school.instructure.com/12';
+  const s = G.GZ_SANITIZE({ courses: { colors: { [key]: '#112233' }, tint: false } });
+  const list = { [key]: { color: '#445566' } };
+  assert.equal(G.GZ_COURSE_COLOR(s, list, key), '#112233');
+  s.courses.colors[key] = 'url(https://invalid.test)';
+  assert.equal(G.GZ_COURSE_COLOR(s, list, key), '#445566');
+  list[key].color = 'currentColor';
+  assert.equal(G.GZ_COURSE_COLOR(s, list, key), '');
+  assert.equal(G.GZ_COURSE_COLOR(s, list, null), '');
+  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+  const line = source.match(/^  const surfaceCourse = .*;$/m)[0];
+  for (const site of ['ultra', 'canvas', 'moodle']) {
+    const c = vm.createContext({ chrome: { runtime: { id: 'glaze' } }, GZ_COURSE_COLOR: G.GZ_COURSE_COLOR, settings: s, courseList: list, ultra: site === 'ultra', courseId: () => key, canvasCourseKey: () => key });
+    const get = vm.runInContext(`${line}\nsurfaceCourse`, c);
+    list[key].color = '#445566'; assert.equal(get(), '#445566', site);
+    c.canvasCourseKey = c.courseId = () => null; assert.equal(get(), '', `${site}: navigation clears the old course`);
+    c.canvasCourseKey = c.courseId = () => key; delete c.chrome.runtime.id; assert.equal(get(), '', `${site}: invalidated context clears`);
+  }
+});

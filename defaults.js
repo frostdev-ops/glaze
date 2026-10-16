@@ -458,6 +458,8 @@ const GZ_COURSE_EDIT = {
   // A nickname, or '' (or only spaces) to let it go.
   name: (c, id, nick) => { const n = cleanNick(nick); if (n) c.names[id] = n; else delete c.names[id]; },
 };
+// Surface tint uses only an existing picked or recorded color; an unknown course keeps the accent fallback.
+const GZ_COURSE_COLOR = (s, list, key) => [s.courses?.colors?.[key], list[key]?.color].find((v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) || '';
 // Whether the course is tinting its pages now: the master switch is on and it (or its slot) is ticked.
 const GZ_COURSE_TINTED = (c, id, list = {}) => !!c.tint && (c.tinted.includes(id) || (!!list[id]?.slot && c.tinted.includes(list[id].slot)));
 
@@ -535,5 +537,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_SURFACE_VARS, GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_SURFACE_VARS, GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_COLOR, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }

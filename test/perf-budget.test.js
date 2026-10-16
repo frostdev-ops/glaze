@@ -23,8 +23,9 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // for it (216,000, then 221,000 for B7c's nav at first paint and B8's tabs), and lowered to what B7 and B8 actually
 // measure once they land.
 // Ultra resets to the measured c30814e release total. B11 surface hooks fit its existing 2% allowance;
-// pet/editor code stays lazy. Canvas and Moodle retain their original baselines.
-const FIRST_SCRIPT_BASELINE = { ultra: 225195, canvas: 201446, moodle: 171507 };
+// pet/editor code stays lazy. Moodle resets its stale 171,507 baseline to the measured 172,222-byte release;
+// the course-surface correction keeps the complete change within release + 2%. Canvas retains its original baseline.
+const FIRST_SCRIPT_BASELINE = { ultra: 225195, canvas: 201446, moodle: 172222 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;

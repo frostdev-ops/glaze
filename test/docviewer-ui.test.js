@@ -208,3 +208,11 @@ test('an invalidated viewer removes theme and ink before accepting a later paren
   assert.equal(v.bar(), undefined); assert.equal(v.svg(), undefined);
   assert.equal(v.html.attrs['data-gz-docs'], undefined);
 });
+
+test('the viewer keeps a validated containing course color and rejects injected CSS', async () => {
+  const v = viewer();
+  await v.tell({ theme: true, colors: { '--gz-surface-course': '#445566', '--gz-course': 'red; background:url(https://invalid.test)' } });
+  const css = v.html.children.find((e) => e.tagName === 'STYLE')?.textContent || '';
+  assert.match(css, /--gz-surface-course: #445566/);
+  assert.doesNotMatch(css, /invalid\.test/);
+});
