@@ -82,7 +82,16 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     } catch { if (sameAction(k, g)) fail(); }
     finally { if (a === action) pendingFocus = null; }
   };
-  const icon = (hidden) => `<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${hidden ? '<path d="m3 3 18 18"/>' : ''}</svg>`;
+  const icon = (hidden) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    for (const [k, v] of Object.entries({ 'aria-hidden': 'true', width: '18', height: '18', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.7' })) svg.setAttribute(k, v);
+    for (const [tag, attrs] of [['path', { d: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z' }], ['circle', { cx: '12', cy: '12', r: '3' }], ...(hidden ? [['path', { d: 'm3 3 18 18' }]] : [])]) {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+      svg.append(node);
+    }
+    return svg;
+  };
   const button = () => {
     const b = document.createElement('button'); b.type = 'button';
     for (const ev of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'keydown', 'keyup']) b.addEventListener(ev, (e) => e.stopPropagation());
@@ -120,7 +129,7 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
       if (hidden && data.show) markHidden(toggle, row, id);
       const label = t(hidden ? 'Unhide folder: {title}' : 'Hide folder: {title}', { title: titleOf(toggle) });
       if (b.getAttribute('aria-label') !== label) { b.setAttribute('aria-label', label); b.title = label; }
-      if (b.dataset.hidden !== String(hidden)) { b.dataset.hidden = String(hidden); b.innerHTML = icon(hidden); }
+      if (b.dataset.hidden !== String(hidden)) { b.dataset.hidden = String(hidden); b.replaceChildren(icon(hidden)); }
     }
     const bar = document.getElementById('gz-progress'), top = rows.find((r) => !r.parentElement.closest(ROW));
     if (bar) { if (status.previousElementSibling !== bar) bar.after(status); }
@@ -136,7 +145,7 @@ var GZ_FOLDER_UI = globalThis.GZ_FOLDER_UI || (() => {
     else if (status.isConnected && control.nextElementSibling !== status) status.before(control);
     const label = t(data.show ? 'Hide them again ({n})' : 'Show hidden folders ({n})', { n: ids.size }), text = control.querySelector('.gz-folders-toggle-label');
     if (text.textContent !== label) text.textContent = label;
-    if (control.dataset.show !== String(data.show)) { control.dataset.show = String(data.show); control.querySelector('.gz-folders-toggle-icon').innerHTML = icon(data.show); }
+    if (control.dataset.show !== String(data.show)) { control.dataset.show = String(data.show); control.querySelector('.gz-folders-toggle-icon').replaceChildren(icon(data.show)); }
     if (control.getAttribute('aria-pressed') !== String(data.show)) control.setAttribute('aria-pressed', String(data.show));
     if (focusToggle) { control.focus({ preventScroll: true }); pendingFocus = null; }
   };

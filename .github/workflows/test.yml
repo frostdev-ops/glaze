@@ -11,3 +11,30 @@ jobs:
         with:
           node-version: 22
       - run: node --test
+  firefox:
+    if: github.ref == 'refs/heads/dev/firefox' || github.base_ref == 'dev/firefox'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Package Firefox and require clean lint
+        run: |
+          sh scripts/package-firefox.sh
+          mkdir -p "$RUNNER_TEMP/glaze-firefox"
+          unzip -q dist/*-firefox.zip -d "$RUNNER_TEMP/glaze-firefox"
+          npx --yes web-ext@10.8.0 lint --no-config-discovery --warnings-as-errors --source-dir "$RUNNER_TEMP/glaze-firefox"
+          version=$(node -p 'require("./manifest.json").version')
+          git archive --format=zip -o "dist/glaze-v$version-source.zip" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firefox
+          path: |
+            dist/*-firefox.zip
+            dist/*-source.zip
+          if-no-files-found: error

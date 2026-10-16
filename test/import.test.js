@@ -223,7 +223,7 @@ const reader = () => {
     createImageBitmap: async (b) => { decoded.push(b); throw new Error('stand-in decoder'); },
     Worker: class { postMessage() {} terminate() {} },
   });
-  new vm.Script(fs.readFileSync(path.join(root, 'reader.js'), 'utf8'), { importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER }).runInContext(ctx);
+  new vm.Script(fs.readFileSync(path.join(root, 'reader.js'), 'utf8'), { filename: path.join(stand, 'reader.js'), importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER }).runInContext(ctx);
   // A job as any page could post it, with a channel of its own; → the reader's answer, or null when it says nothing.
   const post = (data) => new Promise((resolve) => {
     const ch = new MessageChannel();

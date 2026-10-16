@@ -13,6 +13,23 @@ Everything a release builds goes in `release/<version>/` (gitignored), one folde
 
 `release/appcast.xml` is the one file outside a version folder: the signed Mac update feed, holding every version.
 
+## Firefox maintenance
+
+`dev/firefox` is the permanent Firefox compatibility branch. Keep its dedicated worktree, merge `origin/main`
+into it as main changes, and push normally after validation. Do not rebase, force-push or delete this branch.
+Keep the manifest version from main; unpublished release branches are not inputs unless explicitly requested.
+Shared fixes may be ported to main separately, but merging main must retain Firefox's local-only PDF imports,
+event-page background, unavailable Google sign-in adapter and minimum versions (desktop 140, Android 142).
+
+The GitHub test workflow runs the existing suite, packages Firefox, and runs pinned `web-ext@10.8.0` lint with
+warnings treated as failures on this branch and pull requests into it. Its Firefox artifact includes the upload
+ZIP and a reviewer source ZIP from the same commit. Lint does not replace Firefox desktop/Android runtime QA.
+
+For a Firefox release, first merge the corresponding published main commit into `dev/firefox`, validate, and build
+the upload and source ZIPs there. Use these artifacts for Firefox Add-ons and any Firefox GitHub asset; a Firefox ZIP
+built from main alone is not the compatibility candidate. Do not replace already published 3.0.2 packages or tags.
+Never submit or publish as part of routine branch synchronization.
+
 ## Steps
 
 1. Bump `version` in `manifest.json`, add the `CHANGELOG.md` entry, commit.
@@ -27,6 +44,7 @@ Everything a release builds goes in `release/<version>/` (gitignored), one folde
 6. Stores, each from its folder:
    - Chrome Web Store: `sh scripts/publish-chrome.sh release/<v>/chrome-web-store/glaze-v<v>.zip`, or upload it in the dashboard.
    - Firefox Add-ons: upload `release/<v>/firefox/glaze-v<v>-firefox.zip` at addons.mozilla.org. When it asks for source
-     code, upload `glaze-v<v>-source.zip` from the same folder: the vendored pdf.js gets a one-line shim and three.js
-     is a custom build, and reviewers rebuild both with `scripts/vendor-pdfjs.sh` and `scripts/vendor-three.sh`.
+     code, upload `glaze-v<v>-source.zip` from the same folder: pdf.js has fixed local imports and a compatibility
+     shim, and three.js is a custom build. Reviewers rebuild both with `scripts/vendor-pdfjs.sh` and
+     `scripts/vendor-three.sh`; the required tools and pinned versions are in README.md.
    - App Store: `sh scripts/appstore-safari.sh` (Mac) and `APPSTORE_UPLOAD=1 sh scripts/appstore-ios.sh`.

@@ -903,11 +903,11 @@ GZ_UI.load().then((s) => {
     const gcalSignIn = async () => {
       try {
         if (!await chrome.permissions.request({ permissions: ['identity'] })) return t("Glaze can't connect without Chrome's sign-in permission.");
-        const r = await chrome.identity.getAuthToken({ interactive: true });
+        const r = await GZ_GCAL_AUTH.token({ interactive: true });
         const scope = chrome.runtime.getManifest().oauth2.scopes[0];
         if (Array.isArray(r?.grantedScopes) && !r.grantedScopes.includes(scope)) {
           // Chrome would hand the same token back: forgotten, so the next Connect asks Google again.
-          await chrome.identity.removeCachedAuthToken({ token: r.token }).catch(() => {});
+          await GZ_GCAL_AUTH.drop(r.token).catch(() => {});
           return t("Glaze needs the calendar access on Google's screen. Connect again and leave it ticked.");
         }
         return '';

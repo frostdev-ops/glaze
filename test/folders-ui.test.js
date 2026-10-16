@@ -42,6 +42,7 @@ const fixture = () => {
   const chrome = { storage: { local, onChanged: { addListener: (f) => changed.push(f) } }, runtime: { sendMessage: async (m) => { sent.push(m); const r = await F.change(m, { local }); if (reply) await reply; return r; } } };
   const document = { head, body, createElement: (t) => new E(t), querySelectorAll: (s) => html.querySelectorAll(s), getElementById: (id) => html.querySelector(`#${id}`) };
   html.setOwner(document); document.createElement = (t) => { const e = new E(t); e.setOwner(document); return e; }; document.activeElement = body;
+  document.createElementNS = (_, tag) => document.createElement(tag);
   const ctx = { on: () => on, settings: () => ({ enhance: { hideFolders: enabled } }), courseId: () => cid,
     toggleOf: (r) => r.querySelector(`#folder-title-${r.dataset.contentId}`) || r.querySelector(`#learning-module-title-${r.dataset.contentId}`), t: (k, args) => k.replace(/\{(\w+)\}/g, (_, p) => args[p]) };
   const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { constructor(f) { mutations = f; } observe() { watched.on = true; } disconnect() { watched.on = false; } }, requestAnimationFrame: (f) => frames.push(f), setTimeout: (f) => { timers.set(++timerId, f); return timerId; }, clearTimeout: (id) => timers.delete(id) });
@@ -191,7 +192,7 @@ test('feedback toggles its action and restores live native accessible names with
   assert.equal(toggle.textContent, 'Show hidden folders (3)'); assert.equal(toggle.getAttribute('aria-pressed'), 'false');
   await e.click(toggle);
   assert.equal(toggle.textContent, 'Hide them again (3)'); assert.equal(toggle.getAttribute('aria-pressed'), 'true');
-  assert.match(toggle.querySelector('.gz-folders-toggle-icon').innerHTML, /m3 3 18 18/);
+  assert.equal(toggle.querySelector('.gz-folders-toggle-icon').querySelectorAll('path').at(-1).getAttribute('d'), 'm3 3 18 18');
   assert.equal(parent.getAttribute('aria-label'), 'Native parent · Hidden');
   assert.equal(child.getAttribute('aria-labelledby'), '  native-title native-detail   gz-folder-badge-_102_1');
   assert.equal(module.textContent, 'Module Hidden'); assert.equal(e.parent.querySelector('h3'), heading);

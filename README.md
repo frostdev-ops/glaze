@@ -116,16 +116,15 @@ Narrow modal drawers keep Ultra's native width.
 
 ## Firefox
 
-Glaze for Firefox needs Firefox 140 or newer. Until it is listed on Firefox Add-ons, try it from a build:
+Firefox compatibility is maintained on the long-lived [`dev/firefox` branch](https://github.com/frostdev-ops/glaze/tree/dev/firefox),
+which regularly merges `main`. Build Firefox releases from that branch; see [RELEASING.md](RELEASING.md).
+Glaze needs Firefox 140 or newer on desktop, or Firefox 142 or newer on Android. Until it is listed on Firefox Add-ons, try it from a build:
 run `sh scripts/package-firefox.sh`, open `about:debugging#/runtime/this-firefox`, click **Load Temporary
 Add-on…** and pick `dist/glaze-v<version>-firefox.zip`. A temporary add-on is removed when Firefox quits.
 
 The Firefox package is the Chrome package with a rewritten manifest: Firefox has no extension service
 worker, so the background runs as an event page that loads every script the worker imports. Google
 Calendar sync needs Chrome's sign-in and isn't in the Firefox build; the calendar export is.
-
-For the dedicated Firefox for Android emulator, launcher and validation checklist, see
-[Firefox for Android testing](docs/firefox-android.md).
 
 ## Safari
 
@@ -255,6 +254,14 @@ grade calculators, loads on demand from `features/` the first time a page needs 
 Writes `dist/glaze-v<version>.zip`, ready for the Chrome Web Store. Requires `node` and `zip`.
 `sh scripts/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons.
 For a release, `sh scripts/release.sh` builds everything into `release/<version>/`; see [RELEASING.md](RELEASING.md).
+
+To reproduce the vendored libraries, run `bash scripts/vendor-pdfjs.sh` and
+`bash scripts/vendor-three.sh` first (Bash, curl, tar, Node.js and npm are required).
+The PDF.js script verifies the pinned 6.4.299 source archive, replaces its obsolete
+global-discovery eval with `globalThis`, fixes imports to Glaze's bundled worker and
+image decoders, and minifies with esbuild 0.28.2. These generated files are checked in;
+normal packaging needs no npm install. Firefox packaging supplies an unavailable
+Google sign-in adapter and requires Android 142 for its data-collection manifest key.
 
 ```sh
 node --test

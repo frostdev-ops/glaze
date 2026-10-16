@@ -509,7 +509,14 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     // A note that can't be read stays closed: never an empty note that a save could write over the real one.
     if (!r?.ok) { el.body.textContent = t(r?.error === 'missing' ? "This note's text couldn't be found on this device." : "Couldn't open this note. Try again in a moment."); cur.saved = null; cur.ro = true; return; }
     cur.rev = r.rev;
-    el.body.innerHTML = N.sanitize(r.html);
+    // Build from the sanitizer's allowlisted tree, without interpreting another HTML string.
+    const node = (n) => {
+      if (typeof n === 'string') return n;
+      const e = attr(make(n.tag, {}, ...n.kids.map(node)), n.attrs);
+      if (n.tag === 'a' && n.attrs.href) attr(e, { rel: 'noopener noreferrer', target: '_blank' });
+      return e;
+    };
+    el.body.replaceChildren(...N.parse(r.html).kids.map(node));
     cur.saved = serialize();
     el.body.setAttribute('contenteditable', String(!cur.ro));
     if (keep?.sel) el.body.focus();

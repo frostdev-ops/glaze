@@ -182,8 +182,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
 
   // ---- the strip ------------------------------------------------------------------------------------------------
-  const svg = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${d}"/></svg>`;
-  const ICON = { book: svg('M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h9'), pin: svg('M9 4h6l-1 5 3 3v2H7v-2l3-3zM12 14v6'), x: svg('M7 7l10 10M17 7 7 17') };
+  const svg = (d) => {
+    const e = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    for (const [k, v] of Object.entries({ viewBox: '0 0 24 24', 'aria-hidden': 'true', focusable: 'false' })) e.setAttribute(k, v);
+    p.setAttribute('d', d); e.append(p); return e;
+  };
+  const ICON = { book: 'M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h9', pin: 'M9 4h6l-1 5 3 3v2H7v-2l3-3zM12 14v6', x: 'M7 7l10 10M17 7 7 17' };
   const make = () => {
     strip = document.createElement('div');
     strip.id = 'gz-ctabs';
@@ -217,7 +221,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const e = document.createElement('div');
     e.setAttribute('role', 'tab');
     e.setAttribute('aria-describedby', 'gz-ctabs-hint');
-    e.innerHTML = `<span class="gz-ctab-mark" aria-hidden="true"></span><span class="gz-ctab-name"></span><span class="gz-ctab-pin" aria-hidden="true">${ICON.pin}</span><span class="gz-ctab-x" aria-hidden="true">${ICON.x}</span>`;
+    for (const name of ['mark', 'name', 'pin', 'x']) {
+      const span = document.createElement('span');
+      span.className = `gz-ctab-${name}`;
+      if (name !== 'name') span.setAttribute('aria-hidden', 'true');
+      if (ICON[name]) span.append(svg(ICON[name]));
+      e.append(span);
+    }
     return e;
   };
   const labelFor = (cid, name, code) => ctx.nickOf(cid) || (P().label === 'code' && code) || (P().label === 'short' ? L.shortName(name) : name);
@@ -257,7 +267,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const n = e.querySelector('.gz-ctab-name');
       if (n.textContent !== r.label) n.textContent = r.label;
       const mark = e.querySelector('.gz-ctab-mark');
-      if (p.mark === 'icon' && !mark.firstChild) mark.innerHTML = ICON.book;
+      if (p.mark === 'icon' && !mark.firstChild) mark.append(svg(ICON.book));
       else if (p.mark !== 'icon' && mark.firstChild) mark.replaceChildren();
       set(e.querySelector('.gz-ctab-pin'), 'title', t(r.pin ? 'Unpin tab' : 'Pin tab'));
       set(e.querySelector('.gz-ctab-x'), 'title', t('Close tab'));
@@ -478,10 +488,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const img = Object.assign(document.createElement('img'), { src: snap.shot, alt: '', draggable: false });
       // Blurred, with a spinner over it: a picture of the page, not the page, until the page itself is ready.
       const root = box.attachShadow({ mode: 'closed' });
-      root.innerHTML = `<style>img{position:absolute;top:0;left:0;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}
+      const style = document.createElement('style'), spinner = document.createElement('div');
+      style.textContent = `img{position:absolute;top:0;left:0;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}
 .s{position:absolute;top:50%;left:50%;width:2.25rem;height:2.25rem;margin:-1.125rem;box-sizing:border-box;border-radius:50%;border:3px solid color-mix(in srgb,var(--gz-ink,#fff) 25%,transparent);border-top-color:var(--gz-accent,#6fdcff);animation:r .8s linear infinite}
-@keyframes r{to{transform:rotate(1turn)}}:host([data-still]) .s{animation:none}</style><div class="s" role="progressbar"></div>`;
-      root.querySelector('.s').setAttribute('aria-label', t('Loading…'));
+@keyframes r{to{transform:rotate(1turn)}}:host([data-still]) .s{animation:none}`;
+      spinner.className = 's'; spinner.setAttribute('role', 'progressbar'); spinner.setAttribute('aria-label', t('Loading…'));
+      root.append(style, spinner);
       root.prepend(img);
       if (html.getAttribute('data-gz-motion') === 'off') box.toggleAttribute('data-still', true);
       for (const ev of ['wheel', 'pointerdown', 'touchstart']) box.addEventListener(ev, () => { f.el.style.visibility = ''; unpicture(); }, { passive: true });
