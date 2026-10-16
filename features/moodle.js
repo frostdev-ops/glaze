@@ -89,7 +89,7 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
       if (color) colors = GZ_TINT(colors, color, s.courses.strength / 100);
       const vars = colors ? { ...colors, ...Object.fromEntries(Object.entries(GZ_SURFACE_VARS({ ...worn, bg: s.bg })).map(([key, value]) => [key, value || 'initial'])),
         '--gz-radius': `${worn.look.radius}px`, '--gz-radius-sm': `${worn.look.radius * 2 / 3}px`, '--gz-glass': `${worn.look.glass}px` } : {};
-      const text = JSON.stringify([vars, colors ? worn.look.depth : '']);
+      const text = colors ? JSON.stringify([vars, worn.look.depth]) : '';
       if ((painted.get(card) || '') === text) continue;
       painted.set(card, text);
       const keys = [...GZ_COLORS.map(([v]) => v), ...Object.keys(GZ_SURFACE_VARS(s)), '--gz-radius', '--gz-radius-sm', '--gz-glass'];
