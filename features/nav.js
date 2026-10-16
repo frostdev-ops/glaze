@@ -185,7 +185,7 @@ function GZ_ULTRA_RAIL(X) {
   const get = (area, keys) => new Promise((res) => { try { chrome.storage[area].get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const captured = new Map(), custom = new Map();
-  let config = N.clean(), active = false, host, top, bottom, signature = '', clock = 0, logo = null, logoId = '', rev = 0, reads = 0, local = {}, W, P, icons, iconRead;
+  let config = N.clean(), active = false, host, top, bottom, signature = '', clock = 0, logo = null, logoId = '', rev = 0, reads = 0, local = {}, W, icons, iconRead;
   let nextItems = [], nextAt = 0, nextBusy = false, nextError = false, nextRetry = { key: '', at: 0 };
   let timerPending = false, advanced = '', timerFailed = '';
   const icon = (name) => {
@@ -198,6 +198,7 @@ function GZ_ULTRA_RAIL(X) {
   };
   const restore = () => {
     clearTimeout(clock); clock = 0;
+    for (const node of widgetNodes.values()) node.pet?.stop();
     const focused = document.activeElement, managed = [...captured.keys(), ...[...custom.values()].map((r) => r.a)].some((a) => a === focused || a.contains(focused));
     const fallback = [...captured.keys()].find((a) => a.isConnected && !captured.get(a).hidden);
     for (const [a, r] of captured) {
@@ -239,11 +240,6 @@ function GZ_ULTRA_RAIL(X) {
       if (!active || token !== rev || read !== reads) return;
       if (r.todoCache?.key !== local.todoCache?.key) { nextItems = []; nextAt = 0; }
       local = { ...r, ...(isPreview && { widgetTimer: local.widgetTimer }) };
-      const key = r.todoCache?.key;
-      if (typeof key === 'string' && key.startsWith(`todo:${location.origin}/`) && Date.now() - r.todoCache.at < 120000) {
-        const petKey = key.replace(/^todo:/, 'pet:');
-        local.pet = (await get('local', petKey))[petKey];
-      }
       if (active && token === rev && read === reads) drawWidgets();
     });
   };
@@ -318,21 +314,13 @@ function GZ_ULTRA_RAIL(X) {
         setText(node.time, left); setText(node.go, X.t(state.end ? 'Pause' : 'Start'));
         node.go.setAttribute('aria-label', `${X.t(state.end ? 'Pause' : 'Start')} · ${X.t('Focus timer')}`);
       }
-      if (w.id === 'pet' && P) {
-        const data = P.view(local.pet);
-        const label = X.t('Level {level}', { level: data?.level || 1 }); setText(node.detail, label);
-        node.box.title = `${X.t('Pet habitat')} · ${label}`; node.box.setAttribute('aria-label', node.box.title);
-        const art = P.WEAR[data?.wear || 'plain'].art;
-        const src = chrome.runtime.getURL(`assets/art/stickers/critters/${art}.webp`);
-        if (node.image.src !== src) node.image.src = src;
-      }
     }
     if (config.widgets.some((w) => w.on)) { const step = config.widgets.some((w) => w.on && w.id === 'timer') && local.widgetTimer?.end > now ? 1000 : 60000; clock = setTimeout(drawWidgets, step - now % step + 5); }
   };
   const mountWidgets = () => {
     const sig = JSON.stringify(config.widgets);
     if (sig === signature) return;
-    signature = sig; widgetNodes.clear(); top.replaceChildren(); bottom.replaceChildren();
+    signature = sig; for (const node of widgetNodes.values()) node.pet?.stop(); widgetNodes.clear(); top.replaceChildren(); bottom.replaceChildren();
     const token = ++rev;
     for (const w of config.widgets.filter((w) => w.on)) {
       const box = make(w.id === 'next' ? 'a' : 'div', { className: 'gz-nav-widget' });
@@ -355,8 +343,14 @@ function GZ_ULTRA_RAIL(X) {
         }).catch(() => {});
       }
       if (w.id === 'pet') {
-        node.image = make('img', { alt: '', width: 28, height: 28 }); detail.classList.add('gz-nav-pet-level'); box.append(node.image, detail);
-        X.need('lib/pet.js', () => globalThis.GZ_PET).then(() => { if (active && token === rev) { P = GZ_PET; drawWidgets(); } }).catch(() => {});
+        node.image = make('span', { className: 'gz-nav-pet' }); detail.classList.add('gz-nav-pet-level'); box.append(node.image, detail);
+        X.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => {
+          if (!active || token !== rev || !chrome.runtime?.id) return;
+          node.pet = GZ_WIDGETS_UI.avatar(node.image, { onData: (data) => {
+            const label = X.t('Level {level}', { level: data?.level || 1 }); setText(detail, label);
+            box.title = `${X.t('Pet habitat')} · ${label}`; box.setAttribute('aria-label', box.title);
+          } });
+        }).catch(() => {});
       }
       (w.at === 'top' ? top : bottom).append(box);
     }

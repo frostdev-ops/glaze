@@ -9,19 +9,19 @@ const source = () => process.env.GZ_B7C_REVIEW_BASE
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const turn = () => new Promise(setImmediate);
 
-test('a late pet read cannot overwrite a newer account snapshot', async () => {
+test('a late planner read cannot overwrite a newer account snapshot', async () => {
   const src = source(), a = src.indexOf('  const readLocal ='), b = src.indexOf('  const refreshNext =', a);
   const old = deferred(), now = Date.now(), origin = 'https://school.test';
   let calls = 0;
   const c = vm.createContext({ chrome: { runtime: { id: 'glaze' } }, rev: 1, reads: 0, active: true, isPreview: false, local: {}, nextItems: [], nextAt: 0, draws: 0, location: { origin }, drawWidgets() { c.draws++; }, get: async (_, key) => {
-    if (Array.isArray(key)) return { todoCache: { key: `todo:${origin}/${++calls === 1 ? '_1_1' : '_2_1'}`, at: now } };
-    return key.endsWith('/_1_1') ? old.promise : { [key]: 'current pet' };
+    assert.ok(Array.isArray(key), 'pet identity no longer comes from the planner cache');
+    return ++calls === 1 ? old.promise : { todoCache: { key: `todo:${origin}/_2_1`, at: now } };
   } });
   const read = vm.runInContext(src.slice(a, b) + '\nreadLocal;', c);
   read(); await turn(); read(); await turn();
-  assert.equal(c.local.pet, 'current pet');
-  old.resolve({ [`pet:${origin}/_1_1`]: 'old pet' }); await turn();
-  assert.equal(c.local.pet, 'current pet'); assert.equal(c.local.todoCache.key, `todo:${origin}/_2_1`); assert.equal(c.draws, 1);
+  assert.equal(c.local.todoCache.key, `todo:${origin}/_2_1`);
+  old.resolve({ todoCache: { key: `todo:${origin}/_1_1`, at: now } }); await turn();
+  assert.equal(c.local.pet, undefined); assert.equal(c.local.todoCache.key, `todo:${origin}/_2_1`); assert.equal(c.draws, 1);
 });
 
 const nextFixture = () => {

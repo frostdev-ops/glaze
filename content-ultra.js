@@ -171,8 +171,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     }
   };
 
-  // The document view's column (theme.css [data-gz-doc]): what holds .document-content-root, tagged here, before it
-  // is painted. A :has() reaching it from any element made every change on the page restyle the whole page.
+  // Tag document columns before paint; a broad :has() restyled Ultra on every change.
   const docs = new Set();
   const tagDocs = (scopes) => {
     for (const d of docs) if (!d.isConnected || !d.querySelector(':scope > .document-content-root')) { d.removeAttribute('data-gz-doc'); docs.delete(d); }
@@ -181,6 +180,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       for (const d of found) { const p = d.parentElement; if (p && !docs.has(p)) { p.setAttribute('data-gz-doc', ''); docs.add(p); } }
     }
   };
+  // Requests behind file previews (features/docs.js).
+  try { new PerformanceObserver((l) => { for (const e of l.getEntries()) if (/view(er)?Url/.test(e.name)) (self.GZ_ASKS ||= []).unshift(e.name); self.GZ_ASKS?.splice(50); }).observe({ type: 'resource', buffered: true }); } catch {}
   // Keep the course strip attached when Ultra replaces its header; no route paint hold.
   const gate = (scope) => { discoverNav(scope); tagDocs([scope]); return globalThis.GZ_CTABS?.held(); };
 

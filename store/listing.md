@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.0.2
+# Chrome Web Store listing — Glaze 3.0.3
 
 ## Name
 
@@ -16,7 +16,13 @@ Productivity
 
 Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain. What Glaze keeps stays on your device.
 
-NEW IN 3.0.2
+NEW IN 3.0.3
+
+• Choose one pet character for the habitat, Study buddy, Blackboard navigation badge and course-card pet. Their visibility controls stay separate, and progress stays with your school's account.
+• The original Cat and Bunny join the character selector. Pets react to focus sessions and completed tasks, respect reduced motion and pause while hidden.
+• Blackboard file previews refresh expired viewer tickets and retry while uploaded files convert.
+
+FROM 3.0.2
 
 • Much faster on Blackboard Ultra: clicks, hovers and page changes no longer make the browser restyle the whole page, and pages are themed sooner.
 • Course tabs keep up to four live pages on every computer again, and hidden ones no longer close when idle.
@@ -97,11 +103,11 @@ Open source (MIT): https://github.com/frostdev-ops/glaze
 
 Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Anthology Inc. Moodle is a registered trademark of Moodle Pty Ltd. Glaze is an independent project and is not affiliated with or endorsed by any of these companies or any school.
 
-## What's new in 3.0.2
+## What's new in 3.0.3
 
 Prepared release copy; the Chrome Web Store has no separate What's New field.
 
-Glaze 3.0.2 makes Blackboard Ultra much faster with Glaze on: clicks, hovers and page changes no longer make the browser restyle the whole page, pages are themed sooner, and course tabs keep up to four live pages on every computer again.
+Glaze 3.0.3 shares your selected pet character across the habitat, Study buddy, Blackboard navigation badge and course-card pet, with separate visibility controls and account-specific progress. The original Cat and Bunny join the selector. Blackboard file previews refresh expired viewer tickets and retry while uploaded files convert.
 
 ## Single-purpose statement
 

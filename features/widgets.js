@@ -467,33 +467,83 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       return {};
     },
 
-    // The study buddy: asleep while nothing's going on, awake while the timer runs or after a pat, happy for a while after
-    // a finished focus block (any tab) or an item ticked off in Better To Do. Only when the last win was is kept.
-    buddy(body) {
-      let st = { happyAt: 0, patAt: 0, running: false }, wait = 0, todoKey = '', alive = true;
+    // Every pet surface uses this character, account record and the same timer/task reactions.
+    buddy(body, options = {}) {
+      let st = { happyAt: 0, patAt: 0, running: false }, wait = 0, todoKey = '', petKey = '', alive = true, sleeping = false, player = null, sprite = '';
+      const saved = {}, versions = new Map();
       const img = make('img', { alt: '', draggable: false, decoding: 'async' });
+      const read = (keys) => {
+        const before = keys.map((k) => versions.get(k));
+        return get('local', keys).then((r) => {
+          if (!alive || !validContext()) return;
+          keys.forEach((k, i) => { if (before[i] === versions.get(k)) saved[k] = r[k]; });
+          st.running = !!W.cleanTimer(saved.widgetTimer).end;
+          st.happyAt = Math.max(st.happyAt, Number.isFinite(saved.widgetBuddy?.happyAt) ? saved.widgetBuddy.happyAt : 0);
+          st.patAt = Math.max(st.patAt, Number.isFinite(saved.widgetBuddy?.patAt) ? saved.widgetBuddy.patAt : 0);
+          paint();
+        });
+      };
       const paint = () => {
         clearTimeout(wait);
-        if (!alive || !validContext()) return;
+        if (!alive) return;
+        if (!validContext()) { stop(); return; }
+        if (pet.isConnected === false) { stop(); return; }
+        const P = globalThis.GZ_PET, S = globalThis.GZ_PET_SPRITES;
+        const data = P?.view(saved[petKey]);
+        options.onData?.(data);
         const m = W.mood(st, Date.now());
-        const src = chrome.runtime.getURL(`assets/art/stickers/critters/study-buddy${m.mood ? `-${m.mood}` : ''}.webp`);
+        const choice = typeof saved.petCharacter === 'string' ? saved.petCharacter : data?.sprite || (['cat', 'bunny'].includes(ctx.settings().card?.pet) ? ctx.settings().card.pet : '');
+        const selected = S?.picture(choice, saved.petSprites);
+        const label = selected ? t('Play with {name}', { name: selected.name }) : t('Pet your study buddy');
+        pet.setAttribute('aria-label', label);
+        const identity = selected?.data || selected?.path || '';
+        if (identity !== sprite) {
+          sprite = identity; player?.stop(); player = null;
+          pet.replaceChildren(img);
+          if (selected && globalThis.GZ_PET_PLAYER) {
+            try {
+              const canvas = make('canvas'); pet.replaceChildren(canvas);
+              player = GZ_PET_PLAYER.mount(canvas, selected);
+            } catch { sprite = ''; pet.replaceChildren(img); }
+          }
+        }
+        const wear = data?.wear || 'plain';
+        const art = m.mood === 'happy' ? 'study-buddy-happy' : m.mood === 'sleepy' && wear === 'plain' ? 'study-buddy-sleepy' : P?.WEAR[wear].art || 'study-buddy';
+        const src = chrome.runtime.getURL(`assets/art/stickers/critters/${art}.webp`);
         if (img.src !== src) img.src = src;
-        body.dataset.mood = m.mood || 'awake';
-        if (m.until) wait = setTimeout(paint, m.until - Date.now() + 50);
+        player?.rest(m.mood === 'happy' ? 'jumping' : st.running ? 'running' : m.mood === 'sleepy' ? 'waiting' : 'idle');
+        if (body.dataset.mood !== (m.mood || 'awake')) body.dataset.mood = m.mood || 'awake';
+        if (sleeping || document.visibilityState === 'hidden') player?.sleep(); else player?.wake();
+        if (m.until && !sleeping && document.visibilityState !== 'hidden') wait = setTimeout(paint, m.until - Date.now() + 50);
       };
-      const win = () => { st.happyAt = Date.now(); put({ widgetBuddy: { happyAt: st.happyAt } }); paint(); };
-      const pet = button('', () => {
+      const win = () => { st.happyAt = Date.now(); put({ widgetBuddy: { happyAt: st.happyAt, patAt: st.patAt } }); paint(); };
+      const pat = (state = 'waving') => {
+        if (!alive || !validContext()) return;
         st.patAt = Date.now();
+        put({ widgetBuddy: { happyAt: st.happyAt, patAt: st.patAt } });
         paint();
+        player?.set(state);
         const w = make('span', { className: 'gz-w-cheer', textContent: t(CHEERS[Math.floor(Math.random() * CHEERS.length)]) });
         w.setAttribute('aria-hidden', 'true');
         pet.after(w);
         setTimeout(() => w.remove(), 1600);
-      }, { className: 'gz-w-pet' });
+      };
+      const pet = options.interactive === false ? make('span', { className: 'gz-w-pet' }) : button('', () => pat(), { className: 'gz-w-pet' });
       pet.setAttribute('aria-label', t('Pet your study buddy'));
       pet.append(img);
+      if (options.interactive !== false) {
+        pet.addEventListener('keydown', (e) => { if (e.isTrusted && ['Enter', ' '].includes(e.key)) { e.preventDefault(); e.stopPropagation(); pat('jumping'); } });
+        pet.addEventListener('pointermove', (e) => {
+          if (!e.isTrusted || !player || (globalThis.GZ_PET_SPRITES?.BUILTIN[choiceId()]?.spriteVersionNumber || saved.petSprites?.[choiceId()]?.spriteVersionNumber) !== 2) return;
+          const rect = pet.getBoundingClientRect(); player.set('look', GZ_PET_SPRITES.direction(e.clientX - rect.left - rect.width / 2, e.clientY - rect.top - rect.height / 2));
+        });
+        pet.addEventListener('pointerleave', () => player?.set('idle'));
+      }
+      const choiceId = () => typeof saved.petCharacter === 'string' ? saved.petCharacter : globalThis.GZ_PET?.view(saved[petKey])?.sprite || '';
       const onStore = (ch, a) => {
-        if (a !== 'local') return;
+        if (!alive || a !== 'local') return;
+        if (!validContext()) { stop(); return; }
+        for (const k of ['widgetTimer', 'widgetBuddy', 'petCharacter', 'petSprites', petKey]) if (ch[k]) { saved[k] = ch[k].newValue; versions.set(k, (versions.get(k) || 0) + 1); }
         const tm = ch.widgetTimer;
         if (tm) {
           const was = W.cleanTimer(tm.oldValue), now = W.cleanTimer(tm.newValue);
@@ -501,19 +551,31 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           if (was.phase === 'work' && was.end && now.phase === 'rest') win(); else paint();
         }
         if (todoKey && ch[todoKey] && W.ticks(ch[todoKey].newValue) > W.ticks(ch[todoKey].oldValue)) win();
-        if (ch.widgetBuddy && !tm) { st.happyAt = Math.max(st.happyAt, +ch.widgetBuddy.newValue?.happyAt || 0); paint(); }
+        if (ch.widgetBuddy) {
+          st.happyAt = Math.max(st.happyAt, +ch.widgetBuddy.newValue?.happyAt || 0);
+          st.patAt = Math.max(st.patAt, +ch.widgetBuddy.newValue?.patAt || 0);
+        }
+        if (ch.widgetBuddy || ch.petCharacter || ch.petSprites || ch[petKey]) paint();
       };
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
-      get('local', ['widgetTimer', 'widgetBuddy']).then((r) => {
-        st.running = !!W.cleanTimer(r.widgetTimer).end;
-        st.happyAt = Math.max(st.happyAt, Number.isFinite(r.widgetBuddy?.happyAt) ? r.widgetBuddy.happyAt : 0);
-        paint();
-      });
-      // Better To Do's data is per account: its key needs who's signed in. Without it, only the timer counts.
-      who().then(() => { todoKey = `todo:${location.origin}/${me.uid}`; }, () => {});
-      paint();
       body.append(pet);
-      return { wake: paint, stop: () => { alive = false; clearTimeout(wait); try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ } } };
+      const show = () => paint();
+      const stop = () => {
+        if (!alive) return;
+        alive = false; clearTimeout(wait); player?.stop();
+        try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
+        document.removeEventListener?.('visibilitychange', show); removeEventListener('pagehide', stop);
+      };
+      document.addEventListener('visibilitychange', show); addEventListener('pagehide', stop, { once: true });
+      read(['widgetTimer', 'widgetBuddy', 'petCharacter', 'petSprites']);
+      who().then(() => {
+        if (!alive || !validContext()) return;
+        todoKey = `todo:${location.origin}/${me.uid}`; petKey = `pet:${location.origin}/${me.uid}`;
+        read([petKey]);
+      }, () => {});
+      Promise.all(['lib/pet.js', 'lib/petsprites.js', 'lib/petplayer.js'].map((file) => ctx.need(file, () => ({ 'lib/pet.js': globalThis.GZ_PET, 'lib/petsprites.js': globalThis.GZ_PET_SPRITES, 'lib/petplayer.js': globalThis.GZ_PET_PLAYER })[file]))).then(paint, () => {});
+      Promise.resolve().then(paint);
+      return { wake: () => { sleeping = false; paint(); }, sleep: () => { sleeping = true; clearTimeout(wait); player?.sleep(); }, update: paint, play: (state) => player?.set(state), stop };
     },
   };
 
@@ -1223,7 +1285,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // grid draws it once its file is in (wanted).
   const register = (id, fill) => { if (MORE[id] && !added.has(id) && typeof fill === 'function') added.set(id, fill); };
 
-  return { sync, hub: open, register, who: account };
+  const avatar = (body, options = {}) => {
+    let alive = true, sleeping = false, live;
+    ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(() => {
+      if (alive && validContext() && body.isConnected !== false) { W ||= globalThis.GZ_WIDGETS; live = WIDGETS.buddy(body, options); if (sleeping) live.sleep(); }
+    }).catch(() => {});
+    return { wake: () => { sleeping = false; live?.wake(); }, sleep: () => { sleeping = true; live?.sleep(); }, play: (state) => live?.play(state), stop: () => { alive = false; live?.stop(); } };
+  };
+  return { sync, hub: open, register, who: account, avatar };
 })();
 
 GZ_WIDGETS_UI;

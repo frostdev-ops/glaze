@@ -7,11 +7,15 @@
 
 # Glaze
 
-**New in 3.0.2:** Blackboard Ultra is much faster with Glaze on: clicks, hovers and page changes no longer restyle the whole page, and pages are themed sooner. Course tabs keep up to four live pages on every computer again. There is a Firefox package too (Firefox 140 or newer).
+**New in 3.0.3:** Choose one pet character for the habitat, Study buddy, Blackboard navigation badge and course-card pet. The original Cat and Bunny join the character selector, and Blackboard file previews refresh expired viewer tickets and retry while uploaded files convert.
+
+**From 3.0.2:** Blackboard Ultra is much faster with Glaze on: clicks, hovers and page changes no longer restyle the whole page, and pages are themed sooner. Course tabs keep up to four live pages on every computer again. There is a Firefox package too (Firefox 140 or newer).
 
 **From 3.0.1:** **Look → Surfaces** controls content-panel opacity, blur, palette/custom color, accent/course tint, shadow strength/color, frost, depth and borders. Panels, native content rows, navigation, menus, tooltips and Glaze’s own apps share those controls across Blackboard Ultra, Canvas and Moodle. Surface backgrounds follow the Look’s corner radius. Automatic defaults retain each Look’s existing fills; custom transparency needs blur and a non-solid background. Small rows get no additional backdrop blur.
 
 **Animated pets:** the optional habitat keeps its existing XP and decorations. Choose Ember the fox, Luna the owl, Mochi the cat, Sprout the dragon, Pebble the capybara, Rime the arctic fox or the animated Glaze droplet, or import a local ChatGPT pet under **Study tools → Pet habitat**. Choose its `pet.json` and PNG/WebP sprite sheet together, a ZIP containing them, or the sprite sheet alone. Existing v1 (`1536 × 1872`) and v2 (`1536 × 2288`) sheets are supported; v2 adds sixteen gaze directions. Click a pet to wave, or focus it and press Enter/Space to jump. Animation pauses offscreen and in hidden pages, and reduced motion or Glaze Motion off shows a still frame. No account connection, pet service or upload is needed.
+
+Your character choice is shared across this device: the habitat, Study buddy widget, navigation badge and course-card pet all use it. Each display keeps its own visibility setting. The original Cat and Bunny are also available in the habitat's character selector; their original artwork has idle and action poses. All displays wake during a focus timer, celebrate a completed focus block or a task checked in Better To Do, and respond to petting where interactive. These reactions add no XP. Progress, outfits and habitat decorations stay with each school's signed-in account. Removing a selected imported pet switches back to Classic buddy without removing progress or decorations. The navigation level uses the signed-in account directly and does not depend on planner-cache freshness.
 
 **Optional share sessions:** open **Share sessions** in settings, Ctrl/⌘K, Notes or To Do. Nothing connects until you create, join or resume. Share selected notes/a folder (including encrypted pictures and attachments), your current Look, or selected custom tasks with their steps and plans. Paste invites into Glaze rather than opening them in a web page. Anyone holding an edit invite can edit; a view invite can only read. Joining keeps a separate local copy; explicitly copy into a chosen local account to add new items. An editable copy follows updates; a viewer's copy is detached. A Look changes your theme only after **Use this Look** opens the existing editor preview and you apply it.
 
@@ -34,7 +38,7 @@ Its animated scene also stops and releases its rendering resources.
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
-  <a href="https://github.com/frostdev-ops/glaze/releases/download/v3.0.2/glaze-3.0.2-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
+  <a href="https://github.com/frostdev-ops/glaze/releases/download/v3.0.3/glaze-3.0.3-safari-macos.dmg"><b>Download for Mac (Safari)</b></a>
 </p>
 
 The settings editor has eight tabs: **Look, Blackboard, Canvas, Moodle, Study tools, Sharing and sync, Backup and privacy, and About**. Search works across tabs; section links such as `#blackboard/nav` and older editor links reveal the right tab. Section resets change their own preferences; resetting preferences keeps your palettes, pictures, local notes/tasks, bookmarks and share keys. The live preview uses fictional local pages at real desktop or phone CSS widths, with site/page/appearance controls. Focusing a Blackboard course's editor controls previews that course's appearance; Blackboard nicknames can be edited here as well as on its course cards. Sharing and sync includes the Relay origin and an explicit connection test; saving stays offline.
@@ -129,7 +133,7 @@ For the dedicated Firefox for Android emulator, launcher and validation checklis
 
 ## Safari
 
-[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.0.2/glaze-3.0.2-safari-macos.dmg): signed and notarized, attached to each release on
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.0.3/glaze-3.0.3-safari-macos.dmg): signed and notarized, attached to each release on
 [GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
 on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
 the frosted-glass blur needs Safari 18.

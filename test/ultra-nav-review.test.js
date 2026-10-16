@@ -192,7 +192,7 @@ test('the compact clock accessible name includes the date even when its detail i
 });
 
 test('a refused completed timer advance is attempted only once for that stored state', () => {
-  const src = source('features/nav.js'), a = src.indexOf("      if (w.id === 'timer' && W"), b = src.indexOf("      if (w.id === 'pet'", a);
+  const src = source('features/nav.js'), a = src.indexOf("      if (w.id === 'timer' && W"), b = src.indexOf('\n    }\n    if (config.widgets', a);
   let attempts = 0;
   const W = require('../lib/widgets.js'), node = { options: { work: 25, rest: 5 }, go: { setAttribute() {} }, time: {} };
   const c = vm.createContext({ w: { id: 'timer' }, W, node, now: 5000, local: { widgetTimer: { phase: 'work', end: 1000, left: 0 } }, advanced: '', timerFailed: '', timerAction: () => { attempts++; }, send: () => { attempts++; }, X: { t: (s) => s }, setText() {} });

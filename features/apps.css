@@ -106,9 +106,12 @@ html[data-gz-motion="off"] .gz-w-breath:is([data-phase="in"], [data-phase="hold"
 .gz-w-body:has(.gz-w-breath) { display: grid; justify-items: center; gap: 0.3rem; }
 /* Study buddy: click for a word of encouragement, which floats up and away. */
 .gz-w-pet { display: block; margin: 0 auto; padding: 0; border: 0; background: none; cursor: pointer; }
-.gz-w-pet img { display: block; width: 6rem; height: 6rem; }
-html:not([data-gz-motion="off"]) .gz-w-pet img { transition: transform 0.2s; }
-html:not([data-gz-motion="off"]) .gz-w-pet:hover img { transform: rotate(-4deg) scale(1.04); }
+.gz-w-pet :is(img,canvas) { display: block; width: 6rem; height: 6rem; object-fit: contain; }
+html:not([data-gz-motion="off"]) .gz-w-pet :is(img,canvas) { transition: transform 0.2s; }
+html:not([data-gz-motion="off"]) .gz-w-pet:hover :is(img,canvas) { transform: rotate(-4deg) scale(1.04); }
+.gz-game-avatar .gz-w-pet :is(img,canvas) { width: 72px; height: 72px; }
+.gz-nav-pet .gz-w-pet :is(img,canvas) { width: 28px; height: 28px; }
+.gz-pet .gz-w-pet :is(img,canvas) { width: 64px; height: 64px; }
 .gz-w-body:has(.gz-w-pet) { position: relative; display: grid; justify-items: center; gap: 0.3rem; }
 .gz-w-cheer { position: absolute; top: 40%; inset-inline: 0; pointer-events: none; text-align: center; font-weight: 700; font-size: 1rem; color: var(--gz-accent); }
 html:not([data-gz-motion="off"]) .gz-w-cheer { animation: gz-w-rise 1.6s ease-out forwards; }
