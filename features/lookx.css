@@ -13,7 +13,7 @@ html[data-gz-cursor] :is(input:not([type="button"], [type="submit"], [type="rese
 #gz-stickers .gz-stk { position: absolute; translate: -50% 0; pointer-events: none; user-select: none; -webkit-user-select: none; touch-action: none; }
 #gz-stickers .gz-stk img { display: block; width: 100%; height: auto; pointer-events: none; -webkit-user-drag: none; filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.28)); }
 #gz-stickers .gz-stk-grip { display: none; }
-#gz-stickers.gz-stk-edit .gz-stk { pointer-events: auto; cursor: grab; border-radius: 8px; }
+#gz-stickers.gz-stk-edit .gz-stk { pointer-events: auto; cursor: grab; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
 #gz-stickers.gz-stk-edit .gz-stk:active { cursor: grabbing; }
 #gz-stickers.gz-stk-edit .gz-stk:is(:hover, :focus-visible) { outline: 2px dashed var(--gz-accent, #2563eb); outline-offset: 4px; }
 #gz-stickers.gz-stk-edit .gz-stk-grip {
@@ -26,11 +26,11 @@ html[data-gz-cursor] :is(input:not([type="button"], [type="submit"], [type="rese
 #gz-stk-panel {
   position: fixed; right: 16px; bottom: 16px; z-index: 2147483002; width: min(340px, calc(100vw - 32px)); max-height: min(78vh, 640px);
   display: grid; gap: 0.5rem; overflow: auto; padding: 0.75rem; font: 14px/1.4 var(--gz-font, system-ui, sans-serif); color: var(--gz-ink, #111);
-  background: var(--gz-surface, #fff); border: 1px solid var(--gz-line-strong, #999); border-radius: var(--gz-radius, 12px); box-shadow: var(--gz-shadow, 0 8px 30px rgb(0 0 0 / 0.25));
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, #fff)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong, #999)); border-radius: var(--gz-radius, calc(var(--gz-radius, 12px) * 1 / 1)); box-shadow: var(--gz-shadow, 0 8px 30px rgb(0 0 0 / 0.25));
 }
 #gz-stk-panel .gz-stk-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 #gz-stk-panel button, #gz-stk-panel select {
-  font: inherit; color: inherit; background: var(--gz-surface-2, #f3f3f3); border: 1px solid var(--gz-line, #ccc); border-radius: 8px; padding: 0.25rem 0.6rem; cursor: pointer;
+  font: inherit; color: inherit; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2, #f3f3f3)); border: 1px solid var(--gz-border-line, var(--gz-line, #ccc)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); padding: 0.25rem 0.6rem; cursor: pointer;
 }
 #gz-stk-panel :is(button, select):focus-visible { outline: 2px solid var(--gz-accent, #2563eb); outline-offset: 2px; }
 #gz-stk-panel .gz-stk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 0.35rem; }

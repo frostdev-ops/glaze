@@ -1,7 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 const P = require('../lib/pet.js'), T = require('../lib/todo.js'), { El } = require('./stand-in-dom.js');
 const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
-const page = ({ delayed = false } = {}) => {
+const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } } } = {}) => {
   const doc = { activeElement: null }, storage = [], events = [], timers = new Map(); let next = 0, release;
   const make = (tag) => new El(tag, doc);
   doc.root = make('html'); doc.head = make('head'); doc.body = make('body'); doc.root.append(doc.head, doc.body);
@@ -11,12 +11,12 @@ const page = ({ delayed = false } = {}) => {
   const c = { document: doc, console, URL, Date, Intl, Map, Set, Object, Number, Math, Array, String, Promise,
     GZ_PET: P, GZ_TODO: T, GZ_CTX: { site: 'canvas', t: (k) => k, settings: () => ({ enabled: true, enhance: { pet: true } }), need: async () => {} },
     location: { origin: 'https://canvas.test' }, setTimeout: (f, ms) => { timers.set(++next, { f, ms }); return next; }, clearTimeout: (id) => timers.delete(id),
-    chrome: { runtime: { getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => cb({ ok: true, data: P.view({ earned: { 'work:assignment:1': 20 } }) }) },
+    chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => cb({ ok: true, data: P.view(record) }) },
       storage: { onChanged: { addListener: (f) => storage.push(f), removeListener: (f) => { const i = storage.indexOf(f); if (i >= 0) storage.splice(i, 1); } } } } };
   c.globalThis = c; vm.createContext(c);
   const ui = vm.runInContext(fs.readFileSync(require.resolve('../features/pet.js'), 'utf8'), c);
   const body = make('div'); doc.body.append(body);
-  return { ui, body, doc, storage, events, timers, release: () => release({ uid: '3', tz: 'UTC' }), api: { who: () => profile } };
+  return { ui, body, doc, storage, events, timers, chrome: c.chrome, release: () => release({ uid: '3', tz: 'UTC' }), api: { who: () => profile } };
 };
 test('pet mount stops storage/visibility listeners and its clock, without leaving a stylesheet link', async () => {
   const p = page(), tile = p.ui.mount(p.body, p.api); await settle();
@@ -29,4 +29,25 @@ test('a pet removed before identity resolves never registers listeners or schedu
   const p = page({ delayed: true }), tile = p.ui.mount(p.body, p.api);
   tile.stop(); p.release(); await settle();
   assert.equal(p.storage.length, 0); assert.equal(p.events.length, 0); assert.equal(p.timers.size, 0);
+});
+
+test('a reload stops the habitat before its next timer or late profile can repaint', async () => {
+  const p = page(), live = p.ui.mount(p.body, p.api); await settle();
+  delete p.chrome.runtime.id;
+  live.update(); await settle();
+  assert.equal(p.storage.length + p.events.length + p.timers.size, 0);
+  const q = page({ delayed: true }); q.ui.mount(q.body, q.api); delete q.chrome.runtime.id;
+  q.release(); await settle();
+  assert.equal(q.storage.length + q.timers.size, 0);
+});
+
+test('animated characters hide Classic outfits without changing the saved outfit', async () => {
+  const record = { sprite: 'rime', wear: 'bandana', earned: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`work:assignment:${i}`, 20])) };
+  const p = page({ record }), live = p.ui.mount(p.body, p.api); await settle();
+  let wear = p.body.querySelector('[data-control="wear"]');
+  assert.equal(wear.parentElement.hidden, true); assert.equal(wear.value, 'bandana');
+  record.sprite = ''; live.update(); await settle();
+  wear = p.body.querySelector('[data-control="wear"]');
+  assert.equal(wear.parentElement.hidden, false); assert.equal(wear.value, 'bandana');
+  assert.equal(record.wear, 'bandana'); live.stop();
 });

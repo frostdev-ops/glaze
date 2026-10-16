@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const R = require('../lib/relay.js');
+const D = require('../defaults.js'), S = require('../lib/surfaces.js');
 const G = require('../lib/sharing.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let n = 0; n < 8; n++) await new Promise(setImmediate); };
@@ -19,15 +20,16 @@ const page = async ({ accepted = false, granted = true, selected = G.SERVER, hos
   const nodes = new Map(), calls = [], confirmations = [];
   const node = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   const state = { ok: true, on: false, sessions: [], sources: [], accounts: [], hosts, defaultRelay: G.SERVER, relay: selected };
-  const context = vm.createContext({ URL, URLSearchParams, setTimeout, clearTimeout, console, GZ_RELAY: R,
+  const context = vm.createContext({ ...D, GZ_SURFACES: S, matchMedia: () => ({ matches: false, addEventListener() {} }), URL, URLSearchParams, setTimeout, clearTimeout, console, GZ_RELAY: R,
     GZ_I18N: { page() {}, ui: () => 'en', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, key) => v?.[key] ?? '') },
     navigator: { userActivation: { isActive: true } }, location: { search: '' }, addEventListener() {},
     confirm: (text) => { calls.push('confirm'); confirmations.push(text); return accepted; },
-    document: { querySelector: node, createElement: () => new Element() },
+    document: { documentElement: { style: { setProperty() {}, removeProperty() {} }, setAttribute() {} }, querySelector: node, createElement: () => new Element() },
     chrome: {
+      storage: { sync: { get: async () => ({}) }, onChanged: { addListener() {} } },
       permissions: { contains: async ({ origins }) => { calls.push(['contains', origins]); return granted; }, request: async ({ origins }) => { calls.push(['request', origins]); return true; } },
       runtime: {
-        sendMessage: async (m) => { calls.push(m.op); if (m.op === 'relaySave') state.relay = m.server; return m.op === 'list' ? structuredClone(state) : { ok: true, result: 'connected' }; },
+        id: 'glaze', sendMessage: async (m) => { calls.push(m.op); if (m.op === 'relaySave') state.relay = m.server; return m.op === 'list' ? structuredClone(state) : { ok: true, result: 'connected' }; },
         connect: () => ({ onMessage: { addListener() {} }, disconnect() {}, postMessage() {} }),
       },
     },
@@ -84,14 +86,15 @@ test('E1 helper stays out of LMS startup, is cached for a worker restart and is 
   assert.match(read('package.sh'), /defaults\.js lib i18n/);
 });
 
-test('E1 standalone Relay URL has visible field and keyboard-focus colors without editor tokens', () => {
+test('E1 standalone Relay URL keeps local role fallbacks and keyboard-focus colors with shared surfaces', () => {
   const css = read('sharing/sessions.css');
   // ID specificity must beat ui.css's input[type=url] and :is(...):focus-visible rules.
   const field = css.match(/#relay-url\s*\{([^}]+)\}/)?.[1] || '';
   const focus = css.match(/#relay-url:focus-visible\s*\{([^}]+)\}/)?.[1] || '';
-  assert.match(field, /background:\s*light-dark\(/);
-  assert.match(field, /border:\s*1px solid light-dark\(/);
+  assert.match(field, /background:[^;]*var\(--gz-session-input-fill\)/);
+  assert.match(css, /--gz-session-input:light-dark\(#fff,#101722\)/);
+  assert.match(field, /border:\s*1px solid var\(--gz-border-strong,var\(--gz-line-strong\)\)/);
+  assert.match(css, /--gz-line-strong:light-dark\(#768599,#8092ab\)/);
   assert.match(field, /color:\s*inherit/);
   assert.match(focus, /outline:\s*3px solid light-dark\(/);
-  assert.doesNotMatch(field + focus, /var\(--gz-/);
 });

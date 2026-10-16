@@ -82,16 +82,26 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
     const on = s.enabled && GZ_CTX.on();
     for (const card of document.querySelectorAll('[data-region="course-content"][data-course-id]')) {
       const key = GZ_CTX.canvasCourseKey(card.dataset.courseId);
+      const course = on ? GZ_COURSE_COLOR(s, list, key) : '';
+      if (card.style.getPropertyValue('--gz-course') !== course) {
+        if (course) card.style.setProperty('--gz-course', course); else card.style.removeProperty('--gz-course');
+      }
       const color = on && s.courses.tint && s.courses.tinted.includes(key) && list[key]?.color;
       const look = on && s.courses.looks[key];
-      let colors = (look || color) && GZ_ACTIVE_COLORS(GZ_COURSE_LOOK(s, key), matchMedia('(prefers-color-scheme: dark)').matches);
+      const worn = GZ_COURSE_LOOK(s, key);
+      let colors = (look || color) && GZ_ACTIVE_COLORS(worn, matchMedia('(prefers-color-scheme: dark)').matches);
       if (color) colors = GZ_TINT(colors, color, s.courses.strength / 100);
-      const text = colors ? GZ_COLORS.map(([v]) => `${v}:${colors[v]}`).join(';') : '';
+      const vars = colors ? { ...colors, ...Object.fromEntries(Object.entries(GZ_SURFACE_VARS({ ...worn, bg: s.bg })).map(([key, value]) => [key, value || 'initial'])),
+        '--gz-radius': `${worn.look.radius}px`, '--gz-radius-sm': `${worn.look.radius * 2 / 3}px`, '--gz-glass': `${worn.look.glass}px` } : {};
+      const text = colors ? JSON.stringify([vars, worn.look.depth]) : '';
       if ((painted.get(card) || '') === text) continue;
       painted.set(card, text);
-      for (const [v] of GZ_COLORS) if (colors) card.style.setProperty(v, colors[v]); else card.style.removeProperty(v);
-      if (colors) card.dataset.gzCourseLook = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < 0.5 ? 'dark' : 'light';
-      else delete card.dataset.gzCourseLook;
+      const keys = [...GZ_COLORS.map(([v]) => v), ...Object.keys(GZ_SURFACE_VARS(s)), '--gz-radius', '--gz-radius-sm', '--gz-glass'];
+      for (const v of keys) if (colors) card.style.setProperty(v, vars[v]); else card.style.removeProperty(v);
+      if (colors) {
+        card.dataset.gzCourseLook = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < 0.5 ? 'dark' : 'light';
+        card.dataset.gzDepth = String(worn.look.depth);
+      } else { delete card.dataset.gzCourseLook; delete card.dataset.gzDepth; }
     }
   };
 

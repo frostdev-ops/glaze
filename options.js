@@ -10,6 +10,7 @@ const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
 const DEPTH = ['Flat', 'Soft', 'Raised', 'Floating'];
 const FORMAT = {
   pct: (v) => GZ_I18N.pct(Math.round(v * 100), GZ_I18N.ui()),
+  surfacepct: (v) => v < 0 ? t('Automatic') : GZ_I18N.pct(v, GZ_I18N.ui()),
   pct100: (v) => GZ_I18N.pct(v, GZ_I18N.ui()),
   px: (v) => `${v}px`,
   depth: (v) => t(DEPTH[v]),
@@ -1270,6 +1271,15 @@ GZ_UI.load().then((s) => {
 
   });
 
+  for (const button of $$('[data-reset-setting]')) {
+    const control = $$('[data-key]').find((el) => el.dataset.key === button.dataset.resetSetting);
+    button.setAttribute('aria-label', t('Reset {name}', { name: control?.closest('label')?.querySelector('span')?.textContent || button.dataset.resetSetting }));
+    button.addEventListener('click', (e) => {
+    if (!e.isTrusted) return;
+    const path = button.dataset.resetSetting, touched = GZ_EDITOR.reset(s, [path], { ...GZ_SANITIZE(), card: GZ_CARDS.settings() });
+    fill(); save(touched);
+    });
+  }
   for (const button of $$('[data-reset-section]')) button.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
     if (button.dataset.resetSection === 'sharing/relay') return resetRelay();
@@ -1279,6 +1289,7 @@ GZ_UI.load().then((s) => {
     fill(); save(touched); hint(t('Section reset. Your local data is kept.'));
   });
   $('#editor-version').textContent = `Glaze ${chrome.runtime.getManifest().version}`;
+  GZ_PET_LIBRARY.mount($('#pet-library'), t);
   followSection(editor.route());
 
   // Report a problem: a GitHub issue filled in here with the version, browser and system (lib/widgets.js feedback).

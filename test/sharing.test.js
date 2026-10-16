@@ -183,7 +183,7 @@ test('adapters work as classic scripts, without require()', async () => {
   const path = require('node:path');
   const ctx = vm.createContext({ crypto, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, URL, console });
   // The worker's order (lib/background.js importScripts), then this file.
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/cards.js', 'lib/share.js', 'lib/doctext.js', 'lib/notes.js', 'lib/sharing.js']) {
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/cards.js', 'lib/share.js', 'lib/doctext.js', 'lib/notes.js', 'lib/sharing.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), ctx, { filename: f });
   }
   const code = await L.encode(D.GZ_SANITIZE({}));

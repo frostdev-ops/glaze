@@ -60,7 +60,8 @@ const viewer = () => {
     MutationObserver: class { observe() {} disconnect() {} },
     DOMPoint: class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return { x: this.x, y: this.y }; } },
     GZ_INK: require('../lib/ink.js'),
-    chrome: { storage: {
+    GZ_SURFACES: require('../lib/surfaces.js'),
+    chrome: { runtime: { id: 'glaze', getURL: (path) => `chrome-extension://test/${path}` }, storage: {
       onChanged: { addListener() {} },
       local: {
         get: async (k) => ({ [k]: store[k] }),
@@ -76,7 +77,7 @@ const viewer = () => {
   const bar = () => body.children.find((c) => c.id === 'gz-ink-bar');
   const svg = () => page.children.find((c) => c.attrs.class === 'gz-ink');
   const pointer = (type, id, x, y) => svg().fire(type, { pointerType: 'mouse', button: 0, pointerId: id, clientX: x, clientY: y });
-  return { html, tell, fire, bar, svg, pointer, sets, inputs };
+  return { html, tell, fire, bar, svg, pointer, sets, inputs, chrome: ctx.chrome };
 };
 
 test('Esc in the middle of a stroke lets the pointer go and drops the half stroke; the next stroke draws', async () => {
@@ -174,4 +175,44 @@ test('an import that finishes on its own file is kept', async () => {
   await settle();
   assert.equal(v.sets.length, 1);
   assert.deepEqual(Object.keys(v.sets[0]), [`ink:${CANVAS}/5/21`]);
+});
+
+test('the viewer applies sanitized surface controls and removes them while off', async () => {
+  const v = viewer();
+  await v.tell({ theme: true, look: { radius: 0, depth: 0, surfaceBorder: 0, surfaceCustom: true, surfaceColor: '#334455', surfaceFrost: 50, shadowCustom: true, shadowColor: '#112233' } });
+  assert.equal(v.html.attrs['data-gz-depth'], '0');
+  const css = v.html.children.find((e) => e.tagName === 'STYLE').textContent;
+  assert.match(css, /--gz-surface-color: #334455/);
+  assert.match(css, /--gz-radius: 0px/);
+  assert.match(css, /--gz-surface-border: 0%/);
+  assert.match(v.bar().shadowRoot.children[0].textContent, /box-shadow: var\(--gz-shadow/);
+  assert.match(v.bar().shadowRoot.children[0].textContent, /--gz-border-strong/);
+  await v.tell({ on: false });
+  assert.equal(v.html.attrs['data-gz-depth'], undefined);
+  assert.equal(v.html.children.some((e) => ['STYLE', 'LINK'].includes(e.tagName)), false);
+});
+
+test('a held storage read cannot replace the latest open of the same document', async () => {
+  const v = viewer(), reads = [];
+  v.chrome.storage.local.get = () => new Promise((resolve) => reads.push(resolve));
+  await v.tell(); await v.tell({ ink: false }); await v.tell();
+  const key = require('../lib/ink.js').storeKey(CANVAS, '5', '21');
+  reads[1]({ [key]: { pages: MARK } }); await settle();
+  assert.equal(v.svg().firstChild.children[0].attrs.stroke, '#e11d48');
+  reads[0]({ [key]: { pages: { 1: [{ ...MARK[1][0], c: '#112233' }] } } }); await settle();
+  assert.equal(v.svg().firstChild.children[0].attrs.stroke, '#e11d48');
+});
+test('an invalidated viewer removes theme and ink before accepting a later parent message', async () => {
+  const v = viewer(); await v.tell({ theme: true });
+  delete v.chrome.runtime.id; await v.tell({ theme: true, look: { radius: 0 } });
+  assert.equal(v.bar(), undefined); assert.equal(v.svg(), undefined);
+  assert.equal(v.html.attrs['data-gz-docs'], undefined);
+});
+
+test('the viewer keeps a validated containing course color and rejects injected CSS', async () => {
+  const v = viewer();
+  await v.tell({ theme: true, colors: { '--gz-surface-course': '#445566', '--gz-course': 'red; background:url(https://invalid.test)' } });
+  const css = v.html.children.find((e) => e.tagName === 'STYLE')?.textContent || '';
+  assert.match(css, /--gz-surface-course: #445566/);
+  assert.doesNotMatch(css, /invalid\.test/);
 });

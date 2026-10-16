@@ -72,7 +72,7 @@ test('the shared image contrast reader measures pixels with the selected filter'
     Image: class { set src(v) { this.onload(); } },
     document: { createElement: () => ({ getContext: () => ({ set filter(v) { filter = v; }, drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(Array(64).fill([128, 128, 128, 255]).flat()) }) }) }) },
   });
-  for (const f of ['lib/color.js', 'lib/fonts.js', 'defaults.js', 'lib/cards.js']) vm.runInContext(fs.readFileSync(require.resolve('../' + f), 'utf8'), context);
+  for (const f of ['lib/color.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/cards.js']) vm.runInContext(fs.readFileSync(require.resolve('../' + f), 'utf8'), context);
   assert.equal(await vm.runInContext('GZ_CARDS.average("data:image/png;base64,AAAA", "mono")', context), '#808080');
   assert.equal(filter, 'grayscale(1)');
 });
@@ -128,7 +128,7 @@ test('late words start the sidebar once; ordinary mutation passes do not repeat 
   const source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
   const chunk = source.slice(source.indexOf('  const flush = () => {'), source.indexOf('  // Throttle, not debounce:'));
   let ready = false, calls = 0;
-  const ctx = { timer: 1, dirty: new Set(), full: false, wordsLate: true, ultra: true, hid: () => false, document: { body: {} }, tip: null, tinted: null, looked: null, words: () => ready, outermost: () => [], tintKey: () => null, lookHere: () => null, X: { gate() {}, syncNav: () => calls++ } };
+  const ctx = { timer: 1, dirty: new Set(), full: false, wordsLate: true, ultra: true, hid: () => false, document: { body: {} }, tip: null, tinted: null, looked: null, words: () => ready, outermost: () => [], tintKey: () => null, lookHere: () => null, surfaceCourse: () => '', html: { style: { getPropertyValue: () => '' } }, X: { gate() {}, syncNav: () => calls++ } };
   for (const name of ['sweepAll','sweepRoots','tagExtras','themeEditors','applySettings','placeScene','keepPlace','watchDrafts','syncDownloads','syncDocTools','syncCourseMenu']) ctx[name] = () => {};
   for (const name of ['paintCourses','renderProgress','renderNew','renderCalc','syncTodo','syncCardTasks','syncRemind','syncWidgets','syncSyl','syncInsights']) ctx.X[name] = () => {};
   const c = vm.createContext(ctx);

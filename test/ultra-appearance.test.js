@@ -42,7 +42,7 @@ test('ordinary Ultra mutation flushes refresh late cards and replacement navigat
       sendMessage: (m) => { if (m?.type === 'glaze:load') { loads.push(...m.files); if (m.files.includes('features/cards.js')) c.GZ_CARD_UI = { paint: () => { paints++; } }; if (m.files.includes('features/nav.js')) c.GZ_NAV_UI = { sync: () => navs++ }; return Promise.resolve({ ok: true }); } return Promise.resolve({ ok: false }); } },
       storage: { sync: { get: (k, cb) => cb({ nav: { labels: 'icons' } }) }, local: area(), onChanged: { addListener() {} } } } });
   c.window = c; c.top = c; c.globalThis = c;
-  for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'defaults.js', 'lib/nav.js', 'content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
+  for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/nav.js', 'content-ultra.js']) vm.runInContext(read(f), c, { filename: f });
   vm.runInContext(read('content.js'), c, { filename: 'content.js' });
   await settle();
   const runTimers = async () => { while (timers.length) { const t = timers.shift(); if (t.ms <= 1000) t.f(); } await settle(); };

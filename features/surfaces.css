@@ -1,0 +1,33 @@
+/* Surface catalogue: native cards, course/module rows, headers, drawers, papers, menus and dialogs;
+   Canvas panels/Boost cards; Glaze tiles, To Do, toolbar, hub, notes, tooltips and editor sections.
+   Existing selectors use these fills. Only existing large glass surfaces keep backdrop-filter.
+   Background layers clip to the element's radius; floating controls and circular icons keep their shapes. */
+:root, :host, [data-gz-course-look] {
+  --gz-surface-tint: color-mix(in srgb, var(--gz-surface-course, var(--gz-accent)) var(--gz-surface-course-weight, 0%), var(--gz-accent));
+  --gz-surface-paint: color-mix(in srgb, var(--gz-surface-tint, var(--gz-accent)) var(--gz-surface-tint-strength, 0%), var(--gz-surface-color, var(--gz-surface)));
+  --gz-surface-paint-2: color-mix(in srgb, var(--gz-surface-tint, var(--gz-accent)) var(--gz-surface-tint-strength, 0%), var(--gz-surface-color, var(--gz-surface-2)));
+  --gz-surface-fill: color-mix(in srgb, var(--gz-surface-paint) var(--gz-surface-opacity, 100%), transparent);
+  --gz-surface-fill-2: color-mix(in srgb, var(--gz-surface-paint-2) var(--gz-surface-opacity, 100%), transparent);
+  --gz-border-line: color-mix(in srgb, var(--gz-line) var(--gz-surface-border, 100%), transparent);
+  --gz-border-strong: color-mix(in srgb, var(--gz-line-strong) var(--gz-surface-border, 100%), transparent);
+}
+/* Per-course colors are inherited locally, including on course cards outside a course page. */
+:is([data-gz-course], [data-course-id], [class*="course-color-"], .ic-DashboardCard, .gz-course-card, .planner-grouping, [data-gz-course-color]) {
+  --gz-surface-tint: color-mix(in srgb, var(--gz-course, var(--gz-accent)) var(--gz-surface-course-weight, 0%), var(--gz-accent));
+  --gz-surface-paint: color-mix(in srgb, var(--gz-surface-tint, var(--gz-accent)) var(--gz-surface-tint-strength, 0%), var(--gz-surface-color, var(--gz-surface)));
+  --gz-surface-paint-2: color-mix(in srgb, var(--gz-surface-tint, var(--gz-accent)) var(--gz-surface-tint-strength, 0%), var(--gz-surface-color, var(--gz-surface-2)));
+  --gz-surface-fill: color-mix(in srgb, var(--gz-surface-paint) var(--gz-surface-opacity, 100%), transparent);
+  --gz-surface-fill-2: color-mix(in srgb, var(--gz-surface-paint-2) var(--gz-surface-opacity, 100%), transparent);
+  --gz-panel: color-mix(in srgb, var(--gz-surface-paint) var(--gz-surface-opacity, var(--gz-panel-opacity, 100%)), transparent);
+}
+html[data-gz-bg]:not([data-gz-bg="solid"]) { --gz-panel-opacity: 88%; }
+
+/* Shared geometry also reaches embedded documents, isolated bars and cards with an owned Look. */
+:root, :host, [data-gz-course-look] {
+  --gz-shadow-ink: color-mix(in srgb, var(--gz-shadow-color, color-mix(in srgb, var(--gz-surface-2), #000 55%)) var(--gz-shadow-strength, 35%), transparent);
+  --gz-shadow: 0 8px 24px var(--gz-shadow-ink);
+  --gz-rest-shadow: none;
+}
+:is(html, :host, [data-gz-course-look])[data-gz-depth="0"] { --gz-shadow: none; }
+:is(html, :host, [data-gz-course-look])[data-gz-depth="2"] { --gz-shadow: 0 12px 32px var(--gz-shadow-ink), 0 2px 6px var(--gz-shadow-ink); --gz-rest-shadow: 0 1px 3px var(--gz-shadow-ink); }
+:is(html, :host, [data-gz-course-look])[data-gz-depth="3"] { --gz-shadow: 0 20px 48px var(--gz-shadow-ink), 0 4px 12px var(--gz-shadow-ink); --gz-rest-shadow: 0 4px 14px var(--gz-shadow-ink); }

@@ -1,0 +1,9 @@
+{
+  "id": "glaze",
+  "name": "Glaze",
+  "displayName": "Glaze",
+  "description": "A glossy cyan-blue droplet companion inspired by the Glaze logo.",
+  "spriteVersionNumber": 2,
+  "spritesheet": "spritesheet.webp",
+  "spritesheetPath": "spritesheet.webp"
+}

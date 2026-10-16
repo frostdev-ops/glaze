@@ -15,3 +15,11 @@ test('a course wears its own look on its pages, and the student theme everywhere
   const many = Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`_${i}_1`, 'Clear']));
   assert.equal(Object.keys(G.GZ_SANITIZE({ courses: { looks: many } }).courses.looks).length, 200);
 });
+
+test('a scoped course Look owns the shared surface model as well as its palette', () => {
+  const s = G.GZ_SANITIZE({ look: { radius: 24, surfaceCustom: true, surfaceColor: '#ff0000', surfaceFrost: 40, shadowCustom: true, shadowColor: '#112233' }, courses: { looks: { _1_1: 'Terminal' } } });
+  const course = G.GZ_COURSE_LOOK(s, '_1_1'), vars = G.GZ_SURFACE_VARS(course);
+  assert.equal(course.look.radius, 2); assert.equal(course.look.glass, 0); assert.equal(course.look.depth, 0);
+  assert.equal(vars['--gz-surface-color'], ''); assert.equal(vars['--gz-surface-grain'], 'none'); assert.equal(vars['--gz-shadow-color'], '');
+  assert.equal(s.look.surfaceColor, '#ff0000', 'the global settings are unchanged');
+});

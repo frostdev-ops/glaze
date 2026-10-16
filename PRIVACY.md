@@ -2,6 +2,15 @@
 
 _Last updated: 2026-10-15_
 
+## 3.0.1 surface settings and local pets
+
+Surface appearance is part of the existing synced `look` settings and saved Look codes/history. It introduces no analytics, tracking, remote configuration or requests for school content. Frost is a bundled/generated local CSS texture. Custom fills may reduce contrast; check the live preview. Custom transparency is ignored over solid pages or without glass blur, and small rows gain no extra backdrop filters.
+
+Pet animation adds no completion tracking or activity log. The existing per-site/account pet record keeps only the chosen character alongside its existing XP and habitat data. The bundled companions, including the owner-provided Rime and animated Glaze droplet, need no network service. Custom pets are imported only through Glaze’s extension-owned editor from explicitly chosen local files: PNG/WebP sheets, optional `pet.json`, or a bounded ZIP. Remote paths, scripts and metadata links are ignored; files are decoded, checked for supported dimensions/frame occupancy/transparency and re-encoded locally. Source input is capped at 20 MiB, normalized picture data at 2,000,000 characters each, and the local library at eight pets and 4,000,000 picture-data characters total; a failed read/write keeps the prior library. No file is executed or uploaded. The library is shared among this device’s habitats in `storage.local` under `petSprites`; it does not sync, enter Look codes or share sessions, and settings backups do not include the sprite library. Keep the original pet files as a backup. Removing an imported pet affects its artwork only; existing XP/decorations remain. Uninstalling or clearing extension storage removes imported artwork.
+
+Glaze’s isolated content script displays the selected sprite on the LMS page; this does not upload the picture to the school. Its rendered pixels are visible like other page content; do not import a picture containing private material you would not display on that page. Animation stops on hidden/offscreen surfaces and follows reduced motion and Glaze Motion off. ChatGPT compatibility is a local file-format adapter, independent of OpenAI accounts and without a connection to ChatGPT.
+
+
 Ultra performance changes reuse the page's existing gradebook reads and ignore internal Glaze UI mutations. They add
 no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
 The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep

@@ -87,7 +87,7 @@
   .mock-document { border: 1px solid var(--gz-line); padding: 32px; max-width: 50rem; line-height: 1.7; }
   @media (max-width: 899px) {
     #site-wrap, html[data-gz-nav-collapsed] #site-wrap { display: block; }
-    #preview-menu { display: block; padding: 12px; margin: 8px; color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line); border-radius: 8px; }
+    #preview-menu { display: block; padding: 12px; margin: 8px; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
     .MuiDrawer-root { display: none; position: fixed !important; inset: 0; z-index: 1400; }
     html[data-preview-nav-open] .MuiDrawer-root { display: block; }
     .MuiDrawer-paper, html[data-gz-nav-collapsed] .MuiDrawer-paper { position: relative; width: min(var(--gz-nav-width,200px),85vw); height: 100vh; overflow: auto; }
@@ -208,6 +208,7 @@
 <script src="lib/zip.js"></script>
 <script src="features/schedule.js"></script>
 <script src="features/light.js"></script>
+<script src="lib/surfaces.js"></script>
 <script src="defaults.js"></script>
 <script src="lib/coursetabs.js"></script>
 <script src="lib/nav.js"></script>

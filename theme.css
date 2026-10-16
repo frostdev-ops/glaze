@@ -21,7 +21,7 @@
   --gz-radius-sm: calc(var(--gz-radius) * 2 / 3);
   /* Derived, not black: on a light preset surface-2 is off-white, so the shadow lands as a soft
      grey instead of a hard smudge. Depth 0-3 picks the size; 0 is flat. */
-  --gz-shadow-ink: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 55%) 35%, transparent);
+  --gz-shadow-ink: color-mix(in srgb, var(--gz-shadow-color, color-mix(in srgb, var(--gz-surface-2), #000 55%)) var(--gz-shadow-strength, 35%), transparent);
   --gz-shadow: 0 8px 24px var(--gz-shadow-ink);
   /* The page ground. extras.css swaps it for transparent when a background is painted behind. */
   --gz-ground: var(--gz-surface-2);
@@ -181,7 +181,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 /* Grade pill: Ultra paints the empty one rgb(240,240,240). The #site-wrap prefix is needed to
    beat the inherit rule above. Graded pills carry Ultra's grade-band class (excellent … extremeFailing)
    and take that band's tint from the palette remap; --gz-grade-edge is the band's own colour. */
-#site-wrap .wrapping-input-style.pill-style { background: var(--gz-surface) !important; border: 1px solid var(--gz-line-strong) !important; }
+#site-wrap .wrapping-input-style.pill-style { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 #site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.excellent, .veryGood) { --gz-grade-edge: var(--gz-ok); }
 #site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style).good { --gz-grade-edge: color-mix(in srgb, var(--gz-ok), var(--gz-accent)); }
 #site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style):is(.fair, .borderline, .warning) { --gz-grade-edge: var(--gz-warn); }
@@ -199,21 +199,21 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 /* ---- side nav ---- */
 .MuiDrawer-paper, .themed-background-primary-fill-only, .themed-logo-background-primary-fill,
 .themed-background-primary-alt-fill-only {
-  background: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent) !important;
   color: var(--gz-ink-muted) !important;
 }
-.MuiDrawer-paper { border-right: 1px solid var(--gz-line) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.4); }
-.MuiDrawer-paper header { border-bottom: 1px solid var(--gz-line) !important; }
+.MuiDrawer-paper { border-right: 1px solid var(--gz-border-line, var(--gz-line)) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.4); }
+.MuiDrawer-paper header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 /* In a narrow window the nav is a drawer floating over the page: solid, so the page under it doesn't show
    through the glass and its items. */
-.MuiDrawer-modal > .MuiDrawer-paper { background: var(--gz-surface-2) !important; backdrop-filter: none; box-shadow: var(--gz-shadow) !important; }
+.MuiDrawer-modal > .MuiDrawer-paper { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; backdrop-filter: none; box-shadow: var(--gz-shadow) !important; }
 .base-navigation-button-content {
   color: var(--gz-ink-muted) !important;
   border-radius: var(--gz-radius-sm) !important;
   margin: 2px 8px !important;
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring) !important;
 }
-.base-navigation-button-content:hover { background: var(--gz-surface) !important; color: var(--gz-ink) !important; transform: var(--gz-nudge); }
+.base-navigation-button-content:hover { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; transform: var(--gz-nudge); }
 .base-navigation-button-content.Mui-selected, .base-navigation-button-content[aria-current], .base-navigation-button-content.active { color: var(--gz-accent) !important; }
 /* The current page in the main nav and in a course's Contents tree: Ultra marks it with a straight
    bar in the institution's brand color on its own ::before (a purple strip next to Glaze's stripe,
@@ -236,9 +236,9 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    #262626 in every palette until 2.0. The #site-wrap-scoped selectors outrank the "*-header"
    catch-all further down, which used to paint these opaque and hide the blur. ---- */
 #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header, .bb-course-navigation [class*="makeStylestoolbar"] {
-  background: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
-  border-bottom: 1px solid var(--gz-line) !important;
+  border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important;
   box-shadow: none !important;
 }
 /* The tools row sits inside the header: no second blur, no second rule under the title. */
@@ -246,14 +246,14 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 /* The course header's toolbar is inset 16px inside it: a second glass box there showed square edges. */
 .bb-course-navigation course-page-header > header [class*="makeStylestoolbar"] { background: transparent !important; border: 0 !important; backdrop-filter: none; }
 /* The outline's "Course Content" header is a box inside the content column, not a page header. */
-#site-wrap header.outline-header { border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important; }
+#site-wrap header.outline-header { border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
 
 /* ---- cards ---- */
 .element-card, .MuiPaper-root:not(.MuiDrawer-paper), .MuiCard-root, .panel, .todo-item, article,
 .content-list-item .itemContainer {
-  background: var(--gz-surface) !important;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important;
   color: var(--gz-ink) !important;
-  border: 1px solid var(--gz-line) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important;
   border-radius: var(--gz-radius) !important;
   box-shadow: var(--gz-rest-shadow) !important;
   transition: var(--gz-card-transition) !important;
@@ -261,45 +261,45 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 :is(.element-card, .gz-course-card):hover, .content-list-item .itemContainer:hover {
   transform: var(--gz-lift);
   box-shadow: var(--gz-hover-shadow) !important;
-  border-color: var(--gz-line-strong) !important;
+  border-color: var(--gz-border-strong, var(--gz-line-strong)) !important;
 }
 .course-banner, .status-bar { border-radius: var(--gz-radius) 0 0 var(--gz-radius) !important; }
 /* Courses grid: the banner is the card's top, not its left. */
-.multi-column-view .course-banner { border-radius: calc(var(--gz-radius) - 1px) calc(var(--gz-radius) - 1px) 0 0 !important; }
+.multi-column-view .course-banner { border-radius: calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)) calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)) 0 0 !important; }
 /* Ultra's 4px frame around each top-level outline card drew a second, squarer outline outside it. */
 #site-wrap .content-list-item [class*="makeStylesparentItem-"] { border: 0 !important; box-shadow: none !important; border-radius: var(--gz-radius) !important; }
 /* Course outline: one card per top-level folder; what is nested, a row of its own, rounded with the Look (--gz-radius). */
 #site-wrap .content-list-item .itemContainer { overflow: hidden; }
 /* Each on Glaze's surface (see-through over a picture or scene, extras.css), never bare: a module's items show below
    its card, on whatever is behind the page. */
-#site-wrap .content-list-item .content-list-item .itemContainer { background: var(--gz-surface) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important; }
-#site-wrap .content-list-item .content-list-item .itemContainer:hover { transform: none; box-shadow: none !important; background: color-mix(in srgb, var(--gz-accent-soft) 40%, var(--gz-surface)) !important; }
+#site-wrap .content-list-item .content-list-item .itemContainer { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; }
+#site-wrap .content-list-item .content-list-item .itemContainer:hover { transform: none; box-shadow: none !important; background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-soft) 40%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 .content-list-item a, .content-list-item [role=button] { color: var(--gz-ink) !important; }
 .content-list-item a:hover { color: var(--gz-accent) !important; }
-aside, .todo-panel { background: var(--gz-ground) !important; border-left: 1px solid var(--gz-line) !important; }
+aside, .todo-panel { background: var(--gz-ground) !important; border-left: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 /* A course gradebook's student header is an <aside> too, but not a side panel. */
 aside.student-grade-overview { border-left: 0 !important; }
 /* Table header bands (the gradebook's) end in rounded corners; collapsed tables ignore border-radius. */
 #site-wrap thead:has(.MuiTableCell-head) { clip-path: inset(0 round var(--gz-radius-sm)); }
 .MuiAccordion-root { overflow: hidden; }
-.MuiAccordion-root, .MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
-.MuiAccordionDetails-root { border-top: 1px solid var(--gz-line) !important; }
-.MuiAccordionDetails-root > div { background: var(--gz-surface-2) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm); }
-.MuiBadge-badge { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
+.MuiAccordion-root, .MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
+.MuiAccordionDetails-root { border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
+.MuiAccordionDetails-root > div { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm); }
+.MuiBadge-badge { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 /* The favourite star pops. */
 #site-wrap .js-favourite-button { transition: transform var(--gz-t-slow) var(--gz-spring), color var(--gz-t) var(--gz-ease) !important; }
 #site-wrap .js-favourite-button:hover { transform: var(--gz-pop); color: var(--gz-accent) !important; }
 
 /* ---- controls ---- */
 input, textarea, select, .MuiInputBase-root, .MuiOutlinedInput-root, .MuiSelect-select {
-  background: var(--gz-surface) !important;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important;
   color: var(--gz-ink) !important;
-  border-color: var(--gz-line) !important;
+  border-color: var(--gz-border-line, var(--gz-line)) !important;
   border-radius: var(--gz-radius-sm) !important;
   transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease) !important;
 }
-.MuiOutlinedInput-notchedOutline { border-color: var(--gz-line) !important; transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease); }
-.MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-line-strong) !important; }
+.MuiOutlinedInput-notchedOutline { border-color: var(--gz-border-line, var(--gz-line)) !important; transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease); }
+.MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 .Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft); }
 #site-wrap legend, #site-wrap legend *, #site-wrap label { background: transparent !important; }
 #site-wrap legend * { color: transparent !important; }
@@ -310,21 +310,21 @@ input, textarea, select, .MuiInputBase-root, .MuiOutlinedInput-root, .MuiSelect-
 #site-wrap label.MuiInputLabel-root.MuiInputLabel-shrink, #site-wrap label.MuiInputLabel-root::before { background: none !important; }
 #site-wrap .MuiFormControl-root:has(> label.MuiInputLabel-shrink) fieldset.MuiOutlinedInput-notchedOutline > legend { max-width: 100% !important; }
 .course-overview-management > div > div > div { background: transparent !important; }
-.course-overview-management label:has(input) { background: var(--gz-surface) !important; border: 1px solid var(--gz-line) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm) !important; transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
-.course-overview-management label:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-line-strong) !important; }
-.MuiChip-root { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
+.course-overview-management label:has(input) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm) !important; transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
+.course-overview-management label:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
+.MuiChip-root { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 .MuiButton-contained { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; border-radius: var(--gz-radius-sm) !important; box-shadow: none !important; }
 .MuiButton-contained:hover { filter: var(--gz-hover-filter); }
-.MuiButton-contained.MuiButton-containedSecondary { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; }
-.MuiButton-outlined, .MuiButton-text, .standard-button { color: var(--gz-accent) !important; border-color: var(--gz-line-strong) !important; }
+.MuiButton-contained.MuiButton-containedSecondary { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
+.MuiButton-outlined, .MuiButton-text, .standard-button { color: var(--gz-accent) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 button, .MuiButtonBase-root { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), filter var(--gz-t) var(--gz-ease), transform var(--gz-t-slow) var(--gz-spring), scale var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease) !important; }
 button:active, .MuiButtonBase-root:active { scale: var(--gz-press); }
-.MuiMenu-paper, .MuiPopover-paper, .MuiDialog-paper { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; box-shadow: var(--gz-shadow) !important; }
+.MuiMenu-paper, .MuiPopover-paper, .MuiDialog-paper { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: var(--gz-shadow) !important; }
 .MuiMenuItem-root { transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
 .MuiMenuItem-root:hover { background: var(--gz-accent-soft) !important; }
-.MuiDivider-root, hr { border-color: var(--gz-line) !important; }
-table, th, td { border-color: var(--gz-line) !important; color: var(--gz-ink) !important; }
-th { background: var(--gz-surface) !important; }
+.MuiDivider-root, hr { border-color: var(--gz-border-line, var(--gz-line)) !important; }
+table, th, td { border-color: var(--gz-border-line, var(--gz-line)) !important; color: var(--gz-ink) !important; }
+th { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 .MuiRadio-root, .MuiCheckbox-root { transition: color var(--gz-t) var(--gz-ease) !important; }
 
 /* ---- per-route leaks (found with the light/dark finder in the browser) ---- */
@@ -332,18 +332,18 @@ th { background: var(--gz-surface) !important; }
 #site-wrap a.base-navigation-button-content:hover { color: var(--gz-ink) !important; }
 #site-wrap a.base-navigation-button-content.Mui-selected, #site-wrap a.base-navigation-button-content[aria-current] { color: var(--gz-accent) !important; }
 .page-title, h1, h2, h3 { font-family: var(--gz-font-head, inherit) !important; }
-.element-image { background: var(--gz-surface) !important; border-color: var(--gz-line) !important; }
+.element-image { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
 #site-wrap button:not(.MuiButton-contained) { color: var(--gz-ink) !important; }
-.button-group button, .button-group li { background: var(--gz-surface) !important; color: var(--gz-ink-muted) !important; border-color: var(--gz-line) !important; }
+.button-group button, .button-group li { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
 .button-group button.active, .button-group button[aria-pressed=true], .button-group button.selected { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; }
 .days .week-day button { color: var(--gz-ink-muted) !important; }
 .days .week-day.today button, .days .week-day button.selected { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
 .base-grades-empty-state, .base-grades-empty-state *, .no-grades { background: var(--gz-ground) !important; background-image: none !important; color: var(--gz-ink-muted) !important; }
 .grades-list .columns, .grades-list .row { background: transparent !important; }
-.messages-container-summary, .color-override { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+.messages-container-summary, .color-override { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 /* Course messages toolbar. Ultra's own rule is class-stacked + !important, so #site-wrap is what outranks it. */
-#site-wrap .messages-header, #site-wrap .messages-header .summary, #site-wrap .messages-container { background: var(--gz-ground) !important; border-color: var(--gz-line) !important; }
-#site-wrap .messages-header .summary { border-bottom: 1px solid var(--gz-line) !important; }
+#site-wrap .messages-header, #site-wrap .messages-header .summary, #site-wrap .messages-container { background: var(--gz-ground) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
+#site-wrap .messages-header .summary { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 #site-wrap .messages-container-summary .summary { background: transparent !important; border: 0 !important; }
 #site-wrap .messages-container-summary { border-radius: var(--gz-radius) !important; overflow: hidden; }
 #site-wrap .send-message-button { border-radius: var(--gz-radius-sm) !important; }
@@ -360,7 +360,7 @@ html[data-gz-font-mono] :is(code, pre, kbd, samp, .ql-code-block, .ql-code-block
 /* Document view (course item pages): Ultra paints the whole body and the title bar white. The title
    bar's div is anonymous, so it is reached through :has() from the stable h1 class. */
 #site-wrap .document-content-root, #site-wrap .document-body, #site-wrap .bbml-editor, #site-wrap main { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
-#site-wrap div:has(> div > div > div > h1.js-header-text) { background: var(--gz-ground) !important; border-bottom: 1px solid var(--gz-line) !important; }
+#site-wrap div:has(> div > div > div > h1.js-header-text) { background: var(--gz-ground) !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 /* The document is one centered column, its title row lined up with it, and the page is a single
    frosted card: Ultra wraps every block in four nested borders and leaves it at the left of a wide
    panel. Past a 92.5rem-wide content area the column zooms up with it, text and attachments
@@ -377,10 +377,10 @@ html { --gz-doc-w: 50rem; --gz-doc-zoom: clamp(1, calc(100cqi / 92.5rem), 1.5); 
    are a MuiPaper, so the Paper surface rule further down outranks the see-through fill there and
    that card stays opaque; the rest of the recipe (edge, radius, shadow) applies to all three. */
 #site-wrap .bbml-editor-parent > .bbml-editor, bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]) {
-  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.2);
-  border: 1px solid color-mix(in srgb, var(--gz-line-strong) 70%, transparent) !important;
-  border-radius: calc(var(--gz-radius) + 4px) !important;
+  border: 1px solid color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important;
+  border-radius: calc(var(--gz-radius) + calc(var(--gz-radius, 12px) * 1 / 3)) !important;
   box-shadow: 0 1px 0 color-mix(in srgb, var(--gz-ink) 6%, transparent) inset, var(--gz-shadow) !important;
 }
 #site-wrap .bbml-editor-parent > .bbml-editor { padding: 1.25rem 1.5rem 1rem !important; }
@@ -394,10 +394,10 @@ html { --gz-doc-w: 50rem; --gz-doc-zoom: clamp(1, calc(100cqi / 92.5rem), 1.5); 
 /* Attachments in a document: one rounded tile each, an open preview inside it, clipped to the corners. */
 #site-wrap .bbml-editor div:has(> .js-file-viewer-root-controls) {
   border-radius: var(--gz-radius) !important; overflow: hidden; margin-block: 0.5rem;
-  background: color-mix(in srgb, var(--gz-surface-2) 55%, transparent) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 55%), transparent) !important;
 }
 #site-wrap .bbml-editor .js-file-viewer-root-controls { padding-inline: 0.25rem; }
-#site-wrap .bbml-editor .js-file-viewer-inline-preview { border-top: 1px solid var(--gz-line); background: var(--gz-surface-2) !important; }
+#site-wrap .bbml-editor .js-file-viewer-inline-preview { border-top: 1px solid var(--gz-border-line, var(--gz-line)); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; }
 #site-wrap .bbml-editor .js-file-viewer-inline-preview iframe { display: block; }
 /* Assignment attempt: Ultra centers the instructions and details as one group but leaves the title
    at the left edge; it lines up with the group instead. The instructions accordion is see-through
@@ -405,27 +405,27 @@ html { --gz-doc-w: 50rem; --gz-doc-zoom: clamp(1, calc(100cqi / 92.5rem), 1.5); 
 bb-assignment-attempt-authoring-panel div:has(> div > h1.js-header-text) { max-width: 80rem !important; margin-inline: auto !important; width: 100%; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesdetails-"] { padding: 1rem 1.25rem !important; align-self: flex-start; }
 bb-assignment-attempt-authoring-panel .MuiAccordion-root :is(.MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root, .bb-editor-container, .ql-editor, .ql-container, .editor-content-container, .bb-editor-root) { background: transparent !important; }
-bb-assignment-attempt-authoring-panel .MuiAccordionSummary-root { border-bottom: 1px solid var(--gz-line) !important; }
+bb-assignment-attempt-authoring-panel .MuiAccordionSummary-root { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-right: 0 !important; }
 /* Previous / Next above an item: Ultra sits them on a hard-coded #262626 bar the sweep leaves alone
    (it only recolors light fills). */
 #site-wrap div:has(> .js-content-navigator-previous, > .js-content-navigator-next) { background: transparent !important; gap: 0.5rem; }
 #site-wrap :is(.js-content-navigator-previous, .js-content-navigator-next) button {
   border-radius: 999px !important; padding: 0.35rem 0.9rem !important; gap: 0.4rem; font-size: 0.875rem;
-  background: color-mix(in srgb, var(--gz-surface) 80%, transparent) !important; color: var(--gz-ink) !important;
-  border: 1px solid var(--gz-line-strong) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 80%), transparent) !important; color: var(--gz-ink) !important;
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important;
 }
 #site-wrap :is(.js-content-navigator-previous, .js-content-navigator-next) button:is(:hover, :focus-visible) { color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; background: var(--gz-accent-soft) !important; }
 
 /* Item panels (discussions, assignments, tests): Ultra's panel chrome and its Quill editor are white. */
 #site-wrap .panel-header, #site-wrap .persistent-white-header, #site-wrap .panel-title, #site-wrap .panel-content, #site-wrap .panel-content-slide-toggle, #site-wrap .collapsible-row, #site-wrap .editable-title-container { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
-#site-wrap .panel-header { border-bottom: 1px solid var(--gz-line) !important; box-shadow: none !important; }
-#site-wrap .reply-form, #site-wrap .new-comment, #site-wrap .bb-editor-root, #site-wrap .bb-editor-container, #site-wrap .editor-content-container, #site-wrap .ql-editor, #site-wrap .ql-container, #site-wrap .ql-toolbar, #site-wrap bb-message, #site-wrap .message-body, #site-wrap .comments { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+#site-wrap .panel-header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: none !important; }
+#site-wrap .reply-form, #site-wrap .new-comment, #site-wrap .bb-editor-root, #site-wrap .bb-editor-container, #site-wrap .editor-content-container, #site-wrap .ql-editor, #site-wrap .ql-container, #site-wrap .ql-toolbar, #site-wrap bb-message, #site-wrap .message-body, #site-wrap .comments { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 #site-wrap .lti-placement__root { background: transparent !important; }
 
 /* Off-canvas side panels (rubric details, settings sheets): the panel wrap and its Fluent header are white. */
 #site-wrap .bb-offcanvas-panel-wrap, #site-wrap .bb-offcanvas-panel, #site-wrap .panel-body, #site-wrap .ms-Panel-commands, #site-wrap .simple-header { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
-#site-wrap button.bb-close { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; }
+#site-wrap button.bb-close { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 
 /* ---- slide-outs (Ultra's "peek" panels: settings, rubrics, details) ----
    A sheet over the dimmed page: one step above the ground, with an edge and a shadow toward the
@@ -433,8 +433,8 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
    don't patch over the sheet. */
 #site-wrap :is(.bb-offcanvas-panel.peek, .peek-panel__content-wrapper), .ms-Panel-main {
   --gz-ground: transparent;
-  background: color-mix(in srgb, var(--gz-surface) 45%, var(--gz-surface-2)) !important;
-  border-left: 1px solid var(--gz-line-strong) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 45%), var(--gz-surface-paint-2, var(--gz-surface-2))) !important;
+  border-left: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important;
   box-shadow: -18px 0 48px var(--gz-shadow-ink) !important;
 }
 /* #site-wrap is overflow: hidden, but an off-screen helper of Ultra's sticks out past its right
@@ -445,29 +445,29 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 /* Attendance bleeds its sections 30px past both edges, so the panel scrolls sideways; Glaze's styled
    (always-visible) scrollbars turned that into a bar along the bottom. */
 #site-wrap .peek-panel__container { overflow-x: hidden !important; }
-#site-wrap .bb-offcanvas-overlay { background: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 45%) 60%, transparent) !important; }
+#site-wrap .bb-offcanvas-overlay { background: var(--gz-surface-grain, none), color-mix(in srgb, color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)), #000 45%) 60%, transparent) !important; }
 #site-wrap .peek .panel-header { padding-bottom: 0.25rem; }
 #site-wrap .peek .panel-sub-title { color: var(--gz-ink-faint) !important; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
-#site-wrap .peek .panel-footer { border-top: 1px solid var(--gz-line) !important; }
+#site-wrap .peek .panel-footer { border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 /* The close button straddles the sheet's edge: a round button instead of a tab with a purple fold. */
 #site-wrap .peek button.bb-close {
-  border-radius: 999px !important; border-color: var(--gz-line-strong) !important; box-shadow: var(--gz-shadow) !important;
-  background: color-mix(in srgb, var(--gz-surface) 45%, var(--gz-surface-2)) !important;
+  border-radius: 999px !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; box-shadow: var(--gz-shadow) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 45%), var(--gz-surface-paint-2, var(--gz-surface-2))) !important;
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease) !important;
 }
 /* Colour only: Ultra positions this button with a transform, so a hover transform moved it out from under the pointer. */
 #site-wrap .peek button.bb-close:is(:hover, :focus-visible) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
 #site-wrap button.bb-close::after { display: none !important; }
-#site-wrap .rubric-view-panel .panel-body > div, #site-wrap .rubric-view-panel .MuiAccordionDetails-root > div > div > div { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius-sm) !important; }
-#site-wrap .js-rubric-view-achievement-score { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
+#site-wrap .rubric-view-panel .panel-body > div, #site-wrap .rubric-view-panel .MuiAccordionDetails-root > div > div > div { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap .js-rubric-view-achievement-score { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 
 /* File attachment header above the PDF/file viewer (the viewer itself is an iframe on /bbcswebdav/, untouched). */
-#site-wrap div:has(> .js-file-viewer-root-controls) { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important; }
+#site-wrap div:has(> .js-file-viewer-root-controls) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important; }
 #site-wrap .js-file-viewer-root-controls, #site-wrap .js-file-viewer-attachment-meta { color: var(--gz-ink) !important; }
 
 /* Announcements (and other sortable tables): the search/guidance bar and read rows are white. */
-#site-wrap .guidance-wrapper { background: var(--gz-ground) !important; color: var(--gz-ink) !important; border-bottom: 1px solid var(--gz-line) !important; box-shadow: none !important; }
-#site-wrap .guidance-wrapper input { background: var(--gz-surface) !important; }
+#site-wrap .guidance-wrapper { background: var(--gz-ground) !important; color: var(--gz-ink) !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; box-shadow: none !important; }
+#site-wrap .guidance-wrapper input { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 #site-wrap table tr, #site-wrap table td { background: transparent !important; }
 #site-wrap table td { transition: background var(--gz-t) var(--gz-ease); }
 #site-wrap table tr.is-read, #site-wrap table tr.announcement-item-row.is-read, #site-wrap table tr.is-read td { background: transparent !important; color: var(--gz-ink-muted) !important; }
@@ -475,13 +475,13 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 
 /* Calendar due-dates list: the white group box around a day's cards, and the Today toggle. */
 #site-wrap .element-card-container { background: transparent !important; border: 0 !important; box-shadow: none !important; }
-#site-wrap .calendar-toggle button { background: var(--gz-surface) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius-sm) !important; }
-#site-wrap .calendar-toggle button:hover { color: var(--gz-ink) !important; border-color: var(--gz-line-strong) !important; }
+#site-wrap .calendar-toggle button { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap .calendar-toggle button:hover { color: var(--gz-ink) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 
 /* Gradebook (MUI table + readonly grade pills). */
 #site-wrap table, #site-wrap .MuiTable-root, #site-wrap .MuiTableCell-root { background: transparent !important; color: var(--gz-ink) !important; }
-#site-wrap .MuiTableHead-root .MuiTableCell-root, #site-wrap thead th { background: var(--gz-surface) !important; }
-#site-wrap .readonly-pill { background: var(--gz-grade-bg, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line-strong) !important; }
+#site-wrap .MuiTableHead-root .MuiTableCell-root, #site-wrap thead th { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
+#site-wrap .readonly-pill { background: var(--gz-surface-grain, none), var(--gz-grade-bg, var(--gz-surface-paint, var(--gz-surface))) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 #site-wrap .readonly-pill.customGradePill { color: var(--gz-ink) !important; }
 /* Grade pills: one width for every row, sized for the longest ("[rubric] 100 / 100 | 100%"), one line,
    even digits. Ultra fixes the pill's box at ~100px and hides the rest, so "Not graded" wrapped and
@@ -499,34 +499,34 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap .readonly-pill .pill-points-possible { opacity: 0.75; }
 /* By id: a leading unread-dot column comes and goes, so the Grade column isn't always the 4th. */
 #site-wrap .grades-list td:has(.readonly-pill), #site-wrap .grades-list th#course-student-grades-header-grade { width: calc(10rem + 32px) !important; }
-#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style)[class*="customGradePill"] { background: var(--gz-grade-bg, var(--gz-surface)) !important; border-color: color-mix(in srgb, var(--gz-grade-edge, var(--gz-line-strong)) 55%, var(--gz-line-strong)) !important; }
+#site-wrap :is(.readonly-pill, .wrapping-input-style.pill-style)[class*="customGradePill"] { background: var(--gz-surface-grain, none), var(--gz-grade-bg, var(--gz-surface-paint, var(--gz-surface))) !important; border-color: color-mix(in srgb, var(--gz-grade-edge, var(--gz-border-strong, var(--gz-line-strong))) 55%, var(--gz-border-strong, var(--gz-line-strong))) !important; }
 
 /* Message compose: reply dock + the Quill toolbar. */
-#site-wrap .message-reply-container, #site-wrap .send-wrapper { background: var(--gz-ground) !important; border-top: 1px solid var(--gz-line) !important; }
-#site-wrap .bb-editor-toolbar { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border-color: var(--gz-line) !important; }
-#site-wrap .bb-editor-toolbar button, #site-wrap .bb-editor-toolbar .ql-picker, #site-wrap .bb-editor-toolbar svg { color: var(--gz-ink-muted) !important; background: transparent !important; border-color: var(--gz-line) !important; }
+#site-wrap .message-reply-container, #site-wrap .send-wrapper { background: var(--gz-ground) !important; border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
+#site-wrap .bb-editor-toolbar { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
+#site-wrap .bb-editor-toolbar button, #site-wrap .bb-editor-toolbar .ql-picker, #site-wrap .bb-editor-toolbar svg { color: var(--gz-ink-muted) !important; background: transparent !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
 #site-wrap .bb-editor-toolbar button:hover { color: var(--gz-ink) !important; background: var(--gz-accent-soft) !important; }
 
 /* Any Ultra "*-header" bar (course-groups-header, base-header, messages-header, …) is ground. */
 #site-wrap div:is([class*="-header"], [class*="header-"]):not(.base-header, .base-header-tools) { background: var(--gz-ground) !important; color: var(--gz-ink) !important; box-shadow: none !important; }
-#site-wrap .course-groups-header { border-bottom: 1px solid var(--gz-line) !important; }
+#site-wrap .course-groups-header { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 
 /* Attendance peek panel. */
 #site-wrap .peek-panel__content-wrapper, #site-wrap .student-panel, #site-wrap .student-panel__background { background: var(--gz-ground) !important; color: var(--gz-ink) !important; }
-#site-wrap .student-panel__background { border-bottom: 1px solid var(--gz-line) !important; }
-#site-wrap .attendance-grade-pill { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-line-strong) !important; }
-#site-wrap thead, #site-wrap thead tr { background: var(--gz-surface) !important; }
+#site-wrap .student-panel__background { border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
+#site-wrap .attendance-grade-pill { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
+#site-wrap thead, #site-wrap thead tr { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 
 /* Empty states ("No course faculty", …). */
-#site-wrap .js-empty-state, #site-wrap [class*="empty-state"] { background: var(--gz-ground) !important; background-image: none !important; color: var(--gz-ink-muted) !important; border: 1px dashed var(--gz-line-strong) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap .js-empty-state, #site-wrap [class*="empty-state"] { background: var(--gz-ground) !important; background-image: none !important; color: var(--gz-ink-muted) !important; border: 1px dashed var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important; }
 
 /* Assessment overview: Foundation-style .button links (Start attempt) and the Contents tree's selected row. */
 /* Button hierarchy. Ultra's Foundation .button is on everything from "Start attempt" to "Back" and
    "Show more", so a solid accent on all of them left no hierarchy. Tonal by default; solid only for
    the per-view call to action; text and clear buttons are links. */
-#site-wrap a.button, #site-wrap button.button { background: var(--gz-accent-soft) !important; border: 1px solid var(--gz-line-strong) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap a.button, #site-wrap button.button { background: var(--gz-accent-soft) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap a.button, #site-wrap a.button *, #site-wrap button.button, #site-wrap button.button * { color: var(--gz-accent) !important; }
-#site-wrap a.button:hover, #site-wrap button.button:hover { background: color-mix(in srgb, var(--gz-accent) 22%, var(--gz-surface)) !important; border-color: var(--gz-accent) !important; }
+#site-wrap a.button:hover, #site-wrap button.button:hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 22%, var(--gz-surface-paint, var(--gz-surface))) !important; border-color: var(--gz-accent) !important; }
 #site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]) { background: var(--gz-accent) !important; border-color: transparent !important; }
 #site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]), #site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]) * { color: var(--gz-accent-ink) !important; }
 #site-wrap :is(a, button).button:is(.button-attempt, .js-submit, [type="submit"]):hover { background: var(--gz-accent-hi) !important; }
@@ -534,7 +534,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { border-r
 #site-wrap :is(a, button).button:is(.button--text, .super-clear):hover { background: var(--gz-accent-soft) !important; }
 /* Segmented switches (calendar Schedule/Due Dates, Day/Month): one joined control, the selected half
    marked. Ultra marks it with .active-switch and nothing visual survived the recolour. */
-#site-wrap button.button.small:is(.left-button, .right-button) { background: var(--gz-surface) !important; border: 1px solid var(--gz-line) !important; }
+#site-wrap button.button.small:is(.left-button, .right-button) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 #site-wrap button.button.small:is(.left-button, .right-button), #site-wrap button.button.small:is(.left-button, .right-button) * { color: var(--gz-ink-muted) !important; }
 #site-wrap button.button.small.left-button { border-radius: var(--gz-radius-sm) 0 0 var(--gz-radius-sm) !important; margin-right: -1px !important; }
 #site-wrap button.button.small.right-button { border-radius: 0 var(--gz-radius-sm) var(--gz-radius-sm) 0 !important; }
@@ -573,19 +573,19 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
 #site-wrap .MuiRadio-root.Mui-checked, #site-wrap .MuiCheckbox-root.Mui-checked, #site-wrap .Mui-checked svg { color: var(--gz-accent) !important; }
 #site-wrap label.MuiFormControlLabel-root, #site-wrap label.MuiFormControlLabel-root .MuiFormControlLabel-label, #site-wrap label.MuiFormControlLabel-root .MuiFormControlLabel-label * { color: var(--gz-ink) !important; }
 #site-wrap .MuiFormControlLabel-label::before, #site-wrap .MuiFormControlLabel-label *::before, #site-wrap .MuiFormControlLabel-label *::after { color: var(--gz-ink-muted) !important; }
-#site-wrap button.button--secondary, #site-wrap button.button--secondary *, #site-wrap .js-assessment-filter-dropdown-button, #site-wrap .js-assessment-filter-dropdown-button * { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
-#site-wrap button.button--secondary, #site-wrap .js-assessment-filter-dropdown-button { border: 1px solid var(--gz-line-strong) !important; border-radius: var(--gz-radius-sm) !important; }
+#site-wrap button.button--secondary, #site-wrap button.button--secondary *, #site-wrap .js-assessment-filter-dropdown-button, #site-wrap .js-assessment-filter-dropdown-button * { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
+#site-wrap button.button--secondary, #site-wrap .js-assessment-filter-dropdown-button { border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important; }
 
 /* ---- portals: MUI popovers, menus and dialogs mount on <body>, OUTSIDE #site-wrap, so the page-scoped
    inherit/border rules above never reach them. Same rules, portal scope. ---- */
 .MuiModal-root, .MuiPopper-root, .MuiPopover-root, .MuiDialog-root { color: var(--gz-ink) !important; }
 :is(.MuiModal-root, .MuiPopper-root) *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)) { color: inherit !important; }
-:is(.MuiModal-root, .MuiPopper-root) * { border-color: var(--gz-line) !important; }
+:is(.MuiModal-root, .MuiPopper-root) * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
 :is(.MuiModal-root, .MuiPopper-root) :is(a, .MuiLink-root) { color: var(--gz-accent) !important; }
 :is(.MuiModal-root, .MuiPopper-root) :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root) { color: var(--gz-ink-muted) !important; }
 :is(.MuiModal-root, .MuiPopper-root) .Mui-checked { color: var(--gz-accent) !important; }
 :is(.MuiModal-root, .MuiPopper-root) :is(fieldset, legend, legend *, .MuiFormControlLabel-root, .MuiMenuItem-root, .MuiListItem-root, [class*="popover-container"]) { background: transparent !important; }
-.MuiPaper-root:not(.MuiDrawer-paper) { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+.MuiPaper-root:not(.MuiDrawer-paper) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 
 /* ---- footer bar (content.js appends it; every rule here is gated on the popup's Footer switch) ----
    Ultra sizes its layout to the full viewport and scrolls inside, so a footer only earns its space
@@ -617,8 +617,8 @@ html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, h
   font: 500 11px/1 ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.02em;
   color: var(--gz-ink-faint) !important;
-  background: var(--gz-surface-2);
-  border-top: 1px solid var(--gz-line);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
+  border-top: 1px solid var(--gz-border-line, var(--gz-line));
 }
 #gz-footer a {
   color: var(--gz-ink-faint) !important;
@@ -628,7 +628,7 @@ html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, h
 #gz-footer a:hover { color: var(--gz-accent) !important; }
 
 /* ---- the long tail: content.js tags anything still painted light / with dark text ---- */
-[data-gz-light] { background-color: var(--gz-surface) !important; }
+[data-gz-light] { background-color: var(--gz-surface-fill, var(--gz-surface)) !important; }
 [data-gz-dark] { color: var(--gz-ink) !important; }
 
 /* ---- spacing ----
@@ -651,10 +651,10 @@ html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, h
 #site-wrap .element-card-list li::before, #site-wrap .element-card-list li::after { background-color: var(--gz-line) !important; }
 
 /* ---- borders: every border under the page is a theme line; the few that mean something are restated ---- */
-#site-wrap * { border-color: var(--gz-line) !important; }
-#site-wrap .element-card:hover, #site-wrap .content-list-item > .itemContainer:hover, #site-wrap .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-line-strong) !important; }
+#site-wrap * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
+#site-wrap .element-card:hover, #site-wrap .content-list-item > .itemContainer:hover, #site-wrap .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline { border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 #site-wrap .Mui-focused .MuiOutlinedInput-notchedOutline { border-color: var(--gz-accent) !important; }
-#site-wrap .wrapping-input-style.pill-style, #site-wrap .MuiChip-root { border-color: var(--gz-line-strong) !important; }
+#site-wrap .wrapping-input-style.pill-style, #site-wrap .MuiChip-root { border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 /* Course tab strip: the active tab's 4px underline is the course colour in Ultra; theme accent here. */
 #site-wrap a.MuiListItemButton-root[variant=secondary] { border-bottom-color: transparent !important; }
 #site-wrap a.MuiListItemButton-root[aria-current=page] { border-bottom-color: var(--gz-accent) !important; }
@@ -691,13 +691,13 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 .calendar-wrapper .element-card.tile[class*="course-color-"]:is(:hover, :focus)::before { background-color: var(--gz-course) !important; }
 
 /* ---- calendar month (FullCalendar 3) ---- */
-#site-wrap .fc-day-header { text-align: center !important; padding: 0.5rem 0 !important; font-size: 0.7rem !important; font-weight: 600 !important; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted) !important; background: var(--gz-surface) !important; }
+#site-wrap .fc-day-header { text-align: center !important; padding: 0.5rem 0 !important; font-size: 0.7rem !important; font-weight: 600 !important; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-muted) !important; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 #site-wrap .fc-day-number { font-size: 0.85rem !important; padding: 0.4rem 0.5rem 0.1rem !important; color: var(--gz-ink-muted) !important; }
 #site-wrap .fc-day-number.fc-other-month { color: var(--gz-ink-faint) !important; opacity: 0.6; }
 #site-wrap .fc-monthWithoutDD-view .fc-day.fc-today { background: color-mix(in srgb, var(--gz-accent-soft) 60%, transparent) !important; box-shadow: inset 0 0 0 1px var(--gz-accent); }
 #site-wrap .fc-day-number.fc-today { color: var(--gz-accent) !important; font-weight: 700 !important; }
-#site-wrap .fc-monthWithoutDD-view .fc-event { margin: 1px 4px !important; padding: 1px 6px !important; border: 0 !important; border-left: 3px solid var(--gz-course, var(--gz-accent)) !important; border-radius: 4px !important; background: color-mix(in srgb, var(--gz-course, var(--gz-accent)) 16%, var(--gz-surface)) !important; transition: background var(--gz-t) var(--gz-ease); }
-#site-wrap .fc-monthWithoutDD-view .fc-event:hover { background: color-mix(in srgb, var(--gz-course, var(--gz-accent)) 28%, var(--gz-surface)) !important; }
+#site-wrap .fc-monthWithoutDD-view .fc-event { margin: 1px 4px !important; padding: 1px 6px !important; border: 0 !important; border-left: 3px solid var(--gz-course, var(--gz-accent)) !important; border-radius: calc(var(--gz-radius, 12px) * 1 / 3) !important; background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-course, var(--gz-accent)) 16%, var(--gz-surface-paint, var(--gz-surface))) !important; transition: background var(--gz-t) var(--gz-ease); }
+#site-wrap .fc-monthWithoutDD-view .fc-event:hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-course, var(--gz-accent)) 28%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 #site-wrap .fc-monthWithoutDD-view .fc-event, #site-wrap .fc-monthWithoutDD-view .fc-event * { color: var(--gz-ink) !important; }
 /* Every month-view chip is a due date, and the cells are narrow: the "Due:" prefix only costs title. */
 #site-wrap .fc-monthWithoutDD-view .fc-event .fc-time { display: none !important; }
@@ -712,8 +712,8 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
    The right column's blocks (Course Faculty, Details & Actions, Better To Do): each a panel on Glaze's surface, frosted
    with the Look's glass, its accordion flat inside it (Ultra drew a bordered box around a bordered accordion). */
 #site-wrap .outline-action-block {
-  border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important; padding: 0.75rem 1rem !important;
-  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; padding: 0.75rem 1rem !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
 }
 #site-wrap .outline-action-block .MuiAccordion-root { background: transparent !important; border: 0 !important; box-shadow: none !important; }
@@ -728,8 +728,8 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
    their titles and between their parts, the separators above each participant, and the divider Ultra draws beside the
    column go. */
 #site-wrap .layer-details :is(.discussion-settings, .discussion-participants) {
-  padding: 0.75rem 1rem; border: 1px solid var(--gz-line); border-radius: var(--gz-radius);
-  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow);
+  padding: 0.75rem 1rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow);
 }
 #site-wrap .layer-content::after { display: none !important; }
 #site-wrap .layer-details :is(.full-panel-details-title, .separation-border, .guidance-wrapper, [class*="makeStyleselementDetails-"], .element-details) { border-bottom: 0 !important; }
@@ -738,8 +738,8 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
    nothing in it): panels on Glaze's surface with the Look's corners. Ultra painted the wells in the page's own colour,
    square, so they read as empty outlines. */
 #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .base-profile section ul, .group-empty-state) {
-  border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important;
-  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
+  border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
 }
 /* Over a solid background the glass on the nav, the headers and these panels blurs a flat colour: nothing to see, and
    a GPU layer each. Same fill. */
@@ -790,13 +790,13 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
 /* ---- rich text editor (submissions, replies, messages): toolbar, text and word count as one
    card, with the accent ring while you type ---- */
 #site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-root {
-  border: 1px solid var(--gz-line-strong) !important; border-radius: var(--gz-radius) !important;
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius) !important;
   transition: border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease);
 }
 #site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-root:focus-within { border-color: var(--gz-accent) !important; box-shadow: 0 0 0 3px var(--gz-accent-soft) !important; }
 #site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar {
-  border: 0 !important; border-bottom: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important;
-  background: color-mix(in srgb, var(--gz-surface) 55%, var(--gz-surface-2)) !important;
+  border: 0 !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) var(--gz-radius) 0 0 !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 55%), var(--gz-surface-paint-2, var(--gz-surface-2))) !important;
 }
 #site-wrap .bb-editor-wrapper:not(.read-only) .bb-editor-toolbar :is(button, .ql-picker) { border-color: transparent !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap .bb-editor-wrapper:not(.read-only) :is(.editor-content-container, .bb-editor-container) { border: 0 !important; border-radius: 0 0 var(--gz-radius) var(--gz-radius) !important; }
@@ -817,25 +817,25 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
 #site-wrap [class*="makeStylessubmission-"] { border-top-style: solid !important; }
 #site-wrap [class*="makeStylessubmission-"] .ql-editor { min-height: 11rem; }
 #site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"] {
-  border: 2px dashed color-mix(in srgb, var(--gz-line-strong) 70%, var(--gz-accent)) !important; border-radius: var(--gz-radius) !important;
-  background: color-mix(in srgb, var(--gz-surface) 70%, transparent) !important;
+  border: 2px dashed color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, var(--gz-accent)) !important; border-radius: var(--gz-radius) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 70%), transparent) !important;
   transition: border-color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease);
 }
-#site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"]:is(:hover, :focus-within) { border-color: var(--gz-accent) !important; background: color-mix(in srgb, var(--gz-accent-soft) 50%, var(--gz-surface)) !important; }
+#site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"]:is(:hover, :focus-within) { border-color: var(--gz-accent) !important; background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-soft) 50%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 #site-wrap [class*="makeStylessubmission-"] [class*="makeStylesinputContainer-"] svg { color: var(--gz-accent) !important; }
 /* The Exit button in the item header: Ultra paints it #404040. */
 #site-wrap header[class*="makeStylesheader-"] .MuiButtonBase-root[class*="makeStylescontained-"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-radius: var(--gz-radius-sm) !important; }
 
 /* ---- empty states: centred, quieter ---- */
-#site-wrap :is(.js-empty-state, [class*="empty-state"]) { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-faint) !important; border-color: color-mix(in srgb, var(--gz-line-strong) 70%, transparent) !important; }
+#site-wrap :is(.js-empty-state, [class*="empty-state"]) { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-faint) !important; border-color: color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important; }
 
 /* ---- course header pieces Ultra paints #404040 ---- */
 course-page-header > header [data-analytics-id="course.header.home"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-radius: var(--gz-radius-sm) !important; }
 course-page-header > header .MuiDivider-root { background-color: var(--gz-line) !important; }
 
 /* ---- row actions: a solid MUI button repeated on every gradebook row is noise; tonal, like .button ---- */
-#site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-line-strong) !important; }
-#site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained:hover { background: color-mix(in srgb, var(--gz-accent) 22%, var(--gz-surface)) !important; border-color: var(--gz-accent) !important; filter: none; }
+#site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
+#site-wrap :is([class*="resultsButtonWrapper"], [role="row"], td) .MuiButton-contained:hover { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 22%, var(--gz-surface-paint, var(--gz-surface))) !important; border-color: var(--gz-accent) !important; filter: none; }
 
 /* ---- review state (the circle before each item): not started is quiet, started is accent, done is ok ---- */
 #site-wrap .js-review-state-icon-button[aria-checked="false"] { color: var(--gz-ink-faint) !important; }
@@ -860,9 +860,9 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
    Hover, focus and tooltips: one language for everything you can point at.
    ====================================================================================== */
 :root {
-  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface));
+  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface-paint, var(--gz-surface)));
   --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
-  --gz-tip-bg: color-mix(in srgb, var(--gz-surface) 78%, var(--gz-line-strong));
+  --gz-tip-bg: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) 78%, var(--gz-line-strong));
 }
 
 /* Fills Ultra lights up only on hover or focus; content.js tags them on first contact. */
@@ -872,11 +872,11 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 #site-wrap :is(.element-list-row, .messages-container-summary) {
   transition: var(--gz-card-transition) !important;
 }
-#site-wrap .element-list-row { border: 1px solid var(--gz-line) !important; border-radius: var(--gz-radius) !important; background: var(--gz-surface) !important; }
+#site-wrap .element-list-row { border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 #site-wrap :is(.element-list-row, .messages-container-summary):hover {
   transform: var(--gz-lift);
   box-shadow: var(--gz-hover-shadow) !important;
-  border-color: var(--gz-line-strong) !important;
+  border-color: var(--gz-border-strong, var(--gz-line-strong)) !important;
 }
 
 /* Rows (nested outline items, table rows, menu items) tint instead of lifting. */
@@ -905,21 +905,21 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 /* ---- tooltips: every flavour Ultra ships (Foundation .tooltip, enhanced-tooltip, MUI, Fluent,
    keyboard hints) and Glaze's own (.gz-tip, which replaces native title tooltips) ---- */
 :is(.tooltip, span.enhanced-tooltip, .MuiTooltip-tooltip, .ms-Tooltip, .ms-Callout-main, .keyboard-tooltip, .editor-keyboard-tooltip, .gz-tip) {
-  background: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent) !important;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-tip-bg) 94%, transparent) !important;
   color: var(--gz-ink) !important;
-  border: 1px solid var(--gz-line-strong) !important;
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important;
   border-radius: var(--gz-radius-sm) !important;
   box-shadow: var(--gz-shadow) !important;
   backdrop-filter: blur(var(--gz-glass));
 }
 :is(.tooltip, span.enhanced-tooltip, .ms-Tooltip) * { color: inherit !important; }
 .MuiTooltip-arrow { color: var(--gz-tip-bg) !important; }
-.MuiTooltip-arrow::before { border: 1px solid var(--gz-line-strong); }
-.ms-Callout-beak, .ms-Callout-beakCurtain { background: var(--gz-tip-bg) !important; }
+.MuiTooltip-arrow::before { border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); }
+.ms-Callout-beak, .ms-Callout-beakCurtain { background: var(--gz-surface-grain, none), var(--gz-tip-bg) !important; }
 /* Arrows: Foundation's nub is a border triangle with a white ::after; enhanced-tooltip's pip is a rotated box. */
 .tooltip > .nub { border-color: transparent !important; }
-.tooltip > .nub::after { background-color: var(--gz-tip-bg) !important; border-color: var(--gz-line-strong) transparent transparent var(--gz-line-strong) !important; }
-span.enhanced-tooltip span.enhanced-tooltip-pip { background-color: var(--gz-tip-bg) !important; border-color: transparent var(--gz-line-strong) var(--gz-line-strong) transparent !important; }
+.tooltip > .nub::after { background-color: var(--gz-tip-bg) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) transparent transparent var(--gz-border-strong, var(--gz-line-strong)) !important; }
+span.enhanced-tooltip span.enhanced-tooltip-pip { background-color: var(--gz-tip-bg) !important; border-color: transparent var(--gz-border-strong, var(--gz-line-strong)) var(--gz-border-strong, var(--gz-line-strong)) transparent !important; }
 .gz-tip {
   position: fixed; z-index: 2147483002; max-width: 280px; padding: 0.35rem 0.6rem; pointer-events: none;
   font: 500 12px/1.35 var(--gz-font); letter-spacing: 0.01em; white-space: normal; overflow-wrap: anywhere;
@@ -948,12 +948,12 @@ html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-c
 html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card { height: auto !important; min-height: calc(var(--gz-card-h) + 156px); }
 /* A term's cards that happened to be one window high when swept are tagged data-gz-vh; they still grow. */
 html[data-gz-footer] #site-wrap .course-org-list [data-gz-vh] { max-height: none !important; }
-#site-wrap .multi-column-view article.course-element-card .course-banner { border-radius: calc(var(--gz-card-r, var(--gz-radius)) - 1px) calc(var(--gz-card-r, var(--gz-radius)) - 1px) 0 0 !important; }
+#site-wrap .multi-column-view article.course-element-card .course-banner { border-radius: calc(var(--gz-card-r, var(--gz-radius)) - calc(var(--gz-radius, 12px) * 1 / 12)) calc(var(--gz-card-r, var(--gz-radius)) - calc(var(--gz-radius, 12px) * 1 / 12)) 0 0 !important; }
 html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title { position: absolute; top: auto; bottom: calc(100% - var(--gz-card-banner-h, var(--gz-card-h, 146px))); inset-inline: 12px; margin: 0 !important; padding: 0 0 8px !important; max-height: calc(var(--gz-card-banner-h, var(--gz-card-h, 146px)) - 8px); line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; color: white !important; z-index: 1; text-shadow: 0 1px 3px #000; }
 html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title :is(a, span) { color: white !important; }
 #site-wrap article.course-element-card .gz-bm { position: absolute; z-index: 2; top: 8px; left: 8px; right: 80px; display: flex; flex-wrap: wrap; gap: 4px; }
 html:not([data-gz-card-icons]) #site-wrap .gz-bm { display: none; }
-#site-wrap .gz-bm a { display: grid; place-items: center; width: 28px; height: 28px; background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: 50%; }
+#site-wrap .gz-bm a { display: grid; place-items: center; width: 28px; height: 28px; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 50%; }
 #site-wrap .gz-bm a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 #site-wrap .gz-bm svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* Base navigation: no changes to the course tab bar or other navigation regions. */
@@ -1056,7 +1056,7 @@ html[data-gz-nav] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesna
 html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) { display: flex; flex-direction: column; padding: var(--gz-nav-padding) !important; box-sizing: border-box; }
 html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) ul { display: flex; flex-direction: column; gap: var(--gz-nav-gap); padding: 0; margin: 0; list-style: none; }
 html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) :is(a.base-navigation-button-content, a.MuiListItemButton-root, a.gz-nav-link) { display: flex; align-items: center; box-sizing: border-box; gap: 12px; min-height: var(--gz-nav-height) !important; padding: 6px 10px !important; font-size: var(--gz-nav-text) !important; color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm); text-decoration: none; }
-html[data-gz-nav-brand] nav[class*="makeStylesnavigation"] a:is(:hover, :focus-visible) { background: var(--gz-surface) !important; color: var(--gz-ink) !important; }
+html[data-gz-nav-brand] nav[class*="makeStylesnavigation"] a:is(:hover, :focus-visible) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 /* Compact labels use the space beside the icon; full text stays in the DOM and tooltip. */
 html[data-gz-nav-brand] :is(nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]) a:is(.base-navigation-button-content, .MuiListItemButton-root, .gz-nav-link) {
   width: 100%; min-width: 0 !important; max-width: 100%; height: var(--gz-nav-height) !important; margin: 0 !important;
@@ -1102,10 +1102,10 @@ html[data-gz-nav-no-logo] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="make
 .gz-nav-dashboard > svg.gz-nav-dashboard-icon { fill: currentColor !important; stroke: none !important; }
 .gz-nav-widgets { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
 .gz-nav-widgets:empty { display: none; }
-.gz-nav-widget { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 36px; padding: 6px; border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface); font: inherit; font-size: 12px; text-decoration: none; }
+.gz-nav-widget { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 36px; padding: 6px; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); font: inherit; font-size: 12px; text-decoration: none; }
 .gz-nav-widget img { width: 28px; height: 28px; object-fit: contain; }
 .gz-nav-widget span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.gz-nav-widget button { color: inherit; background: transparent; border: 1px solid var(--gz-line-strong); border-radius: 4px; cursor: pointer; font: inherit; }
+.gz-nav-widget button { color: inherit; background: transparent; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 1 / 3); cursor: pointer; font: inherit; }
 .gz-nav-status { font-size: 11px; }
 .gz-nav-widget :focus-visible, .gz-nav-widget:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 html[data-gz-nav-collapsed]:not([data-gz-nav-expanded]) .gz-nav-widget { flex-wrap: wrap; justify-content: center; padding: 4px 0; font-size: 10px; }
@@ -1128,7 +1128,7 @@ html[data-gz-nav-footer-hidden] .MuiDrawer-paper:has(:is(#base_tools, nav[class*
 
 html[data-gz-nav-overflow="wrap"] .MuiDrawer-paper:has(:is(#base_tools, nav[class*="makeStylesnavigation"])) :is(footer, [class*="makeStylesfooter"]) a { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.3; max-height: 2.6em; }
 
-.gz-nav-expand { position: absolute; z-index: 1; inset-block-end: 4px; inset-inline: 0; display: grid; place-items: center; width: 30px; height: 30px; margin: 0 auto; padding: 0; border: 1px solid var(--gz-line); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface); cursor: pointer; }
+.gz-nav-expand { position: absolute; z-index: 1; inset-block-end: 4px; inset-inline: 0; display: grid; place-items: center; width: 30px; height: 30px; margin: 0 auto; padding: 0; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); cursor: pointer; }
 .gz-nav-expand svg { display: block; }
 .gz-nav-expand:dir(rtl) svg { transform: scaleX(-1); }
 .gz-nav-expand:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }

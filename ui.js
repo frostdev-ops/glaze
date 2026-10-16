@@ -35,6 +35,11 @@ const GZ_UI = (() => {
   const paint = (s) => {
     const colors = GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
     for (const [v] of GZ_COLORS) document.documentElement.style.setProperty(v, colors[v]);
+    document.documentElement.style.setProperty('--gz-radius', `${s.look.radius}px`);
+    document.documentElement.style.setProperty('--gz-glass', `${s.look.glass}px`);
+    document.documentElement.setAttribute('data-gz-depth', String(s.look.depth));
+    document.documentElement.setAttribute('data-gz-motion', s.motion.level);
+    for (const [key, value] of Object.entries(GZ_SURFACE_VARS({ ...s, bg: { kind: 'solid' } }))) document.documentElement.style.setProperty(key, value);
     document.documentElement.style.colorScheme = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < 0.5 ? 'dark' : 'light';
   };
 

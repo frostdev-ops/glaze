@@ -57,7 +57,7 @@
   let enhanced = {};
   // Canvas wears canvas.css, not theme.css and extras.css (Ultra's markup). motion.css holds the motion knobs any
   // sheet's animations read. features/apps.css: Glaze's own apps (notes, widgets) on Ultra and Canvas, not Moodle.
-  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css']];
+  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css'], 'features/surfaces.css'];
   // What only one site does: its part puts its own over these (the site's part, below). Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,
@@ -397,7 +397,7 @@
     themeEditors();
     if (tip && ultraTipShown()) hideTip();
     X.paintCourses();
-    if (tintKey() !== tinted || lookHere() !== looked) applySettings();
+    if (tintKey() !== tinted || lookHere() !== looked || surfaceCourse() !== html.style.getPropertyValue('--gz-surface-course')) applySettings();
     placeScene();
     if (!said) return;
     if (all) X.syncNav();
@@ -472,6 +472,7 @@
     dirty.clear();
     full = false;
     X.stop();
+    globalThis.GZ_MOODLE_PAGE?.paint();
     clearTags(ultra ? TAGS : [...TAGS, 'data-gz-course-color']);
     liftable.clear();
     if (!ultra) for (const e of document.querySelectorAll('[style*="--gz-course-raw"]')) { e.style.removeProperty('--gz-course-raw'); if (!e.style.length) e.removeAttribute('style'); } // Canvas's course colors
@@ -989,6 +990,7 @@
   // the slot is remembered per course id, on this device. flush() re-checks on every page change.
   const courseSlots = {};
   let courseList = {};
+  const surfaceCourse = () => chrome.runtime?.id ? GZ_COURSE_COLOR(settings, courseList, ultra ? courseId() : canvasCourseKey()) : '';
   let cc = []; // worked out once per list and picks
   const courseColors = () => { const p = settings.courses.colors; if (cc[0] !== courseList || cc[1] !== p) cc = [courseList, p, GZ_COURSE_COLORS(courseList, p)]; return cc[2]; };
   try {
@@ -1125,6 +1127,7 @@
   const applySettings = () => {
     looked = lookHere();
     const s = (worn = looked ? GZ_COURSE_LOOK(settings, ultra ? courseId() : canvasCourseKey()) : settings);
+    setVar('--gz-surface-course', surfaceCourse());
     const base = GZ_ACTIVE_COLORS(s, darkMQ.matches);
     for (const [v] of GZ_COLORS) setVar(v, base[v]);
     setAttr('data-gz-raw-courses', !s.courses.harmonize);
@@ -1169,7 +1172,7 @@
     setVar('--gz-leading', s.look.leading);
     setVar('--gz-glass', `${s.look.glass}px`);
     // No blur means no glass: a see-through header without the blur just shows text behind text.
-    setVar('--gz-glass-mix', s.look.glass ? '78%' : '100%');
+    for (const [key, value] of Object.entries(GZ_SURFACE_VARS(s))) setVar(key, value);
     // Fonts: the stacks are vars; a web font loads into the page once chosen (lib/fonts.js).
     setAttr('data-gz-font', s.look.font);
     setVar('--gz-font', GZ_FONTS.stack(s.look.font));
