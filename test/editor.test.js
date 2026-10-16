@@ -21,6 +21,7 @@ const ENHANCE = {
 const OVERRIDE = {
   enabled: 'header', footer: 'blackboard/declutter', preset: 'look/palette', presets: 'look/palette',
   'widgets.land': 'blackboard/dashboard',
+  ...Object.fromEntries(['glass', 'depth', ...Object.keys(D.GZ_SPEC.look).filter((k) => /^(surface|shadow)/.test(k))].map((k) => [`look.${k}`, 'look/surfaces'])),
   ...Object.fromEntries(Object.entries(ENHANCE).flatMap(([section, keys]) => keys.map((key) => [`enhance.${key}`, section]))),
   ...Object.fromEntries(Object.keys(N.SPEC).map((key) => [`nav.${key}`, 'blackboard/nav'])),
   ...Object.fromEntries(['icsDue', 'icsTasks', 'icsPlan', 'icsGs', 'icsClasses', 'icsRange'].map((key) => [`todo.${key}`, 'study/schedule'])),

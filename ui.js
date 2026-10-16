@@ -35,6 +35,8 @@ const GZ_UI = (() => {
   const paint = (s) => {
     const colors = GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
     for (const [v] of GZ_COLORS) document.documentElement.style.setProperty(v, colors[v]);
+    document.documentElement.style.setProperty('--gz-radius', `${s.look.radius}px`);
+    for (const [key, value] of Object.entries(GZ_SURFACE_VARS(s))) document.documentElement.style.setProperty(key, value);
     document.documentElement.style.colorScheme = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < 0.5 ? 'dark' : 'light';
   };
 

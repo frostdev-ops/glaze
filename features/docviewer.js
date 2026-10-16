@@ -31,16 +31,16 @@
   // ---- the palette ------------------------------------------------------------------------------------------------
   const BAR = '.ViewerControls:not(:has(button:not(.ViewerControls--page-controls button, .DocumentControls button)))';
   const CSS = `html[data-gz-docs] { color-scheme: var(--gz-scheme); scrollbar-color: var(--gz-line-strong) transparent; }
-html[data-gz-docs] :is(body, #App, .Pages) { background: var(--gz-surface-2) !important; color: var(--gz-ink) !important; }
-html[data-gz-docs] ${BAR} { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border-color: var(--gz-line) !important; box-shadow: 0 1px 0 var(--gz-line) !important; }
+html[data-gz-docs] :is(body, #App, .Pages) { background:var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; color: var(--gz-ink) !important; }
+html[data-gz-docs] ${BAR} { background:var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border-color: var(--gz-line) !important; box-shadow: 0 1px 0 var(--gz-line) !important; }
 html[data-gz-docs] ${BAR} :is(button, input, span, div) { color: inherit !important; }
 html[data-gz-docs] ${BAR} svg { fill: currentColor; }
-html[data-gz-docs] ${BAR} input { background: var(--gz-surface-2) !important; border: 1px solid var(--gz-line-strong) !important; border-radius: 6px; }
+html[data-gz-docs] ${BAR} input { background:var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; border: 1px solid var(--gz-line-strong) !important; border-radius: calc(var(--gz-radius, 12px) * 1 / 2); }
 html[data-gz-docs] ${BAR} button:is(:hover, :focus-visible):not(:disabled) .AnnotationControlButton-outer { background: var(--gz-accent-soft) !important; }
 html[data-gz-docs] ${BAR} :is(button, input):focus-visible { outline: 2px solid var(--gz-accent) !important; outline-offset: 1px; }
 html[data-gz-docs] ${BAR} button:disabled { opacity: 0.45; }
 html[data-gz-docs] .Page { box-shadow: 0 0 0 1px var(--gz-line-strong), 0 2px 10px rgb(0 0 0 / 0.3) !important; }
-html[data-gz-docs] [class*="Thumbnail"]:not(canvas, img) { background-color: var(--gz-surface) !important; border-color: var(--gz-line) !important; color: var(--gz-ink) !important; }
+html[data-gz-docs] [class*="Thumbnail"]:not(canvas, img) { background-color: var(--gz-surface-fill, var(--gz-surface)) !important; border-color: var(--gz-line) !important; color: var(--gz-ink) !important; }
 html[data-gz-pages="dim"] .Page-canvas-container { filter: brightness(0.8) contrast(1.05); }
 html[data-gz-pages="dark"] .Page-canvas-container { filter: invert(0.9) hue-rotate(180deg); }
 .gz-ink { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; overflow: visible; }
@@ -48,14 +48,18 @@ html[data-gz-tool] .gz-ink { pointer-events: auto; cursor: crosshair; touch-acti
 html[data-gz-tool="eraser"] .gz-ink { cursor: cell; }
 html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoom; }`;
   let got = null; // the Canvas page's last answer
+  let surfaceSheet;
   let style = null;
   const paint = () => {
     html.toggleAttribute('data-gz-docs', got.on && got.theme);
     if (got.on && got.dark && got.pages !== 'plain') html.setAttribute('data-gz-pages', got.pages);
     else html.removeAttribute('data-gz-pages');
-    if (!got.on) { style?.remove(); style = null; return; }
+    if (!got.on) { style?.remove(); surfaceSheet?.remove(); style = null; return; }
     style ||= document.createElement('style');
-    const css = `:root { ${got.colors.map(([k, v]) => `${k}: ${v}; `).join('')}--gz-scheme: ${got.dark ? 'dark' : 'light'}; }\n${CSS}`;
+    surfaceSheet ||= Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('features/surfaces.css') });
+    if (!surfaceSheet.isConnected) (document.head || html).append(surfaceSheet);
+    const vars = GZ_SURFACES.vars({ look: got.look, bg: { kind: 'solid' } });
+    const css = `:root { ${got.colors.map(([k, v]) => `${k}: ${v}; `).join('')}${Object.entries(vars).filter(([, value]) => value).map(([k, v]) => `${k}: ${v};`).join('')}--gz-radius: ${got.look.radius}px; --gz-radius-sm: ${got.look.radius * 2 / 3}px; --gz-scheme: ${got.dark ? 'dark' : 'light'}; }\n${CSS}`;
     if (style.textContent !== css) style.textContent = css;
     if (!style.isConnected) (document.head || html).append(style);
   };
@@ -70,6 +74,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
     got = {
       on: r.on === true, dark: r.dark === true, theme: r.theme === true, ink: r.ink === true, pages: ['dim', 'dark'].includes(r.pages) ? r.pages : 'plain',
       colors: Object.entries(r.colors || {}).filter(([k, v]) => /^--gz-[a-z\d-]{1,24}$/.test(k) && /^#[0-9a-f]{6}$/i.test(v)).slice(0, 40),
+      look: GZ_SURFACES.clean(r.look),
     };
     paint();
     const k = got.on && got.ink ? I.storeKey(canvas, String(r.user || ''), String(r.file || '')) : null;
@@ -239,9 +244,9 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   };
   const SWATCHES = [['Black', '#111827'], ['Red', '#e11d48'], ['Blue', '#2563eb'], ['Green', '#16a34a'], ['Yellow', '#fde047']];
   const BAR_CSS = `:host { all: initial; position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 2147483000; max-width: calc(100vw - 16px); }
-.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px; padding: 4px; border-radius: 12px; font: 13px/1.2 system-ui, sans-serif;
-  background: var(--gz-surface, #fff); color: var(--gz-ink, #111); border: 1px solid var(--gz-line-strong, #c8cdd4); box-shadow: 0 6px 24px rgb(0 0 0 / 0.25); }
-button { all: unset; box-sizing: border-box; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; cursor: pointer; color: inherit; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px; padding: 4px; border-radius: calc(var(--gz-radius, 12px) * 1 / 1); font: 13px/1.2 system-ui, sans-serif;
+  background:var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, #fff)); color: var(--gz-ink, #111); border: 1px solid var(--gz-line-strong, #c8cdd4); box-shadow: 0 6px 24px rgb(0 0 0 / 0.25); }
+button { all: unset; box-sizing: border-box; width: 32px; height: 32px; display: grid; place-items: center; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); cursor: pointer; color: inherit; }
 button:hover:not(:disabled) { background: var(--gz-accent-soft, #dbeafe); }
 button[aria-pressed="true"] { background: var(--gz-accent-soft, #dbeafe); color: var(--gz-accent, #2563eb); box-shadow: inset 0 0 0 1.5px currentColor; }
 button:disabled { opacity: 0.4; cursor: default; }

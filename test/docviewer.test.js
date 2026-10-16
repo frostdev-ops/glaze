@@ -14,7 +14,7 @@ const entry = m.content_scripts.find((c) => c.js.includes('features/docviewer.js
 
 test('canvadocs gets its own small script in every frame, and not the first content script', () => {
   assert.deepEqual(entry.matches, DOCS);
-  assert.deepEqual(entry.js, ['lib/ink.js', 'features/docviewer.js']);
+  assert.deepEqual(entry.js, ['lib/ink.js', 'lib/surfaces.js', 'features/docviewer.js']);
   assert.equal(entry.all_frames, true, 'the viewer is always framed');
   assert.equal(entry.run_at, 'document_start');
   const glaze = m.content_scripts.filter((x) => x.js.includes('content.js'));
@@ -23,7 +23,7 @@ test('canvadocs gets its own small script in every frame, and not the first cont
 });
 
 // A ratchet, as the first script's: lib/ink.js and features/docviewer.js as W9 left them (with the review's fixes), plus about 2%.
-const DOCVIEWER_BASELINE = 30857;
+const DOCVIEWER_BASELINE = 34317; // Shared surface model and local viewer controls, including message validation.
 test('the DocViewer script stays within its budget', () => {
   const total = entry.js.reduce((n, f) => n + fs.statSync(path.join(root, f)).size, 0);
   assert.ok(total <= Math.round(DOCVIEWER_BASELINE * 1.02), `${total} bytes in ${entry.js.join(', ')}: over ${DOCVIEWER_BASELINE} + 2%`);

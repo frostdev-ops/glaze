@@ -60,7 +60,8 @@ const viewer = () => {
     MutationObserver: class { observe() {} disconnect() {} },
     DOMPoint: class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return { x: this.x, y: this.y }; } },
     GZ_INK: require('../lib/ink.js'),
-    chrome: { storage: {
+    GZ_SURFACES: require('../lib/surfaces.js'),
+    chrome: { runtime: { getURL: (path) => `chrome-extension://test/${path}` }, storage: {
       onChanged: { addListener() {} },
       local: {
         get: async (k) => ({ [k]: store[k] }),

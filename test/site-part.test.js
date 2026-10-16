@@ -10,7 +10,7 @@ const vm = require('node:vm');
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const settle = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
-const FIRST = ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'defaults.js'];
+const FIRST = ['lib/color.js', 'lib/i18n.js', 'lib/page.js', 'lib/grades.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js'];
 const HEAD = { ultra: 'base[href*="/ultra/"]', canvas: 'link[rel~="stylesheet"][href*="/dist/brandable_css/"]' };
 
 // An element that takes whatever content.js does to it and answers "nothing here".
@@ -115,7 +115,7 @@ const noUnhandled = async (run) => {
   assert.deepEqual(unhandled, [], 'no unhandled rejection');
 };
 
-const SHEETS = { canvas: ['canvas.css', 'motion.css', 'apps.css'], ultra: ['theme.css', 'motion.css', 'extras.css', 'apps.css'] };
+const SHEETS = { canvas: ['canvas.css', 'motion.css', 'apps.css', 'surfaces.css'], ultra: ['theme.css', 'motion.css', 'extras.css', 'apps.css', 'surfaces.css'] };
 // Canvas's part draws its sidebar's attributes (paintNav); Ultra's has nothing on <html> of its own, so its
 // gradebook helper, asked through GZ_CTX, is what shows it is in.
 const partOn = (p, site) => (site === 'canvas' ? p.html.hasAttribute('data-gz-nav-labels') : typeof p.c.GZ_CTX.bookFor('_1_1') === 'object');

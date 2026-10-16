@@ -69,14 +69,14 @@
   const CSS = `
     :host { all: initial; display: block; margin: 12px 16px; }
     section { --ink: #1f2328; --muted: #57606a; --bg: #f6f8fa; --line: #d0d7de; --accent: #0b6e4f; --on-accent: #fff;
-      color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+      color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: calc(var(--gz-radius, 12px) * 5 / 6); padding: 12px 14px;
       font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 760px; }
     @media (prefers-color-scheme: dark) { section { --ink: #e6edf3; --muted: #9da7b3; --bg: #161b22; --line: #30363d; --accent: #3fb68b; --on-accent: #0d1117; } }
     h2 { margin: 0 0 4px; font-size: 15px; } p { margin: 0 0 8px; color: var(--muted); }
     ul { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
     label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
     label span { min-width: 12em; font-weight: 600; }
-    select, button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+    select, button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: calc(var(--gz-radius, 12px) * 1 / 2); padding: 4px 8px; }
     select { max-width: 100%; background: var(--bg); }
     button { cursor: pointer; } button.main { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

@@ -8,7 +8,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const start = () => (ready ||= Promise.all([ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO)]).catch((e) => { ready = null; throw e; }));
   const send = (m) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'glaze:pet', ...m }, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const mount = (body, api) => {
-    let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0;
+    let alive = true, key = '', tz, busy = false, pending = false, data = null, timer = 0, player = null, generation = 0, pets = [];
     const waiting = [];
     const tile = body.closest('.gz-w');
     if (tile) tile.hidden = true;
@@ -17,6 +17,8 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     const art = (path, cls) => make('img', { src: chrome.runtime.getURL(`assets/art/stickers/${path}.webp`), alt: '', className: cls, width: 72, height: 72, decoding: 'async' });
     const paint = () => {
       if (!alive || !data) return;
+      player?.stop(); player = null;
+      const turn = ++generation;
       const P = GZ_PET, d = data;
       const active = pet.contains(document.activeElement) && document.activeElement.dataset.control;
       const wasOpen = [...pet.querySelectorAll('details')].map((e) => e.open);
@@ -25,7 +27,20 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       for (let i = 0; i < 9; i++) {
         const cell = make('div', { className: 'gz-game-cell' });
         for (const [id, at] of Object.entries(d.decor)) if (at === i) cell.append(art(P.DECOR[id].art, 'gz-game-decor'));
-        if (i === 4) cell.append(art(`critters/${P.WEAR[d.wear].art}`, 'gz-game-buddy'));
+        if (i === 4) {
+          const old = art(`critters/${P.WEAR[d.wear].art}`, 'gz-game-buddy'); cell.append(old);
+          if (d.sprite) Promise.all([ctx.need('lib/petsprites.js', () => globalThis.GZ_PET_SPRITES), ctx.need('lib/petplayer.js', () => globalThis.GZ_PET_PLAYER)])
+            .then(() => send({ type: 'glaze:petSprites', key, op: 'get', id: d.sprite })).then((r) => {
+              if (!alive || turn !== generation || !r?.pet) return;
+              const canvas = make('canvas', { className: 'gz-game-buddy', tabIndex: 0 });
+              canvas.setAttribute('role', 'button'); canvas.setAttribute('aria-label', t('Play with {name}', { name: r.pet.name }));
+              old.replaceWith(canvas); player = GZ_PET_PLAYER.mount(canvas, r.pet);
+              canvas.addEventListener('click', (e) => { if (e.isTrusted) player?.set('waving'); });
+              canvas.addEventListener('keydown', (e) => { if (e.isTrusted && ['Enter', ' '].includes(e.key)) { e.preventDefault(); e.stopPropagation(); player?.set('jumping'); } });
+              canvas.addEventListener('pointermove', (e) => { if (!e.isTrusted || r.pet.spriteVersionNumber !== 2) return; const rect = canvas.getBoundingClientRect(); player?.set('look', GZ_PET_SPRITES.direction(e.clientX - rect.left - rect.width / 2, e.clientY - rect.top - rect.height / 2)); });
+              canvas.addEventListener('pointerleave', () => player?.set('idle'));
+            }).catch(() => {});
+        }
         stage.append(cell);
       }
       const progress = make('progress', { max: d.next ? d.next - d.floor : 1, value: d.next ? d.xp - d.floor : 1 });
@@ -35,6 +50,10 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       wear.dataset.control = 'wear';
       for (const [id, item] of Object.entries(P.WEAR)) wear.append(make('option', { value: id, selected: d.wear === id, disabled: d.level < item.level, textContent: `${t(NAMES[id])} · ${t('Level {level}', { level: item.level })}` }));
       wear.addEventListener('change', () => update({ op: 'wear', wear: wear.value }));
+      const sprite = make('select'); sprite.dataset.control = 'sprite'; sprite.setAttribute('aria-label', t('Pet character'));
+      sprite.append(make('option', { value: '', textContent: t('Classic buddy'), selected: !d.sprite }));
+      for (const item of pets) sprite.append(make('option', { value: item.id, textContent: item.name, selected: d.sprite === item.id }));
+      sprite.addEventListener('change', (e) => { if (e.isTrusted) update({ op: 'sprite', sprite: sprite.value }); });
       const decor = make('details', {}, make('summary', { textContent: t('Decorate habitat') }));
       for (const [id, item] of Object.entries(P.DECOR)) {
         const select = make('select', { disabled: d.level < item.level });
@@ -53,7 +72,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       pet.replaceChildren(make('p', { className: 'gz-game-level', textContent: t('Level {level} · {xp} XP', { level: d.level, xp: d.xp }) }), stage, progress,
         make('p', { textContent: d.next ? t('{xp} XP to the next level', { xp: d.next - d.xp }) : t('All rewards unlocked') }),
         make('p', { className: 'gz-game-breakdown', textContent: t('Work {work} · Plans {plans} · Streak {streak}', { work: d.work, plans: d.plans, streak: d.streakXp }) }),
-        make('label', {}, make('span', { textContent: t('Buddy’s look') }), wear), decor, rules);
+        make('label', {}, make('span', { textContent: t('Pet character') }), sprite), make('label', {}, make('span', { textContent: t('Buddy’s look') }), wear), decor, rules);
       if (active) [...pet.querySelectorAll('[data-control]')].find((e) => e.dataset.control === active)?.focus({ preventScroll: true });
     };
     const update = async (patch = { op: 'read' }) => {
@@ -76,11 +95,13 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       if (!alive || !key) return;
       if (area === 'sync' && (ch.todo || ch.enhance)) { update(); return; }
       if (area !== 'local') return;
+      if (ch.petSprites) { library(); return; }
       const suffix = key.slice(4);
       if (ch[`todo:${suffix}`] || ch[`insights:${suffix}`] || ch[`remind:${suffix}`] || ch.todoCache) update();
       if (ch[key]?.newValue) { data = GZ_PET.view(ch[key].newValue); paint(); }
     };
-    const show = () => { clearTimeout(timer); if (document.visibilityState === 'visible') update(); };
+    const show = () => { clearTimeout(timer); if (document.visibilityState === 'visible') update(); else player?.sleep(); };
+    const library = () => send({ type: 'glaze:petSprites', key, op: 'list' }).then((r) => { if (alive && r?.ok && Array.isArray(r.pets)) { pets = r.pets; paint(); } });
     document.addEventListener('visibilitychange', show);
     body.append(pet, status);
     start().then(() => { const who = api?.who || globalThis.GZ_WIDGETS_UI?.who; return who ? who().then((p) => ({ id: p.uid, time_zone: p.tz })) : ctx.profile(); }).then((p) => {
@@ -89,9 +110,9 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       if (tile) tile.hidden = false;
       key = GZ_PET.storeKey(location.origin, p.id); tz = GZ_TODO.zone(p.time_zone);
       chrome.storage.onChanged.addListener(changed);
-      update();
+      update(); library();
     }).catch(() => { if (alive) status.textContent = t('Your buddy is available when your account is known.'); });
-    return { wake: () => update(), update: () => update(), stop: () => { alive = false; clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); } };
+    return { wake: () => { player?.wake(); update(); }, update: () => update(), stop: () => { alive = false; generation++; player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); } };
   };
   let box;
   const open = async () => {

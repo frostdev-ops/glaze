@@ -23,17 +23,17 @@
 /* Colors and look values are not defaulted here: content.js writes every --gz-* value on <html> first. */
 :root {
   --gz-radius-sm: calc(var(--gz-radius) * 2 / 3);
-  --gz-shadow-ink: color-mix(in srgb, color-mix(in srgb, var(--gz-surface-2), #000 55%) 35%, transparent);
+  --gz-shadow-ink: color-mix(in srgb, var(--gz-shadow-color, color-mix(in srgb, var(--gz-surface-2), #000 55%)) var(--gz-shadow-strength, 35%), transparent);
   --gz-shadow: 0 8px 24px var(--gz-shadow-ink);
   --gz-ground: var(--gz-surface-2);
-  --gz-panel: var(--gz-surface);
+  --gz-panel: var(--gz-surface-fill, var(--gz-surface));
   --gz-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   /* A band on a panel (a table head, a recessed area): a hint of ink, lighter on a dark palette, darker on a light one. */
-  --gz-band: color-mix(in srgb, var(--gz-ink) 6%, var(--gz-surface));
-  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface));
+  --gz-band: color-mix(in srgb, var(--gz-ink) 6%, var(--gz-surface-paint, var(--gz-surface)));
+  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface-paint, var(--gz-surface)));
   --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
-  --gz-tip-bg: color-mix(in srgb, var(--gz-surface) 78%, var(--gz-line-strong));
-  --gz-glass-bar: color-mix(in srgb, var(--gz-surface-2) var(--gz-glass-mix, 100%), transparent);
+  --gz-tip-bg: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) 78%, var(--gz-line-strong));
+  --gz-glass-bar: color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent);
 }
 html { --gz-on-soft: var(--gz-accent); --gz-rest-shadow: none; --gz-space: 1; }
 html:not([data-gz-dark-theme]) { --gz-on-soft: var(--gz-accent-hi); }
@@ -83,7 +83,7 @@ html { font-size: calc(100% * var(--gz-scale, 1)) !important; }
   --bs-code-color: var(--gz-accent);
   --bs-highlight-color: var(--gz-ink);
   --bs-highlight-bg: var(--gz-accent-soft);
-  --bs-border-color: var(--gz-line);
+  --bs-border-color: var(--gz-border-line, var(--gz-line));
   --bs-border-color-translucent: var(--gz-line-strong);
   --bs-focus-ring-color: color-mix(in srgb, var(--gz-accent) 60%, transparent);
   --bs-form-valid-color: var(--gz-ok);
@@ -217,11 +217,11 @@ html :is(h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6) { font-family: va
    (as canvas.css; the picture is --gz-bg-grad, an image or the aurora, and a scene draws over it) ---- */
 html[data-gz-bg]:not([data-gz-bg="solid"]) {
   --gz-ground: transparent;
-  --gz-panel: color-mix(in srgb, var(--gz-surface) 88%, transparent);
+  --gz-panel: color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 88%), transparent);
   --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) var(--gz-bg-dim, 60%), transparent);
   --gz-bg-art: var(--gz-bg-grad), var(--gz-surface-2);
   --gz-bg-grain: linear-gradient(transparent, transparent);
-  background: var(--gz-surface-2) !important;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
 }
 html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
   --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -234,12 +234,12 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before {
 }
 html[data-gz-bg="aurora"]::before {
   inset: -18%;
-  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
+  background: var(--gz-surface-grain, none), linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
     radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-bg-1) 46%, transparent), transparent 70%),
     radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-bg-2) 36%, transparent), transparent 70%),
     radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
     radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
-    var(--gz-surface-2);
+    var(--gz-surface-paint-2, var(--gz-surface-2));
   animation: gz-aurora 42s ease-in-out infinite alternate; animation-play-state: var(--gz-ambient); will-change: transform;
 }
 @keyframes gz-aurora {
@@ -263,8 +263,8 @@ html, body, #page-wrapper, #page, #page.drawers, #page-content, #region-main-box
 #page.drawers::-webkit-scrollbar-track { background: transparent; }
 #page.drawers::-webkit-scrollbar-thumb { background-color: var(--gz-line-strong); border-color: transparent; }
 ::selection { background: var(--gz-accent-soft); color: var(--gz-ink); }
-:is(code, pre, kbd) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); border-color: var(--gz-line); }
-html :is(hr) { border-color: var(--gz-line); opacity: 1; }
+:is(code, pre, kbd) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); border-color: var(--gz-border-line, var(--gz-line)); }
+html :is(hr) { border-color: var(--gz-border-line, var(--gz-line)); opacity: 1; }
 /* Bootstrap's rgb() utilities, which the variables above can't reach. Its dark ones stay dark: they are meant to stand out. */
 html :is(.bg-white, .bg-body, .bg-light, .bg-body-tertiary, .bg-body-secondary) { background-color: var(--gz-panel) !important; }
 html .bg-secondary { background-color: var(--gz-band) !important; }
@@ -288,14 +288,14 @@ html .text-success { color: var(--gz-ok) !important; }
 html .text-warning { color: var(--gz-warn) !important; }
 html .text-danger { color: var(--gz-err) !important; }
 html .text-info { color: var(--gz-accent) !important; }
-html :is(.border, .border-top, .border-bottom, .border-start, .border-end, .border-left, .border-right) { border-color: var(--gz-line) !important; }
+html :is(.border, .border-top, .border-bottom, .border-start, .border-end, .border-left, .border-right) { border-color: var(--gz-border-line, var(--gz-line)) !important; }
 html .border-primary { border-color: var(--gz-accent) !important; }
 
 /* ---- the top bar: glass over the ground; the page scrolls under it ---- */
 html .navbar.fixed-top {
   background: var(--gz-glass-bar) !important;
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
-  border-bottom: 1px solid var(--gz-line) !important;
+  border-bottom: 1px solid var(--gz-border-line, var(--gz-line)) !important;
   --bs-navbar-color: var(--gz-ink-muted); --bs-navbar-hover-color: var(--gz-ink); --bs-navbar-active-color: var(--gz-ink);
   --bs-navbar-brand-color: var(--gz-ink); --bs-navbar-brand-hover-color: var(--gz-accent);
 }
@@ -316,13 +316,13 @@ html .drawer {
   background: var(--gz-glass-bar) !important; color: var(--gz-ink);
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
 }
-html .drawer.drawer-left { border-right: 1px solid var(--gz-line); }
-html .drawer.drawer-right { border-left: 1px solid var(--gz-line); }
+html .drawer.drawer-left { border-right: 1px solid var(--gz-border-line, var(--gz-line)); }
+html .drawer.drawer-right { border-left: 1px solid var(--gz-border-line, var(--gz-line)); }
 html .drawer .drawercontent { scrollbar-color: var(--gz-line-strong) transparent; }
 html .drawer .drawercontent::-webkit-scrollbar-track { background: transparent; }
 html .drawer .drawercontent::-webkit-scrollbar-thumb { background-color: var(--gz-line-strong); border-color: transparent; }
 html .drawer .drawerheader .draweractions .btn, html .drawer-toggles .drawer-toggler .btn {
-  background: var(--gz-surface); color: var(--gz-ink-muted); border: 1px solid var(--gz-line-strong); box-shadow: var(--gz-rest-shadow);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink-muted); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-rest-shadow);
 }
 html .drawer-toggles .drawer-toggler .btn:hover, html .drawer .drawerheader .draweractions .btn:hover { background: var(--gz-hover-fill); color: var(--gz-ink); }
 /* Course index: rows on the glass, the page you're on marked like the main menu's current section. */
@@ -344,15 +344,15 @@ html .breadcrumb-item, html .breadcrumb-item a { color: var(--gz-ink-muted); }
 html .breadcrumb-item a:hover { color: var(--gz-accent); }
 html .breadcrumb-item.active, html .breadcrumb-item [aria-current="page"] { color: var(--gz-ink); }
 html .secondary-navigation .navigation {
-  background: var(--gz-glass-bar) !important; border-bottom: 1px solid var(--gz-line);
+  background: var(--gz-glass-bar) !important; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
 }
 html :is(.nav-tabs:not(.more-nav), .nav-pills) { background-color: transparent; }
 html .moremenu .nav-link { color: var(--gz-ink-muted); border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0; }
 html .moremenu .nav-link:is(:hover, :focus) { background-color: var(--gz-row-hover); color: var(--gz-ink); }
 html .moremenu .nav-link.active { background-color: transparent; color: var(--gz-ink); border-bottom-color: var(--gz-accent); }
-html .nav-tabs .nav-link.active { background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-line) var(--gz-line) var(--gz-panel); }
-html .nav-tabs { border-color: var(--gz-line); --bs-nav-tabs-link-active-color: var(--gz-ink); --bs-nav-tabs-link-active-bg: var(--gz-panel); --bs-nav-tabs-link-active-border-color: var(--gz-line) var(--gz-line) var(--gz-panel); --bs-nav-tabs-link-hover-border-color: transparent; }
+html .nav-tabs .nav-link.active { background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)) var(--gz-border-line, var(--gz-line)) var(--gz-panel); }
+html .nav-tabs { border-color: var(--gz-border-line, var(--gz-line)); --bs-nav-tabs-link-active-color: var(--gz-ink); --bs-nav-tabs-link-active-bg: var(--gz-panel); --bs-nav-tabs-link-active-border-color: var(--gz-border-line, var(--gz-line)) var(--gz-border-line, var(--gz-line)) var(--gz-panel); --bs-nav-tabs-link-hover-border-color: transparent; }
 html .nav-pills { --bs-nav-pills-link-active-color: var(--gz-on-soft); --bs-nav-pills-link-active-bg: var(--gz-accent-soft); }
 /* Moodle 5's menus are pills drawn from the tokens above; the open page's pill reads in the accent, as Glaze marks it. */
 html :is(.mds-nav-pill--selected, .secondary-navigation .mds-nav-pill.active) { color: var(--gz-on-soft); }
@@ -363,21 +363,21 @@ html .nav-link:is(:hover, :focus) { color: var(--gz-accent-hi); }
 /* ---- cards and blocks ---- */
 /* The properties as well as Bootstrap 5's variables: Bootstrap 4 (Moodle 4.x) writes these surfaces as literals. */
 html .card {
-  --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-line); --bs-card-cap-bg: var(--gz-band); --bs-card-color: var(--gz-ink);
-  background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-line); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+  --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-border-line, var(--gz-line)); --bs-card-cap-bg: var(--gz-band); --bs-card-color: var(--gz-ink);
+  background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
 }
 html .card .card-title { color: var(--gz-ink); }
-html .card-footer, html .card-header { background-color: transparent; border-color: var(--gz-line); }
+html .card-footer, html .card-header { background-color: transparent; border-color: var(--gz-border-line, var(--gz-line)); }
 html .block .block-cards span.categoryname, html .block .block-cards .btn-link { color: var(--gz-ink-muted); }
 /* The course cards (Dashboard and My courses, all three views). */
 html [data-region="course-content"].card {
   overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter);
 }
-html [data-region="course-content"].card:hover { transform: var(--gz-lift); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-line-strong); }
+html [data-region="course-content"].card:hover { transform: var(--gz-lift); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html [data-region="course-content"] .card-footer.menu { background: transparent !important; }
 html [data-region="course-content"] .coursename { color: var(--gz-ink); }
 html [data-region="course-content"] .coursename:hover { color: var(--gz-on-soft); }
-html :is(.course-listitem, .course-summaryitem) { background: var(--gz-panel); border-color: var(--gz-line) !important; transition: background var(--gz-t) var(--gz-ease); }
+html :is(.course-listitem, .course-summaryitem) { background: var(--gz-surface-grain, none), var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)) !important; transition: background var(--gz-t) var(--gz-ease); }
 html :is(.course-listitem, .course-summaryitem):hover { background: var(--gz-hover-fill); }
 html [data-region="card-deck"] > :nth-child(2) > [data-region="course-content"] { animation-delay: calc(var(--gz-stagger) * 1); }
 html [data-region="card-deck"] > :nth-child(3) > [data-region="course-content"] { animation-delay: calc(var(--gz-stagger) * 2); }
@@ -393,38 +393,38 @@ html[data-gz-motion="expressive"] [data-region="course-content"].card:hover {
 }
 
 /* ---- the course page: sections are cards, activities rows on them ---- */
-html .course-section .section-item { background: var(--gz-panel); border-color: var(--gz-line); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow); animation: var(--gz-enter); }
-html .course-section .section-item .course-content-item-content .section-content-inner { background: transparent; border-color: var(--gz-line); }
+html .course-section .section-item { background: var(--gz-surface-grain, none), var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow); animation: var(--gz-enter); }
+html .course-section .section-item .course-content-item-content .section-content-inner { background: transparent; border-color: var(--gz-border-line, var(--gz-line)); }
 html .course-section .sectionname a, html .course-section .sectionname { color: var(--gz-ink); }
 html .course-section .summarytext { color: var(--gz-ink-muted); }
 html .course-section .availabilityinfo { background: var(--gz-band); color: var(--gz-ink-muted); }
-html .activity-item { background: transparent; border-color: var(--gz-line); border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease); }
-html .activity-item:hover:not(:has(.delegated-section)) { background: var(--gz-row-hover); border-color: var(--gz-line-strong); }
+html .activity-item { background: transparent; border-color: var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease); }
+html .activity-item:hover:not(:has(.delegated-section)) { background: var(--gz-row-hover); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .activity-item .activityname :is(a, .aalink), html .activity-item .activity-name-area .activityname :is(.aalink, a.autolink) { color: var(--gz-ink); }
 html .activity-item .activityname a:hover { color: var(--gz-on-soft); }
 html .activity-item .activity-altcontent, html .activity-item .activity-dates, html .activity-information { color: var(--gz-ink-muted); }
-html .activity-item .activitybadge.badge-none { background: transparent; border-color: var(--gz-line); color: var(--gz-ink-muted); }
+html .activity-item .activitybadge.badge-none { background: transparent; border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink-muted); }
 /* Moodle 4.x's sections: a list with rules between them. */
-html .course-content :is(li.section, .section.main) { border-color: var(--gz-line); }
-html .course-content .divider hr, html .course-content .divider .divider-content { border-color: var(--gz-line); }
+html .course-content :is(li.section, .section.main) { border-color: var(--gz-border-line, var(--gz-line)); }
+html .course-content .divider hr, html .course-content .divider .divider-content { border-color: var(--gz-border-line, var(--gz-line)); }
 
 /* ---- an activity's own page: its header and description ---- */
-html .activity-header { color: var(--gz-ink-muted); border-color: var(--gz-line); }
+html .activity-header { color: var(--gz-ink-muted); border-color: var(--gz-border-line, var(--gz-line)); }
 html .path-mod .activity-details:not(:empty), html .activity-header .activity-information { background: transparent; }
 html .activity-description, html #intro { color: var(--gz-ink); }
-html .automatic-completion-conditions .badge, html .completion-info .badge { background: var(--gz-band) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line); }
+html .automatic-completion-conditions .badge, html .completion-info .badge { background: var(--gz-band) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-border-line, var(--gz-line)); }
 html .automatic-completion-conditions .badge.alert-success, html .badge.bg-success, html .completion-info .badge.alert-success { color: var(--gz-ok) !important; border-color: color-mix(in srgb, var(--gz-ok) 50%, transparent); background: color-mix(in srgb, var(--gz-ok) 14%, transparent) !important; }
-html .generalbox, html .box.py-3, html .box.generalbox { background: transparent; color: inherit; border-color: var(--gz-line); }
+html .generalbox, html .box.py-3, html .box.generalbox { background: transparent; color: inherit; border-color: var(--gz-border-line, var(--gz-line)); }
 /* Assignment status: Moodle prints its states on literal greens, yellows and pinks with black text. */
 html .path-mod-assign :is(td, div, a:link):is(.submissionstatus, .submissionstatusdraft, .submissionstatussubmitted, .submissionlocked, .submissionreopened, .submissiongraded, .submissionnotgraded, .latesubmission, .earlysubmission, .gradingreminder) {
   color: var(--gz-ink); background-color: var(--gz-panel);
 }
-html .path-mod-assign :is(.submissionstatussubmitted, .submissiongraded, .earlysubmission) { background-color: color-mix(in srgb, var(--gz-ok) 16%, var(--gz-surface)) !important; }
-html .path-mod-assign :is(.submissionstatusdraft, .submissionlocked) { background-color: color-mix(in srgb, var(--gz-warn) 16%, var(--gz-surface)) !important; }
-html .path-mod-assign :is(.latesubmission, .gradingreminder) { background-color: color-mix(in srgb, var(--gz-err) 16%, var(--gz-surface)) !important; }
+html .path-mod-assign :is(.submissionstatussubmitted, .submissiongraded, .earlysubmission) { background-color: color-mix(in srgb, var(--gz-ok) 16%, var(--gz-surface-paint, var(--gz-surface))) !important; }
+html .path-mod-assign :is(.submissionstatusdraft, .submissionlocked) { background-color: color-mix(in srgb, var(--gz-warn) 16%, var(--gz-surface-paint, var(--gz-surface))) !important; }
+html .path-mod-assign :is(.latesubmission, .gradingreminder) { background-color: color-mix(in srgb, var(--gz-err) 16%, var(--gz-surface-paint, var(--gz-surface))) !important; }
 html .path-mod-assign :is(.submittedlate, td.submissioneditable, .overdue) { color: var(--gz-err); }
 /* Quiz: the summary of attempts, its navigation buttons and its feedback boxes (literal tints in Boost). */
-html .path-mod-quiz #mod_quiz_navblock .qnbutton { background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-line-strong); }
+html .path-mod-quiz #mod_quiz_navblock .qnbutton { background-color: var(--gz-panel); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .path-mod-quiz #mod_quiz_navblock .qnbutton .trafficlight { background-color: var(--gz-panel); }
 html .path-mod-quiz #mod_quiz_navblock .qnbutton.thispage { border-color: var(--gz-accent); }
 /* An answered question's button is tinted by its result (literal pale greens, pinks and yellows in Boost). */
@@ -433,45 +433,45 @@ html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.incorrect, .not
 html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton.partiallycorrect { --gz-state: var(--gz-warn); }
 html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.correct, .incorrect, .notanswered, .partiallycorrect) :is(.trafficlight),
 html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.correct, .incorrect, .notanswered, .partiallycorrect) {
-  background-color: color-mix(in srgb, var(--gz-state) 22%, var(--gz-surface)); color: var(--gz-ink);
+  background-color: color-mix(in srgb, var(--gz-state) 22%, var(--gz-surface-paint, var(--gz-surface))); color: var(--gz-ink);
 }
 html .path-mod-quiz :is(#mod_quiz_navblock, #page) .qnbutton:is(.correct, .incorrect, .notanswered, .partiallycorrect) .thispageholder { border-color: var(--gz-state); }
-html .que :is(.info) { background-color: var(--gz-band); border-color: var(--gz-line); color: var(--gz-ink); }
-html .que .formulation { background-color: color-mix(in srgb, var(--gz-accent) 10%, var(--gz-surface)); border-color: color-mix(in srgb, var(--gz-accent) 35%, var(--gz-surface)); color: var(--gz-ink); }
-html .que :is(.outcome, .comment) { background-color: color-mix(in srgb, var(--gz-warn) 12%, var(--gz-surface)); border-color: color-mix(in srgb, var(--gz-warn) 40%, var(--gz-surface)); color: var(--gz-ink); }
+html .que :is(.info) { background-color: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink); }
+html .que .formulation { background-color: color-mix(in srgb, var(--gz-accent) 10%, var(--gz-surface-paint, var(--gz-surface))); border-color: color-mix(in srgb, var(--gz-accent) 35%, var(--gz-surface)); color: var(--gz-ink); }
+html .que :is(.outcome, .comment) { background-color: color-mix(in srgb, var(--gz-warn) 12%, var(--gz-surface-paint, var(--gz-surface))); border-color: color-mix(in srgb, var(--gz-warn) 40%, var(--gz-surface)); color: var(--gz-ink); }
 html .que :is(.formulation, .outcome, .comment) a { color: var(--gz-on-soft); }
 html .que .correct { color: var(--gz-ok); }
 html .que .incorrect { color: var(--gz-err); }
 html .quizinfo, html .quizattemptcounts { color: var(--gz-ink-muted); }
 /* Forum: the discussion list and the posts. */
-html .forumpost, html .forum-post-container .forumpost { background: var(--gz-panel); border-color: var(--gz-line); border-radius: var(--gz-radius); }
+html .forumpost, html .forum-post-container .forumpost { background: var(--gz-surface-grain, none), var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
 html .forumpost .author, html .forumpost .post-info { color: var(--gz-ink-muted); }
-html .discussion-list :is(th, td) { border-color: var(--gz-line); }
+html .discussion-list :is(th, td) { border-color: var(--gz-border-line, var(--gz-line)); }
 html .discussion-list .discussion.pinned { background: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent); }
 
 /* ---- tables: the header row a label, rows on hairlines, hover a tint ---- */
 html .table, html table.generaltable {
-  --bs-table-bg: transparent; --bs-table-color: var(--gz-ink); --bs-table-border-color: var(--gz-line);
+  --bs-table-bg: transparent; --bs-table-color: var(--gz-ink); --bs-table-border-color: var(--gz-border-line, var(--gz-line));
   --bs-table-striped-bg: color-mix(in srgb, var(--gz-ink) 4%, transparent); --bs-table-striped-color: var(--gz-ink);
   --bs-table-hover-bg: var(--gz-row-hover); --bs-table-hover-color: var(--gz-ink);
   --bs-table-active-bg: var(--gz-accent-soft); --bs-table-active-color: var(--gz-ink);
-  color: var(--gz-ink); border-color: var(--gz-line);
+  color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line));
 }
-html table.generaltable :is(th, td), html .table :is(th, td) { background-color: transparent; border-color: var(--gz-line); }
+html table.generaltable :is(th, td), html .table :is(th, td) { background-color: transparent; border-color: var(--gz-border-line, var(--gz-line)); }
 html :is(table.generaltable, .table) thead th, html :is(table.generaltable, .table) th.header {
-  color: var(--gz-ink-muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; border-bottom: 1px solid var(--gz-line-strong);
+  color: var(--gz-ink-muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; border-bottom: 1px solid var(--gz-border-strong, var(--gz-line-strong));
 }
 html table.generaltable.table-striped tbody tr:nth-of-type(odd) > * { --bs-table-bg-type: color-mix(in srgb, var(--gz-ink) 4%, transparent); }
 html table.generaltable tbody tr:hover > * { --bs-table-bg-state: var(--gz-row-hover); }
 
 /* ---- grades: the overview report and a course's user report ---- */
 html .user-grade { background: transparent; }
-html .user-grade :is(th, td) { background-color: transparent !important; border-color: var(--gz-line) !important; color: var(--gz-ink); }
+html .user-grade :is(th, td) { background-color: transparent !important; border-color: var(--gz-border-line, var(--gz-line)) !important; color: var(--gz-ink); }
 html .user-grade .category, html .user-grade th.category { background: var(--gz-band) !important; }
 html .user-grade :is(.column-itemname, .column-itemname a) { color: var(--gz-ink); }
 html .user-grade .baggt, html .user-grade .baggb { background: var(--gz-band) !important; }
 html .path-grade-report :is(.gradeitemheader, .rowtitle) { color: var(--gz-ink); }
-html .gradeparent :is(.cell, th, td) { background-color: transparent !important; border-color: var(--gz-line) !important; color: var(--gz-ink); }
+html .gradeparent :is(.cell, th, td) { background-color: transparent !important; border-color: var(--gz-border-line, var(--gz-line)) !important; color: var(--gz-ink); }
 html .gradeparent :is(.heading .cell, .cell.category, .avg .cell) { background-color: var(--gz-band) !important; }
 
 /* ---- buttons ---- */
@@ -486,10 +486,10 @@ html .btn-primary {
 }
 html .btn-primary:is(:hover, :focus-visible) { background-color: var(--bs-btn-hover-bg); color: var(--bs-btn-hover-color); }
 html :is(.btn-secondary, .btn-light, .btn-subtle-body, .btn-outline-secondary, .btn-outline-light, .btn-outline-dark, .btn-dark, .btn-default) {
-  --bs-btn-color: var(--gz-ink); --bs-btn-bg: var(--gz-surface); --bs-btn-border-color: var(--gz-line-strong);
-  --bs-btn-hover-color: var(--gz-ink); --bs-btn-hover-bg: var(--gz-hover-fill); --bs-btn-hover-border-color: var(--gz-line-strong);
+  --bs-btn-color: var(--gz-ink); --bs-btn-bg: var(--gz-surface); --bs-btn-border-color: var(--gz-border-strong, var(--gz-line-strong));
+  --bs-btn-hover-color: var(--gz-ink); --bs-btn-hover-bg: var(--gz-hover-fill); --bs-btn-hover-border-color: var(--gz-border-strong, var(--gz-line-strong));
   --bs-btn-active-color: var(--gz-on-soft); --bs-btn-active-bg: var(--gz-accent-soft); --bs-btn-active-border-color: var(--gz-accent);
-  --bs-btn-disabled-color: var(--gz-ink-faint); --bs-btn-disabled-bg: var(--gz-surface); --bs-btn-disabled-border-color: var(--gz-line);
+  --bs-btn-disabled-color: var(--gz-ink-faint); --bs-btn-disabled-bg: var(--gz-surface); --bs-btn-disabled-border-color: var(--gz-border-line, var(--gz-line));
   background-color: var(--bs-btn-bg); color: var(--bs-btn-color); border-color: var(--bs-btn-border-color);
 }
 html :is(.btn-secondary, .btn-light, .btn-subtle-body, .btn-outline-secondary, .btn-outline-light, .btn-outline-dark, .btn-dark, .btn-default):is(:hover, :focus-visible) { background-color: var(--bs-btn-hover-bg); color: var(--bs-btn-hover-color); }
@@ -510,25 +510,25 @@ html .btn-primary:hover { filter: var(--gz-hover-filter); }
 
 /* ---- forms: fields are surfaces with an edge, the accent ring while you type ---- */
 html :is(.form-control, .form-select, .custom-select, select, textarea, input:not([type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="file"], [type="range"], [type="color"], [type="image"], [type="hidden"])):not(#gz-cmd *) {
-  background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong);
+  background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong));
 }
 html :is(.form-control, .form-select, .custom-select, select, textarea, input):not(#gz-cmd *):focus { border-color: var(--gz-accent); box-shadow: 0 0 0 3px var(--gz-accent-soft); outline: 0; }
 html ::placeholder { color: var(--gz-ink-faint) !important; opacity: 1; }
 html :is(.form-control:disabled, .form-control[readonly], .form-select:disabled) { background-color: var(--gz-band); color: var(--gz-ink-muted); }
-html .input-group-text { background-color: var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-line-strong); }
+html .input-group-text { background-color: var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--gz-accent); }
-html .form-check-input { --bs-form-check-bg: var(--gz-surface); border-color: var(--gz-line-strong); }
+html .form-check-input { --bs-form-check-bg: var(--gz-surface); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .form-check-input:checked { background-color: var(--gz-accent); border-color: var(--gz-accent); }
 html .form-switch .form-check-input:not(:checked) { --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23888'/%3e%3c/svg%3e"); }
 /* The select's arrow is a dark data: image; on a dark palette it is turned light. */
 html[data-gz-dark-theme] :is(.form-select, .custom-select) { --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23c8d0da' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e"); }
 html :is(label, legend, .col-form-label) { color: var(--gz-ink); }
-html .mform fieldset { border-color: var(--gz-line); }
+html .mform fieldset { border-color: var(--gz-border-line, var(--gz-line)); }
 html .mform .ftoggler, html .collapsible-actions a { color: var(--gz-ink); }
 html .form-text, html .form-text.text-muted { color: var(--gz-ink-muted) !important; }
-html :is(.form-autocomplete-suggestions, .simplesearchform .collapse.show) { background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); }
+html :is(.form-autocomplete-suggestions, .simplesearchform .collapse.show) { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .form-autocomplete-suggestions li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-on-soft); }
-html .simplesearchform .btn-submit { background-color: var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-line-strong); }
+html .simplesearchform .btn-submit { background-color: var(--gz-band); color: var(--gz-ink-muted); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 
 /* ---- badges, alerts and notices ---- */
 html .badge { --bs-badge-color: var(--gz-accent-ink); }
@@ -537,7 +537,7 @@ html :is(.badge.bg-info, .badge-info, .badge.text-bg-info, .badge.bg-primary, .b
 html :is(.badge.bg-success, .badge-success, .badge.text-bg-success) { background: var(--gz-ok) !important; color: var(--gz-accent-ink) !important; }
 html :is(.badge.bg-warning, .badge-warning, .badge.text-bg-warning) { background: var(--gz-warn) !important; color: var(--gz-accent-ink) !important; }
 html :is(.badge.bg-danger, .badge-danger, .badge.text-bg-danger) { background: var(--gz-err) !important; color: var(--gz-accent-ink) !important; }
-html .alert { --gz-status: var(--gz-accent); background: var(--gz-surface); color: var(--gz-ink); border: 1px solid var(--gz-line); border-left: 4px solid var(--gz-status); border-radius: var(--gz-radius-sm); }
+html .alert { --gz-status: var(--gz-accent); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border: 1px solid var(--gz-border-line, var(--gz-line)); border-left: 4px solid var(--gz-status); border-radius: var(--gz-radius-sm); }
 html .alert-success { --gz-status: var(--gz-ok); }
 html .alert-warning { --gz-status: var(--gz-warn); }
 html .alert-danger, html .alert-error { --gz-status: var(--gz-err); }
@@ -546,55 +546,55 @@ html .alert .btn-close, html .alert .close { color: var(--gz-ink-muted); opacity
 
 /* ---- floating: menus, popovers, tooltips, dialogs, toasts. Opaque surfaces with an edge and a lift ---- */
 html .dropdown-menu {
-  --bs-dropdown-bg: var(--gz-surface); --bs-dropdown-color: var(--gz-ink); --bs-dropdown-border-color: var(--gz-line-strong);
+  --bs-dropdown-bg: var(--gz-surface); --bs-dropdown-color: var(--gz-ink); --bs-dropdown-border-color: var(--gz-border-strong, var(--gz-line-strong));
   --bs-dropdown-link-color: var(--gz-ink); --bs-dropdown-link-hover-color: var(--gz-ink); --bs-dropdown-link-hover-bg: var(--gz-hover-fill);
   --bs-dropdown-link-active-color: var(--gz-on-soft); --bs-dropdown-link-active-bg: var(--gz-accent-soft); --bs-dropdown-divider-bg: var(--gz-line);
   --bs-dropdown-header-color: var(--gz-ink-faint); --bs-dropdown-link-disabled-color: var(--gz-ink-faint);
-  background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); box-shadow: var(--gz-shadow); border-radius: var(--gz-radius-sm);
+  background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); border-radius: var(--gz-radius-sm);
   animation: var(--gz-tip-in);
 }
 html .dropdown-item { color: var(--gz-ink); }
 html .dropdown-item:is(:hover, :focus) { background-color: var(--gz-hover-fill); color: var(--gz-ink); }
 html .dropdown-item:is(.active, :active, [aria-current="true"]) { background-color: var(--gz-accent-soft); color: var(--gz-on-soft); }
 html .moremenu .dropdownmoremenu > .dropdown-menu .dropdown-item, html .dropdownmoremenu > .dropdown-menu .dropdown-submenu > .dropdown-menu .dropdown-item { background-color: transparent; }
-html .popover { --bs-popover-bg: var(--gz-surface); --bs-popover-border-color: var(--gz-line-strong); --bs-popover-header-bg: var(--gz-band); --bs-popover-header-color: var(--gz-ink); --bs-popover-body-color: var(--gz-ink); --bs-popover-arrow-border: var(--gz-line-strong); background-color: var(--gz-surface); border-color: var(--gz-line-strong); box-shadow: var(--gz-shadow); }
+html .popover { --bs-popover-bg: var(--gz-surface); --bs-popover-border-color: var(--gz-border-strong, var(--gz-line-strong)); --bs-popover-header-bg: var(--gz-band); --bs-popover-header-color: var(--gz-ink); --bs-popover-body-color: var(--gz-ink); --bs-popover-arrow-border: var(--gz-border-strong, var(--gz-line-strong)); background-color: var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); }
 html :is(.popover-header, .popover-body) { color: var(--gz-ink); }
-html .popover-header { background-color: var(--gz-band); border-color: var(--gz-line); }
-html .popover-region-container { background: var(--gz-surface); border-color: var(--gz-line-strong); box-shadow: var(--gz-shadow); color: var(--gz-ink); }
-html .popover-region-header-container, html .popover-region-footer-container { background: var(--gz-band); border-color: var(--gz-line); }
-html .popover-region .content-item-container { border-color: var(--gz-line); }
-html .popover-region .content-item-container.unread { background: color-mix(in srgb, var(--gz-accent-soft) 45%, var(--gz-surface)); }
+html .popover-header { background-color: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
+html .popover-region-container { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border-color: var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); color: var(--gz-ink); }
+html .popover-region-header-container, html .popover-region-footer-container { background: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
+html .popover-region .content-item-container { border-color: var(--gz-border-line, var(--gz-line)); }
+html .popover-region .content-item-container.unread { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-soft) 45%, var(--gz-surface-paint, var(--gz-surface))); }
 html .popover-region .content-item-container:hover { background: var(--gz-hover-fill); }
 html .tooltip { --bs-tooltip-bg: var(--gz-tip-bg); --bs-tooltip-color: var(--gz-ink); --bs-tooltip-opacity: 1; }
-html .tooltip .tooltip-inner { border: 1px solid var(--gz-line-strong); box-shadow: var(--gz-shadow); }
-html .modal { --bs-modal-bg: var(--gz-surface); --bs-modal-color: var(--gz-ink); --bs-modal-border-color: var(--gz-line-strong); --bs-modal-header-border-color: var(--gz-line); --bs-modal-footer-border-color: var(--gz-line); }
-html .modal-content { background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-enter-panel); }
-html :is(.modal-header, .modal-footer) { border-color: var(--gz-line); }
-html .modal-backdrop { --bs-backdrop-bg: var(--gz-surface-2); background-color: var(--gz-surface-2); }
+html .tooltip .tooltip-inner { border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-shadow); }
+html .modal { --bs-modal-bg: var(--gz-surface); --bs-modal-color: var(--gz-ink); --bs-modal-border-color: var(--gz-border-strong, var(--gz-line-strong)); --bs-modal-header-border-color: var(--gz-border-line, var(--gz-line)); --bs-modal-footer-border-color: var(--gz-border-line, var(--gz-line)); }
+html .modal-content { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-enter-panel); }
+html :is(.modal-header, .modal-footer) { border-color: var(--gz-border-line, var(--gz-line)); }
+html .modal-backdrop { --bs-backdrop-bg: var(--gz-surface-2); background-color: var(--gz-surface-fill-2, var(--gz-surface-2)); }
 html .modal-backdrop.show { opacity: 0.7; }
-html :is(.toast, .toast-header) { background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); }
-html .toast { --bs-toast-bg: var(--gz-surface); --bs-toast-color: var(--gz-ink); --bs-toast-border-color: var(--gz-line-strong); --bs-toast-header-bg: var(--gz-band); --bs-toast-header-color: var(--gz-ink-muted); box-shadow: var(--gz-shadow); }
-html .list-group-item { background-color: transparent; color: var(--gz-ink); border-color: var(--gz-line); }
+html :is(.toast, .toast-header) { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html .toast { --bs-toast-bg: var(--gz-surface); --bs-toast-color: var(--gz-ink); --bs-toast-border-color: var(--gz-border-strong, var(--gz-line-strong)); --bs-toast-header-bg: var(--gz-band); --bs-toast-header-color: var(--gz-ink-muted); box-shadow: var(--gz-shadow); }
+html .list-group-item { background-color: transparent; color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)); }
 html .list-group-item.active { background-color: var(--gz-accent-soft); color: var(--gz-on-soft); border-color: var(--gz-accent); }
-html .list-group { --bs-list-group-bg: transparent; --bs-list-group-color: var(--gz-ink); --bs-list-group-border-color: var(--gz-line); --bs-list-group-action-color: var(--gz-ink); --bs-list-group-action-hover-color: var(--gz-ink); --bs-list-group-action-hover-bg: var(--gz-row-hover); --bs-list-group-action-active-bg: var(--gz-accent-soft); --bs-list-group-active-bg: var(--gz-accent-soft); --bs-list-group-active-color: var(--gz-on-soft); --bs-list-group-active-border-color: var(--gz-accent); }
-html .pagination { --bs-pagination-bg: var(--gz-surface); --bs-pagination-color: var(--gz-on-soft); --bs-pagination-border-color: var(--gz-line); --bs-pagination-hover-bg: var(--gz-hover-fill); --bs-pagination-hover-color: var(--gz-accent-hi); --bs-pagination-active-bg: var(--gz-accent); --bs-pagination-active-color: var(--gz-accent-ink); --bs-pagination-active-border-color: var(--gz-accent); --bs-pagination-disabled-bg: var(--gz-band); --bs-pagination-disabled-color: var(--gz-ink-faint); }
+html .list-group { --bs-list-group-bg: transparent; --bs-list-group-color: var(--gz-ink); --bs-list-group-border-color: var(--gz-border-line, var(--gz-line)); --bs-list-group-action-color: var(--gz-ink); --bs-list-group-action-hover-color: var(--gz-ink); --bs-list-group-action-hover-bg: var(--gz-row-hover); --bs-list-group-action-active-bg: var(--gz-accent-soft); --bs-list-group-active-bg: var(--gz-accent-soft); --bs-list-group-active-color: var(--gz-on-soft); --bs-list-group-active-border-color: var(--gz-accent); }
+html .pagination { --bs-pagination-bg: var(--gz-surface); --bs-pagination-color: var(--gz-on-soft); --bs-pagination-border-color: var(--gz-border-line, var(--gz-line)); --bs-pagination-hover-bg: var(--gz-hover-fill); --bs-pagination-hover-color: var(--gz-accent-hi); --bs-pagination-active-bg: var(--gz-accent); --bs-pagination-active-color: var(--gz-accent-ink); --bs-pagination-active-border-color: var(--gz-accent); --bs-pagination-disabled-bg: var(--gz-band); --bs-pagination-disabled-color: var(--gz-ink-faint); }
 html .page-link { background-color: var(--bs-pagination-bg); border-color: var(--bs-pagination-border-color); }
 html .page-item.active .page-link { background-color: var(--gz-accent); color: var(--gz-accent-ink); border-color: var(--gz-accent); }
-html .accordion { --bs-accordion-bg: transparent; --bs-accordion-color: var(--gz-ink); --bs-accordion-border-color: var(--gz-line); --bs-accordion-btn-color: var(--gz-ink); --bs-accordion-active-color: var(--gz-ink); --bs-accordion-active-bg: var(--gz-accent-soft); }
-html .hover-tooltip-container .hover-tooltip { background: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); }
+html .accordion { --bs-accordion-bg: transparent; --bs-accordion-color: var(--gz-ink); --bs-accordion-border-color: var(--gz-border-line, var(--gz-line)); --bs-accordion-btn-color: var(--gz-ink); --bs-accordion-active-color: var(--gz-ink); --bs-accordion-active-bg: var(--gz-accent-soft); }
+html .hover-tooltip-container .hover-tooltip { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .hover-tooltip-container .hover-tooltip::after { border-top-color: var(--gz-surface); }
 html :is(.user-initials, .userinitials) { background-color: var(--gz-accent-soft); color: var(--gz-on-soft); }
 /* The help button and its popover at the foot of the page. */
-html .btn-footer-popover { background: var(--gz-surface) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-line-strong); box-shadow: var(--gz-rest-shadow); }
+html .btn-footer-popover { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); box-shadow: var(--gz-rest-shadow); }
 html .btn-footer-popover:hover { background: var(--gz-hover-fill) !important; color: var(--gz-ink) !important; }
-html .footer-popover .footer-section { border-color: var(--gz-line); }
+html .footer-popover .footer-section { border-color: var(--gz-border-line, var(--gz-line)); }
 html .footer-popover a { color: var(--gz-on-soft); }
 
 /* ---- calendar: the month grid is one card, today marked, events chips in their kind's colour ---- */
-html .maincalendar .calendarmonth { border-color: var(--gz-line); background: var(--gz-panel); box-shadow: var(--gz-rest-shadow); }
+html .maincalendar .calendarmonth { border-color: var(--gz-border-line, var(--gz-line)); background: var(--gz-surface-grain, none), var(--gz-panel); box-shadow: var(--gz-rest-shadow); }
 html .maincalendar .calendarmonth :is(ul li a, .eventname) { color: var(--gz-ink); }
 html .maincalendar .calendarmonth ul li a:hover { color: var(--gz-on-soft); }
-html .maincalendar .calendarmonth :is(td, th) { border-color: var(--gz-line) !important; background: transparent; }
+html .maincalendar .calendarmonth :is(td, th) { border-color: var(--gz-border-line, var(--gz-line)) !important; background: transparent; }
 html .maincalendar .calendarmonth th { color: var(--gz-ink-muted); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 html .maincalendar .calendarmonth td.clickable:hover { background-color: var(--gz-row-hover) !important; }
 html .maincalendar .calendarmonth td.dayblank, html .maincalendar .calendarmonth td.weekend { background-color: color-mix(in srgb, var(--gz-ink) 3%, transparent); }
@@ -610,18 +610,18 @@ html .calendar_event_group { --gz-kind: #f0ad4e; }
 html .calendar_event_user { --gz-kind: #2b9cd8; }
 html .calendar_event_other { --gz-kind: var(--gz-ink-faint); }
 html :is(.calendar_event_course, .calendar_event_site, .calendar_event_category, .calendar_event_group, .calendar_event_user, .calendar_event_other) {
-  background-color: color-mix(in srgb, var(--gz-kind) 32%, var(--gz-surface)) !important; color: var(--gz-ink);
+  background-color: color-mix(in srgb, var(--gz-kind) 32%, var(--gz-surface-paint, var(--gz-surface))) !important; color: var(--gz-ink);
 }
 html .maincalendar .calendarmonth .day-number { color: var(--gz-ink); }
 html .maincalendar .calendarmonth td.today .day-number { color: var(--gz-accent-ink); }
-html .maincalendar :is(.event, .eventlist .card) { background: var(--gz-panel); border-color: var(--gz-line); color: var(--gz-ink); }
+html .maincalendar :is(.event, .eventlist .card) { background: var(--gz-surface-grain, none), var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink); }
 html .maincalendar .calendar-controls :is(a, .current) { color: var(--gz-ink); }
 html .maincalendar .header { color: var(--gz-ink); }
 
 /* ---- messages: the drawer and the full page. Moodle's bubbles are literal greys and blues ---- */
-html :is(.message-app, .message-drawer) { background-color: var(--gz-surface) !important; color: var(--gz-ink); }
-html .message-app :is(.panel-header-container, .footer-container, .header-container) { background-color: var(--gz-band) !important; border-color: var(--gz-line) !important; }
-html .message-app .list-group-item { background: transparent; border-color: var(--gz-line); color: var(--gz-ink); }
+html :is(.message-app, .message-drawer) { background-color: var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink); }
+html .message-app :is(.panel-header-container, .footer-container, .header-container) { background-color: var(--gz-band) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
+html .message-app .list-group-item { background: transparent; border-color: var(--gz-border-line, var(--gz-line)); color: var(--gz-ink); }
 html .message-app .list-group-item:is(:hover, :focus) { background: var(--gz-row-hover); }
 html .message-app .message.received { background-color: var(--gz-band); color: var(--gz-ink); }
 html .message-app .message.received .tail { border-bottom-color: var(--gz-band); }
@@ -635,41 +635,41 @@ html .message-app .btn.btn-link:hover { color: var(--gz-accent); }
 
 /* ---- the login page: the form on a panel, over the ground (or the school's picture beside it) ---- */
 html .pagelayout-login #page { background-color: var(--gz-ground) !important; }
-html .login-container { background: var(--gz-panel); color: var(--gz-ink); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
+html .login-container { background: var(--gz-surface-grain, none), var(--gz-panel); color: var(--gz-ink); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
 html .login-container :is(.login-heading, h1, h2) { color: var(--gz-ink); }
-html .login-container .login-form .login-input-wrapper .form-control { background-color: var(--gz-surface) !important; border-color: var(--gz-line-strong); }
+html .login-container .login-form .login-input-wrapper .form-control { background-color: var(--gz-surface-fill, var(--gz-surface)) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html .login-container .login-form .login-input-wrapper .login-input-icon { color: var(--gz-ink-faint); }
-html .login-container .login-form .toggle-sensitive-wrapper .toggle-sensitive-btn { --bs-btn-bg: var(--gz-surface); --bs-btn-hover-bg: var(--gz-hover-fill); --bs-btn-active-bg: var(--gz-surface); --bs-btn-border-color: var(--gz-line-strong); color: var(--gz-ink-muted); }
-html .login-container .login-identityprovider-btn { background-color: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line-strong); }
-html .login-divider { border-color: var(--gz-line); }
+html .login-container .login-form .toggle-sensitive-wrapper .toggle-sensitive-btn { --bs-btn-bg: var(--gz-surface); --bs-btn-hover-bg: var(--gz-hover-fill); --bs-btn-active-bg: var(--gz-surface); --bs-btn-border-color: var(--gz-border-strong, var(--gz-line-strong)); color: var(--gz-ink-muted); }
+html .login-container .login-identityprovider-btn { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html .login-divider { border-color: var(--gz-border-line, var(--gz-line)); }
 html .login-layout-left::after { color: #fff; }
 
 /* ---- the rich text editor (TinyMCE; content.js themes its writing area inside the frame) ---- */
-html .tox.tox-tinymce { border-color: var(--gz-line-strong); border-radius: var(--gz-radius-sm); }
-html .tox :is(.tox-editor-header, .tox-menubar, .tox-toolbar, .tox-toolbar__primary, .tox-toolbar-overlord, .tox-statusbar, .tox-toolbar__overflow, .tox-promotion) { background: var(--gz-band) !important; border-color: var(--gz-line) !important; }
+html .tox.tox-tinymce { border-color: var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); }
+html .tox :is(.tox-editor-header, .tox-menubar, .tox-toolbar, .tox-toolbar__primary, .tox-toolbar-overlord, .tox-statusbar, .tox-toolbar__overflow, .tox-promotion) { background: var(--gz-band) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
 html .tox :is(.tox-tbtn, .tox-mbtn, .tox-statusbar a, .tox-statusbar__path-item, .tox-statusbar__wordcount, .tox-split-button) { color: var(--gz-ink) !important; background: transparent; }
 html .tox :is(.tox-tbtn, .tox-split-button__chevron) svg { fill: var(--gz-ink) !important; }
 html .tox :is(.tox-tbtn, .tox-mbtn):hover, html .tox .tox-tbtn--enabled { background: var(--gz-hover-fill) !important; }
-html .tox .tox-edit-area__iframe { background-color: var(--gz-surface); }
-html .tox :is(.tox-menu, .tox-collection--list, .tox-dialog, .tox-dialog__header, .tox-dialog__footer, .tox-dialog__body) { background: var(--gz-surface) !important; color: var(--gz-ink) !important; border-color: var(--gz-line-strong) !important; }
+html .tox .tox-edit-area__iframe { background-color: var(--gz-surface-fill, var(--gz-surface)); }
+html .tox :is(.tox-menu, .tox-collection--list, .tox-dialog, .tox-dialog__header, .tox-dialog__footer, .tox-dialog__body) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 html .tox .tox-collection__item { color: var(--gz-ink) !important; }
 html .tox .tox-collection__item--active { background: var(--gz-hover-fill) !important; }
 html .tox .tox-collection__item svg { fill: var(--gz-ink) !important; }
 /* Moodle 4.x's older editor. */
-html :is(.editor_atto_content_wrap, .editor_atto_content) { background-color: var(--gz-surface); color: var(--gz-ink); }
-html .editor_atto_toolbar { background-color: var(--gz-band); border-color: var(--gz-line); }
-html .editor_atto_toolbar button { background: var(--gz-surface); color: var(--gz-ink-muted); border-color: var(--gz-line); }
+html :is(.editor_atto_content_wrap, .editor_atto_content) { background-color: var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); }
+html .editor_atto_toolbar { background-color: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
+html .editor_atto_toolbar button { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink-muted); border-color: var(--gz-border-line, var(--gz-line)); }
 /* File pickers. */
-html :is(.fp-panel-button, .file-picker .fp-content, .filemanager-container, .filepicker-filelist, .fp-iconview .fp-thumbnail, .fp-iconview .fp-filename-field .fp-filename) { background: var(--gz-surface); color: var(--gz-ink); border-color: var(--gz-line); }
-html .filemanager .yui3-datatable-header { background: var(--gz-band) !important; color: var(--gz-ink-muted) !important; border-color: var(--gz-line) !important; }
+html :is(.fp-panel-button, .file-picker .fp-content, .filemanager-container, .filepicker-filelist, .fp-iconview .fp-thumbnail, .fp-iconview .fp-filename-field .fp-filename) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-line, var(--gz-line)); }
+html .filemanager .yui3-datatable-header { background: var(--gz-band) !important; color: var(--gz-ink-muted) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
 html .filemanager .yui3-datatable-even .yui3-datatable-cell { background-color: transparent !important; }
-html :is(.filepicker-filelist .dndupload-target, .filemanager-container .dndupload-target) { background: var(--gz-band); border-color: var(--gz-line-strong); color: var(--gz-ink-muted); }
+html :is(.filepicker-filelist .dndupload-target, .filemanager-container .dndupload-target) { background: var(--gz-band); border-color: var(--gz-border-strong, var(--gz-line-strong)); color: var(--gz-ink-muted); }
 
 /* ---- user content: what instructors write. Their art stays; ink and pictures are kept readable ---- */
 html[data-gz-dark-theme] :is(.no-overflow, .activity-description, .summarytext, .box.generalbox) img:not(:hover) { filter: brightness(0.9); }
 
 /* ---- the long tail: content.js tags anything still painted light / with dark text (on a dark palette) ---- */
-[data-gz-light] { background-color: var(--gz-surface) !important; }
+[data-gz-light] { background-color: var(--gz-surface-fill, var(--gz-surface)) !important; }
 [data-gz-dark] { color: var(--gz-ink) !important; }
 [data-gz-hover]:is(:hover, :focus, :focus-visible) { background-color: var(--gz-hover-fill) !important; }
 html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg); opacity: 0.5; }
@@ -697,8 +697,8 @@ html[data-gz-motion="expressive"]::view-transition-old(root), html[data-gz-motio
 /* ---- what Glaze draws itself ---- */
 #gz-footer {
   position: relative; z-index: 1; display: flex; justify-content: center; align-items: center;
-  min-height: 2rem; box-sizing: border-box; padding: 0.5rem 1rem; background: var(--gz-surface-2);
-  border-top: 1px solid var(--gz-line); font: 500 11px/1 ui-sans-serif, system-ui, sans-serif;
+  min-height: 2rem; box-sizing: border-box; padding: 0.5rem 1rem; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
+  border-top: 1px solid var(--gz-border-line, var(--gz-line)); font: 500 11px/1 ui-sans-serif, system-ui, sans-serif;
 }
 #gz-footer a { color: var(--gz-ink-faint); text-decoration: none; }
 #gz-footer a:hover { color: var(--gz-accent); }
@@ -706,7 +706,7 @@ html[data-gz-motion="expressive"]::view-transition-old(root), html[data-gz-motio
 .gz-tip {
   position: fixed; z-index: 2147483002; max-width: 280px; padding: 0.35rem 0.6rem; pointer-events: none;
   font: 500 12px/1.35 var(--gz-font); letter-spacing: 0.01em; white-space: normal; overflow-wrap: anywhere;
-  background: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); color: var(--gz-ink); border: 1px solid var(--gz-line-strong);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); color: var(--gz-ink); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
   border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); backdrop-filter: blur(var(--gz-glass)); animation: var(--gz-tip-in);
 }
 .gz-tip-sub { display: block; margin-top: 0.1rem; font-weight: 400; color: var(--gz-ink-muted); }
@@ -717,7 +717,7 @@ html[data-gz-enhance-overall] [data-region="course-content"] [data-gz-grade]::af
   display: inline-block; margin-left: 0.5em; padding: 0 0.5em; border-radius: 999px;
   font-size: 0.85em; font-weight: 600; line-height: 1.6; vertical-align: 0.05em; white-space: nowrap;
   color: var(--gz-chip, var(--gz-ink-muted));
-  background: color-mix(in srgb, var(--gz-chip, var(--gz-ink-muted)) 14%, var(--gz-surface));
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-chip, var(--gz-ink-muted)) 14%, var(--gz-surface-paint, var(--gz-surface)));
 }
 [data-region="course-content"] [data-gz-chip="graded-hi"] { --gz-chip: var(--gz-ok); }
 [data-region="course-content"] [data-gz-chip="graded-mid"] { --gz-chip: var(--gz-warn); }
@@ -725,18 +725,18 @@ html[data-gz-enhance-overall] [data-region="course-content"] [data-gz-grade]::af
 /* Command palette (Ctrl+K). */
 #gz-cmd {
   position: fixed; inset: 0; z-index: 2147483003; display: grid; justify-items: center; align-items: start; padding-top: min(14vh, 120px);
-  background: color-mix(in srgb, var(--gz-surface-2) 55%, transparent); backdrop-filter: blur(4px);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 55%), transparent); backdrop-filter: blur(4px);
   animation: gz-fade var(--gz-t) var(--gz-ease) both;
 }
 #gz-cmd .gz-cmd-panel {
   width: min(600px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden; font: 14px/1.4 var(--gz-font); color: var(--gz-ink);
-  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow, 0 12px 32px color-mix(in srgb, #000 40%, transparent));
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow, 0 12px 32px color-mix(in srgb, #000 40%, transparent));
   animation: var(--gz-enter-panel);
 }
 #gz-cmd input {
   box-sizing: border-box; width: 100%; height: auto; margin: 0; padding: 0.9rem 1.1rem; font: inherit; font-size: 16px; color: var(--gz-ink);
-  background: transparent; border: 0; border-bottom: 1px solid var(--gz-line); border-radius: 0; outline: none; box-shadow: none;
+  background: transparent; border: 0; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 0; outline: none; box-shadow: none;
 }
 #gz-cmd input::placeholder { color: var(--gz-ink-faint); }
 #gz-cmd ul { list-style: none; margin: 0; padding: 0.35rem; overflow: auto; overscroll-behavior: contain; }
@@ -746,22 +746,22 @@ html[data-gz-enhance-overall] [data-region="course-content"] [data-gz-grade]::af
 #gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
 #gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
-#gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-line); }
+#gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
 /* Keyboard shortcuts' list (g then ?). */
-#gz-keys { position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center; background: color-mix(in srgb, var(--gz-surface-2) 75%, transparent); }
-#gz-keys .gz-keys-panel { width: min(360px, calc(100vw - 32px)); box-sizing: border-box; padding: 1.25rem; font: 14px/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
+#gz-keys { position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center; background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 75%), transparent); }
+#gz-keys .gz-keys-panel { width: min(360px, calc(100vw - 32px)); box-sizing: border-box; padding: 1.25rem; font: 14px/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
 #gz-keys h2 { margin: 0 0 0.6rem; font-size: 15px; color: var(--gz-ink); }
 #gz-keys dl { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; }
 #gz-keys dt { display: flex; gap: 0.25rem; }
 #gz-keys dd { margin: 0; }
-#gz-keys kbd { padding: 0.1rem 0.4rem; font-size: 12px; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 4px; }
-#gz-keys button { padding: 0.4rem 0.75rem; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm); cursor: pointer; }
+#gz-keys kbd { padding: 0.1rem 0.4rem; font-size: 12px; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 1 / 3); }
+#gz-keys button { padding: 0.4rem 0.75rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); cursor: pointer; }
 /* The course menu on course cards (Dashboard's recent courses, My courses' three views): tint and look. */
 html .gz-cm-btn {
   position: absolute; top: var(--gz-cm-top, 8px); right: var(--gz-cm-right, 8px); z-index: 2;
   display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer; opacity: 0; color: var(--gz-ink-muted);
-  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass));
-  border: 1px solid var(--gz-line-strong); border-radius: 999px; box-shadow: var(--gz-rest-shadow);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; box-shadow: var(--gz-rest-shadow);
   transition: opacity var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), scale var(--gz-t-slow) var(--gz-spring) !important;
 }
 html .gz-cm-btn:is(:hover, :focus-visible, [aria-expanded="true"]) { color: var(--gz-accent) !important; border-color: var(--gz-accent); }
@@ -777,7 +777,7 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 #gz-cm {
   position: fixed; z-index: 2147483002; box-sizing: border-box; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto;
   display: grid; gap: 0.35rem; padding: 0.8rem 0.9rem 0.9rem; font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
-  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
   transform-origin: var(--gz-cm-origin, top right); animation: var(--gz-tip-in);
 }
 #gz-cm * { box-sizing: border-box; }
@@ -800,23 +800,23 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 #gz-cm .gz-cm-looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
 #gz-cm .gz-cm-look {
   min-width: 0; padding: 0.35rem 0.4rem 0.35rem 0.6rem; text-align: left; font-weight: 600; font-size: 11.5px; line-height: 1.3; cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gz-ink-muted); background: var(--gz-surface-2);
-  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gz-ink-muted); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
 }
 #gz-cm .gz-cm-look:hover { transform: var(--gz-lift); }
 #gz-cm .gz-cm-look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
 /* A card in its course's own Look or tint: features/moodle.js puts that palette on the card (--gz-*), and what the page
    derives from the palette is derived again here, from the card's. */
 html [data-region="course-content"][data-gz-course-look] {
-  --gz-panel: var(--gz-surface);
-  --gz-band: color-mix(in srgb, var(--gz-ink) 6%, var(--gz-surface));
-  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface));
+  --gz-panel: var(--gz-surface-fill, var(--gz-surface));
+  --gz-band: color-mix(in srgb, var(--gz-ink) 6%, var(--gz-surface-paint, var(--gz-surface)));
+  --gz-hover-fill: color-mix(in srgb, var(--gz-accent-soft) 55%, var(--gz-surface-paint, var(--gz-surface)));
   --gz-row-hover: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent);
   --gz-on-soft: var(--gz-accent);
   --bs-white: var(--gz-panel); --bs-body-bg: var(--gz-surface); --bs-body-color: var(--gz-ink); --bs-emphasis-color: var(--gz-ink);
   --bs-secondary-color: var(--gz-ink-muted); --bs-tertiary-color: var(--gz-ink-faint); --bs-primary: var(--gz-accent);
-  --bs-link-color: var(--gz-on-soft); --bs-link-hover-color: var(--gz-on-soft); --bs-border-color: var(--gz-line);
-  --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-line); --bs-card-color: var(--gz-ink);
-  color: var(--gz-ink); background-color: var(--gz-panel); border-color: var(--gz-line) !important;
+  --bs-link-color: var(--gz-on-soft); --bs-link-hover-color: var(--gz-on-soft); --bs-border-color: var(--gz-border-line, var(--gz-line));
+  --bs-card-bg: var(--gz-panel); --bs-card-border-color: var(--gz-border-line, var(--gz-line)); --bs-card-color: var(--gz-ink);
+  color: var(--gz-ink); background-color: var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)) !important;
 }
 html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft: var(--gz-accent-hi); }

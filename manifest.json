@@ -66,6 +66,7 @@
         "lib/page.js",
         "lib/grades.js",
         "lib/fonts.js",
+        "lib/surfaces.js",
         "defaults.js",
         "lib/nav.js",
         "content-ultra.js",
@@ -87,6 +88,7 @@
         "lib/page.js",
         "lib/grades.js",
         "lib/fonts.js",
+        "lib/surfaces.js",
         "defaults.js",
         "content-canvas.js",
         "content.js"
@@ -126,6 +128,7 @@
       ],
       "js": [
         "lib/ink.js",
+        "lib/surfaces.js",
         "features/docviewer.js"
       ],
       "run_at": "document_start",
@@ -142,10 +145,12 @@
         "moodle.css",
         "fonts/*.woff2",
         "assets/art/pets/*/sprites.webp",
+        "assets/art/pets/*/spritesheet.webp",
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
         "features/lookx.css",
         "features/apps.css",
+        "features/surfaces.css",
         "assets/logo.svg",
         "assets/logo-dark.svg",
         "icons/icon.svg"
