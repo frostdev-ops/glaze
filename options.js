@@ -1001,7 +1001,7 @@ GZ_UI.load().then((s) => {
     const palette = offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette');
     const what = $('#share-what');
     what.replaceChildren();
-    if (from) what.append(Object.assign(document.createElement('b'), { textContent: from.author ? t('{name} by @{author}.', from) : `${from.name}.`, translate: false }), ' ');
+    if (from) what.append(Object.assign(document.createElement('b'), { textContent: from.author ? t('{name} by {author}.', from) : `${from.name}.`, translate: false }), ' ');
     if (!Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !got.cards.length) {
       // A palette alone (the gallery has those) leaves the rest as it is.
       what.append(t("{palette}. Your fonts and background stay as they are. It's showing in the preview.", { palette }));
@@ -1080,7 +1080,7 @@ GZ_UI.load().then((s) => {
     const rows = await Promise.all(favorites.map(async (f) => {
       let got;
       try { got = await GZ_SHARE.decode(f.code); } catch { return null; }
-      return row(got.colors, f.name, f.author ? `@${f.author}` : '',
+      return row(got.colors, f.name, f.author || '',
         button(t('Preview'), t('Preview {name}', { name: f.name }), async () => {
           $('#share-code').value = f.code;
           await tryCode(f);

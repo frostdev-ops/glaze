@@ -599,7 +599,8 @@ the gallery's pages only, Glaze runs a small script that waits for you to click 
 Glaze**. That click passes the Look's code, name and author from the page to Glaze's editor on your
 device; nothing is sent anywhere, and the editor applies nothing until you choose **Use this theme**.
 If a Look's code names a background image on another site, the editor's preview loads it from that
-site, as for any pasted theme code, and says which site it is.
+site, as for any pasted theme code, and says which site it is. Sharing your own Look there is the
+website's own form, which you fill in yourself; Glaze takes no part in it.
 
 ## Recognizing Canvas and Moodle
 

@@ -421,7 +421,7 @@
   "The themes you wore lately, newest first, kept on this computer.": "Os temas que você usou recentemente, do mais novo ao mais antigo, neste computador.",
   "Previous Look": "Estilo anterior",
   "Clear history": "Limpar histórico",
-  "{name} by @{author}.": "{name} por @{author}.",
+  "{name} by {author}.": "{name} por {author}.",
   "{palette}. Your fonts and background stay as they are. It's showing in the preview.": "{palette}. Suas fontes e seu fundo continuam como estão. A pré-visualização mostra.",
   "Preview {name}": "Pré-visualizar {name}",
   "Remove": "Remover",

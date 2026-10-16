@@ -421,7 +421,7 @@
   "The themes you wore lately, newest first, kept on this computer.": "De thema’s die je onlangs gebruikte, nieuwste eerst, op deze computer.",
   "Previous Look": "Vorige stijl",
   "Clear history": "Geschiedenis wissen",
-  "{name} by @{author}.": "{name} van @{author}.",
+  "{name} by {author}.": "{name} van {author}.",
   "{palette}. Your fonts and background stay as they are. It's showing in the preview.": "{palette}. Je lettertypen en achtergrond blijven zoals ze zijn. Het voorbeeld laat het zien.",
   "Preview {name}": "Voorbeeld van {name}",
   "Remove": "Verwijderen",
