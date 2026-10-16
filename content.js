@@ -383,6 +383,7 @@
 
   let dirty = new Set();
   let full = false;
+  const hid = () => tabFrame && html.hasAttribute('data-gz-ctab-framed');
   const flush = () => {
     timer = 0;
     const roots = outermost(dirty);
@@ -419,8 +420,10 @@
   const schedule = (records) => {
     // Cut off by a reload of Glaze: stop watching, and every GZ_CTX.on() feature stops too.
     if (!chrome.runtime?.id) { observer?.disconnect(); observer = null; return; }
-    // Native-parent removals still need remount/teardown; only changes inside our UI are irrelevant.
-    if (ultra) records = records.filter((r) => !r.target.closest?.('[id^="gz-"]'));
+    // A course tab's hidden frame: no sweep until it is shown (GZ_CTX scene), then one full pass.
+    if (hid()) { dirty.clear(); full = true; return; }
+    // Native-parent removals still need remount/teardown; only changes inside our UI and the light's are irrelevant.
+    records = records.filter((r) => !r.oldValue?.includes('--gz-mx') && !(ultra && r.target.closest?.('[id^="gz-"]')));
     if (!records.length) return;
     X.lift();
     for (const r of records) {
@@ -516,20 +519,6 @@
   };
   document.addEventListener('pointerover', checkHover, { capture: true, passive: true });
   document.addEventListener('focusin', checkHover, true);
-
-  // ---- pointer light (Expressive) ------------------------------------------------------------
-  // Hovered cards carry a soft light under the pointer: extras.css reads --gz-mx/--gz-my off <html>.
-  // One write per frame, and <html> sits outside the observed body, so the sweep never hears it.
-  let raf = 0;
-  let mx = 0;
-  let my = 0;
-  document.addEventListener('pointermove', (e) => {
-    // A finger has no hover: the light would stay wherever the last touch was.
-    if (e.pointerType === 'touch' || html.getAttribute('data-gz-motion') !== 'expressive') return;
-    mx = e.clientX;
-    my = e.clientY;
-    if (!raf) raf = requestAnimationFrame(() => { raf = 0; setVar('--gz-mx', `${mx}px`); setVar('--gz-my', `${my}px`); });
-  }, { passive: true });
 
   // ---- tooltips and hints -------------------------------------------------------------------
   // Two sources, one themed tooltip:
@@ -813,11 +802,11 @@
   // Expired copies go, and with the feature off, all of them. Top frame, on load and when switched off.
   const tidyDrafts = () => {
     if (window.top !== window) return;
-    // lib/drafts.js only when there are copies to look at.
-    local((s) => s.get(null, (all) => {
+    // lib/drafts.js only when there are copies to look at; only they are read where keys can be listed.
+    local((s) => Promise.resolve(s.getKeys?.()).then((ks) => s.get(ks?.filter((k) => k.startsWith('draft:')) || null, (all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
       need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
-    }));
+    })));
   };
 
   // ---- download all (Extras) -------------------------------------------------------------------
@@ -939,9 +928,9 @@
   };
 
   // ---- animated background (bg.kind "scene") ----------------------------------------------------
-  // lib/scene.js and three.js (~520 KB) load only once a scene is picked, and only in the top frame
-  // or the editor's preview: one WebGL canvas per tab. The canvas lives in the topmost full-screen
-  // layer (see extras.css); flush() moves it when a course or item panel opens or closes.
+  // lib/scene.js and three.js (~520 KB) load only once a scene is picked, and only in a page of its own
+  // (solo) or the editor's preview; a course tab's hidden frame lets its canvas go. The canvas lives in
+  // the topmost full-screen layer (see extras.css); flush() moves it when a course or item panel opens or closes.
   const LAYERS = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
   const sceneFrame = solo || location.protocol !== 'https:';
   let scene = null; // { update, draw, stop } from lib/scene.js
@@ -978,11 +967,11 @@
   const syncScene = () => {
     // Cut off by a reload of Glaze: the scene keeps its last frame (lib/scene.js) until the page loads again.
     if (!chrome.runtime?.id) return;
-    if (!settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body) return stopScene();
+    if (!settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body || hid()) return stopScene();
     if (scene) return scene.update(sceneOpts());
     sceneLoad ||= import(chrome.runtime.getURL('lib/scene.js'));
     sceneLoad.then((mod) => {
-      if (!chrome.runtime?.id || scene || !links.length || worn.bg.kind !== 'scene') return;
+      if (!chrome.runtime?.id || scene || !links.length || worn.bg.kind !== 'scene' || hid()) return;
       sceneCanvas = document.createElement('canvas');
       sceneCanvas.id = 'gz-scene';
       sceneCanvas.setAttribute('aria-hidden', 'true');
@@ -999,7 +988,8 @@
   // the slot is remembered per course id, on this device. flush() re-checks on every page change.
   const courseSlots = {};
   let courseList = {};
-  const courseColors = () => GZ_COURSE_COLORS(courseList, settings.courses.colors);
+  let cc = []; // worked out once per list and picks
+  const courseColors = () => { const p = settings.courses.colors; if (cc[0] !== courseList || cc[1] !== p) cc = [courseList, p, GZ_COURSE_COLORS(courseList, p)]; return cc[2]; };
   try {
     chrome.storage.local.get(['courseSlots', 'seenCourses'], (r) => {
       Object.assign(courseSlots, r?.courseSlots);
@@ -1205,6 +1195,7 @@
     else setAttr('data-gz-bg-failed', false);
     // Motion: the system's reduced-motion setting wins over the level unless told otherwise.
     setAttr('data-gz-motion', s.motion.followSystem && calmMQ.matches ? 'off' : s.motion.level);
+    if (s.motion.level === 'expressive') need('features/light.js', () => globalThis.GZ_LIGHT).catch(() => {}); // the pointer light
     setAttr('data-gz-no-trans', !s.motion.transitions);
     setAttr('data-gz-no-enter', !s.motion.enter);
     setAttr('data-gz-no-hover', !s.motion.hover);
@@ -1387,7 +1378,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
-    canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => syncScene(),
+    canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => { syncScene(); if (full && !timer && !hid()) timer = setTimeout(flush); },
     ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
   // Storage can fail (offline sync errors) and every chrome.* call throws once the extension is
@@ -1435,7 +1426,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       courseList = changes.seenCourses.newValue || {};
       reapply();
     }
-    if (area !== 'sync' || isPreview) return;
+    if (area !== 'sync' || isPreview || !Object.keys(changes).some((k) => k in settings || k in GZ_SPEC)) return;
     load().then((s) => {
       const was = settings.enabled && links.length > 0;
       settings = s;
