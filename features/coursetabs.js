@@ -309,7 +309,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // How a course's page looked, to the pixel: a picture of the browser tab, which the worker takes (lib/background.js
   // 'shot') while this tab is the one on screen, of whichever page is showing (this one or a tab's frame), once it has
   // finished building, without a tip of Glaze's. Taken as the student is about to leave it (a press on a tab or on a link
-  // out of the course), after it changes or scrolls, and every 15 s while it stays; at most one each 0.6 s (the browser
+  // out of the course), and after it changes, scrolls or stays, at most each 15 s per page; at most one each 0.6 s (the browser
   // allows two a second). Shown only while a tab's frame first loads, at the window size it was taken at.
   const loading = (el) => !!el && [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root')].some(shown);
   const split = (path) => { const i = path.indexOf('?'); return i < 0 ? [path, ''] : [path.slice(0, i), path.slice(i + 1)]; };
@@ -355,11 +355,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   let capTimer = 0;
   let capWhere = '';
   let capAt = 0;
+  // The page on screen: a frame's own address, which moves without this page's.
+  const where = () => `${showing ? surface().path : location.href} ${showing}`;
   const later = (wait = 1500) => {
-    if (framed || capTimer || (wait > 1000 && capWhere === location.href + showing && Date.now() - capAt < 15000)) return;
+    if (framed || capTimer || (capWhere === where() && Date.now() - capAt < 15000)) return;
     capTimer = setTimeout(() => {
       capTimer = 0;
-      (globalThis.requestIdleCallback || setTimeout)(() => { capWhere = location.href + showing; capAt = Date.now(); shoot(); }, { timeout: 1000 });
+      (globalThis.requestIdleCallback || setTimeout)(() => { capWhere = where(); capAt = Date.now(); shoot(); }, { timeout: 1000 });
     }, wait);
   };
   // Leaving through Ultra's own header (home, the course switcher), or a link out of the course: a picture first, taken on
@@ -384,16 +386,19 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A tab picked from the strip runs in a frame of its own (#gz-ctabs-frames, over the whole window as a course in Ultra
   // is, above Glaze's footer), named gz-ctab:<course> so Glaze there works as on a page of its own (content.js solo). Ultra draws no menu
   // in a frame. Frames stay running while hidden; at most LIVE of them, the least recently shown going first, and a
-  // closed tab's at once. This page's own course is shown as itself. The strip in a frame sends its picks here (toTop):
+  // closed tab's at once; an unedited one hidden for IDLE goes too, opened again behind its picture when picked. This page's
+  // own course is shown as itself. The strip in a frame sends its picks here (toTop):
   // a tab, a close, its page leaving its course (then this page goes there), its page changing (a fresh picture).
-  const LIVE = 4;
-  const frames = new Map(); // cid → { el, at (last shown), ready }
+  // Each frame is a whole Ultra: two where the machine has few cores (deviceMemory stops at 8, so it can't tell).
+  const LIVE = navigator.hardwareConcurrency <= 6 ? 2 : 4;
+  const IDLE = 600000;
+  const frames = new Map(); // cid → { el, at (last shown), ready, dirty, idle (its timer while hidden) }
   let showing = ''; // the course whose frame is on screen; '' for this page
   let shownFrom = ''; // this page's address when a frame covered it: if it changes, the student went somewhere here
   let host = null, pic = null, showTurn = 0;
   const toTop = (op, m = {}) => { try { window.top.postMessage({ gzCtab: op, ...m }, location.origin); } catch { /* gone */ } };
   let movedTimer = 0;
-  const moved = () => { if (!movedTimer) movedTimer = setTimeout(() => { movedTimer = 0; toTop('moved'); }, 500); };
+  const moved = () => { clearTimeout(movedTimer); movedTimer = setTimeout(() => toTop('moved'), 500); };
   const lay = () => {
     if (!host) return;
     const foot = document.getElementById('gz-footer');
@@ -419,7 +424,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         doc = d;
         changed = now;
         mo = new MutationObserver(() => { changed = performance.now(); });
-        mo.observe(d.body, { subtree: true, childList: true, attributes: true, characterData: true });
+        mo.observe(d.body, { subtree: true, childList: true });
         d.addEventListener('scroll', () => { changed = performance.now(); }, { capture: true, passive: true });
       }
       const built = doc && doc.location.pathname.startsWith(`/ultra/courses/${cid}/`) && [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown)
@@ -504,7 +509,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     showing = cid;
     shownFrom = location.pathname + location.search;
     for (const [k, g] of frames) {
-      if (k === cid) g.at = Date.now();
+      if (k === cid) { g.at = Date.now(); clearTimeout(g.idle); g.idle = 0; }
+      else g.idle ||= setTimeout(() => { g.idle = 0; if (frames.get(k) === g && showing !== k && !g.dirty) drop(k); }, IDLE);
       g.el.style.visibility = k === cid && g.ready ? '' : 'hidden';
       g.el.inert = k !== cid;
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid }, location.origin);

@@ -51,7 +51,7 @@ test('at most four frames stay running: the least recently shown go, never the o
   const dropped = [];
   const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
-    LIVE: 4, Date, Promise, setTimeout, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
+    LIVE: 4, IDLE: 1, Date, Promise, setTimeout() {}, clearTimeout() {}, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
     open: (cid) => { const f = frame(6); frames.set(cid, f); return f; }, lay() {}, unpicture() {}, picture() {}, draw() {}, later() {}, drop: (k) => { dropped.push(k); frames.delete(k); },
   });
@@ -61,6 +61,28 @@ test('at most four frames stay running: the least recently shown go, never the o
   assert.equal(frames.get('_3_1').el.style.visibility, '', 'the shown frame is visible');
   assert.equal(frames.get('_2_1').el.style.visibility, 'hidden');
   assert.equal(frames.get('_2_1').el.inert, true, 'a hidden frame takes no input');
+});
+
+test('a clean frame hidden for IDLE is dropped; an edited one, or one shown again, stays', async () => {
+  const frame = (at, dirty = false) => ({ at, dirty, ready: true, el: { style: {}, inert: false, focus() {} } });
+  const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(2, true)], ['_3_1', frame(3)]]);
+  const timers = new Map(), dropped = [];
+  let n = 0;
+  const context = vm.createContext({
+    showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
+    LIVE: 4, IDLE: 600000, Date, Promise, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
+    setTimeout: (fn) => { timers.set(++n, fn); return n; }, clearTimeout: (id) => timers.delete(id),
+    html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
+    lay() {}, unpicture() {}, picture() {}, draw() {}, later() {}, drop: (k) => { dropped.push(k); frames.delete(k); },
+  });
+  const show = vm.runInContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', context);
+  await show('_1_1');
+  assert.equal(timers.size, 2, 'every hidden frame has its timer, the shown one none');
+  await show('_3_1');
+  assert.equal(timers.size, 2, 'a hidden frame keeps its first timer; the one shown again loses its own');
+  for (const fn of [...timers.values()]) fn();
+  assert.deepEqual(dropped, ['_1_1'], 'the edited frame is never dropped');
+  assert.ok(frames.has('_3_1'));
 });
 
 test('the worker takes a course tab\'s frame as its Ultra page: its origin stands in for the about:blank it reports', () => {
