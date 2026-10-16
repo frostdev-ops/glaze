@@ -518,7 +518,7 @@ html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding
 /* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. */
 html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }
 html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
-html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: var(--gz-surface-grain, none), var(--gz-surface, Canvas); }
+html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas)); }
 #gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
 #gz-ctabs {
   position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 8px; box-sizing: border-box; flex: none; width: 100%;
@@ -546,7 +546,7 @@ html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:ha
 #gz-ctabs .gz-ctab[aria-selected="true"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: calc(var(--gz-radius, 12px) * 1 / 6); background: var(--gz-accent); }
 #gz-ctabs[data-shape="tab"] .gz-ctab[aria-selected="true"]::after { top: -1px; bottom: auto; left: 8px; right: 8px; }
 #gz-ctabs .gz-ctab:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
-#gz-ctabs .gz-ctab[data-drag] { z-index: 2; cursor: grabbing; box-shadow: 0 6px 18px color-mix(in srgb, #000 35%, transparent); }
+#gz-ctabs .gz-ctab[data-drag] { z-index: 2; cursor: grabbing; box-shadow: var(--gz-shadow); }
 /* Each course's own colour (--gz-course, as Course colors resolves it): the dot or icon, a tint, or more of it. */
 #gz-ctabs .gz-ctab-mark { flex: none; display: grid; place-items: center; }
 #gz-ctabs[data-mark="none"] .gz-ctab-mark { display: none; }
@@ -572,7 +572,7 @@ html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:ha
   #gz-ctabs .gz-ctabs-note {
     position: absolute; z-index: 3; top: 3px; bottom: 3px; right: 6px; max-width: calc(100% - 12px); display: flex; align-items: center; padding: 0 10px;
     white-space: normal; line-height: 1.2; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
-    border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: 0 4px 14px color-mix(in srgb, #000 30%, transparent); cursor: pointer;
+    border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: var(--gz-shadow); cursor: pointer;
   }
 }
 /* A tab's switch: the course's copy on screen (an inert shadow tree) until Ultra's live page is built, the strip on top

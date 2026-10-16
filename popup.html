@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title translate="no">Glaze</title>
 <link rel="stylesheet" href="ui.css">
+<link rel="stylesheet" href="features/surfaces.css">
 <style>
   /* Tiles, Control Center style: the switch, the look, what's due, palette, motion and the editor,
      all in view at once; the editor is the wide tile at the bottom. */
@@ -12,11 +13,11 @@
   .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .tile {
     box-sizing: border-box; min-width: 0; margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
-    font: inherit; text-align: left; color: var(--gz-ink); background: var(--gz-surface);
-    border: 1px solid var(--gz-line); border-radius: 18px;
+    font: inherit; text-align: left; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
+    border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 3 / 2);
     transition: transform 0.2s var(--gz-ease), border-color 0.2s var(--gz-ease), background 0.2s var(--gz-ease);
   }
-  button.tile:hover { color: var(--gz-ink); border-color: var(--gz-line-strong); transform: translateY(-1px); }
+  button.tile:hover { color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); transform: translateY(-1px); }
   .wide { grid-column: span 2; }
   .tile b { font-size: 15px; }
   .cap { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gz-ink-faint); }
@@ -28,12 +29,12 @@
   .look { min-height: 116px; padding: 8px; }
   .look > span:last-child { padding: 0 4px; }
   .look b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .thumb { height: 52px; border-radius: 11px; border: 1px solid; display: flex; align-items: flex-end; padding: 5px 8px; box-sizing: border-box; font-weight: 700; font-size: 18px; }
+  .thumb { height: 52px; border-radius: calc(var(--gz-radius, 12px) * 11 / 12); border: 1px solid; display: flex; align-items: flex-end; padding: 5px 8px; box-sizing: border-box; font-weight: 700; font-size: 18px; }
   .due { flex-direction: row; align-items: center; gap: 14px; min-height: 96px; }
   .due .count { display: flex; flex-direction: column; flex: none; width: 74px; }
   .due .count b { font-size: 34px; line-height: 1; color: var(--gz-accent); }
   .due .count small { font-size: 12px; color: var(--gz-ink-muted); }
-  .due ul { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--gz-line); display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; flex: 1; min-width: 0; }
+  .due ul { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--gz-border-line, var(--gz-line)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; flex: 1; min-width: 0; }
   .due li { display: flex; justify-content: space-between; gap: 8px; }
   .due li b { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .due li small { font-size: 12px; color: var(--gz-ink-muted); white-space: nowrap; }
@@ -42,11 +43,11 @@
   .palette .swatches { gap: 8px; }
   .motion { justify-content: space-between; }
   .bars { display: flex; align-items: flex-end; gap: 4px; height: 24px; }
-  .bars i { width: 8px; border-radius: 3px; background: var(--gz-line-strong); transition: background 0.2s var(--gz-ease); }
+  .bars i { width: 8px; border-radius: calc(var(--gz-radius, 12px) * 1 / 4); background: var(--gz-border-strong, var(--gz-line-strong)); transition: background 0.2s var(--gz-ease); }
   .bars i:nth-child(1) { height: 8px; } .bars i:nth-child(2) { height: 16px; } .bars i:nth-child(3) { height: 24px; }
   .motion[data-level="subtle"] .bars i:nth-child(-n+2), .motion[data-level="expressive"] .bars i { background: var(--gz-accent); }
   .editor { flex-direction: row; align-items: center; gap: 14px; background: var(--gz-accent-soft); border-color: color-mix(in srgb, var(--gz-accent) 40%, transparent); }
-  .editor .icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--gz-accent-ink); background: var(--gz-accent); }
+  .editor .icon { width: 40px; height: 40px; border-radius: calc(var(--gz-radius, 12px) * 1 / 1); display: grid; place-items: center; flex: none; color: var(--gz-accent-ink); background: var(--gz-accent); }
   .editor .text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .editor small { font-size: 12px; color: var(--gz-ink-muted); }
   /* Notes for this version not seen yet: a dot, nothing on the toolbar icon. */
@@ -54,7 +55,7 @@
   .hint { margin: 10px 2px 0; }
   body.off .tiles > :not(.power, .editor) { opacity: 0.45; }
   /* All eight looks, over the tiles. */
-  #sheet { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 14px; border: 0; color: var(--gz-ink); background: var(--gz-surface-2); }
+  #sheet { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 14px; border: 0; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
   #sheet header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
   #sheet #previous { margin-left: auto; }
   #sheet .back { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; }

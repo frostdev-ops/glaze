@@ -11,12 +11,12 @@ const page = ({ delayed = false } = {}) => {
   const c = { document: doc, console, URL, Date, Intl, Map, Set, Object, Number, Math, Array, String, Promise,
     GZ_PET: P, GZ_TODO: T, GZ_CTX: { site: 'canvas', t: (k) => k, settings: () => ({ enabled: true, enhance: { pet: true } }), need: async () => {} },
     location: { origin: 'https://canvas.test' }, setTimeout: (f, ms) => { timers.set(++next, { f, ms }); return next; }, clearTimeout: (id) => timers.delete(id),
-    chrome: { runtime: { getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => cb({ ok: true, data: P.view({ earned: { 'work:assignment:1': 20 } }) }) },
+    chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => cb({ ok: true, data: P.view({ earned: { 'work:assignment:1': 20 } }) }) },
       storage: { onChanged: { addListener: (f) => storage.push(f), removeListener: (f) => { const i = storage.indexOf(f); if (i >= 0) storage.splice(i, 1); } } } } };
   c.globalThis = c; vm.createContext(c);
   const ui = vm.runInContext(fs.readFileSync(require.resolve('../features/pet.js'), 'utf8'), c);
   const body = make('div'); doc.body.append(body);
-  return { ui, body, doc, storage, events, timers, release: () => release({ uid: '3', tz: 'UTC' }), api: { who: () => profile } };
+  return { ui, body, doc, storage, events, timers, chrome: c.chrome, release: () => release({ uid: '3', tz: 'UTC' }), api: { who: () => profile } };
 };
 test('pet mount stops storage/visibility listeners and its clock, without leaving a stylesheet link', async () => {
   const p = page(), tile = p.ui.mount(p.body, p.api); await settle();
@@ -29,4 +29,14 @@ test('a pet removed before identity resolves never registers listeners or schedu
   const p = page({ delayed: true }), tile = p.ui.mount(p.body, p.api);
   tile.stop(); p.release(); await settle();
   assert.equal(p.storage.length, 0); assert.equal(p.events.length, 0); assert.equal(p.timers.size, 0);
+});
+
+test('a reload stops the habitat before its next timer or late profile can repaint', async () => {
+  const p = page(), live = p.ui.mount(p.body, p.api); await settle();
+  delete p.chrome.runtime.id;
+  live.update(); await settle();
+  assert.equal(p.storage.length + p.events.length + p.timers.size, 0);
+  const q = page({ delayed: true }); q.ui.mount(q.body, q.api); delete q.chrome.runtime.id;
+  q.release(); await settle();
+  assert.equal(q.storage.length + q.timers.size, 0);
 });

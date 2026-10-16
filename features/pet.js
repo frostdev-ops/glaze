@@ -16,7 +16,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     const status = make('p', { className: 'gz-game-status', role: 'status' });
     const art = (path, cls) => make('img', { src: chrome.runtime.getURL(`assets/art/stickers/${path}.webp`), alt: '', className: cls, width: 72, height: 72, decoding: 'async' });
     const paint = () => {
-      if (!alive || !data) return;
+      if (!alive || !data || !chrome.runtime?.id) return;
       player?.stop(); player = null;
       const turn = ++generation;
       const P = GZ_PET, d = data;
@@ -31,7 +31,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
           const old = art(`critters/${P.WEAR[d.wear].art}`, 'gz-game-buddy'); cell.append(old);
           if (d.sprite) Promise.all([ctx.need('lib/petsprites.js', () => globalThis.GZ_PET_SPRITES), ctx.need('lib/petplayer.js', () => globalThis.GZ_PET_PLAYER)])
             .then(() => send({ type: 'glaze:petSprites', key, op: 'get', id: d.sprite })).then((r) => {
-              if (!alive || turn !== generation || !r?.pet) return;
+              if (!alive || turn !== generation || !chrome.runtime?.id || !r?.pet) return;
               const canvas = make('canvas', { className: 'gz-game-buddy', tabIndex: 0 });
               canvas.setAttribute('role', 'button'); canvas.setAttribute('aria-label', t('Play with {name}', { name: r.pet.name }));
               old.replaceWith(canvas); player = GZ_PET_PLAYER.mount(canvas, r.pet);
@@ -75,13 +75,16 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         make('label', {}, make('span', { textContent: t('Pet character') }), sprite), make('label', {}, make('span', { textContent: t('Buddy’s look') }), wear), decor, rules);
       if (active) [...pet.querySelectorAll('[data-control]')].find((e) => e.dataset.control === active)?.focus({ preventScroll: true });
     };
+    const stop = () => { alive = false; generation++; player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };
     const update = async (patch = { op: 'read' }) => {
       if (!alive || !key) return;
+      if (!chrome.runtime?.id) { stop(); return; }
       if (busy) { if (patch.op === 'read') pending = true; else waiting.push(patch); return; }
       busy = true;
       const r = await send({ key, tz, ...patch });
       busy = false;
       if (!alive) return;
+      if (!chrome.runtime?.id) { stop(); return; }
       status.textContent = r?.ok ? '' : r?.error === 'history' ? t('Pet history couldn’t be updated. Existing progress was kept.') : t('Couldn’t save your buddy. Try again.');
       if (r?.data) { data = r.data; paint(); }
       if (waiting.length) update(waiting.shift());
@@ -101,18 +104,19 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       if (ch[key]?.newValue) { data = GZ_PET.view(ch[key].newValue); paint(); }
     };
     const show = () => { clearTimeout(timer); if (document.visibilityState === 'visible') update(); else player?.sleep(); };
-    const library = () => send({ type: 'glaze:petSprites', key, op: 'list' }).then((r) => { if (alive && r?.ok && Array.isArray(r.pets)) { pets = r.pets; paint(); } });
+    const library = () => send({ type: 'glaze:petSprites', key, op: 'list' }).then((r) => { if (alive && chrome.runtime?.id && r?.ok && Array.isArray(r.pets)) { pets = r.pets; paint(); } });
     document.addEventListener('visibilitychange', show);
     body.append(pet, status);
     start().then(() => { const who = api?.who || globalThis.GZ_WIDGETS_UI?.who; return who ? who().then((p) => ({ id: p.uid, time_zone: p.tz })) : ctx.profile(); }).then((p) => {
-      if (!alive || !ctx.settings().enabled || !ctx.settings().enhance.pet) return;
+      if (!alive) return;
+      if (!chrome.runtime?.id || !ctx.settings().enabled || !ctx.settings().enhance.pet) { stop(); return; }
       if (!/^(?:\d+|_\d+_\d+)$/.test(String(p?.id))) throw new Error('unknown account');
       if (tile) tile.hidden = false;
       key = GZ_PET.storeKey(location.origin, p.id); tz = GZ_TODO.zone(p.time_zone);
       chrome.storage.onChanged.addListener(changed);
       update(); library();
     }).catch(() => { if (alive) status.textContent = t('Your buddy is available when your account is known.'); });
-    return { wake: () => { player?.wake(); update(); }, update: () => update(), stop: () => { alive = false; generation++; player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); } };
+    return { wake: () => { player?.wake(); update(); }, update: () => update(), stop };
   };
   let box;
   const open = async () => {

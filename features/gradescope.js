@@ -14,6 +14,8 @@
   globalThis.__gzGradescope = true;
   const G = globalThis.GZ_GRADESCOPE;
   const FRESH = 6e5;
+  const LOOK_KEYS = ['enabled', 'enhance', 'look', 'colors', 'auto', 'presets'];
+  const darkMQ = matchMedia('(prefers-color-scheme: dark)');
   const lang = (() => { try { return chrome.i18n.getUILanguage(); } catch { return navigator.language; } })();
   const t = (k, v) => GZ_I18N.t(k, v, lang);
   const get = (area, keys) => new Promise((res) => { try { chrome.storage[area].get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
@@ -68,10 +70,9 @@
   // ---- the bar -------------------------------------------------------------------------------------------------------
   const CSS = `
     :host { all: initial; display: block; margin: 12px 16px; }
-    section { --ink: #1f2328; --muted: #57606a; --bg: #f6f8fa; --line: #d0d7de; --accent: #0b6e4f; --on-accent: #fff;
-      color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: calc(var(--gz-radius, 12px) * 5 / 6); padding: 12px 14px;
+    section { --ink: var(--gz-ink); --muted: var(--gz-ink-muted); --bg: var(--gz-surface-fill); --line: var(--gz-border-line); --accent: var(--gz-accent); --on-accent: var(--gz-accent-ink);
+      color: var(--ink); background: var(--gz-surface-grain), var(--bg); box-shadow: var(--gz-rest-shadow); border: 1px solid var(--line); border-radius: calc(var(--gz-radius, 12px) * 5 / 6); padding: 12px 14px;
       font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 760px; }
-    @media (prefers-color-scheme: dark) { section { --ink: #e6edf3; --muted: #9da7b3; --bg: #161b22; --line: #30363d; --accent: #3fb68b; --on-accent: #0d1117; } }
     h2 { margin: 0 0 4px; font-size: 15px; } p { margin: 0 0 8px; color: var(--muted); }
     ul { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
     label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
@@ -83,19 +84,37 @@
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     [role="status"]:empty { display: none; } [role="status"] { margin: 8px 0 0; color: var(--ink); }`;
   // The bar while it's on the page: it goes as soon as Glaze or its Gradescope switch is turned off.
-  let shown = null;
+  let shown = null, appearanceRevision = 0, appearanceTimer = 0;
+  const appearance = async (host = shown) => {
+    if (!host) return false;
+    const turn = ++appearanceRevision, raw = await get('sync', LOOK_KEYS);
+    if (host !== shown || turn !== appearanceRevision) return false;
+    clearTimeout(appearanceTimer);
+    // A failed read or an invalidated extension must not redraw a stale enabled bar.
+    if (!chrome.runtime?.id || raw.enabled === false || raw.enhance?.gradescope !== true) { host.remove(); shown = null; return false; }
+    const settings = GZ_SANITIZE(raw), colors = GZ_ACTIVE_COLORS(settings, darkMQ.matches);
+    for (const [key, value] of Object.entries({ ...colors, ...GZ_SURFACES.vars({ look: settings.look, bg: { kind: 'solid' } }), '--gz-radius': `${settings.look.radius}px` })) {
+      if (value) host.style.setProperty(key, value); else host.style.removeProperty(key);
+    }
+    host.setAttribute('data-gz-depth', String(settings.look.depth));
+    if (settings.auto.on && settings.auto.mode === 'schedule') {
+      const at = GZ_SCHEDULE_NEXT(settings.auto.from, settings.auto.to, new Date());
+      if (at) appearanceTimer = setTimeout(() => appearance(), Math.max(0, at - Date.now()) + 20);
+    }
+    return true;
+  };
   try {
-    chrome.storage.onChanged.addListener((ch, area) => {
-      if (area === 'sync' && (ch.enabled || ch.enhance) && shown) on().then((yes) => { if (!yes) { shown?.remove(); shown = null; } });
-    });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'sync' && LOOK_KEYS.some((key) => ch[key])) appearance(); });
+    darkMQ.addEventListener('change', () => appearance());
+    addEventListener('pagehide', () => { appearanceRevision++; clearTimeout(appearanceTimer); shown = null; }, { once: true });
   } catch { /* reloaded */ }
-  const bar = (d, open, list) => {
+  const bar = async (d, open, list) => {
     const host = make('div');
     shown = host;
     host.id = 'gz-gradescope';
     const root = host.attachShadow({ mode: 'closed' });
     const say = make('p', { role: 'status' });
-    const close = () => { host.remove(); if (shown === host) shown = null; };
+    const close = () => { host.remove(); if (shown === host) { shown = null; appearanceRevision++; clearTimeout(appearanceTimer); } };
     const pick = (c) => {
       const want = G.suggest(c, list);
       const sel = make('select', { name: c.gid },
@@ -112,7 +131,7 @@
       make('p', { textContent: t("Pick the Canvas or Blackboard course each Gradescope course belongs to. Its assignments then show in Glaze's To Do, on your course cards and in reminders. Glaze reads them when you visit Gradescope, and they stay on this device.") }),
       form, say);
     box.setAttribute('aria-labelledby', 'h');
-    root.append(make('style', { textContent: CSS }), box);
+    root.append(make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('features/surfaces.css') }), make('style', { textContent: CSS }), box);
     never.addEventListener('click', async (e) => {
       if (!human(e)) return;
       const r = await send({ type: 'glaze:gradescope', op: 'hide', hide: true });
@@ -138,7 +157,7 @@
     });
     // Escape: away for this page only.
     box.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-    (document.querySelector('main') || document.body).prepend(host);
+    if (await appearance(host) && shown === host) (document.querySelector('main') || document.body).prepend(host);
   };
 
   (async () => {
@@ -157,7 +176,7 @@
     if (open.length) {
       await words().catch(() => {});
       if (!await on()) return;
-      bar(d, open, G.canvas(seenCourses));
+      await bar(d, open, G.canvas(seenCourses));
     }
     await sync(d);
   })();

@@ -41,3 +41,27 @@ test('adding a pet selection preserves XP, rewards, provider clocks and habitat'
   assert.equal(after.sprite, 'ember'); assert.equal(after.work, 20); assert.deepEqual(after.decor, before.decor); assert.deepEqual(after.sub, before.sub);
   assert.equal(P.clean({ ...before, sprite: '../../bad.js' }).sprite, '');
 });
+
+test('pet library writes are restricted to the top-level editor; LMS reads need a confirmed site and opt-in', async () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const source = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
+  const setup = source.slice(source.indexOf('const fromEditor'), source.indexOf('// The notes app'));
+  const local = { ultra: ['https://school.test'] }, sync = { enhance: { pet: true } };
+  const chrome = { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, getManifest: () => ({ host_permissions: ['<all_urls>'] }) },
+    storage: { local: { get: async () => local }, sync: { get: async () => sync } } };
+  const allow = vm.runInNewContext(`${setup} BROKER.petSprites.allow`, { chrome, URL, GZ_PET: P, GZ_SANITIZE: require('../defaults.js').GZ_SANITIZE });
+  const editor = { id: 'glaze', frameId: 0, origin: 'chrome-extension://glaze', url: 'chrome-extension://glaze/options.html#look/pets' };
+  assert.equal(await allow({ op: 'import' }, editor), true);
+  assert.equal(await allow({ op: 'delete' }, { ...editor, frameId: 1 }), false);
+  assert.equal(await allow({ op: 'import' }, { ...editor, origin: 'https://bad.test' }), false);
+  const site = { id: 'glaze', tab: {}, frameId: 0, url: 'https://school.test/ultra/courses' }, key = 'pet:https://school.test/_3_1';
+  for (const op of ['import', 'delete']) assert.equal(await allow({ op, key }, site), false);
+  for (const op of ['list', 'get']) assert.equal(await allow({ op, key }, site), true);
+  assert.equal(await allow({ op: 'list', key: 'pet:https://other.test/_3_1' }, site), false);
+  local.ultra = [];
+  assert.equal(await allow({ op: 'get', key }, site), false);
+  local.ultra = ['https://school.test']; sync.enhance.pet = false;
+  assert.equal(await allow({ op: 'list', key }, site), false);
+  sync.enhance.pet = true; sync.enabled = false;
+  assert.equal(await allow({ op: 'list', key }, site), false);
+});

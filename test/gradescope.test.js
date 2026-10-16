@@ -400,7 +400,7 @@ test('on Gradescope: only with Glaze and its switch on; whose account first; red
     const node = () => ({ prepend: (x) => drawn.push(x) });
     const doc = { querySelector: () => null, querySelectorAll: () => [] };
     const context = vm.createContext({
-      URL, console, Promise, Date, setTimeout, TextEncoder, crypto: globalThis.crypto, navigator: { language: 'en' }, location: { pathname: '/' },
+      URL, console, Promise, Date, setTimeout, TextEncoder, crypto: globalThis.crypto, matchMedia: () => ({ matches: false, addEventListener() {} }), clearTimeout, addEventListener() {}, navigator: { language: 'en' }, location: { pathname: '/' },
       DOMParser: class { parseFromString(s) { return s === 'account' ? { querySelector: (q) => (q === 'input[name="user[email]"]' ? { getAttribute: () => EMAIL } : null) } : doc; } },
       fetch: async (u, init) => {
         fetched.push(u);
@@ -412,13 +412,13 @@ test('on Gradescope: only with Glaze and its switch on; whose account first; red
       document: { ...doc, body: node(), createElement: () => ({}) },
       chrome: {
         i18n: { getUILanguage: () => 'en' },
-        runtime: { sendMessage: (m, cb) => { sent.push(m.op); if (m.type !== 'glaze:gradescope') return cb({ ok: true }); context.GZ_GRADESCOPE.change(m, memory(local).area).then(cb); } },
+        runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => { sent.push(m.op); if (m.type !== 'glaze:gradescope') return cb({ ok: true }); context.GZ_GRADESCOPE.change(m, memory(local).area).then(cb); } },
         storage: { sync: get(sync), local: get(local) },
       },
     });
     context.window = context;
     context.window.top = context;
-    for (const f of ['lib/i18n.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
+    for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
     await new Promise((r) => setTimeout(r, 30));
     return { fetched, drawn, sent };
   };
@@ -436,11 +436,11 @@ test('on Gradescope: only with Glaze and its switch on; whose account first; red
 test('on Gradescope: the bar is drawn only if both switches still hold after every wait, and goes when either is turned off', async () => {
   // Just enough of an element for the bar.
   class E {
-    constructor(tag = 'div') { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.attrs = {}; this.on = {}; this.parent = null; }
+    constructor(tag = 'div') { this.tagName = tag.toUpperCase(); this.children = []; this.dataset = {}; this.attrs = {}; this.on = {}; this.parent = null; this.style = { setProperty: (k, v) => { this.style[k] = v; }, removeProperty: (k) => { delete this.style[k]; } }; }
     append(...xs) { for (const x of xs) { if (x && typeof x === 'object') x.parent = this; this.children.push(x); } }
     prepend(x) { x.parent = this; this.children.unshift(x); }
     remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; }
-    attachShadow() { return new E('shadow'); }
+    attachShadow() { return (this.shadowRoot = new E('shadow')); }
     addEventListener(t, f) { this.on[t] = f; }
     setAttribute(k, v) { this.attrs[k] = v; }
     getAttribute(k) { return this.attrs[k] ?? null; }
@@ -448,8 +448,8 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
     querySelectorAll() { return []; }
     closest() { return this; }
   }
-  const run = async ({ lang = 'en', offWhileLoading = false } = {}) => {
-    const sync = { enhance: { gradescope: true } };
+  const run = async ({ lang = 'en', offWhileLoading = false, look = {}, readFails = false } = {}) => {
+    const sync = { enhance: { gradescope: true }, look };
     const local = {
       seenCourses: { 'canvas:https://c.test/7': { name: 'Calculus I', code: 'MATH 1350', canvas: true } },
       gradescope: { acct: { id: A1, name: 'Sam' } },
@@ -459,15 +459,16 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
     const box = new E('a');
     box.attrs.href = '/courses/900001';
     box.querySelector = (q) => (q === '.courseBox--shortname' ? { textContent: 'MATH 1350' } : null);
-    const get = (s) => ({ get: (k, cb) => cb(Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))) });
+    const get = (s) => ({ get: (k, cb) => { if (readFails) throw Error('storage failed'); cb(Object.fromEntries([].concat(k).filter((x) => x in s).map((x) => [x, s[x]]))); } });
     const context = vm.createContext({
-      URL, console, Promise, Date, setTimeout, TextEncoder, crypto: globalThis.crypto, navigator: { language: lang }, location: { pathname: '/' },
+      URL, console, Promise, Date, setTimeout, TextEncoder, crypto: globalThis.crypto, matchMedia: () => ({ matches: false, addEventListener() {} }), clearTimeout, addEventListener() {}, navigator: { language: lang }, location: { pathname: '/' },
       DOMParser: class { parseFromString() { return { querySelector: (q) => (q === 'input[name="user[email]"]' ? { getAttribute: () => EMAIL } : null) }; } },
       fetch: async (u) => ({ ok: true, url: `https://www.gradescope.com${u}`, text: async () => 'account' }),
       document: { querySelector: (q) => (q === 'main' ? main : null), querySelectorAll: (q) => (q.includes('courseBox') ? [box] : []), body: new E('body'), createElement: (t) => new E(t) },
       chrome: {
         i18n: { getUILanguage: () => lang },
         runtime: {
+          id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`,
           sendMessage: (m, cb) => {
             if (m.type === 'glaze:load') { if (offWhileLoading) sync.enabled = false; return setTimeout(() => cb({ ok: true }), 5); }
             context.GZ_GRADESCOPE.change(m, memory(local).area).then(cb);
@@ -478,7 +479,7 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
     });
     context.window = context;
     context.window.top = context;
-    for (const f of ['lib/i18n.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
+    for (const f of ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js']) vm.runInContext(read(f), context);
     await new Promise((r) => setTimeout(r, 40));
     const off = async (patch) => {
       Object.assign(sync, patch);
@@ -498,6 +499,15 @@ test('on Gradescope: the bar is drawn only if both switches still hold after eve
   assert.equal(b.main.children.length, 1);
   await b.off({ enhance: { gradescope: false } });
   assert.equal(b.main.children.length, 0, 'gone with its switch off');
+  const styled = await run({ look: { radius: 0, depth: 3, surfaceCustom: true, surfaceColor: '#334455', surfaceBorder: 0, surfaceFrost: 50 } });
+  assert.equal(styled.main.children[0].style['--gz-radius'], '0px');
+  assert.equal(styled.main.children[0].style['--gz-surface-color'], '#334455');
+  assert.equal(styled.main.children[0].attrs['data-gz-depth'], '3');
+  await styled.off({ look: { radius: 24, surfaceBorder: 50 } });
+  assert.equal(styled.main.children[0].style['--gz-radius'], '24px');
+  assert.equal(styled.main.children[0].style['--gz-surface-color'], undefined);
+  assert.equal(styled.main.children[0].style['--gz-surface-border'], '50%');
+  assert.equal((await run({ readFails: true })).main.children.length, 0, 'failed reads never draw');
   // Another setting changing leaves it.
   const c = await run();
   await c.off({ enhance: { gradescope: true, todo: true } });

@@ -45,10 +45,12 @@ const fromJs = (js) => {
   return out;
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['sharing/sessions.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/todo.js', 'lib/ultra.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+const JS = ['sharing/sessions.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 const used = new Set([
   ...['sharing/sessions.html', 'options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
+  // Import failures are translated by the editor's t(error.message).
+  ...['lib/petsprites.js', 'lib/petlibrary.js'].flatMap((f) => [...read(f).matchAll(/(?:Error|error)\('([^']+)'\)/g)].map((m) => m[1])),
   ...D.GZ_COLORS.map(([, label]) => label),
   ...D.GZ_TABS.map(([, label]) => label),
   ...D.GZ_CONTRAST(D.GZ_DEFAULTS.colors).map((r) => r.label),

@@ -5,6 +5,30 @@
   const $ = (s) => document.querySelector(s);
   const human = (e) => e.isTrusted && (navigator.userActivation?.isActive ?? true);
   let state, busy = false, dead = false, relayLoaded = false;
+  const LOOK_KEYS = ['look', 'colors', 'auto', 'presets'];
+  const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+  let lookRevision = 0, lookTimer = 0;
+  const paintLook = async () => {
+    const turn = ++lookRevision;
+    clearTimeout(lookTimer);
+    try {
+      const settings = GZ_SANITIZE(await chrome.storage.sync.get(LOOK_KEYS));
+      if (dead || turn !== lookRevision || !chrome.runtime?.id) return;
+      const html = document.documentElement, vars = GZ_SURFACES.vars({ look: settings.look, bg: { kind: 'solid' } });
+      // Keep this standalone page's original role colors until the user overrides its surfaces.
+      vars['--gz-surface-tint'] = GZ_ACTIVE_COLORS(settings, darkMQ.matches)['--gz-accent'];
+      vars['--gz-radius'] = `${settings.look.radius}px`;
+      for (const [key, value] of Object.entries(vars)) { if (value) html.style.setProperty(key, value); else html.style.removeProperty(key); }
+      html.setAttribute('data-gz-depth', String(settings.look.depth));
+      if (settings.auto.on && settings.auto.mode === 'schedule') {
+        const at = GZ_SCHEDULE_NEXT(settings.auto.from, settings.auto.to, new Date());
+        if (at) lookTimer = setTimeout(paintLook, Math.max(0, at - Date.now()) + 20);
+      }
+    } catch { /* A failed read leaves the existing appearance and local copies intact. */ }
+  };
+  chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && LOOK_KEYS.some((key) => changes[key])) paintLook(); });
+  darkMQ.addEventListener('change', paintLook);
+  paintLook();
   const say = (k, err = false) => { $('#status').textContent = t(k); $('#status').classList.toggle('error', err); };
   const send = async (op, rest = {}) => {
     const r = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op, ...rest });
@@ -216,7 +240,7 @@
   let port;
   try { port = chrome.runtime.connect({ name: 'glaze:sessions' }); port.onMessage.addListener(() => { if (!busy) load().catch(() => say('Could not finish. Your local copies are kept. Try again.', true)); }); }
   catch { say('Could not finish. Your local copies are kept. Try again.', true); }
-  addEventListener('pagehide', () => { dead = true; $('#invite').value = ''; port?.disconnect(); });
+  addEventListener('pagehide', () => { dead = true; lookRevision++; clearTimeout(lookTimer); $('#invite').value = ''; port?.disconnect(); });
   addEventListener('online', () => { if (!dead) { port?.postMessage({ online: true }); load().catch(() => {}); } });
   load().catch(() => say('Could not finish. Your local copies are kept. Try again.', true));
 })();

@@ -29,3 +29,19 @@ test('late image loads and invalidated extension contexts do not restart animati
   const q = page(); q.player.mount(q.canvas, { path: 'x.webp', spriteVersionNumber: 1 }); q.context.chrome.runtime.id = undefined; q.load();
   assert.equal(q.timers.size + q.docEvents.size + q.winEvents.size + q.motionEvents.size, 0);
 });
+
+test('detached and invalidated hidden pets release all listeners without waking', () => {
+  for (const invalidated of [false, true]) {
+    const p = page(); p.player.mount(p.canvas, { path: 'x.webp', spriteVersionNumber: 2 }); p.load();
+    if (invalidated) { p.context.chrome.runtime.id = undefined; p.context.document.hidden = true; }
+    else p.canvas.isConnected = false;
+    p.docEvents.get('visibilitychange')();
+    assert.equal(p.timers.size + p.docEvents.size + p.winEvents.size + p.motionEvents.size, 0);
+  }
+});
+test('a stale intersection callback cannot wake an explicitly sleeping pet', () => {
+  const p = page(), live = p.player.mount(p.canvas, { path: 'x.webp', spriteVersionNumber: 2 }); p.load();
+  live.sleep(); p.observer(true);
+  assert.equal(p.timers.size, 0);
+  live.wake(); assert.equal(p.timers.size, 1);
+});
