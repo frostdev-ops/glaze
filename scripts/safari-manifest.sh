@@ -16,7 +16,7 @@ if optional:
     manifest['optional_permissions'] = optional
 else:
     manifest.pop('optional_permissions', None)
-manifest['description'] = 'Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras.'
+manifest['description'] = 'Restyle Blackboard Ultra, Canvas and Moodle: palettes, fonts, backgrounds and motion, plus handy extras.'
 for entry in manifest.get('web_accessible_resources', []):
     entry.pop('use_dynamic_url', None)
 open(path, 'w').write(json.dumps(manifest, indent=2) + '\n')

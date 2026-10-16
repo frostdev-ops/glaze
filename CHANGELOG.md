@@ -6,6 +6,13 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-10-15
+
+Glaze 3.0 makes Blackboard Ultra as capable as Canvas, all on your device: a Glaze Dashboard, widgets you place
+anywhere (Better To Do and your course cards among them), course tabs that stay live like browser tabs, search in your
+courses, hidden folders, navigation styling, planning, reminders and Insights. Moodle joins Blackboard and Canvas.
+Settings move into tabs with search, and optional encrypted share sessions can use frostdev.io's relay or your own.
+
 ### Changed
 - **Course tabs keep their pages alive, like browser tabs.** A course tab picked from the strip now runs as a live
   Blackboard page in a frame over the window, kept running while you're on another tab: text you typed, an upload or
@@ -850,6 +857,11 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
+[3.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v3.0.0
+[2.2.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.2.0
+[2.1.4]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.4
+[2.1.3]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.3
+[2.1.2]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.2
 [2.1.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.1
 [2.1.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.0
 [2.0.3]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.3
