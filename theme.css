@@ -167,7 +167,8 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 /* :where() keeps this at the specificity of the id alone, so it beats every Ultra class rule but any
    targeted #site-wrap rule below can still set a colour. (1.0 had it at (1,2,3), which silently beat
    the button, badge and chip colors written later in this file.) */
-#site-wrap :where(*:not(a, .MuiButton-root, .MuiChip-label, svg, svg *)) { color: inherit !important; }
+/* SVG's own elements by name, not `svg *`: that made every element on Ultra's page walk its ancestors for an <svg>. */
+#site-wrap :where(*:not(a, .MuiButton-root, .MuiChip-label, svg, svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop))) { color: inherit !important; }
 #site-wrap :where(.course-id, .course-status, .summary, .ellipsis, .more-info-toggle, .MuiFormLabel-root,
   .MuiInputLabel-root, .MuiListItemText-secondary, .muted, .secondary, .subtitle) { color: var(--gz-ink-muted) !important; }
 #site-wrap :where(a, .MuiLink-root) { color: var(--gz-accent) !important; transition: color var(--gz-t) var(--gz-ease); }
@@ -578,7 +579,7 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
 /* ---- portals: MUI popovers, menus and dialogs mount on <body>, OUTSIDE #site-wrap, so the page-scoped
    inherit/border rules above never reach them. Same rules, portal scope. ---- */
 .MuiModal-root, .MuiPopper-root, .MuiPopover-root, .MuiDialog-root { color: var(--gz-ink) !important; }
-:is(.MuiModal-root, .MuiPopper-root) *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg *) { color: inherit !important; }
+:is(.MuiModal-root, .MuiPopper-root) *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)) { color: inherit !important; }
 :is(.MuiModal-root, .MuiPopper-root) * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
 :is(.MuiModal-root, .MuiPopper-root) :is(a, .MuiLink-root) { color: var(--gz-accent) !important; }
 :is(.MuiModal-root, .MuiPopper-root) :is(.MuiRadio-root, .MuiCheckbox-root, .MuiSvgIcon-root) { color: var(--gz-ink-muted) !important; }
@@ -740,6 +741,13 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
 }
+/* Over a solid background the glass on the nav, the headers and these panels blurs a flat colour: nothing to see, and
+   a GPU layer each. Same fill. */
+html[data-gz-bg="solid"] :is(.MuiDrawer-paper, #site-wrap .base-header, #site-wrap header[class*="makeStylesheader-"], course-page-header > header,
+  .bb-course-navigation [class*="makeStylestoolbar"], #site-wrap .bbml-editor-parent > .bbml-editor,
+  bb-assignment-attempt-authoring-panel :is(.MuiAccordion-root, [class*="makeStylesdetails-"]), #site-wrap .outline-action-block,
+  #site-wrap .layer-details :is(.discussion-settings, .discussion-participants),
+  #site-wrap :is(.section-well, .assessment-details-section > ul.section-content, .base-profile section ul, .group-empty-state)) { backdrop-filter: none; }
 #site-wrap .assessment-details-section > ul.section-content { padding: 0.75rem 1rem !important; }
 #site-wrap .base-profile section ul { overflow: hidden; } /* its rows paint their own fill: kept inside the corners */
 /* Item type at a glance: the type icon carries its name as aria-label. */

@@ -10,16 +10,22 @@ const uid = '_42_1', cid = '_1_1';
 // A picture the page asks for: the worker takes it (captureVisibleTab, faked here: `shots.size` characters).
 const shot = (c = cid, extra = {}) => ({ op: 'shot', cid: c, path: `/ultra/courses/${c}/outline`, strip: null, size: [1400, 900], ...extra });
 const flush = () => new Promise(setImmediate);
-function worker() {
+function worker({ keys = false } = {}) {
   const data = {}, notices = [], pages = new Map([[1, site + '/ultra/course'], [2, site + '/ultra/course'], [3, site + '/ultra/course']]);
-  const active = new Set([1, 2, 3]), shots = { size: 1000, calls: 0, during() {} };
+  const active = new Set([1, 2, 3]), shots = { size: 1000, calls: 0, failStore: false, during() {} };
   const born = Date.now() - 10000, epochs = new Map();
   let message, changed;
   const source = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
   const section = source.slice(source.indexOf('const SNAP_MEM'), source.indexOf('// A Gradescope course page for a Canvas or Ultra page'));
+  const reads = { all: 0 };
   const area = {
-    async get(k) { await flush(); return structuredClone(k === null ? data : { [k]: data[k] }); },
-    async set(patch) { await flush(); Object.assign(data, structuredClone(patch)); },
+    async get(k) { await flush(); if (k === null) reads.all++; return structuredClone(k === null ? data : { [k]: data[k] }); },
+    ...(keys && { async getKeys() { await flush(); return Object.keys(data); } }),
+    async set(patch) {
+      await flush();
+      if (shots.failStore && Object.keys(patch).some((k) => k.startsWith('snap:'))) { shots.failStore = false; throw new Error('quota'); }
+      Object.assign(data, structuredClone(patch));
+    },
     async remove(keys) { await flush(); for (const k of [].concat(keys)) delete data[k]; },
   };
   let on = true;
@@ -41,7 +47,7 @@ function worker() {
     if (reply?.ok && reply.epoch) epochs.set(s.documentId, reply.epoch);
     return reply;
   };
-  return { data, send, notices, pages, born, active, shots,
+  return { data, send, notices, pages, born, active, shots, reads,
     change(onNow) { on = onNow; changed({ enabled: { newValue: onNow } }, 'sync'); },
     async drain() { await send({ op: 'invalid' }); },
   };
@@ -116,6 +122,35 @@ test('concurrent pictures stay inside the shared total cap', async () => {
   const copies = Object.entries(w.data).filter(([k]) => k.startsWith('snap:')).map(([, v]) => v);
   assert.ok(copies.length > 0);
   assert.ok(copies.reduce((sum, s) => sum + s.n, 0) <= L.SNAP_ALL);
+});
+
+test('with getKeys, the total cap is kept from the sizes recorded, without reading the pictures', async () => {
+  const w = worker({ keys: true });
+  await w.send({ op: 'hello' });
+  w.shots.size = 3_000_000 - 100;
+  for (const c of ['_1_1', '_2_1', '_3_1', '_4_1']) assert.ok((await w.send(shot(c)))?.snap);
+  assert.equal(w.reads.all, 0, 'no whole-area read');
+  const copies = Object.entries(w.data).filter(([k]) => k.startsWith('snap:')).map(([, v]) => v);
+  assert.deepEqual(copies.map((s) => s.cid).sort(), ['_3_1', '_4_1'], 'the oldest went past the total');
+  await w.send({ op: 'forget', cid: '_4_1' });
+  assert.ok((await w.send(shot('_5_1')))?.snap);
+  assert.deepEqual(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 2, 'a forgotten picture no longer counts');
+  w.change(false); await w.drain();
+  assert.equal(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 0);
+});
+
+test('a failed picture overwrite cannot undercount the retained picture and exceed the total cap', async () => {
+  const w = worker({ keys: true });
+  await w.send({ op: 'hello' });
+  w.shots.size = 2_900_000;
+  await w.send(shot());
+  w.shots.size = 100_000;
+  w.shots.failStore = true;
+  await w.send(shot());
+  w.shots.size = 2_900_000;
+  await w.send(shot('_2_1')); await w.send(shot('_3_1'));
+  const copies = Object.entries(w.data).filter(([k]) => k.startsWith('snap:')).map(([, s]) => s);
+  assert.ok(copies.reduce((n, s) => n + s.n, 0) <= L.SNAP_ALL, 'size bookkeeping must describe the successfully stored pictures');
 });
 
 test('closing a course forgets its worker picture without dropping another course\'s', async () => {

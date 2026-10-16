@@ -240,8 +240,10 @@ html[data-gz-bg="aurora"]::before {
     radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
     radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
     var(--gz-surface-paint-2, var(--gz-surface-2));
-  animation: gz-aurora 42s ease-in-out infinite alternate; animation-play-state: var(--gz-ambient); will-change: transform;
+  animation: gz-aurora 42s ease-in-out infinite alternate; animation-play-state: var(--gz-ambient);
 }
+/* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
+html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before { will-change: transform; }
 @keyframes gz-aurora {
   0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
   50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
@@ -252,6 +254,9 @@ html[data-gz-bg="aurora"]::before {
   width: calc(100% + var(--gz-bg-blur, 0px) * 4); height: calc(100% + var(--gz-bg-blur, 0px) * 4);
   z-index: -1; pointer-events: none; filter: blur(var(--gz-bg-blur, 0px));
 }
+/* No blur set, no filter: even blur(0) gives the layer an offscreen copy on the GPU. Every element is a style
+   container, so this reads the --gz-bg-blur content.js sets on <html>. */
+@container style(--gz-bg-blur: 0px) { html::before, #gz-scene { filter: none; } }
 
 /* ---- ground: the page and the frames around content are the ground, see-through over a background ---- */
 html, body, #page-wrapper, #page, #page.drawers, #page-content, #region-main-box, #topofscroll, #page.drawers .main-inner, #region-main,
