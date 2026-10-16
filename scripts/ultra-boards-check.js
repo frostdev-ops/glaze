@@ -1,5 +1,5 @@
 // Ultra's boards, headless (B7b): the real extension on synthetic Courses, Institution and start pages built from
-// parity/spikes/B7.md (B0's anchors; invented courses and modules), served under a made-up school's address. Nothing
+// docs/spikes/B7.md (B0's anchors; invented courses and modules), served under a made-up school's address. Nothing
 // leaves the machine: Ultra's API is answered from test/fixtures, every other request is aborted and DNS is mapped to
 // nowhere. It checks that the Courses page's tiles float where the panel was without covering Ultra's To Do; that
 // they move only in Edit layout, by pointer (snapped, with a guide; Alt: free) and by keys (announced), and are where

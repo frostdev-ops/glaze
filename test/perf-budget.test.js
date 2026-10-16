@@ -1,6 +1,6 @@
 // Performance budget (W0). What every Ultra, Canvas and Moodle page pays for, checked statically, so a change can't
 // quietly grow it: the size of each site's first content script, the size of the detector every other https page runs, no fast
-// timers, and no new whole-page sweeps. The runtime numbers (time to themed, no light frame) are in parity/spikes/W0-perf.md.
+// timers, and no new whole-page sweeps. The runtime numbers (time to themed, no light frame) are in docs/spikes/W0-perf.md.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -53,7 +53,7 @@ test('the detector that runs on every other https page stays under 2 KB', () => 
 // Every first-party script Glaze ships, at any depth (features/, lib/, i18n/ and the root), whether it is in the
 // first content script, loaded on demand or in the extension's pages. Not the vendored three.js or OCR engine, nor the tools,
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
-const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'parity', 'server']);
+const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server']);
 const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js']); // pdf.js is .mjs, not scanned
 const shipped = (dir = '') => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
   const rel = dir ? `${dir}/${e.name}` : e.name;

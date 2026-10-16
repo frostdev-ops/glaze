@@ -26,7 +26,7 @@ const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-impo
 const BASE = 'http://localhost:3000';
 const CREDS = path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
 const CHROME = process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
-const NOT_EXTENSION = new Set(['assets', 'safari', 'scripts', 'store', 'test', 'parity', 'dist', 'release', 'node_modules']);
+const NOT_EXTENSION = new Set(['assets', 'safari', 'scripts', 'store', 'test', 'docs', 'dist', 'release', 'node_modules']);
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) process.exitCode = 1; };
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const look = (name) => G.GZ_SANITIZE({ preset: name, colors: { ...G.GZ_PRESETS.find(([n]) => n === name)[1] }, enhance: { ...G.GZ_DEFAULTS.enhance, syllabus: true, gpa: true } });

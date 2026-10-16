@@ -1,6 +1,5 @@
 // Canvas HTML fixtures (test/fixtures/canvas-*.html): Canvas pages as the student sees them, captured with Glaze off by
-// `scripts/canvas-shots.js --settings '{enabled:false}' --html test/fixtures name=/path ...` (see parity/spikes/W0-dark-audit.md
-// for the exact list). These tests keep them safe to commit and keep them honest: every class, id and attribute Glaze's
+// `scripts/canvas-shots.js --settings '{enabled:false}' --html test/fixtures name=/path ...`. These tests keep them safe to commit and keep them honest: every class, id and attribute Glaze's
 // Canvas code and canvas.css key on must still be found in one, so when a reseed or a Canvas update drops a selector,
 // this fails instead of a page quietly losing its theme.
 const test = require('node:test');

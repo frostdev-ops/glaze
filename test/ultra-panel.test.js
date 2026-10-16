@@ -1,5 +1,5 @@
 // Glaze's panel on Blackboard Ultra's Courses page (features/widgets.js on Ultra), on a synthetic page built from B0's
-// anchors (parity/spikes/B0.md): first in the To Do column, back after Ultra redraws it, folded away and kept so, gone
+// anchors (docs/spikes/B0.md): first in the To Do column, back after Ultra redraws it, folded away and kept so, gone
 // on other pages; a school without Ultra's To Do gets it above the courses. And a tile another file declares (MORE) and
 // registers, on either site: filled once, stopped when it goes.
 const test = require('node:test');

@@ -1,8 +1,7 @@
 # Ultra performance review
 
 Baseline: `f39b3ed`. Scope: all Ultra startup/SPA observers, native sweeps, extension storage/load traffic and existing
-page data reuse; actual unpacked headless extension on local synthetic responses. Evidence and commands:
-[`parity/spikes/Ultra-perf.md`](../parity/spikes/Ultra-perf.md).
+page data reuse; actual unpacked headless extension on local synthetic responses.
 
 Confirmed causes, ranked by measured impact:
 

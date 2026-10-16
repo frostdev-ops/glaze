@@ -67,7 +67,7 @@ const COURSES = { bio: 'BIO 1100', eng: 'ENG 1100', math: 'MATH 1350', hist: 'HI
 // Pages loaded at once.
 const TABS = 2;
 // Top-level entries that aren't the extension (or are too big to copy for every run).
-const NOT_EXTENSION = new Set(['assets', 'safari', 'scripts', 'store', 'test', 'parity', 'dist', 'release', 'node_modules']);
+const NOT_EXTENSION = new Set(['assets', 'safari', 'scripts', 'store', 'test', 'docs', 'dist', 'release', 'node_modules']);
 const DOCS = /\.(md|sh)$|^LICENSE$/;
 
 const die = (msg) => { console.error(msg); process.exit(1); };

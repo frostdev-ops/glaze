@@ -1,7 +1,7 @@
 // Gradescope in Better To Do (lib/gradescope.js): reading a course page row by row, guessing the Canvas course, what's
 // kept and for whom, and the items it adds to Better To Do; the worker's rules and the Gradescope page's start. Gradescope's
 // markup is from public knowledge of its pages (there's no test account): the real pages are checked by an owner before
-// release (parity notes, W10).
+// release (W10).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

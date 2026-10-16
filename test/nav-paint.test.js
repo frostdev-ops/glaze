@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const { analyse, assertClean, assertCoverage } = require('../parity/bench/B7c-paint.cjs');
+const { analyse, assertClean, assertCoverage } = require('./helpers/paint-audit.cjs');
 const url = 'https://nav.test/ultra/grades';
 const start = { name: 'navigationStart', ts: 100, args: { frame: 'current', data: { documentLoaderURL: url, navigationId: 'nav' } } };
 const commit = { name: 'CommitLoad', ts: 120, args: { data: { frame: 'current', url } } };

@@ -60,7 +60,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   let want = false;
   const shows = (s) => s.enabled !== false && !!s.enhance.notes;
   // Ultra: a course outline's right column (aside.outline-actions) gets a block of its own at its end, below Ultra's
-  // details and Glaze's Better To Do (B0's anchors; parity notes B2-B5-mount.md).
+  // details and Glaze's Better To Do (B0's anchors).
   const ultra = ctx.site === 'ultra';
   const sync = (on = want) => {
     want = on;

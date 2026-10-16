@@ -1,5 +1,5 @@
 // Ultra's course cards, headless (B7a): the real extension on a synthetic Courses page (test/fixtures/ultra-courses.html,
-// built from parity/spikes/B7.md), served under a made-up school's address. Nothing leaves the machine: every other
+// built from docs/spikes/B7.md), served under a made-up school's address. Nothing leaves the machine: every other
 // request is aborted and DNS is mapped to nowhere. Each card gets a due list as features/cardtasks.js draws it (four
 // rows and "and 2 more"; Ultra's planner isn't here to ask), then, for each card mode (Ultra's own, a banner height,
 // a short banner, a width and gap, condensed with a pet), it checks that every list ends inside its card, that every
