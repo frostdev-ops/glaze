@@ -50,6 +50,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       wear.dataset.control = 'wear';
       for (const [id, item] of Object.entries(P.WEAR)) wear.append(make('option', { value: id, selected: d.wear === id, disabled: d.level < item.level, textContent: `${t(NAMES[id])} · ${t('Level {level}', { level: item.level })}` }));
       wear.addEventListener('change', () => update({ op: 'wear', wear: wear.value }));
+      const outfit = make('label', { hidden: !!d.sprite }, make('span', { textContent: t('Buddy’s look') }), wear);
       const sprite = make('select'); sprite.dataset.control = 'sprite'; sprite.setAttribute('aria-label', t('Pet character'));
       sprite.append(make('option', { value: '', textContent: t('Classic buddy'), selected: !d.sprite }));
       for (const item of pets) sprite.append(make('option', { value: item.id, textContent: item.name, selected: d.sprite === item.id }));
@@ -72,7 +73,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       pet.replaceChildren(make('p', { className: 'gz-game-level', textContent: t('Level {level} · {xp} XP', { level: d.level, xp: d.xp }) }), stage, progress,
         make('p', { textContent: d.next ? t('{xp} XP to the next level', { xp: d.next - d.xp }) : t('All rewards unlocked') }),
         make('p', { className: 'gz-game-breakdown', textContent: t('Work {work} · Plans {plans} · Streak {streak}', { work: d.work, plans: d.plans, streak: d.streakXp }) }),
-        make('label', {}, make('span', { textContent: t('Pet character') }), sprite), make('label', {}, make('span', { textContent: t('Buddy’s look') }), wear), decor, rules);
+        make('label', {}, make('span', { textContent: t('Pet character') }), sprite), outfit, decor, rules);
       if (active) [...pet.querySelectorAll('[data-control]')].find((e) => e.dataset.control === active)?.focus({ preventScroll: true });
     };
     const stop = () => { alive = false; generation++; player?.stop(); clearTimeout(timer); document.removeEventListener('visibilitychange', show); chrome.storage.onChanged.removeListener(changed); };

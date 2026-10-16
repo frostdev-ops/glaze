@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const m = require('../manifest.json');
+const D = require('../defaults.js');
 
 const root = path.join(__dirname, '..');
 const DOCS = ['https://canvadocs.instructure.com/*'];
@@ -35,17 +36,17 @@ const page = ({ src, href = 'https://school.instructure.com/courses/1/modules', 
   const frame = { closed: false, postMessage: (msg, origin) => sent.push({ msg, origin }) };
   const iframe = { src, contentWindow: frame };
   const later = new Set();
-  const settings = { enhance: { docTheme: true, docPages: 'dim', docInk: true, toggles: true } };
+  const settings = D.GZ_SANITIZE({ enhance: { docTheme: true, docPages: 'dim', docInk: true, toggles: true } });
   const ctx = vm.createContext({
     URL, URLSearchParams, JSON, Object, String, Array, location: new URL(href), window: {}, IntersectionObserver: class { observe() {} },
-    GZ_COLORS: [['--gz-surface'], ['--gz-ink']],
+    GZ_COLORS: [['--gz-surface'], ['--gz-ink']], GZ_COURSE_LOOK: D.GZ_COURSE_LOOK,
     document: {
       documentElement: { style: { getPropertyValue: (v) => ({ '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa' })[v] }, matches: () => false, removeAttribute() {} },
       getElementsByTagName: () => [iframe], querySelector: () => null, querySelectorAll: () => [], addEventListener() {},
     },
   });
   ctx.globalThis = ctx;
-  ctx.GZ_CTX = { site: 'canvas', t: (w) => ({ Pen: 'Stift' })[w] || w, on: () => true, darkTheme: () => true, settings: () => settings, wordsIn: later, PREVIEWS: 'iframe', DOC: '.doc',
+  ctx.GZ_CTX = { site: 'canvas', canvasCourseKey: () => { const id = new URL(href).pathname.match(/\/courses\/(\d+)/)?.[1]; return id ? `canvas:${new URL(href).origin}/${id}` : null; }, t: (w) => ({ Pen: 'Stift' })[w] || w, on: () => true, darkTheme: () => true, settings: () => settings, wordsIn: later, PREVIEWS: 'iframe', DOC: '.doc',
     profile: () => { ctx.profiles = (ctx.profiles || 0) + 1; return profile(); } };
   vm.runInContext(fs.readFileSync(path.join(root, 'features/docs.js'), 'utf8'), ctx);
   const ask = (data, origin = 'https://canvadocs.instructure.com', source = frame) => ctx.GZ_DOCS.ask({ data, origin, source });
@@ -77,7 +78,7 @@ test('a canvadocs frame of this page is told the palette, the switches, the file
   assert.equal(sent.length, 1);
   assert.equal(sent[0].origin, 'https://canvadocs.instructure.com', 'never "*"');
   assert.deepEqual(JSON.parse(JSON.stringify(sent[0].msg)), {
-    gz: 'docs', on: true, dark: true, colors: { '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa' }, theme: true, pages: 'dim', ink: true,
+    gz: 'docs', on: true, dark: true, look: D.GZ_DEFAULTS.look, colors: { '--gz-surface': '#0d1b2e', '--gz-ink': '#e8f2fa' }, theme: true, pages: 'dim', ink: true,
     file: '21', user: '170000000000042', words: { Pen: 'Stift', Eraser: 'Eraser' },
   });
 });
@@ -178,4 +179,14 @@ test('the frame is told again when anything it was told changes and when the wor
   settings.enhance = { ...settings.enhance, docPages: 'plain' };
   docs.sync();
   assert.equal(sent.length, 2);
+});
+
+test('a DocViewer receives its containing course Look rather than global surfaces', () => {
+  const p = page({ src: `/api/v1/canvadoc_session?blob=${BLOB}` });
+  p.settings.look.surfaceCustom = true; p.settings.look.surfaceColor = '#ff0000'; p.settings.look.radius = 24;
+  p.settings.courses.looks['canvas:https://school.instructure.com/1'] = 'Terminal';
+  p.ask({ gz: 'docs?' });
+  const look = p.sent[0].msg.look;
+  assert.equal(look.radius, 2); assert.equal(look.glass, 0); assert.equal(look.depth, 0);
+  assert.equal(look.surfaceCustom, false); assert.equal(look.surfaceFrost, 0);
 });

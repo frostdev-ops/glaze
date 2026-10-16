@@ -203,7 +203,7 @@ const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = []
   };
   const context = vm.createContext({ solo: false, tabFrame: '',
     URL, Promise, JSON, Date, document, location: { origin: ORIGIN }, matchMedia: () => ({ matches: dark }),
-    GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../lib/color.js'),
+    GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../lib/color.js'),
     GZ_MOODLE: M, GZ_PAGE: { score },
     GZ_CTX: { t: (k) => k, settings: () => settings, local: (fn) => fn(local), canvasCourseKey: (id) => (id ? `moodle:${root}/${id}` : null), courseList: () => list, on: () => live.on },
     fetch: async (url, opts = {}) => { asked.push({ url, ...opts }); return { ok: true, status: 200, text: async () => overview, json: async () => [{ error: false, data: { events: [], courses } }] }; },
@@ -557,15 +557,19 @@ test('a signed-out page or a failed course read is caught, and asked again when 
 
 test('each course card wears its own course\'s Look and tint, painted only on change and taken off with them', () => {
   const k = (id) => `moodle:${ORIGIN}/${id}`;
-  const settings = D.GZ_SANITIZE({ enabled: true, courses: { tint: true, tinted: [k(16)], looks: { [k(17)]: 'Library' } } });
+  const settings = D.GZ_SANITIZE({ enabled: true, look: { radius: 24, depth: 3, surfaceCustom: true, surfaceColor: '#ff0000', surfaceFrost: 40 }, courses: { tint: true, tinted: [k(16)], looks: { [k(17)]: 'Library' } } });
   const list = { [k(16)]: { name: 'BIO', moodle: true, color: '#b2bec3' }, [k(17)]: { name: 'ENG', moodle: true, color: '#fdcb6e' }, [k(18)]: { name: 'MATH', moodle: true, color: '#fd79a8' } };
   const p = page({ cards: [['16'], ['17'], ['18']], settings, list });
   p.api.paint();
   const [bio, eng, math] = p.cards;
   const base = D.GZ_ACTIVE_COLORS(settings, true);
-  assert.deepEqual(plain(bio.style.vars), D.GZ_TINT(base, '#b2bec3', settings.courses.strength / 100), 'tinted as its pages are');
+  for (const [key, value] of Object.entries(D.GZ_TINT(base, '#b2bec3', settings.courses.strength / 100))) assert.equal(bio.style.vars[key], value, 'tinted as its pages are');
   assert.equal(bio.dataset.gzCourseLook, 'dark');
-  assert.deepEqual(plain(eng.style.vars), D.GZ_ACTIVE_COLORS(D.GZ_COURSE_LOOK(settings, k(17)), true), 'its Look');
+  for (const [key, value] of Object.entries(D.GZ_ACTIVE_COLORS(D.GZ_COURSE_LOOK(settings, k(17)), true))) assert.equal(eng.style.vars[key], value, 'its Look');
+  assert.equal(bio.style.vars['--gz-surface-color'], '#ff0000'); assert.equal(bio.dataset.gzDepth, '3');
+  assert.equal(eng.style.vars['--gz-surface-color'], 'initial', 'own Look clears inherited custom fill');
+  assert.equal(eng.style.vars['--gz-surface-grain'], 'none'); assert.equal(eng.style.vars['--gz-radius'], '6px');
+  assert.equal(eng.dataset.gzDepth, '1');
   assert.equal(eng.dataset.gzCourseLook, 'light', 'Library is a light Look');
   assert.deepEqual([plain(math.style.vars), math.dataset.gzCourseLook], [{}, undefined], 'neither: the page\'s own');
   // Only on change: a card already painted isn't written again.
