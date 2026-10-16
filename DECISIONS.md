@@ -727,7 +727,7 @@ becomes the Dashboard; landing there is opt-in. Evidence: `parity/spikes/B7.md`.
 
 Owner decisions (`parity/BLACKBOARD-PLAN.md` § B8): a tab for each course opened, closable, reorderable and pinnable;
 the strip above the course's top bar by default, between its rows or below it as options, staying on items opened over
-the course; each tab remembers its place but never restores into a test, attempt or assessment; fully customizable
+the course; each tab remembers its place (the later owner-directed live-page design below also restores tests and attempts); fully customizable
 buttons with the course's colours; instant switching from a copy kept in memory until the browser closes, never on disk;
 nothing fetched or opened in the background. On by default. Evidence: `parity/spikes/B8.md` (no account access; a
 synthetic Ultra, `test/fixtures/ultra-course.html`, and `scripts/ultra-tabs-check.js`).
@@ -825,3 +825,25 @@ synthetic Ultra, `test/fixtures/ultra-course.html`, and `scripts/ultra-tabs-chec
 | Canonical `course:<https origin>/<Ultra course id>` keys; at most 48 per school on each board (384 across schools per board); no global course floats | Schools can reuse IDs. Course cards belong only to Courses/Dashboard boards, have independent placements, and use the same existing per-tile worker queue. Removing a course tile frees a slot without removing the course’s other data. |
 | The Ultra-only `canvasPeek` returns existing identity/membership promises and the book Map; the existing grade callback wakes mounted cards | The owner approved up to 100 B for cached-only hooks; together they add 99 B. Neither starts a request. Late existing grade answers refresh the cards even without native DOM mutations. Shared core, Canvas and Moodle grow 0 B. |
 | Reuse the card painter/menu and the native card-task renderer with stored account data | No new fetch path or duplicate done/date rules; board creation adds no request. Progress and new-work badges are copied as primitive values only while the native card already supplies them. |
+
+## Live course frame review (2026-10-15)
+
+The top page owns list saves and receives only each live frame's own path/scroll plus explicit pin/reorder actions.
+A storage close immediately removes its frame. Four frames remain the hard live limit: trusted input/change/submit
+protects a frame from automatic list/live eviction until explicit closure; if all four are protected, a fifth waits.
+This deliberately favors retaining native work over automatically reclaiming an edited page. Native operations with
+no such event cannot be identified reliably; explicit close/reload/disable can still discard work. Hidden frame scenes
+use the existing still-scene switch. Same-origin frames run Blackboard normally; a sandbox with scripts and same-origin
+would provide no separation, while removing either breaks the native page. The address bar stays on the surrounding
+page and strip switches do not add history. Permissions remain owner-approved `<all_urls>` for captureVisibleTab;
+`activeTab` would require a toolbar invocation before capture, changing the requested automatic behavior.
+
+Permission review (Chrome primary documentation checked 2026-10-15):
+[`captureVisibleTab`](https://developer.chrome.com/docs/extensions/reference/api/tabs#method-captureVisibleTab)
+requires `<all_urls>` or an active `activeTab` grant. A grant for only the LMS origin is insufficient for that API.
+A feasible narrower design is explicit per-tab activation through the toolbar, an extension context menu, command or
+omnibox suggestion, followed by captures while that same-origin tab grant lasts. Ordinary course-strip clicks are
+not listed grant triggers. This would add an activation step to every new browser tab and lose captures after leaving
+the granted origin; replacing pictures with a spinner would also remove the approved pixel capture behavior.
+[`activeTab` documentation](https://developer.chrome.com/docs/extensions/develop/concepts/activeTab) describes those
+triggers and same-origin lifetime. Keep the owner's approved permission for the current automatic behavior.

@@ -238,7 +238,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
   const renderNew = () => {
-    if (globalThis.GZ_CTABS?.showing?.()) return;
+    if (globalThis.GZ_CTABS?.showing?.() || (tabFrame && html.hasAttribute('data-gz-ctab-framed'))) return;
     const { newgrades, newcontent } = I.settings.enhance;
     if (!(newgrades || newcontent) || !solo || !I.observer) return;
     if (!seen) return loadSeen();

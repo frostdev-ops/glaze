@@ -11,7 +11,7 @@ test('automatic native new-content callbacks wait while a tab\'s frame covers th
   const window = {}; window.top = window;
   fns = vm.runInNewContext(render + reader + '\n({renderNew,courseItems});', {
     I: { settings: { enhance: { newcontent: true, newgrades: false } }, observer: {} }, window, solo: true,
-    GZ_CTABS: { showing: () => active }, seen: {}, courseId: () => '_102_1',
+    GZ_CTABS: { showing: () => active }, tabFrame: '', seen: {}, courseId: () => '_102_1',
     location: { pathname: '/ultra/courses/_102_1/outline' },
     renderItems(cid) { nativePasses++; fns.courseItems(cid); },
     api: async () => { requests++; return { results: [] }; },
@@ -34,4 +34,17 @@ test('a revoked document cannot recreate the first-paint tab reservation', () =>
     GZ_CTABS: { revoked: () => true },
   });
   assert.equal(tabsOn(), false);
+});
+
+
+test('automatic new-content callbacks pause in a retained hidden live frame', () => {
+  let passes = 0;
+  const render = source.slice(source.indexOf('  const renderNew = '), source.indexOf('  // ---- new content (Extras)'));
+  const renderNew = vm.runInNewContext(render + '\nrenderNew;', {
+    GZ_CTABS: { showing: () => false }, tabFrame: '_102_1', html: { hasAttribute: () => true },
+    I: { settings: { enhance: { newcontent: true } }, observer: {} }, solo: true, seen: {},
+    courseId: () => '_102_1', renderItems: () => passes++,
+  });
+  renderNew();
+  assert.equal(passes, 0, 'an invisible retained page cannot mark its rows seen or start a new-content refresh');
 });

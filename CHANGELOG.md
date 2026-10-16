@@ -6,21 +6,28 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-10-15
+
+Glaze 3.0 makes Blackboard Ultra as capable as Canvas, all on your device: a Glaze Dashboard, widgets you place
+anywhere (Better To Do and your course cards among them), course tabs that stay live like browser tabs, search in your
+courses, hidden folders, navigation styling, planning, reminders and Insights. Moodle joins Blackboard and Canvas.
+Settings move into tabs with search, and optional encrypted share sessions can use frostdev.io's relay or your own.
+
 ### Changed
 - **Course tabs keep their pages alive, like browser tabs.** A course tab picked from the strip now runs as a live
   Blackboard page in a frame over the window, kept running while you're on another tab: text you typed, an upload or
   submission under way, open folders, an open document or assignment and the scroll are all still there when you
-  pick it again, and switching is instant. Up to four tabs stay live (the least recently shown stops first; it opens
-  again where you left it). While a tab's page first loads, a blurred picture of how it last looked, with a spinner,
+  pick it again, and switching is instant. Up to four framed course pages stay live alongside the surrounding page (the least recently shown stops first; it opens
+  again at its saved URL and scroll). Edited pages are protected from automatic eviction; when all four are edited, another waits until you close one. Explicit close, reload and disabling can discard unsaved work. While a tab's page first loads, a blurred picture of how it last looked, with a spinner,
   covers it. Any page of the course is remembered, exactly. Glaze's host access becomes `<all_urls>` (Chrome requires
   it to take those pictures; its install warning is unchanged), and the covered page's animated scene pauses.
 
 ### Fixed
+- Live course frames cannot overwrite newer tab-list changes with stale saves. Closing a saved tab destroys its live frame, hidden frames pause their scenes, and edited frames stay out of automatic eviction. Privacy and settings text now describe live pages and JPEG captures.
 - Ultra navigation keeps its native fixed position with custom backgrounds, collapses the MUI rail to its intended width, and centers the expand control in right-to-left layouts.
 - Settings Back/Forward survives preview site changes. Precise navigation dimensions and Blackboard nicknames have usable editor controls; course edits repaint the preview, and open Share sessions pages follow relay preference saves without connecting.
-- Course tabs stay visible on Ultra's full routed documents and positively cached Assignment overviews, preserving
-  their allowed URL context and content scroller. Unknown assessments and tests return to Course Content; tabs never
-  fetch a gradebook to classify an overview or open an attempt. Saved page and scroll wait for native content to arrive;
+- Course tabs stay visible on Ultra's full routed documents and assessment overviews, preserving
+  their URL context and content scroller. The later live-page design remembers any own-course page, including attempts. Saved page and scroll wait for native content to arrive;
   a refreshed native gradebook immediately replaces an older Assignment classification. Floating widgets keep clear
   of the routed native header as well as the strip.
 - Course tabs use automatic short names by default, removing common term/section wrappers and spacing subject codes.
@@ -850,6 +857,11 @@ Initial release.
 - Master on/off switch that adds and removes the theme without a page reload.
 - Settings stored in `chrome.storage.sync`; no data collection and no network requests.
 
+[3.0.0]: https://github.com/frostdev-ops/glaze/releases/tag/v3.0.0
+[2.2.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.2.0
+[2.1.4]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.4
+[2.1.3]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.3
+[2.1.2]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.2
 [2.1.1]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.1
 [2.1.0]: https://github.com/frostdev-ops/glaze/releases/tag/v2.1.0
 [2.0.3]: https://github.com/frostdev-ops/glaze/releases/tag/v2.0.3
