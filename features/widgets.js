@@ -832,6 +832,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const resizer = (el, body, corner, id) => {
     // w: its new width, h: its body's height (null: its own; h undefined: as it is), tall: the tile's height then.
     const keep = (f, at, w, h, tall) => {
+      if (w !== null) w = Math.min(4000, Math.round(w));
+      if (h != null) { const next = Math.min(3000, Math.round(h)); tall += next - h; h = next; }
       const set = { w, ...(h !== undefined && { h }) };
       const wide = w || W.WIDTH[cur(id).size];
       if (!f.float) return settle(id, { ...W.spotOf({ left: at.left, top: at.top, w: wide }, f.W), ...set });

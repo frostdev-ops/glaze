@@ -349,6 +349,44 @@ test('a floating tile resizes by its corner at any time, kept as floating', asyn
   assert.equal(n.style.width, `${304 - W.EDGE}px`);
 });
 
+test('a corner resize at fractional page coordinates keeps a whole-pixel size across reload', async () => {
+  const p = page({ local: { widgetLayout: ONLY(['notes']) } });
+  p.ui.sync(true); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  const n = p.tile('notes'), body = n.querySelector('.gz-w-body'), corner = n.querySelector('.gz-w-resize');
+  n.box = { left: 976.5, top: 120.25, width: 288, height: 200 };
+  body.box = { left: 976.5, top: 160.25, width: 288, height: 150 };
+  corner.dispatchEvent(p.ev('pointerdown', { target: corner, clientX: 1264.5, clientY: 320.25 }));
+  corner.dispatchEvent(p.ev('pointermove', { clientX: 1200, clientY: 423 }));
+  corner.dispatchEvent(p.ev('pointerup'));
+  await settle();
+  assert.deepEqual([on(p, 'courses', 'notes').w, on(p, 'courses', 'notes').h], [232, 246]);
+  const q = page({ local: p.store }); q.ui.sync(true); await settle();
+  assert.equal(q.tile('notes').style.width, '232px');
+  assert.equal(q.tile('notes').querySelector('.gz-w-body').style.height, '246px');
+});
+
+test('a keyboard resize at the stored size limits keeps the limits instead of resetting its size', async () => {
+  const kept = W.bset(W.layout(ONLY(['notes'])), 'courses', 'notes', { h: 3000 });
+  const p = page({ local: { widgetLayout: kept } }); p.ui.sync(true); await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  const n = p.tile('notes'), body = n.querySelector('.gz-w-body'), corner = n.querySelector('.gz-w-resize');
+  n.box = { left: 976, top: 120, width: 288, height: 3050 };
+  body.box = { left: 976, top: 160, width: 288, height: 3000 };
+  corner.dispatchEvent(p.ev('keydown', { key: 'ArrowDown', target: corner }));
+  await settle();
+  assert.equal(on(p, 'courses', 'notes').h, 3000);
+  assert.equal(body.style.height, '3000px');
+  const wide = W.bset(W.layout(ONLY(['notes'])), 'courses', 'notes', { w: 4000 });
+  const q = page({ width: 6000, local: { widgetLayout: wide } }); q.ui.sync(true); await settle();
+  q.doc.fire(q.doc.querySelector('.gz-dash-edit'), 'click');
+  const n2 = q.tile('notes'), c2 = n2.querySelector('.gz-w-resize');
+  n2.box = { left: 976, top: 120, width: 4000, height: 200 };
+  c2.dispatchEvent(q.ev('keydown', { key: 'ArrowRight', shiftKey: true, target: c2 }));
+  await settle();
+  assert.equal(on(q, 'courses', 'notes').w, 4000, 'width limit kept too');
+});
+
 test('a tile folds to its heading and is removed or added back while editing, on this board only', async () => {
   const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } });
   p.ui.sync(true);
