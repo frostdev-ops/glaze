@@ -33,18 +33,23 @@ test('work handed in: an open submission that is now handed in, in the same acco
 test('the planner answer another tab stores announces a submit once, through GZ_CTX.moment', () => {
   const heard = [];
   let listener;
-  const ctx = vm.createContext({ chrome: { storage: { onChanged: { addListener: (f) => { listener = f; } } } }, module: undefined, require: undefined });
+  const ctx = vm.createContext({ chrome: { storage: { onChanged: { addListener: (f) => { listener = f; } } } }, location: { origin: 'https://school-a.test' }, module: undefined, require: undefined });
   ctx.globalThis = ctx;
   ctx.GZ_CTX = { moment: (...a) => heard.push(a) };
   ctx.GZ_SPEC = {};
   vm.runInContext(read('lib/todo.js'), ctx);
   const item = (submitted) => ({ type: 'assignment', id: '7', sub: { submitted } });
   const change = (oldValue, newValue) => ({ todoCache: { oldValue, newValue } });
-  listener(change({ key: 'k', items: [item(false)] }, { key: 'k', items: [item(true)] }), 'local');
+  const key = 'todo:https://school-a.test/1';
+  listener(change({ key, items: [item(false)] }, { key, items: [item(true)] }), 'local');
   assert.deepEqual(heard, [['submit']]);
-  listener(change({ key: 'k', items: [item(false)] }, { key: 'k', items: [item(true)] }), 'sync');
+  for (const foreign of ['todo:https://school-b.test/1', 'todo:https://school-a.test.evil/1']) {
+    listener(change({ key: foreign, items: [item(false)] }, { key: foreign, items: [item(true)] }), 'local');
+  }
+  assert.deepEqual(heard, [['submit']], 'another origin cannot announce its submissions on this page');
+  listener(change({ key, items: [item(false)] }, { key, items: [item(true)] }), 'sync');
   listener({ other: {} }, 'local');
-  listener(change({ key: 'k', items: [item(true)] }, { key: 'k', items: [item(true)] }), 'local');
+  listener(change({ key, items: [item(true)] }, { key, items: [item(true)] }), 'local');
   assert.equal(heard.length, 1);
   // Nothing listens where there is no page (the worker, the editor, node).
   assert.ok(T.handedIn);
