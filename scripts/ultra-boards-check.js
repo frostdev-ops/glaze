@@ -97,12 +97,13 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'b7b-'));
-  const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
-    executablePath: CHROME, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
-    args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
-  });
+  let ctx;
   const errors = [];
   try {
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
+      executablePath: CHROME, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
+      args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
+    });
     const requests = [];
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
@@ -143,6 +144,15 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await page.waitForSelector(where === '/ultra/course' ? `${tile('quotes')}` : '#gz-dash[data-board="dash"] section.gz-w', { timeout: 15000 });
       await page.waitForTimeout(700); // the agenda and the notes arrive
     };
+    const editingStill = async (label) => {
+      await stable();
+      const geometry = () => page.evaluate(() => [...document.querySelectorAll('#gz-dash .gz-w, #gz-room > .gz-w')].map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.tile, r.left, r.top + scrollY, r.width, r.height]; }));
+      const before = JSON.stringify(await geometry());
+      for (const state of ['Edit layout', 'Done']) {
+        await page.click('.gz-dash-edit'); await stable();
+        ok(JSON.stringify(await geometry()) === before, `${label}: ${state} keeps tile dimensions and spots`);
+      }
+    };
     const notes = { [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
 
     if (!process.env.B10_ONLY) {
@@ -162,6 +172,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         ok(await page.evaluate(() => document.querySelector('#gz-panel .gz-dash-grid').hasAttribute('data-stack') && !!document.querySelector('#gz-panel .gz-dash-grid section.gz-w')), 'Courses, 375px: the tiles stack in the panel');
         ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Courses, 375px: no sideways scroll');
       }
+      await editingStill(`Courses ${width}`);
       await shot(`courses-light-${width}`);
       await open('/ultra/institution-page', width);
       if (width === 1280) {
@@ -175,6 +186,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         const used = await page.evaluate(() => { const g = document.querySelector('#gz-dash .gz-dash-grid').getBoundingClientRect(); const t = [...document.querySelectorAll('#gz-dash section.gz-w')].map((e) => e.getBoundingClientRect()); return { left: Math.min(...t.map((r) => r.left)) - g.left, right: g.right - Math.max(...t.map((r) => r.right)) }; });
         ok(Math.abs(used.left - used.right) <= 1, `Dashboard, fresh: in the middle of its room (${Math.round(used.left)} | ${Math.round(used.right)})`);
       } else ok(await page.evaluate(() => document.querySelector('#gz-dash .gz-dash-grid').hasAttribute('data-stack')), 'Dashboard, 375px: stacked');
+      await editingStill(`Dashboard ${width}`);
       await shot(`dash-light-${width}`);
     }
 
@@ -593,8 +605,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     ok(await page.locator(courseTile).count() === 48, 'B10: re-enabling restores the saved board');
     ok(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 5).join(' | ')}` : ''}`);
   } finally {
-    await ctx.close();
-    fs.rmSync(tmp, { recursive: true, force: true });
+    try { await ctx?.close(); } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
   }
   console.log(`${fails ? 'FAILED' : 'passed'}; screenshots in ${out}`);
   process.exitCode = fails ? 1 : 0;

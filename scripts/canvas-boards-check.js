@@ -2,6 +2,7 @@
 // frame CSS and API answers are synthetic; all other requests abort and DNS resolves nowhere. No server or LMS needed.
 //   NODE_PATH=/path/to/node_modules nice node scripts/canvas-boards-check.js [screenshots directory]
 const { chromium } = require('playwright');
+const { isDeepStrictEqual } = require('node:util');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -126,8 +127,8 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
     const resized = saved.boards.cdash.find((x) => x.id === 'timer');
     ok(resized.w === Math.round(b.width) + 48 && resized.h >= 48, 'pointer corner resize keeps width and body height');
     await press('notes');
-    saved = await layout();
-    ok(saved.boards.cdash.find((x) => x.id === 'notes').z > resized.z, 'press raises and persists z');
+    saved = await until(layout, (l) => l.boards.cdash.find((x) => x.id === 'notes').z > l.boards.cdash.find((x) => x.id === 'timer').z, 'raise not saved');
+    ok(saved.boards.cdash.find((x) => x.id === 'notes').z > saved.boards.cdash.find((x) => x.id === 'timer').z, 'press raises and persists z');
     const beforeDone = await rects(); await edit(); await stable();
     ok(JSON.stringify(await rects()) === JSON.stringify(beforeDone), 'Done keeps tile dimensions and spots');
     await page.reload(); await page.waitForSelector(tile('timer')); await stable();
@@ -148,7 +149,7 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
     await page.setViewportSize({ width: 375, height: 900 }); await stable();
     ok(await page.locator('.gz-dash-grid').evaluate((e) => e.hasAttribute('data-stack')), 'narrower than a tile: stack');
     ok(await cardsClear(), 'stack keeps cards clear');
-    ok(JSON.stringify(await layout()) === JSON.stringify(block), 'width changes preserve stored layout');
+    ok(isDeepStrictEqual(await layout(), block), 'width changes preserve stored layout');
     await page.setViewportSize({ width: 1280, height: 900 }); await stable();
     ok(JSON.stringify(await rects()) === JSON.stringify(original), 'wide room restores placed block');
     // Resize, float, resize without editing, raise from its body, drag by heading, reload, return from another page.
@@ -162,7 +163,8 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
     await until(layout, (l) => l.tiles.find((x) => x.id === 'quotes').float, 'second float not saved');
     await open('/courses/25');
     await press('timer');
-    ok((await layout()).tiles.find((x) => x.id === 'timer').z > (await layout()).tiles.find((x) => x.id === 'quotes').z, 'floating body press raises and persists z');
+    saved = await until(layout, (l) => l.tiles.find((x) => x.id === 'timer').z > l.tiles.find((x) => x.id === 'quotes').z, 'float raise not saved');
+    ok(saved.tiles.find((x) => x.id === 'timer').z > saved.tiles.find((x) => x.id === 'quotes').z, 'floating body press raises and persists z');
     await page.locator(`${tile('timer')} .gz-w-resize`).focus(); await page.keyboard.press('ArrowRight');
     await until(layout, (l) => l.tiles.find((x) => x.id === 'timer').w === 320, 'float key resize not saved');
     ok(await page.locator(`${tile('timer')} .gz-w-body`).evaluate((e) => !e.inert), 'global float content works without editing');
@@ -179,6 +181,11 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
     for (const preset of ['Paper', 'Frost']) for (const width of [1280, 375]) {
       await store(settings(preset), { widgetLayout: screenshots, ...notes });
       await page.setViewportSize({ width, height: 1000 }); await open();
+      const beforeEditing = await rects();
+      await edit(); await stable();
+      ok(isDeepStrictEqual(await rects(), beforeEditing), `${preset} ${width}: Edit layout keeps tile dimensions and spots`);
+      await edit(); await stable();
+      ok(isDeepStrictEqual(await rects(), beforeEditing), `${preset} ${width}: Done keeps tile dimensions and spots`);
       ok(await cardsClear(), `${preset} ${width}: cards clear`);
       await page.screenshot({ path: path.join(out, `canvas-board-${preset.toLowerCase()}-${width}.png`), fullPage: true });
     }
