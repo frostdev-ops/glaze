@@ -81,7 +81,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     vm.runInContext(read('lib/ultra.js'), c);
   }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, hub: open, register, who: account, avatar };', '  return { sync, hub: open, register, who: account, avatar, probe: { WIDGETS, set: (w, s, m) => { W = w; o = s; me = m; } } };');
+  const src = read('features/widgets.js').replace('  return { sync, hub: open, register, who: account, avatar };', '  return { sync, hub: open, register, who: account, avatar, probe: { WIDGETS, tileEl, set: (w, s, m) => { W = w; o = s; me = m; } } };');
   assert.notEqual(src, read('features/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
@@ -89,6 +89,12 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
   return { ui, timers, answer, sent, listeners, local, clock, held, c };
 };
 const find = (el, pred) => (pred(el) ? el : el.children?.map((c) => find(c, pred)).find(Boolean) || null);
+
+test('Canvas tiles append only their elements, without an Ultra-only corner becoming text', () => {
+  const p = page();
+  const { el: tile } = p.ui.probe.tileEl('timer');
+  assert.deepEqual(tile.children.map((x) => x.tagName), ['HEADER', 'DIV', 'DIV']);
+});
 
 test('a timer tile that goes before its stored state arrives arms no clock', async () => {
   const p = page({ local: { widgetTimer: { phase: 'work', end: Date.now() + 10 * 6e4, left: 0 } } });

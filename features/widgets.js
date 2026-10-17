@@ -601,7 +601,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       corner.setAttribute('aria-label', t('Resize {name}: arrow keys', { name }));
       corner.title = t('Drag to resize, or use the arrow keys. Double-click for its own size.');
     }
-    el.append(head, tools, body, corner);
+    el.append(head, tools, body);
+    if (corner) el.append(corner);
     drag(el, head, grip, id);
     if (corner) resizer(el, body, corner, id);
     return { el, head, tools, body };
