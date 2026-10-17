@@ -954,3 +954,19 @@ test('broker: concurrent first author requests retain one signing identity', asy
   const failed = await M.change({ op: 'author' }, { local: { get: async () => ({}), set: async () => false } });
   assert.deepEqual(failed, { ok: false, error: 'write' }, 'no signing identity is returned unless it was retained');
 });
+
+
+test('plan: adding or changing a remote background host prompts without granting network', () => {
+  const manifest = (src) => ({ permissions: [], ...(src && { parts: { bg: { media: { type: 'video', src } } } }) });
+  const before = (src) => ({ id: 'a', key: 'k', hash: 'old', version: '1.0.0', dev: false, manifest: manifest(src) });
+  const incoming = (src) => ({ ...before(src), hash: 'new', version: '1.1.0', signed: true });
+  for (const old of [null, 'https://old.example/a.webm', `file:${'a'.repeat(43)}`]) {
+    const plan = M.plan(before(old), incoming('https://new.example/a.webm'));
+    assert.equal(plan.prompt, true, 'the newly contacted host needs consent');
+    assert.deepEqual(plan.newPermissions, ['media:new.example']);
+  }
+  assert.deepEqual(M.caps(manifest('https://new.example/a.webm')), ['media:new.example']);
+  assert.equal(M.plan(before('https://new.example/a.webm'), incoming('https://new.example/b.webm')).prompt, false, 'the same host is already disclosed');
+  assert.equal(M.plan(before('https://new.example/a.webm'), incoming(null)).prompt, false, 'removing remote media needs no new consent');
+  assert.deepEqual(M.caps(manifest(`file:${'a'.repeat(43)}`)), [], 'local media adds no remote capability');
+});

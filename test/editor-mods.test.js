@@ -253,7 +253,7 @@ test('the install prompt discloses remote backgrounds without claiming there is 
   const ctx = vm.createContext({ $, t, and, URL, lines: E.lines, plain: E.plain, warnings: E.warnings, fingerprint: E.fingerprint, sourceText: E.sourceText,
     channelNotice: E.channelNotice, runs: async () => true, dialog: { open: false, showModal() { this.open = true; } },
     h: (tag, props, ...children) => ({ tag, ...props, children }), pending: null });
-  vm.runInContext(`${source.match(/  const remoteMedia = .*;/)?.[0] || ''}\n${source.slice(start, end)}\nthis.prompt = prompt;`, ctx);
+  vm.runInContext(`${source.slice(start, end)}\nthis.prompt = prompt;`, ctx);
   const media = (src) => view({ parts: { bg: { media: { type: 'video', src } } } });
   for (const remote of [true, false]) {
     const prompt = media(remote ? 'https://media.example/loop.webm' : `file:${'a'.repeat(43)}`);
@@ -262,7 +262,7 @@ test('the install prompt discloses remote backgrounds without claiming there is 
     const ws = $('mod-prompt-warn').children;
     if (remote) {
       assert.doesNotMatch(note, /no network/);
-      assert.ok(ws.some((w) => /media.example/.test(w.textContent) && /address/.test(w.textContent)), 'the host sees the address and use');
+      assert.ok($('mod-prompt-perms').children.some((li) => li.children.some((w) => /media.example/.test(w?.textContent) && /address/.test(w.textContent))), 'the host sees the address and use');
     } else {
       assert.match(note, /no network/);
       assert.ok(!ws.some((w) => /media.example/.test(w.textContent)));
@@ -295,4 +295,23 @@ test('author creation in the editor uses the shared worker operation', async () 
   vm.runInContext(`${source.slice(start, end)}\nthis.makeKey = makeKey;`, ctx);
   assert.equal(await ctx.makeKey(), key);
   assert.deepEqual(requests, ['author']);
+});
+
+
+test('remote media host changes are shown as New without becoming network grants', () => {
+  const v = view({ parts: { bg: { media: { type: 'video', src: 'https://media.example/a.webm' } } } });
+  const ls = E.lines(v, t, ['media:media.example']);
+  assert.equal(ls.length, 1);
+  assert.equal(ls[0].id, 'media:media.example');
+  assert.equal(ls[0].fresh, true);
+  assert.match(ls[0].text, /media.example.*address/);
+  assert.equal(ls[0].why, '');
+  assert.deepEqual(E.grantsFor(v, null, ['media:media.example']), []);
+});
+
+
+test('installed remote-media disclosure has no grant checkbox', async () => {
+  const p = mounted([record('a', { parts: { bg: { media: { type: 'video', src: 'https://media.example/a.webm' } } } })]);
+  await settle();
+  assert.equal(p.find('a:perm:media:media.example'), undefined, 'implicit host consent is not a declared grant');
 });

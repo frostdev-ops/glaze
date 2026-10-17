@@ -2495,7 +2495,6 @@
   "Reviewed": "Revisado",
   "Dev": "Dev",
   "Its background loads from {host}: that site can see your address and when you use it.": "O fundo é carregado de {host}: esse site pode ver seu endereço e quando você o usa.",
-  "It asks for no data or page of its own.": "Ele não pede dados nem uma página própria.",
   "It asks for nothing: no data, no network and no page of its own.": "Ele não pede nada: nem dados, nem rede, nem página própria.",
   "It now also asks for what is marked New.": "Agora ele também pede o que está marcado como Novo.",
   "It asks for:": "Ele pede:",

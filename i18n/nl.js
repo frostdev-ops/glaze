@@ -2495,7 +2495,6 @@
   "Reviewed": "Beoordeeld",
   "Dev": "Dev",
   "Its background loads from {host}: that site can see your address and when you use it.": "Zijn achtergrond wordt geladen van {host}: die site kan je adres zien en wanneer je hem gebruikt.",
-  "It asks for no data or page of its own.": "Hij vraagt niet om gegevens of een eigen pagina.",
   "It asks for nothing: no data, no network and no page of its own.": "Hij vraagt nergens om: geen gegevens, geen netwerk en geen eigen pagina.",
   "It now also asks for what is marked New.": "Hij vraagt nu ook om wat als Nieuw is gemarkeerd.",
   "It asks for:": "Hij vraagt om:",
