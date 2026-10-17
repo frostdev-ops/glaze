@@ -179,16 +179,21 @@ test('Edit layout: announced, keyboard reachable; a drag snaps, fixes the others
   assert.equal(p.doc.querySelector('.gz-dash-reset').hidden, false, 'Reset layout');
   assert.match(p.doc.querySelector('#gz-dash .gz-sr').textContent, /^Editing the layout/, 'said to a screen reader');
   assert.equal(p.doc.querySelector('.gz-sr').getAttribute('role'), 'status');
-  // Drag notes by its heading: from (976+10, 130) to near the page's left edge and a grid line.
+  // Editing: each tile is a thing to move: no handle and no size picker, its content waiting, the tile itself in the Tab
+  // order, and a corner to resize it by.
   const notes = p.tile('notes');
+  assert.ok(!notes.querySelector('.gz-w-grip') && !notes.querySelector('.gz-w-size'), 'no handle, no size picker');
+  assert.equal(notes.querySelector('.gz-w-body').inert, true, 'its content waits');
+  assert.equal(notes.getAttribute('tabindex'), '0');
+  assert.equal(notes.querySelector('.gz-w-resize').getAttribute('aria-label'), 'Resize Notes: arrow keys');
+  // Drag notes anywhere on it (here its body): from (976+10, 130) to near the page's left edge and a grid line.
   notes.box = { left: 976, top: 120, width: 288, height: 200 };
-  const head = notes.querySelector('.gz-w-head');
-  head.dispatchEvent(p.ev('pointerdown', { target: head, clientX: 986, clientY: 130 }));
-  head.dispatchEvent(p.ev('pointermove', { clientX: 200 + 20 + 10, clientY: 405 }));
+  notes.dispatchEvent(p.ev('pointerdown', { target: notes.querySelector('.gz-w-body'), clientX: 986, clientY: 130 }));
+  notes.dispatchEvent(p.ev('pointermove', { clientX: 200 + 20 + 10, clientY: 405 }));
   assert.deepEqual([px(notes.style.left), px(notes.style.top)], [W.EDGE, 400], 'onto the edge, and the grid');
   const guide = p.room().querySelector('.gz-guide');
   assert.ok(guide && !guide.hidden, 'a guide on the edge it met');
-  head.dispatchEvent(p.ev('pointerup'));
+  notes.dispatchEvent(p.ev('pointerup'));
   delete notes.box;
   await settle();
   const b = Object.fromEntries(lay(p).boards.courses.map((x) => [x.id, x]));
@@ -212,9 +217,9 @@ test('Edit layout: announced, keyboard reachable; a drag snaps, fixes the others
   r.doc.fire(r.doc.querySelector('.gz-dash-edit'), 'click');
   const n2 = r.tile('notes');
   n2.box = { left: 200 + W.EDGE, top: 400, width: 288, height: 200 };
-  n2.querySelector('.gz-w-head').dispatchEvent(r.ev('pointerdown', { target: n2.querySelector('.gz-w-head'), clientX: 200 + W.EDGE + 5, clientY: 405 }));
-  n2.querySelector('.gz-w-head').dispatchEvent(r.ev('pointermove', { clientX: 200 + 53 + 5, clientY: 405 + 7, altKey: true }));
-  n2.querySelector('.gz-w-head').dispatchEvent(r.ev('pointerup'));
+  n2.dispatchEvent(r.ev('pointerdown', { target: n2.querySelector('.gz-w-head'), clientX: 200 + W.EDGE + 5, clientY: 405 }));
+  n2.dispatchEvent(r.ev('pointermove', { clientX: 200 + 53 + 5, clientY: 405 + 7, altKey: true }));
+  n2.dispatchEvent(r.ev('pointerup'));
   await settle();
   assert.deepEqual([on(r, 'courses', 'notes').x, on(r, 'courses', 'notes').y], [53, 407]);
   // Done: said, and the controls go.
@@ -223,23 +228,24 @@ test('Edit layout: announced, keyboard reachable; a drag snaps, fixes the others
   assert.equal(r.doc.querySelector('.gz-dash-reset').hidden, true);
 });
 
-test('Edit layout: the arrow keys on a handle move a grid step (Shift: four), say where, and keep the focus', async () => {
+test('Edit layout: the arrow keys on a tile move it a grid step (Shift: four), say where, and keep the focus', async () => {
   const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } });
   p.ui.sync(true);
   await settle();
-  const grip = p.tile('notes').querySelector('.gz-w-grip');
-  assert.equal(grip.getAttribute('aria-label'), 'Move Notes: arrow keys');
-  grip.dispatchEvent(p.ev('keydown', { key: 'ArrowLeft' }));
+  const grip = p.tile('notes');
+  assert.equal(grip.getAttribute('tabindex'), null, 'not in the Tab order while not editing');
+  grip.dispatchEvent(p.ev('keydown', { key: 'ArrowLeft', target: grip }));
   await settle();
   assert.ok(!p.wrote.some((w) => w.widgetLayout), 'not while not editing');
   p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  assert.equal(grip.getAttribute('aria-description'), 'Drag to move, or use the arrow keys');
   grip.focus();
-  grip.dispatchEvent(p.ev('keydown', { key: 'ArrowLeft' }));
+  grip.dispatchEvent(p.ev('keydown', { key: 'ArrowLeft', target: grip }));
   await settle();
   assert.deepEqual([on(p, 'courses', 'notes').x, on(p, 'courses', 'notes').y, on(p, 'courses', 'notes').r], [16 + W.GRID, 120, true], 'one grid step left (kept from the right)');
   assert.equal(p.doc.querySelector('#gz-dash .gz-sr').textContent, `Moved Notes: ${776 - W.GRID} px from the left, 120 px from the top`);
-  assert.ok(p.doc.activeElement === p.tile('notes').querySelector('.gz-w-grip'), 'the handle keeps the focus');
-  p.doc.activeElement.dispatchEvent(p.ev('keydown', { key: 'ArrowDown', shiftKey: true }));
+  assert.ok(p.doc.activeElement === p.tile('notes'), 'the tile keeps the focus');
+  p.doc.activeElement.dispatchEvent(p.ev('keydown', { key: 'ArrowDown', shiftKey: true, target: p.tile('notes') }));
   await settle();
   assert.equal(on(p, 'courses', 'notes').y, 120 + 4 * W.GRID);
   // Reset layout: back where the panel was, said.
@@ -251,6 +257,96 @@ test('Edit layout: the arrow keys on a handle move a grid step (Shift: four), sa
   // Esc ends editing.
   p.doc.getElementById('gz-dash').dispatchEvent(p.ev('keydown', { key: 'Escape' }));
   assert.equal(p.doc.querySelector('.gz-dash-edit').getAttribute('aria-pressed'), 'false');
+});
+
+test('Edit layout: a tile resized by its corner (snapped, kept, its left edge where it was; arrow keys; a double-click undoes it)', async () => {
+  const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } });
+  p.ui.sync(true);
+  await settle();
+  const notes = p.tile('notes'), corner = notes.querySelector('.gz-w-resize'), body = notes.querySelector('.gz-w-body');
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  // Notes (Ultra's column: 776 in the room, 120 down) from 288 × 200, its heading and padding 50 of that, to near the
+  // room's right edge and a grid line.
+  notes.box = { left: 976, top: 120, width: 288, height: 200 };
+  body.box = { left: 976, top: 160, width: 288, height: 150 };
+  corner.dispatchEvent(p.ev('pointerdown', { target: corner, clientX: 1264, clientY: 320 }));
+  corner.dispatchEvent(p.ev('pointermove', { clientX: 1270, clientY: 423 }));
+  assert.deepEqual([notes.style.width, body.style.height], [`${1080 - W.EDGE - 776}px`, `${416 - 120 - 50}px`], 'onto the edge and the grid, as it goes');
+  corner.dispatchEvent(p.ev('pointerup'));
+  await settle();
+  let n = on(p, 'courses', 'notes');
+  assert.deepEqual([n.w, n.h, n.x, n.y, n.r], [292, 246, W.EDGE, 120, true], 'kept: its width, its body\'s height, and its spot');
+  assert.ok(n.z > on(p, 'courses', 'timer').z, 'on top');
+  assert.equal(notes.style.width, '292px');
+  assert.equal(body.style.height, '246px');
+  // The arrow keys on its corner: a grid step (Shift: four), its left edge where it was, said.
+  notes.box = { left: 976 - 4, top: 120, width: 292, height: 296 };
+  body.box = { left: 976 - 4, top: 160, width: 292, height: 246 };
+  corner.focus();
+  corner.dispatchEvent(p.ev('keydown', { key: 'ArrowLeft', shiftKey: true, target: corner }));
+  await settle();
+  n = on(p, 'courses', 'notes');
+  assert.deepEqual([n.w, n.h, 1080 - n.x - n.w], [292 - 64, 246, 776], 'narrower, the left edge kept');
+  assert.equal(p.doc.querySelector('#gz-dash .gz-sr').textContent, 'Resized Notes: 228 by 296 px');
+  assert.ok(p.doc.activeElement === corner, 'the corner keeps the focus');
+  // A double-click: its own size again.
+  corner.dispatchEvent(p.ev('dblclick', { target: corner }));
+  await settle();
+  n = on(p, 'courses', 'notes');
+  assert.ok(!('w' in n) && !('h' in n));
+  assert.equal(body.style.height, '');
+  assert.equal(p.doc.querySelector('#gz-dash .gz-sr').textContent, 'Notes is its own size again.');
+});
+
+test('Edit layout: the tile pressed comes to the front, moved or not; a press that wanders a pixel moves nothing', async () => {
+  const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } });
+  p.ui.sync(true);
+  await settle();
+  const timer = p.tile('timer');
+  const press = (el, wander = 0) => {
+    el.dispatchEvent(p.ev('pointerdown', { target: el.querySelector('.gz-w-head'), clientX: 1000, clientY: 400 }));
+    if (wander) el.dispatchEvent(p.ev('pointermove', { clientX: 1000 + wander, clientY: 400 }));
+    el.dispatchEvent(p.ev('pointerup'));
+  };
+  press(timer);
+  await settle();
+  assert.ok(!p.sent.some((m) => m.type === 'glaze:widgetLayout'), 'not while not editing');
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  press(timer, 2);
+  await settle();
+  assert.ok(on(p, 'courses', 'timer').z > on(p, 'courses', 'notes').z, 'on top');
+  assert.equal(on(p, 'courses', 'timer').x, null, 'not moved');
+  assert.ok(p.doc.activeElement === timer, 'and it has the focus, for the arrow keys');
+  assert.ok(+timer.style.zIndex > +p.tile('notes').style.zIndex);
+  const sent = p.sent.length;
+  press(timer);
+  await settle();
+  assert.equal(p.sent.length, sent, 'on top already: nothing to change');
+  press(p.tile('notes'));
+  await settle();
+  assert.ok(on(p, 'courses', 'notes').z > on(p, 'courses', 'timer').z, 'the other one, pressed, in front');
+  // Its controls are its own: pressing Remove neither raises nor moves it.
+  const z = on(p, 'courses', 'timer').z;
+  timer.dispatchEvent(p.ev('pointerdown', { target: p.tool('timer', 'Remove Focus timer'), clientX: 1000, clientY: 400 }));
+  assert.equal(on(p, 'courses', 'timer').z, z);
+});
+
+test('a floating tile resizes by its corner at any time, kept as floating', async () => {
+  const q = page({ at: 'outline', local: { widgetLayout: { tiles: [{ id: 'notes', on: true, float: true, x: 0, y: 0 }] } } });
+  q.ui.sync(true);
+  await settle();
+  const n = q.tile('notes'), corner = n.querySelector('.gz-w-resize');
+  assert.ok(corner, 'its corner');
+  assert.equal(n.querySelector('.gz-w-body').inert, false, 'its content works');
+  n.box = { left: 212, top: 106, width: 384, height: 200 };
+  n.querySelector('.gz-w-body').box = { left: 212, top: 146, width: 384, height: 150 };
+  corner.dispatchEvent(q.ev('pointerdown', { target: corner, clientX: 596, clientY: 306 }));
+  corner.dispatchEvent(q.ev('pointermove', { clientX: 496, clientY: 356 }));
+  corner.dispatchEvent(q.ev('pointerup'));
+  await settle();
+  const x = on(q, 'pages', 'notes');
+  assert.deepEqual([x.w, x.h], [304 - W.EDGE, 256 - W.EDGE - 50]);
+  assert.equal(n.style.width, `${304 - W.EDGE}px`);
 });
 
 test('a tile folds to its heading and is removed or added back while editing, on this board only', async () => {
@@ -286,7 +382,7 @@ test('a narrow window stacks the tiles in the panel, without touching the layout
   assert.equal(p.tile('notes').style.left, undefined);
   assert.ok(!p.wrote.some((w) => w.widgetLayout), 'the layout is kept as it was');
   p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
-  p.tile('notes').querySelector('.gz-w-grip').dispatchEvent(p.ev('keydown', { key: 'ArrowUp' }));
+  p.tile('notes').dispatchEvent(p.ev('keydown', { key: 'ArrowUp', target: p.tile('notes') }));
   await settle();
   assert.ok(!p.wrote.some((w) => w.widgetLayout), 'nothing moves while stacked');
   // Reading order, as they'd be laid out here: notes (kept at 400) before the timer (in free room at the column's top, under the courses).
@@ -392,7 +488,7 @@ test('the boards are separate: moving a tile on the Dashboard leaves the Courses
   p.ui.sync(true);
   await settle();
   p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
-  p.tile('timer').querySelector('.gz-w-grip').dispatchEvent(p.ev('keydown', { key: 'ArrowRight' }));
+  p.tile('timer').dispatchEvent(p.ev('keydown', { key: 'ArrowRight', target: p.tile('timer') }));
   await settle();
   assert.ok(lay(p).boards.dash.every((x) => !x.on || x.x !== null), 'the Dashboard fixed');
   assert.ok(lay(p).boards.courses.every((x) => x.x === null), 'the Courses page untouched');
@@ -439,9 +535,9 @@ test('float on every page: one copy, clear of the nav and a course\'s top bar, k
   assert.ok(px(n.style.left) >= 200 + W.EDGE && px(n.style.top) >= 94 + W.EDGE, `clear of the nav and the top bar (${n.style.left}, ${n.style.top})`);
   assert.equal(px(n.style.left) + 288, 1280 - W.EDGE, 'at the right edge');
   // Moved by its handle: snapped, kept as where it is in the room, announced.
-  n.querySelector('.gz-w-grip').focus();
+  n.focus();
   n.box = { left: px(n.style.left), top: px(n.style.top), width: 288, height: 200 };
-  n.querySelector('.gz-w-grip').dispatchEvent(q.ev('keydown', { key: 'ArrowLeft' }));
+  n.dispatchEvent(q.ev('keydown', { key: 'ArrowLeft', target: n }));
   await settle();
   assert.ok(on(q, 'pages', 'notes').x < 1, 'kept as where in the room it is');
   assert.match(q.doc.querySelector('#gz-float .gz-sr').textContent, /^Moved Notes/);
@@ -682,7 +778,7 @@ test('a global tile keyboard announcement uses its clamped margin, matching its 
   const p = page({ at: 'outline', local: { widgetLayout: { tiles: [{ id: 'notes', on: true, float: true, x: 0, y: 0 }] } } });
   p.ui.sync(true);
   await settle();
-  p.tile('notes').querySelector('.gz-w-grip').dispatchEvent(p.ev('keydown', { key: 'ArrowLeft' }));
+  p.tile('notes').dispatchEvent(p.ev('keydown', { key: 'ArrowLeft', target: p.tile('notes') }));
   await settle();
   assert.equal(px(p.tile('notes').style.left), 200 + W.EDGE);
   assert.match(p.doc.querySelector('#gz-float .gz-sr').textContent, /12 px from the left, 12 px from the top/);

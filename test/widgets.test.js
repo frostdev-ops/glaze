@@ -272,7 +272,7 @@ test('snap: onto the room edges, other tiles and the page lines within reach, el
   assert.equal(W.snap(10, 10, 1200, 100, 1000, 600).left, 0, 'wider than the room: its left edge');
 });
 
-test('arrange: spots kept from their side, new tiles in free room, and a stack when the window is too narrow for the layout', () => {
+test('arrange: spots kept, the Dashboard as one block, new tiles in free room, a flow or a stack when the window is too narrow', () => {
   const dims = { notes: { w: 384, h: 300 }, agenda: { w: 384, h: 200 }, timer: { w: 288, h: 180 }, quotes: { w: 384, h: 160 } };
   const fresh = (ids) => ids.map((id) => ({ id, on: true, x: null, y: null, r: false, z: 0 }));
   // The Dashboard: rows from the top left, a gap apart, on the grid; a fresh one in the middle of its room.
@@ -286,26 +286,41 @@ test('arrange: spots kept from their side, new tiles in free room, and a stack w
   const col = W.arrange(fresh(['notes', 'timer']), dims, 1000, { col: { right: 16, top: 60 } });
   assert.deepEqual([col.at.notes.left, col.at.notes.top, col.at.timer.left, col.at.timer.top], [1000 - 16 - 384, 60, 1000 - 16 - 288, 60 + 300 + W.GAP]);
   assert.ok(col.at.notes.r && col.at.timer.r);
-  // Kept spots: from the left, or from the right edge, which follows the window.
+  // Kept spots, in the room they were kept in (w0, else this one): from the left, or from its right edge.
   const kept = [{ id: 'notes', on: true, x: 24, y: 40, r: false }, { id: 'timer', on: true, x: 16, y: 40, r: true }];
   const wide = W.arrange(kept, dims, 1400);
   assert.deepEqual([wide.at.notes.left, wide.at.timer.left], [24, 1400 - 16 - 288]);
   assert.deepEqual(wide.order, ['notes', 'timer'], 'reading order');
   assert.equal(wide.stack, false);
-  // Narrower than the room they were placed in: the one from the left and the one from the right would meet: a stack,
-  // and the spots are untouched. As wide or wider: never.
+  // Zoomed out or a wider window: the Dashboard's tiles stay together, the room on either side grown alike.
+  const out = W.arrange(kept, dims, 1600, { w0: 1400 });
+  assert.equal(out.at.timer.left - out.at.notes.left, 1400 - 16 - 288 - 24, 'none moves against another');
+  assert.deepEqual([out.at.notes.left, 1600 - out.at.timer.left - 288], [24 * 6, 16 * 6]);
+  // Zoomed in: still together while they fit, the room on either side shrunk alike.
+  const pair = [{ id: 'notes', on: true, x: 200, y: 40, r: false }, { id: 'timer', on: true, x: 200, y: 40, r: true }];
+  const zin = W.arrange(pair, dims, 900, { w0: 1000 });
+  assert.deepEqual([zin.at.notes.left, zin.at.timer.left, zin.stack], [150, 900 - 150 - 288, false]);
+  // Wider than the room: every tile flows in free room, at its size, in reading order; the spots are untouched.
   const narrow = W.arrange(kept, dims, 600, { w0: 1400 });
-  assert.equal(narrow.stack, true);
+  assert.equal(narrow.stack, false);
+  assert.deepEqual([narrow.at.notes.left, narrow.at.notes.top, narrow.at.timer.left, narrow.at.timer.top], [108, 0, 108, 320], "in the middle of the room");
+  assert.deepEqual(narrow.order, ['notes', 'timer']);
   assert.deepEqual(kept[1], { id: 'timer', on: true, x: 16, y: 40, r: true });
-  assert.equal(W.arrange(kept, dims, 1600, { w0: 1400 }).stack, false);
-  // One from the left laid over one from the right on purpose (they met where they were placed) stays so.
+  // A tile wider than the room: a stack.
+  assert.equal(W.arrange(kept, dims, 300, { w0: 1400 }).stack, true);
+  // One from the left laid over one from the right on purpose stays so, wider or narrower.
   const laid = [{ id: 'notes', on: true, x: 500, y: 40, r: false }, { id: 'timer', on: true, x: 200, y: 100, r: true }];
-  assert.equal(W.arrange(laid, dims, 1000, { w0: 1000 }).stack, false);
-  assert.equal(W.arrange(laid, dims, 900, { w0: 1000 }).stack, false, 'narrower, but they met already');
-  // A tile that would cross the room's edge stacks them too; overlaps the student made (same side) don't.
-  assert.equal(W.arrange([{ id: 'notes', on: true, x: 500, y: 0, r: false }], dims, 800).stack, true);
+  for (const w of [1000, 900, 1300]) {
+    const a = W.arrange(laid, dims, w, { w0: 1000 });
+    assert.deepEqual([a.stack, a.at.timer.left - a.at.notes.left], [false, 12], `at ${w}`);
+  }
+  // A tile that would cross the room's edge comes back inside it; overlaps the student made don't stack them.
+  assert.deepEqual(Object.values(W.arrange([{ id: 'notes', on: true, x: 500, y: 0, r: false }], dims, 800).at).map((a) => [a.left, a.top]), [[800 - 384, 0]]);
   const overlap = W.arrange([{ id: 'notes', on: true, x: 24, y: 40, r: false }, { id: 'agenda', on: true, x: 100, y: 100, r: false }], dims, 1000);
   assert.equal(overlap.stack, false, 'tiles laid over each other on purpose stay so');
+  // The Courses page: each from its side, and a stack when one from the left would meet one from the right.
+  const c = { col: { right: 16, top: 0 }, w0: 1400 };
+  assert.deepEqual([W.arrange(kept, dims, 1600, c).at.timer.left, W.arrange(kept, dims, 600, c).stack], [1600 - 16 - 288, true]);
   // A tile placed in free room keeps clear of the kept ones.
   const mixed = W.arrange([{ id: 'notes', on: true, x: 0, y: 0, r: false }, ...fresh(['timer'])], dims, 1000);
   assert.ok(mixed.at.timer.left >= 384 + W.GAP || mixed.at.timer.top >= 300 + W.GAP);
@@ -444,12 +459,28 @@ test('fresh course cards start in the native list area, grouped by term and clea
   assert.ok(ids.every((id) => r.at[id].left + 288 < r.at.notes.left));
 });
 
-test('Better To Do\'s tile keeps the height the student dragged it to, within bounds, on its own board', () => {
-  const l = W.layout({ todo: true, boards: { courses: [{ id: 'todo', on: true, h: 512 }, { id: 'notes', on: true, h: 512 }], dash: [{ id: 'todo', on: true, h: 40 }] } });
-  assert.equal(l.boards.courses.find((x) => x.id === 'todo').h, 512);
-  assert.equal(l.boards.courses.find((x) => x.id === 'notes').h, undefined, 'only the To Do has a height');
-  assert.equal(l.boards.dash.find((x) => x.id === 'todo').h, undefined, 'too short: its default');
-  const after = W.apply(l, { ops: [{ s: 'dash', id: 'todo', set: { h: 300 } }] });
-  assert.equal(after.boards.dash.find((x) => x.id === 'todo').h, 300);
+test('a tile keeps the size it was resized to (its width, its body\'s height), within bounds, on its own board', () => {
+  const l = W.layout({ todo: true, boards: { courses: [{ id: 'todo', on: true, h: 512 }, { id: 'notes', on: true, w: 400, h: 300 }], dash: [{ id: 'todo', on: true, h: 40, w: 100 }], pages: [{ id: 'timer', on: true, w: 320, h: 2.5 }] } });
+  assert.equal(l.boards.courses.find((x) => x.id === 'todo').h, 512, 'a To Do dragged taller before is kept');
+  assert.deepEqual([l.boards.courses.find((x) => x.id === 'notes').w, l.boards.courses.find((x) => x.id === 'notes').h], [400, 300]);
+  const small = l.boards.dash.find((x) => x.id === 'todo');
+  assert.ok(!('w' in small) && !('h' in small), 'too small: its own size');
+  assert.deepEqual([l.boards.pages.find((x) => x.id === 'timer').w, 'h' in l.boards.pages.find((x) => x.id === 'timer')], [320, false], 'floating too; not a whole pixel: dropped');
+  const after = W.apply(l, { ops: [{ s: 'dash', id: 'todo', set: { h: 300, w: W.MIN_W } }] });
+  assert.deepEqual([after.boards.dash.find((x) => x.id === 'todo').h, after.boards.dash.find((x) => x.id === 'todo').w], [300, W.MIN_W]);
   assert.equal(after.boards.courses.find((x) => x.id === 'todo').h, 512, 'each board its own');
+  const back = W.apply(after, { ops: [{ s: 'courses', id: 'notes', set: { w: null, h: null } }] });
+  assert.ok(!('w' in back.boards.courses.find((x) => x.id === 'notes')), 'null: its own size again');
+});
+
+test('stretch: a corner dragged meets the lines a dragged tile does, never under the smallest size', () => {
+  const other = { left: 400, top: 0, w: 288, h: 200 };
+  // Near the other tile's left edge less a gap: there; its bottom: there.
+  assert.deepEqual(W.stretch(0, 0, 380, 205, 1000, Infinity, [other]), { w: 400 - W.GAP, h: 200, guides: { x: 400 - W.GAP, y: 200 } });
+  // Nowhere near a line: the grid.
+  assert.deepEqual(W.stretch(0, 0, 250, 333, 1000, Infinity, []).w, 256);
+  // Alt: where it is; never past the room's edge, nor under the smallest size.
+  assert.deepEqual(W.stretch(0, 0, 251, 333, 1000, Infinity, [], { free: true }), { w: 251, h: 333, guides: { x: null, y: null } });
+  assert.equal(W.stretch(100, 0, 5000, 50, 1000, Infinity).w, 900);
+  assert.deepEqual(W.stretch(100, 100, 120, 110, 1000, Infinity, [], { minH: 90 }), { w: W.MIN_W, h: 90, guides: { x: null, y: null } });
 });

@@ -225,15 +225,34 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     const q1 = await rect(tile('quotes'));
     ok(Math.abs(q1.left - (n.left + 77)) < 1.5 && Math.abs(q1.top - (n.top + 133)) < 1.5, `Alt places it freely, over the notes (${Math.round(q1.left - n.left)}, ${Math.round(q1.top - n.top)}; from ${Math.round(q0.left - n.left)}, ${Math.round(q0.top - n.top)})`);
     ok(await page.evaluate(() => +document.querySelector('section.gz-w[data-tile="quotes"]').style.zIndex > +document.querySelector('section.gz-w[data-tile="notes"]').style.zIndex), 'the one moved last is on top');
-    // Keys: one grid step, said, the handle keeps the focus.
-    await page.focus(`${tile('timer')} .gz-w-grip`);
+    // Keys: one grid step, said, the tile keeps the focus.
+    await page.focus(tile('timer'));
     await page.keyboard.press('ArrowLeft');
     const tk = await rect(tile('timer'));
     ok(Math.abs(tk.left - (tm.left - 16)) < 1, 'ArrowLeft: one grid step');
     ok(await page.evaluate(() => /^Moved Focus timer: \d+ px from the left, \d+ px from the top$/.test(document.querySelector('#gz-dash .gz-sr').textContent)), 'the move is said');
-    ok(await page.evaluate(() => document.activeElement?.classList.contains('gz-w-grip')), 'the handle keeps the focus');
+    ok(await page.evaluate(() => document.activeElement?.dataset.tile === 'timer'), 'the tile keeps the focus');
     await page.keyboard.press('Shift+ArrowDown');
     ok(Math.abs((await rect(tile('timer'))).top - (tk.top + 64)) < 1, 'Shift+ArrowDown: four steps');
+    // Anywhere on it while editing, its content too (which waits meanwhile): a drag by the middle of its body.
+    const tb = await rect(`${tile('timer')} .gz-w-body`), t1 = await rect(tile('timer'));
+    ok(await page.evaluate(() => document.querySelector('section.gz-w[data-tile="timer"] .gz-w-body').inert && !document.querySelector('.gz-w-grip, .gz-w-size')), 'editing: its content waits; no handle, no size picker');
+    await page.mouse.move(tb.left + 40, tb.top + 20); await page.mouse.down(); await page.mouse.move(tb.left + 40 - 160, tb.top + 20, { steps: 6 }); await page.mouse.up();
+    await stable();
+    ok(t1.left - (await rect(tile('timer'))).left > 140, 'a drag by its body moves it');
+    // Its corner: dragged, it resizes (snapped), on top, kept.
+    const rc = await rect(`${tile('timer')} .gz-w-resize`), t2 = await rect(tile('timer'));
+    await page.mouse.move(rc.left + 9, rc.top + 9); await page.mouse.down(); await page.mouse.move(rc.left + 9 + 70, rc.top + 9 + 90, { steps: 8 }); await page.mouse.up();
+    await until(layout, (l) => Number.isInteger(l?.boards?.courses?.find((x) => x.id === 'timer')?.w), 'timer resize not saved');
+    await stable();
+    const t3 = await rect(tile('timer'));
+    ok(t3.width > t2.width + 40 && t3.bottom - t3.top > t2.bottom - t2.top + 50 && Math.abs(t3.left - t2.left) < 1, `the corner resizes it, its left edge where it was (${Math.round(t2.width)} → ${Math.round(t3.width)})`);
+    await shot('courses-resize-light-1280');
+    // A double-click on its corner: its own size again.
+    await page.dblclick(`${tile('timer')} .gz-w-resize`);
+    await until(layout, (l) => !('w' in (l?.boards?.courses?.find((x) => x.id === 'timer') || { w: 1 })), 'timer size not reset');
+    await stable();
+    ok(Math.abs((await rect(tile('timer'))).width - t2.width) < 1, 'a double-click on the corner: its own size again');
     await shot('courses-overlap-edit-light-1280');
     await page.click('#gz-toolbar .gz-dash-edit'); // Done
     const kept = await rect(tile('quotes'));
@@ -469,10 +488,14 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await opts.evaluate(() => chrome.storage.sync.set({ ucards: { ['ultra:https://bb.school.test/_101_1']: { k: 'gradient', c: '#aa2244', d: '#2255aa', a: 45 } }, ulinks: { ['ultra:https://bb.school.test/_101_1']: [{ n: 'Course calendar', u: 'https://bb.school.test/ultra/calendar', i: 'calendar' }] } }));
       await page.waitForSelector(`${courseTile} article[data-gz-card="gradient"]`);
       ok(await page.locator(`${courseTile} .gz-bm a`).count() > 0, 'B10: existing bookmark and style painter applies');
+      // While editing, a card is a thing to move: its menu waits until Done.
       const menuButton = page.locator(`${courseTile} .gz-cm-btn`).first();
+      ok(await menuButton.evaluate((b) => !!b.closest('[inert]')), 'B10: editing, the card\'s content waits');
+      await page.click('#gz-toolbar .gz-dash-edit');
       await menuButton.click(); await page.waitForSelector('#gz-cm');
       ok(await page.locator('#gz-cm').count() === 1, 'B10: existing course menu opens');
       await page.keyboard.press('Escape');
+      await page.click('#gz-toolbar .gz-dash-edit');
       const geometry = await page.locator(courseTile).evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, term: e.querySelector('.gz-course-term').textContent }; }));
       ok(geometry.every((a) => a.l >= 0 && a.r <= width && geometry.every((b) => a === b || a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t)), `B10 ${preset} ${width}: cards fit without overlap`);
       ok(requests.length === count, `B10 ${preset} ${width}: adding cards starts no requests (${requests.length - count})`);
@@ -487,17 +510,18 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await first.locator('.gz-w-fold').click();
       if (width === 1280) {
         const before = await first.boundingBox();
-        await first.locator('.gz-w-grip').focus(); await page.keyboard.press('ArrowDown');
+        await first.focus(); await page.keyboard.press('ArrowDown');
         await until(layout, (l) => Number.isFinite(l.boards.courses.find((x) => x.id === key)?.y), 'course move not saved');
         await stable();
         const after = await first.boundingBox();
-        ok(Math.abs(after.y - before.y - 16) < 1, 'B10: keyboard movement uses the shared grip');
+        ok(Math.abs(after.y - before.y - 16) < 1, 'B10: keyboard movement on the card itself');
+        await first.locator('.gz-w-resize').focus(); await page.keyboard.press('Shift+ArrowRight');
+        await until(layout, (l) => l.boards.courses.find((x) => x.id === key)?.w === Math.round(after.width) + 64, 'course resize not saved');
+        await page.reload(); await page.waitForSelector(tile(key)); await stable();
+        ok(Math.round((await page.locator(tile(key)).boundingBox()).width) === Math.round(after.width) + 64, 'B10: size survives reload');
       }
-      await first.locator('.gz-w-size').selectOption('m');
-      await until(layout, (l) => l.boards.courses.find((x) => x.id === key)?.size === 'm', 'course size not saved');
-      await page.reload(); await page.waitForSelector(`${courseTile}[data-size="m"]`); await stable();
-      ok(await page.locator(`${courseTile}[data-size="m"]`).count() === 1, 'B10: size survives reload');
-      // Same-origin in-app navigation; modified clicks are left as native link behaviour.
+      // Same-origin in-app navigation (not while editing); modified clicks are left as native link behaviour.
+      if (await page.locator('#gz-toolbar .gz-dash-edit[aria-pressed="true"]').count()) await page.click('#gz-toolbar .gz-dash-edit');
       const route = await page.locator(`${courseTile} .course-title`).first().getAttribute('href');
       await page.evaluate(() => { window.__b10SameDocument = true; });
       await page.locator(`${courseTile} .course-title`).first().click();
@@ -513,17 +537,20 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       while (await page.locator(courseTile).count()) await page.locator(`${courseTile} button[aria-label^="Remove "]`).first().click();
       ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: removing every card restores Ultra');
     }
-    // The accepted To Do resize change keeps its height independently beside the course-card layout fields.
+    // The To Do resized by its corner keeps its height independently beside the course-card layout fields.
     const todoLayout = require('../lib/widgets.js').layout(base);
     for (const board of ['courses', 'dash']) todoLayout.boards[board].find((x) => x.id === 'todo').on = true;
     await store(settingsFor('Paper', { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: true } }), { widgetLayout: todoLayout });
     await page.setViewportSize({ width: 1280, height: 1400 });
     await page.goto(`${O}/ultra/institution-page`); await page.waitForSelector(`${tile('todo')} #gz-todo`);
-    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => getComputedStyle(e).resize === 'vertical' && getComputedStyle(e).overflowY === 'auto'), 'To Do: tile keeps the resize handle and inner scrolling');
-    await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => { e.style.height = '512px'; });
-    await until(layout, (l) => l.boards.dash.find((x) => x.id === 'todo')?.h === 512, 'To Do resize not saved');
+    await page.click('#gz-dash .gz-dash-edit');
+    const tc = await page.locator(`${tile('todo')} .gz-w-resize`).boundingBox();
+    await page.mouse.move(tc.x + 9, tc.y + 9); await page.mouse.down(); await page.mouse.move(tc.x + 9 + 40, tc.y + 9 + 160, { steps: 8 }); await page.mouse.up();
+    await until(layout, (l) => Number.isInteger(l.boards.dash.find((x) => x.id === 'todo')?.h), 'To Do resize not saved');
+    const todoH = (await layout()).boards.dash.find((x) => x.id === 'todo').h;
+    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e, h) => e.style.height === `${h}px` && getComputedStyle(e).overflowY === 'auto', todoH), 'To Do: resized by its corner, its list scrolling inside');
     await page.reload(); await page.waitForSelector(`${tile('todo')} #gz-todo`);
-    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => e.style.height === '512px'), 'To Do: resized height survives reload');
+    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e, h) => e.style.height === `${h}px`, todoH), 'To Do: resized height survives reload');
     await page.goto(`${O}/ultra/course`); await page.waitForSelector(`${tile('todo')} #gz-todo`);
     ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => e.style.height === ''), 'To Do: Courses keeps its independent height');
     // A full board: unchanged passes must settle, and toggling Glaze must restore the native list exactly.
@@ -555,6 +582,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await page.waitForSelector(`${courseTile} .gz-pet`);
     ok(await page.locator(`${courseTile} .gz-pet`).first().evaluate((e) => getComputedStyle(e).animationName === 'none'), 'B10: reduced motion stills the shared card pet');
     await page.evaluate(() => { document.documentElement.setAttribute('data-gz-motion', 'expressive'); document.documentElement.removeAttribute('data-gz-no-hover'); });
+    await page.click('#gz-toolbar .gz-dash-edit'); // Done: hover is for cards in use
     await page.locator(`${courseTile} .gz-course-card`).first().hover();
     ok(await page.locator(`${courseTile} .gz-course-card`).first().evaluate((e) => getComputedStyle(e).transform !== 'none' && getComputedStyle(e, '::before').animationName === 'gz-card-fall'), 'B10: shared hover growth and particles reach board cards');
     await opts.evaluate(() => chrome.storage.sync.set({ enabled: false }));

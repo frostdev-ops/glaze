@@ -586,49 +586,42 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     el.dataset.id = id;
     el.dataset.tile = id;
     el.setAttribute('aria-label', name);
-    const grip = button('', () => {}, { className: 'gz-w-grip' });
-    grip.setAttribute('aria-label', t('Move {name}: arrow keys', { name }));
-    grip.title = t('Drag to move, or use the arrow keys');
+    // Canvas: a handle to move it by. Ultra: the tile itself (dragged anywhere while editing, by its heading while it
+    // floats, the arrow keys once it has the focus), and its corner to resize it by.
+    const grip = !ultra && button('', () => {}, { className: 'gz-w-grip' });
+    if (grip) {
+      grip.setAttribute('aria-label', t('Move {name}: arrow keys', { name }));
+      grip.title = t('Drag to move, or use the arrow keys');
+    }
     const head = make('header', { className: 'gz-w-head' }, grip, make('h3', { textContent: name }));
     const tools = make('div', { className: 'gz-w-tools' });
     const body = make('div', { className: 'gz-w-body' });
-    el.append(head, tools, body);
+    const corner = ultra && button('', () => {}, { className: 'gz-w-resize' });
+    if (corner) {
+      corner.setAttribute('aria-label', t('Resize {name}: arrow keys', { name }));
+      corner.title = t('Drag to resize, or use the arrow keys. Double-click for its own size.');
+    }
+    el.append(head, tools, body, corner);
     drag(el, head, grip, id);
+    if (corner) resizer(el, body, corner, id);
     return { el, head, tools, body };
   };
   // Floating: on Ultra, over every Blackboard page (lay.boards.pages, then on no board); on Canvas, over every page.
   const fl = (id) => (ultra ? !!lay.boards.pages.find((x) => x.id === id)?.on : !!lay.tiles.find((x) => x.id === id)?.float);
   // The tile as this page keeps it: floating on Ultra, the board's, or Canvas's.
-  // Better To Do's tile: as tall as the student drags it (its body's resize handle; kept per board, h), the list
-  // scrolling inside. A drag's height is saved once it settles.
-  const sizeTodo = (x, tile) => {
-    const want = tile.h ? `${tile.h}px` : '';
-    if (x.body.style.height !== want && !x.sizing) x.body.style.height = want;
-    if (x.watch) return;
-    let wait = 0;
-    x.watch = new ResizeObserver(() => {
-      const h = Math.round(parseFloat(x.body.style.height));
-      if (!board || !h || h === cur('todo')?.h) return;
-      x.sizing = true;
-      clearTimeout(wait);
-      wait = setTimeout(() => { x.sizing = false; if (board) change({ ops: [{ s: board, id: 'todo', set: { h: Math.min(3000, Math.max(120, h)) } }] }); }, 400);
-    });
-    x.watch.observe(x.body);
-    const stop = x.stop;
-    x.stop = () => { stop?.(); x.watch.disconnect(); clearTimeout(wait); };
-  };
   const cur = (id) => (ultra && fl(id) ? lay.boards.pages : board ? lay.boards[board] : lay.tiles).find((x) => x.id === id);
-  const saveBoard = (id, patch) => change({ ops: [{ s: board, id, set: patch }] });
+  // Its width on Ultra: as the student resized it, else its size's.
+  const widthOf = (x) => x.w || W.WIDTH[x.size];
   // Ultra: a board's tile goes to float over every page, from the room's bottom right corner clear of the others (its
   // board keeps its spot), or comes back to this page's board (on a page without one, the Courses page's).
   const floatOut = (id) => {
     const r = floatRoom(), x = cur(id);
     const others = [...tiles].filter(([k]) => k !== id && fl(k)).map(([, v]) => { const b = v.el.getBoundingClientRect(); return { left: b.left - r.left, top: b.top - r.top, w: b.width, h: b.height }; });
-    const w = W.WIDTH[x.size], h = tiles.get(id)?.el.offsetHeight || 200;
+    const w = widthOf(x), h = tiles.get(id)?.el.offsetHeight || 200;
     const c = W.corner(others, w, h, r.W, r.H);
     const p = W.place(c.left, c.top, w, h, r.W, r.H, true);
-    change({ ops: [{ s: 'pages', id, set: { on: true, size: x.size, fold: x.fold, x: p.x, y: p.y }, front: true }], widths: { pages: Math.round(r.W) } });
-    tiles.get(id)?.el.querySelector('.gz-w-grip')?.focus();
+    change({ ops: [{ s: 'pages', id, set: { on: true, size: x.size, fold: x.fold, x: p.x, y: p.y, w: x.w ?? null, h: x.h ?? null }, front: true }], widths: { pages: Math.round(r.W) } });
+    tiles.get(id)?.el.focus();
     say(t('{name} floats on every Blackboard page.', { name: t(nameOf(id)) }));
   };
   const backBoard = () => {
@@ -640,26 +633,26 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     change({ ops: [{ s: 'pages', id, set: { on: false } }, { s: b, id, set: { on: true } }] });
     say(t(board ? '{name} is back on this page.' : b === 'dash' ? '{name} is back on the Dashboard.' : '{name} is back on the Courses page.', { name: t(nameOf(id)) }));
   };
-  // The controls a tile shows: on a board, Fold at any time, and its size and Remove while editing; on Canvas, a floating
-  // tile its way back and away, and in the grid while editing, order, size and float. A control redrawn by its own click
-  // keeps the focus.
+  // The controls a tile shows: on a board, Fold at any time, and Float and Remove while editing (its corner resizes it);
+  // on Canvas, a floating tile its way back and away, and in the grid while editing, order, size and float. A control
+  // redrawn by its own click keeps the focus.
   const toolsFor = (x, tile) => {
     const name = t(nameOf(tile.id));
     const label = (b, text) => { b.setAttribute('aria-label', text); b.title = text; return b; };
     const again = (sel, run) => () => { run(); x.tools.querySelector(sel)?.focus(); };
-    const size = make('select', { className: 'gz-w-size' }, ...W.SIZES.map((v) => make('option', { value: v, textContent: t(SIZE_NAMES[v]), selected: v === tile.size })));
-    size.setAttribute('aria-label', t('Size of {name}', { name }));
-    size.addEventListener('change', again('.gz-w-size', () => change({ ops: [{ s: board || 'canvas', id: tile.id, set: { size: size.value } }] })));
     if (ultra) {
-      // Ultra: Fold at any time. Floating over every page: its way back. On a board while editing: size, float, remove.
+      // Ultra: Fold at any time. Floating over every page: its way back. On a board while editing: float, remove.
       const where = tile.float ? 'pages' : board;
       const fold = label(button(tile.fold ? '▸' : '▾', again('.gz-w-fold', () => change({ ops: [{ s: where, id: tile.id, set: { fold: !tile.fold } }] })), { className: 'gz-w-icon gz-w-fold' }), t(tile.fold ? 'Unfold {name}' : 'Fold {name}', { name }));
       fold.setAttribute('aria-expanded', String(!tile.fold));
       x.body.hidden = tile.fold;
       x.tools.replaceChildren(...(tile.float ? [label(button('⇲', () => floatBack(tile.id), { className: 'gz-w-icon' }), t(board ? 'Put {name} back on this page' : backBoard() === 'dash' ? 'Put {name} back on the Dashboard' : 'Put {name} back on the Courses page', { name }))]
-        : editing ? [size, ...(tile.id === 'todo' || W.course(tile.id) ? [] : [label(button('⇱', () => floatOut(tile.id), { className: 'gz-w-icon' }), t('Float {name} on every Blackboard page', { name }))]), label(button('×', () => change({ ops: [{ s: board, id: tile.id, ...(W.course(tile.id) ? { remove: true } : { set: { on: false } }) }] }), { className: 'gz-w-icon' }), t('Remove {name}', { name }))] : []), fold);
+        : editing ? [...(tile.id === 'todo' || W.course(tile.id) ? [] : [label(button('⇱', () => floatOut(tile.id), { className: 'gz-w-icon' }), t('Float {name} on every Blackboard page', { name }))]), label(button('×', () => change({ ops: [{ s: board, id: tile.id, ...(W.course(tile.id) ? { remove: true } : { set: { on: false } }) }] }), { className: 'gz-w-icon' }), t('Remove {name}', { name }))] : []), fold);
       return;
     }
+    const size = make('select', { className: 'gz-w-size' }, ...W.SIZES.map((v) => make('option', { value: v, textContent: t(SIZE_NAMES[v]), selected: v === tile.size })));
+    size.setAttribute('aria-label', t('Size of {name}', { name }));
+    size.addEventListener('change', again('.gz-w-size', () => change({ ops: [{ s: 'canvas', id: tile.id, set: { size: size.value } }] })));
     if (tile.float) {
       x.tools.replaceChildren(
         label(button('⇲', () => change({ ops: [{ s: 'canvas', id: tile.id, set: { float: false } }] }), { className: 'gz-w-icon' }), t('Put {name} back on the Dashboard', { name })),
@@ -699,13 +692,16 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     });
   };
 
-  // Moving a tile: floating, dragged by its header or moved by its grip with the arrow keys (Shift: further); on a board
-  // the same while editing. It snaps to the grid, its room's edges, the other tiles and Ultra's column (lib/widgets.js
-  // snap), with a guide on the line it met; Alt places it freely. A floating tile keeps where it is in the room the
-  // window leaves; a board's keeps its spot from its nearer side. On Ultra the one moved goes on top.
+  // Moving a tile, on Ultra: on a board while editing, dragged anywhere but its controls; floating, by its heading; or,
+  // once it has the focus, by the arrow keys (Shift: further). On Canvas: dragged by its header, or its grip's arrow
+  // keys. It snaps to the grid, its room's edges, the other tiles and Ultra's column (lib/widgets.js snap), with a guide
+  // on the line it met; Alt places it freely. A floating tile keeps where it is in the room the window leaves; a board's
+  // keeps its spot. On Ultra the one pressed goes on top of the others, moved or not.
   let dragged = null; // the grid tile being dragged to a new place in the order
   let lastAt = {}, lastW = 0, stacked = false; // the board's last arrangement (arrange), its room's width, stacked or not
   let floatsStacked = false; // Ultra's floating tiles, stacked at the window's edge (floating)
+  let gesture = false; // a tile being dragged or resized: nothing is laid out under the pointer meanwhile
+  const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   const movable = (id) => (fl(id) ? !(ultra && floatsStacked) : board ? editing && !stacked : false);
   const roomEl = () => (board === 'courses' ? room : grid?.querySelector('.gz-dash-grid'));
   // The room a floating tile has: on Ultra, the window right of the nav, below a course's top bar (B8's course tabs, or
@@ -742,12 +738,17 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       lines: board === 'courses' && g.width ? [g.left - at().left, g.right - at().left] : [], layer: host,
     };
   };
-  // A board's tile moved: every tile keeps where it shows now (the first move fixes those still placed in free room, so
-  // nothing else moves), and this one goes to its new spot, on top.
+  // A board's tile moved: this one goes to its new spot, on top, and every other keeps where it shows now, all of them
+  // kept from this room (its width is the board's w0), so nothing else moves.
   const settle = (id, spot) => change({
-    ops: [...lay.boards[board].filter((x) => x.id !== id && x.x === null && lastAt[x.id]).map((x) => ({ s: board, id: x.id, set: W.spotOf(lastAt[x.id], lastW) })), { s: board, id, set: spot, front: true }],
+    ops: [{ s: board, id, set: spot, front: true }, ...lay.boards[board].filter((x) => x.id !== id && lastAt[x.id]).map((x) => ({ s: board, id: x.id, set: W.spotOf(lastAt[x.id], lastW) }))],
     widths: { [board]: Math.round(lastW) },
   });
+  // Ultra: a tile pressed goes on top of the others where it is (a board, or floating), unless it's there already.
+  const raise = (id) => {
+    const s = fl(id) ? 'pages' : board, list = lay.boards[s] || [], me = list.find((x) => x.id === id);
+    if (me && list.some((x) => x !== me && x.on && x.z >= me.z)) change({ ops: [{ s, id, front: true }] });
+  };
   const drag = (el, head, grip, id) => {
     const to = (left, top, f, free) => {
       const s = W.snap(left, top, el.offsetWidth, el.offsetHeight, f.W, f.H, f.others, { free, lines: f.lines });
@@ -762,37 +763,45 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       change(ultra ? { ops: [{ s: 'pages', id, set: { x: p.x, y: p.y }, front: true }], widths: { pages: Math.round(f.W) } } : { ops: [{ s: 'canvas', id, set: { x: p.x, y: p.y } }] });
       return p;
     };
-    head.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || !movable(id) || (e.target.closest('button, a, input, select, textarea') && e.target !== grip)) return;
+    const surface = ultra ? el : head;
+    surface.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !movable(id)) return;
+      if (ultra && !fl(id) ? e.target.closest('.gz-w-tools, .gz-w-resize') : !head.contains(e.target) || (e.target.closest('button, a, input, select, textarea') && e.target !== grip)) return;
       const f = frame(id);
       const r = el.getBoundingClientRect();
-      const dx = e.clientX - r.left, dy = e.clientY - r.top;
-      head.setPointerCapture(e.pointerId);
-      el.dataset.dragging = '';
-      if (ultra) el.style.zIndex = f.float ? '2000' : '999';
+      const x0 = e.clientX, y0 = e.clientY, dx = x0 - r.left, dy = y0 - r.top;
+      surface.setPointerCapture(e.pointerId);
+      gesture = true;
+      const z0 = el.style.zIndex;
+      if (ultra) { el.style.zIndex = f.float ? '2000' : '999'; el.focus({ preventScroll: true }); }
       let s = null;
-      // The room's box is asked again each move: the page can scroll under the pointer.
+      // The room's box is asked again each move: the page can scroll under the pointer. A press that wanders a pixel or
+      // two is still a press.
       const move = (ev) => {
+        if (!s && Math.abs(ev.clientX - x0) + Math.abs(ev.clientY - y0) < 4) return;
+        el.dataset.dragging = '';
         const at = f.at();
         s = to(ev.clientX - dx - at.left, ev.clientY - dy - at.top, f, ev.altKey);
         showGuides(f.layer, s.guides, { w: f.W, h: Number.isFinite(f.H) ? f.H : Math.max(f.layer.clientHeight, innerHeight) }, f.float ? at : undefined);
       };
       const up = () => {
-        head.removeEventListener('pointermove', move);
-        head.removeEventListener('pointerup', up);
-        head.removeEventListener('pointercancel', up);
+        surface.removeEventListener('pointermove', move);
+        surface.removeEventListener('pointerup', up);
+        surface.removeEventListener('pointercancel', up);
         delete el.dataset.dragging;
+        gesture = false;
         guides?.forEach((d) => d.remove());
         if (s) keep(s, f);
+        else if (ultra) { el.style.zIndex = z0; raise(id); }
       };
-      head.addEventListener('pointermove', move);
-      head.addEventListener('pointerup', up);
-      head.addEventListener('pointercancel', up);
+      surface.addEventListener('pointermove', move);
+      surface.addEventListener('pointerup', up);
+      surface.addEventListener('pointercancel', up);
       e.preventDefault();
     });
-    grip.addEventListener('keydown', (e) => {
-      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-      if (!d) return;
+    (grip || el).addEventListener('keydown', (e) => {
+      const d = ARROWS[e.key];
+      if (!d || (!grip && e.target !== el)) return;
       e.preventDefault();
       // In Canvas's grid: left and up move it earlier, right and down later.
       if (!ultra && !fl(id)) { change({ ops: [{ s: 'canvas', id, move: d[0] + d[1] < 0 ? -1 : 1 }] }); grip.focus(); return; }
@@ -804,7 +813,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (!at) return;
       const s = to(at.left + d[0] * by, at.top + d[1] * by, f, true);
       const kept = keep(s, f) || s;
-      grip.focus();
+      (grip || el).focus();
       say(t('Moved {name}: {x} px from the left, {y} px from the top', { name: t(nameOf(id)), x: kept.left, y: kept.top }));
     });
     // In Canvas's grid while editing: drag a tile onto another to put it there.
@@ -815,6 +824,81 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     el.addEventListener('dragend', () => { dragged = null; });
   };
 
+  // Resizing a tile by its corner (Ultra): on a board while editing, floating at any time. Dragged, the corner snaps as a
+  // moved tile does (Alt: freely); the arrow keys on it grow or shrink it a grid step (Shift: four); a double-click gives
+  // it its own size back. Its width and its body's height are kept (w, h; folded, only its width), and on a board every
+  // spot from this room, as a move keeps them. The one resized goes on top.
+  const resizer = (el, body, corner, id) => {
+    // w: its new width, h: its body's height (null: its own; h undefined: as it is), tall: the tile's height then.
+    const keep = (f, at, w, h, tall) => {
+      const set = { w, ...(h !== undefined && { h }) };
+      const wide = w || W.WIDTH[cur(id).size];
+      if (!f.float) return settle(id, { ...W.spotOf({ left: at.left, top: at.top, w: wide }, f.W), ...set });
+      const p = W.place(at.left, at.top, wide, tall, f.W, f.H, true);
+      change({ ops: [{ s: 'pages', id, set: { x: p.x, y: p.y, ...set }, front: true }], widths: { pages: Math.round(f.W) } });
+    };
+    const where = (f) => {
+      const b = el.getBoundingClientRect(), o = f.at();
+      return f.float ? { left: b.left - o.left, top: b.top - o.top } : lastAt[id];
+    };
+    corner.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !movable(id)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const f = frame(id), r = el.getBoundingClientRect(), o = f.at();
+      const at = { left: r.left - o.left, top: r.top - o.top };
+      const extra = el.offsetHeight - (body.hidden ? 0 : body.offsetHeight); // its heading, padding and gaps
+      const dx = e.clientX - r.right, dy = e.clientY - r.bottom;
+      corner.setPointerCapture(e.pointerId);
+      gesture = true;
+      el.dataset.resizing = '';
+      const z0 = el.style.zIndex;
+      el.style.zIndex = f.float ? '2000' : '999';
+      let got = null;
+      const move = (ev) => {
+        const o2 = f.at();
+        got = W.stretch(at.left, at.top, ev.clientX - dx - o2.left, ev.clientY - dy - o2.top, f.W, f.H, f.others, { free: ev.altKey, lines: f.lines, minH: extra + W.MIN_H });
+        el.style.width = `${got.w}px`;
+        if (!body.hidden) body.style.height = `${got.h - extra}px`;
+        showGuides(f.layer, got.guides, { w: f.W, h: Number.isFinite(f.H) ? f.H : Math.max(f.layer.clientHeight, innerHeight) }, f.float ? o2 : undefined);
+      };
+      const up = () => {
+        corner.removeEventListener('pointermove', move);
+        corner.removeEventListener('pointerup', up);
+        corner.removeEventListener('pointercancel', up);
+        delete el.dataset.resizing;
+        gesture = false;
+        guides?.forEach((d) => d.remove());
+        if (got) keep(f, at, got.w, body.hidden ? undefined : got.h - extra, got.h);
+        else { el.style.zIndex = z0; raise(id); }
+      };
+      corner.addEventListener('pointermove', move);
+      corner.addEventListener('pointerup', up);
+      corner.addEventListener('pointercancel', up);
+    });
+    corner.addEventListener('keydown', (e) => {
+      const d = ARROWS[e.key];
+      if (!d) return;
+      e.preventDefault();
+      if (!movable(id)) return;
+      const by = W.GRID * (e.shiftKey ? 4 : 1);
+      const f = frame(id), at = where(f);
+      if (!at) return;
+      const w = Math.max(W.MIN_W, Math.round(el.offsetWidth) + d[0] * by);
+      const h = body.hidden ? undefined : Math.max(W.MIN_H, Math.round(body.offsetHeight) + d[1] * by);
+      keep(f, at, w, h, el.offsetHeight + (h === undefined ? 0 : d[1] * by));
+      corner.focus();
+      say(t('Resized {name}: {w} by {h} px', { name: t(nameOf(id)), w, h: Math.round(el.offsetHeight) }));
+    });
+    corner.addEventListener('dblclick', () => {
+      if (!movable(id)) return;
+      const f = frame(id), at = where(f);
+      if (!at) return;
+      keep(f, at, null, null, el.offsetHeight);
+      say(t('{name} is its own size again.', { name: t(nameOf(id)) }));
+    });
+  };
+
   // Edit widgets (Canvas's grid) or Edit layout (a board: then Done, with Reset layout and the tiles to add). Said to a
   // screen reader as it starts and ends; Esc ends it too.
   const setEditing = (v) => {
@@ -823,7 +907,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (edit) { edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
     const reset = bar?.querySelector('.gz-dash-reset');
     if (reset) reset.hidden = !editing;
-    if (board) say(t(editing ? 'Editing the layout. Drag a widget by its heading, or use the arrow keys on its handle; Alt places it freely.' : 'Layout saved.'));
+    if (board) say(t(editing ? 'Editing the layout. Drag a widget to move it, or its corner to resize it; the one you press comes to the front. Arrow keys work too, and Alt places it freely.' : 'Layout saved.'));
     draw();
   };
   const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); bar?.querySelector('.gz-dash-edit')?.focus(); } };
@@ -887,7 +971,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const edit = button(t(board ? 'Edit layout' : 'Edit widgets'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
     const reset = board && button(t('Reset layout'), () => {
-      change({ ops: lay.boards[board].filter((x) => !W.course(x.id) || W.course(x.id).origin === location.origin).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false } })), widths: { [board]: 0 } });
+      change({ ops: lay.boards[board].filter((x) => !W.course(x.id) || W.course(x.id).origin === location.origin).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } })), widths: { [board]: 0 } });
       say(t('Layout reset.'));
     }, { className: 'gz-w-small gz-dash-reset', hidden: true });
     const hubBtn = button(t('What Glaze can do'), () => hub(), { className: 'gz-w-small' });
@@ -999,7 +1083,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       x.el.draggable = editing && !ultra && !tile.float;
       x.el.toggleAttribute('data-float', !!tile.float);
       x.el.toggleAttribute('data-fold', !!tile.fold);
-      if (tile.id === 'todo' && board) sizeTodo(x, tile);
+      if (ultra) {
+        // Its body as tall as it was resized to (else its content), scrolling inside. While a board is edited, its tiles
+        // are things to move (their content waits), each in the Tab order for the arrow keys; a floating one always is.
+        if (!gesture) { const h = tile.h ? `${tile.h}px` : ''; if (x.body.style.height !== h) x.body.style.height = h; }
+        const edit = editing && !tile.float;
+        if (x.body.inert !== edit) x.body.inert = edit;
+        if (tile.float || edit) { x.el.setAttribute('tabindex', '0'); x.el.setAttribute('aria-description', t('Drag to move, or use the arrow keys')); }
+        else { x.el.removeAttribute('tabindex'); x.el.removeAttribute('aria-description'); }
+      }
       toolsFor(x, tile);
       if (board && !tile.float) continue; // laid out below, in reading order
       // In order, moving only what is out of place: a moved element loses focus (a note being typed).
@@ -1042,14 +1134,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const layoutBoard = () => {
     const area = grid?.querySelector('.gz-dash-grid');
     const host = roomEl();
-    if (!board || !area || !host?.isConnected || (board === 'courses' && hidden && !editing)) return;
+    if (gesture || !board || !area || !host?.isConnected || (board === 'courses' && hidden && !editing)) return;
     const list = wanted(true).filter((x) => !x.float && tiles.has(x.id));
     const dims = {};
     for (const x of list) {
       const { el } = tiles.get(x.id);
       if (!el.isConnected) (stacked || board === 'dash' ? area : room).append(el);
       if (el.offsetHeight && (!stacked || !heights.has(x.id))) heights.set(x.id, el.offsetHeight);
-      dims[x.id] = { w: W.WIDTH[x.size], h: heights.get(x.id) || el.offsetHeight };
+      dims[x.id] = { w: widthOf(x), h: heights.get(x.id) || el.offsetHeight };
     }
     const width = host.clientWidth;
     let col = null, lines = null, side = true, courseArea = null;
@@ -1078,9 +1170,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const a = res.at[id];
       const z = String(1 + (cur(id)?.z || 0));
       if (stacked) { if (el.style.left) el.removeAttribute('style'); continue; }
-      if (el.style.left !== `${a.left}px`) el.style.left = `${a.left}px`;
-      if (el.style.top !== `${a.top}px`) el.style.top = `${a.top}px`;
-      if (el.style.zIndex !== z) el.style.zIndex = z;
+      for (const [k, v] of Object.entries({ left: `${a.left}px`, top: `${a.top}px`, width: `${a.w}px`, zIndex: z })) if (el.style[k] !== v) el.style[k] = v;
     }
     if (focus !== document.activeElement && focus?.isConnected) focus.focus({ preventScroll: true });
     const keep = stacked ? '' : `${board === 'courses' ? W.reserve(Object.values(res.at), lines[0], lines[1], col.top) : res.bottom + W.GAP}px`;
@@ -1112,10 +1202,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const api = (id) => ({ id, term: () => cur(id)?.term || '', who: account, site: ctx.site, size: () => cur(id)?.size || 's' });
   // Ultra's floating tiles (lib/widgets.js floating): each at its place in the room the window leaves right of the nav
   // and below a course's top bar, on top in the order they were moved; stacked at the window's edge (data-stack) when
-  // the window is too narrow for where they were placed. Their width is their size's, as on the boards.
+  // the window is too narrow for where they were placed. Their width is as resized, else their size's, as on the boards.
   const placeFloats = () => {
     if (ultra) {
-      if (!floats) return;
+      if (!floats || gesture) return;
       const r = floatRoom();
       const list = lay.boards.pages.filter((x) => x.on && tiles.has(x.id));
       if (!list.length) { floatRO?.disconnect(); floatWatched.clear(); floatsStacked = false; floats.removeAttribute('data-stack'); return; }
@@ -1123,7 +1213,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       floatRO ||= new ResizeObserver(() => { cancelAnimationFrame(floatFrame); floatFrame = requestAnimationFrame(() => { if (on) placeFloats(); }); });
       for (const e of floatWatched) if (!watch.has(e)) { floatRO.unobserve(e); floatWatched.delete(e); }
       for (const e of watch) if (!floatWatched.has(e)) { floatRO.observe(e); floatWatched.add(e); }
-      const dims = Object.fromEntries(list.map((x) => [x.id, { w: W.WIDTH[x.size], h: Math.max(tiles.get(x.id).el.offsetHeight, tiles.get(x.id).el.scrollHeight) }]));
+      const dims = Object.fromEntries(list.map((x) => [x.id, { w: widthOf(x), h: Math.max(tiles.get(x.id).el.offsetHeight, tiles.get(x.id).el.scrollHeight) }]));
       const res = W.floating(list, dims, r.W, r.H, lay.widths.pages);
       floatsStacked = res.stack;
       floats.toggleAttribute('data-stack', floatsStacked);
@@ -1133,7 +1223,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       for (const x of list) {
         const { el } = tiles.get(x.id);
         if (floatsStacked) { el.removeAttribute('style'); continue; }
-        for (const [k, v] of Object.entries({ left: `${r.left + res.at[x.id].left}px`, top: `${r.top + res.at[x.id].top}px`, width: `${W.WIDTH[x.size]}px`, zIndex: String(1000 + x.z) })) if (el.style[k] !== v) el.style[k] = v;
+        for (const [k, v] of Object.entries({ left: `${r.left + res.at[x.id].left}px`, top: `${r.top + res.at[x.id].top}px`, width: `${widthOf(x)}px`, zIndex: String(1000 + x.z) })) if (el.style[k] !== v) el.style[k] = v;
       }
       return;
     }

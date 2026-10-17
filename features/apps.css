@@ -36,9 +36,11 @@
 :is(#gz-float, #gz-dash[data-editing], #gz-room[data-editing]) .gz-w-grip { display: block; }
 .gz-w-tools { position: absolute; top: 0.45rem; inset-inline-end: 0.5rem; display: flex; align-items: center; gap: 0.15rem; }
 .gz-w-tools:empty { display: none; }
-/* While editing, a grid tile's controls get their own row above its heading. */
-:is(#gz-dash, #gz-room)[data-editing] .gz-w:not([data-float]) .gz-w-tools { position: static; order: -1; flex-wrap: wrap; justify-content: flex-end; }
-:is(#gz-dash, #gz-room)[data-editing] .gz-w:not([data-float]) .gz-w-head { padding-inline-end: 0; }
+/* While editing Canvas's grid, a tile's controls get their own row above its heading; on Ultra's boards they stay in
+   it (Float, Remove, Fold), so a tile is the same size editing or not. */
+#gz-dash:not([data-board])[data-editing] .gz-w:not([data-float]) .gz-w-tools { position: static; order: -1; flex-wrap: wrap; justify-content: flex-end; }
+#gz-dash:not([data-board])[data-editing] .gz-w:not([data-float]) .gz-w-head { padding-inline-end: 0; }
+:is(#gz-room, #gz-dash[data-board])[data-editing] .gz-w:not([data-float]) .gz-w-head { padding-inline-end: 6rem; }
 .gz-w-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .gz-w-faint { margin: 0; color: var(--gz-ink-muted); font-size: 0.8rem; }
 .gz-w-status { margin: 0; font-size: 0.8rem; color: var(--gz-ink-muted); }
@@ -271,10 +273,19 @@ html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
 #gz-dash[data-board="dash"] { margin: 0; padding: 1rem 1.5rem 2rem; font-family: var(--gz-font); }
 #gz-dash[data-board="dash"] .gz-dash-grid:not([data-stack]) { position: relative; display: block; min-height: 24rem; }
 :is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w { outline: 1px dashed var(--gz-border-strong, var(--gz-line-strong)); outline-offset: 3px; }
-:is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w .gz-w-head { cursor: grab; touch-action: none; user-select: none; }
+:is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w { cursor: grab; touch-action: none; user-select: none; }
 #gz-dash[data-board] .gz-dash-grid[data-stack] .gz-w { cursor: auto; }
 #gz-dash[data-board] .gz-dash-grid[data-stack] .gz-w-grip { display: none; }
 :is(#gz-room, #gz-dash[data-board]) .gz-w[data-dragging] { cursor: grabbing; opacity: 0.92; }
+/* The corner a tile is resized by (Ultra): on a board while editing, and on a floating tile. */
+.gz-w-resize {
+  display: none; position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 0 0 var(--gz-radius) 0; cursor: nwse-resize; touch-action: none;
+  color: var(--gz-ink-faint); background: linear-gradient(135deg, transparent 0 52%, currentColor 52% 59%, transparent 59% 70%, currentColor 70% 77%, transparent 77%);
+}
+:is(#gz-room[data-editing], #gz-dash[data-board][data-editing] .gz-dash-grid:not([data-stack])) > .gz-w > .gz-w-resize, #gz-float:not([data-stack]) > .gz-w > .gz-w-resize { display: block; }
+.gz-w-resize:hover, .gz-w[data-resizing] > .gz-w-resize { color: var(--gz-accent); }
+.gz-w-resize:focus-visible { outline-offset: -2px; }
+.gz-w[tabindex]:focus-visible { outline: 2px solid var(--gz-accent) !important; outline-offset: 3px !important; }
 #gz-dash[data-board="dash"][data-editing] .gz-dash-grid:not([data-stack]) { background: radial-gradient(circle, var(--gz-line-strong) 1px, transparent 1.5px) 0 0 / 16px 16px; }
 /* Ultra's tiles floating over every page (B7b): placed by features/widgets.js right of the nav and below a course's top
    bar; on a window too narrow for where they were put, one column at its right edge, below that bar. */
@@ -286,9 +297,13 @@ html[data-gz-todo-tile] div.todo-panel > bb-todo { display: none !important; }
    heading stays for screen readers only, its counts and buttons under the tile's. */
 .gz-w[data-tile="todo"] #gz-todo .gz-todo-head h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .gz-w[data-tile="todo"] #gz-todo { margin: 0; }
-/* Its list scrolls inside, under its counts and buttons; dragged taller or shorter by the corner (kept per board). */
-.gz-w[data-tile="todo"] > .gz-w-body { min-height: 8rem; max-height: 28rem; overflow: auto; resize: vertical; overscroll-behavior: contain; }
-.gz-w[data-tile="todo"] > .gz-w-body[style*="height"] { max-height: none; }
+/* Its list scrolls inside, under its counts and buttons. */
+.gz-w[data-tile="todo"] > .gz-w-body { min-height: 8rem; max-height: 28rem; overflow: auto; overscroll-behavior: contain; }
+/* Resized (its body a height of its own): what doesn't fit scrolls inside, and the notes fill it. */
+.gz-w > .gz-w-body[style*="height"] { min-height: 0; max-height: none; overflow: auto; overscroll-behavior: contain; }
+.gz-w > .gz-w-body[style*="height"]:has(> .gz-w-note) { display: flex; flex-direction: column; gap: 0.4rem; }
+.gz-w-body[style*="height"] > :is(.gz-w-note-view, .gz-w-note) { flex: 1 1 auto; min-height: 2.5rem; max-height: none; }
+.gz-w-body[style*="height"] > .gz-w-note-app { align-self: flex-start; }
 .gz-w[data-tile="todo"] #gz-todo .gz-todo-head { position: sticky; top: 0; z-index: 1; background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-paint, var(--gz-surface))); }
 /* The line a dragged tile met. */
 .gz-guide { position: absolute; z-index: 1000; pointer-events: none; background: var(--gz-accent); }
