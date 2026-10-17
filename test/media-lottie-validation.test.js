@@ -42,3 +42,11 @@ test('Lottie bounded scalar keyframes cannot use easing to overshoot their limit
   ]) assert.equal(M.lottie(shapes(item)), null);
   assert.ok(M.lottie(shapes({ ty: 'rp', c: animated(0.5) })));
 });
+
+test('Lottie precomp reuse counts each copy of its shape nodes', () => {
+  const picture = { ty: 4, shapes: Array.from({ length: 1000 }, () => ({ ty: 'el', p: prop([0, 0]), s: prop([10, 10]) })) };
+  const animation = (copies) => ({ v: '5.13.0', fr: 30, ip: 0, op: 30, w: 100, h: 100,
+    layers: Array.from({ length: copies }, () => ({ ty: 0, refId: 'shapes' })), assets: [{ id: 'shapes', layers: [picture] }] });
+  assert.ok(M.lottie(animation(1)));
+  assert.equal(Boolean(M.lottie(animation(20))), false, 'a short list of precomp references cannot multiply the shape-node budget');
+});
