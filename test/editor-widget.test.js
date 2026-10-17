@@ -163,7 +163,7 @@ test('replacing or removing an image keeps files still used by another block', a
     const pictures = { 'img/shared.png': new Uint8Array([1]) }, st = { blocks: [first, second] };
     const list = { replaceChildren(...rows) { this.rows = rows; }, querySelector() {} };
     const h = (tag, props, ...kids) => ({ tag, props, kids: kids.flat() });
-    const ctx = vm.createContext({ st, pictures, list, h, t: (x) => x, touch() {}, set() {}, uid: 0, Uint8Array,
+    const ctx = vm.createContext({ st, pictures, list, h, imageReads: new WeakMap(), t: (x) => x, touch() {}, set() {}, uid: 0, Uint8Array,
       PICTURE: { png: 'image/png' }, MAX_PICTURE: 256 << 10, GZ_DOCTEXT: { imageSize: () => ({ w: 1, h: 1 }) }, GZ_MODBROKER: { LIMIT: { picture: 4096 } }, TYPE_NAME: { image: 'Image' }, FIELDS: { image: [] }, $: () => ({ focus() {} }), say() {} });
     vm.runInContext(`${controls}\n${drawing}\nthis.control = control; this.drawBlocks = drawBlocks;`, ctx);
     if (replace) {
@@ -186,7 +186,7 @@ test('the image picker rejects unreadable or oversized images before replacing t
   for (const size of [null, { w: 4097, h: 1 }, { w: 1, h: 4097 }]) {
     const b = { type: 'image', src: 'img/old.png', alt: 'Old' }, pictures = { 'img/old.png': new Uint8Array([1]) }, said = [];
     const ctx = vm.createContext({
-      st: { blocks: [b] }, pictures, uid: 0, Uint8Array, t: (s) => s, say: (...a) => said.push(a), touch() {},
+      st: { blocks: [b] }, pictures, imageReads: new WeakMap(), uid: 0, Uint8Array, t: (s) => s, say: (...a) => said.push(a), touch() {},
       PICTURE: { png: 'image/png' }, MAX_PICTURE: 256 << 10,
       GZ_DOCTEXT: { imageSize: () => size }, GZ_MODBROKER: { LIMIT: { picture: 4096 } },
       h: (tag, props, ...kids) => ({ tag, props, kids: kids.flat() }),
@@ -221,4 +221,27 @@ test('saving a widget never changes a new draft opened while signing', async () 
   assert.ok(got);
   assert.equal(got.version, '1.0.6');
   assert.equal(current.version, '1.0.0', 'the new draft keeps its version');
+});
+
+
+test('an older picture read cannot replace a newer choice or repopulate another draft', async () => {
+  const vm = require('node:vm'), source = read('lib/editor-widget.js');
+  const controls = source.slice(source.indexOf('    const control ='), source.indexOf('    const list ='));
+  for (const nextDraft of [false, true]) {
+    const b = { type: 'image', src: 'img/old.png', alt: '' }, pictures = { 'img/old.png': new Uint8Array([1]) };
+    const ctx = vm.createContext({ st: { blocks: [b] }, pictures, imageReads: new WeakMap(), uid: 0, Uint8Array, t: (s) => s, say() {}, touch() {},
+      PICTURE: { png: 'image/png' }, MAX_PICTURE: 256 << 10, GZ_DOCTEXT: { imageSize: () => ({ w: 1, h: 1 }) }, GZ_MODBROKER: { LIMIT: { picture: 4096 } },
+      h: (tag, props, ...kids) => ({ tag, props, kids: kids.flat() }) });
+    vm.runInContext(`${controls}\nthis.control = control;`, ctx);
+    let release;
+    const held = new Promise((r) => { release = r; });
+    const pick = (control, name, bytes) => control.kids[1].kids[0].props.onchange({ target: { files: [{ name, size: 1, arrayBuffer: async () => bytes }], value: '' } });
+    const old = pick(ctx.control(b, ['src', 'pic', 'Picture']), 'older.png', held);
+    if (nextDraft) { ctx.st = { blocks: [] }; ctx.pictures = {}; }
+    else await pick(ctx.control(b, ['src', 'pic', 'Picture']), 'newer.png', new Uint8Array([3]).buffer);
+    release(new Uint8Array([2]).buffer);
+    await old;
+    if (nextDraft) assert.equal(Object.keys(ctx.pictures).length, 0, 'the old draft cannot add pictures to the new one');
+    else assert.equal(ctx.pictures[b.src][0], 3, 'the most recent picture choice wins, even after controls redraw');
+  }
 });
