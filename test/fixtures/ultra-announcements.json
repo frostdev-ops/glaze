@@ -1,5 +1,5 @@
 {
- "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. See docs/spikes/B0.md.",
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values.",
  "paging": {
   "limit": 10,
   "nextPage": "/learn/api/v1/courses/_101_1/announcements?offset=10",

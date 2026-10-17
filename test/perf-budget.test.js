@@ -1,6 +1,6 @@
 // Performance budget (W0). What every Ultra, Canvas and Moodle page pays for, checked statically, so a change can't
 // quietly grow it: the size of each site's first content script, the size of the detector every other https page runs, no fast
-// timers, and no new whole-page sweeps. The runtime numbers (time to themed, no light frame) are in docs/spikes/W0-perf.md.
+// timers, and no new whole-page sweeps.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

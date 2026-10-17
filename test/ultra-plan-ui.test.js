@@ -1,5 +1,5 @@
 // Planning on Blackboard Ultra pages (B2): Better To Do, tasks on cards and reminders in a VM with an inert DOM, storage
-// and worker, on Ultra's anchors (docs/spikes/B0.md, page anchors): where each goes, that only Ultra is asked (lib/ultra.js
+// and worker, on Ultra's anchors (page anchors): where each goes, that only Ultra is asked (lib/ultra.js
 // pageDue, never Canvas's planner), that a tick stays on this device whatever todo.sync says, and when content-ultra.js
 // loads each. The module's closure is reached by a probe appended to its return value here, in the test only.
 const test = require('node:test');

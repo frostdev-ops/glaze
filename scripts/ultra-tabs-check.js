@@ -1,5 +1,5 @@
 // Ultra's course tabs, headless (B8): the real extension on a synthetic Ultra (test/fixtures/ultra-course.html, built from
-// docs/spikes/B8.md: the sticky two-row course bar, course panels, items opened over them, an SPA router), served under a
+// the B8 spike: the sticky two-row course bar, course panels, items opened over them, an SPA router), served under a
 // made-up school's address. Nothing leaves the machine: every other request is aborted and DNS is mapped to nowhere.
 // It opens courses, then checks: tabs open, switch, close (×, middle click, Delete), pin, move (keyboard, drag) and cap;
 // a switch shows the course's copy at once and fades to the live page, back where the tab was (page and scroll), and never

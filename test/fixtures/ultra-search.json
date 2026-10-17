@@ -1,5 +1,5 @@
 {
-  "_note": "Glaze test fixture: Blackboard Ultra public search lists, synthetic values. Shapes: docs/spikes/B0.md #19, #21, #22.",
+  "_note": "Glaze test fixture: Blackboard Ultra public search lists, synthetic values.",
   "contents": [
     {"id": "_700_1", "title": "Laboratory", "availability": {"available": "Yes", "adaptiveRelease": {}}, "contentHandler": {"id": "resource/x-bb-folder"}},
     {"id": "_701_1", "parentId": "_700_1", "title": "Reading: Cell membrane", "availability": {"available": "Yes", "adaptiveRelease": {}}, "body": "<p>Résumé &amp; safety notes: mitochondria.</p><img src=\"https://files.example.com/never-request\"><script>forbiddenword()</script>", "contentHandler": {"id": "resource/x-bb-document"}},

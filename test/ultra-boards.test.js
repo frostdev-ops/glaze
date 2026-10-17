@@ -1,5 +1,5 @@
 // Blackboard Ultra's boards (B7b): features/widgets.js and features/dashboard.js on synthetic Courses, Institution and
-// course pages built from docs/spikes/B7.md and B8.md (and B0's anchors), in a VM with the stand-in DOM laying the page
+// course pages built from the B7 and B8 spikes (and B0's anchors), in a VM with the stand-in DOM laying the page
 // out like Ultra at 1280 px: a 200 px nav, the page from 200 to 1280, the To Do column its last 320 px, a course's 94 px
 // top bar. The tiles float in the page's layer at the column's top, the column makes room for them; Edit layout lets
 // them move (pointer and keys, snapped, kept across a reload); a narrow window stacks them and keeps the layout; a tile
