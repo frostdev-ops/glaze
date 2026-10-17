@@ -217,7 +217,8 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     const t0 = await rect(tile('timer')), tg = await grab('timer');
     await page.mouse.move(tg.left + 60, tg.top + 5);
     await page.mouse.down();
-    await page.mouse.move(n.right + 16 + 4 + 60 + (tg.left - t0.left), n.top + 5 + 5 + (tg.top - t0.top), { steps: 8 });
+    // Let go a pixel off both lines, so no other tile's line is nearer (the column's tiles can line up there too).
+    await page.mouse.move(n.right + 16 + 1 + 60 + (tg.left - t0.left), n.top + 5 + 1 + (tg.top - t0.top), { steps: 8 });
     const guides = await page.evaluate(() => [...document.querySelectorAll('#gz-room .gz-guide')].filter((g) => !g.hidden).length);
     ok(guides >= 1, `a guide shows on the line it meets (${guides})`);
     await shot('courses-drag-guide-light-1280');
