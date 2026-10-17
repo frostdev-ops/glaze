@@ -793,7 +793,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         gesture = false;
         guides?.forEach((d) => d.remove());
         if (s) keep(s, f);
-        else if (ultra) { el.style.zIndex = z0; raise(id); }
+        else if (ultra) { el.style.zIndex = z0; raise(id); draw(); }
       };
       surface.addEventListener('pointermove', move);
       surface.addEventListener('pointerup', up);
@@ -873,7 +873,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         gesture = false;
         guides?.forEach((d) => d.remove());
         if (got) keep(f, at, got.w, body.hidden ? undefined : got.h - extra, body.hidden ? el.offsetHeight : got.h);
-        else { el.style.zIndex = z0; raise(id); }
+        else { el.style.zIndex = z0; raise(id); draw(); }
       };
       corner.addEventListener('pointermove', move);
       corner.addEventListener('pointerup', up);

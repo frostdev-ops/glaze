@@ -403,6 +403,23 @@ test('resizing a folded floating tile changes its width without moving it vertic
   assert.equal(on(p, 'pages', 'notes').h, 240, 'unfolded height kept');
 });
 
+test('a press without a move applies another tab\'s size once the gesture ends', async () => {
+  for (const resize of [false, true]) {
+    const kept = W.bset(W.layout(ONLY(['notes'])), 'courses', 'notes', { z: 99 });
+    const p = page({ local: { widgetLayout: kept } }); p.ui.sync(true); await settle();
+    p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+    const n = p.tile('notes');
+    const surface = resize ? n.querySelector('.gz-w-resize') : n;
+    surface.dispatchEvent(p.ev('pointerdown', { target: resize ? surface : n.querySelector('.gz-w-head'), clientX: 980, clientY: 130 }));
+    p.store.widgetLayout = W.bset(p.store.widgetLayout, 'courses', 'notes', { w: 240, h: 180 });
+    p.changed({ widgetLayout: { newValue: p.store.widgetLayout } });
+    surface.dispatchEvent(p.ev('pointerup')); await settle();
+    assert.equal(n.style.width, '240px');
+    assert.equal(n.querySelector('.gz-w-body').style.height, '180px');
+    assert.equal(p.sent.filter((m) => m.type === 'glaze:widgetLayout').length, 0, 'no local change needed');
+  }
+});
+
 test('a tile folds to its heading and is removed or added back while editing, on this board only', async () => {
   const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } });
   p.ui.sync(true);
