@@ -16,6 +16,24 @@ no stored fields, requests to other sites, or activity collection. The synthetic
 The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep
 their separate, existing URL handling.
 
+## Signed mod blocklist
+
+On Chrome, while Glaze and its synced blocklist setting are on and at least one installed mod contains code, Glaze
+asks `https://frostdev.io/glaze/mods/api/blocklist` at most daily (failed attempts retry after an hour). This fixed GET
+has no cookies, referrer, query string, request body or student identifiers. Declarative-only mods, Firefox and Safari
+never cause this request. The signed list and check timestamps stay in device-local storage. Turning the setting off
+stops checks; previously blocked mods stay blocked, including when the last verified list is out of date.
+
+## Mod channels
+
+A mod installed from a channel link is checked against that link's relay when the editor opens, on **Check now**, and
+at most daily while a page runs it; **Stop following** or removing the mod ends this. An author's **Publish to a
+channel** uploads the signed mod to their selected relay. Both are encrypted share-session requests without cookies,
+referrer or student identifiers; the relay sees what it sees for any session (described below). The check state stays
+in device-local storage. The install prompt and followed mod name the relay host. After publishing a newer version,
+Glaze requests deletion of the previous bundle file, best effort; older relays without file deletion retain it until
+session deletion or expiry. Recipients and operator backups may keep copies.
+
 ## Optional encrypted share sessions
 
 Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's extension-owned Sessions page. Glaze checks the selected origin's browser permission and requests it only if missing. Glaze's required `<all_urls>` access already covers the default relay, custom HTTPS relays and `http://localhost` or `http://127.0.0.1` relays for local testing, so none is declared separately. A browser prompt is only needed when the selected origin's access is missing or withheld. Device-local consent gates session traffic independently. Pause aborts requests and closes the live connections. Backup/key restore never enables sharing. No session connection runs without an open Notes, To Do or Sessions surface. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
@@ -287,7 +305,7 @@ services, which receive ordinary connection information such as your IP address.
 Ultra appearance uses the visible course-card banners and existing color slots; it makes no LMS API requests. Linked images load from their chosen HTTPS hosts, exactly as on Canvas. The Ultra document viewer has no added iframe injection or host access.
 
 The browser extension ships as static files and loads no remote scripts. Its built-in fonts, three.js (used by the
-animated backgrounds), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
+animated backgrounds), lottie-web's light player (used for Lottie animations), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
 you import) are bundled. It makes requests in these cases:
 
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
@@ -567,6 +585,13 @@ you import) are bundled. It makes requests in these cases:
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
+- **Video, animated picture or animation background.** If a Look's background is a video, an animated picture or a Lottie
+  animation named by an `https://` link on a public website, your browser loads it from that site when a page is shown,
+  like a background image, and that site sees an ordinary request. A Lottie file is fetched by Glaze's background
+  worker instead, with no cookies, no referrer, no redirects and at most 1 MiB, because a page may not read other sites'
+  files. The editor, and the preview of a theme code, name the site before you apply the Look. A Look can also name a file
+  kept on your computer by its SHA-256; such a file reaches you only through a share session (encrypted end to end, like a
+  shared note's file) or because you chose it in the editor, and Reset everything removes it.
 - **Sidebar pictures.** A sidebar picture linked by `https://` is loaded by your browser from that host when
   shown. The editor also reads it for its contrast warning when the host permits that; the preview of a theme
   code names its sidebar image host before you apply it. Files selected from your device cause no upload.

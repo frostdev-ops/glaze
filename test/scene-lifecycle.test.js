@@ -1,23 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
-const file = process.env.GZ_LIFECYCLE_REPO ? path.join(process.env.GZ_LIFECYCLE_REPO, 'lib/scene.js') : require.resolve('../lib/scene.js');
-const text = fs.readFileSync(file, 'utf8');
-const source = text.slice(text.indexOf('export const start = ')).replace('export const start', 'const start');
-const engine = () => {
-  let next = 0;
-  const frames = new Map(), listeners = new Map(), counts = { draws: 0, disposed: 0, lost: 0, geometry: 0, material: 0 };
-  class Color { set() { return this; } lerp() { return this; } }
-  class Renderer {
-    setPixelRatio() {} setSize() {} setClearColor() {} render() { counts.draws++; }
-    dispose() { counts.disposed++; } forceContextLoss() { counts.lost++; }
-  }
-  const c = { WebGLRenderer: Renderer, Color, Scene: class { add() {} remove() {} }, FPS: 30,
-    SCENES: { mist: { scale: 0.5, make: () => [{ geometry: { dispose: () => counts.geometry++ }, material: { dispose: () => counts.material++ } }, {}] } },
-    requestAnimationFrame: (fn) => { frames.set(++next, fn); return next; }, cancelAnimationFrame: (id) => frames.delete(id),
-    addEventListener: (event, fn) => listeners.set(event, fn), removeEventListener: (event) => listeners.delete(event),
-    innerWidth: 1280, innerHeight: 900, performance: { now: () => 0 } };
-  return { start: vm.runInNewContext(source + '\nstart', c), frames, listeners, counts };
-};
+const { engine } = require('./helpers/scene-engine.cjs');
 const opts = { name: 'mist', ground: '#000', colors: ['#123', '#456', '#789'], dim: 0, amount: 0.5, speed: 1 };
 
 test('a scene cut off from its caller stops its frames and keeps its last frame on screen', () => {
@@ -37,6 +19,7 @@ test('a scene switched off frees everything, once', () => {
   scene.stop(); scene.stop(); scene.draw(); scene.update(opts);
   assert.deepEqual([e.counts.disposed, e.counts.lost, e.frames.size, e.listeners.size], [1, 1, 0, 0]);
   assert.equal(e.counts.draws, 1);
+  assert.deepEqual([e.counts.geometry, e.counts.material, e.canvasListeners.size, e.docListeners.size], [1, 1, 0, 0], 'its mesh, material and its listeners go too');
 });
 
 test('standalone promo callers keep their still frame and resize behavior', () => {

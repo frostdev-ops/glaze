@@ -949,3 +949,23 @@ async function mockS3() {
   await new Promise((resolve) => srv.listen(0, '127.0.0.1', resolve));
   return { objects, seen, url: `http://127.0.0.1:${srv.address().port}`, close: () => new Promise((resolve) => { srv.closeAllConnections(); srv.close(resolve); }) };
 }
+
+test('a file delete requires its own editor signature bound to the session and file', async (t) => {
+  const store = memory(), r = await up({ store });
+  t.after(() => r.close());
+  const a = make(r), ref = await a.s.put(new Uint8Array([1, 2, 3]));
+  const reader = await join(await a.s.link(false));
+  await assert.rejects(reader.s.removeFile(ref.id), /read-only/);
+  const url = `${r.url}/s/${a.st.sid}/b/${ref.id}`;
+  assert.equal((await fetch(url, { method: 'DELETE', headers: { 'x-glaze-sig': 'A'.repeat(86) } })).status, 403);
+  const k = await G.keys({ sid: G.unb64(a.st.sid), seed: G.unb64(a.st.seed) });
+  const sig = G.b64(new Uint8Array(await crypto.subtle.sign('Ed25519', k.sk, new TextEncoder().encode(`gzs1|${a.st.sid}|blob-delete|${ref.id}`))));
+  // A signature for another file cannot delete this one.
+  const other = await a.s.put(new Uint8Array([4]));
+  assert.equal((await fetch(`${r.url}/s/${a.st.sid}/b/${other.id}`, { method: 'DELETE', headers: { 'x-glaze-sig': sig } })).status, 403);
+  await a.s.removeFile(ref.id);
+  assert.equal((await fetch(url)).status, 404);
+  assert.equal(store.m.has(`${a.st.sid}/${ref.id}`), false);
+  assert.ok(store.m.has(`${a.st.sid}/${other.id}`));
+  await a.s.removeFile(ref.id); // retries are harmless
+});

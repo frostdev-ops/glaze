@@ -417,12 +417,13 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const mark = async (r, el) => {
     const want = el.checked;
     const said = want ? t('{title} is done.', { title: r.title }) : t('{title} is back on your list.', { title: r.title });
-    const burst = () => { if (want && document.documentElement.getAttribute('data-gz-motion') === 'expressive') ctx.celebrate?.(el); };
+    const rect = el.getBoundingClientRect();
+    const burst = () => { if (want) ctx.celebrate?.({ getBoundingClientRect: () => rect }); };
     if (r.custom || r.type === 'gradescope' || !toSite()) {
-      // The burst where the box is now: the redraw moves a done item into the Done section.
-      burst();
+      // The save redraws the list; keep the box's original place for its completion.
       // A mark that agrees with Canvas is no mark (null): the item follows Canvas again (handed in later, say).
-      return save([r.custom ? ['taskDone', r.id, want ? Date.now() : 0] : ['done', r.key, want === L.isDone(r, o().done) ? null : want]], said);
+      if (await save([r.custom ? ['taskDone', r.id, want ? Date.now() : 0] : ['done', r.key, want === L.isDone(r, o().done) ? null : want]], said)) burst();
+      return;
     }
     // Ticks go to Canvas: nothing of the student's own changes.
     el.disabled = true;

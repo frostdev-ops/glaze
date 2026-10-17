@@ -81,12 +81,81 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // changed (a move x and y, a resize w, a turn r), so another tab's change to the others stands.
   const pending = new Map();
   let own = {}; // id -> blob: address, of the student's pictures read so far
+  // Stickers a mod carries (mod.json packs.stickers): which mods bring packs (asked of the worker, which says only what is on and
+  // not blocked), and each sticker's art once it is asked for: { kind: 'image', url, bytes, mime, animated } or { kind: 'lottie',
+  // json } as the worker cleaned them, or false when it can't be had (the mod went, or the file is no longer what it was).
+  let modPacks = null;
+  const modArt = new Map();
+  const lotties = new Set(); // the players on the page now
+  const stillNow = () => html.getAttribute('data-gz-motion') === 'off';
   // Sticker mode shows them while "Show stickers" is on its way to being saved.
   // A course tab's frame shows its own page's stickers (ctx.solo); the Look rotation stays the top page's.
   const shown = () => ctx.solo && ctx.on() && (X().stickers || editing) && !quiz();
   const ownId = (s) => (s.startsWith('own:') ? s.slice(4) : null);
+  const isMod = (s) => GZ_LX.MOD.test(s);
   const src = (s) => (ownId(s) ? own[ownId(s)] || '' : url(GZ_LX.file(s)));
-  const nameOf = (s) => (ownId(s) ? t('Your picture') : t(GZ_LX.BUNDLED.get(s)));
+  const nameOf = (s) => (ownId(s) ? t('Your picture') : isMod(s) ? modPacks?.find((p) => p.mod === s.slice(4, 20))?.stickers.find((x) => x.id === s.slice(21))?.name || t('Sticker') : t(GZ_LX.BUNDLED.get(s)));
+  const packsIn = async () => (modPacks ||= (await send({ type: 'glaze:modpage', op: 'packs' }))?.packs || []);
+  // A mod's stickers, read now: each from the worker, which reads the file again and hands back only a cleaned copy.
+  const readMod = async (list) => {
+    await packsIn();
+    await Promise.all([...new Set(list)].filter((s) => isMod(s) && !modArt.has(s)).map(async (s) => {
+      modArt.set(s, false);
+      const r = await send({ type: 'glaze:modpage', op: 'sticker', mod: s.slice(4, 20), id: s.slice(21) });
+      if (!live || !r?.ok) return;
+      if (r.kind === 'lottie') modArt.set(s, { kind: 'lottie', json: r.json });
+      else if (r.kind === 'image') {
+        const bytes = Uint8Array.from(atob(r.b64), (c) => c.charCodeAt(0));
+        modArt.set(s, { kind: 'image', bytes, mime: r.mime, animated: !!r.animated, url: URL.createObjectURL(new Blob([bytes], { type: r.mime })) });
+      }
+    }));
+  };
+  const forgetMods = () => {
+    for (const a of modArt.values()) if (a?.url) URL.revokeObjectURL(a.url);
+    modArt.clear();
+    modPacks = null;
+  };
+  // The mods changed (installed, turned off, updated): what they bring is asked again, and what is on screen redrawn from it.
+  const refreshMods = async () => {
+    const old = [...modArt.values()];
+    modArt.clear();
+    modPacks = null;
+    if (list.some((p) => isMod(p.s))) await readMod(list.map((p) => p.s));
+    if (live && (layer || editing)) { draw(); if (panel && pack.startsWith('mod:')) showPack(); }
+    for (const a of old) if (a?.url) URL.revokeObjectURL(a.url);
+  };
+  // The Lottie player, imported once (lib/lottie/): the first Lottie sticker asks for it.
+  let lottieLoad = null;
+  const lottieIn = () => (lottieLoad ||= import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js')).then(() => {
+    if (typeof globalThis.lottie?.loadAnimation !== 'function') throw new Error('lottie');
+    return globalThis.lottie;
+  }));
+  const mute = () => { for (const a of lotties) { if (document.hidden || stillNow()) a.pause(); else a.play(); } };
+  // What a sticker shows. Bundled and own pictures are images. A mod's: its picture (an animated WebP or AVIF moves by itself,
+  // and with motion off is its first frame in a canvas), or its Lottie animation (frame 0 with motion off, paused while hidden).
+  const art = (s, small = false) => {
+    if (!isMod(s)) return make('img', { src: src(s), alt: '', draggable: false });
+    const a = modArt.get(s);
+    if (!a) return make('span', { className: 'gz-stk-gone' });
+    if (a.kind === 'image') {
+      if (!a.animated || !stillNow()) return make('img', { src: a.url, alt: '', draggable: false });
+      const c = make('canvas', { width: 1, height: 1 });
+      createImageBitmap(new Blob([a.bytes], { type: a.mime })).then((b) => { c.width = b.width; c.height = b.height; c.getContext('2d').drawImage(b, 0, 0); b.close(); }).catch(() => {});
+      return c;
+    }
+    if (small) return make('span', { textContent: nameOf(s) });
+    const box = make('div', { className: 'gz-stk-lottie' });
+    box.style.aspectRatio = `${a.json.w} / ${a.json.h}`;
+    lottieIn().then((lottie) => {
+      if (!box.isConnected || !live) return;
+      const anim = lottie.loadAnimation({ container: box, renderer: 'canvas', loop: true, autoplay: false, animationData: JSON.parse(JSON.stringify(a.json)), rendererSettings: { preserveAspectRatio: 'xMidYMid meet', clearCanvas: true, dpr: Math.min(devicePixelRatio || 1, 2) } });
+      anim.setSubframe?.(false);
+      lotties.add(anim);
+      if (document.hidden || stillNow()) anim.goToAndStop(0, true); else anim.play();
+    }).catch(() => box.replaceWith(make('span', { className: 'gz-stk-gone' })));
+    return box;
+  };
+  const dropLotties = () => { for (const a of lotties) { try { a.destroy(); } catch { /* gone */ } } lotties.clear(); };
   const readOwn = async (ids) => {
     const want = ids.filter((id) => !(id in own)).map((id) => `stkImg:${id}`);
     if (!want.length) return;
@@ -101,6 +170,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (!shown()) {
       flush();
       if (editing) stopEdit();
+      dropLotties();
       layer?.remove();
       layer = null;
       key = '';
@@ -115,6 +185,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
       list = GZ_LX.clean(r[k]);
     }
     await readOwn(list.map((p) => ownId(p.s)).filter(Boolean));
+    if (list.some((p) => isMod(p.s))) await readMod(list.map((p) => p.s));
     if (still()) draw();
   };
   // Changes go to the worker one by one (lib/lookx.js apply), each with when it was made: adding and removing at once,
@@ -143,8 +214,9 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     layer.classList.toggle('gz-stk-edit', editing);
     // Decoration, out of the way of a screen reader, but for sticker mode's own controls.
     layer.toggleAttribute('aria-hidden', !editing);
+    dropLotties();
     els = list.map((p, i) => {
-      const el = make('div', { className: 'gz-stk', tabIndex: editing ? 0 : -1 }, make('img', { src: src(p.s), alt: '', draggable: false }), make('span', { className: 'gz-stk-grip' }));
+      const el = make('div', { className: 'gz-stk', tabIndex: editing ? 0 : -1 }, art(p.s), make('span', { className: 'gz-stk-grip' }));
       if (editing) {
         el.setAttribute('role', 'img');
         el.setAttribute('aria-label', nameOf(p.s));
@@ -173,6 +245,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     const [p] = list.splice(i, 1);
     pending.delete(`${key} ${p.id}`);
     op({ op: 'del', id: p.id });
+    dropLotties();
     draw();
     say(t('{name} removed.', { name: nameOf(p.s) }));
     (els[Math.min(i, els.length - 1)] || panel?.querySelector('select'))?.focus();
@@ -237,13 +310,19 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
       file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) addOwn(f); });
       grid.replaceChildren(...ids.filter((id) => own[id]).map((id) => make('span', { className: 'gz-stk-own' },
         pick(`own:${id}`), button('×', t('Delete your picture'), () => dropOwn(id)))), make('span', {}, button(t('Add a picture…'), '', () => file.click()), file));
+    } else if (pack.startsWith('mod:')) {
+      const asked = pack, mine = (await packsIn()).find((p) => `mod:${p.mod}` === asked);
+      const ids = (mine?.stickers || []).map((x) => `mod:${mine.mod}/${x.id}`);
+      await readMod(ids);
+      if (!ctx.on() || !live || panel !== was || !panel || pack !== asked) return;
+      grid.replaceChildren(...ids.filter((s) => modArt.get(s)).map(pick));
     } else grid.replaceChildren(...GZ_LX.PACKS[pack].map((n) => pick(`${pack}/${GZ_LX.slug(n)}`)));
   };
   const pick = (s) => {
     const b = button('', nameOf(s), () => place(s));
     b.className = 'gz-stk-pick';
     b.title = nameOf(s);
-    b.append(make('img', { src: src(s), alt: '' }));
+    b.append(art(s, true));
     return b;
   };
   // The student's own picture: read on this device, scaled to 256 px at most, kept as WebP (PNG where the browser can't
@@ -291,7 +370,9 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (!editing) return;
     if (!layer) draw();
     if (panel) return panel.querySelector('select').focus();
-    const sel = make('select', {}, ...[...Object.entries(GZ_LX.PACK_NAMES), ['own', 'Your pictures']].map(([v, n]) => make('option', { value: v, textContent: t(n) })));
+    const mods = (await packsIn()).filter((p) => p.stickers.length).map((p) => make('option', { value: `mod:${p.mod}`, textContent: p.name }));
+    const sel = make('select', {}, ...[...Object.entries(GZ_LX.PACK_NAMES), ['own', 'Your pictures']].map(([v, n]) => make('option', { value: v, textContent: t(n) })), ...mods);
+    if (pack.startsWith('mod:') && !mods.some((o) => o.value === pack)) pack = 'study';
     sel.value = pack;
     sel.setAttribute('aria-label', t('Sticker pack'));
     sel.addEventListener('change', () => { pack = sel.value; showPack(); });
@@ -318,21 +399,25 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     editing = false;
     panel?.remove();
     panel = status = grid = onPage = null;
+    dropLotties();
     draw();
   };
 
   // Another tab or the worker changed what this page shows.
   chrome.storage.onChanged.addListener((c, area) => {
     if (area !== 'local') return;
-    if (c.rotateState) arm();
+    if (c.rotateState) { arm(); if (top && globalThis.GZ_LX?.turned(c.rotateState.oldValue, c.rotateState.newValue)) ctx.moment?.('look.rotate'); }
     if (c.cursorImg && X().cursor === 'own') cursor();
+    if (Object.keys(c).some((k) => k === 'mods' || k.startsWith('mod:') || k === 'modsBlocklist')) refreshMods();
     if (key && c[key] && !editing && !pending.size) { key = ''; stickers(); }
   });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) arm(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) arm(); mute(); });
   addEventListener('pagehide', () => {
     flush();
     live = false;
     for (const u of [...Object.values(own), pointer]) if (u) URL.revokeObjectURL(u);
+    dropLotties();
+    forgetMods();
     own = {};
     pointer = '';
   });

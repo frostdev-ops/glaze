@@ -23,6 +23,7 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
 (async () => {
   let ctx;
   try {
+    await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
       executablePath: process.env.CHROME || path.join(os.homedir(), 'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'),
       headless: true, viewport: { width: 1280, height: 860 },

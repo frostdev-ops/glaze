@@ -177,7 +177,7 @@ test("a teacher's fresh planner answer from the course cards (teach: null) is ke
 });
 
 const item = () => T.slim({ plannable_type: 'assignment', plannable_id: 3, course_id: 25, plannable_date: new Date(Date.now() + 36e5).toISOString(), plannable: { title: 'Essay' } });
-const tick = (checked = true) => ({ dataset: { act: 'done' }, checked, closest: () => ({ dataset: { key: 'assignment:3' } }) });
+const tick = (checked = true) => ({ dataset: { act: 'done' }, checked, getBoundingClientRect: () => ({ left: 0, top: 0, width: 20, height: 20 }), closest: () => ({ dataset: { key: 'assignment:3' } }) });
 
 test("only the student's own tick writes to Canvas, never a script's change event", async () => {
   const f = feature();

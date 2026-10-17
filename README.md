@@ -52,7 +52,7 @@ The settings editor has eight tabs: **Look, Blackboard, Canvas, Moodle, Study to
 
 - **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system or a schedule (dark from 20:00 to 08:00, say). Keep quizzes light (off by default) leaves quizzes you're taking and external tools such as New Quizzes unthemed on Canvas.
 - **Look** — fonts for text, headings and code (two bundled; about forty more from Google Fonts and Nerd Fonts, or any Google Font by name, each previewed in its own face), text size, line height, corner radius, density, depth and glass.
-- **Backgrounds** — solid; a gradient you shape (linear, radial, conic or mesh; angle, blend, spread); a drifting aurora; your own image; or ten slow animated scenes (three.js, drawn at low resolution; two for Halloween, a moonlit graveyard and a pumpkin patch) with one Intensity slider. Palette colors or your own.
+- **Backgrounds** — solid; a gradient you shape (linear, radial, conic or mesh; angle, blend, spread); a drifting aurora; your own image; a looping video, animated picture (WebP or AVIF) or Lottie animation from a link or a file (always muted, held on its first frame when motion is off, paused while the tab is hidden); or ten slow animated scenes (three.js, drawn at low resolution; two for Halloween, a moonlit graveyard and a pumpkin patch) with one Intensity slider. Palette colors or your own.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — every course its own color, from Ultra's stripes blended into your palette or set one by one, on course pages, Messages, Grades and the calendar.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
@@ -281,7 +281,7 @@ aren't in the API; edit those in the dashboard. The publisher and item IDs defau
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). To make a mod, see the [mods API](docs/mods-api.md) and [example mods](examples/mods).
 
 ## Privacy
 
@@ -311,7 +311,7 @@ your overall grade on course cards; on Canvas a course's assignment groups when 
 on Blackboard each course's grading schemas for the GPA, a course's grade categories when its what-if needs their names, this term's
 gradebooks with your submission status for Insights, and a course's documents when you import a syllabus from one;
 your course list and a course's items for the command palette and new-content badges; on Canvas, what you type in the command palette, to search your courses' titles), to Google Fonts or jsDelivr for a web
-font you choose, and to a background image, course card picture or sidebar picture you choose. For Canvas Download all, the extension's background worker
+font you choose, and to a background image, video or animation, course card picture or sidebar picture you choose. For Canvas Download all, the extension's background worker
 fetches signed file links from your school's file host without cookies. Links and file bytes stay in memory while
 Glaze makes the zip; they are not saved in extension storage. Blackboard's course content answers can include a course tool's launch credentials: Glaze asks for them to be left out and never keeps them. The downloaded Mac app also checks
 `https://frostdev.io/projects/glaze/appcast.xml` about once a day and downloads updates from GitHub,
@@ -320,7 +320,7 @@ address. See [PRIVACY.md](PRIVACY.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Bundled with it, each under its own license beside it: three.js (MIT, `lib/three.LICENSE`), pdf.js and its JBIG2 and JPEG 2000 decoders (Apache-2.0 and BSD, `lib/pdfjs/`), and the Tesseract OCR engine and its tessdata_fast models (Apache-2.0, `lib/tesseract/`), each rebuilt by its `scripts/vendor-*.sh`.
+MIT — see [LICENSE](LICENSE). Bundled with it, each under its own license beside it: three.js (MIT, `lib/three.LICENSE`), lottie-web's light canvas player (MIT, `lib/lottie/LICENSE`), pdf.js and its JBIG2 and JPEG 2000 decoders (Apache-2.0 and BSD, `lib/pdfjs/`), and the Tesseract OCR engine and its tessdata_fast models (Apache-2.0, `lib/tesseract/`), each rebuilt by its `scripts/vendor-*.sh`.
 
 ---
 

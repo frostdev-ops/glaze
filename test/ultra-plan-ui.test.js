@@ -170,7 +170,7 @@ test('a tick on Ultra stays on this device, even with "Tick off in Canvas too" o
   vm.runInContext(probe(read('features/todo.js'), 'onChange, render, get: () => ({ box })'), p.c);
   p.c.GZ_TODO_UI.sync(true);
   await settle();
-  const tick = { dataset: { act: 'done' }, checked: true, closest: () => ({ dataset: { key: 'assignment:_603_1' } }) };
+  const tick = { dataset: { act: 'done' }, checked: true, getBoundingClientRect: () => ({ left: 0, top: 0, width: 20, height: 20 }), closest: () => ({ dataset: { key: 'assignment:_603_1' } }) };
   p.c.GZ_TODO_UI.probe.onChange({ target: tick, isTrusted: true });
   await settle();
   assert.deepEqual(p.calls, [], 'nothing is written to Blackboard');

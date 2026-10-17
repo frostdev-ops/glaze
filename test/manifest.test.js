@@ -58,6 +58,10 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   delete expected.optional_permissions;
   expected.description = 'Restyle Blackboard Ultra, Canvas and Moodle: palettes, fonts, backgrounds and motion, plus handy extras.';
   for (const entry of expected.web_accessible_resources) delete entry.use_dynamic_url;
+  // Safari has no manifest sandbox (MDN: not supported on macOS or iOS), so no code mods: their page, CSP and files go.
+  delete expected.sandbox;
+  delete expected.content_security_policy.sandbox;
+  expected.web_accessible_resources = expected.web_accessible_resources.filter((e) => !e.resources.every((r) => r.startsWith('mods/')));
   try {
     const rewrite = () => execFileSync('sh', [path.join(__dirname, '../scripts/safari-manifest.sh'), file]);
     rewrite();
@@ -65,6 +69,11 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
     assert.deepEqual(JSON.parse(once), expected);
     rewrite();
     assert.equal(fs.readFileSync(file, 'utf8'), once);
+    // A staged copy loses the mods host's files too.
+    fs.mkdirSync(path.join(dir, 'mods'));
+    fs.writeFileSync(path.join(dir, 'mods', 'host.html'), '');
+    rewrite();
+    assert.ok(!fs.existsSync(path.join(dir, 'mods')));
 
     // A clean Chrome manifest also gains the permission on its first conversion.
     fs.writeFileSync(file, JSON.stringify(m));
@@ -75,11 +84,26 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   }
 });
 
-test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; the reader is the one page a site may frame, and loads only Glaze\'s files', () => {
-  assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" });
-  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html']);
+// Code mods (2026-10-17) add the second page a site may frame, mods/host.html: a manifest sandbox
+// page (opaque origin, no extension APIs) under its own CSP, which lets no request, frame or inline script out, and eval in
+// that sandbox only. Its bootstrap, mods/boot.js, is the only other file it exposes. Both on dynamic URLs.
+const SANDBOX_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
+test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; the reader and the mods host are the pages a site may frame, and load only Glaze\'s files', () => {
+  assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'", sandbox: SANDBOX_CSP });
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'mods/host.html']);
   const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');
   assert.match(reader, /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
+});
+
+test('the mods host is the one sandbox page: no same-origin, no inline script, no requests, and only it and its bootstrap are exposed', () => {
+  assert.deepEqual(m.sandbox, { pages: ['mods/host.html'] });
+  const csp = Object.fromEntries(m.content_security_policy.sandbox.split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]));
+  assert.deepEqual(csp.sandbox, ['allow-scripts'], 'never allow-same-origin, forms, popups or top navigation');
+  assert.deepEqual(csp['script-src'], ["'self'", "'unsafe-eval'"], "no 'unsafe-inline': boot.js is the only way a frame UI's code starts");
+  for (const d of ['default-src', 'frame-src', 'connect-src']) assert.deepEqual(csp[d], ["'none'"], d);
+  const war = m.web_accessible_resources.filter((w) => w.resources.some((r) => r.startsWith('mods/')));
+  assert.deepEqual(war, [{ resources: ['mods/host.html', 'mods/boot.js'], matches: ['https://*/*'], use_dynamic_url: true }]);
+  for (const f of ['mods/host.html', 'mods/host.js', 'mods/boot.js']) assert.ok(fs.existsSync(path.join(__dirname, '..', f)), f);
 });
 
 test('every content script file exists', () => {

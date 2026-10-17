@@ -1,49 +1,55 @@
 /* Glaze — motion. Every animated rule in theme.css and extras.css reads these knobs; the level
    (html[data-gz-motion], set by content.js) and the three fine-tune switches only change knobs,
-   so no rule ever branches on motion itself. */
+   so no rule ever branches on motion itself. A Look's own animations (lib/motionx.js) arrive as --gz-x-* values that each
+   knob reads first, so the level, the switches and reduced motion still have the last word. */
 :root {
   --gz-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --gz-spring: linear(0, 0.3538 4.1%, 0.6624 8.4%, 0.8613 12.6%, 0.9823 17%, 1.0407 21.6%, 1.0618 26.5%, 1.0532 32.2%, 1.0157 44.4%, 0.998 55.6%, 0.9954 66.9%, 1);
   --gz-t: 0.25s;
   --gz-t-slow: 0.5s;
-  --gz-enter: gz-in 0.6s var(--gz-spring) backwards;
-  --gz-enter-page: gz-in 0.45s var(--gz-ease) backwards;
-  --gz-enter-panel: gz-fade 0.3s var(--gz-ease) backwards;
+  --gz-enter: var(--gz-x-enter, gz-in 0.6s var(--gz-spring) backwards);
+  --gz-enter-page: var(--gz-x-enter-page, gz-in 0.45s var(--gz-ease) backwards);
+  --gz-enter-panel: var(--gz-x-enter-panel, gz-fade 0.3s var(--gz-ease) backwards);
+  /* Dashboard tiles and the rail's items as it opens: nothing moves unless a Look says how. */
+  --gz-enter-tile: var(--gz-x-enter-tile, none);
+  --gz-rail-open: var(--gz-x-rail-open, none);
   --gz-t-page: 0.28s;
   --gz-reveal-blur: 8px;
-  --gz-tip-in: gz-tip 0.16s var(--gz-ease) backwards;
-  --gz-stagger: 0.05s;
-  --gz-lift: translateY(-2px);
+  --gz-tip-in: var(--gz-x-tip-in, gz-tip 0.16s var(--gz-ease) backwards);
+  --gz-stagger: var(--gz-x-stagger, 0.05s);
+  --gz-lift: var(--gz-x-lift, translateY(-2px));
   --gz-nudge: translateX(3px);
-  --gz-press: 0.96; /* the `scale` property: it adds to a transform Ultra positions a button with, instead of replacing it */
+  --gz-press: var(--gz-x-press, 0.96); /* the `scale` property: it adds to a transform Ultra positions a button with, instead of replacing it */
   --gz-pop: scale(1.15);
   --gz-hover-shadow: var(--gz-shadow);
   --gz-hover-filter: brightness(1.08);
+  --gz-card-hover-filter: var(--gz-x-hover-filter, none); /* a hovered card's own filter, set by a Look's card.hover */
+  --gz-t-hover: var(--gz-x-hover-t, var(--gz-t-slow)); /* how long a card takes to reach its hover state */
   --gz-ambient: paused;
-  --gz-card-transition: transform var(--gz-t-slow) var(--gz-spring), box-shadow var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease);
+  --gz-card-transition: transform var(--gz-t-hover) var(--gz-x-hover-ease, var(--gz-spring)), box-shadow var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease), filter var(--gz-t-hover) var(--gz-ease);
 }
 
 /* Expressive: bigger, bouncier, and the ambient background drifts. */
 html[data-gz-motion="expressive"] {
   --gz-t-slow: 0.7s;
   --gz-spring: linear(0, 0.2 3%, 0.55 7.5%, 0.86 12%, 1.06 17%, 1.14 22%, 1.12 27%, 1.04 35%, 0.98 45%, 0.99 60%, 1);
-  --gz-enter: gz-rise 0.8s var(--gz-spring) backwards;
-  --gz-enter-panel: gz-focus 0.45s var(--gz-ease) backwards;
+  --gz-enter: var(--gz-x-enter, gz-rise 0.8s var(--gz-spring) backwards);
+  --gz-enter-panel: var(--gz-x-enter-panel, gz-focus 0.45s var(--gz-ease) backwards);
   --gz-t-page: 0.42s;
   --gz-reveal-blur: 14px;
-  --gz-tip-in: gz-tip 0.34s var(--gz-spring) backwards;
-  --gz-stagger: 0.07s;
-  --gz-lift: translateY(-4px) scale(1.01);
+  --gz-tip-in: var(--gz-x-tip-in, gz-tip 0.34s var(--gz-spring) backwards);
+  --gz-stagger: var(--gz-x-stagger, 0.07s);
+  --gz-lift: var(--gz-x-lift, translateY(-4px) scale(1.01));
   --gz-nudge: translateX(5px);
-  --gz-press: 0.93;
+  --gz-press: var(--gz-x-press, 0.93);
   --gz-pop: scale(1.3) rotate(-8deg);
   --gz-ambient: running;
 }
 
 /* Off: nothing moves. The fine-tune switches zero one group each. */
-html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s; }
-html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-tip-in: none; --gz-stagger: 0s; }
-html[data-gz-motion="off"], html[data-gz-no-hover] { --gz-lift: none; --gz-nudge: none; --gz-press: none; --gz-pop: none; --gz-hover-shadow: none; --gz-hover-filter: none; }
+html[data-gz-motion="off"], html[data-gz-no-trans] { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; }
+html[data-gz-motion="off"], html[data-gz-no-enter] { --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; }
+html[data-gz-motion="off"], html[data-gz-no-hover] { --gz-lift: none; --gz-nudge: none; --gz-press: none; --gz-pop: none; --gz-hover-shadow: none; --gz-hover-filter: none; --gz-card-hover-filter: none; }
 html[data-gz-motion="off"] { --gz-ambient: paused; }
 /* The page under a course tab's frame, and a frame while hidden: nobody sees it, so nothing drifts. The entrances
    stay: switching them off and on again replays every card's on uncovering. */
@@ -51,12 +57,12 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 /* Touch screens: :hover sticks to whatever was tapped last, so a tapped card would stay lifted. Nothing
    lifts on hover there; press feedback stays. */
 @media (hover: none) {
-  html[data-gz-motion] { --gz-lift: none; --gz-nudge: none; --gz-pop: none; --gz-hover-shadow: var(--gz-rest-shadow); --gz-hover-filter: none; }
+  html[data-gz-motion] { --gz-lift: none; --gz-nudge: none; --gz-pop: none; --gz-hover-shadow: var(--gz-rest-shadow); --gz-hover-filter: none; --gz-card-hover-filter: none; }
 }
 /* content.js maps the system setting to "off" unless the user opted out; this only covers the
    moment before it runs. */
 @media (prefers-reduced-motion: reduce) {
-  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-ambient: paused; }
+  html:not([data-gz-motion]) { --gz-t: 0s; --gz-t-slow: 0s; --gz-t-hover: 0s; --gz-enter: none; --gz-enter-page: none; --gz-enter-panel: none; --gz-enter-tile: none; --gz-rail-open: none; --gz-tip-in: none; --gz-stagger: 0s; --gz-ambient: paused; }
 }
 
 @keyframes gz-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -82,6 +88,9 @@ html[data-gz-ctab-framed] { --gz-ambient: paused; }
 :is(.tooltip, span.enhanced-tooltip, .ms-Tooltip, .gz-tip) { animation: var(--gz-tip-in); }
 .gz-tip[data-side="bottom"] { --gz-tip-dy: -4px; }
 .element-card, .content-list-item { animation: var(--gz-enter); }
+/* Dashboard tiles enter on a Look's say-so; the rail's items play theirs each time a collapsed rail opens. */
+.gz-w { animation: var(--gz-enter-tile); }
+html[data-gz-nav-expanded] :is(nav#base_tools, nav[class*="makeStylesnavigation"]) a, body.primary-nav-expanded #header .ic-app-header__menu-list-link { animation: var(--gz-rail-open); }
 .element-card:nth-child(2), .content-list-item:nth-child(2) { animation-delay: calc(var(--gz-stagger) * 1); }
 .element-card:nth-child(3), .content-list-item:nth-child(3) { animation-delay: calc(var(--gz-stagger) * 2); }
 .element-card:nth-child(4), .content-list-item:nth-child(4) { animation-delay: calc(var(--gz-stagger) * 3); }

@@ -119,6 +119,7 @@ const listeners = async (cdp) => {
         m.content_scripts.find((c) => c.matches.includes('https://*/ultra')).js.unshift('perf-shim.js');
         fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
       }
+      await require('./wait-for-browser.js')();
       context = await chromium.launchPersistentContext(path.join(scratch, instrumented ? 'instrumented-profile' : 'plain-profile'), {
         executablePath: chrome, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce',
         args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1', '--disable-background-networking'],

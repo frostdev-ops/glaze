@@ -526,3 +526,16 @@ test('Canvas migration reading order: a small later tile never fills a gap befor
   assert.deepEqual(W.arrange(ts, dims, 900, { ordered: true }).order, ['notes', 'quotes', 'timer']);
   assert.deepEqual(W.arrange(ts, dims, 900).order, ['notes', 'timer', 'quotes'], 'Ultra keeps its existing free-room placement');
 });
+
+test('layout edits keep mod tile placements from tabs where the mod is not running', async () => {
+  const id = 'mabcdefghijklmn0';
+  const more = { [id]: { size: 'm' } };
+  const raw = W.layout({ tiles: [{ id, on: true, float: true, x: 0.4, y: 0.6 }], boards: { dash: [{ id, on: true, x: 80, y: 120, size: 'l' }] } }, more);
+  const store = { widgetLayout: raw };
+  const local = { get: async () => structuredClone(store), set: async (v) => (Object.assign(store, v), true) };
+  await W.change({ more: { pet: { size: 'm' } }, ops: [{ s: 'dash', id: 'notes', set: { fold: true } }] }, local);
+  const restored = W.layout(store.widgetLayout, more);
+  assert.deepEqual(restored.tiles.find((x) => x.id === id), raw.tiles.find((x) => x.id === id));
+  assert.deepEqual(restored.boards.dash.find((x) => x.id === id), raw.boards.dash.find((x) => x.id === id));
+  assert.equal(restored.boards.dash.find((x) => x.id === 'notes').fold, true);
+});

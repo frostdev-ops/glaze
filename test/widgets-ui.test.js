@@ -81,7 +81,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     vm.runInContext(read('lib/ultra.js'), c);
   }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, hub: open, register, who: account, avatar };', '  return { sync, hub: open, register, who: account, avatar, probe: { WIDGETS, tileEl, set: (w, s, m) => { W = w; o = s; me = m; } } };');
+  const src = read('features/widgets.js').replace('  return { sync, hub: open, register, declare, who: account, avatar };', '  return { sync, hub: open, register, declare, who: account, avatar, probe: { WIDGETS, tileEl, added, tiles, set: (w, s, m) => { W = w; o = s; me = m; } } };');
   assert.notEqual(src, read('features/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
@@ -500,4 +500,21 @@ test('buddy timer checks context invalidation before any core mutation or runtim
     assert.ok(![...p.timers.values()].some((x) => x.ms > 60000), 'invalid repaint does not rearm');
     tile.stop();
   }
+});
+
+
+test('declaring and revoking a built-in tile replacement disposes the previous renderer', () => {
+  const p = page();
+  let stops = 0, removed = 0;
+  const old = () => ({ stop: () => stops++, el: { remove: () => removed++ } });
+  p.ui.probe.tiles.set('timer', old());
+  const fill = () => ({});
+  p.ui.declare({ timer: { name: 'Mod timer', size: 'm', owner: 'a|tile:timer', fill } });
+  assert.equal(p.ui.probe.added.get('timer'), fill);
+  assert.equal(stops, 1);
+  p.ui.probe.tiles.set('timer', old());
+  p.ui.declare({});
+  assert.equal(p.ui.probe.added.has('timer'), false);
+  assert.equal(stops, 2);
+  assert.equal(removed, 2);
 });

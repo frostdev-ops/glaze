@@ -518,7 +518,7 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
   background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-card-r, var(--gz-radius)); box-shadow: var(--gz-rest-shadow);
   overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter); width: var(--gz-card-w, 262px);
 }
-#application .ic-DashboardCard:hover { transform: var(--gz-lift); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+#application .ic-DashboardCard:hover { transform: var(--gz-lift); filter: var(--gz-card-hover-filter); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 #application .ic-DashboardCard__header_content { background: transparent; border-color: transparent; }
 /* The hero is the course's colour, set inline; its box and edge are Canvas's, invisible on white, a frame here. */
 #application .ic-DashboardCard__header_hero { border-color: transparent; background-image: var(--gz-card-grad, linear-gradient(transparent, transparent)); }

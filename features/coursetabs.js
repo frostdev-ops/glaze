@@ -13,6 +13,7 @@
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const ctx = globalThis.GZ_CTX;
+  if (!ctx || !globalThis.GZ_CTABS_LIB) return null; // a frame-only injection can outlive its document
   const L = GZ_CTABS_LIB;
   const { t } = ctx;
   const html = document.documentElement;

@@ -285,7 +285,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         if (!id || !el) continue;
         if (newgrades && n++ < 12) {
           const b = bookFor(id);
-          cardBadge(el, id, b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : 0);
+          cardBadge(el, id, b.results ? GZ_GRADES.fresh(b.results, seen[id]).ids.size : undefined);
         }
         if (!newcontent) continue;
         cardsInView.observe(el);
@@ -635,7 +635,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       if (text) text.data = name; else label.append(name);
       a.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); try { chrome.runtime.sendMessage('options'); } catch { /* reloaded */ } });
       const li = last.parentElement.tagName === 'LI' && Object.assign(last.parentElement.cloneNode(false), { id: '' });
-      if (li) { li.classList.add('gz-nav-glaze'); li.append(a); last.parentElement.after(li); } else last.after(a);
+      if (li) { li.hidden = false; li.classList.add('gz-nav-glaze'); li.append(a); last.parentElement.after(li); } else last.after(a);
     }
   };
   const queueNav = () => { if (!navQueued) { navQueued = true; queueMicrotask(() => { navQueued = false; syncDashboard(); }); } };
@@ -705,7 +705,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
     else if (I.links.length && navItems) {
       const n = I.worn.nav;
-      if (n.i || n.li || n.labelOverflow === 'shrink' || n.collapsed || n.labels === 'icons' || ['links', 'order', 'hidden'].some((k) => Array.isArray(navItems[k]) && navItems[k].length) || (Array.isArray(navItems.widgets) && navItems.widgets.some((w) => w?.on === true))) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
+      if (n.i || n.li || n.labelOverflow === 'shrink' || n.collapsed || n.labels === 'icons' || globalThis.GZ_CTX?.parts()?.nav || ['links', 'order', 'hidden'].some((k) => Array.isArray(navItems[k]) && navItems[k].length) || (Array.isArray(navItems.widgets) && navItems.widgets.some((w) => w?.on === true))) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync()).catch(() => {});
     } else if (I.links.length && !navRead) {
       navRead = true;
       try { chrome.storage.sync.get('navItems', (r) => {

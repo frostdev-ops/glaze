@@ -137,11 +137,11 @@ Injects and registers Glaze's packaged content scripts after recognizing Canvas 
 
 ### Web-accessible resources
 
-The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, features/apps.css, features/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. lib/scene.js and the bundled lib/three.min.js draw animated backgrounds. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
+The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, features/apps.css, features/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. lib/scene.js and the bundled lib/three.min.js draw animated backgrounds, and lib/scene-media.js with the bundled Lottie player (lib/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
 
 ## Remote code
 
-None. All executable code ships in the package, including the bundled three.js (MIT), PDF.js (Apache-2.0) and Tesseract OCR engine (Apache-2.0). The extension's own pages allow 'wasm-unsafe-eval' only so the packaged OCR engine's WebAssembly can run; it never runs in LMS pages. Optional web fonts and background images are data, not code.
+None. All executable code ships in the package, including the bundled three.js (MIT), lottie-web's light player (MIT, no expression support, so nothing in an animation file is ever run), PDF.js (Apache-2.0) and Tesseract OCR engine (Apache-2.0). The extension's own pages allow 'wasm-unsafe-eval' only so the packaged OCR engine's WebAssembly can run; it never runs in LMS pages. Optional web fonts, background images, videos and animations are data, not code.
 
 ## Data usage (privacy practices tab)
 

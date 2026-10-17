@@ -144,7 +144,7 @@ GZ_UI.load().then((s) => {
     const colors = scheme === 'current' ? null : GZ_PRESET(scheme === 'light' ? 'Paper' : 'Frost');
     const shown = previewSite === 'ultra' && course ? { ...settings, courses: { ...settings.courses, tinted: GZ_COURSE_TINTED(settings.courses, id, courses) ? [id] : [] } } : settings;
     frame.contentWindow?.postMessage({ gzPreviewContext: { site: previewSite, page: previewPage, viewport: $('#preview-size').value } }, location.origin);
-    frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) } }, location.origin);
+    frame.contentWindow?.postMessage({ gzPreview: { ...shown, nav, ...(colors && { colors, auto: { ...settings.auto, on: false } }) }, gzPreviewParts: settings === base ? base.parts ?? null : null }, location.origin);
     renderNav(); frame.contentWindow?.postMessage({ gzNavPreview: previewItems() }, location.origin); sizePreview();
   };
   const contextPreview = (site, page) => {
@@ -184,16 +184,19 @@ GZ_UI.load().then((s) => {
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
   const pending = new Set(), pendingNav = new Set();
-  let timer = 0;
+  let timer = 0, partKeys = [], saving = 0, settingsRead = 0;
   const flush = () => {
     clearTimeout(timer);
     timer = 0;
     if (!pending.size) return;
     const navPatch = pendingNav.size ? Object.fromEntries([...pendingNav].map((k) => [k, s.nav[k]])) : undefined;
-    GZ_UI.save(s, [...pending], (err) => hint(err || t('Saved'), !!err), navPatch);
-    pending.clear(); pendingNav.clear();
+    saving++;
+    GZ_UI.save(s, [...pending], (err) => { saving--; hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined);
+    pending.clear(); pendingNav.clear(); partKeys = [];
   };
-  const save = (keys, soon = false) => {
+  const save = (keys, soon = false, parts) => {
+    settingsRead++;
+    if (keys.includes('parts')) partKeys = parts && partKeys ? [...new Set([...partKeys, ...parts])] : null;
     for (const k of keys) pending.add(k);
     clearTimeout(timer);
     if (soon) timer = setTimeout(flush, 500);
@@ -328,8 +331,10 @@ GZ_UI.load().then((s) => {
     renderHistory();
     renderExtras();
     renderBg();
+    GZ_EDITOR_X.render();
     renderNav();
     presetOptions();
+    GZ_XEDIT.render();
     outputs();
     for (const el of $$('#ultra-nav-editor input[type="range"][data-key]')) el.value = get(el.dataset.key);
     $('[data-key="auto.on"]').checked = s.auto.on;
@@ -605,6 +610,8 @@ GZ_UI.load().then((s) => {
   });
   chrome.storage.sync.get('navItems', (r) => { navItems = N.clean(r?.navItems); renderNavItems(); showNavPreview(); });
   chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && changes.navItems) { navItems = N.clean(changes.navItems.newValue); renderNavItems(); showNavPreview(); } });
+  // A Look's own nav layout and page tweaks (lib/editor-xparts.js): they edit s.parts and save it with the Look.
+  GZ_XEDIT.mount({ s, t, save, refresh, frame, navItems: () => navItems, preview: (site) => contextPreview(site, site === previewSite ? previewPage : 'courses') });
 
   let navPick = 0, navReview = 0, navRendered = '', navImage = null;
   const navAverages = new Map();
@@ -962,25 +969,40 @@ GZ_UI.load().then((s) => {
     chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && changes.gcal) gcalRender(changes.gcal.newValue); });
   }
 
-  // Another surface (the popup, another options tab) changed something: take it, unless it is
-  // only our own save coming back.
+  // Another surface changed something: read after our queued saves, and never apply a read older than an edit.
+  const syncSettings = () => {
+    if (pending.size || saving) return;
+    const mine = ++settingsRead;
+    GZ_UI.load().then((next) => {
+      if (mine !== settingsRead || pending.size || saving || JSON.stringify(next) === JSON.stringify(s)) return;
+      Object.assign(s, next);
+      fill();
+    });
+  };
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.seenCourses) renderCourses(changes.seenCourses.newValue);
     if (area === 'local' && (changes.gradescope || changes.seenCourses)) gsLoad();
     if (area === 'sync' && changes.cards) renderCardSet(changes.cards.newValue);
-    if (area !== 'sync' || pending.size) return;
-    GZ_UI.load().then((next) => {
-      if (JSON.stringify(next) === JSON.stringify(s)) return;
-      Object.assign(s, next);
-      fill();
-    });
+    if (area === 'sync') syncSettings();
   });
 
   // ---- share: a theme code is the palette, look and background, checked by lib/share.js ----
+  let partsStorageRead = 0;
+  const partsStorage = async () => {
+    const mine = ++partsStorageRead, { lookX } = await chrome.storage.sync.get('lookX');
+    const localOnly = typeof lookX?.h === 'string';
+    const packed = localOnly ? await GZ_XPARTS.stored(lookX, GZ_XPARTS.areas().local) : null;
+    if (mine !== partsStorageRead) return;
+    const notice = $('#look-parts-storage');
+    notice.hidden = !localOnly;
+    notice.textContent = !localOnly ? '' : packed === undefined ? t("This Look's extras are unavailable on this device.") : t('Extras on this device only.');
+  };
+  partsStorage().catch(() => {});
+  chrome.storage.onChanged.addListener((ch) => { if (ch.lookX) partsStorage().catch(() => {}); });
   $('#share-copy').addEventListener('click', async () => {
     const { cards } = await new Promise((res) => chrome.storage.sync.get('cards', (r) => res(r || {})));
     let code;
-    try { code = await GZ_SHARE.encode(s, cards); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
+    try { code = await GZ_SHARE.encode(s, cards, s.parts); } catch (e) { return hint(t(e.why || e.message, e.vars), true); }
     try { await navigator.clipboard.writeText(code); hint(t('Theme code copied.')); } catch { $('#share-code').value = code; $('#share-code').select(); hint(t('Copy the code from the box.')); }
   });
   // from: the gallery Look the code came with ({ name, author }), or null for a pasted code.
@@ -998,29 +1020,35 @@ GZ_UI.load().then((s) => {
     offer.card = GZ_CARDS.settings({ ...s.card, ...got.card });
     offer.cardSet = got.cards;
     offer.code = code;
+    // Every code brings its own parts or clears the previous Look's parts.
+    const paletteOnly = !Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !got.cards.length && !got.parts;
+    offer.parts = got.parts;
     const palette = offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette');
     const what = $('#share-what');
     what.replaceChildren();
     if (from) what.append(Object.assign(document.createElement('b'), { textContent: from.author ? t('{name} by {author}.', from) : `${from.name}.`, translate: false }), ' ');
-    if (!Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !got.cards.length) {
+    if (paletteOnly) {
       // A palette alone (the gallery has those) leaves the rest as it is.
       what.append(t("{palette}. Your fonts and background stay as they are. It's showing in the preview.", { palette }));
     } else {
       // What it is, and anything it would fetch from elsewhere.
-      const fonts = [...new Set(['font', 'head', 'mono'].map((k) => offer.look[k]).filter((v) => v !== 'auto'))].map((v) => GZ_FONTS.resolve(v));
+      const fonts = [...new Set([...['font', 'head', 'mono'].map((k) => offer.look[k]), ...(got.parts?.x?.rules || []).map((r) => r.st?.f)].filter((v) => v && v !== 'auto'))].map((v) => GZ_FONTS.resolve(v));
       const web = fonts.filter((f) => f.google || f.files).map((f) => f.name);
+      const fontHosts = [...new Set(fonts.flatMap((f) => f.google ? ['fonts.googleapis.com', 'fonts.gstatic.com'] : Object.values(f.files || {}).map((url) => new URL(url).hostname)))];
       // Style and scene values are the editor's own labels, lowercased: 'radial' is 'Radial'.
       const word = (v) => t(v[0].toUpperCase() + v.slice(1));
-      const kind = { solid: t('a solid background'), gradient: t('a {style|lower} gradient background', { style: word(offer.bg.style) }), aurora: t('an aurora background'), scene: t('the {scene|lower} animated background', { scene: word(offer.bg.scene) }), image: t('an image background') }[offer.bg.kind];
+      const kind = { solid: t('a solid background'), gradient: t('a {style|lower} gradient background', { style: word(offer.bg.style) }), aurora: t('an aurora background'), scene: t('the {scene|lower} animated background', { scene: word(offer.bg.scene) }), image: t('an image background') }[offer.bg.kind] || t(GZ_XPARTS.KIND_WORD[offer.bg.kind]);
       const and = (names) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(names);
       what.append(t("{palette}, {fonts}, and {background}. It's showing in the preview.", { palette, fonts: and(fonts.map(fontName)), background: kind }));
       const notes = [];
       if (web.length) notes.push(t('Downloads {fonts} (web fonts).', { n: web.length, fonts: and(web) }));
+      if (fontHosts.length) notes.push(t('Its web fonts load from {hosts}.', { hosts: and(fontHosts) }));
       if (offer.bg.kind === 'image' && offer.bg.image) notes.push(t('Loads its background image from {host}.', { host: new URL(offer.bg.image).hostname }));
       const cardHosts = [...new Set(got.cards.filter((c) => c.u).map((c) => new URL(c.u).hostname))];
       if (got.cards.length) notes.push(t('Brings {n} course card styles for your Canvas Dashboard.', { n: got.cards.length }));
       if (cardHosts.length) notes.push(t('Its card pictures load from {hosts}.', { hosts: and(cardHosts) }));
       if (offer.nav.k === 'image' && offer.nav.u) notes.push(t('Its sidebar picture loads from {host}.', { host: new URL(offer.nav.u).hostname }));
+      for (const n of GZ_XPARTS.describe(got.parts)) notes.push(t(n.why, n.vars));
       if (notes.length) what.append(Object.assign(document.createElement('span'), { className: 'desc', textContent: notes.join(' ') }));
     }
     $('#share-offer').hidden = false;
@@ -1225,10 +1253,13 @@ GZ_UI.load().then((s) => {
     // To Do edits take turns, and success is said only once both stores have it.
     const next = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
     next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
+    const mediaSrc = raw.parts?.x?.bg?.media?.src;
+    const mediaMissing = next.bg.kind === 'media' && typeof mediaSrc === 'string' && mediaSrc.startsWith('file:');
+    if (mediaMissing) next.bg.kind = 'gradient';
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
     flush(); // an edit still waiting goes out first, so it can't land on top of the import
-    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, folders: GZ_FOLDERS.backup(raw.folders), settings: { version: 2, ...next, navItems: N.clean(raw.navItems) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
+    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null, settings: { version: 2, ...next, navItems: N.clean(raw.navItems) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
     if (!r.ok) {
       // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
       if (r.undone === false) {
@@ -1238,6 +1269,8 @@ GZ_UI.load().then((s) => {
       return hint(t("Couldn't import {file}, so nothing changed.", { file: file.name }), true);
     }
     Object.assign(s, next);
+    // The backup's Look brings its parts (the export holds them); one without any leaves none worn.
+    s.parts = GZ_XPARTS.bundle(raw.parts);
     navItems = N.clean(raw.navItems); renderNavItems(); showNavPreview();
     const ultraStyled = !(raw.ucards || raw.ulinks) || await cardsOp({ ultra: true, replace: { cards: raw.ucards, links: raw.ulinks } });
     const styled = await cardsOp({ nav: next.nav, ...(raw.cards || raw.links ? { replace: { cards: raw.cards, links: raw.links } } : {}) });
@@ -1247,7 +1280,7 @@ GZ_UI.load().then((s) => {
       const shared = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'importKeys', keys: raw.shareKeys }).catch(() => null);
       if (!shared?.ok) return hint(t('Settings imported, but share keys could not be restored. Try importing again.'), true);
     }
-    hint(t('Imported {file}.', { file: file.name }));
+    hint(t(mediaMissing ? 'Imported {file}. The background file was not included in this backup; showing the gradient.' : 'Imported {file}.', { file: file.name }));
   });
   // Two clicks, so a stray one can't wipe everything. Custom presets survive.
   let armed = 0;
@@ -1264,8 +1297,11 @@ GZ_UI.load().then((s) => {
     const defaults = { ...GZ_SANITIZE(), card: GZ_CARDS.settings() };
     const touched = GZ_EDITOR.reset(s, Object.keys(defaults), defaults);
     pendingNav.clear();
-    // Keep image IDs, per-course styles/bookmarks, local data and share keys. No destructive worker reset.
-    save(touched);
+    // Keep image IDs, per-course styles/bookmarks, local data and share keys. No destructive worker reset. The Look's
+    // parts go: they are part of the Look being reset.
+    s.parts = null;
+    GZ_EDITOR_X.render(true); // Discard unsaved shader text even when there were no saved parts.
+    save([...touched, 'parts']);
     fill();
     hint(t('Preferences reset. Your presets and local data are kept.'));
 
@@ -1288,9 +1324,18 @@ GZ_UI.load().then((s) => {
     if (touched.includes('nav')) for (const key of paths.filter((p) => p.startsWith('nav.') && !['nav.i', 'nav.li'].includes(p))) pendingNav.add(key.slice(4));
     fill(); save(touched); hint(t('Section reset. Your local data is kept.'));
   });
+  // Look parts builders (lib/editor-x*.js): they edit s.parts and save it like any other key.
+  GZ_EDITOR_X.mount({ s, save, preview, t, frame });
   $('#editor-version').textContent = `Glaze ${chrome.runtime.getManifest().version}`;
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
+  // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
+  const widgets = GZ_WIDGETEDIT.mount({ t, show: (route) => editor.show(route, { scroll: true }) }); // widgets made of blocks (lib/editor-widget.js)
+  GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
+    when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
   followSection(editor.route());
+
+  // Opening the editor wakes the mod blocklist check, which asks only if one is due (lib/blocklist.js).
+  try { chrome.runtime.sendMessage({ type: 'glaze:blocklist' }, () => void chrome.runtime.lastError); } catch { /* no worker */ }
 
   // Report a problem: a GitHub issue filled in here with the version, browser and system (lib/widgets.js feedback).
   $('#report-link').href = GZ_WIDGETS.feedback({ version: chrome.runtime.getManifest().version, ua: navigator.userAgent, lang: navigator.language });

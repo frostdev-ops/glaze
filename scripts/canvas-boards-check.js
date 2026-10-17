@@ -51,6 +51,7 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'canvas-boards-profile-'));
   let ctx;
   try {
+    await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { executablePath: CHROME, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
     });

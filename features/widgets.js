@@ -19,9 +19,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Tiles other files add, the same on both sites: { id: { file, name (an English key for t()), size } }. This file
   // loads the file (need) while its tile is on, and the file calls register(id, fill). Off until the student adds it.
   const MORE = { pet: { file: 'features/pet.js', name: 'Pet habitat', size: 'm' } };
+  // Mods' tiles join MORE while their mod runs on this page (declare, from features/mods.js and features/modwidgets.js), with no file to load.
+  const modTiles = new Set();
   const loadingMore = new Map(); // id -> retry time, Infinity while loading
   const added = new Map(); // id -> fill(body, api), from register()
-  const nameOf = (id) => NAMES[id] || MORE[id]?.name || globalThis.GZ_COURSE_CARDS?.title(id) || id;
+  const nameOf = (id) => MORE[id]?.name || NAMES[id] || globalThis.GZ_COURSE_CARDS?.title(id) || id;
   const ultra = ctx.site === 'ultra';
   const pages = ultra ? 'pages' : 'canvas'; // the floating surface; Canvas's old tiles keep their normalized spots
   // Written for Glaze (original, not quoted from anyone), each in every language Glaze speaks.
@@ -116,14 +118,15 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // is stored then, so another tab's change made since is kept. While changes are on their way, the stored layout that
   // comes back is the worker's answer to the last one; one that couldn't be saved is put back as stored.
   let flying = 0, layoutRead = 0;
-  const DECLARED = Object.fromEntries(Object.entries(MORE).map(([k, v]) => [k, { size: v.size }]));
-  const adopt = (raw) => { const next = W.layout(raw, MORE); if (JSON.stringify(next) !== JSON.stringify(lay)) { lay = next; draw(); } };
+  const declared = () => Object.fromEntries(Object.entries(MORE).map(([k, v]) => [k, { size: v.size }]));
+  let rawLay; // the layout as stored, read again when the tiles declared change
+  const adopt = (raw) => { rawLay = raw; const next = W.layout(raw, MORE); if (JSON.stringify(next) !== JSON.stringify(lay)) { lay = next; draw(); } };
   const change = (m) => {
     layoutRead++;
     lay = W.apply(lay, m, MORE);
     draw();
     flying++;
-    send({ type: 'glaze:widgetLayout', more: DECLARED, ...m }).then(() => {
+    send({ type: 'glaze:widgetLayout', more: declared(), ...m }).then(() => {
       if (--flying) return;
       // Callbacks can arrive backwards; reread storage instead of adopting the last callback's older snapshot.
       const n = ++layoutRead;
@@ -295,7 +298,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     },
 
     timer(body) {
-      let s = W.IDLE, tick = 0, audio = null, alive = true;
+      let s = W.IDLE, tick = 0, audio = null, alive = true, seenEnd = 0;
       // Text nodes changed in place, and labels only when they change: the page's own observer sees no new nodes each second.
       const phase = document.createTextNode(''), time = document.createTextNode('');
       const clock = make('p', { className: 'gz-w-clock' }, time);
@@ -341,11 +344,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         tick = 0;
         if (!alive) return;
         const now = Date.now();
-        const was = s;
+        const was = s, ended = seenEnd === was.end;
+        seenEnd = was.end > now ? was.end : 0;
         s = W.advance(s, now, o);
         if (s !== was && shown()) {
           ask('advance');
-          if (now - was.end < 2000) { chime(); say.textContent = t(s.phase === 'rest' ? 'Time for a break.' : 'Break over. Ready when you are.'); }
+          if (ended && now - was.end < 2000) { chime(); ctx.moment?.('timer.done', null, `timer ${was.end}`); say.textContent = t(s.phase === 'rest' ? 'Time for a break.' : 'Break over. Ready when you are.'); }
         }
         phase.data = t(s.phase === 'rest' ? 'Break' : 'Focus');
         time.data = W.clock(W.left(s, now, o));
@@ -1045,7 +1049,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       let x = tiles.get(tile.id);
       if (!x) {
         x = tileEl(tile.id);
-        Object.assign(x, (WIDGETS[tile.id] || added.get(tile.id) || GZ_COURSE_CARDS.fill)(x.body, api(tile.id)) || {});
+        Object.assign(x, (added.get(tile.id) || WIDGETS[tile.id] || GZ_COURSE_CARDS.fill)(x.body, api(tile.id)) || {});
         tiles.set(tile.id, x);
         ro?.observe(x.el);
       }
@@ -1294,6 +1298,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
     W = globalThis.GZ_WIDGETS;
     const [r] = await Promise.all([get('local', ['widgetLayout', 'widgetsHidden']), readPrefs()]);
+    rawLay = r.widgetLayout;
+    declare(globalThis.GZ_MODS?.tiles() || {});
+    declare(globalThis.GZ_MODWIDGETS?.tiles() || {}, 'plain');
     lay = W.layout(r.widgetLayout, MORE);
     hidden = r.widgetsHidden === true;
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
@@ -1332,6 +1339,31 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // built-in ones do; the first registration of an id wins. api: who() (the account: { uid, tz }), site, size(). The
   // grid draws it once its file is in (wanted).
   const register = (id, fill) => { if (MORE[id] && !added.has(id) && typeof fill === 'function') added.set(id, fill); };
+  // The code mods' tiles now: { id: { name, size, fill } }, replacing the ones declared before. A tile whose mod stopped goes
+  // from the board; the worker keeps its stored place even when another tab edits without the mod running.
+  let modSig = '';
+  // Two sources: code mods (features/mods.js) and declarative widgets (features/modwidgets.js), each replacing its own.
+  const modSources = { mods: {}, plain: {} };
+  const declare = (next, from = 'mods') => { modSources[from] = next; join({ ...modSources.mods, ...modSources.plain }); };
+  const join = (next) => {
+    const signature = (v) => v && [v.name, v.size, v.owner];
+    const sig = JSON.stringify(Object.entries(next).map(([k, v]) => [k, signature(v)]));
+    if (sig === modSig) return;
+    modSig = sig;
+    for (const id of new Set([...modTiles, ...Object.keys(next)])) {
+      if (JSON.stringify(signature(MORE[id])) === JSON.stringify(signature(next[id]))) continue;
+      const x = tiles.get(id);
+      x?.stop?.(); x?.el.remove(); tiles.delete(id);
+    }
+    for (const id of modTiles) if (!Object.hasOwn(next, id)) { delete MORE[id]; added.delete(id); modTiles.delete(id); }
+    for (const [id, v] of Object.entries(next)) {
+      if (id === 'pet' || (MORE[id] && !modTiles.has(id))) continue;
+      MORE[id] = { name: v.name, size: v.size, owner: v.owner };
+      added.set(id, v.fill);
+      modTiles.add(id);
+    }
+    if (W && lay) { lay = W.layout(rawLay, MORE); if (on) draw(); }
+  };
 
   const avatar = (body, options = {}) => {
     let alive = true, sleeping = false, live;
@@ -1340,7 +1372,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }).catch(() => {});
     return { wake: () => { sleeping = false; live?.wake(); }, sleep: () => { sleeping = true; live?.sleep(); }, play: (state) => live?.play(state), stop: () => { alive = false; live?.stop(); } };
   };
-  return { sync, hub: open, register, who: account, avatar };
+  return { sync, hub: open, register, declare, who: account, avatar };
 })();
 
 GZ_WIDGETS_UI;
