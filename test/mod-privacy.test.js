@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 test('public privacy descriptions disclose user-installed mod code and granted data/network access', () => {
-  for (const file of ['README.md', 'PRIVACY.md', 'store/listing.md']) {
+  for (const file of ['docs/features.md', 'PRIVACY.md', 'store/listing.md']) {
     const text = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
     assert.match(text, /user-installed mods/i, file);
     assert.match(text, /sandbox/i, file);

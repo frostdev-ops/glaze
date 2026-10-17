@@ -1,0 +1,61 @@
+# Install
+
+## Chrome
+
+Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh).
+
+### Load unpacked (development)
+
+1. Clone or download this repository.
+2. Open `chrome://extensions`.
+3. Enable **Developer mode** (top right).
+4. Click **Load unpacked** and select the repository folder.
+5. Open your Blackboard Ultra, Canvas or Moodle site and click the Glaze icon.
+
+## Firefox
+
+Glaze for Firefox needs Firefox 140 or newer. Until it is listed on Firefox Add-ons, try it from a build:
+run `sh scripts/package-firefox.sh`, open `about:debugging#/runtime/this-firefox`, click **Load Temporary
+Add-on…** and pick `dist/glaze-v<version>-firefox.zip`. A temporary add-on is removed when Firefox quits.
+
+The Firefox package is the Chrome package with a rewritten manifest: Firefox has no extension service
+worker, so the background runs as an event page that loads every script the worker imports. Google
+Calendar sync needs Chrome's sign-in and isn't in the Firefox build; the calendar export is.
+
+For the dedicated Firefox for Android emulator, launcher and validation checklist, see
+[Firefox for Android testing](firefox-android.md).
+
+## Safari on Mac
+
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.0.4/glaze-3.0.4-safari-macos.dmg): signed and notarized, attached to each release on
+[GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
+on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
+the frosted-glass blur needs Safari 18.
+
+1. Open the `.dmg`, open **Glaze** and click **Install Glaze**. It copies itself into Applications
+   (your own `~/Applications` if you aren't an administrator) and reopens from there. Dragging it into
+   **Applications** works too. (A `.zip` of the same app is there too.)
+2. Glaze opens Safari's Extensions settings and shows an illustrated guide: tick Glaze, then allow it
+   on your Blackboard, Canvas or Moodle site. The guide ticks off the first step as soon as Safari turns Glaze on.
+
+The downloaded Mac app checks `https://frostdev.io/projects/glaze/appcast.xml` about once a day
+while Glaze is in use and downloads updates from GitHub. Sparkle system profiling is disabled.
+Background checks stay silent and skip updates that need user interaction; opening Glaze yourself
+can show the standard updater interface. An installation previously prepared through that interface
+may still show its existing progress window when a background check finishes it. The Mac App Store
+and iPhone/iPad apps use App Store updates and include no Sparkle updater.
+
+## iPhone and iPad
+
+Glaze for Safari on iPhone and iPad needs iOS or iPadOS 18 or newer. It comes from the same App Store
+listing as the Mac app; buying or installing on one platform covers the other.
+
+1. Install **Glaze** and open it. It shows a two-step guide.
+2. Turn Glaze on in **Settings › Apps › Safari › Extensions › Glaze** by switching on
+   **Allow Extension**. On iOS 26.2 and newer, the guide's **Open Settings** button takes you to
+   Safari's extension settings, and the guide ticks the step off as soon as Glaze is on.
+3. Open your Blackboard Ultra, Canvas or Moodle site in Safari and tap the extensions button in the address bar (a puzzle
+   piece; on iPhone it can be in the page menu at the left of the address). Tap **Glaze**, then **Always Allow…** and **Always Allow on This Website**, and reload the page.
+
+The popup and the editor are under the same button. The editor also opens from Settings › Apps › Safari ›
+Extensions › Glaze › Settings.
