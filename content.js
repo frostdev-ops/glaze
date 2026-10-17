@@ -1042,7 +1042,7 @@
       scene.update(sceneOpts());
     }).catch(() => { sceneFailed = true; stopScene(); });
   };
-  document.addEventListener('glaze:parts', syncScene);
+  document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
 
   // ---- course colors and tint ------------------------------------------------------------------
   // Every course its own color (GZ_COURSE_COLORS), worked out from the course list recordCourses
@@ -1246,7 +1246,7 @@
     X.paintNav(s.nav);
     // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
-    const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
+    const kind = bgKind() === 'image' && !s.bg.image ? 'gradient' : bgKind();
     setAttr('data-gz-bg', kind);
     setAttr('data-gz-scene', kind === 'scene' && s.bg.scene);
     // A scene's gradient fallback (until it draws, or without WebGL) takes its dim from intensity.

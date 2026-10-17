@@ -56,6 +56,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     ok(await dash.evaluate(() => !!document.querySelector('#right-side .Sidebar__TodoListContainer[data-gz-r-hide]')), 'the Look\'s rule stays: rules add up');
     await until(dash, () => !!document.getElementById('gz-scene'), null, 'the scene canvas is drawn');
     ok(true, 'the mod\'s shader background starts, whatever the student\'s background kind');
+    ok(await dash.evaluate(() => document.documentElement.dataset.gzBg === 'shader' && document.documentElement.style.getPropertyValue('--gz-bg-blur') === '0px'), 'the shader also replaces the CSS background kind and blur');
 
     const quiz = await ctx.newPage();
     quiz.on('pageerror', (e) => errors.push(`quiz: ${e}`));
@@ -68,6 +69,7 @@ const ok = (value, label) => { if (!value) throw new Error(`FAIL ${label}`); con
     await until(dash, (want) => JSON.stringify([...document.querySelectorAll('.ic-DashboardCard__header-title')].map((e) => e.textContent.trim())) === want, JSON.stringify(real), 'titles come back');
     ok(true, 'turned off: the card titles are back');
     await until(dash, () => !document.getElementById('gz-scene'), null, 'the scene stops');
+    ok(await dash.evaluate(() => document.documentElement.dataset.gzBg !== 'shader'), 'turned off: the CSS background kind is the student\'s again');
     ok(await dash.evaluate(() => !!document.querySelector('#right-side .Sidebar__TodoListContainer[data-gz-r-hide]')), 'turned off: the Look\'s own parts are what is left');
 
     if (errors.length) throw new Error(errors.join('\n'));

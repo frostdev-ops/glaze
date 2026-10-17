@@ -424,19 +424,20 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
 
     // ---- a mod's own background file ----------------------------------------------------------------------------------
     // An animated WebP in the mod's bundle, laid over the Look as `mod:<id>/bg/a.webp` and asked of the worker, cleaned.
-    // The student's kind is media too, so the fixture's surfaces let the background show for the pixel checks.
+    // The student's own background differs: the mod must replace its CSS kind too, so its pixels stay visible.
     const bgMod = (media, files) => record({ manifest: { ...record().manifest, packs: undefined, parts: { bg: { media } } }, files });
-    const seedBg = async (mod) => { await seed('subtle', mod); await opts.evaluate(async (bg) => chrome.storage.sync.set({ bg }), { ...D.GZ_DEFAULTS.bg, kind: 'media' }); };
+    const seedBg = async (mod, kind = 'solid') => { await seed('subtle', mod); await opts.evaluate(async (bg) => chrome.storage.sync.set({ bg }), { ...D.GZ_DEFAULTS.bg, kind, image: url('still.webp'), blur: 12 }); };
     await seedBg(bgMod({ type: 'image', src: './bg/a.webp', fit: 'fill', dim: 0 }, { 'bg/a.webp': b64('anim.webp') }));
     page = await open();
     check('a mod\'s bundled animated picture is its background', await sceneThere(page) && await waitFor(page, "document.querySelector('#gz-scene img')?.complete"), 'no scene');
+    check('  it replaces the solid CSS background kind and clears the student\'s blur', await page.evaluate(() => document.documentElement.dataset.gzBg === 'media' && document.documentElement.style.getPropertyValue('--gz-bg-blur') === '0px'), 'kind or blur');
     check('  it is an img of a blob the page made from the worker\'s cleaned copy', (await isolated(page, "(document.querySelector('#gz-scene img')?.currentSrc || '').slice(0, 5)")) === 'blob:', 'src');
     const modColours = [];
     for (let i = 0; i < 14; i++) { modColours.push(await pixel(page, 900, 600)); await sleep(60); }
     check('  it moves (more than one of its frames on screen)', new Set(modColours.map((c) => FRAMES.findIndex((f) => near(f, c, 30))).filter((i) => i >= 0)).size >= 2, JSON.stringify(modColours));
     await shot(page, 'mod-image');
     await page.close();
-    await seedBg(bgMod({ type: 'lottie', src: './spin.json', fit: 'cover', dim: 0 }, { 'spin.json': b64('spin.json') }));
+    await seedBg(bgMod({ type: 'lottie', src: './spin.json', fit: 'cover', dim: 0 }, { 'spin.json': b64('spin.json') }), 'image');
     page = await open();
     check('a mod\'s bundled Lottie file is its background, drawn by the player', await sceneThere(page) && await waitFor(page, "document.querySelector('#gz-scene canvas')"), 'no canvas');
     await sleep(300);

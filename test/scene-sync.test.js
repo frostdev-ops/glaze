@@ -29,6 +29,7 @@ const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, en
     chrome: { runtime: { id: 'glaze', getURL: (f) => f } },
     importScene: (file) => { log.imports++; log.files.push(file); return Promise.resolve({ start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } }); },
     need: (file, ready) => { log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
+    applySettings: () => ctx.api.syncScene(), // the settings paint finishes by syncing the scene
     GZ_CTX: { parts: () => ctx.parts },
     parts, GZ_GLSL: glsl ? {} : undefined,
     JSON, Promise,
