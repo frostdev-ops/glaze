@@ -5,7 +5,8 @@
 // (gzPreviewParts), since it ignores storage.
 // It checks order, groups, hidden items, links, icons and a widget; the bar, the dock and the page's room for them;
 // that the visual order is the focus order and aria-current stays; and that taking the Look off, or turning Glaze off,
-// puts each native nav back exactly as it was.
+// puts each native nav back exactly as it was. Canvas and Moodle also mount a declarative mod's rail widget, with and
+// without a Look layout, then restore their native nav when the mod is disabled or removed.
 //   NODE_PATH=/path/to/node_modules nice node scripts/nav-layout-check.js [screenshots directory]   (needs playwright)
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -79,6 +80,31 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     const shot = (page, name) => page.screenshot({ path: path.join(out, `${name}.png`) });
     // The visual order of a bar is the DOM order, so the focus order follows what is seen.
     const leftToRight = (list) => `(() => { const xs = [...document.querySelectorAll(${JSON.stringify(list)} + ' a[href], ' + ${JSON.stringify(list)} + ' button')].filter((e) => e.getClientRects().length).map((e) => e.getBoundingClientRect().left); return xs.length > 2 && xs.every((x, i) => !i || x >= xs[i - 1]); })()`;
+    const M = require(path.join(ext, 'lib/modbundle.js'));
+    const mod = await M.pack({}, { glaze: 1, name: 'Nav rail check', version: '1.0.0', author: { name: 'Glaze check' },
+      ui: { rail: [{ id: 'check', name: 'Rail check', blocks: [{ type: 'text', text: 'Rail widget check' }] }] } }, await M.makeKey());
+    const record = { id: mod.id, manifest: mod.manifest, files: Object.fromEntries(Object.entries(mod.files).map(([k, v]) => [k, M.std(v)])),
+      hash: mod.hash, key: mod.key, version: mod.version, grants: {}, source: 'file', installedAt: Date.now(), enabled: true, dev: false };
+    const railChecks = async (page, list, pristine, site) => {
+      const seed = (enabled) => opts.evaluate(async ({ record, enabled }) => chrome.storage.local.set({ mods: [record.id],
+        [`mod:${record.id}`]: { ...record, enabled }, [`modTrust:${record.id}`]: { key: record.key, version: record.version, hash: record.hash } }), { record, enabled });
+      const visible = `(() => { const el = document.querySelector('.gz-mod-rail[aria-label="Rail check"]'); if (!el) return false; const r = el.getBoundingClientRect(), s = getComputedStyle(el); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth && s.display !== 'none' && s.visibility !== 'hidden'; })()`;
+      await wear(page, null);
+      await until(page, `document.querySelector(${JSON.stringify(list)}).outerHTML`, (v) => v === pristine, `${site}: the mod rail check starts without a Look layout`);
+      await seed(true);
+      await until(page, visible, Boolean, `${site}: the mod rail widget has visible dimensions without a Look layout`);
+      await wear(page, { place: 'left', groups: [{ label: 'Rail checks', items: ['course'] }] });
+      await until(page, `!!document.querySelector(${JSON.stringify(list)} + ' [data-gz-nav-id="g:0"]') && ${visible}`, Boolean, `${site}: the mod rail widget stays visible with a Look layout`);
+      await seed(false);
+      await until(page, `!document.querySelector('.gz-mod-rail')`, Boolean, `${site}: disabling the mod removes its rail widget`);
+      await wear(page, null);
+      await until(page, `document.querySelector(${JSON.stringify(list)}).outerHTML`, (v) => v === pristine, `${site}: after disabling the mod and removing the Look, the native nav is restored`);
+      await seed(true);
+      await until(page, visible, Boolean, `${site}: re-enabling the mod restores its rail widget`);
+      await opts.evaluate(async (id) => { await chrome.storage.local.set({ mods: [] }); await chrome.storage.local.remove([`mod:${id}`, `modTrust:${id}`]); }, mod.id);
+      await until(page, `!document.querySelector('.gz-mod-rail')`, Boolean, `${site}: removing the mod removes its rail widget`);
+      await until(page, `document.querySelector(${JSON.stringify(list)}).outerHTML`, (v) => v === pristine, `${site}: removing the mod restores the native nav exactly`);
+    };
 
     // ---- Ultra, in the editor's preview page -------------------------------------------------------------------------
     {
@@ -150,6 +176,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       let pristine = await page.evaluate(async (l) => new DOMParser().parseFromString(await (await fetch('/')).text(), 'text/html').querySelector(l).outerHTML, LIST);
       ok(await page.evaluate(`document.querySelector('${LIST}').outerHTML`) === pristine, 'Canvas: without a layout the nav is untouched');
       pristine = await page.evaluate((l) => { document.getElementById('global_nav_help_link').closest('li').setAttribute('hidden', 'hidden'); return document.querySelector(l).outerHTML; }, LIST);
+      await railChecks(page, LIST, pristine, 'Canvas');
       const nav = { place: 'top', groups: [{ label: 'Study', items: ['course', 'calendar', 'w:clock'] }, { label: 'Me', items: ['messages', `link:${A}`, 'profile'] }], hidden: ['help'], links: [LINK], icons: { calendar: 'star' } };
       await wear(page, nav);
       const want = ['g:0', 'course', 'calendar', 'w:clock', 'g:1', 'messages', A, 'profile', 'dashboard'];
@@ -186,6 +213,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       const LIST = '.primary-navigation ul.more-nav';
       await until(page, `document.documentElement.style.getPropertyValue('--gz-ink') !== ''`, Boolean, 'Moodle: Glaze is on (the detector registered the host)');
       const pristine = await page.evaluate(async (l) => new DOMParser().parseFromString(await (await fetch('/my/')).text(), 'text/html').querySelector(l).outerHTML, LIST);
+      await railChecks(page, LIST, pristine, 'Moodle');
       const nav = { place: 'bottom', groups: [{ label: 'Learn', items: ['course', 'w:next'] }], hidden: ['dashboard'], links: [LINK] };
       await wear(page, nav);
       await until(page, order(LIST), (v) => JSON.stringify(v) === JSON.stringify(['g:0', 'course', 'w:next', A]), 'Moodle: the layout\'s order and groups');
