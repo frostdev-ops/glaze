@@ -8,6 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const M = require('../lib/media.js');
 const X = require('../lib/lookparts.js');
+const B = require('../lib/modbroker.js');
 
 const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
 const slice = source.slice(source.indexOf('// Media for a Look (lib/media.js)'), source.indexOf("// Share keys and relay traffic"));
@@ -15,14 +16,14 @@ const spin = fs.readFileSync(path.join(__dirname, 'fixtures/media/spin.json'), '
 const URL1 = 'https://cdn.example.com/spin.json';
 const OTHER = 'https://cdn.example.com/other.json';
 
-const rig = async ({ worn = URL1, lms = 'https://school.instructure.com' } = {}) => {
+const rig = async ({ worn = URL1, lms = 'https://school.instructure.com', installed = {} } = {}) => {
   const listeners = [], fetched = [], local = { data: {} };
   const lookX = worn ? await X.pack({ x: { bg: { media: { type: 'lottie', src: worn } } } }) : '';
   const area = (data) => ({ get: async (k) => Object.fromEntries([].concat(k === null ? Object.keys(data) : k).filter((x) => x in data).map((x) => [x, structuredClone(data[x])])),
     set: async (p) => { Object.assign(data, structuredClone(p)); return true; }, remove: async (k) => { for (const x of [].concat(k)) delete data[x]; return true; } });
-  const sync = { lookX }, local2 = {};
+  const sync = { lookX }, local2 = installed;
   const ctx = vm.createContext({
-    BROKER: {}, BROKER_FILES: {}, GZ_MEDIA: M, GZ_XPARTS: X, importScripts() {}, URL, console,
+    BROKER: {}, BROKER_FILES: {}, GZ_MEDIA: M, GZ_XPARTS: X, GZ_MODBROKER: B, importScripts() {}, URL, console,
     chrome: { runtime: { id: 'glaze', getURL: (p = '') => `chrome-extension://glaze/${p}`, onMessage: { addListener: (f) => listeners.push(f) } } },
     fromEditor: (s) => s.id === 'glaze' && s.url?.split(/[?#]/)[0] === 'chrome-extension://glaze/options.html',
     fromLms: async (s) => (s.id === 'glaze' && s.tab && s.frameId === 0 && s.url?.startsWith(lms) ? lms : null),
@@ -83,4 +84,27 @@ test('with no Look worn that names an address, a page may have none; a file the 
 test('a Lottie fetch is not held up by, and does not hold up, the broker\'s queue', () => {
   assert.match(slice, /chrome\.runtime\.onMessage\.addListener\(\(m, s, reply\) => \{\n  if \(m\?\.type !== 'glaze:lottie'\) return;/);
   assert.doesNotMatch(slice.split("'glaze:lottie'")[1], /brokerTurn|GZ_CARDS/);
+});
+
+test('installed mod Lottie sources are authorized only while the mod is eligible to supply parts', async () => {
+  const id = 'a'.repeat(16);
+  const rec = { id, hash: 'bundle', key: 'author', enabled: true, manifest: { parts: { bg: { media: { type: 'lottie', src: URL1 } } } } };
+  const run = async (record, more = {}, mods = [id]) => {
+    const r = await rig({ worn: null, installed: { mods, [`mod:${id}`]: record, ...more } });
+    return { r, result: await r.ask({ type: 'glaze:lottie', src: URL1 }, page) };
+  };
+  const good = await run(rec);
+  assert.equal(good.result.ok, true, 'a mod background needs no separate worn Look');
+  assert.equal(good.r.fetched.length, 1);
+  assert.equal((await good.r.ask({ type: 'glaze:lottie', src: OTHER }, page)).ok, false, 'only the signed source is allowed');
+  for (const [record, more, mods] of [
+    [{ ...rec, enabled: false }], [{ ...rec, blocked: 'removed' }], [{ ...rec, dev: true }],
+    [rec, { modsBlocklist: { list: { mods: [id] } } }], [rec, {}, []],
+    [{ ...rec, manifest: { parts: { bg: { media: { type: 'image', src: URL1 } } } } }],
+  ]) {
+    const refused = await run(record, more, mods);
+    assert.equal(refused.result.ok, false);
+    assert.equal(refused.r.fetched.length, 0, 'ineligible sources cause no request');
+  }
+  assert.equal((await run({ ...rec, dev: true }, { modDev: true })).result.ok, true);
 });
