@@ -78,6 +78,7 @@ test('a ./ path and its mod: spelling clean as a media source, but no Look or co
     `./${'a/'.repeat(8)}x.webm`, `./${'a'.repeat(240)}.webm`]) {
     assert.equal(X.clean({ bg: { media: { type: 'video', src } } }), null, src);
   }
+  assert.equal(X.describe({ x: { bg: { media: { type: 'video', src: './a.webm' } } } })[0].why, 'Plays a video behind your pages, from a file that came with it.', 'a mod\'s file names no host');
   assert.equal(X.MEDIA.mod('./media/loop.webm'), 'media/loop.webm');
   assert.equal(X.MEDIA.mod(`mod:${ID}/a/b.json`), 'a/b.json');
   assert.equal(X.MEDIA.mod('file:' + 'A'.repeat(43)), null);
@@ -116,6 +117,7 @@ test('a mod\'s background file that is missing, not its type, too big or not a b
   await assert.rejects(packed({ 'loop.webm': fx('clip.webm'), 'x.mp4': fx('clip.mp4') }, manifest({ type: 'video', src: './loop.webm' })), /kind mods can't carry: x.mp4/, 'a second video');
   await assert.rejects(packed({ 'loop.webm': fx('clip.webm') }, manifest({ type: 'video', src: `mod:${ID}/loop.webm` })), (e) => e.vars?.field === 'parts.bg.media.src', 'the page spelling');
   await assert.rejects(packed({ 'loop.webm': fx('clip.webm') }, manifest({ type: 'video', src: './../loop.webm' })), (e) => e.vars?.field === 'parts', 'a path up');
+  await assert.rejects(packed({}, manifest({ type: 'video', src: `file:${'a'.repeat(43)}` })), (e) => e.vars?.field === 'parts.bg.media.src', 'the student\'s own kept file');
 });
 
 // ---- the worker's answers -----------------------------------------------------------------------------------------------
