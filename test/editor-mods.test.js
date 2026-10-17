@@ -281,9 +281,12 @@ test('dev folder scans bound depth and empty directory counts before reading fil
   await assert.rejects(ctx.walk(deep(0)), /./);
   assert.ok(visited <= M.CAP.depth + 1, 'stop before descending past the supported path depth');
   visited = 0;
-  const many = { async *entries() { for (let i = 0; i < M.CAP.files * M.CAP.depth + 1; i++) { visited++; yield [`dir-${i}`, { kind: 'directory', async *entries() {} }]; } } };
-  await assert.rejects(ctx.walk(many), /./);
-  assert.ok(visited <= M.CAP.files * M.CAP.depth + 1);
+  for (const prefix of ['dir-', '.hidden-']) {
+    visited = 0;
+    const many = { async *entries() { for (let i = 0; i < M.CAP.files * M.CAP.depth + 1; i++) { visited++; yield [`${prefix}${i}`, { kind: 'directory', async *entries() {} }]; } } };
+    await assert.rejects(ctx.walk(many), /./);
+    assert.ok(visited <= M.CAP.files * M.CAP.depth + 1);
+  }
 });
 
 
