@@ -86,14 +86,15 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     for (const el of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard, .planner-grouping')) {
       const key = on && keyOf(el);
       if (key && !order.has(key)) order.set(key, order.size);
-      const own = editing?.key === key ? editing : null;
+      const q = quick.get(key);
+      const own = editing?.key === key ? editing : q?.style !== undefined ? q : null;
       const style = key ? K.pick(own ? { ...d.cards, [key]: own.style } : d.cards, key, order.get(key)) : null;
       dress(el, style && K.paint(style, src(d, style)));
       // A preview (the Course cards dialog's) wears the style, and nothing that is used: no bookmarks, no pet.
       if (el.hasAttribute('data-gz-card-preview')) continue;
       if (ultra) prop(el, '--gz-card-banner-h', on && card.condensed ? `${el.querySelector('.course-banner')?.offsetHeight || card.height}px` : '');
       if (!ultra && !el.classList.contains('ic-DashboardCard')) continue;
-      bookmarks(el, key && d.card.icons ? (own ? own.links.map(K.link).filter(Boolean) : d.links[key]) : null);
+      bookmarks(el, key && d.card.icons ? (own?.links ? own.links.map(K.link).filter(Boolean) : d.links[key]) : null);
       pet(el, key && order.get(key) === 0 && card.pet !== 'none' && card.pet);
       if (!ultra) create(el, key && d.card.create && key);
     }
@@ -279,12 +280,15 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   };
 
   // back: what has the focus once it closes (the Course cards dialog's button); else the card's menu button.
+  let opening = 0;
   const open = async (key, back = null) => {
+    const n = ++opening;
     if (ultra && /^_\d+_\d+$/.test(key)) key = `ultra:${location.origin}/${key}`;
     if (!await close()) return;
+    if (!(await Promise.all(flush())).every((r) => r.ok)) return;
     let d;
     try { d = await read(); } catch { return; }
-    if (back && !back.isConnected) return;
+    if (n !== opening || (back && !back.isConnected)) return;
     const card = cardOf(key);
     const name = nameOf(card);
     const courseColor = () => colorOf(key);
@@ -578,30 +582,72 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   // ---- one course's style, saved without the editor (Ultra's Course cards dialog) ----
   // Each is one save through the worker, as the editor's are, the course's bookmarks left as they are, and answers
   // { ok, style (as saved) } or { ok: false, error }; say(answer) is what to tell the student.
-  const styleOf = async (key) => { try { return (await read()).cards[key] || null; } catch { return null; } };
-  const saved = async (key, style) => { const r = await send({ key, style }); return r.ok ? { ...r, style: style && K.style(style) } : r; };
-  // A kind ('' the course's color, 'solid', 'gradient'), from what the card wears; `c`, a color it should have.
-  const setKind = async (key, v, c) => {
-    const was = await styleOf(key);
-    return saved(key, starting(v, c ? { ...was, c } : was, colorOf(key)));
+  const quick = new Map();
+  const stale = () => ({ ok: true, stale: true });
+  const cancel = (key) => {
+    const q = quick.get(key);
+    clearTimeout(q?.timer);
+    q?.resolve?.(stale());
+    quick.delete(key);
+  };
+  const begin = (key) => {
+    const old = quick.get(key);
+    cancel(key);
+    const q = { style: old?.style };
+    quick.set(key, q);
+    return q;
+  };
+  const styleOf = async (key) => { try { return quick.get(key)?.style ?? (await read()).cards[key] ?? null; } catch { return null; } };
+  // Slow file decoding and rapid input belong to the latest choice. Color input paints now and writes once it rests.
+  const finish = async (key, q, save) => {
+    if (quick.get(key) !== q) return stale();
+    const r = await save();
+    if (quick.get(key) !== q) return stale();
+    quick.delete(key); reading = null; paint();
+    return r;
+  };
+  const flush = () => [...quick.values()].filter((q) => q.flush).map((q) => q.flush());
+  const saved = async (key, style) => { const r = await send({ key, style }); return r.ok ? { ...r, style } : r; };
+  const setKind = async (key, v, c, preview = false) => {
+    const q = begin(key), was = await styleOf(key);
+    if (!['', 'solid', 'gradient'].includes(v)) { if (quick.get(key) === q) cancel(key); return { ok: false, error: 'write' }; }
+    const raw = starting(v, c ? { ...was, c } : was, colorOf(key)), style = K.style(raw);
+    if (raw && !style) { if (quick.get(key) === q) cancel(key); return { ok: false, error: 'write' }; }
+    if (quick.get(key) !== q) return stale();
+    q.style = style;
+    if (!preview) return finish(key, q, () => saved(key, style));
+    paint();
+    const result = new Promise((resolve) => { q.resolve = resolve; });
+    q.flush = () => {
+      clearTimeout(q.timer);
+      q.saving ||= finish(key, q, () => saved(key, style)).then(q.resolve);
+      return result;
+    };
+    q.timer = setTimeout(q.flush, 500);
+    return result;
   };
   const setLink = async (key, url) => {
-    const was = await styleOf(key);
+    const q = begin(key), was = await styleOf(key);
     const s = K.style({ ...(was?.k === 'image' ? was : {}), k: 'image', u: url, i: undefined });
-    return s?.u ? saved(key, s) : { ok: false, error: 'link' };
+    if (!s?.u) { if (quick.get(key) === q) cancel(key); return { ok: false, error: 'link' }; }
+    return finish(key, q, () => saved(key, s));
   };
   const setPicture = async (key, file) => {
-    const was = await styleOf(key);
+    const q = begin(key), was = await styleOf(key);
     let url;
-    try { url = await K.picture(file); } catch (e) { return { ok: false, error: e.message === 'cap' ? 'cap' : 'file' }; }
-    return keep(key, was?.k === 'image' ? was : { k: 'image' }, url);
+    try { url = await K.picture(file); } catch (e) {
+      if (quick.get(key) !== q) return stale();
+      cancel(key);
+      return { ok: false, error: e.message === 'cap' ? 'cap' : 'file' };
+    }
+    return finish(key, q, () => keep(key, was?.k === 'image' ? was : { k: 'image' }, url));
   };
   const told = (r) => (r.ok ? '' : t(r.error === 'link' ? 'Use an https:// link to an image.' : r.error === 'file' ? "That file isn't a picture Glaze can read." : SAID[r.error] || SAID.write));
 
   // A picture's average color, through its filter, for the contrast line; null when its site doesn't allow reading it.
   const average = (url, f) => K.average(url, f);
 
-  return { paint, open, closeFor: (parent) => ed?.back && parent.contains(ed.back) ? close() : Promise.resolve(true), styleOf, setKind, setLink, setPicture, say: told };
+  return { paint, open, closeFor: (parent) => ed?.back && parent.contains(ed.back) ? close() : Promise.resolve(true), styleOf, setKind, setLink, setPicture, flush, cancel, say: told };
 })();
 // The module as the script's last value: how lib/background.js knows it ran to the end.
 GZ_CARD_UI;

@@ -1244,3 +1244,102 @@ test('Course cards: the count includes saved courses not yet listed, and another
   assert.equal(input(itemOf(dlg, '_101_1'), 'checkbox').checked, true);
   assert.equal(dlg.querySelector('.gz-ccm-count').textContent, 'On this board: 2. Room for 46 more.');
 });
+
+test('Course cards: an older picture cannot replace a newer picture or kind', async () => {
+  const p = cardsPage(); await openCards(p);
+  const ui = p.c.GZ_CARD_UI, key = ukey('_101_1'), decoded = [];
+  p.c.createImageBitmap = () => new Promise((resolve) => decoded.push(() => resolve({ width: 100, height: 100, close() {} })));
+  const first = ui.setPicture(key, {}); await settle();
+  const second = ui.setPicture(key, {}); await settle();
+  decoded.pop()(); await second;
+  const id = sync(p).ucards[key].i;
+  decoded.pop()(); await first;
+  assert.equal(sync(p).ucards[key].i, id, 'the later picture stays');
+  const third = ui.setPicture(key, {}); await settle();
+  await ui.setKind(key, 'solid', '#112233');
+  decoded.pop()(); await third;
+  assert.equal(sync(p).ucards[key].k, 'solid', 'a later kind also stays');
+  assert.equal(Object.keys(p.store).filter((k) => k.startsWith('ultraCardImg:')).length, 0);
+});
+
+test('Course cards: quick color previews each input, coalesces writes and flushes on Done', async () => {
+  const p = cardsPage(); const { dlg } = await openCards(p);
+  const bio = itemOf(dlg, '_101_1'); p.doc.fire(bio.querySelector('.gz-ccm-style'), 'click'); await settle();
+  tick(input(bio, 'radio', 'solid'), true); await settle();
+  const timers = new Map(); let timerId = 0;
+  p.c.setTimeout = (fn, ms) => { const id = ++timerId; timers.set(id, { fn, ms }); return id; };
+  p.c.clearTimeout = (id) => timers.delete(id);
+  const count = () => p.sent.filter((m) => m.type === 'glaze:cards').length;
+  const before = count(), color = input(bio, 'color');
+  for (const v of ['#123456', '#234567', '#345678']) { color.value = v; color.dispatchEvent({ type: 'input' }); await settle(); }
+  assert.equal(bio.querySelector('article').style.getPropertyValue('--gz-card-c'), '#345678', 'the preview is live');
+  assert.equal(count(), before, 'no sync write during the drag');
+  p.doc.fire(buttonIn(dlg.querySelector('footer'), 'Done'), 'click'); await settle();
+  assert.equal(count(), before + 1, 'Done flushes one final write');
+  assert.equal(sync(p).ucards[ukey('_101_1')].c, '#345678');
+  assert.ok(!p.doc.getElementById('gz-ccm'));
+});
+
+test('Course cards: pending pictures are discarded when their modal closes', async () => {
+  const p = cardsPage(); const { dlg } = await openCards(p);
+  const bio = itemOf(dlg, '_101_1'); p.doc.fire(bio.querySelector('.gz-ccm-style'), 'click'); await settle();
+  const ready = later(); p.c.createImageBitmap = () => ready;
+  const file = input(bio, 'file'); file.files = [{}]; file.dispatchEvent({ type: 'change' }); await settle();
+  p.doc.fire(buttonIn(dlg.querySelector('footer'), 'Done'), 'click');
+  ready.res({ width: 10, height: 10, close() {} }); await settle();
+  assert.ok(!sync(p).ucards?.[ukey('_101_1')]);
+});
+
+test('Course cards: style controls form one card cell and their panel spans the shared row', async () => {
+  const p = cardsPage(); const { dlg } = await openCards(p);
+  const bio = itemOf(dlg, '_101_1'), style = bio.querySelector('.gz-ccm-style');
+  assert.ok(style.parentNode === bio.querySelector('.gz-ccm-card'), 'preview and Style share a grid cell');
+  p.doc.fire(style, 'click'); await settle();
+  assert.ok(bio.querySelector('.gz-ccm-look').parentNode === bio, 'the panel is outside that cell');
+});
+
+test('Course cards: concurrent full-editor opens leave one dialog with unique ids', async () => {
+  const p = cardsPage(); const { dlg } = await openCards(p);
+  const back = itemOf(dlg, '_101_1').querySelector('.gz-ccm-style');
+  await Promise.all([p.c.GZ_CARD_UI.open(ukey('_101_1'), back), p.c.GZ_CARD_UI.open(ukey('_102_1'), back)]);
+  assert.equal(p.doc.querySelectorAll('#gz-ce').length, 1);
+  assert.equal(p.doc.getElementById('gz-ce').querySelector('h2').textContent, 'Card for Chemistry');
+});
+
+test('Course cards: invalid quick kinds and colors cannot erase a saved style', async () => {
+  const p = cardsPage({ sync: { ucards: { [ukey('_101_1')]: { k: 'solid', c: '#123456' } } } });
+  await openCards(p);
+  for (const [kind, color] of [['bogus', undefined], ['solid', 'bad']]) {
+    const result = await p.c.GZ_CARD_UI.setKind(ukey('_101_1'), kind, color);
+    assert.equal(result.ok, false);
+    assert.equal(sync(p).ucards[ukey('_101_1')].c, '#123456');
+  }
+});
+
+test('Course cards: quick looks preserve bookmarks and other schools, respect both picture caps and sync item size', async () => {
+  const key = ukey('_101_1'), other = 'ultra:https://other.blackboard.test/_101_1';
+  const links = { [key]: [{ n: 'Lab', u: '/lab', i: 'book' }] };
+  const p = cardsPage({ sync: { ucards: { [other]: { k: 'solid', c: '#445566' } }, ulinks: structuredClone(links) } });
+  await openCards(p); const ui = p.c.GZ_CARD_UI;
+  await ui.setKind(key, 'gradient', '#112233');
+  assert.deepEqual(sync(p).ulinks, links);
+  assert.equal(sync(p).ucards[other].c, '#445566');
+  // Pictures of the other site and Canvas count too.
+  for (let i = 0; i < 10; i++) p.store[`cardImg:${String(i).padStart(12, 'a')}`] = 'A'.repeat(K.IMG_MAX);
+  const result = await ui.setPicture(key, { picture: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(result)), { ok: false, error: 'cap' });
+  assert.equal(sync(p).ucards[key].k, 'gradient');
+  for (const k of Object.keys(p.store).filter((k) => k.startsWith('cardImg:'))) delete p.store[k];
+  const large = {};
+  for (let i = 0; ; i++) {
+    const k = ukey(`_${500 + i}_1`), s = { k: 'image', u: `https://images.test/${'x'.repeat(700)}` };
+    if (K.bytes('ucards', { ...large, [k]: s }) > K.ITEM_MAX) break;
+    large[k] = s;
+  }
+  sync(p).ucards = large; p.changed({ ucards: { newValue: large } }, 'sync'); await settle();
+  const before = structuredClone(large);
+  const tooMuch = await ui.setLink(key, `https://images.test/${'y'.repeat(2000)}`);
+  assert.equal(tooMuch.ok, false);
+  assert.deepEqual(sync(p).ucards, before, 'a rejected save drops no other style');
+  assert.deepEqual(sync(p).ulinks, links);
+});

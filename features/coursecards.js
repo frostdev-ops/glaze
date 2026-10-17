@@ -207,6 +207,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       if (!ui) return;
       note.hidden = true;
       const r = await save(ui);
+      if (r.stale) return;
       note.textContent = ui.say(r);
       note.hidden = r.ok;
       if (r.ok) show(r.style);
@@ -215,7 +216,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       if (r.value !== 'image') { run((ui) => ui.setKind(key, r.value)); return; }
       kind = 'image'; colorRow.hidden = true; pictureRow.hidden = false; choose.focus();
     });
-    color.addEventListener('change', () => run((ui) => ui.setKind(key, kind === 'gradient' ? 'gradient' : 'solid', color.value)));
+    for (const event of ['input', 'change']) color.addEventListener(event, () => run((ui) => ui.setKind(key, kind === 'gradient' ? 'gradient' : 'solid', color.value, event === 'input')));
     file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) run((ui) => ui.setPicture(key, f)); });
     url.addEventListener('change', () => { const v = url.value.trim(); if (v) run((ui) => ui.setLink(key, v)); });
     it.li.append(panel);
@@ -229,7 +230,8 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     card.dataset.courseId = c.id;
     card.setAttribute('data-gz-card-preview', '');
     tone(card, c.id);
-    const li = make('li', { className: 'gz-ccm-item' }, make('label', { className: 'gz-ccm-pick' }, box, card));
+    const cell = make('div', { className: 'gz-ccm-card' }, make('label', { className: 'gz-ccm-pick' }, box, card));
+    const li = make('li', { className: 'gz-ccm-item' }, cell);
     const it = { li, box, card, c, look: null };
     const styleBtn = b(ctx.t('Style'), () => {
       it.look ||= looks(it, styleBtn);
@@ -242,7 +244,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     styleBtn.setAttribute('aria-expanded', 'false');
     styleBtn.setAttribute('aria-controls', `gz-ccm-look-${c.id.replace(/\W/g, '')}`);
     styleBtn.setAttribute('aria-label', ctx.t('Style of {name}', { name }));
-    li.append(styleBtn);
+    cell.append(styleBtn);
     box.addEventListener('change', () => turn([it], box.checked));
     return it;
   };
@@ -307,6 +309,9 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const closePicker = (refocus = true) => {
     const p = pick;
     if (!p) return;
+    const pending = UI()?.flush() || [];
+    if (pending.length) { Promise.all(pending).then((rs) => { if (pick === p && rs.every((r) => r.ok)) closePicker(refocus); }); return; }
+    for (const it of p.items.values()) UI()?.cancel(cardKey(it.c));
     pick = null;
     UI()?.closeFor(p.dlg);
     if (p.dlg.open) p.dlg.close();
