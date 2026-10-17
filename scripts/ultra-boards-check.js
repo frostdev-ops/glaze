@@ -26,12 +26,12 @@ const fx = (n) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', `u
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
 // A tiny picture for the Course cards dialog's "Choose a picture": a 4×4 PNG, drawn here (two colors in stripes).
-const png = (() => {
+const png = () => {
   const chunk = (type, data) => { const b = Buffer.alloc(8 + data.length + 4); b.writeUInt32BE(data.length); b.write(type, 4); data.copy(b, 8); b.writeUInt32BE(zlib.crc32(b.subarray(4, 8 + data.length)), 8 + data.length); return b; };
   const head = Buffer.alloc(13); head.writeUInt32BE(4, 0); head.writeUInt32BE(4, 4); head[8] = 8; head[9] = 2; // 8-bit RGB
   const rows = Buffer.concat(Array.from({ length: 4 }, (_, y) => Buffer.from([0, ...Array.from({ length: 4 }, () => (y % 2 ? [0x22, 0x88, 0x55] : [0xee, 0xaa, 0x22])).flat()])));
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
-})();
+};
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails++; };
 
 // Ultra's frame: the MUI drawer (200px, B7.md) and the page right of it; under 768px the drawer goes (Ultra's phone layout).
@@ -522,7 +522,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         await page.waitForSelector(`${onBoard}[data-gz-card="gradient"]`);
         ok(await item.locator('article[data-gz-card="gradient"]').count() === 1, 'B10: a gradient chosen in the dialog shows on its card and its preview');
         await item.locator('.gz-ccm-kinds label', { hasText: 'Picture' }).click();
-        await item.locator('input[type="file"]').setInputFiles({ name: 'lab.png', mimeType: 'image/png', buffer: png });
+        await item.locator('input[type="file"]').setInputFiles({ name: 'lab.png', mimeType: 'image/png', buffer: png() });
         await page.waitForSelector(`${onBoard}[data-gz-card="image"]`);
         const kept = await opts.evaluate(async (k) => { const { ucards } = await chrome.storage.sync.get('ucards'); const s = ucards?.[k]; const img = s?.i && (await chrome.storage.local.get(`ultraCardImg:${s.i}`))[`ultraCardImg:${s.i}`]; return { k: s?.k, local: !!s?.i && !s.u, img: /^data:image\/(webp|jpeg);base64,/.test(img || '') }; }, ukey);
         ok(kept.k === 'image' && kept.local && kept.img, `B10: a picture from this computer is kept on it, as the card's own (${JSON.stringify(kept)})`);
