@@ -222,6 +222,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     el.style.rotate = `${p.r}deg`;
   };
   const draw = () => {
+    dropLotties();
     if (!ctx.on()) { layer?.remove(); layer = null; return; }
     if (!list.length && !editing) { layer?.remove(); layer = null; return; }
     sheet();
@@ -232,7 +233,6 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     layer.classList.toggle('gz-stk-edit', editing);
     // Decoration, out of the way of a screen reader, but for sticker mode's own controls.
     layer.toggleAttribute('aria-hidden', !editing);
-    dropLotties();
     els = list.map((p, i) => {
       const el = make('div', { className: 'gz-stk', tabIndex: editing ? 0 : -1 }, art(p.s), make('span', { className: 'gz-stk-grip' }));
       if (editing) {

@@ -474,3 +474,20 @@ test('page: Lottie sticker canvas pixels are bounded across all players on the p
   await p.lx.sync(); await p.settle();
   assert.equal(p.log.anims.length, 2 * Math.floor(6.4e7 / (120 * 72 * 101)), 'redraw releases the previous players budget');
 });
+
+test('page: removing the last stored sticker destroys its detached player and releases its pixel budget', async () => {
+  const placements = [placed('a', mod('spark'))], local = { [KEY]: placements };
+  const p = page({ local, replies: { spark: { ...FILES_REPLY.spark, canvases: 4001 } } });
+  await p.lx.sync(); await p.settle();
+  const old = p.log.anims[0];
+  assert.ok(old);
+  local[KEY] = [];
+  p.changed({ [KEY]: { oldValue: placements, newValue: [] } });
+  await p.settle();
+  assert.equal(p.layer(), null);
+  assert.equal(old.calls.at(-1), 'destroy');
+  local[KEY] = placements;
+  p.changed({ [KEY]: { oldValue: [], newValue: placements } });
+  await p.settle();
+  assert.equal(p.log.anims.length, 2, 'the removed player no longer consumes the new player budget');
+});
