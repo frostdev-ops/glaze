@@ -701,7 +701,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let dragged = null; // the grid tile being dragged to a new place in the order
   let lastAt = {}, lastW = 0, stacked = false; // the board's last arrangement (arrange), its room's width, stacked or not
   let floatsStacked = false; // Ultra's floating tiles, stacked at the window's edge (floating)
-  let gesture = false; // a tile being dragged or resized: nothing is laid out under the pointer meanwhile
+  let gesture = null; // the tile being dragged or resized, and how to release it if it goes away
   const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
   const movable = (id) => (fl(id) ? !(ultra && floatsStacked) : board ? editing && !stacked : false);
   const roomEl = () => (board === 'courses' ? room : grid?.querySelector('.gz-dash-grid'));
@@ -766,15 +766,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     };
     const surface = ultra ? el : head;
     surface.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || !movable(id)) return;
+      if (e.button !== 0 || gesture || !movable(id)) return;
       if (ultra && !fl(id) ? e.target.closest('.gz-w-tools, .gz-w-resize') : !head.contains(e.target) || (e.target.closest('button, a, input, select, textarea') && e.target !== grip)) return;
       const f = frame(id);
       const r = el.getBoundingClientRect();
       const x0 = e.clientX, y0 = e.clientY, dx = x0 - r.left, dy = y0 - r.top;
-      surface.setPointerCapture(e.pointerId);
-      gesture = true;
       const z0 = el.style.zIndex;
-      if (ultra) { el.style.zIndex = f.float ? '2000' : '999'; el.focus({ preventScroll: true }); }
       let s = null;
       // The room's box is asked again each move: the page can scroll under the pointer. A press that wanders a pixel or
       // two is still a press.
@@ -785,19 +782,28 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         s = to(ev.clientX - dx - at.left, ev.clientY - dy - at.top, f, ev.altKey);
         showGuides(f.layer, s.guides, { w: f.W, h: Number.isFinite(f.H) ? f.H : Math.max(f.layer.clientHeight, innerHeight) }, f.float ? at : undefined);
       };
-      const up = () => {
+      const up = (ev) => {
         surface.removeEventListener('pointermove', move);
         surface.removeEventListener('pointerup', up);
         surface.removeEventListener('pointercancel', up);
+        surface.removeEventListener('lostpointercapture', up);
         delete el.dataset.dragging;
-        gesture = false;
+        gesture = null;
         guides?.forEach((d) => d.remove());
+        if (surface.hasPointerCapture?.(e.pointerId)) surface.releasePointerCapture(e.pointerId);
+        el.style.zIndex = z0;
+        if (!ev) return; // the caller is already redrawing or taking the tile away
+        if (ev.type !== 'pointerup') { draw(); return; }
         if (s) keep(s, f);
-        else if (ultra) { el.style.zIndex = z0; raise(id); draw(); }
+        else if (ultra) { raise(id); draw(); }
       };
+      gesture = { id, cancel: up };
+      surface.setPointerCapture(e.pointerId);
+      if (ultra) { el.style.zIndex = f.float ? '2000' : '999'; el.focus({ preventScroll: true }); }
       surface.addEventListener('pointermove', move);
       surface.addEventListener('pointerup', up);
       surface.addEventListener('pointercancel', up);
+      surface.addEventListener('lostpointercapture', up);
       e.preventDefault();
     });
     (grip || el).addEventListener('keydown', (e) => {
@@ -845,18 +851,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       return f.float ? { left: b.left - o.left, top: b.top - o.top } : lastAt[id];
     };
     corner.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || !movable(id)) return;
+      if (e.button !== 0 || gesture || !movable(id)) return;
       e.preventDefault();
       e.stopPropagation();
       const f = frame(id), r = el.getBoundingClientRect(), o = f.at();
       const at = { left: r.left - o.left, top: r.top - o.top };
       const extra = el.offsetHeight - (body.hidden ? 0 : body.offsetHeight); // its heading, padding and gaps
       const dx = e.clientX - r.right, dy = e.clientY - r.bottom;
-      corner.setPointerCapture(e.pointerId);
-      gesture = true;
-      el.dataset.resizing = '';
       const z0 = el.style.zIndex;
-      el.style.zIndex = f.float ? '2000' : '999';
       let got = null;
       const move = (ev) => {
         const o2 = f.at();
@@ -865,19 +867,29 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (!body.hidden) body.style.height = `${got.h - extra}px`;
         showGuides(f.layer, got.guides, { w: f.W, h: Number.isFinite(f.H) ? f.H : Math.max(f.layer.clientHeight, innerHeight) }, f.float ? o2 : undefined);
       };
-      const up = () => {
+      const up = (ev) => {
         corner.removeEventListener('pointermove', move);
         corner.removeEventListener('pointerup', up);
         corner.removeEventListener('pointercancel', up);
+        corner.removeEventListener('lostpointercapture', up);
         delete el.dataset.resizing;
-        gesture = false;
+        gesture = null;
         guides?.forEach((d) => d.remove());
+        if (corner.hasPointerCapture?.(e.pointerId)) corner.releasePointerCapture(e.pointerId);
+        el.style.zIndex = z0;
+        if (!ev) return;
+        if (ev.type !== 'pointerup') { draw(); return; }
         if (got) keep(f, at, got.w, body.hidden ? undefined : got.h - extra, body.hidden ? el.offsetHeight : got.h);
-        else { el.style.zIndex = z0; raise(id); draw(); }
+        else { raise(id); draw(); }
       };
+      gesture = { id, cancel: up };
+      corner.setPointerCapture(e.pointerId);
+      el.dataset.resizing = '';
+      el.style.zIndex = f.float ? '2000' : '999';
       corner.addEventListener('pointermove', move);
       corner.addEventListener('pointerup', up);
       corner.addEventListener('pointercancel', up);
+      corner.addEventListener('lostpointercapture', up);
     });
     corner.addEventListener('keydown', (e) => {
       const d = ARROWS[e.key];
@@ -905,6 +917,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Edit widgets (Canvas's grid) or Edit layout (a board: then Done, with Reset layout and the tiles to add). Said to a
   // screen reader as it starts and ends; Esc ends it too.
   const setEditing = (v) => {
+    if (!v) gesture?.cancel();
     editing = v;
     const edit = bar?.querySelector('.gz-dash-edit');
     if (edit) { edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
@@ -1040,6 +1053,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let ro = null, frame0 = 0, floatRO = null, floatFrame = 0;
   const floatWatched = new Set();
   const teardown = (all = true) => {
+    gesture?.cancel();
     for (const [id, x] of tiles) if (all || x.el.parentNode !== floats) { x.stop?.(); x.el.remove(); tiles.delete(id); }
     ro?.disconnect();
     floatRO?.disconnect();
@@ -1068,7 +1082,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       ro ||= new ResizeObserver(() => { cancelAnimationFrame(frame0); frame0 = requestAnimationFrame(() => { if (on && board) layoutBoard(); }); });
       ro.observe(roomEl());
     }
-    for (const [id, x] of tiles) if (!want.some((w) => w.id === id)) { x.stop?.(); x.el.remove(); tiles.delete(id); }
+    for (const [id, x] of tiles) if (!want.some((w) => w.id === id)) { if (gesture?.id === id) gesture.cancel(); x.stop?.(); x.el.remove(); tiles.delete(id); }
     const last = new Map(); // home -> the tile placed last in it
     for (const tile of want) {
       let x = tiles.get(tile.id);

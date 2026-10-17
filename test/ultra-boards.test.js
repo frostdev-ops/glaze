@@ -420,6 +420,53 @@ test('a press without a move applies another tab\'s size once the gesture ends',
   }
 });
 
+test('leaving a board during a gesture does not freeze the next board layout', async () => {
+  for (const resize of [false, true]) {
+    const p = page({ local: { widgetLayout: ONLY(['notes']) } }); p.ui.sync(true); await settle();
+    p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+    const n = p.tile('notes'), surface = resize ? n.querySelector('.gz-w-resize') : n;
+    surface.dispatchEvent(p.ev('pointerdown', { target: resize ? surface : n.querySelector('.gz-w-head'), clientX: 1000, clientY: 130 }));
+    p.c.location.pathname = '/ultra/stream'; p.ui.sync(true);
+    p.c.location.pathname = '/ultra/course'; p.ui.sync(true); await settle();
+    assert.ok(p.tile('notes')?.isConnected, resize ? 'resize released on departure' : 'drag released on departure');
+    assert.equal(p.tile('notes').style.width, '288px');
+    assert.equal(p.sent.filter((m) => m.type === 'glaze:widgetLayout').length, 0);
+  }
+});
+
+test('cancelled gestures restore the saved layout, remove guides and release layout updates', async () => {
+  for (const resize of [false, true]) for (const end of ['pointercancel', 'lostpointercapture', 'Escape', 'remove']) {
+    const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } }); p.ui.sync(true); await settle();
+    p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+    const n = p.tile('notes'), body = n.querySelector('.gz-w-body');
+    n.box = { left: 976, top: 120, width: 288, height: 200 };
+    body.box = { left: 976, top: 160, width: 288, height: 150 };
+    const surface = resize ? n.querySelector('.gz-w-resize') : n;
+    surface.dispatchEvent(p.ev('pointerdown', { target: resize ? surface : n.querySelector('.gz-w-head'), clientX: 1260, clientY: 315 }));
+    surface.dispatchEvent(p.ev('pointermove', { clientX: 1000, clientY: 420 }));
+    if (end === 'Escape') p.doc.getElementById('gz-dash').dispatchEvent(p.ev('keydown', { key: 'Escape' }));
+    else if (end === 'remove') {
+      p.store.widgetLayout = W.bset(lay(p), 'courses', 'notes', { on: false });
+      p.changed({ widgetLayout: { newValue: p.store.widgetLayout } });
+    } else surface.dispatchEvent(p.ev(end));
+    await settle();
+    assert.equal(p.sent.filter((m) => m.type === 'glaze:widgetLayout').length, 0, `${resize ? 'resize' : 'drag'} ${end}: no cancelled change saved`);
+    assert.ok(!p.room().querySelector('.gz-guide'), `${end}: guides removed`);
+    if (end !== 'remove') {
+      assert.equal(n.style.width, '288px', `${end}: width restored`);
+      assert.equal(n.style.left, '776px', `${end}: spot restored`);
+      assert.equal(body.style.height, '', `${end}: height restored`);
+    }
+    const timer = p.tile('timer');
+    timer.dispatchEvent(p.ev('pointerdown', { target: timer.querySelector('.gz-w-head') }));
+    timer.dispatchEvent(p.ev('pointerup'));
+    await settle();
+    p.store.widgetLayout = W.bset(lay(p), 'courses', 'timer', { w: 240 });
+    p.changed({ widgetLayout: { newValue: p.store.widgetLayout } });
+    assert.equal(timer.style.width, '240px', `${end}: layout runs again`);
+  }
+});
+
 test('a tile folds to its heading and is removed or added back while editing, on this board only', async () => {
   const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } });
   p.ui.sync(true);
