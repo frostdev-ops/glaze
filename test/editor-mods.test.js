@@ -22,7 +22,7 @@ const mounted = (mods, data = {}, read = async (k, v) => v) => {
     set: async (patch) => { Object.assign(data, structuredClone(patch)); changed(Object.fromEntries(Object.keys(patch).map((k) => [k, {}])), 'local'); } };
   const chrome = { storage: { local, onChanged: { addListener(f) { changed = f; } } }, runtime: { getManifest: () => ({ sandbox: {} }),
     sendMessage: async (m) => { sent.push(m); return m.op === 'list' ? { ok: true, mods: structuredClone(mods) } : { ok: true }; } } };
-  const ctx = vm.createContext({ chrome, document, GZ_MODBUNDLE: M, GZ_MODAPI: require('../lib/modapi.js'), requestAnimationFrame: (f) => f() });
+  const ctx = vm.createContext({ chrome, document, GZ_MODBUNDLE: M, GZ_XPARTS: require('../lib/lookparts.js'), GZ_MODAPI: require('../lib/modapi.js'), requestAnimationFrame: (f) => f() });
   vm.runInContext(fs.readFileSync(require.resolve('../lib/editor-mods.js'), 'utf8'), ctx);
   ctx.GZ_MODSEDIT.mount({ t, and, when: String });
   const find = (f, e = document.getElementById('mods-list')) => e?.dataset?.f === f ? e : e?.children?.map((c) => find(f, c)).find(Boolean);
