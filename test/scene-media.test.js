@@ -469,3 +469,20 @@ test('stopping before a media source resolves prevents a late network load', asy
     assert.equal(r.host.children.length, 0);
   }
 });
+
+test('abandoning a kept video before its first frame revokes its blob immediately', async () => {
+  const h = env().sha(bytes);
+  for (const stop of [true, false]) {
+    const r = rig({ storage: kept({ h, t: 'video/webm', bytes }) });
+    r.scene.update(o({ type: 'video', src: `file:${h}` }));
+    await settle();
+    const pending = kinds(r.e, 'video')[0];
+    assert.equal(pending.src, 'blob:glaze/0');
+    if (stop) r.scene.stop(); else r.scene.update(o({ type: 'video', src: URL1 }));
+    assert.deepEqual(r.e.revoked, ['blob:glaze/0'], 'no load event is needed to release the kept file');
+    pending.fire('loadeddata');
+    await settle();
+    assert.deepEqual(r.e.revoked, ['blob:glaze/0'], 'a late completion cannot release it twice');
+    r.scene.stop();
+  }
+});
