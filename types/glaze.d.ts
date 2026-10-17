@@ -448,9 +448,14 @@ interface GlazeEffects {
   play(kind: GlazeEffectKind, options?: GlazeEffectOptions): Promise<unknown>;
 }
 
-/** The parts of a theme code: shader or layered backgrounds, animations, event effects, a cursor, a nav layout and rules. */
+/** The parts of a theme code: shader, layered or media backgrounds, animations, event effects, a cursor, a nav layout and rules. */
 interface GlazeLookParts {
-  bg?: { shader?: { src: string }; layers?: Record<string, unknown>[] };
+  bg?: {
+    shader?: { src: string };
+    layers?: Record<string, unknown>[];
+    /** In overrides, src and type must match the media declared in mod.json. */
+    media?: { type: 'video' | 'image' | 'lottie'; src: string; fit?: 'cover' | 'contain' | 'fill'; dim?: number; loop?: boolean };
+  };
   anim?: Record<string, unknown>;
   fx?: Record<string, unknown>;
   cursor?: Record<string, unknown>;
@@ -459,6 +464,6 @@ interface GlazeLookParts {
 }
 
 interface GlazeLook {
-  /** A layer over the worn Look while the mod runs, never saved. `null` takes it away. */
+  /** A layer over the worn Look while the mod runs, never saved. `null` takes it away. Media src/type must match mod.json. */
   override(parts: GlazeLookParts | null): Promise<unknown>;
 }

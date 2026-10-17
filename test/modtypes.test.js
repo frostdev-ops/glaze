@@ -80,3 +80,15 @@ test('every example is listed in the docs', () => {
   }
   assert.ok(docs.includes('examples/looks/shader-background'));
 });
+
+
+test('Look overrides expose every supported background kind in the SDK', () => {
+  const XP = require('../lib/lookparts.js');
+  assert.ok(XP.clean({ bg: { media: { type: 'video', src: 'https://media.example/loop.webm', fit: 'cover', dim: 40, loop: true } } }));
+  const bg = body('GlazeLookParts');
+  for (const key of ['shader', 'layers', 'media']) assert.match(bg, new RegExp(`\\b${key}\\?:`), key);
+  const media = bg.match(/media\?: \{([^}]*)\}/)?.[1];
+  assert.ok(media, 'the media background has its own fields');
+  for (const field of ['type', 'src', 'fit', 'dim', 'loop']) assert.match(media, new RegExp(`\\b${field}\\??:`), field);
+  for (const value of [...XP.MEDIA.types, ...XP.MEDIA.fits]) assert.ok(media.includes(`'${value}'`), value);
+});
