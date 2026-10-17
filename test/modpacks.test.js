@@ -262,7 +262,7 @@ const FILES_REPLY = {
   still: { ok: true, kind: 'image', mime: 'image/webp', animated: false, b64: b64(fx('still.webp')) },
   spark: { ok: true, kind: 'lottie', json: { v: '5.7.0', w: 200, h: 120, fr: 30, ip: 0, op: 60, layers: [] } },
 };
-const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY } = {}) => {
+const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, deferSticker } = {}) => {
   const html = new El('html'), head = new El('head'), body = new El('body');
   html.append(head, body);
   html.style.setProperty = (k, v) => { html.style[k] = v; };
@@ -274,6 +274,7 @@ const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY } = 
   const send = (m, cb) => {
     log.sent.push(structuredClone(m));
     const r = m.type === 'glaze:modpage' && m.op === 'packs' ? { ok: true, packs: packList } : m.type === 'glaze:modpage' && m.op === 'sticker' ? (replies[m.id] || { ok: false, error: 'asset' }) : { ok: true };
+    if (m.op === 'sticker' && deferSticker?.(m, () => cb?.(structuredClone(r)))) return;
     setTimeout(() => cb?.(structuredClone(r)));
   };
   const lottie = { loadAnimation: (o) => { const calls = []; const a = { o, calls, play: () => calls.push('play'), pause: () => calls.push('pause'), goToAndStop: (...x) => calls.push(['goToAndStop', ...x]), destroy: () => calls.push('destroy'), setSubframe: () => {} }; log.anims.push(a); return a; } };
@@ -379,6 +380,40 @@ test('page: a sticker whose mod is gone draws nothing (a hidden box, a dashed on
   const n = p.log.sent.length;
   await p.settle();
   assert.equal(p.log.sent.length, n, 'other changes ask nothing');
+});
+
+test('page: turning dev mode off invalidates cached mod stickers and packs', async () => {
+  const replies = { ...FILES_REPLY };
+  const p = page({ local: { [KEY]: [placed('a', mod('still'))] }, replies });
+  await p.lx.sync(); await p.settle();
+  assert.equal(arts(p)[0].tagName, 'IMG');
+  replies.still = { ok: false, error: 'asset' };
+  p.packs([]);
+  p.changed({ modDev: { oldValue: true, newValue: false } });
+  await p.settle();
+  assert.equal(arts(p)[0].className, 'gz-stk-gone');
+  assert.deepEqual(plain(p.log.revoked), ['blob:x/1']);
+  await p.lx.edit(); await p.settle();
+  const select = p.body.find('gz-stk-panel').children.find((e) => e.tagName === 'SELECT');
+  assert.equal(select.children.some((e) => e.value === `mod:${ID}`), false);
+});
+
+test('page: a late sticker response cannot restore art after its mod is disabled', async () => {
+  const replies = { ...FILES_REPLY };
+  let late, holding = true;
+  const p = page({ local: { [KEY]: [placed('a', mod('still'))] }, replies,
+    deferSticker: (_, reply) => { if (!holding) return false; late = reply; return true; } });
+  await p.lx.sync(); await p.settle();
+  assert.equal(typeof late, 'function');
+  holding = false;
+  replies.still = { ok: false, error: 'asset' };
+  p.packs([]);
+  p.changed({ [`mod:${ID}`]: { newValue: { enabled: false } } });
+  await p.settle();
+  late();
+  await p.settle();
+  assert.equal(arts(p)[0].className, 'gz-stk-gone');
+  assert.deepEqual(p.log.blobs, [], 'discarded responses create no object URLs');
 });
 
 test('page: sticker mode offers a mod\'s pack, lists its stickers, and places one as a placement the worker keeps', async () => {

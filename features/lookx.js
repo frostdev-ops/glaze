@@ -84,7 +84,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // Stickers a mod carries (mod.json packs.stickers): which mods bring packs (asked of the worker, which says only what is on and
   // not blocked), and each sticker's art once it is asked for: { kind: 'image', url, bytes, mime, animated } or { kind: 'lottie',
   // json } as the worker cleaned them, or false when it can't be had (the mod went, or the file is no longer what it was).
-  let modPacks = null;
+  let modPacks = null, modRevision = 0;
   const modArt = new Map();
   const lotties = new Set(); // the players on the page now
   const stillNow = () => html.getAttribute('data-gz-motion') === 'off';
@@ -95,14 +95,21 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   const isMod = (s) => GZ_LX.MOD.test(s);
   const src = (s) => (ownId(s) ? own[ownId(s)] || '' : url(GZ_LX.file(s)));
   const nameOf = (s) => (ownId(s) ? t('Your picture') : isMod(s) ? modPacks?.find((p) => p.mod === s.slice(4, 20))?.stickers.find((x) => x.id === s.slice(21))?.name || t('Sticker') : t(GZ_LX.BUNDLED.get(s)));
-  const packsIn = async () => (modPacks ||= (await send({ type: 'glaze:modpage', op: 'packs' }))?.packs || []);
+  const packsIn = async () => {
+    const revision = modRevision;
+    const packs = modPacks || (await send({ type: 'glaze:modpage', op: 'packs' }))?.packs || [];
+    if (revision !== modRevision) return [];
+    return modPacks = packs;
+  };
   // A mod's stickers, read now: each from the worker, which reads the file again and hands back only a cleaned copy.
   const readMod = async (list) => {
+    const revision = modRevision;
     await packsIn();
+    if (revision !== modRevision) return;
     await Promise.all([...new Set(list)].filter((s) => isMod(s) && !modArt.has(s)).map(async (s) => {
       modArt.set(s, false);
       const r = await send({ type: 'glaze:modpage', op: 'sticker', mod: s.slice(4, 20), id: s.slice(21) });
-      if (!live || !r?.ok) return;
+      if (!live || revision !== modRevision || !r?.ok) return;
       if (r.kind === 'lottie') modArt.set(s, { kind: 'lottie', json: r.json });
       else if (r.kind === 'image') {
         const bytes = Uint8Array.from(atob(r.b64), (c) => c.charCodeAt(0));
@@ -111,12 +118,14 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     }));
   };
   const forgetMods = () => {
+    modRevision++;
     for (const a of modArt.values()) if (a?.url) URL.revokeObjectURL(a.url);
     modArt.clear();
     modPacks = null;
   };
   // The mods changed (installed, turned off, updated): what they bring is asked again, and what is on screen redrawn from it.
   const refreshMods = async () => {
+    modRevision++;
     const old = [...modArt.values()];
     modArt.clear();
     modPacks = null;
@@ -408,7 +417,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     if (area !== 'local') return;
     if (c.rotateState) { arm(); if (top && globalThis.GZ_LX?.turned(c.rotateState.oldValue, c.rotateState.newValue)) ctx.moment?.('look.rotate'); }
     if (c.cursorImg && X().cursor === 'own') cursor();
-    if (Object.keys(c).some((k) => k === 'mods' || k.startsWith('mod:') || k === 'modsBlocklist')) refreshMods();
+    if (Object.keys(c).some((k) => k === 'mods' || k.startsWith('mod:') || k === 'modsBlocklist' || k === 'modDev')) refreshMods();
     if (key && c[key] && !editing && !pending.size) { key = ''; stickers(); }
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) arm(); mute(); });
