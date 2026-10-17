@@ -868,7 +868,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Edit layout (then Done, with Reset layout and the tiles to add). Said to a
   // screen reader as it starts and ends; Esc ends it too.
   const setEditing = (v) => {
-    if (!v) gesture?.cancel();
+    if (!v) { gesture?.cancel(); globalThis.GZ_COURSE_CARDS?.picker.close(false); }
     editing = v;
     const edit = bar?.querySelector('.gz-dash-edit');
     if (edit) { if (v) edit.style.minWidth = `${edit.getBoundingClientRect().width}px`; edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
@@ -886,27 +886,30 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       if (on && board && globalThis.GZ_COURSE_CARDS) { GZ_COURSE_CARDS.sync(draw); draw(); }
     }, () => { loadingCourses = null; });
   };
+  // The board's Course cards button: its dialog (features/coursecards.js) ticks courses on and off this board, each
+  // tick or Select all one change, with the cards new to it placed in the board's free room (arrange). It asks the
+  // board as it is when asked, so a change from it, or from another tab, shows in it at once.
   const coursePicker = (add) => {
     const C = globalThis.GZ_COURSE_CARDS;
     if (!C) return;
-    const available = C.list().filter((c) => !lay.boards[board].some((x) => x.id === c.key && x.on));
-    const count = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin).length;
-    const room = Math.max(0, Math.min(W.COURSE_MAX - count, W.COURSE_TOTAL - lay.boards[board].filter((x) => W.course(x.id)).length));
-    if (board === 'courses') {
-      add.append(button(t('+ Course cards'), () => {
-        nativeShown = false;
-        change({ ops: available.slice(0, room).map((c) => ({ s: board, id: c.key, set: { on: true, size: 's', term: c.term } })) });
-      }, { className: 'gz-w-small gz-course-add', disabled: !available.length || !room }));
-    } else {
-      const select = make('select', { className: 'gz-course-pick' }, ...available.map((c) => make('option', { value: c.key, textContent: [C.title(c.key), c.term, c.code].filter(Boolean).join(' · ') })));
-      select.setAttribute('aria-label', t('Course card'));
-      const addOne = button(t('+ Course card'), () => {
-        const c = available.find((c) => c.key === select.value);
-        if (c) change({ ops: [{ s: board, id: c.key, set: { on: true, size: 's', term: c.term } }] });
-      }, { className: 'gz-w-small gz-course-add', disabled: !available.length || !room });
-      add.append(select, addOne);
-    }
-    add.append(make('span', { className: 'gz-w-faint', textContent: t('Up to {n} course cards per board.', { n: W.COURSE_MAX }) }));
+    const b = board;
+    const rows = () => (board === b && lay.boards[b]) || [];
+    const room = () => Math.max(0, Math.min(W.COURSE_MAX - rows().filter((x) => W.course(x.id)?.origin === location.origin).length, W.COURSE_TOTAL - rows().filter((x) => W.course(x.id)).length));
+    const open = button(t('+ Course cards'), () => C.picker.open({
+      board: b,
+      on: (key) => rows().some((x) => x.id === key && x.on),
+      room,
+      set: (keys, on) => {
+        if (board !== b) return;
+        if (on) nativeShown = false; // the cards show, not Ultra's list
+        const terms = new Map(C.list().map((c) => [c.key, c.term]));
+        change({ ops: keys.map((id) => (on ? { s: b, id, set: { on: true, size: 's', term: terms.get(id) || '' } } : { s: b, id, remove: true })) });
+      },
+      back: () => grid?.querySelector('.gz-course-open'),
+    }), { className: 'gz-w-small gz-course-open' });
+    open.setAttribute('aria-haspopup', 'dialog');
+    add.append(open);
+    C.picker.sync();
   };
   const clearCourses = () => {
     document.documentElement?.removeAttribute('data-gz-course-tiles');
@@ -1011,6 +1014,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     floatWatched.clear();
     cancelAnimationFrame(floatFrame);
     globalThis.GZ_DASH_UI?.tabs(null);
+    globalThis.GZ_COURSE_CARDS?.picker.close(false);
     document.documentElement?.removeAttribute('data-gz-todo-tile');
     clearCourses();
     for (const e of [grid, panel, room, bar, all && floats]) e?.remove?.();

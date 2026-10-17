@@ -12,6 +12,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const D = require('../defaults.js');
 const W = require('../lib/widgets.js');
+const K = require('../lib/cards.js');
 const { El } = require('./stand-in-dom.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
@@ -24,8 +25,11 @@ const later = () => { let done; const p = new Promise((res, rej) => { done = { r
 // at: 'courses', 'dash' or 'outline' (a course's page: its top bar); width: the window's (narrow: Ultra puts the To Do
 // column under the courses). store: one shared by two tabs. hold: { file: promise } for need(). header: false for a
 // Dashboard page without the header's anchors. landed: the worker's tabs that landed; tab: this one's id.
+// courses: the student's courses ({ id, name, code, term, slot }), with the board's course cards, their dialog and the card
+// painter and editor loaded for real (features/coursecards.js, features/cards.js, lib/cards.js), their styles saved by
+// the worker's lib/cards.js ultraChange into `sync` and this computer's `local`.
 // Elements are compared with ===: an assertion message would print the whole stand-in document.
-const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, sync = {}, nav = 'navigate', path: where, hold = {}, header = true, landed = new Set(), tab = 1, acted = 0, history = 1, enhance = {}, holdReplies = false } = {}) => {
+const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, sync = {}, nav = 'navigate', path: where, hold = {}, header = true, landed = new Set(), tab = 1, acted = 0, history = 1, enhance = {}, holdReplies = false, courses = null } = {}) => {
   const doc = { activeElement: null, root: null };
   const make = (t) => new El(t, doc);
   doc.root = make('html');
@@ -64,6 +68,8 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
     if (e.className === 'gz-dash-grid') return { left: left0 + 24, top: 140, width: W0 - 48, height: 400 };
     if (e.className === 'gz-w') return { left: px(e.style.left) || 0, top: px(e.style.top) || 0, width: W.WIDTH[e.dataset.size] || 288, height: 200 };
     if (/route-view-container/.test(e.className)) return { left: left0, top: 0, width: W0, height: 1600 };
+    // The courses' own column, where a board's course cards go first (left of the To Do column; narrow, the page's width).
+    if (e.className === 'base-courses') return narrow ? { left: 0, top: 120, width: W0, height: 600 } : { left: left0, top: 120, width: W0 - 320, height: 600 };
     return null;
   };
   doc.fire = (target, type, { trusted = true } = {}) => { for (let p = target; p; p = p.parentNode) for (const l of p.listeners.filter((x) => x.type === type)) l.f({ type, target, isTrusted: trusted, preventDefault() {}, stopPropagation() {} }); };
@@ -71,7 +77,7 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
     querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), addEventListener() {}, removeEventListener() {}, visibilityState: 'visible',
     documentElement: doc.root, referrer: '' });
   const wrote = [], sent = [], loads = [], replies = [], listeners = [];
-  const changed = (ch) => { for (const f of [...listeners]) f(ch, 'local'); };
+  const changed = (ch, a = 'local') => { for (const f of [...listeners]) f(ch, a); };
   const settings = D.GZ_SANITIZE({ ...sync, enhance: { notes: true, widgets: true, ...enhance } });
   const store = shared || { ...structuredClone(local) };
   // The worker's side, as lib/background.js runs it: the layout's changes on what is stored (lib/widgets.js change).
@@ -83,8 +89,16 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
   if (!queues.has(store)) queues.set(store, { p: Promise.resolve() });
   const queue = queues.get(store);
   const worker = (m) => (queue.p = queue.p.then(() => run(m)));
+  // The cards' items, as chrome.storage has them: a write is heard by every listener, as storage.onChanged does.
+  const items = (s, a) => ({
+    get: async (keys) => structuredClone(keys === null ? s : Object.fromEntries([keys].flat().filter((k) => k in s).map((k) => [k, s[k]]))),
+    set: async (v) => { Object.assign(s, structuredClone(v)); changed(Object.fromEntries(Object.keys(v).map((k) => [k, { newValue: v[k] }])), a); return true; },
+    remove: async (keys) => { for (const k of [keys].flat()) delete s[k]; return true; },
+  });
+  const cardArea = { sync: items(sync, 'sync'), local: items(store, 'local') };
   const run = async (m) => {
     if (m.type === 'glaze:widgetLayout') return W.change(m, area);
+    if (m.type === 'glaze:cards') return K.ultraChange(m, cardArea);
     if (m.type === 'glaze:landed') { if (landed.has(tab)) return { first: false }; landed.add(tab); return { first: true }; }
     return { ok: true, timer: W.IDLE };
   };
@@ -99,7 +113,16 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W,
     GZ_CTX: {
       site: 'ultra', t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), locale: () => 'en', settings: () => settings, acted: () => (typeof acted === 'function' ? acted() : acted),
-      need: async (f) => { loads.push(f); if (hold[f]) await hold[f]; if (f === 'features/dashboard.js' && !c.GZ_DASH_UI) vm.runInContext(read(f), c); },
+      need: async (f) => {
+        loads.push(f); if (hold[f]) await hold[f];
+        const name = { 'features/dashboard.js': 'GZ_DASH_UI', ...(courses && { 'features/coursecards.js': 'GZ_COURSE_CARDS', 'features/cards.js': 'GZ_CARD_UI', 'lib/cards.js': 'GZ_CARDS' }) }[f];
+        if (name && !c[name]) vm.runInContext(read(f), c);
+      },
+      ...(courses && {
+        on: () => true, nickOf: () => '', courseColor: () => null, courseColors: () => ({}),
+        courseList: () => Object.fromEntries(courses.map((x) => [x.id, { name: x.name, code: x.code, site: 'https://school.blackboard.test', slot: String(x.slot) }])),
+        canvasPeek: () => ({ me: null, books: new Map(), courses: Promise.resolve(courses.map((x) => ({ courseId: x.id, courseCardColorIndex: x.slot - 1, course: { name: x.name, courseId: x.code, term: { name: x.term } } }))) }),
+      }),
     },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '2.3.0' }), sendMessage: (m, cb) => { sent.push(m); worker(m).then((r) => { if (holdReplies && m.type === 'glaze:widgetLayout') replies.push(() => cb?.(r)); else cb?.(r); }); } },
@@ -112,15 +135,28 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
   };
   c.globalThis = c;
   c.window = c;
+  if (courses) {
+    // What the card painter and its editor use of the page; Glaze is on (data-gz-motion), so cards wear their styles.
+    Object.assign(c, { top: c, GZ_COURSE_VARS: D.GZ_COURSE_VARS, MutationObserver: class { observe() {} }, TextEncoder, crypto, structuredClone,
+      Option: class extends El { constructor(text, value) { super('option', doc); this.textContent = text; this.value = value; } } });
+    c.GZ_I18N.num = (n) => String(n);
+    doc.createElementNS = (ns, t) => make(t);
+    // A picture: a file the browser can't read is refused; a readable one is drawn on a canvas and kept as a data URL.
+    c.createImageBitmap = async (f) => { if (!f.picture) throw new Error('not a picture'); return { width: 3000, height: 1500, close() {} }; };
+    doc.createElement = (t) => Object.assign(make(t), t === 'canvas' && { getContext: () => ({ drawImage() {} }), toDataURL: (type) => `data:${type};base64,${'A'.repeat(800)}` });
+    doc.root.setAttribute('data-gz-motion', 'calm');
+  }
   vm.createContext(c);
+  if (courses) vm.runInContext(read('lib/color.js'), c);
   const ui = vm.runInContext(read('features/widgets.js'), c);
   const tile = (id) => doc.querySelector(`section[data-tile="${id}"]`);
   const ev = (type, x = {}) => ({ type, target: null, button: 0, pointerId: 1, clientX: 0, clientY: 0, altKey: false, shiftKey: false, preventDefault() {}, stopPropagation() {}, ...x });
   const tool = (id, name) => tile(id).querySelector('.gz-w-tools').children.find((x) => x.getAttribute('aria-label') === name);
-  return { ui, doc, c, store, wrote, sent, loads, clicks, ip, h1, tile, tool, ev, settings, replies, changed, room: () => doc.getElementById('gz-room'), grid: () => doc.querySelector('#gz-dash .gz-dash-grid'), floats: () => doc.getElementById('gz-float') };
+  return { ui, doc, c, store, syncStore: sync, wrote, sent, loads, clicks, ip, h1, tile, tool, ev, settings, replies, changed, room: () => doc.getElementById('gz-room'), grid: () => doc.querySelector('#gz-dash .gz-dash-grid'), floats: () => doc.getElementById('gz-float') };
 };
 const px = (v) => Number(String(v ?? '').replace('px', ''));
 const lay = (p) => W.layout(p.store.widgetLayout);
+const sync = (p) => p.syncStore;
 const on = (p, b, id) => lay(p).boards[b].find((x) => x.id === id);
 
 test('Courses page: the To Do is a widget, on from the start (an older layout too), and Ultra\'s own steps aside', async () => {
@@ -926,4 +962,214 @@ test('Ultra edit controls stay below the room on both boards and keep the toolba
     p.doc.fire(edit, 'click');
     assert.equal(edit.style.minWidth, '104.5px');
   }
+});
+
+
+// ---- the boards' Course cards dialog (features/coursecards.js, opened from widgets.js's Add row) -----------------
+const COURSES = [
+  { id: '_101_1', name: 'Biology', code: 'BIO-101', term: 'Fall 2026', slot: 3 },
+  { id: '_102_1', name: 'Chemistry', code: 'CHEM-110', term: 'Fall 2026', slot: 5 },
+  { id: '_103_1', name: 'History', code: 'HIST-200', term: 'Spring 2027', slot: 8 },
+];
+const ckey = (id) => `course:https://school.blackboard.test/${id}`;
+const ukey = (id) => `ultra:https://school.blackboard.test/${id}`;
+const cardsPage = (o = {}) => page({ courses: COURSES, enhance: { coursemenu: true }, ...o });
+const openCards = async (p) => {
+  p.ui.sync(true);
+  await settle();
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  await settle();
+  const btn = p.doc.querySelector('.gz-dash-add .gz-course-open');
+  p.doc.fire(btn, 'click');
+  await settle();
+  return { btn, dlg: p.doc.getElementById('gz-ccm') };
+};
+const itemOf = (dlg, id) => dlg.querySelectorAll('li.gz-ccm-item').find((li) => li.querySelector('article').dataset.courseId === id);
+const tick = (box, on) => { box.checked = on; box.dispatchEvent({ type: 'change', target: box }); };
+const layoutSends = (p) => JSON.parse(JSON.stringify(p.sent.filter((m) => m.type === 'glaze:widgetLayout'))); // out of the page's realm
+const buttonIn = (el, text) => el.querySelectorAll('button').find((x) => x.textContent === text);
+// The stand-in keeps an input's type as a property (as make() sets it), not an attribute.
+const input = (el, type, v) => el.querySelectorAll('input').filter((x) => x.type === type).find((x) => v === undefined || x.value === v) || null;
+
+test('Course cards: one button opens a labelled dialog of every course by term, as small cards; Esc, × and Done close it and the focus goes back', async () => {
+  const p = cardsPage();
+  const { btn, dlg } = await openCards(p);
+  assert.ok(!p.doc.querySelector('.gz-course-pick') && !p.doc.querySelector('.gz-course-add'), 'the old select and its button are gone');
+  assert.equal(btn.textContent, '+ Course cards');
+  assert.equal(btn.getAttribute('aria-haspopup'), 'dialog');
+  assert.ok(dlg?.open, 'a modal dialog');
+  assert.equal(p.doc.getElementById(dlg.getAttribute('aria-labelledby')).textContent, 'Course cards');
+  assert.ok(p.doc.activeElement === input(dlg, 'search'), 'the focus starts in it, on the search');
+  assert.equal(input(dlg, 'search').getAttribute('aria-label'), 'Find a course');
+  const terms = dlg.querySelectorAll('section.gz-ccm-term');
+  assert.deepEqual(terms.map((x) => x.querySelector('h3').textContent), ['Fall 2026', 'Spring 2027']);
+  assert.deepEqual(terms.map((x) => x.querySelectorAll('article').map((a) => a.querySelector('.course-title').textContent)), [['Biology', 'Chemistry'], ['History']]);
+  assert.equal(terms[0].getAttribute('role'), 'group');
+  const bio = itemOf(dlg, '_101_1');
+  const card = bio.querySelector('article');
+  assert.ok(card.hasAttribute('data-gz-card-preview') && /course-color-3/.test(card.className), 'a preview in its course color');
+  assert.equal(card.querySelector('.course-id').textContent, 'BIO-101');
+  assert.ok(bio.querySelector('label').contains(input(bio, 'checkbox')), 'the card is the label of its tick');
+  assert.equal(dlg.querySelector('.gz-ccm-count').getAttribute('role'), 'status');
+  assert.equal(dlg.querySelector('.gz-ccm-count').textContent, 'On this board: 0. Room for 48 more.');
+  assert.match(buttonIn(dlg.querySelector('.gz-ccm-tools'), 'Select all').className, /gz-w-main/, 'the first time on the Courses page, all of them is one click');
+  p.doc.fire(dlg.querySelector('header button'), 'click');
+  assert.equal(p.doc.getElementById('gz-ccm'), null, '× closes it');
+  assert.ok(p.doc.activeElement === p.doc.querySelector('.gz-course-open'), 'and the focus is back on its button');
+  p.doc.fire(p.doc.querySelector('.gz-course-open'), 'click');
+  p.doc.getElementById('gz-ccm').close(); // Esc: the dialog's own cancel closes it
+  assert.equal(p.doc.getElementById('gz-ccm'), null, 'Esc closes it');
+  p.doc.fire(p.doc.querySelector('.gz-course-open'), 'click');
+  p.doc.fire(buttonIn(p.doc.querySelector('#gz-ccm footer'), 'Done'), 'click');
+  assert.equal(p.doc.getElementById('gz-ccm'), null, 'Done closes it');
+  p.doc.fire(p.doc.querySelector('.gz-course-open'), 'click');
+  p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
+  assert.equal(p.doc.getElementById('gz-ccm'), null, 'and it goes with Edit layout');
+});
+
+test('Course cards: a tick, Select all and Select none are one layout change each, on this board only, within its room; search filters', async () => {
+  const p = cardsPage();
+  const { dlg } = await openCards(p);
+  const before = layoutSends(p).length;
+  tick(input(itemOf(dlg, '_103_1'), 'checkbox'), true);
+  await settle();
+  let sent = layoutSends(p).slice(before);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].ops, [{ s: 'courses', id: ckey('_103_1'), set: { on: true, size: 's', term: 'Spring 2027' } }], 'placed by the board (no spot)');
+  assert.ok(p.tile(ckey('_103_1')), 'on the board');
+  assert.equal(itemOf(dlg, '_103_1').getAttribute('data-on'), '');
+  assert.equal(dlg.querySelector('.gz-ccm-count').textContent, 'On this board: 1. Room for 47 more.');
+  assert.doesNotMatch(buttonIn(dlg.querySelector('.gz-ccm-tools'), 'Select all').className, /gz-w-main/);
+  tick(input(itemOf(dlg, '_103_1'), 'checkbox'), false);
+  await settle();
+  assert.deepEqual(layoutSends(p).at(-1).ops, [{ s: 'courses', id: ckey('_103_1'), remove: true }]);
+  assert.equal(p.tile(ckey('_103_1')), null);
+  // Search: by name, code or term; a term with none left hides; Select all takes only what shows.
+  const q = input(dlg, 'search');
+  q.value = 'chem';
+  q.dispatchEvent({ type: 'input' });
+  assert.deepEqual(dlg.querySelectorAll('li.gz-ccm-item').filter((li) => !li.hidden).map((li) => li.querySelector('article').dataset.courseId), ['_102_1']);
+  assert.equal(dlg.querySelectorAll('section.gz-ccm-term')[1].hidden, true);
+  q.value = 'fall';
+  q.dispatchEvent({ type: 'input' });
+  let n = layoutSends(p).length;
+  p.doc.fire(buttonIn(dlg.querySelector('.gz-ccm-tools'), 'Select all'), 'click');
+  await settle();
+  assert.equal(layoutSends(p).length, n + 1, 'one change');
+  assert.deepEqual(layoutSends(p).at(-1).ops.map((x) => x.id), [ckey('_101_1'), ckey('_102_1')]);
+  q.value = 'zzz';
+  q.dispatchEvent({ type: 'input' });
+  assert.equal(dlg.querySelector('.gz-ccm-empty').hidden, false);
+  assert.equal(dlg.querySelector('.gz-ccm-empty').textContent, 'No courses match.');
+  q.value = '';
+  q.dispatchEvent({ type: 'input' });
+  // Per term: Select none for Fall 2026, in one change.
+  n = layoutSends(p).length;
+  const fall = dlg.querySelectorAll('section.gz-ccm-term')[0];
+  const none = fall.querySelector('.gz-ccm-termhead').querySelectorAll('button').find((x) => x.getAttribute('aria-label') === 'Select none in Fall 2026');
+  p.doc.fire(none, 'click');
+  await settle();
+  assert.equal(layoutSends(p).length, n + 1);
+  assert.deepEqual(layoutSends(p).at(-1).ops, [{ s: 'courses', id: ckey('_101_1'), remove: true }, { s: 'courses', id: ckey('_102_1'), remove: true }]);
+  assert.deepEqual(lay(p).boards.dash.filter((x) => W.course(x.id)), [], "the Dashboard's board untouched");
+  // A board with room for one more: Select all adds one, the rest can't be ticked, and it says so.
+  const full = W.layout({ todo: true, boards: { courses: Array.from({ length: W.COURSE_MAX - 1 }, (_, i) => ({ id: ckey(`_${500 + i}_1`), on: true })) } });
+  const r = cardsPage({ local: { widgetLayout: full } });
+  const { dlg: d2 } = await openCards(r);
+  assert.equal(d2.querySelector('.gz-ccm-count').textContent, `On this board: 0. Room for 1 more.`);
+  r.doc.fire(buttonIn(d2.querySelector('.gz-ccm-tools'), 'Select all'), 'click');
+  await settle();
+  assert.equal(layoutSends(r).at(-1).ops.length, 1, 'only what fits');
+  assert.equal(d2.querySelector('.gz-ccm-count').textContent, 'On this board: 1. Room for 0 more.');
+  assert.deepEqual(['_102_1', '_103_1'].map((id) => input(itemOf(d2, id), 'checkbox').disabled), [true, true]);
+  assert.equal(input(itemOf(d2, '_102_1'), 'checkbox').title, `Up to ${W.COURSE_MAX} course cards per board.`);
+  assert.equal(buttonIn(d2.querySelector('.gz-ccm-tools'), 'Select all').disabled, true);
+});
+
+test('Course cards on the Dashboard: its own board, the Courses page left as it is', async () => {
+  const p = cardsPage({ at: 'dash' });
+  const { dlg } = await openCards(p);
+  assert.doesNotMatch(buttonIn(dlg.querySelector('.gz-ccm-tools'), 'Select all').className, /gz-w-main/);
+  tick(input(itemOf(dlg, '_101_1'), 'checkbox'), true);
+  await settle();
+  assert.deepEqual(layoutSends(p).at(-1).ops, [{ s: 'dash', id: ckey('_101_1'), set: { on: true, size: 's', term: 'Fall 2026' } }]);
+  assert.ok(p.tile(ckey('_101_1')));
+  assert.deepEqual(lay(p).boards.courses.filter((x) => W.course(x.id)), []);
+});
+
+test("Course cards: a course's look changes from the dialog, saved as the card editor saves it; pictures are checked; the full editor opens over it", async () => {
+  const p = cardsPage();
+  const { dlg } = await openCards(p);
+  const bio = itemOf(dlg, '_101_1');
+  const style = bio.querySelector('.gz-ccm-style');
+  assert.equal(style.getAttribute('aria-label'), 'Style of Biology');
+  assert.equal(style.getAttribute('aria-expanded'), 'false');
+  p.doc.fire(style, 'click');
+  await settle();
+  assert.equal(style.getAttribute('aria-expanded'), 'true');
+  const look = p.doc.getElementById(style.getAttribute('aria-controls'));
+  assert.ok(look && !look.hidden && bio.contains(look), 'its looks, under it');
+  const radio = (v) => input(look, 'radio', v);
+  assert.equal(radio('').checked, true, 'the course color, to begin with');
+  assert.ok(p.doc.activeElement === radio(''), 'the focus on the chosen kind');
+  assert.equal(look.querySelector('[role="radiogroup"]').getAttribute('aria-label'), 'Card for Biology');
+  const pick = async (v) => { radio(v).checked = true; radio(v).dispatchEvent({ type: 'change' }); await settle(); };
+  await pick('gradient');
+  assert.deepEqual(Object.keys(sync(p)), ['ucards'], 'kept in Ultra\'s own item');
+  assert.equal(sync(p).ucards[ukey('_101_1')].k, 'gradient');
+  assert.equal(bio.querySelector('article').dataset.gzCard, 'gradient', 'the preview wears it');
+  assert.equal(input(look, 'color').parentNode.hidden, false, 'a color to change it by');
+  const color = input(look, 'color');
+  color.value = '#123456';
+  color.dispatchEvent({ type: 'change' });
+  await settle();
+  assert.deepEqual([sync(p).ucards[ukey('_101_1')].k, sync(p).ucards[ukey('_101_1')].c], ['gradient', '#123456']);
+  // A picture: a link must be https; a file must be a picture; one that is goes on this computer, scaled down.
+  await pick('image');
+  const url = input(look, 'url');
+  assert.equal(url.parentNode.parentNode.hidden, false);
+  url.value = 'http://example.test/a.png';
+  url.dispatchEvent({ type: 'change' });
+  await settle();
+  const note = look.querySelector('.gz-ccm-note');
+  assert.deepEqual([note.hidden, note.textContent], [false, 'Use an https:// link to an image.']);
+  assert.equal(sync(p).ucards[ukey('_101_1')].k, 'gradient', 'nothing saved');
+  url.value = 'https://example.test/a.png';
+  url.dispatchEvent({ type: 'change' });
+  await settle();
+  assert.equal(sync(p).ucards[ukey('_101_1')].u, 'https://example.test/a.png');
+  assert.equal(note.hidden, true);
+  const file = input(look, 'file');
+  file.files = [{ name: 'notes.txt' }];
+  file.dispatchEvent({ type: 'change' });
+  await settle();
+  assert.equal(note.textContent, "That file isn't a picture Glaze can read.");
+  file.files = [{ name: 'lab.png', picture: true }];
+  file.dispatchEvent({ type: 'change' });
+  await settle();
+  const s = sync(p).ucards[ukey('_101_1')];
+  assert.ok(s.k === 'image' && /^[a-z0-9]{12}$/.test(s.i) && !s.u, 'its own picture');
+  assert.match(p.store[`ultraCardImg:${s.i}`], /^data:image\/webp;base64,/, 'kept on this computer');
+  assert.equal(bio.querySelector('article').dataset.gzCard, 'image');
+  // Too big to keep: said, and the picture before stays.
+  p.doc.createElement = ((make) => (t) => Object.assign(make(t), t === 'canvas' && { getContext: () => ({ drawImage() {} }), toDataURL: () => `data:image/webp;base64,${'A'.repeat(K.IMG_MAX)}` }))(p.doc.createElement);
+  file.files = [{ name: 'huge.png', picture: true }];
+  file.dispatchEvent({ type: 'change' });
+  await settle();
+  assert.equal(note.textContent, "That picture is too big to keep. Try a smaller one, or remove another card's picture.");
+  assert.equal(sync(p).ucards[ukey('_101_1')].i, s.i);
+  await pick('');
+  assert.equal(sync(p).ucards?.[ukey('_101_1')], undefined, 'back to the course color');
+  assert.equal(p.store[`ultraCardImg:${s.i}`], undefined, 'and its picture is let go');
+  // Everything else: the card editor, over the dialog; closing it gives the focus back to Style.
+  p.doc.fire(buttonIn(look, 'Card style and bookmarks'), 'click');
+  await settle();
+  const ce = p.doc.getElementById('gz-ce');
+  assert.ok(ce?.open && p.doc.getElementById('gz-ccm').open, 'both dialogs open, the editor on top');
+  assert.equal(ce.querySelector('h2').textContent, 'Card for Biology');
+  p.doc.fire(ce.querySelector('.gz-ce-done'), 'click');
+  await settle();
+  assert.equal(p.doc.getElementById('gz-ce'), null);
+  assert.ok(p.doc.activeElement === style, 'back on the course\'s Style');
+  assert.ok(p.doc.getElementById('gz-ccm').open);
 });

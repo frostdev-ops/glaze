@@ -20,9 +20,11 @@ const matches = (el, sel) => sel.split(',').some((alt) => {
   for (let p = el.parentNode; i >= 0 && p; p = p.parentNode) if (one(p, parts[i])) i--;
   return i < 0;
 });
+// An element's style: its properties as set (left, top…), and custom properties through setProperty.
+const style = () => ({ setProperty(k, v) { this[k] = String(v); }, getPropertyValue(k) { return this[k] ?? ''; }, removeProperty(k) { delete this[k]; } });
 const camel = (k) => k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 class El {
-  constructor(tag, doc) { Object.assign(this, { tagName: tag.toUpperCase(), doc, children: [], parentNode: null, attrs: {}, dataset: {}, listeners: [], className: '', id: '', hidden: false, _html: '', style: { setProperty() {} } }); }
+  constructor(tag, doc) { Object.assign(this, { tagName: tag.toUpperCase(), doc, children: [], parentNode: null, attrs: {}, dataset: {}, listeners: [], className: '', id: '', hidden: false, _html: '', style: style() }); }
   get isConnected() { let p = this; while (p.parentNode) p = p.parentNode; return p === this.doc.root; }
   kids(list) { return list.filter((k) => k != null && k !== false).map((k) => (k instanceof El ? k : { nodeType: 3, textContent: String(k) })); }
   adopt(k) { if (k instanceof El && k.parentNode) k.parentNode.children.splice(k.parentNode.children.indexOf(k), 1); k.parentNode = this; return k; }
@@ -43,7 +45,7 @@ class El {
   setAttribute(k, v) { if (k === 'id') this.id = String(v); else if (k === 'class') this.className = String(v); else if (k.startsWith('data-')) this.dataset[camel(k)] = String(v); else this.attrs[k] = String(v); }
   getAttribute(k) { if (k === 'id') return this.id || null; if (k === 'class') return this.className || null; if (k === 'hidden') return this.hidden ? '' : null; if (k.startsWith('data-')) return this.dataset[camel(k)] ?? null; return this.attrs[k] ?? null; }
   hasAttribute(k) { return this.getAttribute(k) != null; }
-  removeAttribute(k) { if (k === 'style') this.style = { setProperty() {} }; if (k.startsWith('data-')) delete this.dataset[camel(k)]; else delete this.attrs[k]; }
+  removeAttribute(k) { if (k === 'style') this.style = style(); if (k.startsWith('data-')) delete this.dataset[camel(k)]; else delete this.attrs[k]; }
   get textContent() { return this._html ? this._html.replace(/<[^>]*>/g, '') : this.children.map((c) => c.textContent).join(''); }
   set textContent(v) { this.replaceChildren(...(String(v) ? [String(v)] : [])); }
   get innerHTML() { return this._html || this.children.map((c) => (c instanceof El ? `<${c.tagName.toLowerCase()}>${c.innerHTML}</${c.tagName.toLowerCase()}>` : c.textContent)).join(''); }
