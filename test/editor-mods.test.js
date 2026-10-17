@@ -239,3 +239,33 @@ test('a replacement change during a draw is rendered after the pending read', as
   await settle();
   assert.equal(p.find('a:replace:bg').checked, true, 'the storage event must not be lost while drawing');
 });
+
+
+test('the install prompt discloses remote backgrounds without claiming there is no network', async () => {
+  const source = fs.readFileSync(require.resolve('../lib/editor-mods.js'), 'utf8');
+  const start = source.indexOf('    const prompt = async ');
+  const end = source.indexOf('    // A bundle', start);
+  const ids = new Map();
+  const $ = (id) => {
+    if (!ids.has(id)) ids.set(id, { textContent: '', replaceChildren(...children) { this.children = children; }, focus() {} });
+    return ids.get(id);
+  };
+  const ctx = vm.createContext({ $, t, and, URL, lines: E.lines, plain: E.plain, warnings: E.warnings, fingerprint: E.fingerprint, sourceText: E.sourceText,
+    channelNotice: E.channelNotice, runs: async () => true, dialog: { open: false, showModal() { this.open = true; } },
+    h: (tag, props, ...children) => ({ tag, ...props, children }), pending: null });
+  vm.runInContext(`${source.match(/  const remoteMedia = .*;/)?.[0] || ''}\n${source.slice(start, end)}\nthis.prompt = prompt;`, ctx);
+  const media = (src) => view({ parts: { bg: { media: { type: 'video', src } } } });
+  for (const remote of [true, false]) {
+    const prompt = media(remote ? 'https://media.example/loop.webm' : `file:${'a'.repeat(43)}`);
+    await ctx.prompt({ prompt, signed: true }, new Uint8Array(), 'file', null, []);
+    const note = $('mod-prompt-perms-note').textContent;
+    const ws = $('mod-prompt-warn').children;
+    if (remote) {
+      assert.doesNotMatch(note, /no network/);
+      assert.ok(ws.some((w) => /media.example/.test(w.textContent) && /address/.test(w.textContent)), 'the host sees the address and use');
+    } else {
+      assert.match(note, /no network/);
+      assert.ok(!ws.some((w) => /media.example/.test(w.textContent)));
+    }
+  }
+});
