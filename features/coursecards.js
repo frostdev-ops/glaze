@@ -316,7 +316,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     const p = pick;
     if (!p) return;
     const pending = UI()?.flush() || [];
-    if (pending.length) { Promise.all(pending).then((rs) => { if (pick === p && rs.every((r) => r.ok)) closePicker(refocus); }); return; }
+    if (pending.length && refocus) { Promise.all(pending).then((rs) => { if (pick === p && rs.every((r) => r.ok)) closePicker(refocus); }); return; }
     for (const it of p.items.values()) UI()?.cancel(cardKey(it.c));
     pick = null;
     UI()?.closeFor(p.dlg);
@@ -346,6 +346,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       make('footer', { className: 'gz-w-row' }, make('span', { className: 'gz-w-faint', textContent: ctx.t('Up to {n} course cards per board.', { n: W.COURSE_MAX }) }),
         b(ctx.t('Done'), () => closePicker(), { className: 'gz-w-btn gz-w-main' })));
     // Esc closes it (the dialog's own cancel), as do a press on the backdrop, × and Done; the focus goes back.
+    dlg.addEventListener('cancel', (e) => { e.preventDefault(); closePicker(); });
     dlg.addEventListener('close', () => { if (pick?.dlg === dlg) closePicker(); });
     dlg.addEventListener('click', (e) => {
       if (e.target !== dlg) return;

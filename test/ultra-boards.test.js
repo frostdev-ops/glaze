@@ -1387,3 +1387,23 @@ test('Course cards: the full editor waits for a quick style write already in fli
   pending.shift()(); await saving; await opening;
   assert.equal(input(p.doc.getElementById('gz-ce'), 'color').value, '#123456');
 });
+
+test('Course cards: Esc flushes pending color before the native dialog closes, while leaving a board detaches it immediately', async () => {
+  for (const leave of [true, false]) {
+    const p = cardsPage(); const { dlg } = await openCards(p);
+    const bio = itemOf(dlg, '_101_1'); p.doc.fire(bio.querySelector('.gz-ccm-style'), 'click'); await settle();
+    tick(input(bio, 'radio', 'solid'), true); await settle();
+    const color = input(bio, 'color'); color.value = '#123456'; color.dispatchEvent({ type: 'input' }); await settle();
+    if (leave) {
+      p.ui.sync(false);
+      assert.equal(dlg.isConnected, false, 'route changes cannot leave an inert modal over the next page');
+    } else {
+      let prevented = false;
+      dlg.dispatchEvent({ type: 'cancel', preventDefault: () => { prevented = true; } });
+      assert.equal(prevented, true, 'the dialog waits for the same flush as Done');
+    }
+    await settle();
+    assert.ok(!p.doc.getElementById('gz-ccm'));
+    assert.equal(sync(p).ucards[ukey('_101_1')].c, '#123456');
+  }
+});
