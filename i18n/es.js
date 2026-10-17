@@ -2523,6 +2523,8 @@
   "That mod's mod.json has a value Glaze can't use ({field}).": "El mod.json de ese mod tiene un valor que Glaze no puede usar ({field}).",
   "That mod has a file Glaze won't open: {path}.": "Ese mod tiene un archivo que Glaze no abrirá: {path}.",
   "That mod has two files named {path}.": "Ese mod tiene dos archivos llamados {path}.",
+  "Its background is a video or animation file that comes with it, checked by Glaze.": "Su fondo es un archivo de vídeo o animación que viene con él, revisado por Glaze.",
+  "That mod's background file {path} is missing, or isn't the video, animated picture or Lottie file its mod.json says.": "Falta el archivo de fondo {path} de ese mod, o no es el vídeo, la imagen animada o el archivo Lottie que indica su mod.json.",
   "That mod has a file of a kind mods can't carry: {path}.": "Ese mod tiene un tipo de archivo que los mods no pueden llevar: {path}.",
   "That mod has no mod.json.": "Ese mod no tiene mod.json.",
   "Update your browser to install Glaze mods. This browser does not support WebCrypto Ed25519.": "Actualiza tu navegador para instalar mods de Glaze. Este navegador no admite WebCrypto Ed25519.",

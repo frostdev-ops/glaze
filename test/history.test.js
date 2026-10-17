@@ -50,7 +50,7 @@ test('favorites are one per code, newest first, capped; bad stored lists are dro
 });
 
 // The background, run as the browser would: the gallery hand-off and the history it records.
-const worker = () => {
+const worker = ({ fetch } = {}) => {
   const on = { message: [], changed: [] };
   const local = {};
   const sync = {};
@@ -64,7 +64,7 @@ const worker = () => {
     set: async (v) => { Object.assign(store, structuredClone(v)); },
   });
   const context = vm.createContext({
-    URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date,
+    URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
     setTimeout: (f) => timers.push(f), clearTimeout: () => timers.splice(0),
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), context); },
     chrome: {
@@ -80,7 +80,9 @@ const worker = () => {
   const send = (msg, sender) => on.message.forEach((f) => f(msg, sender));
   const change = (changes) => on.changed.forEach((f) => f(changes, 'sync'));
   const tick = () => new Promise(setImmediate);
-  return { send, change, tick, timers, local, sync, opened, hold };
+  // A glaze2 code is read (for a background file to fetch) before it is offered.
+  const settle = async () => { for (let i = 0; i < 50; i++) await tick(); };
+  return { send, change, tick, settle, timers, local, sync, opened, hold };
 };
 
 test('the gallery content script runs only on the gallery, and the background takes codes only from there', async () => {
@@ -288,6 +290,43 @@ test('history cleans parts before offering an entry to wear', () => {
 test('gallery Look names and authors lose bidi and control characters before storage', async () => {
   const w = worker();
   w.send({ gallery: { code: 'glaze2:abc', name: 'a\u202eb\u061cc', author: 'x\u0000\u2069y' } }, { url: 'https://frostdev.io/glaze/looks/', frameId: 0 });
-  await w.tick();
+  await w.settle();
   assert.deepEqual(w.local.galleryOffer, { code: 'glaze2:abc', name: 'abc', author: 'xy' });
+});
+
+// A gallery Look whose background is a file: the worker fetches that one file from the gallery and keeps it before the
+// editor opens; anything wrong with it still offers the Look, without the file.
+test('a gallery Look\'s background file is fetched from the gallery and kept by its name before the offer', async () => {
+  const S = require('../lib/share.js'), M = require('../lib/media.js');
+  const bytes = fs.readFileSync(require.resolve('./fixtures/media/spin.json'));
+  const h = await M.sha(M.check(new Uint8Array(bytes), 'bg').bytes);
+  const code = await S.encode(G.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'lottie', src: `file:${h}` } } } });
+  const url = 'https://frostdev.io/glaze/looks/';
+  const asked = [];
+  const serve = (body) => async (u, i) => { asked.push([u, i.credentials, i.redirect, i.referrerPolicy]); return new Response(body); };
+  const w = worker({ fetch: serve(bytes) });
+  w.send({ gallery: { code, name: 'Spin' } }, { url, frameId: 0 });
+  await w.settle();
+  assert.deepEqual(asked, [[`https://frostdev.io/glaze/looks/api/media/${h}`, 'omit', 'error', 'no-referrer']]);
+  assert.equal(w.local[`lookMedia:${h}`]?.t, 'application/json');
+  assert.equal(w.local.galleryOffer?.code, code);
+  // Kept already: nothing is fetched.
+  delete w.local.galleryOffer;
+  w.send({ gallery: { code, name: 'Spin' } }, { url, frameId: 0 });
+  await w.settle();
+  assert.equal(asked.length, 1);
+  assert.equal(w.local.galleryOffer?.code, code);
+  // The wrong file, or no gallery: offered all the same, nothing kept.
+  for (const f of [serve('{"not":"it"}'), serve(fs.readFileSync(require.resolve('./fixtures/media/clip.webm'))), async () => { throw new TypeError('offline'); }]) {
+    const v = worker({ fetch: f });
+    v.send({ gallery: { code, name: 'Spin' } }, { url, frameId: 0 });
+    await v.settle();
+    assert.equal(v.local.galleryOffer?.code, code);
+    assert.equal(Object.keys(v.local).some((k) => k.startsWith('lookMedia:')), false);
+  }
+  // Not from the gallery's pages: nothing is fetched.
+  const x = worker({ fetch: () => assert.fail('fetched') });
+  x.send({ gallery: { code, name: 'Spin' } }, { url: 'https://evil.example/glaze/looks/', frameId: 0 });
+  await x.settle();
+  assert.deepEqual(x.local, {});
 });
