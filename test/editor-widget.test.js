@@ -199,3 +199,26 @@ test('the image picker rejects unreadable or oversized images before replacing t
     assert.equal(said[0][1], true);
   }
 });
+
+
+test('saving a widget never changes a new draft opened while signing', async () => {
+  const vm = require('node:vm'), source = read('lib/editor-widget.js');
+  const code = source.slice(source.indexOf('    const save = async '), source.indexOf("    $('wb-save')"));
+  const initial = state(), current = state({ name: 'New draft', version: '1.0.0' });
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const ctx = vm.createContext({ st: initial, saving: false, pictures: {}, t, manifestOf: WE.manifestOf, one: (s) => s, W: () => W, E: () => E,
+    author: async () => { await held; return {}; }, local: { get: async () => ({}), set: async () => {} },
+    B: () => ({ pack: async (files, m) => ({ id: 'a', manifest: m, prompt: m, version: m.version, bytes: new Uint8Array(), hash: 'h' }),
+      plan: () => ({ action: 'update', newPermissions: [] }) }),
+    bump: WE.bump, send: async (m) => m.op === 'list' ? { mods: [{ id: 'a', version: '1.0.5' }] } : { ok: true, action: 'update' },
+    std: () => '', say() {} });
+  vm.runInContext(`${code}\nthis.save = save;`, ctx);
+  const saving = ctx.save(true);
+  ctx.st = current;
+  release();
+  const got = await saving;
+  assert.ok(got);
+  assert.equal(got.version, '1.0.6');
+  assert.equal(current.version, '1.0.0', 'the new draft keeps its version');
+});
