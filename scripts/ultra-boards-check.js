@@ -4,7 +4,8 @@
 // nowhere. It checks that the Courses page's tiles float where the panel was without covering Ultra's To Do; that
 // they move only in Edit layout, by pointer (snapped, with a guide; Alt: free) and by keys (announced), and are where
 // they were after a reload; that a narrow window stacks them and keeps the layout; the Dashboard's tabs (arrow keys,
-// remembered, headed Dashboard, with Better To Do and no overlap when fresh); a widget floating over every page, once, on
+// remembered, headed Dashboard, with Better To Do and no overlap when fresh); course cards picked, styled and given a
+// picture in the boards' Course cards dialog (B10); a widget floating over every page, once, on
 // a course's page clear of the nav and its top bar, and an old (B5) float carried over; and the opt-in landing (once,
 // never on a reload). Screenshots: both boards and a course page, light and dark, 1280 and 375.
 //   NODE_PATH=/path/to/node_modules node scripts/ultra-boards-check.js [out dir for screenshots]   (needs playwright)
@@ -13,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const zlib = require('zlib');
 const G = require('../defaults.js');
 require('../lib/widgets.js'); // its settings in GZ_SPEC
 
@@ -23,6 +25,13 @@ const O = 'https://bb.school.test';
 const fx = (n) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', `ultra-${n}.json`), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
+// A tiny picture for the Course cards dialog's "Choose a picture": a 4×4 PNG, drawn here (two colors in stripes).
+const png = (() => {
+  const chunk = (type, data) => { const b = Buffer.alloc(8 + data.length + 4); b.writeUInt32BE(data.length); b.write(type, 4); data.copy(b, 8); b.writeUInt32BE(zlib.crc32(b.subarray(4, 8 + data.length)), 8 + data.length); return b; };
+  const head = Buffer.alloc(13); head.writeUInt32BE(4, 0); head.writeUInt32BE(4, 4); head[8] = 8; head[9] = 2; // 8-bit RGB
+  const rows = Buffer.concat(Array.from({ length: 4 }, (_, y) => Buffer.from([0, ...Array.from({ length: 4 }, () => (y % 2 ? [0x22, 0x88, 0x55] : [0xee, 0xaa, 0x22])).flat()])));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+})();
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails++; };
 
 // Ultra's frame: the MUI drawer (200px, B7.md) and the page right of it; under 768px the drawer goes (Ultra's phone layout).
@@ -486,13 +495,51 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await page.waitForSelector('#gz-toolbar .gz-dash-edit');
       ok(!(await layout()).boards.courses.some((x) => x.id.startsWith('course:')), `B10 ${preset} ${width}: opt-in, native list stays`);
       await page.click('#gz-toolbar .gz-dash-edit');
-      await page.waitForSelector('.gz-course-add');
+      await page.waitForSelector('.gz-course-open');
       await stable();
       const count = requests.length;
       const native = await page.locator('article.course-element-card').count();
-      await page.click('.gz-course-add');
+      // The Course cards dialog: modal, labelled, the focus in it; every course, as a small card; all of them one click.
+      await page.click('.gz-course-open');
+      await page.waitForSelector('#gz-ccm[open] .gz-ccm-item');
+      ok(await page.evaluate(() => { const d = document.getElementById('gz-ccm'); return d.matches(':modal') && d.contains(document.activeElement) && document.getElementById(d.getAttribute('aria-labelledby'))?.textContent === 'Course cards'; }), `B10 ${preset} ${width}: the Course cards dialog is modal and labelled, the focus in it`);
+      ok(await page.locator('#gz-ccm .gz-ccm-item article[data-gz-card-preview]').count() === native, `B10 ${preset} ${width}: each course is in it as a small card`);
+      ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.getElementById('gz-ccm').scrollWidth <= document.getElementById('gz-ccm').clientWidth), `B10 ${preset} ${width}: the dialog fits, no sideways scroll`);
+      await page.click('#gz-ccm .gz-ccm-tools button.gz-w-main'); // Select all: highlighted while the board has none
       await page.waitForSelector(`${courseTile} .gz-course-card`);
       await stable();
+      ok(await page.evaluate((n) => document.querySelector('#gz-ccm .gz-ccm-count').textContent === `On this board: ${n}. Room for ${48 - n} more.` && document.querySelectorAll('#gz-ccm .gz-ccm-item[data-on]').length === n, native), `B10 ${preset} ${width}: Select all ticks them all, and the count says so`);
+      await page.mouse.move(0, 0); await shot(`b10-modal-${preset.toLowerCase()}-${width}`);
+      await page.click('#gz-ccm .gz-ccm-item .gz-ccm-style');
+      await page.waitForSelector('#gz-ccm .gz-ccm-look:not([hidden])');
+      await page.mouse.move(0, 0); await shot(`b10-modal-style-${preset.toLowerCase()}-${width}`);
+      if (preset === 'Paper' && width === 1280) {
+        // A look from the dialog: the second course a gradient, then a picture from this computer; both on its board card.
+        const item = page.locator('#gz-ccm .gz-ccm-item').nth(1), id = await item.locator('article').getAttribute('data-course-id');
+        const ukey = `ultra:${O}/${id}`, onBoard = `${courseTile} article.gz-course-card[data-course-id="${id}"]`;
+        await item.locator('.gz-ccm-style').click();
+        await item.locator('.gz-ccm-kinds label', { hasText: 'Gradient' }).click();
+        await page.waitForSelector(`${onBoard}[data-gz-card="gradient"]`);
+        ok(await item.locator('article[data-gz-card="gradient"]').count() === 1, 'B10: a gradient chosen in the dialog shows on its card and its preview');
+        await item.locator('.gz-ccm-kinds label', { hasText: 'Picture' }).click();
+        await item.locator('input[type="file"]').setInputFiles({ name: 'lab.png', mimeType: 'image/png', buffer: png });
+        await page.waitForSelector(`${onBoard}[data-gz-card="image"]`);
+        const kept = await opts.evaluate(async (k) => { const { ucards } = await chrome.storage.sync.get('ucards'); const s = ucards?.[k]; const img = s?.i && (await chrome.storage.local.get(`ultraCardImg:${s.i}`))[`ultraCardImg:${s.i}`]; return { k: s?.k, local: !!s?.i && !s.u, img: /^data:image\/(webp|jpeg);base64,/.test(img || '') }; }, ukey);
+        ok(kept.k === 'image' && kept.local && kept.img, `B10: a picture from this computer is kept on it, as the card's own (${JSON.stringify(kept)})`);
+        ok(await item.locator('article[data-gz-card="image"]').count() === 1 && await page.locator(onBoard).evaluate((e) => /data:image\//.test(getComputedStyle(e).getPropertyValue('--gz-card-img'))), 'B10: the picture shows on the board card and the preview');
+        await page.mouse.move(0, 0); await shot('b10-modal-picture-paper-1280');
+        // The full editor, over the dialog; Esc closes only it, and the focus goes back to the course's Style.
+        await item.locator('button', { hasText: 'Card style and bookmarks' }).click();
+        await page.waitForSelector('#gz-ce[open]');
+        ok(await page.evaluate(() => document.getElementById('gz-ce').matches(':modal') && document.getElementById('gz-ccm').open), 'B10: the card editor opens over the dialog');
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('#gz-ce', { state: 'detached' });
+        ok(await page.evaluate((cid) => document.getElementById('gz-ccm')?.open && document.activeElement === [...document.querySelectorAll('#gz-ccm .gz-ccm-item')].find((li) => li.querySelector('article').dataset.courseId === cid)?.querySelector('.gz-ccm-style'), id), 'B10: Esc closes the editor only, the focus back on Style');
+        await opts.evaluate(() => chrome.storage.sync.remove('ucards'));
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('#gz-ccm', { state: 'detached' });
+      ok(await page.evaluate(() => document.activeElement?.classList.contains('gz-course-open')), `B10 ${preset} ${width}: Esc closes the dialog, the focus back on its button`);
       const nativeColor = await page.locator(`${courseTile} .gz-course-card`).evaluateAll((es) => es.map((e) => ({ id: e.dataset.courseId, classes: e.className, color: getComputedStyle(e.querySelector('.course-banner')).backgroundColor })));
       ok(nativeColor.some((c) => /course-color-3/.test(c.classes)) && new Set(nativeColor.map((c) => c.color)).size > 1, 'B10: native slot colours reach the banner before any custom card style');
       ok(await page.locator(courseTile).count() >= native, `B10 ${preset} ${width}: each loaded course is a tile`);
@@ -540,8 +587,12 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await page.locator(`${courseTile} .course-title`).first().click();
       ok(page.url() === route && await page.evaluate(() => window.__b10SameDocument === true), 'B10: course link opens in-app');
       await page.goto(`${O}/ultra/institution-page`); await page.waitForSelector('#gz-dash .gz-dash-edit');
-      await page.click('#gz-dash .gz-dash-edit'); await page.waitForSelector('.gz-course-pick');
-      await page.click('.gz-course-add'); await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+      await page.click('#gz-dash .gz-dash-edit'); await page.waitForSelector('.gz-course-open');
+      await page.click('.gz-course-open'); await page.waitForSelector('#gz-ccm[open] .gz-ccm-item');
+      ok(await page.locator('#gz-ccm .gz-ccm-tools button.gz-w-main').count() === 0, 'B10: the Dashboard\'s dialog doesn\'t push Select all');
+      await page.locator('#gz-ccm .gz-ccm-item .gz-ccm-pick').first().click();
+      await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+      await page.keyboard.press('Escape'); await page.waitForSelector('#gz-ccm', { state: 'detached' });
       ok(await page.locator(courseTile).count() === 1, 'B10: Dashboard adds one chosen course');
       ok((await layout()).boards.courses.filter((x) => x.id.startsWith('course:')).length > 1, 'B10: Dashboard keeps the Courses layout');
       await page.mouse.move(0, 0); await shot(`b10-dash-${preset.toLowerCase()}-${width}`);
@@ -579,9 +630,11 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         return node;
       }));
     });
-    await page.click('#gz-toolbar .gz-dash-edit'); await page.waitForSelector('.gz-course-add');
+    await page.click('#gz-toolbar .gz-dash-edit'); await page.waitForSelector('.gz-course-open');
     await stable(); const stressRequests = requests.length, started = Date.now();
-    await page.click('.gz-course-add'); await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+    await page.click('.gz-course-open'); await page.waitForSelector('#gz-ccm[open] .gz-ccm-item');
+    await page.click('#gz-ccm .gz-ccm-tools button.gz-w-main');
+    await page.waitForSelector(`${courseTile} .gz-course-card`); await page.keyboard.press('Escape'); await stable();
     const stressMs = Date.now() - started;
     ok(await page.locator(courseTile).count() === 48 && (await layout()).boards.courses.filter((x) => x.id.startsWith('course:')).length === 48, `B10: 48-card board mounts and persists (${stressMs} ms including geometry settling)`);
     const writes = await page.evaluate(async () => {
