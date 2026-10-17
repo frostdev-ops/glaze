@@ -12,4 +12,6 @@ test('public privacy descriptions disclose user-installed mod code and granted d
     assert.match(text, /frame UI/i, file);
     assert.doesNotMatch(text, /None\. All executable code ships in the package/, file);
   }
+  const privacy = fs.readFileSync(path.join(__dirname, '../PRIVACY.md'), 'utf8');
+  assert.match(privacy, /Per-mod storage and its private-data classification remain/i);
 });

@@ -15,8 +15,8 @@ information, including your IP address. Information rendered on a school page is
 
 Installed bundles, grants, settings, per-mod storage, author trust pins and runtime stop status stay in device-local
 extension storage. The optional mod-development tools also keep your author signing key there; protect exported
-key backups. Removing a mod removes its data and settings, while its author/version trust pin remains until you
-explicitly clear it. Channel traffic and the optional signed blocklist are described below. Glaze adds no analytics
+key backups. Removing a mod removes its installed bundle and editor settings. Per-mod storage and its private-data classification remain
+on this device for a reinstall; its author/version trust pin remains until you explicitly clear it. Channel traffic and the optional signed blocklist are described below. Glaze adds no analytics
 or default notifications for mods.
 
 ## 3.0.1 surface settings and local pets
