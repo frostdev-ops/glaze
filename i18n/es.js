@@ -2561,6 +2561,7 @@
   "Add to my pets": "Añadir a mis mascotas",
   "Your pet library is full. Remove a pet first.": "Tu colección de mascotas está llena. Quita una mascota primero.",
   "That pet couldn’t be added.": "No se pudo añadir esa mascota.",
+  "{n} KB": "{n} KB",
   "{n} MB": "{n} MB",
   "Using a file kept on this computer. A theme code can’t carry a file: share this Look in a share session to send it along.": "Usa un archivo guardado en este ordenador. Un código de tema no puede llevar un archivo: comparte este Look en una sesión compartida para enviarlo con él.",
   "Loads from {host}.": "Se carga desde {host}.",

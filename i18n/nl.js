@@ -2561,6 +2561,7 @@
   "Add to my pets": "Toevoegen aan mijn huisdiertjes",
   "Your pet library is full. Remove a pet first.": "Je verzameling huisdiertjes is vol. Verwijder eerst een huisdiertje.",
   "That pet couldn’t be added.": "Dat huisdiertje kon niet worden toegevoegd.",
+  "{n} KB": "{n} KB",
   "{n} MB": "{n} MB",
   "Using a file kept on this computer. A theme code can’t carry a file: share this Look in a share session to send it along.": "Gebruikt een bestand dat op deze computer staat. Een themacode kan geen bestand bevatten: deel deze Look in een deelsessie om het mee te sturen.",
   "Loads from {host}.": "Wordt geladen van {host}.",

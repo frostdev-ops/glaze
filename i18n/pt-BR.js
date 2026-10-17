@@ -2561,6 +2561,7 @@
   "Add to my pets": "Adicionar aos meus bichinhos",
   "Your pet library is full. Remove a pet first.": "Sua coleção de bichinhos está cheia. Remova um bichinho primeiro.",
   "That pet couldn’t be added.": "Não foi possível adicionar esse bichinho.",
+  "{n} KB": "{n} KB",
   "{n} MB": "{n} MB",
   "Using a file kept on this computer. A theme code can’t carry a file: share this Look in a share session to send it along.": "Usa um arquivo guardado neste computador. Um código de tema não pode levar um arquivo: compartilhe este Look em uma sessão de compartilhamento para enviá-lo junto.",
   "Loads from {host}.": "Carregado de {host}.",
