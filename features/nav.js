@@ -2,7 +2,7 @@
 // shortcut: cold local pictures start with their fill; revisit if their first paint must block.
 var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const X = globalThis.GZ_CTX;
-  // Canvas and Moodle get the rail for a worn Look's nav layout only (x.nav); the worker loads lib/nav*.js with this file.
+  // Canvas and Moodle use the rail for a Look's nav layout or mods' widgets; the worker loads lib/nav*.js with this file.
   const rail = typeof GZ_NAV !== 'undefined' ? GZ_ULTRA_RAIL(X) : null;
   let reading = '', loaded = null, toggle = null;
   const overlay = rail && X.site === 'ultra' ? GZ_ULTRA_OVERLAY(X, () => X.repaintNav(loaded?.src)) : null;
@@ -374,8 +374,7 @@ function GZ_ULTRA_RAIL(X) {
     }
     if (config.widgets.some((w) => w.on)) { const step = config.widgets.some((w) => w.on && w.id === 'timer') && local.widgetTimer?.end > now ? 1000 : 60000; clock = setTimeout(drawWidgets, step - now % step + 5); }
   };
-  const mountWidgets = () => {
-    const mods = [...(globalThis.GZ_MODS?.rail() || []), ...(globalThis.GZ_MODWIDGETS?.rail() || [])]; // mods' rail widgets (features/mods.js, features/modwidgets.js), after Glaze's own
+  const mountWidgets = (mods) => {
     const sig = JSON.stringify([config.widgets, mods.map((m) => m.key)]);
     if (sig === signature) return;
     signature = sig; for (const node of widgetNodes.values()) node.pet?.stop(); widgetNodes.clear(); top.replaceChildren(); bottom.replaceChildren();
@@ -438,18 +437,19 @@ function GZ_ULTRA_RAIL(X) {
     active = on;
     if (!on) { rev++; restore(); widgetNodes.clear(); return; }
     pick();
+    const mods = [...(globalThis.GZ_MODS?.rail() || []), ...(globalThis.GZ_MODWIDGETS?.rail() || [])];
     const root = document.querySelector(roots);
-    if (!root || (!layout && X.site !== 'ultra')) { if (host) restore(); return; }
+    if (!root || (!layout && X.site !== 'ultra' && !mods.length)) { if (host) restore(); return; }
     const list = root.querySelector(':scope > #base_tools, :scope > ul') || root;
     if (host !== list) {
       restore(); host = list; top = make('div', { className: 'gz-nav-widgets' }); bottom = make('div', { className: 'gz-nav-widgets' });
-      if (X.site === 'ultra') { list.before(top); list.after(bottom); }
+      list.before(top); list.after(bottom);
       // Canvas and Moodle draw their lists with no help from Glaze's sweep: a redrawn item is taken up again here.
-      else { watch = new MutationObserver(() => { if (active && host === list) sync(true); }); watch.observe(list, { childList: true }); }
+      if (X.site !== 'ultra') { watch = new MutationObserver(() => { if (active && host === list) sync(true); }); watch.observe(list, { childList: true }); }
       if (X.site === 'moodle') { list.addEventListener('keydown', menuKey, true); list.addEventListener('focusin', menuFocus, true); }
     }
-    if (!layout && sheet) { sheet.remove(); sheet = null; }
-    if (layout && !sheet) (document.head || html).append(sheet = make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('features/navlayout.css') }));
+    if (!layout && !mods.length && sheet) { sheet.remove(); sheet = null; }
+    if ((layout || mods.length) && !sheet) (document.head || html).append(sheet = make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('features/navlayout.css') }));
     for (const a of list.querySelectorAll(items)) {
       const id = nativeOf(a); if (!id) continue;
       if (captured.has(a)) { const r = captured.get(a); if (!r.mark.isConnected) r.unit.before(r.mark); continue; }
@@ -477,7 +477,7 @@ function GZ_ULTRA_RAIL(X) {
       setText(a.lastElementChild, l.n);
       if (a.dataset.icon !== l.i) { a.firstElementChild.replaceWith(icon(l.i)); a.dataset.icon = l.i; }
     }
-    mountWidgets();
+    mountWidgets(mods);
     const originals = [...captured.values()].filter((r) => r.unit.isConnected).sort((a, b) => a.mark.compareDocumentPosition(b.mark) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     const seq = layout && L.resolve(layout, originals.map((r) => r.id));
     const linkParent = [...captured.values()][0]?.mark.parentNode || list;
