@@ -871,7 +871,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     if (!v) gesture?.cancel();
     editing = v;
     const edit = bar?.querySelector('.gz-dash-edit');
-    if (edit) { edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
+    if (edit) { if (v) edit.style.minWidth = `${edit.getBoundingClientRect().width}px`; edit.setAttribute('aria-pressed', String(editing)); if (board) edit.textContent = t(editing ? 'Done' : 'Edit layout'); }
     const reset = bar?.querySelector('.gz-dash-reset');
     if (reset) reset.hidden = !editing;
     if (board) say(t(editing ? 'Editing the layout. Drag a widget to move it, or its corner to resize it; the one you press comes to the front. Arrow keys work too, and Alt places it freely.' : 'Layout saved.'));
@@ -950,7 +950,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const area = make('div', { className: 'gz-dash-grid' });
     bar = make('div', { className: 'gz-dash-bar' }, !ultra && make('h2', { className: 'screenreader-only', textContent: t('Notes and widgets') }), hide, edit, reset, remind, hubBtn);
     if (board === 'courses') { bar.id = 'gz-toolbar'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Glaze'); bar.addEventListener('keydown', escape); }
-    const box = make('section', { id: 'gz-dash' }, ...(board === 'courses' ? [] : [bar]), ...(board ? [add, area] : [area, add]));
+    const box = make('section', { id: 'gz-dash' }, ...(board === 'courses' ? [] : [bar]), area, add);
     if (board) box.dataset.board = board;
     box.setAttribute('aria-label', t(board === 'dash' ? 'Dashboard' : 'Notes and widgets'));
     box.addEventListener('keydown', escape);

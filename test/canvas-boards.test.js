@@ -233,3 +233,18 @@ test('Canvas notes-only floats keep the widgets loader on course pages, without 
   c.top = {}; site.syncWidgets(); await settle(); assert.equal(calls.at(-1), false);
   c.top = c; I.settings.enhance.notes = false; site.syncWidgets(); await settle(); assert.equal(calls.at(-1), false);
 });
+
+
+test('Canvas edit controls stay below the room and reserve the toolbar width', async () => {
+  const p = page(); await settle();
+  const grid = p.grid(), add = p.doc.querySelector('.gz-dash-add'), edit = p.doc.querySelector('.gz-dash-edit');
+  edit.box = { left: 0, top: 0, width: 104.5, height: 28 };
+  Object.defineProperty(edit, 'offsetWidth', { value: 104 });
+  assert.ok(grid.nextElementSibling === add, 'Add cannot push the room down');
+  p.edit();
+  assert.ok(add.children.length, 'the Add row is populated while editing');
+  assert.equal(edit.style.minWidth, '104.5px', 'Done keeps the Edit layout width');
+  p.edit();
+  assert.equal(edit.style.minWidth, '104.5px');
+  assert.match(read('features/apps.css'), /\.gz-dash-reset\[hidden\]\s*\{[^}]*visibility:\s*hidden[^}]*display:\s*inline-flex\s*!important/, 'Reset keeps its space without remaining interactive');
+});

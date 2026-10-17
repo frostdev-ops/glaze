@@ -912,3 +912,18 @@ test('Reset layout never sends another school’s course tiles to this school’
   assert.ok(reset.ops.every((x) => !W.course(x.id)), 'only this site’s tiles are changed');
   assert.equal(lay(p).boards.courses.find((x) => W.course(x.id)).x, 320, 'other school’s placement stays');
 });
+
+
+test('Ultra edit controls stay below the room on both boards and keep the toolbar width', async () => {
+  for (const at of ['courses', 'dash']) {
+    const p = page({ at }); p.ui.sync(true); await settle();
+    const grid = p.grid(), add = p.doc.querySelector('.gz-dash-add'), edit = p.doc.querySelector('.gz-dash-edit');
+    edit.box = { left: 0, top: 0, width: 104.5, height: 28 };
+    Object.defineProperty(edit, 'offsetWidth', { value: 104 });
+    assert.ok(grid.nextElementSibling === add, `${at}: Add cannot push the room down`);
+    p.doc.fire(edit, 'click');
+    assert.equal(edit.style.minWidth, '104.5px', `${at}: Done keeps the Edit layout width`);
+    p.doc.fire(edit, 'click');
+    assert.equal(edit.style.minWidth, '104.5px');
+  }
+});
