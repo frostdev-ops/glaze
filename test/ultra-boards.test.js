@@ -387,6 +387,22 @@ test('a keyboard resize at the stored size limits keeps the limits instead of re
   assert.equal(on(q, 'courses', 'notes').w, 4000, 'width limit kept too');
 });
 
+test('resizing a folded floating tile changes its width without moving it vertically', async () => {
+  const kept = W.layout({ boards: { pages: [{ id: 'notes', on: true, x: 0.3, y: 0.4, fold: true, h: 240 }] } });
+  const p = page({ at: 'outline', local: { widgetLayout: kept } }); p.ui.sync(true); await settle();
+  const n = p.tile('notes'), corner = n.querySelector('.gz-w-resize');
+  n.box = { left: px(n.style.left), top: px(n.style.top), width: 384, height: 50 };
+  p.ui.sync(true);
+  const top = px(n.style.top), r = n.getBoundingClientRect();
+  n.box = { ...n.box, top };
+  corner.dispatchEvent(p.ev('pointerdown', { target: corner, clientX: r.right, clientY: top + 50 }));
+  corner.dispatchEvent(p.ev('pointermove', { clientX: r.right + 32, clientY: top + 50, altKey: true }));
+  corner.dispatchEvent(p.ev('pointerup')); await settle();
+  assert.ok(Math.abs(px(n.style.top) - top) < 1, `top ${top} became ${n.style.top}`);
+  assert.ok(on(p, 'pages', 'notes').w > 384, 'width changed');
+  assert.equal(on(p, 'pages', 'notes').h, 240, 'unfolded height kept');
+});
+
 test('a tile folds to its heading and is removed or added back while editing, on this board only', async () => {
   const p = page({ local: { widgetLayout: ONLY(['notes', 'timer']) } });
   p.ui.sync(true);

@@ -872,7 +872,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         delete el.dataset.resizing;
         gesture = false;
         guides?.forEach((d) => d.remove());
-        if (got) keep(f, at, got.w, body.hidden ? undefined : got.h - extra, got.h);
+        if (got) keep(f, at, got.w, body.hidden ? undefined : got.h - extra, body.hidden ? el.offsetHeight : got.h);
         else { el.style.zIndex = z0; raise(id); }
       };
       corner.addEventListener('pointermove', move);
