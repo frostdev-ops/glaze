@@ -91,7 +91,7 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   assert.deepEqual(fresh.tiles.map((t) => t.id), W.TILES);
   assert.deepEqual(fresh.tiles.filter((t) => t.on).map((t) => t.id), ['notes', 'agenda', 'timer', 'quotes']);
   const kept = W.layout({ tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: 2 }, { id: 'music' }, { id: 'evil' }, { id: 'timer', size: 'xl' }, null], music: 'javascript:x' });
-  assert.deepEqual(kept.tiles.slice(0, 2), [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: null }, { id: 'timer', on: true, size: 's', float: false, x: null, y: null }]);
+  assert.deepEqual(kept.tiles.slice(0, 2), [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: null, z: 0, fold: false }, { id: 'timer', on: true, size: 's', float: false, x: null, y: null, z: 0, fold: false }]);
   assert.equal(kept.tiles.length, W.TILES.length);
   assert.equal(kept.music, '');
   assert.equal(W.layout({ music: ' https://youtu.be/jfKfPfyJRdk ' }).music, 'https://youtu.be/jfKfPfyJRdk');
@@ -101,7 +101,7 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   assert.equal(ids(W.move(fresh, 'todo', 1)), ids(fresh), 'the last stays last');
   assert.equal(ids(W.move(fresh, 'buddy', 0, 'agenda')), 'notes buddy agenda timer quotes music breathe todo');
   assert.equal(ids(W.move(fresh, 'buddy', 0, 'nope')), ids(fresh));
-  assert.deepEqual(W.set(fresh, 'timer', { size: 'zz', on: false }).tiles[2], { id: 'timer', on: false, size: 's', float: false, x: null, y: null });
+  assert.deepEqual(W.set(fresh, 'timer', { size: 'zz', on: false }).tiles[2], { id: 'timer', on: false, size: 's', float: false, x: null, y: null, z: 0, fold: false });
   // Floating: inside the margin, onto an edge within SNAP of it, and kept as where in the free room it is.
   const E = W.EDGE;
   assert.deepEqual(W.place(-50, 5000, 200, 100, 1000, 800), { left: E, top: 800 - 100 - E, x: 0, y: 1 });
@@ -205,7 +205,7 @@ test('layout: a tile another file declares (MORE) comes after the built-in ones,
   const more = { pet: { size: 'm' }, notes: { size: 'l' }, 'Bad id': {}, x: {} };
   const lay = W.layout(undefined, more);
   assert.deepEqual(lay.tiles.map((t) => t.id), [...W.TILES, 'pet'], 'a built-in id or a bad one is not added');
-  assert.deepEqual(lay.tiles.at(-1), { id: 'pet', on: false, size: 'm', float: false, x: null, y: null });
+  assert.deepEqual(lay.tiles.at(-1), { id: 'pet', on: false, size: 'm', float: false, x: null, y: null, z: 0, fold: false });
   const kept = W.layout({ tiles: [{ id: 'pet', on: true, size: 's', float: true, x: 0.5, y: 0 }, { id: 'notes' }] }, more);
   assert.deepEqual(kept.tiles.slice(0, 2).map((t) => [t.id, t.on, t.size, t.float]), [['pet', true, 's', true], ['notes', true, 'm', false]]);
   assert.ok(!W.layout(kept).tiles.some((t) => t.id === 'pet'), 'without its declaration, not a tile');
@@ -362,14 +362,14 @@ test("landing: only Ultra's start page right after sign-in, never a page the stu
 
 // ---- B7b: tiles floating over every Blackboard page, and changes as patches ---------------------------------------
 test("pages: Ultra's floating tiles start from those that floated before (B5), keep their places, and their boards keep their spots", () => {
-  const old = { tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.25, y: 0.75 }, { id: 'notes', on: true, float: false }, { id: 'timer', on: false, float: true, x: 0.5, y: 0.5 }] };
+  const old = { tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.25, y: 0.75, z: 0, fold: false }, { id: 'notes', on: true, float: false }, { id: 'timer', on: false, float: true, x: 0.5, y: 0.5 }] };
   const lay = W.layout(old);
   const p = Object.fromEntries(lay.boards.pages.map((x) => [x.id, x]));
   assert.deepEqual(p.music, { id: 'music', on: true, size: 'l', x: 0.25, y: 0.75, z: 0, fold: false }, 'the old float, at its place');
   assert.equal(p.notes.on, false, 'not floating before: not now');
   assert.equal(p.timer.on, false, 'off: not floating');
   assert.equal(lay.boards.courses.find((x) => x.id === 'music').on, true, 'its Courses spot kept for when it comes back');
-  assert.deepEqual(lay.tiles[0], { id: 'music', on: true, size: 'l', float: true, x: 0.25, y: 0.75 }, 'Canvas unchanged');
+  assert.deepEqual(lay.tiles[0], { id: 'music', on: true, size: 'l', float: true, x: 0.25, y: 0.75, z: 0, fold: false }, 'Canvas unchanged');
   // Kept as stored once there; a place that isn't 0–1 is dropped.
   const kept = W.layout({ ...lay, boards: { ...lay.boards, pages: [{ id: 'notes', on: true, x: 2, y: 0.5, z: 4, fold: true }] } });
   assert.deepEqual(kept.boards.pages[0], { id: 'notes', on: true, size: 'm', x: null, y: 0.5, z: 4, fold: true });
@@ -483,4 +483,46 @@ test('stretch: a corner dragged meets the lines a dragged tile does, never under
   assert.deepEqual(W.stretch(0, 0, 251, 333, 1000, Infinity, [], { free: true }), { w: 251, h: 333, guides: { x: null, y: null } });
   assert.equal(W.stretch(100, 0, 5000, 50, 1000, Infinity).w, 900);
   assert.deepEqual(W.stretch(100, 100, 120, 110, 1000, Infinity, [], { minH: 90 }), { w: W.MIN_W, h: 90, guides: { x: null, y: null } });
+});
+
+test('Canvas board: an old grid migrates once, in order, at its sizes, with its floats and Ultra layouts kept', () => {
+  const old = {
+    tiles: [{ id: 'quotes', on: true, size: 'l' }, { id: 'timer', on: true, size: 's' }, { id: 'music', on: true, size: 'm', float: true, x: 0.25, y: 0.75 }, { id: 'notes', on: false, size: 'l' }, { id: 'pet', on: true, size: 'm' }],
+    music: 'https://youtu.be/jfKfPfyJRdk', todo: true,
+    boards: { courses: [{ id: 'notes', on: true, x: 32, y: 80, r: true, z: 3, fold: true, w: 400, h: 256 }], dash: [{ id: 'timer', on: true, x: 80, y: 48 }], pages: [{ id: 'buddy', on: true, x: 0.4, y: 0.8 }] },
+    widths: { courses: 1080, dash: 1032, pages: 1280 },
+  };
+  const more = { pet: { size: 'm' } }, l = W.layout(old, more), b = l.boards.cdash;
+  assert.deepEqual(b.map((x) => x.id), l.tiles.map((x) => x.id));
+  assert.deepEqual(b.filter((x) => x.on).map((x) => [x.id, x.size]), [['quotes', 'l'], ['timer', 's'], ['pet', 'm'], ['agenda', 'm']]);
+  assert.ok(b.every((x) => x.x === null && x.y === null && x.r === false));
+  assert.deepEqual([l.tiles[2].float, l.tiles[2].x, l.tiles[2].y], [true, 0.25, 0.75]);
+  assert.equal(l.music, old.music);
+  assert.equal(l.widths.cdash, 0);
+  const changed = W.apply(l, { ops: [{ s: 'cdash', id: 'quotes', set: { on: false, x: 50, y: 100, w: 600, h: 240, fold: true }, front: true }], widths: { cdash: 1100 } }, more);
+  assert.deepEqual(W.layout(changed, more), changed, 'saving and loading never migrate again');
+  assert.equal(changed.boards.cdash[0].on, false, 'the old grid cannot turn it back on');
+  assert.deepEqual(changed.tiles, l.tiles, 'floats and the old order stay separate');
+  for (const board of ['courses', 'dash', 'pages']) assert.deepEqual(changed.boards[board], l.boards[board], board);
+});
+
+test('Canvas board and floats validate every kept field and keep their separate pixel and normalized spots', () => {
+  const more = { pet: { size: 'm' } };
+  const l = W.layout({ tiles: [{ id: 'timer', on: true, float: true, x: 1.1, y: 0.5, z: 1000, fold: 'yes', w: 191, h: 3001, extra: 3 }], boards: { cdash: [{ id: 'timer', on: true, x: 0.5, y: 100, r: true, z: -1, w: 4001, h: 47 }, { id: 'course:https://bb.test/_1_1', on: true }] }, widths: { cdash: Infinity, canvas: -1 } }, more);
+  assert.deepEqual(l.tiles[0], { id: 'timer', on: true, size: 's', float: true, x: null, y: 0.5, z: 0, fold: false });
+  assert.deepEqual(l.boards.cdash[0], { id: 'timer', on: true, size: 's', x: null, y: null, r: false, z: 0, fold: false });
+  assert.equal(l.widths.cdash, 0); assert.equal(l.widths.canvas, 0);
+  const next = W.apply(l, { ops: [{ s: 'canvas', id: 'timer', set: { w: 4000, h: 3000, fold: true, x: 0, y: 1 }, front: true }, { s: 'cdash', id: 'timer', set: { x: 20000, y: 0, r: true, w: 192, h: 48 }, front: true }, { s: 'cdash', id: 'course:https://bb.test/_2_1', set: { on: true } }], widths: { cdash: 20000, canvas: 1280 } }, more);
+  assert.deepEqual([next.tiles[0].w, next.tiles[0].h, next.tiles[0].fold, next.tiles[0].x, next.tiles[0].y], [4000, 3000, true, 0, 1]);
+  assert.deepEqual([next.boards.cdash[0].w, next.boards.cdash[0].h, next.boards.cdash[0].x, next.boards.cdash[0].y], [192, 48, 20000, 0]);
+  assert.ok(next.tiles[0].z > next.tiles[1].z);
+  assert.ok(!next.boards.cdash.some((x) => W.course(x.id)), 'Ultra course cards never reach Canvas');
+  assert.deepEqual(next.boards.courses, l.boards.courses);
+});
+
+test('Canvas migration reading order: a small later tile never fills a gap before an earlier large tile', () => {
+  const ts = ['notes', 'quotes', 'timer'].map((id) => ({ id, x: null }));
+  const dims = { notes: { w: 512, h: 200 }, quotes: { w: 512, h: 200 }, timer: { w: 288, h: 200 } };
+  assert.deepEqual(W.arrange(ts, dims, 900, { ordered: true }).order, ['notes', 'quotes', 'timer']);
+  assert.deepEqual(W.arrange(ts, dims, 900).order, ['notes', 'timer', 'quotes'], 'Ultra keeps its existing free-room placement');
 });
