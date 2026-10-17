@@ -54,3 +54,22 @@ test('Lottie matte modes cannot rely on numeric coercion or unknown buffer types
     assert.equal(M.lottie(animation([], [{ id: 'extra', xt: 1, tt, layers: [] }])), null, `extra ${tt}`);
   }
 });
+
+test('Lottie refuses preexpanded layer children and completion flags that bypass asset accounting', () => {
+  const nested = Array.from({ length: 100 }, (_, i) => solid(i + 1, 1));
+  for (const layer of [
+    { ty: 0, refId: 'empty', completed: true, ks: {}, layers: nested },
+    { ty: 0, refId: 'empty', ks: {}, layers: nested },
+    { ty: 0, refId: 'empty', layers: nested },
+    { ty: 0, refId: 'empty', completed: true, ks: {} },
+  ]) assert.equal(Boolean(M.lottie(animation([layer], [{ id: 'empty', layers: [] }]))), false);
+  assert.equal(M.lottie(animation([{ ty: 0, refId: 'matte', ks: {} }], [{ id: 'matte', layers: [solid(1), solid(2, 1)] }])).canvases, 3);
+});
+
+test('Lottie strips the top completion flag and refuses internal cache keys inside drawing data', () => {
+  const original = animation([solid(1), solid(2, 1)]);
+  assert.equal(M.lottie({ ...original, __complete: true }).canvases, 3);
+  for (const key of ['__complete', '__used', '__fnct']) {
+    assert.equal(Boolean(M.lottie(animation([{ ...solid(1), ks: { [key]: true } }]))), false, key);
+  }
+});
