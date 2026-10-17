@@ -484,3 +484,27 @@ test('a mod\'s background picks the scene\'s kind, but only while parts apply he
   ctx.parts = null; // a course with its own Look, a quiz, Glaze off
   assert.equal(ctx.k(), 'gradient');
 });
+
+test('a mod background repaints the CSS kind, dim and blur when its parts arrive or go away', () => {
+  const attrs = {}, vars = {}, listeners = {};
+  let kind = null, paints = 0, scenes = 0;
+  const s = { bg: { kind: 'image', image: 'https://example.com/a.webp', dim: 80, blur: 12, intensity: 25, colors: [] } };
+  const paint = content.slice(content.indexOf('    const kind =', content.indexOf('  const applySettings =')), content.indexOf('    GZ_BG_COLORS', content.indexOf('  const applySettings =')));
+  const ctx = vm.createContext({ s, bgKind: () => kind || s.bg.kind, setAttr: (k, v) => { attrs[k] = v; }, setVar: (k, v) => { vars[k] = v; },
+    GZ_SCENE_LOOK: () => ({ dim: 0.2 }), settings: { enabled: true }, links: [{}],
+    document: { addEventListener: (name, f) => { listeners[name] = f; } },
+    syncScene: () => { scenes++; }, applySettings: () => { paints++; vm.runInContext(`{ ${paint} }`, ctx); } });
+  vm.runInContext(content.split('\n').find((l) => l.includes("document.addEventListener('glaze:parts',") && l.includes('syncScene')), ctx);
+  for (const next of ['shader', 'layers', 'media', null]) {
+    kind = next;
+    listeners['glaze:parts']();
+    assert.equal(attrs['data-gz-bg'], next || 'image');
+    assert.equal(vars['--gz-bg-blur'], next ? '0px' : '12px');
+    assert.equal(vars['--gz-bg-dim'], next ? '20%' : '80%');
+  }
+  assert.equal(paints, 4);
+  ctx.settings.enabled = false;
+  listeners['glaze:parts']();
+  assert.equal(paints, 4, 'no theme paint while Glaze is off');
+  assert.equal(scenes, 1, 'the existing scene still stops');
+});

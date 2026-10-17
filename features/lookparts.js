@@ -74,13 +74,19 @@ var GZ_XPARTS_PAGE = globalThis.GZ_XPARTS_PAGE || (() => {
     modBg = M.some((p) => p.bg);
     set(L.over(P?.x ?? null, M));
   };
-  // From the editor's preview: { x, m } as the editor holds them, or null.
-  const preview = (P) => {
-    seq++;
-    let got = null;
+  // From the editor's preview: { x, m } as the editor holds them, or null, under the installed mods' parts as a page has them,
+  // so a student sees a mod's background there too.
+  const preview = async (P) => {
+    const mine = ++seq;
+    let got = null, M = [];
     try { got = P ? L.bundle(P) : null; } catch { /* no parts */ }
-    modBg = false;
-    set(got?.x ?? null);
+    try {
+      const a = await chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'parts' });
+      for (const x of Array.isArray(a?.parts) ? a.parts : []) { await libs(x); const c = L.clean(x); if (c) M.push(c); }
+    } catch { /* no mods' parts */ }
+    if (mine !== seq) return;
+    modBg = M.some((p) => p.bg);
+    set(L.over(got?.x ?? null, M));
   };
   // Only mods override the selected kind; use the background after code overrides have merged too.
   const bgKind = (bg) => bg && (modBg || globalThis.GZ_MODS?.hasBg()) ? (bg.shader ? 'shader' : bg.media ? 'media' : 'layers') : null;

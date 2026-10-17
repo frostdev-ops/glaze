@@ -54,7 +54,8 @@ const CODE_MODS = { ultra: 732 + 439 + 256 + 125, canvas: 732 + 439 + 256 + 125,
 // instead of lib/scene.js for a video or animation (the module's name, its element and the check that the right one is running)
 // and defaults.js's bg.kind has 'media': 479 bytes on every site. Measured against 795dfd5. The player, Lottie and the file
 // handling all load on demand.
-const MEDIA_BG = { ultra: 479, canvas: 479, moodle: 479 };
+// Mod background visibility: repaint CSS from the effective kind when parts change, 59 bytes against 1d0c9b43.
+const MEDIA_BG = { ultra: 479 + 59, canvas: 479 + 59, moodle: 479 + 59 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;

@@ -370,7 +370,9 @@ test('only Glaze\'s content script in the top frame of an LMS page it runs on, w
     { ...frame, url: 'about:blank', origin: 'https://other.school.edu' }, { ...frame, url: 'https://bb.school.edu/ultra/courses/_1_1/assessment/_2_1' }]) {
     assert.equal(await ctx.fromLms(sender, true), null, `parts refuse ${sender.url}`);
   }
-  assert.match(src, /site: await fromLms\(s, m\.type === 'glaze:modpage' && m\.op === 'parts'\)/);
+  assert.match(src, /site: preview \? 'editor' : await fromLms\(s, m\.type === 'glaze:modpage' && m\.op === 'parts'\)/);
+  // Only the editor's own pages stand in for a page, and only to read parts and a mod's background file.
+  assert.match(src, /const preview = m\.type === 'glaze:modpage' && \['parts', 'media'\]\.includes\(m\.op\) && fromPreview\(s\);/);
   store.sync.enabled = false;
   assert.equal(await ctx.fromLms(s('https://x.instructure.com/')), null, 'Glaze turned off');
 });
