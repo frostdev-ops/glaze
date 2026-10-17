@@ -68,6 +68,18 @@ test('the worker cached record preserves the unsigned flag for the broker', asyn
   assert.deepEqual(await call({ ...env(), record: async () => cached }, 'theme'), { ok: false, error: 'mod' });
 });
 
+test('the worker cached record preserves the fixed media source for checked overrides', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
+  const code = source.slice(source.indexOf('const modKept ='), source.indexOf('chrome.runtime.onMessage.addListener', source.indexOf('const modKept =')));
+  const parts = { bg: { media: { type: 'image', src: 'https://media.example/background.webp' } } };
+  const data = { [`mod:${ID}`]: rec({ manifest: { permissions: [], parts }, grants: {} }) };
+  const ctx = vm.createContext({ GZ_MODBROKER: B, Map, chrome: { storage: { local: area(data), onChanged: { addListener() {} } } } });
+  vm.runInContext(`${code}\nthis.read = modRead;`, ctx);
+  const cached = await ctx.read(`mod:${ID}`);
+  const override = { bg: { media: { ...parts.bg.media, dim: 25 } } };
+  assert.deepEqual(await call({ ...env(), record: async () => cached }, 'look.override', [override]), { ok: true, value: override });
+});
+
 test('a call from no LMS page, for no installed mod, or for a mod turned off or blocklisted is refused', async () => {
   assert.deepEqual(await call(env({ site: null }), 'theme'), { ok: false, error: 'sender' });
   assert.deepEqual(await B.handle({ mod: OTHER, call: 'theme', args: [], via: 'worker' }, env()), { ok: false, error: 'mod' }, 'not installed');
