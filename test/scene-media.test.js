@@ -318,7 +318,7 @@ test('a hidden tab leaves a picture alone: the browser draws nothing for it', as
 // ---- a Lottie animation -------------------------------------------------------------------------------------------------
 test('a Lottie animation: the player is imported on demand, the worker hands over cleaned JSON, and it draws to a canvas at 1x', async () => {
   const json = { v: '5.7.0', w: 200, h: 120 };
-  const r = rig({ ask: async () => ({ ok: true, json }) });
+  const r = rig({ ask: async () => ({ ok: true, json, canvases: 1 }) });
   assert.equal(r.e.ctx?.lottie, undefined);
   r.scene.update(o({ type: 'lottie', src: 'https://cdn.example.com/a.json', fit: 'contain' }));
   await settle();
@@ -485,4 +485,45 @@ test('abandoning a kept video before its first frame revokes its blob immediatel
     assert.deepEqual(r.e.revoked, ['blob:glaze/0'], 'a late completion cannot release it twice');
     r.scene.stop();
   }
+});
+
+test('Lottie rejects aggregate viewport buffers before setup and before an oversized resize', async () => {
+  const ask = async () => ({ ok: true, json: { w: 1, h: 1 }, canvases: 1001 });
+  const huge = rig({ ask });
+  huge.scene.update(o({ type: 'lottie', src: 'https://cdn.example.com/mattes.json' }));
+  await settle();
+  assert.equal(huge.e.anims.length, 0, 'tiny authored dimensions cannot conceal viewport-sized matte canvases');
+  assert.deepEqual(huge.fails, ['load']);
+
+  const r = rig({ ask: async () => ({ ok: true, json: { w: 1, h: 1 }, canvases: 5 }) });
+  r.scene.update(o({ type: 'lottie', src: 'https://cdn.example.com/mattes.json' }));
+  await settle();
+  assert.equal(r.e.anims.length, 1, 'ordinary mattes still work');
+  r.e.width = 10000; r.e.height = 10000;
+  r.e.resize(); r.e.tick();
+  assert.deepEqual(r.fails, ['load']);
+  assert.equal(r.e.anims[0].calls.includes('resize'), false, 'no oversized backing buffers are requested');
+});
+
+test('Lottie requires worker-checked canvas metadata', async () => {
+  for (const canvases of [undefined, 0, -1, 1.5, Infinity, '1']) {
+    const r = rig({ ask: async () => ({ ok: true, json: { w: 1, h: 1 }, canvases }) });
+    r.scene.update(o({ type: 'lottie', src: 'https://cdn.example.com/mattes.json' }));
+    await settle();
+    assert.equal(r.e.anims.length, 0, String(canvases));
+    assert.deepEqual(r.fails, ['load']);
+  }
+});
+
+test('Lottie setup keeps its measured size while asynchronous initialization is pending', async () => {
+  const r = rig({ lottieDelayed: true, ask: async () => ({ ok: true, json: { w: 1, h: 1 }, canvases: 5 }) });
+  r.scene.update(o({ type: 'lottie', src: 'https://cdn.example.com/mattes.json' }));
+  await settle();
+  const a = r.e.anims[0];
+  assert.deepEqual([a.o.container.css.width, a.o.container.css.height], ['1280px', '800px']);
+  r.e.width = r.e.height = 10000;
+  for (const f of a.listeners.DOMLoaded) f();
+  await settle();
+  assert.deepEqual(r.fails, ['load']);
+  assert.ok(a.calls.includes('destroy'));
 });

@@ -34,12 +34,14 @@ class El {
   querySelector(tag) { return this.children.find((c) => c.tag === tag) || null; }
   toBlob(cb) { cb(new Blob(['still'], { type: 'image/png' })); }
   getContext() { return { drawImage: (...a) => this.env.draws.push([this, ...a]) }; }
+  get offsetWidth() { return this.env.width; }
+  get offsetHeight() { return this.env.height; }
   get naturalWidth() { return 640; }
   get naturalHeight() { return 360; }
 }
 
-exports.env = ({ preview = false, storage = {}, ask = async () => ({ ok: true, json: { w: 10, h: 10 } }), decodeFails = false, lottieDelayed = false, bitmapWait = null } = {}) => {
-  const env = { made: [], srcs: [], draws: [], blobs: [], revoked: [], posted: [], messages: [], timers: [], listeners: {}, docListeners: {}, decodeFails, anims: [], lottieOk: true };
+exports.env = ({ preview = false, storage = {}, ask = async () => ({ ok: true, json: { w: 10, h: 10 }, canvases: 1 }), decodeFails = false, lottieDelayed = false, bitmapWait = null } = {}) => {
+  const env = { width: 1280, height: 800, made: [], srcs: [], draws: [], blobs: [], revoked: [], posted: [], messages: [], timers: [], listeners: {}, docListeners: {}, decodeFails, anims: [], lottieOk: true };
   const document = {
     hidden: false,
     createElement: (tag) => new El(tag, env),

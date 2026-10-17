@@ -87,6 +87,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   let modPacks = null, modRevision = 0;
   const modArt = new Map();
   const lotties = new Set(); // the players on the page now
+  let lottiePixels = 0;
   const stillNow = () => html.getAttribute('data-gz-motion') === 'off';
   // Sticker mode shows them while "Show stickers" is on its way to being saved.
   // A course tab's frame shows its own page's stickers (ctx.solo); the Look rotation stays the top page's.
@@ -110,7 +111,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
       modArt.set(s, false);
       const r = await send({ type: 'glaze:modpage', op: 'sticker', mod: s.slice(4, 20), id: s.slice(21) });
       if (!live || revision !== modRevision || !r?.ok) return;
-      if (r.kind === 'lottie') modArt.set(s, { kind: 'lottie', json: r.json });
+      if (r.kind === 'lottie') modArt.set(s, { kind: 'lottie', json: r.json, canvases: r.canvases });
       else if (r.kind === 'image') {
         const bytes = Uint8Array.from(atob(r.b64), (c) => c.charCodeAt(0));
         modArt.set(s, { kind: 'image', bytes, mime: r.mime, animated: !!r.animated, url: URL.createObjectURL(new Blob([bytes], { type: r.mime })) });
@@ -157,14 +158,22 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     box.style.aspectRatio = `${a.json.w} / ${a.json.h}`;
     lottieIn().then((lottie) => {
       if (!box.isConnected || !live) return;
-      const anim = lottie.loadAnimation({ container: box, renderer: 'canvas', loop: true, autoplay: false, animationData: JSON.parse(JSON.stringify(a.json)), rendererSettings: { preserveAspectRatio: 'xMidYMid meet', clearCanvas: true, dpr: Math.min(devicePixelRatio || 1, 2) } });
+      const dpr = Math.min(devicePixelRatio || 1, 2), w = Math.max(1, box.offsetWidth), h = Math.max(1, box.offsetHeight);
+      const pixels = Math.ceil(w * dpr) * Math.ceil(h * dpr) * a.canvases;
+      if (!Number.isSafeInteger(a.canvases) || a.canvases < 1 || !Number.isFinite(pixels) || lottiePixels + pixels > 6.4e7) throw new Error('budget');
+      lottiePixels += pixels;
+      // Freeze the measured size while the player asynchronously creates its matte buffers.
+      box.style.width = `${w}px`; box.style.height = `${h}px`;
+      const anim = lottie.loadAnimation({ container: box, renderer: 'canvas', loop: true, autoplay: false, animationData: JSON.parse(JSON.stringify(a.json)), rendererSettings: { preserveAspectRatio: 'xMidYMid meet', clearCanvas: true, dpr } });
+      const sized = () => { box.style.width = '100%'; box.style.height = 'auto'; };
+      if (anim.isLoaded) sized(); else anim.addEventListener('DOMLoaded', sized);
       anim.setSubframe?.(false);
       lotties.add(anim);
       if (document.hidden || stillNow()) anim.goToAndStop(0, true); else anim.play();
     }).catch(() => box.replaceWith(make('span', { className: 'gz-stk-gone' })));
     return box;
   };
-  const dropLotties = () => { for (const a of lotties) { try { a.destroy(); } catch { /* gone */ } } lotties.clear(); };
+  const dropLotties = () => { for (const a of lotties) { try { a.destroy(); } catch { /* gone */ } } lotties.clear(); lottiePixels = 0; };
   const readOwn = async (ids) => {
     const want = ids.filter((id) => !(id in own)).map((id) => `stkImg:${id}`);
     if (!want.length) return;

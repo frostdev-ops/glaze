@@ -121,7 +121,7 @@ test('page op sticker: a picture and a Lottie file come back cleaned, anything w
   const avif = await ask(e, { op: 'sticker', mod: ID, id: 'photo' });
   assert.deepEqual([avif.kind, avif.mime, avif.animated], ['image', 'image/avif', true]);
   const spark = await ask(e, { op: 'sticker', mod: ID, id: 'spark' });
-  assert.deepEqual([spark.ok, spark.kind, spark.json.w, spark.json.h], [true, 'lottie', 200, 120]);
+  assert.deepEqual([spark.ok, spark.kind, spark.json.w, spark.json.h, spark.canvases], [true, 'lottie', 200, 120, 1]);
   // A WebP with metadata is cleaned on the way out.
   const chunk = (id, data) => [...Buffer.from(id), data.length & 255, 0, 0, 0, ...data, ...(data.length & 1 ? [0] : [])];
   const body = [...Buffer.from('WEBP'), ...chunk('VP8X', [0x08, 0, 0, 0, 15, 0, 0, 15, 0, 0]), ...chunk('VP8L', [0x2f, 0x0f, 0xc0, 0x03, 0, 0, 0, 0, 0]), ...chunk('EXIF', [9, 9, 9, 9])];
@@ -233,6 +233,8 @@ test('pets: a mod\'s pets are asked for by the editor only', () => {
 // ---- the page ------------------------------------------------------------------------------------------------------------
 class El {
   constructor(tag) { Object.assign(this, { tagName: tag.toUpperCase(), children: [], attrs: {}, parent: null, style: {}, id: '', className: '', hidden: false }); }
+  get offsetWidth() { return this.className === 'gz-stk-lottie' ? parseFloat(this.style.width) || parseFloat(this.parent?.style.width) || 120 : 0; }
+  get offsetHeight() { return this.offsetWidth * 0.6; }
   get classList() { const el = this; return { toggle: (c, on) => { el[`class:${c}`] = on; }, contains: (c) => !!el[`class:${c}`] }; }
   get isConnected() { let e = this; while (e.parent) e = e.parent; return e.tagName === 'HTML'; }
   append(...kids) { for (const k of kids) if (k instanceof El) { k.remove(); k.parent = this; this.children.push(k); } }
@@ -260,7 +262,7 @@ const mod = (sid) => `mod:${ID}/${sid}`;
 const FILES_REPLY = {
   wave: { ok: true, kind: 'image', mime: 'image/webp', animated: true, b64: b64(fx('anim.webp')) },
   still: { ok: true, kind: 'image', mime: 'image/webp', animated: false, b64: b64(fx('still.webp')) },
-  spark: { ok: true, kind: 'lottie', json: { v: '5.7.0', w: 200, h: 120, fr: 30, ip: 0, op: 60, layers: [] } },
+  spark: { ok: true, kind: 'lottie', canvases: 1, json: { v: '5.7.0', w: 200, h: 120, fr: 30, ip: 0, op: 60, layers: [] } },
 };
 const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, deferSticker } = {}) => {
   const html = new El('html'), head = new El('head'), body = new El('body');
@@ -277,7 +279,7 @@ const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, def
     if (m.op === 'sticker' && deferSticker?.(m, () => cb?.(structuredClone(r)))) return;
     setTimeout(() => cb?.(structuredClone(r)));
   };
-  const lottie = { loadAnimation: (o) => { const calls = []; const a = { o, calls, play: () => calls.push('play'), pause: () => calls.push('pause'), goToAndStop: (...x) => calls.push(['goToAndStop', ...x]), destroy: () => calls.push('destroy'), setSubframe: () => {} }; log.anims.push(a); return a; } };
+  const lottie = { loadAnimation: (o) => { const calls = []; const a = { o, calls, isLoaded: true, play: () => calls.push('play'), pause: () => calls.push('pause'), goToAndStop: (...x) => calls.push(['goToAndStop', ...x]), destroy: () => calls.push('destroy'), setSubframe: () => {} }; log.anims.push(a); return a; } };
   const context = vm.createContext({
     console, Promise, Date, Map, Set, structuredClone, crypto: globalThis.crypto, Blob, atob, btoa, Uint8Array, JSON,
     URL: { createObjectURL: (blob) => { const u = `blob:x/${++b}`; log.blobs.push([u, blob.type, blob.size]); return u; }, revokeObjectURL: (u) => log.revoked.push(u) },
@@ -452,4 +454,23 @@ test('the manifest reference documents packs and a complete entry that the impor
   assert.match(section[1], /24 stickers/);
   assert.match(section[1], /4 pets/);
   assert.match(section[1], /Firefox/);
+});
+
+test('page: Lottie stickers require checked canvas metadata and bound matte pixels before setup', async () => {
+  for (const canvases of [undefined, 0, -1, 1.5, Infinity, '1', 501]) {
+    const p = page({ local: { [KEY]: [{ ...placed('a', mod('spark')), w: 480 }] },
+      replies: { spark: { ...FILES_REPLY.spark, canvases } } });
+    await p.lx.sync(); await p.settle();
+    assert.equal(p.log.anims.length, 0, String(canvases));
+    assert.equal(arts(p)[0].className, 'gz-stk-gone');
+  }
+});
+
+test('page: Lottie sticker canvas pixels are bounded across all players on the page', async () => {
+  const p = page({ local: { [KEY]: Array.from({ length: 100 }, (_, i) => placed(`s${i}`, mod('spark'))) },
+    replies: { spark: { ...FILES_REPLY.spark, canvases: 101 } } });
+  await p.lx.sync(); await p.settle();
+  assert.equal(p.log.anims.length, Math.floor(6.4e7 / (120 * 72 * 101)));
+  await p.lx.sync(); await p.settle();
+  assert.equal(p.log.anims.length, 2 * Math.floor(6.4e7 / (120 * 72 * 101)), 'redraw releases the previous players budget');
 });
