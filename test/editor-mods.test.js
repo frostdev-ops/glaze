@@ -269,3 +269,19 @@ test('the install prompt discloses remote backgrounds without claiming there is 
     }
   }
 });
+
+
+test('dev folder scans bound depth and empty directory counts before reading files', async () => {
+  const source = fs.readFileSync(require.resolve('../lib/editor-mods.js'), 'utf8');
+  const start = source.indexOf('    const walk = async '), end = source.indexOf('    const loadFolder =', start);
+  const ctx = vm.createContext({ B: () => M, Uint8Array });
+  vm.runInContext(`${source.slice(start, end)}\nthis.walk = walk;`, ctx);
+  let visited = 0;
+  const deep = (n) => ({ kind: 'directory', async *entries() { visited++; if (n < 40) yield ['deep', deep(n + 1)]; } });
+  await assert.rejects(ctx.walk(deep(0)), /./);
+  assert.ok(visited <= M.CAP.depth + 1, 'stop before descending past the supported path depth');
+  visited = 0;
+  const many = { async *entries() { for (let i = 0; i < M.CAP.files * M.CAP.depth + 1; i++) { visited++; yield [`dir-${i}`, { kind: 'directory', async *entries() {} }]; } } };
+  await assert.rejects(ctx.walk(many), /./);
+  assert.ok(visited <= M.CAP.files * M.CAP.depth + 1);
+});
