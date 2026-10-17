@@ -6,6 +6,16 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.4] — 2026-10-17
+
+### Added
+- Mods. Install them from a code, link, file or the gallery's Mods section; each one lists what it may read and why before you add it. Mods can bring backgrounds (shaders, layered scenes, videos, animated pictures and Lottie animations), motion and event effects, nav layouts, rules that restyle, hide, move or relabel parts of your LMS pages, sticker and pet packs, and widgets for the dashboard and rail.
+- A widget builder in the Mods tab: make a dashboard tile or rail widget from text, numbers, rings, lists, countdowns, pictures and buttons, with no code.
+- Code mods on Chrome run sandboxed, away from your LMS pages. A mod that reads your courses, to-dos or grades runs without a page of its own and its interface is drawn by Glaze. Firefox and Safari get mods without code.
+- Signed updates: an update must come from the same author, and you are asked again when it wants more access. Follow a mod's channel to get its updates, and a signed blocklist (on by default, can be turned off) turns off mods found to be harmful.
+- For developers: dev mode, the mods API reference (docs/mods-api.md), TypeScript types and example mods.
+- A Look's background can be a looping video, an animated WebP or AVIF, or a Lottie animation, from a link or a file. It is always muted, holds still when motion is off and pauses while the tab is hidden.
+
 ## [3.0.3] — 2026-10-16
 
 ### Changed
