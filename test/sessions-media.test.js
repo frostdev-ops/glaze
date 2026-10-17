@@ -38,9 +38,9 @@ const start = async (t) => {
 };
 const device = (url) => {
   const local = localArea({ 'notesIdx:https://school.instructure.com/5': N.clean({}), 'todo:https://school.instructure.com/5': T.clean({}) }), settings = localArea(), db = database();
-  const d = { local, settings, db, requests: [], offered: [] };
+  const d = { local, settings, db, requests: [], offered: [], fetch };
   d.worker = S.make({ local, sync: settings, db, notes: notesDB(), relay: url, dev: true, permission: async () => true, offerLook: async (code) => { d.offered.push(code); return true; },
-    fetch: (...a) => { d.requests.push(a[0]); return fetch(...a); }, WebSocket });
+    fetch: (...a) => { d.requests.push(a[0]); return d.fetch(...a); }, WebSocket });
   d.send = (op, rest = {}) => d.worker.handle({ op, ...rest });
   return d;
 };
@@ -112,6 +112,24 @@ test('a changed media file replaces the one shared; a Look whose file is not her
   const before = files(blobs).length;
   await e.send('sync', plain);
   assert.equal(files(blobs).length, before, 'the draft stays on this computer');
+});
+
+test('retrying a changed media upload never reuses the previous background file', async (t) => {
+  const { url } = await start(t), a = device(url), b = device(url);
+  t.after(() => { a.worker.stop(); b.worker.stop(); });
+  await wear(a, fx('anim.webp'));
+  const look = await a.send('create', { kind: 'look', title: 'Moving' });
+  await b.send('join', { link: (await a.send('link', look)).link });
+  const h = await wear(a, fx('still.webp'));
+  a.fetch = (...args) => args[1]?.method === 'PUT' ? Promise.reject(Error('offline')) : fetch(...args);
+  await a.send('sync', look);
+  assert.equal((await a.send('list')).sessions[0].status, 'offline');
+  a.fetch = fetch;
+  await a.send('sync', look);
+  await b.send('sync', look);
+  await b.send('useLook', look);
+  assert.equal((await L.decode(b.offered.at(-1))).parts.x.bg.media.src, `file:${h}`);
+  assert.deepEqual(Buffer.from((await M.read(b.local, h))?.bytes || []), Buffer.from(fx('still.webp')));
 });
 
 test('a file that is not the one the Look names is not kept', async (t) => {
