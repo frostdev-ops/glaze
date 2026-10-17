@@ -1,5 +1,7 @@
 # Glaze mods
 
+Mods need Glaze 3.0.4 or newer.
+
 A mod is a signed bundle with settings Glaze draws for it and, in Chrome, code and UI slots that talk to Glaze through
 the `glaze` object below. The manifest can also carry Look parts, which apply while the mod is on, with or without code.
 

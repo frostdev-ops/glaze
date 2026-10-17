@@ -1,5 +1,7 @@
 # Widgets made of blocks
 
+Widgets made of blocks need Glaze 3.0.4 or newer.
+
 A widget with no code is a mod whose `mod.json` lists **blocks**. Glaze draws it itself, from the blocks and the data it
 already has on the student's device, on Chrome, Firefox and Safari alike. Nothing the mod supplies ever runs, so it needs
 no sandbox and has no way to send anything anywhere. Students make these in the editor (Mods → Widget builder) and share

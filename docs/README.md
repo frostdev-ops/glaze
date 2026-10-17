@@ -8,3 +8,5 @@
 - [Run your own relay](../server/README.md) for share sessions
 - [Firefox for Android testing](firefox-android.md)
 - [Contributing](../CONTRIBUTING.md), [Releasing](../RELEASING.md), [Changelog](../CHANGELOG.md)
+
+The [GitHub wiki](https://github.com/frostdev-ops/glaze/wiki) and the [Glaze guides on frostdev.io](https://frostdev.io/guides#glaze-docs) are copies of these pages, made by `node scripts/docs-mirror.js <wiki checkout> <frostdev.io checkout>`. Edit them here.
