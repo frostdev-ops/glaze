@@ -1343,3 +1343,47 @@ test('Course cards: quick looks preserve bookmarks and other schools, respect bo
   assert.deepEqual(sync(p).ucards, before, 'a rejected save drops no other style');
   assert.deepEqual(sync(p).ulinks, links);
 });
+
+test('Course cards: opening the full editor cancels a quick picture still decoding', async () => {
+  const p = cardsPage(); const { dlg } = await openCards(p);
+  const ready = later(); p.c.createImageBitmap = () => ready;
+  const ui = p.c.GZ_CARD_UI, key = ukey('_101_1');
+  const picture = ui.setPicture(key, {}); await settle();
+  await ui.open(key, itemOf(dlg, '_101_1').querySelector('.gz-ccm-style'));
+  ready.res({ width: 10, height: 10, close() {} }); await picture; await settle();
+  assert.ok(!sync(p).ucards?.[key], 'the older quick choice cannot land under the full editor');
+});
+
+test('Course cards: Style waits for the shared card editor to load', async () => {
+  const loaded = later(), p = cardsPage({ hold: { 'features/cards.js': loaded } });
+  const { dlg } = await openCards(p);
+  const style = itemOf(dlg, '_101_1').querySelector('.gz-ccm-style');
+  assert.equal(style.disabled, true, 'choices cannot be silently dropped during loading');
+  loaded.res(); await settle();
+  assert.equal(style.disabled, false);
+  p.doc.fire(style, 'click'); await settle();
+  tick(input(itemOf(dlg, '_101_1'), 'radio', 'solid'), true); await settle();
+  assert.equal(sync(p).ucards[ukey('_101_1')].k, 'solid');
+});
+
+test('Course cards: an existing disabled course can be re-enabled at the saved-record limit', async () => {
+  const board = [{ id: ckey('_101_1'), on: false }, ...Array.from({ length: 47 }, (_, i) => ({ id: ckey(`_${500 + i}_1`), on: true }))];
+  const p = cardsPage({ local: { widgetLayout: { todo: true, boards: { courses: board } } } });
+  const { dlg } = await openCards(p);
+  assert.equal(input(itemOf(dlg, '_101_1'), 'checkbox').disabled, false, 'this record already fits');
+  assert.equal(input(itemOf(dlg, '_102_1'), 'checkbox').disabled, true, 'a new record does not fit');
+  p.doc.fire(buttonIn(dlg.querySelector('.gz-ccm-tools'), 'Select all'), 'click'); await settle();
+  assert.equal(on(p, 'courses', ckey('_101_1')).on, true);
+  assert.equal(lay(p).boards.courses.filter((x) => W.course(x.id)).length, 48);
+});
+
+test('Course cards: the full editor waits for a quick style write already in flight', async () => {
+  const p = cardsPage(); const { dlg } = await openCards(p);
+  const ui = p.c.GZ_CARD_UI, send = p.c.chrome.runtime.sendMessage, pending = [];
+  p.c.chrome.runtime.sendMessage = (m, cb) => m.type === 'glaze:cards' ? pending.push(() => send(m, cb)) : send(m, cb);
+  const saving = ui.setKind(ukey('_101_1'), 'solid', '#123456'); await settle();
+  const opening = ui.open(ukey('_101_1'), itemOf(dlg, '_101_1').querySelector('.gz-ccm-style')); await settle();
+  assert.ok(!p.doc.getElementById('gz-ce'), 'the draft must start from the completed quick choice');
+  pending.shift()(); await saving; await opening;
+  assert.equal(input(p.doc.getElementById('gz-ce'), 'color').value, '#123456');
+});

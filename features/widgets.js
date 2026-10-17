@@ -897,6 +897,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const room = () => Math.max(0, Math.min(W.COURSE_MAX - rows().filter((x) => W.course(x.id)?.origin === location.origin).length, W.COURSE_TOTAL - rows().filter((x) => W.course(x.id)).length));
     const open = button(t('+ Course cards'), () => C.picker.open({
       board: b,
+      has: (key) => rows().some((x) => x.id === key),
       on: (key) => rows().some((x) => x.id === key && x.on),
       room,
       count: () => rows().filter((x) => x.on && W.course(x.id)?.origin === location.origin).length,

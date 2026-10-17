@@ -146,7 +146,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   // change of the layout (o.set, all its courses at once). A course's Style shows its quick looks below it: its course
   // color, a color, a gradient or a picture (from this computer or a link), saved as features/cards.js's editor saves
   // them, and that editor ("Card style and bookmarks", over this dialog) for everything else.
-  // o: { board, on(key) (on this board now), room() (how many more fit), set(keys, on), back() (the button it came from) }.
+  // o: { board, on(key) (on this board now), has(key) (a saved record), count(), room() (how many more fit), set(keys, on), back() (the button it came from) }.
   let pick = null; // { dlg, o, list, items: Map(key -> { li, box, card, c, look }), terms: [{ sec, its }], count, empty, all, none, query, keys }
   const cardKey = (c) => `ultra:${location.origin}/${c.id}`;
   const UI = () => globalThis.GZ_CARD_UI;
@@ -161,7 +161,13 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const shownItems = () => [...pick.items.values()].filter((it) => !it.li.hidden);
   // Up to the room left, in the order shown; a course already on the board is left as it is.
   const turn = (list, on) => {
-    const keys = list.filter((it) => pick.o.on(it.c.key) !== on).map((it) => it.c.key).slice(0, on ? pick.o.room() : Infinity);
+    let room = pick.o.room();
+    const keys = list.filter((it) => {
+      if (pick.o.on(it.c.key) === on) return false;
+      if (!on || pick.o.has(it.c.key)) return true;
+      if (!room) return false;
+      room--; return true;
+    }).map((it) => it.c.key);
     if (keys.length) pick.o.set(keys, on);
     syncPicker();
   };
@@ -240,7 +246,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       li.toggleAttribute('data-open', open);
       styleBtn.setAttribute('aria-expanded', String(open));
       if (open) it.look.show().then(() => it.look?.first().focus());
-    }, { className: 'gz-w-btn gz-w-small gz-ccm-style' });
+    }, { className: 'gz-w-btn gz-w-small gz-ccm-style', disabled: !UI() });
     styleBtn.setAttribute('aria-expanded', 'false');
     styleBtn.setAttribute('aria-controls', `gz-ccm-look-${c.id.replace(/\W/g, '')}`);
     styleBtn.setAttribute('aria-label', ctx.t('Style of {name}', { name }));
@@ -289,7 +295,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       const there = pick.o.on(it.c.key);
       on += there;
       put(it.box, 'checked', there);
-      const full = !there && !room;
+      const full = !there && !room && !pick.o.has(it.c.key);
       put(it.box, 'disabled', full);
       if (it.li.hasAttribute('data-on') !== there) it.li.toggleAttribute('data-on', there);
       put(it.box, 'title', full ? ctx.t('Up to {n} course cards per board.', { n: W.COURSE_MAX }) : '');
@@ -300,7 +306,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     const shown = shownItems();
     put(pick.empty, 'hidden', !!shown.length);
     put(pick.empty, 'textContent', ctx.t(pick.items.size ? 'No courses match.' : 'No courses yet. They show here once Blackboard has listed them.'));
-    put(pick.all, 'disabled', !room || shown.every((it) => it.box.checked));
+    put(pick.all, 'disabled', shown.every((it) => it.box.checked || it.box.disabled));
     put(pick.none, 'disabled', !shown.some((it) => it.box.checked));
     // The first time on the Courses page, every course is one click away.
     put(pick.all, 'className', `gz-w-btn gz-w-small${pick.o.board === 'courses' && !on ? ' gz-w-main' : ''}`);
@@ -352,7 +358,11 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     dlg.showModal();
     query.focus();
     // The previews wear their styles once the card painter is in (it is on any page with board cards).
-    ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (pick?.dlg === dlg) UI().paint(); }, () => {});
+    ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => {
+      if (pick?.dlg !== dlg) return;
+      for (const it of pick.items.values()) it.li.querySelector('.gz-ccm-style').disabled = false;
+      UI().paint();
+    }, () => {});
   };
 
   return { sync, list, title, fill, picker: { open: openPicker, sync: syncPicker, close: closePicker } };

@@ -286,6 +286,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (ultra && /^_\d+_\d+$/.test(key)) key = `ultra:${location.origin}/${key}`;
     if (!await close()) return;
     if (!(await Promise.all(flush())).every((r) => r.ok)) return;
+    cancel(key);
     let d;
     try { d = await read(); } catch { return; }
     if (n !== opening || (back && !back.isConnected)) return;
@@ -601,12 +602,12 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   // Slow file decoding and rapid input belong to the latest choice. Color input paints now and writes once it rests.
   const finish = async (key, q, save) => {
     if (quick.get(key) !== q) return stale();
-    const r = await save();
+    const r = await (q.saving ||= save());
     if (quick.get(key) !== q) return stale();
     quick.delete(key); reading = null; paint();
     return r;
   };
-  const flush = () => [...quick.values()].filter((q) => q.flush).map((q) => q.flush());
+  const flush = () => [...quick.values()].flatMap((q) => q.flush ? [q.flush()] : q.saving ? [q.saving] : []);
   const saved = async (key, style) => { const r = await send({ key, style }); return r.ok ? { ...r, style } : r; };
   const setKind = async (key, v, c, preview = false) => {
     const q = begin(key), was = await styleOf(key);
@@ -620,7 +621,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     const result = new Promise((resolve) => { q.resolve = resolve; });
     q.flush = () => {
       clearTimeout(q.timer);
-      q.saving ||= finish(key, q, () => saved(key, style)).then(q.resolve);
+      q.flushing ||= finish(key, q, () => saved(key, style)).then(q.resolve);
       return result;
     };
     q.timer = setTimeout(q.flush, 500);
