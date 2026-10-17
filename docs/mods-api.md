@@ -249,7 +249,7 @@ Where a row says Worker, a frame UI can't use it (personal data goes to Workers 
 | `glaze.palette.commands(list)` | `[{ id, title, hint?, run }]` for Ctrl+K, at most 16; `run()` is called here when the student picks it. | |
 | `glaze.rules.set(rules)` | Page rules, below; `[]` clears. | |
 | `glaze.effects.play(kind, options?)` | A particle effect: `kind` is `burst`, `confetti`, `rain`, `ring` or `sprite`. Options: `count` 1 to 60, `shapes` (up to 4 of `dot` `star` `snow` `heart` `leaf` `spark`), `c` (up to 6 colours), `spread` 0 to 360, `gravity` -2 to 2, `life` 200 to 2500 ms, `size` 2 to 48, `x` and `y` 0 to 1 (fractions of the window; 0.5 and 0.33 by default). One a mod every 200 ms; none with motion off or the page hidden. | |
-| `glaze.look.override(parts)` | Look parts laid over the student's Look while the mod runs, never saved; `null` removes them. The first mod in the student's order to give a part wins it; `rules` add up. | |
+| `glaze.look.override(parts)` | Look parts laid over the student's Look while the mod runs, never saved; `null` removes them. The first mod in the student's order to give a part wins it; `rules` add up. Media `src` and `type` must exactly match `parts.bg.media` in the installed manifest; code can change its fit, dim and loop controls. Use `glaze.fetch` for network requests. | |
 | `glaze.broadcast(data)` | To this mod's other Worker and frames on the page, as a `broadcast` event; not back to the sender. At most 64 KiB. | |
 
 **Nav layout** (`glaze.nav.items`, `parts.nav`): `{ place: 'left' | 'top' | 'bottom' | 'dock', groups: [{ label, items: [id] }]

