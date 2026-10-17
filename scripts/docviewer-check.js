@@ -13,6 +13,8 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const G = require('../defaults.js');
+const C = require('../lib/color.js');
+const opaqueHex = (value) => { const c = C.parse(value); return c?.a === 1 ? C.hex(c) : null; };
 
 const ext = path.join(__dirname, '..');
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-docviewer-'));
@@ -59,7 +61,12 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
       for (let i = 0; i < 50; i++) { const f = page.frames().find((x) => x.url().startsWith('https://canvadocs.')); if (f) { await f.waitForLoadState(); return f; } await page.waitForTimeout(100); }
       throw new Error('no docviewer frame');
     };
-    const load = async () => { await page.goto('https://school.instructure.com/courses/25/files/21'); const f = await frame(); await page.waitForTimeout(600); return f; };
+    // The palette message and its shared stylesheet arrive separately; neither has a fixed load time.
+    const painted = (f, name) => f.waitForFunction((ground) => document.documentElement.hasAttribute('data-gz-docs')
+      && getComputedStyle(document.documentElement).getPropertyValue('--gz-surface-2').trim() === ground
+      && [...document.querySelectorAll('link[rel="stylesheet"]')].some((l) => l.href.endsWith('/features/surfaces.css') && l.sheet),
+    G.GZ_PRESETS.find(([n]) => n === name)[1]['--gz-surface-2'], { polling: 50, timeout: 10000 });
+    const load = async () => { await page.goto('https://school.instructure.com/courses/25/files/21'); const f = await frame(); await painted(f, 'Frost'); return f; };
 
     // Dark (Frost), pages plain, no ink.
     await set({ ...look('Frost') });
@@ -67,9 +74,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
     const surf = G.GZ_PRESETS.find(([n]) => n === 'Frost')[1];
     const st = await f.evaluate(() => ({ docs: document.documentElement.hasAttribute('data-gz-docs'), bg: getComputedStyle(document.body).backgroundColor, bar: getComputedStyle(document.querySelector('.ViewerControls')).backgroundColor, ink: !!document.querySelector('#gz-ink-bar, .gz-ink'), pages: document.documentElement.getAttribute('data-gz-pages'), glazeContent: !!window.__gzGlaze }));
     ok(st.docs, 'dark: the viewer wears the palette');
-    const rgb = (hex) => `rgb(${hex.slice(1).match(/../g).map((h) => parseInt(h, 16)).join(', ')})`;
-    ok(st.bg === rgb(surf['--gz-surface-2']), `dark: background is the ground ${st.bg}`);
-    ok(st.bar === rgb(surf['--gz-surface']), `dark: toolbar is the surface ${st.bar}`);
+    ok(opaqueHex(st.bg) === surf['--gz-surface-2'], `dark: background is the ground ${st.bg}`);
+    ok(opaqueHex(st.bar) === surf['--gz-surface'], `dark: toolbar is the surface ${st.bar}`);
     ok(!st.ink, 'annotations off by default: no toolbar, no layer');
     ok(st.pages === null, 'pages plain by default');
     ok(!st.glazeContent, 'the first content script is not in the canvadocs frame');
@@ -79,33 +85,36 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
 
     // Dimmed pages, then inverted (the old switch, migrated).
     await set({ ...look('Frost'), enhance: { ...G.GZ_DEFAULTS.enhance, docPages: 'dim' } });
-    await page.waitForTimeout(500);
+    await f.waitForFunction(() => document.documentElement.getAttribute('data-gz-pages') === 'dim', null, { polling: 50, timeout: 10000 });
     ok(await f.evaluate(() => document.documentElement.getAttribute('data-gz-pages')) === 'dim', 'a settings change reaches the open frame (dim) without a reload');
     ok(await f.evaluate(() => getComputedStyle(document.querySelector('.Page-canvas-container')).filter).then((x) => /brightness/.test(x)), 'dimmed pages: the page canvas is dimmed');
     const raw = { ...look('Frost'), enhance: { ...G.GZ_DEFAULTS.enhance, darkDocs: true } };
     delete raw.enhance.docPages;
     await set(raw);
-    await page.waitForTimeout(500);
+    await f.waitForFunction(() => document.documentElement.getAttribute('data-gz-pages') === 'dark', null, { polling: 50, timeout: 10000 });
     ok(await f.evaluate(() => document.documentElement.getAttribute('data-gz-pages')) === 'dark', 'darkDocs: true from 2.2 inverts the pages');
     ok(await f.evaluate(() => getComputedStyle(document.querySelector('.PageAnnotations')).filter) === 'none', 'Canvas annotation layer is never filtered');
 
     // Light (Paper): palette on, pages never dimmed in a light palette.
     await set({ ...look('Paper'), enhance: { ...G.GZ_DEFAULTS.enhance, docPages: 'dim' } });
-    await page.waitForTimeout(500);
+    await painted(f, 'Paper');
     const paper = G.GZ_PRESETS.find(([n]) => n === 'Paper')[1];
-    ok(await f.evaluate(() => getComputedStyle(document.body).backgroundColor) === rgb(paper['--gz-surface-2']), 'light: ground from Paper');
+    const paperGround = await f.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    ok(opaqueHex(paperGround) === paper['--gz-surface-2'], `light: ground from Paper ${paperGround}`);
     ok(await f.evaluate(() => document.documentElement.getAttribute('data-gz-pages')) === null, 'light: pages not dimmed');
     await page.screenshot({ path: path.join(out, 'paper.png') });
 
     // Glaze off: the frame goes back to Canvas's own look.
     await set({ ...look('Frost'), enabled: false });
-    await page.waitForTimeout(500);
+    await f.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-docs'), null, { polling: 50, timeout: 10000 });
     ok(await f.evaluate(() => !document.documentElement.hasAttribute('data-gz-docs') && !document.getElementById('gz-docs') && !document.querySelector('style')?.textContent.includes('--gz-')), 'Glaze off: nothing left in the frame');
 
     // Annotations on.
     await set({ ...look('Frost'), enhance: { ...G.GZ_DEFAULTS.enhance, docInk: true } });
     f = await load();
     const bar = f.locator('#gz-ink-bar');
+    await bar.waitFor();
+    await f.waitForSelector('#page-1 > svg.gz-ink');
     ok(await bar.count() === 1, 'annotations on: the toolbar is there');
     ok(await f.locator('#page-1 > svg.gz-ink').count() === 1, 'a layer on page 1');
     // Keyboard: Tab reaches the Annotate button, Enter opens the tools with the pen picked.
