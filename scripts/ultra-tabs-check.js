@@ -2,10 +2,10 @@
 // the B8 spike: the sticky two-row course bar, course panels, items opened over them, an SPA router), served under a
 // made-up school's address. Nothing leaves the machine: every other request is aborted and DNS is mapped to nowhere.
 // It opens courses, then checks: tabs open, switch, close (×, middle click, Delete), pin, move (keyboard, drag) and cap;
-// a switch shows the course's copy at once and fades to the live page, back where the tab was (page and scroll), and never
-// into an assessment; the strip above, between and below the bar's rows, on an item panel and above a page, never over
-// Ultra's own controls; the copies are dropped when the tabs are switched off and when another account signs in; and no
-// request is made for any of it. Screenshots: each placement, Frost (dark) and Paper (light), 1280 and 375 px wide.
+// a first switch loads the saved course in a live frame; later switches keep that document, route, scroll and edits;
+// an assessment is never reopened or started by a warm switch; the strip above, between and below the bar's rows, on an item panel and above a page, never over
+// Ultra's own controls; the pictures and frames are dropped when the tabs are switched off and when another account signs in; and no
+// warm return reloads its document or resources. Screenshots: each placement, Frost (dark) and Paper (light), 1280 and 375 px wide.
 //   NODE_PATH=/path/to/node_modules node scripts/ultra-tabs-check.js [out dir for screenshots]   (needs playwright)
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -36,17 +36,23 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     executablePath: CHROME, headless: true, viewport: { width: 1280, height: 860 },
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
   });
-  let user = '_42_1';
+  let user = '_42_1', holdCourse = '', releaseCourse;
+  let courseHeld = false;
   let phase = 'first-load', switchCount = 0;
   const requestDetails = [];
   const requests = []; // everything the page asked for besides Glaze's own extension files
   try {
-    await ctx.route('**/*', (route) => {
+    await ctx.route('**/*', async (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
       requests.push(`${u.host}${u.pathname}`);
       requestDetails.push({ phase, method: route.request().method(), origin: u.origin, path: u.pathname, search: u.search, page: route.request().frame().url(), type: route.request().resourceType() });
-      if (u.origin === SITE && u.pathname.startsWith('/ultra')) return route.fulfill({ contentType: 'text/html', body: PAGE });
+      if (u.origin === SITE && u.pathname.startsWith('/ultra')) {
+        if (u.pathname.startsWith(`/ultra/courses/${holdCourse}/`)) {
+          courseHeld = true; await new Promise((r) => { releaseCourse = r; });
+        }
+        return route.fulfill({ contentType: 'text/html', body: PAGE });
+      }
       if (u.href === CSS_URL) return route.fulfill({ contentType: 'text/css', body: '.course-content-container{min-height:100vh}\n.panel-wrap{overscroll-behavior:contain}', headers: { 'cache-control': 'no-store' } });
       if (['/fixture/image.png', '/fixture/background.png'].includes(u.pathname) && [SITE, 'https://cdn.school.test'].includes(u.origin)) return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j5FQAAAAASUVORK5CYII=', 'base64'), headers: { 'cache-control': 'no-store' } });
       if (u.origin === SITE && u.pathname === '/learn/api/v1/users/me') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: user }) });
@@ -65,6 +71,14 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     const settings = (o = {}) => opts.evaluate(async (s) => { await chrome.storage.sync.clear(); await chrome.storage.sync.set(s); },
       { ...G.GZ_DEFAULTS, colors: G.GZ_PRESETS.find(([n]) => n === (o.preset || 'Frost'))[1], preset: o.preset || 'Frost', enhance: { ...G.GZ_DEFAULTS.enhance, ...o.enhance }, tabs: { ...G.GZ_SANITIZE({}).tabs, ...o.tabs }, nav: { ...G.GZ_DEFAULTS.nav, ...o.nav } });
     const session = () => opts.evaluate(() => chrome.storage.session.get(null));
+    const pictured = (cid, route) => opts.evaluate(async ({ cid, route }) => {
+      const until = performance.now() + 10000;
+      while (performance.now() < until) {
+        if (Object.values(await chrome.storage.session.get(null)).some((v) => v?.cid === cid && v.path === route && v.shot)) return;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error(`no picture captured for ${cid} at ${route}`);
+    }, { cid, route });
     let cdp, world;
     const worlds = [];
     const isolated = async (func) => {
@@ -76,7 +90,8 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         await cdp.send('Runtime.enable');
       }
       if (!world) {
-        for (const candidate of worlds.filter((x) => !x.auxData?.isDefault)) {
+        const { frameTree } = await cdp.send('Page.getFrameTree');
+        for (const candidate of worlds.filter((x) => !x.auxData?.isDefault && x.auxData?.frameId === frameTree.frame.id)) {
           const result = await cdp.send('Runtime.evaluate', { expression: 'typeof GZ_CTABS', contextId: candidate.id }).catch(() => null);
           if (result?.result.value === 'object') world = candidate.id;
         }
@@ -86,51 +101,69 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text + ': ' + result.exceptionDetails.exception?.description);
       return result.result.value;
     };
-    await settings(process.env.GZ_B8_REQUEST_PROBE ? { enhance: { newcontent: false } } : {});
+    await settings();
     const page = await ctx.newPage();
+    page.setDefaultTimeout(10000);
+    let target = page;
     page.on('pageerror', (error) => console.error(`page error: ${error.stack || error.message}`));
-    const strip = () => page.evaluate(() => {
+    const strip = () => target.evaluate(() => {
       const s = document.getElementById('gz-ctabs');
       return s && { at: s.dataset.at, tabs: [...s.querySelectorAll('[role="tab"]')].map((e) => ({ cid: e.dataset.courseId, sel: e.getAttribute('aria-selected') === 'true', pin: e.hasAttribute('data-pin'), label: e.getAttribute('aria-label') })), note: s.querySelector('.gz-ctabs-note')?.textContent || '' };
     });
     const order = async () => (await strip())?.tabs.map((x) => x.cid).join(' ');
-    const settled = (cid) => page.waitForFunction(({ cid, name }) => !document.getElementById('gz-ctabs-snap') && !document.querySelector('.spinner, [data-gz-loading]')
+    const settled = (cid) => target.waitForFunction(({ cid, name }) => !document.querySelector('.spinner, [data-gz-loading], [data-gz-placing]')
       && document.querySelector(`#gz-ctabs [role="tab"][data-course-id="${cid}"][aria-selected="true"]`)
       && ([...document.querySelectorAll('div.bb-course-navigation a[href]')].some((a) => a.getAttribute('href').startsWith(`/ultra/courses/${cid}/`))
         || document.querySelector('.routed-page.bb-offcanvas-container h1')?.textContent.includes(name)), { cid, name: COURSES.find((c) => c[0] === cid)?.[1] }, { timeout: 10000 });
     const open = async (cid) => {
       const previous = phase; phase = `native-open:${cid}`;
       try {
-        await page.click('[data-analytics-id="course.header.home"]').catch(() => {});
-        await page.waitForSelector(`a[href="/ultra/courses/${cid}/outline"]`);
-        await page.click(`a[href="/ultra/courses/${cid}/outline"]`);
+        if (await target.locator('.routed-page a').count()) await target.click('.routed-page a');
+        await target.click('[data-analytics-id="course.header.home"]');
+        target = page;
+        await target.waitForSelector(`a[href="/ultra/courses/${cid}/outline"]`);
+        await target.click(`a[href="/ultra/courses/${cid}/outline"]`);
         await settled(cid);
       } finally { phase = previous; }
     };
+    const showing = async (cid) => {
+      const own = await page.evaluate((cid) => location.pathname.startsWith(`/ultra/courses/${cid}/`), cid);
+      if (!own) await page.locator(`iframe[name="gz-ctab:${cid}"]`).waitFor({ state: 'attached' });
+      target = own ? page : page.frames().find((f) => f.name() === `gz-ctab:${cid}`);
+      if (!target) throw new Error(`no live frame for ${cid}`);
+      if (!own) await page.locator(`iframe[name="gz-ctab:${cid}"]`).waitFor({ state: 'visible' });
+      await settled(cid);
+      await page.waitForFunction((name) => {
+        const f = name && document.querySelector(`iframe[name="${name}"]`);
+        return name ? f && !f.inert && getComputedStyle(f).visibility === 'visible' && !document.querySelector('.gz-ctabs-pic')
+          : !document.querySelector('#gz-ctabs-frames[data-on]');
+      }, own ? '' : `gz-ctab:${cid}`, { timeout: 10000 });
+    };
     const switchTab = async (cid) => {
       const previous = phase; phase = `tab-switch:${++switchCount}:${cid}`;
-      try { await page.click(`#gz-ctabs [data-course-id="${cid}"]`); await settled(cid); } finally { phase = previous; }
+      try { await target.click(`#gz-ctabs [data-course-id="${cid}"]`); await showing(cid); } finally { phase = previous; }
     };
-    const scroller = () => page.evaluate(() => document.querySelector('.course-content-container > .panel-wrap')?.scrollTop);
+    const scroller = () => target.evaluate(() => document.querySelector('.course-content-container > .panel-wrap')?.scrollTop);
 
     // ---- opening courses; the strip outside a course ----
     await page.goto(`${SITE}/ultra/course`);
-    await page.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
-    await page.click('a[href="/ultra/courses/_101_1/outline"]');
+    await target.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
+    await target.click('a[href="/ultra/courses/_101_1/outline"]');
     await settled('_101_1');
     const routedChecks = async () => {
-      // All reads below are native feature reads or fixture navigation; RESTORE labels only the active inert copy.
+      // Native navigation builds each page once; tab returns must retain that live document.
       const quietTimer = async () => {
         await opts.evaluate(async () => {
           const { widgetLayout } = await chrome.storage.local.get('widgetLayout');
           if (widgetLayout?.boards?.pages) await chrome.storage.local.set({ widgetLayout: { ...widgetLayout, boards: { ...widgetLayout.boards, pages: widgetLayout.boards.pages.map((x) => x.id === 'timer' ? { ...x, on: false } : x) } } });
         });
-        await page.waitForFunction(() => !document.querySelector('#gz-float section.gz-w[data-tile="timer"]'));
+        await target.waitForFunction(() => !document.querySelector('#gz-float section.gz-w[data-tile="timer"]'));
       };
       await quietTimer();
+      await open('_102_1');
       await open('_101_1');
       if (process.env.GZ_B8B_FOCUSED) {
-        const label = await page.locator('#gz-ctabs [data-course-id="_101_1"]').evaluate((e) => ({ text: e.querySelector('.gz-ctab-name').textContent, title: e.title, aria: e.getAttribute('aria-label') }));
+        const label = await target.locator('#gz-ctabs [data-course-id="_101_1"]').evaluate((e) => ({ text: e.querySelector('.gz-ctab-name').textContent, title: e.title, aria: e.getAttribute('aria-label') }));
         ok(label.text === 'ZZ 3456' && label.title.includes('209940-ZZ3456-007') && label.aria.includes('209940-ZZ3456-007') && label.aria.includes('FA26-CS101-01'), `auto short label retains original metadata (${JSON.stringify(label)})`);
         const choice = async (label, nick = '') => {
           await opts.evaluate(async ({ label, nick }) => {
@@ -140,13 +173,13 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         };
         for (const mode of ['short', 'name', 'code']) {
           await choice(mode, 'My reading');
-          await page.waitForFunction(() => document.querySelector('#gz-ctabs [data-course-id="_101_1"] .gz-ctab-name')?.textContent === 'My reading');
-          const metadata = await page.locator('#gz-ctabs [data-course-id="_101_1"]').getAttribute('aria-label');
+          await target.waitForFunction(() => document.querySelector('#gz-ctabs [data-course-id="_101_1"] .gz-ctab-name')?.textContent === 'My reading');
+          const metadata = await target.locator('#gz-ctabs [data-course-id="_101_1"]').getAttribute('aria-label');
           ok(metadata.includes('209940-ZZ3456-007') && metadata.includes('FA26-CS101-01'), `nickname wins in ${mode} while full metadata remains accessible`);
         }
         for (const [mode, expected] of [['name', '209940-ZZ3456-007'], ['code', 'FA26-CS101-01'], ['short', 'ZZ 3456']]) {
           await choice(mode);
-          await page.waitForFunction((text) => document.querySelector('#gz-ctabs [data-course-id="_101_1"] .gz-ctab-name')?.textContent === text, expected);
+          await target.waitForFunction((text) => document.querySelector('#gz-ctabs [data-course-id="_101_1"] .gz-ctab-name')?.textContent === text, expected);
           ok(true, `explicit ${mode} choice displays ${expected}`);
         }
         await open('_102_1');
@@ -156,27 +189,15 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         await opts.evaluate(async () => { const { tabs } = await chrome.storage.sync.get('tabs'); await chrome.storage.sync.set({ tabs: { ...tabs, cap: 8 } }); });
         await open('_101_1');
       }
-      await isolated(async () => {
-        if (!globalThis.__b8bNet) {
-          globalThis.__b8bNet = [];
-          const original = fetch;
-          globalThis.fetch = (...args) => { __b8bNet.push({ url: String(args[0]), method: args[1]?.method || 'GET', active: GZ_CTABS.showing(), page: location.href, at: performance.now(), stack: new Error().stack }); return original(...args); };
-        }
-        const until = performance.now() + 3000;
-        while (!GZ_SITE_ULTRA.assignment('_101_1', '_8120_1') && performance.now() < until) await new Promise((r) => setTimeout(r, 25));
-        if (!GZ_SITE_ULTRA.assignment('_101_1', '_8120_1')) throw new Error('native gradebook did not establish the cached Assignment');
-        return true;
-      });
-      await open('_102_1'); await switchTab('_101_1');
       const native = async (cls) => {
         phase = `B8b:NATIVE:${cls}`;
-        await page.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
-        await page.click(cls); await settled('_101_1');
+        await target.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
+        await target.click(cls); await settled('_101_1');
         ok((await strip())?.at === 'routed', `strip remains on ${cls}`);
-        ok(await page.evaluate(() => !document.querySelector('div.bb-course-navigation, .panel-wrap, #main-content, #main-content-inner')), `${cls} uses the full routed structure`);
+        ok(await target.evaluate(() => !document.querySelector('div.bb-course-navigation, .panel-wrap, #main-content, #main-content-inner')), `${cls} uses the full routed structure`);
       };
       const position = async (top) => {
-        const measured = await page.evaluate((n) => {
+        const measured = await target.evaluate((n) => {
         const main = document.querySelector('main[class*="contentGridArea"]');
         let sc = main;
         while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
@@ -196,42 +217,24 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         }
         throw new Error(`tab place was not saved: ${cid} ${route} ${top}`);
       }, { route, top, cid });
-      const restore = async (route, top, label, cid = '_101_1', delayed = '') => {
+      const restore = async (route, top, label, cid = '_101_1') => {
+        const birth = await target.evaluate(() => performance.timeOrigin);
         await switchTab(cid === '_101_1' ? '_102_1' : '_101_1');
-        phase = `B8b:RESTORE:${label}`;
+        phase = `B8b:RETURN:${label}`;
         const start = requestDetails.length;
-        await page.click(`#gz-ctabs [data-course-id="${cid}"]`);
-        await page.waitForSelector('#gz-ctabs-snap', { timeout: 500 });
-        ok(await isolated(() => GZ_CTABS.showing()), `${label} displays its inert copy immediately`);
-        if (delayed) {
-          await page.waitForFunction((stage) => window.__b8bStage === stage, delayed);
-          const held = { active: await isolated(() => GZ_CTABS.showing()), native: await page.evaluate(() => ({ page: location.href, stage: window.__b8bStage, main: document.querySelector('main[class*="contentGridArea"]')?.textContent.slice(0, 100), timeOrigin: performance.timeOrigin })) };
-          ok(held.active && (delayed !== 'header-held' || !held.native.main), `${label} waits for native main replacement (${JSON.stringify(held)})`);
-          await page.waitForFunction(() => window.__b8bStage === 'empty');
-          ok(await isolated(() => GZ_CTABS.showing()), `${label} stays held while the native main is absent`);
-          await saved(route, top, cid);
-          ok(true, `${label} does not overwrite the target's saved scroll before content arrives`);
-          fs.writeFileSync(path.join(out, `B8b-${label}.json`), JSON.stringify(held, null, 2));
-        }
-        await isolated(async () => {
-          const until = performance.now() + 10000;
-          while (GZ_CTABS.showing() && performance.now() < until) await new Promise((r) => setTimeout(r, 5));
-          if (GZ_CTABS.showing()) throw new Error('cached view did not release');
-          return true;
-        });
-        phase = `B8b:LIVE:${label}`;
-        ok(requestDetails.length === start, `${label} restoration starts no requests (${JSON.stringify(requestDetails.slice(start))})`);
-        await settled(cid);
-        await page.waitForFunction((n) => {
+        await switchTab(cid);
+        ok(await target.evaluate(() => performance.timeOrigin) === birth, `${label} retains the live document`);
+        ok(!requestDetails.slice(start).some((r) => r.type === 'document' || r.page === target.url()), `${label} return loads no document or resources for that course`);
+        await target.waitForFunction((n) => {
           const main = document.querySelector('main[class*="contentGridArea"]'); let sc = main;
           while (sc !== document.body && !/auto|scroll|overlay/.test(getComputedStyle(sc).overflowY)) sc = sc.parentElement;
           return Math.abs((sc === document.body ? document.scrollingElement : sc).scrollTop - n) < 2;
         }, top);
-        ok(await page.evaluate(() => location.pathname + location.search) === route, `${label} keeps its exact route/query`);
+        ok(await target.evaluate(() => location.pathname + location.search) === route, `${label} keeps its exact route/query`);
         ok((await strip())?.at === 'routed', `${label} keeps the strip after settlement`);
       };
-      await page.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
-      await page.click('.b8b-folder');
+      await target.evaluate(() => { const sc = document.querySelector('.course-content-container > .panel-wrap'); if (sc) sc.scrollTop = 0; });
+      await target.click('.b8b-folder');
       await opts.evaluate(async () => {
         const until = performance.now() + 4000;
         while (performance.now() < until) {
@@ -242,20 +245,20 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       });
       await native('a.b8b-document');
       const doc = '/ultra/courses/_101_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
-      phase = 'B8b:NATIVE:history'; await page.goBack(); await settled('_101_1');
-      ok(await page.evaluate(() => location.pathname.endsWith('/outline')), 'Back from a routed document restores the native outline');
-      try { await page.waitForSelector('.b8b-folder[aria-expanded="true"]', { timeout: 5000 }); }
+      phase = 'B8b:NATIVE:history'; await target.evaluate(() => history.back()); await target.waitForFunction(() => location.pathname.endsWith('/outline')); await settled('_101_1');
+      ok(await target.evaluate(() => location.pathname.endsWith('/outline')), 'Back from a routed document restores the native outline');
+      try { await target.waitForSelector('.b8b-folder[aria-expanded="true"]', { timeout: 5000 }); }
       catch (error) {
-        const receipt = { native: await page.evaluate(() => ({ page: location.href, folder: document.querySelector('.b8b-folder')?.outerHTML, pagePlace: sessionStorage.getItem('gz-place:_101_1') })),
+        const receipt = { native: await target.evaluate(() => ({ page: location.href, folder: document.querySelector('.b8b-folder')?.outerHTML, pagePlace: sessionStorage.getItem('gz-place:_101_1') })),
           settings: await isolated(() => ({ enabled: GZ_CTX.on(), place: GZ_CTX.settings().enhance.place, loaded: typeof GZ_PLACE, acted: GZ_CTX.acted(), asked: GZ_CTX.placeAsked() })), local: await opts.evaluate(() => chrome.storage.local.get('coursePlace')) };
         fs.writeFileSync(path.join(out, 'B8b-folder-failure.json'), JSON.stringify(receipt, null, 2)); throw error;
       }
       ok(true, 'the existing Your place path restores the open folder after the routed document');
-      await page.goForward(); await settled('_101_1');
-      ok(await page.evaluate(() => location.pathname + location.search) === doc && (await strip())?.at === 'routed', 'Forward restores the routed document with its strip and query');
+      await target.evaluate(() => history.forward()); await target.waitForFunction(() => location.pathname.includes('/document/')); await settled('_101_1');
+      ok(await target.evaluate(() => location.pathname + location.search) === doc && (await strip())?.at === 'routed', 'Forward restores the routed document with its strip and query');
       for (const at of ['above', 'between', 'below']) {
         await opts.evaluate(async (at) => { const { tabs } = await chrome.storage.sync.get('tabs'); await chrome.storage.sync.set({ tabs: { ...tabs, at } }); }, at);
-        await page.waitForFunction((a) => {
+        await target.waitForFunction((a) => {
           const strip = document.getElementById('gz-ctabs'), hd = document.querySelector('[class*="panelHeaderContainerRoot"]');
           return strip?.dataset.at === 'routed' && (a === 'above' ? strip.nextElementSibling === hd : strip.previousElementSibling === hd);
         }, at);
@@ -268,9 +271,9 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
           phase = `B8b:NATIVE:geometry:${preset}:${at}:${size}:${width}`;
           await settings({ preset, enhance: { widgets: true }, tabs: { at }, nav: { size } });
           await page.setViewportSize({ width, height: 860 });
-          await page.waitForSelector('#gz-float section.gz-w[data-tile="timer"]');
+          await target.waitForSelector('#gz-float section.gz-w[data-tile="timer"]');
           await page.waitForTimeout(200);
-          const g = await page.evaluate(() => {
+          const g = await target.evaluate(() => {
             const st = document.getElementById('gz-ctabs'), hd = document.querySelector('[class*="panelHeaderContainerRoot"]');
             const timer = document.querySelector('#gz-float section.gz-w[data-tile="timer"]');
             const a = st.getBoundingClientRect(), b = hd.getBoundingClientRect(), c = timer.getBoundingClientRect();
@@ -292,233 +295,127 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       }
       await position(470); await saved(doc, 470); await restore(doc, 470, 'document-nested-scroll');
       await switchTab('_102_1');
-      phase = 'B8b:NATIVE:second-document'; await page.click('a.b8b-document'); await settled('_102_1');
+      phase = 'B8b:NATIVE:second-document'; await target.click('a.b8b-document'); await settled('_102_1');
       const second = '/ultra/courses/_102_1/document/_8110_1?view=content&state=view&parentId=_8130_1';
       await position(380); await saved(second, 380, '_102_1');
-      await page.evaluate(() => { window.__b8bHeaderOnly = true; });
-      await restore(doc, 470, 'header-before-main', '_101_1', 'header-held');
-      await page.evaluate(() => { window.__b8bHeaderOnly = false; window.__b8bReuse = true; });
-      await restore(second, 380, 'reused-header-old-main', '_102_1', 'old-held');
-      await page.evaluate(() => { window.__b8bReuse = false; });
+      await restore(second, 380, 'second-live-document', '_102_1');
       await switchTab('_101_1');
-      phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
+      phase = 'B8b:NATIVE:document-close'; await target.click('.routed-page a'); await settled('_101_1');
       await native('a.b8b-document-self');
       const self = '/ultra/courses/_101_1/document/_8112_1?view=content&state=view';
       await position(430); await saved(self, 430); await restore(self, 430, 'document-main-scroll');
-      phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
+      phase = 'B8b:NATIVE:document-close'; await target.click('.routed-page a'); await settled('_101_1');
       await native('a.b8b-document-fallback');
       const fallback = '/ultra/courses/_101_1/document/_8111_1?view=content&state=view';
       await position(520); await saved(fallback, 520); await restore(fallback, 520, 'document-page-scroll');
-      phase = 'B8b:NATIVE:document-close'; await page.click('.routed-page a'); await settled('_101_1');
+      phase = 'B8b:NATIVE:document-close'; await target.click('.routed-page a'); await settled('_101_1');
       await native('a.b8b-assignment');
       const overview = '/ultra/courses/_101_1/assessment/_8120_1/overview?courseId=_101_1';
-      await position(390); await saved(overview, 390); await restore(overview, 390, 'cached-assignment-overview');
-      await isolated(() => { globalThis.__b8bClassifier = GZ_SITE_ULTRA.assignment; GZ_SITE_ULTRA.assignment = () => false; return true; });
-      await switchTab('_102_1'); await switchTab('_101_1');
-      ok(await page.evaluate(() => location.pathname.endsWith('/outline')), 'a stored overview cannot authorize a target after its positive cache check is lost');
-      await isolated(() => { GZ_SITE_ULTRA.assignment = __b8bClassifier; return true; });
+      await position(390); await saved(overview, 390); await restore(overview, 390, 'assignment-overview');
       for (const cls of ['a.b8b-test', 'a.b8b-unknown']) {
-        if (await page.locator('.routed-page a').count()) { phase = 'B8b:NATIVE:overview-close'; await page.click('.routed-page a'); await settled('_101_1'); }
+        if (await target.locator('.routed-page a').count()) { phase = 'B8b:NATIVE:overview-close'; await target.click('.routed-page a'); await settled('_101_1'); }
         await native(cls); await switchTab('_102_1'); await switchTab('_101_1');
-        ok(await page.evaluate(() => location.pathname.endsWith('/outline')), `${cls} returns quietly to the outline`);
+        ok(await target.evaluate(() => location.pathname.includes('/overview')), `${cls} keeps the already open overview without opening another attempt`);
       }
-      ok(await page.evaluate(() => window.__attempts === 0), 'no routed overview starts or resumes an attempt');
-      const nativeNet = await isolated(() => __b8bNet);
-      ok(!nativeNet.some((r) => r.active), `routed snapshot callbacks initiate no fetch (${JSON.stringify(nativeNet.filter((r) => r.active))})`);
-      const report = requestDetails.filter((r) => r.phase.startsWith('B8b:'));
-      fs.writeFileSync(path.join(out, 'B8b-requests.json'), JSON.stringify(report, null, 2));
-      fs.writeFileSync(path.join(out, 'B8b-fetch-starts.json'), JSON.stringify(nativeNet, null, 2));
+      ok(await target.evaluate(() => window.__attempts === 0), 'no routed overview starts or resumes an attempt');
+      fs.writeFileSync(path.join(out, 'B8b-requests.json'), JSON.stringify(requestDetails.filter((r) => r.phase.startsWith('B8b:')), null, 2));
       phase = 'B8b:complete';
     };
     if (process.env.GZ_B8B_FOCUSED) {
       await routedChecks(); console.log(`${fails ? 'FAILED' : 'passed'} routed document/Assignment controls`); process.exitCode = fails ? 1 : 0; return;
     }
-    if (process.env.GZ_B8_REQUEST_PROBE) await isolated(() => {
-      globalThis.__b8Net = []; globalThis.__b8SeenWrites = [];
-      const stored = chrome.storage.local.set;
-      chrome.storage.local.set = (...args) => { if (args[0]?.seenContent) __b8SeenWrites.push({ at: performance.now(), active: GZ_CTABS.showing?.(), page: location.href, native: document.querySelector('div.bb-course-navigation a.js-course-outline-tool')?.getAttribute('href'), value: args[0].seenContent }); return stored.apply(chrome.storage.local, args); };
-      globalThis.__b8Pending = 0; globalThis.__b8Settled = performance.now();
-      const original = fetch;
-      globalThis.fetch = async (...args) => {
-        const over = document.getElementById('gz-ctabs-snap');
-        __b8Net.push({ url: String(args[0]), at: performance.now(), page: location.href, active: GZ_CTABS.showing?.(), overlay: !!over, opacity: over?.style.opacity,
-          spinner: !!document.querySelector('.spinner'), native: document.querySelector('div.bb-course-navigation a.js-course-outline-tool')?.getAttribute('href'), stack: new Error().stack });
-        __b8Pending++;
-        try { return await original(...args); } finally { __b8Pending--; __b8Settled = performance.now(); }
-      };
-      return true;
-    });
     let s = await strip();
     ok(s.tabs.length === 1 && s.tabs[0].sel && s.tabs[0].label === 'Computer Science I · FA26-CS101-01', `a course opened gets a tab, named and selected (${JSON.stringify(s.tabs)})`);
     ok(s.at === 'above', `above the course's bar by default (${s.at})`);
     phase = 'native-navigation';
     // Gradebook, scrolled: the place the tab keeps.
-    await page.click('a.js-course-grades-tool');
-    await page.waitForFunction(() => location.pathname.endsWith('/grades') && !document.querySelector('.spinner'));
-    await page.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 600; });
-    await page.waitForTimeout(800);
-    // Synthetic content that must not run or fetch again when cloned or replayed.
-    await page.evaluate(async () => {
-      window.__snapshotConstructors = 0;
-      customElements.define('b8-snapshot-probe', class extends HTMLElement { constructor() { super(); window.__snapshotConstructors++; } });
-      const root = document.querySelector('.course-content-container section.course');
-      root.append(document.createElement('b8-snapshot-probe'));
-      root.append(document.createElement('b8-late-snapshot-probe'));
-      window.__snapshotBuiltinConstructors = 0;
-      customElements.define('b8-snapshot-button', class extends HTMLButtonElement { constructor() { super(); window.__snapshotBuiltinConstructors++; } }, { extends: 'button' });
-      root.append(document.createElement('button', { is: 'b8-snapshot-button' }));
-      root.append(document.createElement('button', { is: 'b8-late-snapshot-button' }));
-      const box = document.createElement('div'); box.dataset.token = 'invented-secret'; box.style.backgroundImage = 'url(https://cdn.school.test/fixture/background.png)'; root.append(box);
-      for (const origin of [location.origin, 'https://cdn.school.test']) {
-        const img = new Image(); img.src = origin + '/fixture/image.png'; root.append(img); await img.decode();
-      }
-    });
-    await page.click('[data-analytics-id="course.header.home"]');
-    await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'page');
+    await target.click('a.js-course-grades-tool');
+    await target.waitForFunction(() => location.pathname.endsWith('/grades') && !document.querySelector('.spinner'));
+    await target.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 600; });
+    await pictured('_101_1', '/ultra/courses/_101_1/grades');
+    await target.click('[data-analytics-id="course.header.home"]');
+    await target.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'page');
     ok(true, 'outside a course, the strip shows above the page');
-    await page.click('a[href="/ultra/courses/_102_1/outline"]');
+    await target.click('a[href="/ultra/courses/_102_1/outline"]');
     await settled('_102_1');
     await open('_103_1');
-    await page.evaluate(() => { window.__lateSnapshotConstructors = 0; customElements.define('b8-late-snapshot-probe', class extends HTMLElement { constructor() { super(); window.__lateSnapshotConstructors++; } }); window.__lateBuiltinConstructors = 0; customElements.define('b8-late-snapshot-button', class extends HTMLButtonElement { constructor() { super(); window.__lateBuiltinConstructors++; } }, { extends: 'button' }); });
     ok(await order() === '_101_1 _102_1 _103_1', `each course opened gets a tab, in order (${await order()})`);
 
-    console.log('isolated platform: ' + JSON.stringify(await isolated(() => ({ nullRegistry: customElements === null, styleIterator: typeof document.documentElement.style[Symbol.iterator] }))));
-
-    // ---- a switch: the copy at once, then the live page, back where the tab was ----
-    const before = requests.length;
-    phase = 'snapshot-switch';
-    await page.click('#gz-ctabs [data-course-id="_101_1"]');
-    const snapAt = await page.waitForSelector('#gz-ctabs-snap', { timeout: 300 }).then(() => true, () => false);
-    ok(snapAt, 'a click on a tab shows its course\'s copy at once');
-    ok((await strip()).tabs.find((x) => x.cid === '_101_1')?.sel, 'the selected tab updates as soon as its snapshot appears');
-    await page.screenshot({ path: path.join(out, 'switch-copy-frost-1280.png') });
-    ok(await page.evaluate(() => !!document.querySelector('.spinner')), 'while Ultra is still building the live page (its spinner is under the copy)');
-    await settled('_101_1');
-    ok(await page.evaluate(() => location.pathname) === '/ultra/courses/_101_1/grades', 'the live page is the tab\'s own place (Gradebook)');
-    await page.waitForTimeout(500);
-    ok(Math.abs((await scroller()) - 600) <= 2, `and its scroll (${await scroller()})`);
-    ok(requests.length === before, `no request for the switch (${requests.slice(before).join(', ') || 'none'})`);
-    ok(await page.evaluate(() => window.__lateSnapshotConstructors === 0), 'a tag registered after capture runs no constructor when replay connects');
-    ok(await page.evaluate(() => window.__snapshotConstructors === 1), 'capturing/replaying a defined custom element runs no constructor');
-    const builtinCounts = await page.evaluate(() => ({ defined: __snapshotBuiltinConstructors, late: __lateBuiltinConstructors }));
-    ok(builtinCounts.defined === 1 && builtinCounts.late === 0, `customized built-ins run no capture or replay constructors (${JSON.stringify(builtinCounts)})`);
-    const copies = Object.values(await session()).filter((v) => v?.layers).map((v) => JSON.stringify(v));
-    ok(!copies.some((x) => x.includes('invented-secret')), 'snapshots discard arbitrary data attributes and credentials');
-    if (process.env.GZ_B8_REQUEST_PROBE) {
-      // A real SPA can leave the previous outline's rows in place under the restored URL while its next view loads.
-      await page.click('a.js-course-outline-tool');
-      await page.waitForFunction(() => !document.querySelector('.spinner') && document.querySelector('.content-list-item'));
-      await opts.evaluate(async () => { const { enhance } = await chrome.storage.sync.get('enhance'); await chrome.storage.sync.set({ enhance: { ...enhance, newcontent: true } }); });
-      const quiet = () => isolated(async () => {
-        const start = performance.now();
-        while (performance.now() - start < 3000) {
-          if (!__b8Pending && performance.now() - __b8Settled > 500) return { pending: __b8Pending, quietFor: performance.now() - __b8Settled, timeOrigin: performance.timeOrigin, page: location.href };
-          await new Promise((r) => setTimeout(r, 25));
-        }
-        throw new Error('fixture reads did not become quiescent');
-      });
-      await isolated(async () => { const start = performance.now(); while (!GZ_CTX.settings().enhance.newcontent && performance.now() - start < 3000) await new Promise((r) => setTimeout(r, 25)); if (!GZ_CTX.settings().enhance.newcontent) throw new Error('newcontent did not activate'); return true; });
-      console.log('before restore quiescence: ' + JSON.stringify(await quiet()));
-      const seen = await isolated(() => __b8Net.length);
-      await page.evaluate(() => addEventListener('popstate', (e) => {
-        e.stopImmediatePropagation();
-        document.querySelector('section.course').append(document.createElement('div'));
-        setTimeout(() => dispatchEvent(new PopStateEvent('popstate')), 900);
-      }, { capture: true, once: true }));
-      await switchTab('_102_1');
-      console.log('after restore quiescence: ' + JSON.stringify(await quiet()));
-      const trace = await isolated(() => __b8Net);
-      fs.writeFileSync(path.join(out, 'fetch-starts.json'), JSON.stringify(trace, null, 2));
-      console.log('restore fetch starts: ' + JSON.stringify(trace.slice(seen)));
-      const writes = await isolated(() => __b8SeenWrites);
-      fs.writeFileSync(path.join(out, 'seen-writes.json'), JSON.stringify(writes, null, 2));
-      console.log('seenContent writes: ' + JSON.stringify(writes));
-      ok(!trace.slice(seen).some((r) => r.active && r.url.includes('/contents')), 'no automatic contents read starts while the cached view is active');
-      ok(trace.slice(seen).some((r) => !r.active && !r.spinner && r.native === '/ultra/courses/_102_1/outline' && r.url.includes('/_102_1/contents')), 'newcontent still reads the genuine live target after the copy is released');
-      process.exitCode = fails ? 1 : 0;
-      return;
-    }
-    if (process.env.GZ_B8_FOCUSED) {
-      phase = 'account-boundary';
-      user = '_43_1';
-      const other = await ctx.newPage();
-      await other.goto(`${SITE}/ultra/courses/_103_1/outline`);
-      await other.waitForSelector('#gz-ctabs [role="tab"]');
-      await other.waitForFunction(() => !document.querySelector('.spinner, [data-gz-loading]') && [...document.querySelectorAll('div.bb-course-navigation a[href]')].some((a) => a.getAttribute('href') === '/ultra/courses/_103_1/outline'));
-      console.log('new account settled: ' + JSON.stringify(await other.evaluate(() => ({ timeOrigin: performance.timeOrigin, spinner: !!document.querySelector('.spinner'), loading: !!document.querySelector('[data-gz-loading]') }))));
-      await page.waitForTimeout(300);
-      ok(await page.locator('#gz-ctabs').count() === 0 && await isolated(() => GZ_CTABS.snapshots()) === 0, 'another document changing account clears the old in-page copies and strip');
-      ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctabs') && !sessionStorage.getItem('gz-ctabs')), 'account revocation leaves no page reservation or phantom strip gap');
-      await isolated(() => { GZ_CTABS.sync(true); return true; });
-      await page.waitForTimeout(100);
-      ok(await page.locator('#gz-ctabs').count() === 0, 'an older document cannot reenable its cached account');
-      ok((await session())[`snapwho:${SITE}`]?.uid === '_43_1', 'the newer document retains account ownership');
-      await other.click('[data-analytics-id="course.header.home"]');
-      await other.click('a[href="/ultra/courses/_102_1/outline"]');
-      await other.waitForFunction(() => !document.querySelector('.spinner') && document.querySelector('#gz-ctabs [data-course-id="_102_1"][aria-selected="true"]'));
-      await page.waitForTimeout(200);
-      ok(Object.keys(await session()).some((k) => k.startsWith('snap:')), 'the newer account still captures viewed courses');
-      const epochBefore = (await session())[`snapwho:${SITE}`]?.epoch || 0;
-      phase = 'rapid-toggle';
-      await opts.evaluate(async () => {
-        const { enhance } = await chrome.storage.sync.get('enhance');
-        await chrome.storage.sync.set({ enhance: { ...enhance, tabs: false } });
-        await chrome.storage.sync.set({ enhance: { ...enhance, tabs: true } });
-      });
-      await page.waitForTimeout(350);
-      const state = await session();
-      ok(!Object.keys(state).some((k) => k.startsWith('snap:')) && state[`snapwho:${SITE}`]?.epoch > epochBefore, 'rapid off/on clears the observed cache generation');
-      await other.waitForSelector('#gz-ctabs [role="tab"]');
-      ok(await other.locator('#gz-ctabs').count() === 1 && await page.locator('#gz-ctabs').count() === 0, 'rapid off/on keeps one current-account strip and cannot revive the old account');
-      await other.close();
-      console.log(`${fails ? 'FAILED' : 'passed'} focused snapshot/account/toggle controls`);
-      process.exitCode = fails ? 1 : 0;
-      return;
-    }
-    phase = 'interactions';
-
-    // ---- never back into an assessment ----
-    await page.click('a.js-course-outline-tool');
-    await page.waitForFunction(() => location.pathname.endsWith('/outline') && document.querySelector('a[href*="/outline/assessment/"]'));
-    await page.click('a[href*="/outline/assessment/"]');
-    await page.waitForFunction(() => location.pathname.includes('/assessment/'));
-    const views = await page.evaluate(() => window.__assessmentViews);
+    // First open restores the saved tool/scroll; a warm switch retains the exact live document and edits.
+    const parentPath = page.url();
+    holdCourse = '_101_1';
+    await target.click('#gz-ctabs [data-course-id="_101_1"]');
+    try {
+      await page.waitForSelector('.gz-ctabs-pic');
+      ok(courseHeld, 'the first live course is still loading behind its picture');
+      const axSession = await ctx.newCDPSession(page);
+      const ax = await axSession.send('Accessibility.getFullAXTree');
+      await axSession.detach();
+      ok(ax.nodes.some((n) => n.role?.value === 'progressbar' && n.name?.value === 'Loading…'), 'the loading picture exposes its accessible spinner');
+      ok(await page.locator('#gz-ctabs [data-course-id="_101_1"]').getAttribute('aria-selected') === 'true', 'the selected tab updates while its live page loads');
+      ok(await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('.gz-ctabs-pic')), 'the cached course picture covers the outgoing page until its frame is built');
+      await page.screenshot({ path: path.join(out, 'switch-copy-frost-1280.png') });
+    } finally { holdCourse = ''; releaseCourse?.(); }
+    await showing('_101_1');
+    ok(page.url() === parentPath, 'a live tab leaves the surrounding native page in place');
+    ok(await target.evaluate(() => location.pathname) === '/ultra/courses/_101_1/grades', 'a first live tab opens its saved Gradebook');
+    await target.waitForFunction(() => Math.abs(document.querySelector('.course-content-container > .panel-wrap').scrollTop - 600) <= 2);
+    ok(Math.abs((await scroller()) - 600) <= 2, `and its saved scroll (${await scroller()})`);
+    const live = target, birth = await target.evaluate(() => performance.timeOrigin);
+    await target.evaluate(() => { const t = document.createElement('textarea'); t.id = 'live-draft'; t.setAttribute('aria-label', 'Synthetic draft'); document.querySelector('section.course').append(t); });
+    await target.locator('#live-draft').fill('unsaved synthetic work');
+    await target.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 600; });
     await switchTab('_102_1');
+    const before = requests.length;
     await switchTab('_101_1');
-    ok(await page.evaluate(() => location.pathname) === '/ultra/courses/_101_1/outline', `a tab left in an assessment goes back to the course's tool (${await page.evaluate(() => location.pathname)})`);
-    ok(await page.evaluate(() => [window.__assessmentViews, window.__attempts]).then(([v, a]) => v === views && a === 0), 'the assessment wasn\'t opened again, nor an attempt started');
+    ok(target === live && await target.evaluate(() => performance.timeOrigin) === birth, 'returning shows the same live document');
+    ok(await target.locator('#live-draft').inputValue() === 'unsaved synthetic work', 'the live tab retains unsaved edits');
+    ok(Math.abs((await scroller()) - 600) <= 2, 'a warm switch retains its scroll');
+    // Hidden courses may finish their own API reads; a return must not reload this course's document or resources.
+    ok(!requestDetails.slice(before).some((r) => r.type === 'document' || r.page === target.url()), 'a warm switch loads no document or resources for the returning course');
+    await page.screenshot({ path: path.join(out, 'switch-live-frost-1280.png') });
+    await open('_101_1');
+
+    // A retained live assessment stays where the student left it; a switch never opens another attempt.
+    await target.click('a[href*="/outline/assessment/"]');
+    await target.waitForFunction(() => location.pathname.includes('/assessment/'));
+    const views = await target.evaluate(() => window.__assessmentViews);
+    await switchTab('_102_1'); await switchTab('_101_1');
+    ok(await target.evaluate(() => location.pathname.includes('/assessment/')), 'the native live assessment stays in its existing document');
+    ok(await target.evaluate(() => [window.__assessmentViews, window.__attempts]).then(([v, a]) => v === views && a === 0), 'the assessment was not opened again, nor an attempt started');
+    await target.click('.panel-header a');
 
     // ---- an item opened over the course: the strip at its panel ----
-    await page.click('a[href*="/outline/edit/document/"]');
-    await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
-    const nested = await page.evaluate(() => { const r = document.getElementById('gz-ctabs').getBoundingClientRect(); const e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e?.closest('#gz-ctabs'); });
+    await target.click('a[href*="/outline/edit/document/"]');
+    await target.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
+    const nested = await target.evaluate(() => { const r = document.getElementById('gz-ctabs').getBoundingClientRect(); const e = document.elementFromPoint(r.left + 40, r.top + r.height / 2); return !!e?.closest('#gz-ctabs'); });
     ok(nested, 'on a document opened over the course, the strip is on top, at its panel');
     await page.screenshot({ path: path.join(out, 'nested-frost-1280.png') });
-    await page.click('.panel-header a');
-    await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'above');
+    await target.click('.panel-header a');
+    await target.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'above');
 
     // ---- pin, move, close ----
-    await page.hover('#gz-ctabs [data-course-id="_103_1"]');
-    await page.click('#gz-ctabs [data-course-id="_103_1"] .gz-ctab-pin');
+    await target.hover('#gz-ctabs [data-course-id="_103_1"]');
+    await target.click('#gz-ctabs [data-course-id="_103_1"] .gz-ctab-pin');
     s = await strip();
     ok(s.tabs[0].cid === '_103_1' && s.tabs[0].pin && /pinned/.test(s.tabs[0].label), `a pinned tab goes first and says so (${await order()})`);
-    await page.focus('#gz-ctabs [data-course-id="_101_1"]');
+    await target.focus('#gz-ctabs [data-course-id="_101_1"]');
     await page.keyboard.press('Shift+ArrowRight');
     ok(await order() === '_103_1 _102_1 _101_1', `Shift+→ moves a tab (${await order()})`);
-    ok(await page.evaluate(() => document.activeElement?.dataset.courseId) === '_101_1', 'and it keeps the focus');
+    ok(await target.evaluate(() => document.activeElement?.dataset.courseId) === '_101_1', 'and it keeps the focus');
     await page.keyboard.press('ArrowLeft');
-    ok(await page.evaluate(() => document.activeElement?.dataset.courseId) === '_102_1', '← moves the focus');
+    ok(await target.evaluate(() => document.activeElement?.dataset.courseId) === '_102_1', '← moves the focus');
     await page.keyboard.press('Delete');
     ok(await order() === '_103_1 _101_1', `Delete closes the focused tab (${await order()})`);
     await open('_104_1');
-    await switchTab('_101_1');
-    await page.click('#gz-ctabs [data-course-id="_104_1"]', { button: 'middle' });
+    await target.click('#gz-ctabs [data-course-id="_104_1"]', { button: 'middle' });
+    await showing('_101_1');
     ok(await order() === '_103_1 _101_1', `a middle click closes a tab (${await order()})`);
     await page.waitForTimeout(200);
-    ok(!Object.keys(await session()).some((k) => k.endsWith('|_104_1')), 'closing a tab also drops its worker snapshot');
+    ok(!Object.keys(await session()).some((k) => k.endsWith('|_104_1')), 'closing a tab also drops its worker picture');
     // Dragging: the last unpinned tab to the first unpinned place.
     await open('_104_1');
-    const box = async (cid) => page.locator(`#gz-ctabs [data-course-id="${cid}"]`).boundingBox();
+    const box = async (cid) => target.locator(`#gz-ctabs [data-course-id="${cid}"]`).boundingBox();
     const from = await box('_104_1');
     const to = await box('_101_1');
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
@@ -526,14 +423,14 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     for (let i = 1; i <= 8; i++) await page.mouse.move(from.x + from.width / 2 + ((to.x + 10) - (from.x + from.width / 2)) * i / 8, from.y + from.height / 2);
     await page.mouse.up();
     ok(await order() === '_103_1 _104_1 _101_1', `a tab drags into place, within its group (${await order()})`);
-    await page.evaluate(() => { document.documentElement.dir = 'rtl'; });
+    await target.evaluate(() => { document.documentElement.dir = 'rtl'; });
     const rtlFrom = await box('_101_1'), rtlTo = await box('_104_1');
     await page.mouse.move(rtlFrom.x + rtlFrom.width / 2, rtlFrom.y + rtlFrom.height / 2);
     await page.mouse.down();
     await page.mouse.move(rtlTo.x + rtlTo.width * .75, rtlTo.y + rtlTo.height / 2, { steps: 8 });
     await page.mouse.up();
     ok(await order() === '_103_1 _101_1 _104_1', `drag follows the rendered right-to-left order (${await order()})`);
-    await page.evaluate(() => { document.documentElement.dir = 'ltr'; });
+    await target.evaluate(() => { document.documentElement.dir = 'ltr'; });
     // The cap: past it, the least recently used unpinned tab closes, with a word.
     await settings({ tabs: { cap: 3 } });
     await page.waitForTimeout(400);
@@ -544,7 +441,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.setViewportSize({ width: 375, height: 860 });
     await page.screenshot({ path: path.join(out, 'cap-word-frost-375.png') });
     await page.setViewportSize({ width: 1280, height: 860 });
-    await page.waitForFunction(() => !document.querySelector('#gz-ctabs .gz-ctabs-note')?.textContent, null, { timeout: 8000 });
+    await target.waitForFunction(() => !document.querySelector('#gz-ctabs .gz-ctabs-note')?.textContent, null, { timeout: 8000 });
 
     // ---- placements, light and dark, wide and narrow ----
     await settings({ tabs: { cap: 8 } });
@@ -553,10 +450,10 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         for (const width of [1280, 375]) {
           await settings({ preset, tabs: { at, cap: 8, color: at === 'between' ? 'tint' : at === 'below' ? 'theme' : 'off', mark: at === 'below' ? 'icon' : 'dot', shape: at === 'between' ? 'pill' : 'tab' } });
           await page.setViewportSize({ width, height: 860 });
-          await page.waitForFunction((a) => document.getElementById('gz-ctabs')?.dataset.at === a && !document.querySelector('[data-gz-loading], [data-gz-reveal]'), at);
+          await target.waitForFunction((a) => document.getElementById('gz-ctabs')?.dataset.at === a && !document.querySelector('[data-gz-loading], [data-gz-reveal]'), at);
           await page.mouse.move(5, 850);
           await page.waitForTimeout(300);
-          const g = await page.evaluate(() => {
+          const g = await target.evaluate(() => {
             const r = (e) => e.getBoundingClientRect();
             const st = document.getElementById('gz-ctabs');
             const one = document.querySelector('course-page-header');
@@ -573,23 +470,23 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         }
       }
       // Scrolled: the strip stays with the sticky bar.
-      await page.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 900; });
+      await target.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 900; });
       await page.waitForTimeout(150);
-      ok(await page.evaluate(() => { const r = document.getElementById('gz-ctabs').getBoundingClientRect(); return r.top >= -1 && r.bottom < 200; }), `${preset}: scrolled, the strip stays at the top with the bar`);
-      await page.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 0; });
+      ok(await target.evaluate(() => { const r = document.getElementById('gz-ctabs').getBoundingClientRect(); return r.top >= -1 && r.bottom < 200; }), `${preset}: scrolled, the strip stays at the top with the bar`);
+      await target.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 0; });
       // An item panel and a page outside a course, in this palette.
       await settings({ preset });
       await page.setViewportSize({ width: 1280, height: 860 });
-      await page.click('a.js-course-outline-tool').catch(() => {});
-      await page.waitForSelector('a[href*="/outline/edit/document/"]');
-      await page.click('a[href*="/outline/edit/document/"]');
-      await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
+      await target.click('a.js-course-outline-tool').catch(() => {});
+      await target.waitForSelector('a[href*="/outline/edit/document/"]');
+      await target.click('a[href*="/outline/edit/document/"]');
+      await target.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'nested');
       for (const at of ['above', 'between', 'below']) {
         for (const width of [1280, 375]) {
           await page.setViewportSize({ width, height: 860 });
           await settings({ preset, tabs: { at } });
           await page.waitForTimeout(150);
-          const g = await page.evaluate(() => {
+          const g = await target.evaluate(() => {
             const strip = document.getElementById('gz-ctabs'), header = strip.parentElement.querySelector('.panel-header');
             const a = strip.getBoundingClientRect(), b = header.getBoundingClientRect();
             const hit = document.elementFromPoint(a.left + Math.min(40, a.width / 2), a.top + a.height / 2);
@@ -600,11 +497,12 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
           await page.screenshot({ path: path.join(out, `nested-${at}-${preset.toLowerCase()}-${width}.png`) });
         }
       }
-      await page.click('.panel-header a');
-      await page.click('[data-analytics-id="course.header.home"]');
-      await page.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'page');
+      await target.click('.panel-header a');
+      await target.click('[data-analytics-id="course.header.home"]');
+      target = page;
+      await target.waitForFunction(() => document.getElementById('gz-ctabs')?.dataset.at === 'page');
       await page.screenshot({ path: path.join(out, `page-${preset.toLowerCase()}-1280.png`) });
-      await page.click('a[href="/ultra/courses/_105_1/outline"]');
+      await target.click('a[href="/ultra/courses/_105_1/outline"]');
       await settled('_105_1');
     }
 
@@ -617,9 +515,9 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
         for (const width of [1280, 375]) {
           await page.setViewportSize({ width, height: 860 });
           await settings({ enhance: { widgets: true }, tabs: { at }, nav: { size } });
-          await page.waitForSelector('#gz-float section.gz-w[data-tile="timer"]');
+          await target.waitForSelector('#gz-float section.gz-w[data-tile="timer"]');
           await page.waitForTimeout(150);
-          const g = await page.evaluate(() => {
+          const g = await target.evaluate(() => {
             const r = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();
             return { timer: r('#gz-float section.gz-w[data-tile="timer"]'), strip: r('#gz-ctabs'), bar: r('div.bb-course-navigation'), nav: r('.MuiDrawer-paper'), copies: document.querySelectorAll('section.gz-w[data-tile="timer"]').length, marker: document.getElementById('gz-ctabs').hasAttribute('data-gz-keep-clear'), width: innerWidth };
           });
@@ -635,64 +533,33 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForTimeout(250);
     phase = 'interactions';
     await routedChecks();
+    await open('_103_1');
 
-    // ---- the copies: in the worker's memory only, dropped on switch-off and on another account ----
+    // ---- pictures stay in session storage and are dropped on switch-off or another account ----
     let kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));
     ok(kept.length >= 1 && kept.every((k) => k.startsWith(`snap:${SITE}|_`)), `copies are kept in storage.session, for this site (${kept.length})`);
     await settings({ enhance: { tabs: false } });
-    await page.waitForFunction(() => !document.getElementById('gz-ctabs'));
+    await target.waitForFunction(() => !document.getElementById('gz-ctabs'));
     await page.waitForTimeout(300);
     kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));
     ok(!kept.length, `switched off: the strip goes, and every copy (${kept.length} left)`);
-    ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctabs') && !sessionStorage.getItem('gz-ctabs')), 'switching off clears the page reservation too');
+    ok(await target.evaluate(() => !document.documentElement.hasAttribute('data-gz-ctabs') && !sessionStorage.getItem('gz-ctabs') && !document.getElementById('gz-ctabs-frames')), 'switching off clears the page reservation and every live frame too');
     await settings();
-    await page.waitForSelector('#gz-ctabs [role="tab"]');
-    await switchTab('_103_1');
-    await page.waitForTimeout(300);
-    ok(Object.keys(await session()).some((k) => k.startsWith('snap:')), 'on again, a switch keeps a copy again');
+    await target.waitForSelector('#gz-ctabs [role="tab"]');
+    await switchTab('_104_1');
+    await pictured('_104_1', '/ultra/courses/_104_1/outline');
+    ok(Object.keys(await session()).some((k) => k.startsWith('snap:')), 'on again, a switch keeps a picture again');
     user = '_43_1';
     phase = 'account-reload';
     await page.reload();
-    await page.waitForSelector('#gz-ctabs [role="tab"]');
+    target = page;
+    await target.waitForSelector('#gz-ctabs [role="tab"]');
     await page.waitForTimeout(500);
     kept = Object.keys(await session()).filter((k) => k.startsWith('snap:'));
     ok(!kept.length && ((await session())[`snapwho:${SITE}`]?.uid || (await session())[`snapwho:${SITE}`]) === '_43_1', `another account on the site: the last one's copies go (${kept.length} left)`);
     ok(await order() === '_103_1', `and it starts its own list (${await order()})`);
-    // Native documents/stylesheet loads are separate from resource-free snapshot replay. Other enabled Glaze features
-    // can read their own course endpoints; every request, destination, method and current page is recorded.
-    const asked = requestDetails.filter((r) => r.type === 'document' && r.origin === SITE);
-    ok(asked.length === 2, `the only page loads so far are the student's own (${asked.length})`);
     ok(requestDetails.every((r) => r.method === 'GET'), 'all measured fixture traffic is GET');
-    ok(!requestDetails.some((r) => r.phase === 'snapshot-switch'), 'the snapshot switch made no network request with no-store resources');
-
-    // A router that removes its header and then stalls still reaches the bounded full-load fallback.
-    phase = 'fallback-preparation';
-    await page.click('a.js-course-grades-tool');
-    await page.waitForFunction(() => location.pathname.endsWith('/grades') && !document.querySelector('.spinner'));
-    await page.evaluate(() => { document.querySelector('.course-content-container > .panel-wrap').scrollTop = 410; });
-    await page.waitForTimeout(800);
-    await open('_104_1');
-    await page.evaluate(() => {
-      window.__b8StopRoute = (e) => { document.querySelector('div.bb-course-navigation')?.remove(); e.stopImmediatePropagation(); };
-      window.addEventListener('popstate', window.__b8StopRoute, true);
-    });
-    phase = 'fallback-reload';
-    const fallbackAt = Date.now();
-    const oldDocument = await page.evaluate(() => performance.timeOrigin);
-    const reloaded = page.waitForRequest((r) => r.isNavigationRequest() && r.resourceType() === 'document' && r.url().startsWith(SITE + '/ultra/courses/_103_1/'), { timeout: 6000 }).then(() => true, () => false);
-    await page.click('#gz-ctabs [data-course-id="_103_1"]');
-    const fellBack = await reloaded;
-    if (fellBack) await page.waitForFunction((old) => performance.timeOrigin !== old, oldDocument, { timeout: 5000 });
-    ok(fellBack && Date.now() - fallbackAt < 5000, `missing header triggers the 2.5s reload fallback (${Date.now() - fallbackAt}ms; loaded=${fellBack})`);
-    if (!fellBack) {
-      phase = 'probe-recovery-reload';
-      await page.evaluate(() => window.removeEventListener('popstate', window.__b8StopRoute, true));
-      await page.reload();
-    }
-    await settled('_103_1');
-    ok(await page.evaluate(() => location.pathname.endsWith('/courses/_103_1/grades')), 'the fallback arrives at the selected course tool');
-    await page.waitForTimeout(400);
-    ok(Math.abs((await scroller()) - 410) <= 2, `the full-load fallback restores remembered scroll (${await scroller()})`);
+    ok(requestDetails.filter((r) => r.type === 'document').every((r) => r.origin === SITE && r.path.startsWith('/ultra/')), 'live documents load only the selected synthetic course on this site');
 
     // Quiet state and repeated route redraws: own DOM writes must settle, with one strip and no listener growth.
     phase = 'redraw-probes';
@@ -723,12 +590,12 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
       return true;
     });
     for (let i = 0; i < 12; i++) {
-      await page.evaluate((i) => { history.pushState(null, '', location.origin + '/ultra/courses/_103_1/' + (i % 2 ? 'outline' : 'grades')); dispatchEvent(new PopStateEvent('popstate')); }, i);
+      await target.evaluate((i) => { history.pushState(null, '', location.origin + '/ultra/courses/_103_1/' + (i % 2 ? 'outline' : 'grades')); dispatchEvent(new PopStateEvent('popstate')); }, i);
       await settled('_103_1');
     }
     await page.goBack(); await settled('_103_1');
     await page.goForward(); await settled('_103_1');
-    for (let i = 0; i < 4; i++) { await settings({ enhance: { tabs: false } }); await page.waitForTimeout(100); await settings(); await page.waitForSelector('#gz-ctabs'); }
+    for (let i = 0; i < 4; i++) { await settings({ enhance: { tabs: false } }); await page.waitForTimeout(100); await settings(); await target.waitForSelector('#gz-ctabs'); }
     await page.waitForTimeout(2000);
     const quietBefore = await isolated(() => ({ syncs: __b8.syncs, helds: __b8.helds }));
     await page.waitForTimeout(1200);
@@ -737,7 +604,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     ok(quietAfter.netListeners === 0, `toggle cycles retain no extra listeners (${quietAfter.netListeners})`);
     ok(quietAfter.netStoreListeners === 0, `toggle cycles retain no extra storage listeners (${quietAfter.netStoreListeners})`);
     ok(quietAfter.netRuntimeListeners === 0, `routes/toggles retain no extra runtime listeners (${quietAfter.netRuntimeListeners})`);
-    ok(await page.locator('#gz-ctabs').count() === 1, 'redraws, Back and Forward keep exactly one strip');
+    ok(await target.locator('#gz-ctabs').count() === 1, 'redraws, Back and Forward keep exactly one strip');
     fs.writeFileSync(path.join(out, 'redraw-metrics.json'), JSON.stringify({ quietBefore, quietAfter }, null, 2));
 
     // A full all-pinned list must stay bounded and quiet without hiding the native course.
@@ -748,19 +615,19 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await page.waitForTimeout(800);
     const fullBefore = await isolated(() => __b8.syncs);
     await page.waitForTimeout(1200);
-    ok(await page.locator('#gz-ctabs [role="tab"]').count() === 40, '40 pinned courses keep the hard bound without evicting one');
+    ok(await target.locator('#gz-ctabs [role="tab"]').count() === 40, '40 pinned courses keep the hard bound without evicting one');
     ok((await strip()).note.includes('Close or unpin'), 'a full list explains how to add another tab');
     ok(await isolated(() => __b8.syncs) - fullBefore <= 2, 'a full pinned list does not cause a redraw loop');
-    ok(await page.locator('div.bb-course-navigation .js-course-navigation').count() === 1, 'the native course tools remain available at the hard tab bound');
+    ok(await target.locator('div.bb-course-navigation .js-course-navigation').count() === 1, 'the native course tools remain available at the hard tab bound');
 
     // Sign-out must stay cleared through delayed capture, pagehide and later core passes.
     phase = 'signout';
-    await page.click('.MuiDrawer-paper a[href="#"]');
-    await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide')));
+    await target.click('.MuiDrawer-paper a[href="#"]');
+    await target.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide')));
     await page.waitForTimeout(2000);
     await isolated(() => { GZ_CTABS.sync(true); return true; });
     ok(!Object.keys(await session()).some((k) => k.startsWith('snap:')), 'sign-out followed by pagehide and delayed capture keeps the worker empty');
-    ok(await isolated(() => GZ_CTABS.snapshots()) === 0 && await page.locator('#gz-ctabs').count() === 0, 'sign-out leaves no local snapshots or strip, including a later sync');
+    ok(await isolated(() => GZ_CTABS.snapshots()) === 0 && await target.locator('#gz-ctabs').count() === 0, 'sign-out leaves no local snapshots or strip, including a later sync');
     fs.writeFileSync(path.join(out, 'requests.json'), JSON.stringify(requestDetails, null, 2));
 
 
@@ -776,10 +643,11 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
     await opts.locator('#tabs').scrollIntoViewIfNeeded();
     await opts.screenshot({ path: path.join(out, 'editor-frost-1280.png') });
   } finally {
+    releaseCourse?.();
     fs.writeFileSync(path.join(out, 'requests.json'), JSON.stringify(requestDetails, null, 2));
     await ctx.close();
     fs.rmSync(tmp, { recursive: true, force: true });
   }
   console.log(`${fails ? 'FAILED' : 'passed'}; screenshots in ${out}`);
   process.exitCode = fails ? 1 : 0;
-})();
+})().catch((e) => { console.error(e); process.exitCode = 1; });
