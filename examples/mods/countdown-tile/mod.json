@@ -1,0 +1,16 @@
+{
+  "glaze": 1,
+  "name": "Next Due Countdown",
+  "version": "1.0.0",
+  "author": { "name": "Your name" },
+  "permissions": [
+    { "id": "todo", "why": "Finds your next due date so the tile can count down to it." }
+  ],
+  "hooks": "hooks.js",
+  "ui": {
+    "tiles": [{ "id": "next-due", "name": "Next due", "sizes": ["s", "m"] }]
+  },
+  "settings": [
+    { "id": "course", "type": "toggle", "label": "Show the course name", "default": true }
+  ]
+}

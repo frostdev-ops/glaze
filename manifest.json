@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
@@ -48,7 +48,13 @@
     "service_worker": "lib/background.js"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'"
+  },
+  "sandbox": {
+    "pages": [
+      "mods/host.html"
+    ]
   },
   "options_ui": {
     "page": "options.html",
@@ -116,7 +122,9 @@
     {
       "matches": [
         "https://frostdev.io/glaze/looks",
-        "https://frostdev.io/glaze/looks/*"
+        "https://frostdev.io/glaze/looks/*",
+        "https://frostdev.io/glaze/mods",
+        "https://frostdev.io/glaze/mods/*"
       ],
       "js": [
         "lib/gallery.js"
@@ -149,6 +157,8 @@
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
         "features/lookx.css",
+        "features/rules.css",
+        "features/navlayout.css",
         "features/apps.css",
         "features/surfaces.css",
         "assets/logo.svg",
@@ -164,12 +174,24 @@
       "resources": [
         "lib/scene.js",
         "lib/three.min.js",
+        "lib/scene-media.js",
+        "lib/lottie/lottie_light_canvas.min.js",
         "reader.html",
         "fonts/*.woff2"
       ],
       "matches": [
         "https://*/*"
       ]
+    },
+    {
+      "resources": [
+        "mods/host.html",
+        "mods/boot.js"
+      ],
+      "matches": [
+        "https://*/*"
+      ],
+      "use_dynamic_url": true
     }
   ]
 }

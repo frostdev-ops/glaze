@@ -378,7 +378,7 @@ html .block .block-cards span.categoryname, html .block .block-cards .btn-link {
 html [data-region="course-content"].card {
   overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter);
 }
-html [data-region="course-content"].card:hover { transform: var(--gz-lift); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+html [data-region="course-content"].card:hover { transform: var(--gz-lift); filter: var(--gz-card-hover-filter); box-shadow: var(--gz-hover-shadow); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
 html [data-region="course-content"] .card-footer.menu { background: transparent !important; }
 html [data-region="course-content"] .coursename { color: var(--gz-ink); }
 html [data-region="course-content"] .coursename:hover { color: var(--gz-on-soft); }

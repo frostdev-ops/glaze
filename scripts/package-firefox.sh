@@ -40,6 +40,11 @@ delete m.oauth2;
 m.optional_permissions = (m.optional_permissions || []).filter((p) => p !== 'identity');
 if (!m.optional_permissions.length) delete m.optional_permissions;
 for (const entry of m.web_accessible_resources || []) delete entry.use_dynamic_url;
+// Code mods need Chrome: no sandbox page, no sandbox CSP and none of its files. content.js starts code mods
+// only where the manifest has the sandbox; declarative widgets (features/modwidgets.js, drawn by features/modui.js) run here.
+delete m.sandbox;
+delete m.content_security_policy?.sandbox;
+m.web_accessible_resources = (m.web_accessible_resources || []).map((e) => ({ ...e, resources: e.resources.filter((r) => !r.startsWith('mods/')) })).filter((e) => e.resources.length);
 // 140 (ESR) reads data_collection_permissions; 127+ grants host permissions at install. Glaze sends nothing anywhere
 // on its own: shared sessions and the Looks gallery go out only when the user starts them.
 m.browser_specific_settings = {
@@ -48,6 +53,7 @@ m.browser_specific_settings = {
 };
 fs.writeFileSync(file, JSON.stringify(m, null, 2) + '\n');
 JS
+rm -rf "$stage/mods" "$stage/features/mods.js"
 chmod -R a+rX "$stage"
 out="$(cd "$dist" && pwd)/glaze-v$version-firefox.zip"
 rm -f "$out"

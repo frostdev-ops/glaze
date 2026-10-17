@@ -260,6 +260,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
 }
 :is(.element-card, .gz-course-card):hover, .content-list-item .itemContainer:hover {
   transform: var(--gz-lift);
+  filter: var(--gz-card-hover-filter);
   box-shadow: var(--gz-hover-shadow) !important;
   border-color: var(--gz-border-strong, var(--gz-line-strong)) !important;
 }
@@ -875,6 +876,7 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 #site-wrap .element-list-row { border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; }
 #site-wrap :is(.element-list-row, .messages-container-summary):hover {
   transform: var(--gz-lift);
+  filter: var(--gz-card-hover-filter);
   box-shadow: var(--gz-hover-shadow) !important;
   border-color: var(--gz-border-strong, var(--gz-line-strong)) !important;
 }

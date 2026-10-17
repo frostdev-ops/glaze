@@ -11,7 +11,10 @@ html[data-gz-cursor] :is(input:not([type="button"], [type="submit"], [type="rese
 /* Stickers sit over the page and scroll with it. Outside sticker mode no pointer reaches them: the page beneath gets every click. */
 #gz-stickers { position: absolute; left: 0; top: 0; width: 100%; height: 0; z-index: 2147483000; pointer-events: none; }
 #gz-stickers .gz-stk { position: absolute; translate: -50% 0; pointer-events: none; user-select: none; -webkit-user-select: none; touch-action: none; }
-#gz-stickers .gz-stk img { display: block; width: 100%; height: auto; pointer-events: none; -webkit-user-drag: none; filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.28)); }
+#gz-stickers .gz-stk :is(img, canvas, .gz-stk-lottie) { display: block; width: 100%; height: auto; pointer-events: none; -webkit-user-drag: none; filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.28)); }
+/* A mod's sticker that is not there now (the mod is off or gone): nothing on the page, a dashed box in sticker mode so it can still be removed. */
+#gz-stickers .gz-stk-gone { display: block; aspect-ratio: 1; visibility: hidden; }
+#gz-stickers.gz-stk-edit .gz-stk-gone { visibility: visible; outline: 2px dashed currentColor; opacity: 0.4; }
 #gz-stickers .gz-stk-grip { display: none; }
 #gz-stickers.gz-stk-edit .gz-stk { pointer-events: auto; cursor: grab; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
 #gz-stickers.gz-stk-edit .gz-stk:active { cursor: grabbing; }
@@ -35,7 +38,7 @@ html[data-gz-cursor] :is(input:not([type="button"], [type="submit"], [type="rese
 #gz-stk-panel :is(button, select):focus-visible { outline: 2px solid var(--gz-accent, #2563eb); outline-offset: 2px; }
 #gz-stk-panel .gz-stk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 0.35rem; }
 #gz-stk-panel .gz-stk-pick { display: grid; place-items: center; aspect-ratio: 1; padding: 4px; }
-#gz-stk-panel .gz-stk-pick img { width: 100%; height: 100%; object-fit: contain; }
+#gz-stk-panel .gz-stk-pick :is(img, canvas) { width: 100%; height: 100%; object-fit: contain; }
 #gz-stk-panel .gz-stk-own { position: relative; display: grid; }
 #gz-stk-panel .gz-stk-own > button:last-child { position: absolute; top: -6px; right: -6px; padding: 0 0.35rem; line-height: 1.3; border-radius: 50%; }
 #gz-stk-panel .gz-stk-help, #gz-stk-panel .gz-stk-status { margin: 0; font-size: 12px; color: var(--gz-ink-muted, #555); }

@@ -5,8 +5,8 @@ const root = path.resolve(__dirname, '..'), D = require(path.join(root, 'default
 for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(path.join(root, `lib/${file}.js`));
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
-const TABS = ['look', 'blackboard', 'canvas', 'moodle', 'study', 'sharing', 'backup', 'about'];
-const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', tabs: 'blackboard/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses' };
+const TABS = ['look', 'blackboard', 'canvas', 'moodle', 'study', 'sharing', 'mods', 'backup', 'about'];
+const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', tabs: 'blackboard/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses', mods: 'backup/privacy' };
 const ENHANCE = {
   'study/tools': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'keys', 'newcontent', 'palette', 'drafts', 'download', 'search', 'place', 'coursemenu', 'docPages', 'toggles'],
   'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
@@ -38,7 +38,7 @@ const SPECIAL = {
 };
 const ACTIONS = {
   'look/palette': ['looks', 'save-preset', 'reset-colors', 'share-copy', 'share-code', 'share-try', 'share-offer', 'share-apply', 'share-fav', 'share-cancel', 'gallery-link', 'favorites', 'history', 'history-back', 'history-clear'],
-  'look/type': ['font-custom', 'font-use'], 'look/background': ['bg-sets'],
+  'look/type': ['font-custom', 'font-use'], 'look/background': ['bg-sets', 'x-shader', 'x-layers'], 'look/motion': ['x-motion'],
   'look/extras': ['rotate-looks', 'cursor-pick', 'cursor-file'],
   'look/navigation': ['nav-pick', 'nav-file', 'nav-url'],
   'look/cards': ['card-set', 'card-set-clear'], 'look/courses': ['course-list', 'org-list'],
@@ -111,7 +111,7 @@ test('E1 each setting has exactly one real control/group; radios, dynamic carrie
   for (const node of nodes.filter((n) => Object.hasOwn(n.attrs, 'data-editor-alias'))) assert.ok(node.tag === 'a' && /^#[a-z]+\/[a-z-]+$/.test(node.attrs.href || ''), 'Section aliases are links, never duplicate controls');
 });
 
-test('E1 eight labelled tabs own panels and existing action IDs survive in their mapped sections', () => {
+test('E1 nine labelled tabs own panels and existing action IDs survive in their mapped sections', () => {
   const tabs = nodes.filter((n) => n.attrs.role === 'tab' && !preview(n));
   assert.equal(tabs.length, TABS.length);
   for (const tab of TABS) {
@@ -193,7 +193,8 @@ test('E1 switching an open phone preview to desktop removes modal semantics', ()
   const apply = source.slice(source.indexOf('  const applyContext = () => {') + '  const applyContext = '.length, source.indexOf("\n  addEventListener('message'")).replace(/;\s*$/, '');
   const drawer = { role: 'dialog', 'aria-modal': 'true', removeAttribute(key) { delete this[key]; } }, menu = { setAttribute() {} };
   const context = vm.createContext({ site: 'ultra', context: { viewport: 'desktop', page: 'outline' }, html: { dataset: {}, removeAttribute() {} },
-    document: { querySelectorAll: () => [], querySelector: (selector) => selector === '#preview-menu' ? menu : drawer },
+    document: { querySelectorAll: () => [], querySelector: (selector) => selector === '#preview-menu' ? menu : drawer, dispatchEvent() {} },
+    CustomEvent: class { constructor(type) { this.type = type; } },
   });
   vm.runInContext(`(${apply})()`, context);
   assert.equal(drawer.role, undefined); assert.equal(drawer['aria-modal'], undefined);

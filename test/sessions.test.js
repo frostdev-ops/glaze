@@ -396,6 +396,27 @@ test('disk relay: custom tasks carry only cleaned task/plan fields; joined Looks
   assert.deepEqual(b.settings.data, {}, 'Use this Look goes through the existing editor preview/apply contract');
 });
 
+test('a Look session shares the Look with its parts as a glaze2 code, and plain Looks stay glaze1', async (t) => {
+  const { url } = await start(t), a = device(url), b = device(url);
+  t.after(() => { a.worker.stop(); b.worker.stop(); });
+  const X = require('../lib/lookparts.js'), L = require('../lib/share.js');
+  const parts = { x: { cursor: { kind: 'glow', size: 14 } } };
+  Object.assign(a.settings.data, { bg: { kind: 'layers' }, lookX: await X.pack(parts) });
+  const look = await a.send('create', { kind: 'look', title: 'Glowing' });
+  await b.send('join', { link: (await a.send('link', look)).link });
+  await b.send('useLook', look);
+  assert.ok(b.offered.startsWith('glaze2:'));
+  assert.deepEqual((await L.decode(b.offered)).parts, parts);
+  assert.deepEqual(b.settings.data, {}, 'following never changes the theme');
+  // Parts that were saved on another computer (sync holds only their hash) are left out of what this one shares.
+  a.settings.data.lookX = { h: 'other' };
+  await a.send('sync', look);
+  await b.send('sync', look);
+  await b.send('useLook', look);
+  assert.ok(b.offered.startsWith('glaze1:'));
+  assert.equal((await L.decode(b.offered)).parts, null);
+});
+
 test('disk relay: two offline bound editors preserve both note bodies and touch only the chosen local account', async (t) => {
   const { url } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });

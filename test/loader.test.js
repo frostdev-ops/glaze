@@ -14,7 +14,7 @@ const settle = () => new Promise(setImmediate);
 const ID = 'glaze-test-id';
 
 // The worker with Chrome stubbed: every onMessage listener, and the executeScript calls it makes.
-const worker = (execute = () => Promise.resolve([{ result: {} }]), protocol = 'chrome-extension:') => {
+const worker = (execute = () => Promise.resolve([{ result: true }]), protocol = 'chrome-extension:') => {
   const listeners = [];
   const injected = [], asked = [];
   const none = { addListener() {} };
@@ -88,7 +88,7 @@ test('without a document id, a frame that now holds another document gets nothin
 });
 
 test('success means the file ran to its end: an injection that fails, throws or stops short is reported', async () => {
-  const send = (execute, protocol) => worker(execute, protocol).send({ type: 'glaze:load', files: ['lib/drafts.js'] }, tab());
+  const send = (execute, protocol) => worker(execute, protocol).send({ type: 'glaze:load', files: ['lib/drafts.js'] }, { ...tab(), documentId: 'A' });
   assert.deepEqual(await send(() => Promise.reject(new Error('Frame with ID 3 was removed.'))), { ok: false, error: 'Frame with ID 3 was removed.' });
   // Chrome: a file that throws leaves no last value. Firefox reports the error.
   assert.deepEqual(await send(() => Promise.resolve([{ frameId: 3, result: null }])), { ok: false, error: 'did not finish' });
@@ -145,6 +145,8 @@ test('every loadable file exists, is left out of the first content script, and i
   const files = JSON.parse(bootstrap?.match(/for \(const file of (\[[^\]]+\])\) await load\(file\)/)?.[1].replace(/'/g, '"') || '[]');
   assert.ok(files.includes('content-ultra.js') && files.includes('content.js'), 'Ultra runtime is loaded');
   assert.ok(files.indexOf('content-ultra.js') < files.indexOf('content.js'), 'the part before content.js');
+  // need() refuses in the preview, so every feature a Look's parts bring in must be loaded here (rules were missing once).
+  for (const f of ['features/nav.js', 'features/motionx.js', 'features/rules.js']) assert.ok(files.includes(f), `the Ultra preview loads ${f}`);
   for (const f of files) assert.ok(fs.existsSync(path.join(root, f)), `preview runtime: ${f}`);
 });
 
@@ -201,4 +203,40 @@ test('words asked for in a language still loading are not remembered as English'
   vm.runInContext(read('i18n/de.js'), context);
   assert.equal(t('de'), vm.runInContext('GZ_LANGS.de.Restore', context));
   assert.notEqual(t('de'), 'Restore');
+});
+
+test('a fallback probe must positively identify the document and pins its returned document id', async () => {
+  for (const result of [[], [{}], [{ result: undefined }], [{ result: null }]]) {
+    const w = worker(() => Promise.resolve(result));
+    assert.equal((await w.send({ type: 'glaze:load', files: ['lib/widgets.js'], doc: 'A' }, tab())).ok, false);
+    assert.deepEqual(w.injected, []);
+  }
+  const w = worker((o) => Promise.resolve([{ result: o.func ? true : {}, documentId: 'A' }]));
+  assert.equal((await w.send({ type: 'glaze:load', files: ['lib/widgets.js'], doc: 'A' }, tab())).ok, true);
+  assert.deepEqual(w.injected[0].target, { tabId: 7, documentIds: ['A'] });
+});
+
+test('a navigation between a frame probe and injection cannot initialize orphan widget or tab modules', async () => {
+  // Browsers without document targeting can replace the frame after the probe. It has no bootstrap or dependencies yet.
+  for (const file of ['lib/widgets.js', 'lib/coursetabs.js', 'features/coursetabs.js']) {
+    const fresh = vm.createContext({}), errors = [];
+    const w = worker((o) => {
+      if (o.files) for (const f of o.files) try { vm.runInContext(read(f), fresh); } catch (e) { errors.push(e.message); }
+      return Promise.resolve([{ result: o.func ? true : null }]);
+    });
+    assert.equal((await w.send({ type: 'glaze:load', files: [file], doc: 'OLD' }, tab())).ok, false);
+    assert.deepEqual(errors, [], file);
+    for (const name of ['GZ_WIDGETS', 'GZ_CTABS_LIB', 'GZ_CTABS']) assert.ok(!fresh[name], name);
+    // A normal request after the new bootstrap must still initialize; an orphan injection must not poison the guard.
+    if (file.startsWith('lib/')) {
+      vm.runInContext('var GZ_SPEC = {};', fresh);
+      assert.ok(vm.runInContext(read(file), fresh));
+    }
+  }
+});
+
+test('a course-tab feature request includes its library in the same injection', async () => {
+  const w = worker();
+  await w.send({ type: 'glaze:load', files: ['features/coursetabs.js'] }, { ...tab(), documentId: 'A' });
+  assert.deepEqual(w.injected[0].files, ['lib/coursetabs.js', 'features/coursetabs.js']);
 });

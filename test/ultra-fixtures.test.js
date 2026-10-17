@@ -1,5 +1,5 @@
 // Ultra JSON fixtures (test/fixtures/ultra-*.json): response shapes measured on a real Blackboard Ultra account in the
-// B0 spike (docs/spikes/B0.md), every value invented. These tests keep them synthetic and keep them readable by the
+// B0 spike, every value invented. These tests keep them synthetic and keep them readable by the
 // Ultra code Glaze already has, so B1's data layer starts from shapes that match what Ultra really sends.
 const test = require('node:test');
 const assert = require('node:assert/strict');

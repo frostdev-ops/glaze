@@ -4,16 +4,27 @@ const GZ_UI = (() => {
 
   // Settings, and the dashboard cards' (lib/cards.js keeps those apart, out of the content script's first load).
   const clean = (raw) => ({ ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw?.card) });
+  // The Look's parts (lib/lookparts.js) are part of a Look but live in their own key: s.parts is { x, m }, or null.
+  const withParts = async (raw) => ({ ...clean(raw), parts: await GZ_XPARTS.fromStored(raw?.lookX, GZ_XPARTS.areas().local).catch(() => null) ?? null });
   const load = () => new Promise((res) => {
-    try { store.get(null, (raw) => res(clean(chrome.runtime.lastError ? {} : raw))); } catch { res(clean()); }
+    try { store.get(null, (raw) => res(withParts(chrome.runtime.lastError ? {} : raw))); } catch { res(withParts()); }
   });
 
   // Writes only the given top-level keys: sync storage counts every write against a per-minute
-  // quota, and the content script re-reads everything anyway. `note` gets '' or the error.
-  const save = (s, keys, note = () => {}, navPatch) => {
+  // quota, and the content script re-reads everything anyway. `note` gets '' or the error. The key 'parts' is the
+  // Look's parts, written in the same call as the rest (null clears them).
+  const save = (s, keys, note = () => {}, navPatch, partKeys) => {
     const patch = { version: 2 };
     for (const k of keys) patch[k] = s[k];
+    const parts = 'parts' in patch, lookParts = patch.parts ?? null;
+    delete patch.parts;
     const failed = (error) => GZ_I18N.t('Not saved: {error}', { error }, GZ_I18N.ui());
+    if (parts) {
+      if ('nav' in patch && navPatch) patch.nav = navPatch;
+      try { chrome.runtime.sendMessage({ type: 'glaze:look', parts: lookParts, patch, ...(partKeys && { partKeys }) }, (r) => note(chrome.runtime.lastError || !r?.ok ? GZ_I18N.t('Not saved. Try again in a moment.', {}, GZ_I18N.ui()) : '')); }
+      catch (e) { note(failed(e.message)); }
+      return;
+    }
     const write = () => {
       try { store.set(patch, () => note(chrome.runtime.lastError ? failed(chrome.runtime.lastError.message) : '')); }
       catch (e) { note(failed(e.message)); }
@@ -66,7 +77,8 @@ const GZ_UI = (() => {
     s.colors = { ...colors };
     s.preset = name;
     s.auto = { ...s.auto, on: false };
-    return ['colors', 'preset', 'auto'];
+    s.parts = null;
+    return ['colors', 'preset', 'auto', 'parts'];
   };
 
   // One card per look: its name in its own text color on its own surface, fading into its background's
@@ -91,12 +103,14 @@ const GZ_UI = (() => {
     }
   };
 
-  // A look is an explicit choice too: palette, fonts, shape and background at once.
+  // A look is an explicit choice too: palette, fonts, shape and background at once, and no extras (a Look's parts) of
+  // the one before.
   const pickLook = (s, L) => {
     Object.assign(s, GZ_LOOK_APPLY(s, L));
+    s.parts = null;
     // Course cards only as far as the look names them.
     if (L.card) s.card = GZ_CARDS.settings({ ...s.card, ...L.card });
-    return ['colors', 'preset', 'auto', 'look', 'bg', ...(L.card ? ['card'] : [])];
+    return ['colors', 'preset', 'auto', 'look', 'bg', 'parts', ...(L.card ? ['card'] : [])];
   };
 
   // A theme's name in the history and favorites: the Look it is, else its palette's name.

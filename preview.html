@@ -19,6 +19,7 @@
   .makeStylesnavigation-preview ul { list-style: none; padding: 0; }
   .makeStylesnavigation-preview svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; }
   html[data-gz-nav-collapsed] #site-wrap { grid-template-columns: 80px minmax(0, 1fr); }
+  html[data-gz-nav-place] #site-wrap { grid-template-columns: 0 minmax(0, 1fr); } /* a Look's nav as a bar or dock (features/navlayout.css) */
   html[data-gz-nav-collapsed] .MuiDrawer-root { position: relative; }
   html[data-gz-nav-collapsed] .MuiDrawer-paper { width: 80px; }
   /* Desktop mock scaffold only: keep the collapsed column while the real rail overlays at full width. */
@@ -206,6 +207,7 @@
 <script src="lib/fonts.js"></script>
 <script src="lib/drafts.js"></script>
 <script src="lib/zip.js"></script>
+<script src="lib/glsl.js"></script>
 <script src="features/schedule.js"></script>
 <script src="features/light.js"></script>
 <script src="lib/surfaces.js"></script>
@@ -213,9 +215,14 @@
 <script src="lib/coursetabs.js"></script>
 <script src="lib/nav.js"></script>
 <script src="lib/nav-items.js"></script>
+<script src="lib/navlayout.js"></script>
 <script src="lib/cards.js"></script>
 <script src="lib/widgets.js"></script>
 <script src="lib/pet.js"></script>
+<script src="lib/motionx.js"></script>
+<script src="lib/parts.js"></script>
+<script src="lib/lookparts.js"></script>
+<script src="features/lookparts.js"></script>
 <script src="lib/editor-preview.js"></script>
 </body>
 </html>

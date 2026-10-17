@@ -125,7 +125,7 @@ test('rotation turns: a new schedule starts its clock without changing; then one
   assert.deepEqual(r, { state: { mode: '6h 08:00', at: t0, i: -1 }, wear: -1 });
   assert.equal(L.turn(r.state, t0 + 36e5, x, list).wear, -1, 'not due');
   r = L.turn(r.state, t0 + 6 * 36e5, x, list);
-  assert.deepEqual(r, { state: { mode: '6h 08:00', at: t0 + 6 * 36e5, i: 0 }, wear: 0 });
+  assert.deepEqual(r, { state: { mode: '6h 08:00', at: t0 + 6 * 36e5, i: 0, turned: true }, wear: 0 });
   // A second tab asking at the same moment finds nothing due.
   assert.equal(L.turn(r.state, t0 + 6 * 36e5, x, list).wear, -1);
   r = L.turn({ ...r.state, i: 2 }, t0 + 12 * 36e5, x, list);
@@ -142,6 +142,9 @@ test('rotation\'s list: chosen Looks and favorite codes, none chosen being every
   assert.deepEqual(L.rotation(undefined, looks), looks);
   assert.deepEqual(L.rotation(['Library', 'Gone', 'glaze1:abc', 'Library', 7], looks), ['Library', 'glaze1:abc']);
   assert.deepEqual(L.rotation([`glaze1:${'a'.repeat(5000)}`], looks), looks);
+  // A glaze2 code (a Look with parts) is longer: up to 20,000 characters.
+  assert.deepEqual(L.rotation([`glaze2:${'a'.repeat(19993)}`, 'Library'], looks), [`glaze2:${'a'.repeat(19993)}`, 'Library']);
+  assert.deepEqual(L.rotation([`glaze2:${'a'.repeat(19994)}`], looks), looks);
 });
 
 test('a rotated favorite is worn like "Use this theme": its palette, look and background; auto off; the rest kept', () => {
@@ -160,4 +163,10 @@ test('a rotated favorite is worn like "Use this theme": its palette, look and ba
 test('extras settings: off by default, sanitized', () => {
   assert.deepEqual(G.GZ_DEFAULTS.extras, { cursor: 'off', stickers: true, rotate: 'off', at: '08:00' });
   assert.deepEqual(G.GZ_SANITIZE({ extras: { cursor: 'evil', rotate: '1m', at: '25:99', stickers: 'yes' } }).extras, G.GZ_DEFAULTS.extras);
+});
+
+test('Ultra LTI launch frames and direct attempts exclude Look effects', () => {
+  for (const path of ['/ultra/courses/_101_1/outline/lti/launchFrame', '/ultra/courses/_101_1/attempt/_800_1']) {
+    assert.equal(L.quiet(path), true, path);
+  }
 });

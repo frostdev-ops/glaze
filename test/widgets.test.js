@@ -91,7 +91,7 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   assert.deepEqual(fresh.tiles.map((t) => t.id), W.TILES);
   assert.deepEqual(fresh.tiles.filter((t) => t.on).map((t) => t.id), ['notes', 'agenda', 'timer', 'quotes']);
   const kept = W.layout({ tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: 2 }, { id: 'music' }, { id: 'evil' }, { id: 'timer', size: 'xl' }, null], music: 'javascript:x' });
-  assert.deepEqual(kept.tiles.slice(0, 2), [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: null }, { id: 'timer', on: true, size: 's', float: false, x: null, y: null }]);
+  assert.deepEqual(kept.tiles.slice(0, 2), [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: null, z: 0, fold: false }, { id: 'timer', on: true, size: 's', float: false, x: null, y: null, z: 0, fold: false }]);
   assert.equal(kept.tiles.length, W.TILES.length);
   assert.equal(kept.music, '');
   assert.equal(W.layout({ music: ' https://youtu.be/jfKfPfyJRdk ' }).music, 'https://youtu.be/jfKfPfyJRdk');
@@ -101,7 +101,7 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   assert.equal(ids(W.move(fresh, 'todo', 1)), ids(fresh), 'the last stays last');
   assert.equal(ids(W.move(fresh, 'buddy', 0, 'agenda')), 'notes buddy agenda timer quotes music breathe todo');
   assert.equal(ids(W.move(fresh, 'buddy', 0, 'nope')), ids(fresh));
-  assert.deepEqual(W.set(fresh, 'timer', { size: 'zz', on: false }).tiles[2], { id: 'timer', on: false, size: 's', float: false, x: null, y: null });
+  assert.deepEqual(W.set(fresh, 'timer', { size: 'zz', on: false }).tiles[2], { id: 'timer', on: false, size: 's', float: false, x: null, y: null, z: 0, fold: false });
   // Floating: inside the margin, onto an edge within SNAP of it, and kept as where in the free room it is.
   const E = W.EDGE;
   assert.deepEqual(W.place(-50, 5000, 200, 100, 1000, 800), { left: E, top: 800 - 100 - E, x: 0, y: 1 });
@@ -205,7 +205,7 @@ test('layout: a tile another file declares (MORE) comes after the built-in ones,
   const more = { pet: { size: 'm' }, notes: { size: 'l' }, 'Bad id': {}, x: {} };
   const lay = W.layout(undefined, more);
   assert.deepEqual(lay.tiles.map((t) => t.id), [...W.TILES, 'pet'], 'a built-in id or a bad one is not added');
-  assert.deepEqual(lay.tiles.at(-1), { id: 'pet', on: false, size: 'm', float: false, x: null, y: null });
+  assert.deepEqual(lay.tiles.at(-1), { id: 'pet', on: false, size: 'm', float: false, x: null, y: null, z: 0, fold: false });
   const kept = W.layout({ tiles: [{ id: 'pet', on: true, size: 's', float: true, x: 0.5, y: 0 }, { id: 'notes' }] }, more);
   assert.deepEqual(kept.tiles.slice(0, 2).map((t) => [t.id, t.on, t.size, t.float]), [['pet', true, 's', true], ['notes', true, 'm', false]]);
   assert.ok(!W.layout(kept).tiles.some((t) => t.id === 'pet'), 'without its declaration, not a tile');
@@ -272,7 +272,7 @@ test('snap: onto the room edges, other tiles and the page lines within reach, el
   assert.equal(W.snap(10, 10, 1200, 100, 1000, 600).left, 0, 'wider than the room: its left edge');
 });
 
-test('arrange: spots kept from their side, new tiles in free room, and a stack when the window is too narrow for the layout', () => {
+test('arrange: spots kept, the Dashboard as one block, new tiles in free room, a flow or a stack when the window is too narrow', () => {
   const dims = { notes: { w: 384, h: 300 }, agenda: { w: 384, h: 200 }, timer: { w: 288, h: 180 }, quotes: { w: 384, h: 160 } };
   const fresh = (ids) => ids.map((id) => ({ id, on: true, x: null, y: null, r: false, z: 0 }));
   // The Dashboard: rows from the top left, a gap apart, on the grid; a fresh one in the middle of its room.
@@ -286,26 +286,41 @@ test('arrange: spots kept from their side, new tiles in free room, and a stack w
   const col = W.arrange(fresh(['notes', 'timer']), dims, 1000, { col: { right: 16, top: 60 } });
   assert.deepEqual([col.at.notes.left, col.at.notes.top, col.at.timer.left, col.at.timer.top], [1000 - 16 - 384, 60, 1000 - 16 - 288, 60 + 300 + W.GAP]);
   assert.ok(col.at.notes.r && col.at.timer.r);
-  // Kept spots: from the left, or from the right edge, which follows the window.
+  // Kept spots, in the room they were kept in (w0, else this one): from the left, or from its right edge.
   const kept = [{ id: 'notes', on: true, x: 24, y: 40, r: false }, { id: 'timer', on: true, x: 16, y: 40, r: true }];
   const wide = W.arrange(kept, dims, 1400);
   assert.deepEqual([wide.at.notes.left, wide.at.timer.left], [24, 1400 - 16 - 288]);
   assert.deepEqual(wide.order, ['notes', 'timer'], 'reading order');
   assert.equal(wide.stack, false);
-  // Narrower than the room they were placed in: the one from the left and the one from the right would meet: a stack,
-  // and the spots are untouched. As wide or wider: never.
+  // Zoomed out or a wider window: the Dashboard's tiles stay together, the room on either side grown alike.
+  const out = W.arrange(kept, dims, 1600, { w0: 1400 });
+  assert.equal(out.at.timer.left - out.at.notes.left, 1400 - 16 - 288 - 24, 'none moves against another');
+  assert.deepEqual([out.at.notes.left, 1600 - out.at.timer.left - 288], [24 * 6, 16 * 6]);
+  // Zoomed in: still together while they fit, the room on either side shrunk alike.
+  const pair = [{ id: 'notes', on: true, x: 200, y: 40, r: false }, { id: 'timer', on: true, x: 200, y: 40, r: true }];
+  const zin = W.arrange(pair, dims, 900, { w0: 1000 });
+  assert.deepEqual([zin.at.notes.left, zin.at.timer.left, zin.stack], [150, 900 - 150 - 288, false]);
+  // Wider than the room: every tile flows in free room, at its size, in reading order; the spots are untouched.
   const narrow = W.arrange(kept, dims, 600, { w0: 1400 });
-  assert.equal(narrow.stack, true);
+  assert.equal(narrow.stack, false);
+  assert.deepEqual([narrow.at.notes.left, narrow.at.notes.top, narrow.at.timer.left, narrow.at.timer.top], [108, 0, 108, 320], "in the middle of the room");
+  assert.deepEqual(narrow.order, ['notes', 'timer']);
   assert.deepEqual(kept[1], { id: 'timer', on: true, x: 16, y: 40, r: true });
-  assert.equal(W.arrange(kept, dims, 1600, { w0: 1400 }).stack, false);
-  // One from the left laid over one from the right on purpose (they met where they were placed) stays so.
+  // A tile wider than the room: a stack.
+  assert.equal(W.arrange(kept, dims, 300, { w0: 1400 }).stack, true);
+  // One from the left laid over one from the right on purpose stays so, wider or narrower.
   const laid = [{ id: 'notes', on: true, x: 500, y: 40, r: false }, { id: 'timer', on: true, x: 200, y: 100, r: true }];
-  assert.equal(W.arrange(laid, dims, 1000, { w0: 1000 }).stack, false);
-  assert.equal(W.arrange(laid, dims, 900, { w0: 1000 }).stack, false, 'narrower, but they met already');
-  // A tile that would cross the room's edge stacks them too; overlaps the student made (same side) don't.
-  assert.equal(W.arrange([{ id: 'notes', on: true, x: 500, y: 0, r: false }], dims, 800).stack, true);
+  for (const w of [1000, 900, 1300]) {
+    const a = W.arrange(laid, dims, w, { w0: 1000 });
+    assert.deepEqual([a.stack, a.at.timer.left - a.at.notes.left], [false, 12], `at ${w}`);
+  }
+  // A tile that would cross the room's edge comes back inside it; overlaps the student made don't stack them.
+  assert.deepEqual(Object.values(W.arrange([{ id: 'notes', on: true, x: 500, y: 0, r: false }], dims, 800).at).map((a) => [a.left, a.top]), [[800 - 384, 0]]);
   const overlap = W.arrange([{ id: 'notes', on: true, x: 24, y: 40, r: false }, { id: 'agenda', on: true, x: 100, y: 100, r: false }], dims, 1000);
   assert.equal(overlap.stack, false, 'tiles laid over each other on purpose stay so');
+  // The Courses page: each from its side, and a stack when one from the left would meet one from the right.
+  const c = { col: { right: 16, top: 0 }, w0: 1400 };
+  assert.deepEqual([W.arrange(kept, dims, 1600, c).at.timer.left, W.arrange(kept, dims, 600, c).stack], [1600 - 16 - 288, true]);
   // A tile placed in free room keeps clear of the kept ones.
   const mixed = W.arrange([{ id: 'notes', on: true, x: 0, y: 0, r: false }, ...fresh(['timer'])], dims, 1000);
   assert.ok(mixed.at.timer.left >= 384 + W.GAP || mixed.at.timer.top >= 300 + W.GAP);
@@ -347,14 +362,14 @@ test("landing: only Ultra's start page right after sign-in, never a page the stu
 
 // ---- B7b: tiles floating over every Blackboard page, and changes as patches ---------------------------------------
 test("pages: Ultra's floating tiles start from those that floated before (B5), keep their places, and their boards keep their spots", () => {
-  const old = { tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.25, y: 0.75 }, { id: 'notes', on: true, float: false }, { id: 'timer', on: false, float: true, x: 0.5, y: 0.5 }] };
+  const old = { tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.25, y: 0.75, z: 0, fold: false }, { id: 'notes', on: true, float: false }, { id: 'timer', on: false, float: true, x: 0.5, y: 0.5 }] };
   const lay = W.layout(old);
   const p = Object.fromEntries(lay.boards.pages.map((x) => [x.id, x]));
   assert.deepEqual(p.music, { id: 'music', on: true, size: 'l', x: 0.25, y: 0.75, z: 0, fold: false }, 'the old float, at its place');
   assert.equal(p.notes.on, false, 'not floating before: not now');
   assert.equal(p.timer.on, false, 'off: not floating');
   assert.equal(lay.boards.courses.find((x) => x.id === 'music').on, true, 'its Courses spot kept for when it comes back');
-  assert.deepEqual(lay.tiles[0], { id: 'music', on: true, size: 'l', float: true, x: 0.25, y: 0.75 }, 'Canvas unchanged');
+  assert.deepEqual(lay.tiles[0], { id: 'music', on: true, size: 'l', float: true, x: 0.25, y: 0.75, z: 0, fold: false }, 'Canvas unchanged');
   // Kept as stored once there; a place that isn't 0–1 is dropped.
   const kept = W.layout({ ...lay, boards: { ...lay.boards, pages: [{ id: 'notes', on: true, x: 2, y: 0.5, z: 4, fold: true }] } });
   assert.deepEqual(kept.boards.pages[0], { id: 'notes', on: true, size: 'm', x: null, y: 0.5, z: 4, fold: true });
@@ -444,12 +459,83 @@ test('fresh course cards start in the native list area, grouped by term and clea
   assert.ok(ids.every((id) => r.at[id].left + 288 < r.at.notes.left));
 });
 
-test('Better To Do\'s tile keeps the height the student dragged it to, within bounds, on its own board', () => {
-  const l = W.layout({ todo: true, boards: { courses: [{ id: 'todo', on: true, h: 512 }, { id: 'notes', on: true, h: 512 }], dash: [{ id: 'todo', on: true, h: 40 }] } });
-  assert.equal(l.boards.courses.find((x) => x.id === 'todo').h, 512);
-  assert.equal(l.boards.courses.find((x) => x.id === 'notes').h, undefined, 'only the To Do has a height');
-  assert.equal(l.boards.dash.find((x) => x.id === 'todo').h, undefined, 'too short: its default');
-  const after = W.apply(l, { ops: [{ s: 'dash', id: 'todo', set: { h: 300 } }] });
-  assert.equal(after.boards.dash.find((x) => x.id === 'todo').h, 300);
+test('a tile keeps the size it was resized to (its width, its body\'s height), within bounds, on its own board', () => {
+  const l = W.layout({ todo: true, boards: { courses: [{ id: 'todo', on: true, h: 512 }, { id: 'notes', on: true, w: 400, h: 300 }], dash: [{ id: 'todo', on: true, h: 40, w: 100 }], pages: [{ id: 'timer', on: true, w: 320, h: 2.5 }] } });
+  assert.equal(l.boards.courses.find((x) => x.id === 'todo').h, 512, 'a To Do dragged taller before is kept');
+  assert.deepEqual([l.boards.courses.find((x) => x.id === 'notes').w, l.boards.courses.find((x) => x.id === 'notes').h], [400, 300]);
+  const small = l.boards.dash.find((x) => x.id === 'todo');
+  assert.ok(!('w' in small) && !('h' in small), 'too small: its own size');
+  assert.deepEqual([l.boards.pages.find((x) => x.id === 'timer').w, 'h' in l.boards.pages.find((x) => x.id === 'timer')], [320, false], 'floating too; not a whole pixel: dropped');
+  const after = W.apply(l, { ops: [{ s: 'dash', id: 'todo', set: { h: 300, w: W.MIN_W } }] });
+  assert.deepEqual([after.boards.dash.find((x) => x.id === 'todo').h, after.boards.dash.find((x) => x.id === 'todo').w], [300, W.MIN_W]);
   assert.equal(after.boards.courses.find((x) => x.id === 'todo').h, 512, 'each board its own');
+  const back = W.apply(after, { ops: [{ s: 'courses', id: 'notes', set: { w: null, h: null } }] });
+  assert.ok(!('w' in back.boards.courses.find((x) => x.id === 'notes')), 'null: its own size again');
+});
+
+test('stretch: a corner dragged meets the lines a dragged tile does, never under the smallest size', () => {
+  const other = { left: 400, top: 0, w: 288, h: 200 };
+  // Near the other tile's left edge less a gap: there; its bottom: there.
+  assert.deepEqual(W.stretch(0, 0, 380, 205, 1000, Infinity, [other]), { w: 400 - W.GAP, h: 200, guides: { x: 400 - W.GAP, y: 200 } });
+  // Nowhere near a line: the grid.
+  assert.deepEqual(W.stretch(0, 0, 250, 333, 1000, Infinity, []).w, 256);
+  // Alt: where it is; never past the room's edge, nor under the smallest size.
+  assert.deepEqual(W.stretch(0, 0, 251, 333, 1000, Infinity, [], { free: true }), { w: 251, h: 333, guides: { x: null, y: null } });
+  assert.equal(W.stretch(100, 0, 5000, 50, 1000, Infinity).w, 900);
+  assert.deepEqual(W.stretch(100, 100, 120, 110, 1000, Infinity, [], { minH: 90 }), { w: W.MIN_W, h: 90, guides: { x: null, y: null } });
+});
+
+test('Canvas board: an old grid migrates once, in order, at its sizes, with its floats and Ultra layouts kept', () => {
+  const old = {
+    tiles: [{ id: 'quotes', on: true, size: 'l' }, { id: 'timer', on: true, size: 's' }, { id: 'music', on: true, size: 'm', float: true, x: 0.25, y: 0.75 }, { id: 'notes', on: false, size: 'l' }, { id: 'pet', on: true, size: 'm' }],
+    music: 'https://youtu.be/jfKfPfyJRdk', todo: true,
+    boards: { courses: [{ id: 'notes', on: true, x: 32, y: 80, r: true, z: 3, fold: true, w: 400, h: 256 }], dash: [{ id: 'timer', on: true, x: 80, y: 48 }], pages: [{ id: 'buddy', on: true, x: 0.4, y: 0.8 }] },
+    widths: { courses: 1080, dash: 1032, pages: 1280 },
+  };
+  const more = { pet: { size: 'm' } }, l = W.layout(old, more), b = l.boards.cdash;
+  assert.deepEqual(b.map((x) => x.id), l.tiles.map((x) => x.id));
+  assert.deepEqual(b.filter((x) => x.on).map((x) => [x.id, x.size]), [['quotes', 'l'], ['timer', 's'], ['pet', 'm'], ['agenda', 'm']]);
+  assert.ok(b.every((x) => x.x === null && x.y === null && x.r === false));
+  assert.deepEqual([l.tiles[2].float, l.tiles[2].x, l.tiles[2].y], [true, 0.25, 0.75]);
+  assert.equal(l.music, old.music);
+  assert.equal(l.widths.cdash, 0);
+  const changed = W.apply(l, { ops: [{ s: 'cdash', id: 'quotes', set: { on: false, x: 50, y: 100, w: 600, h: 240, fold: true }, front: true }], widths: { cdash: 1100 } }, more);
+  assert.deepEqual(W.layout(changed, more), changed, 'saving and loading never migrate again');
+  assert.equal(changed.boards.cdash[0].on, false, 'the old grid cannot turn it back on');
+  assert.deepEqual(changed.tiles, l.tiles, 'floats and the old order stay separate');
+  for (const board of ['courses', 'dash', 'pages']) assert.deepEqual(changed.boards[board], l.boards[board], board);
+});
+
+test('Canvas board and floats validate every kept field and keep their separate pixel and normalized spots', () => {
+  const more = { pet: { size: 'm' } };
+  const l = W.layout({ tiles: [{ id: 'timer', on: true, float: true, x: 1.1, y: 0.5, z: 1000, fold: 'yes', w: 191, h: 3001, extra: 3 }], boards: { cdash: [{ id: 'timer', on: true, x: 0.5, y: 100, r: true, z: -1, w: 4001, h: 47 }, { id: 'course:https://bb.test/_1_1', on: true }] }, widths: { cdash: Infinity, canvas: -1 } }, more);
+  assert.deepEqual(l.tiles[0], { id: 'timer', on: true, size: 's', float: true, x: null, y: 0.5, z: 0, fold: false });
+  assert.deepEqual(l.boards.cdash[0], { id: 'timer', on: true, size: 's', x: null, y: null, r: false, z: 0, fold: false });
+  assert.equal(l.widths.cdash, 0); assert.equal(l.widths.canvas, 0);
+  const next = W.apply(l, { ops: [{ s: 'canvas', id: 'timer', set: { w: 4000, h: 3000, fold: true, x: 0, y: 1 }, front: true }, { s: 'cdash', id: 'timer', set: { x: 20000, y: 0, r: true, w: 192, h: 48 }, front: true }, { s: 'cdash', id: 'course:https://bb.test/_2_1', set: { on: true } }], widths: { cdash: 20000, canvas: 1280 } }, more);
+  assert.deepEqual([next.tiles[0].w, next.tiles[0].h, next.tiles[0].fold, next.tiles[0].x, next.tiles[0].y], [4000, 3000, true, 0, 1]);
+  assert.deepEqual([next.boards.cdash[0].w, next.boards.cdash[0].h, next.boards.cdash[0].x, next.boards.cdash[0].y], [192, 48, 20000, 0]);
+  assert.ok(next.tiles[0].z > next.tiles[1].z);
+  assert.ok(!next.boards.cdash.some((x) => W.course(x.id)), 'Ultra course cards never reach Canvas');
+  assert.deepEqual(next.boards.courses, l.boards.courses);
+});
+
+test('Canvas migration reading order: a small later tile never fills a gap before an earlier large tile', () => {
+  const ts = ['notes', 'quotes', 'timer'].map((id) => ({ id, x: null }));
+  const dims = { notes: { w: 512, h: 200 }, quotes: { w: 512, h: 200 }, timer: { w: 288, h: 200 } };
+  assert.deepEqual(W.arrange(ts, dims, 900, { ordered: true }).order, ['notes', 'quotes', 'timer']);
+  assert.deepEqual(W.arrange(ts, dims, 900).order, ['notes', 'timer', 'quotes'], 'Ultra keeps its existing free-room placement');
+});
+
+test('layout edits keep mod tile placements from tabs where the mod is not running', async () => {
+  const id = 'mabcdefghijklmn0';
+  const more = { [id]: { size: 'm' } };
+  const raw = W.layout({ tiles: [{ id, on: true, float: true, x: 0.4, y: 0.6 }], boards: { dash: [{ id, on: true, x: 80, y: 120, size: 'l' }] } }, more);
+  const store = { widgetLayout: raw };
+  const local = { get: async () => structuredClone(store), set: async (v) => (Object.assign(store, v), true) };
+  await W.change({ more: { pet: { size: 'm' } }, ops: [{ s: 'dash', id: 'notes', set: { fold: true } }] }, local);
+  const restored = W.layout(store.widgetLayout, more);
+  assert.deepEqual(restored.tiles.find((x) => x.id === id), raw.tiles.find((x) => x.id === id));
+  assert.deepEqual(restored.boards.dash.find((x) => x.id === id), raw.boards.dash.find((x) => x.id === id));
+  assert.equal(restored.boards.dash.find((x) => x.id === 'notes').fold, true);
 });

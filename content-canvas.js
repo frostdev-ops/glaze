@@ -14,7 +14,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const isDone = (el) => (el.matches('input') ? el.checked : el.classList.contains('btn-success') || !!el.querySelector('svg[name="IconComplete"]'));
   let following = null;
   document.addEventListener('click', (e) => {
-    if (!e.isTrusted || html.getAttribute('data-gz-motion') !== 'expressive' || !(e.target instanceof Element)) return;
+    if (!e.isTrusted || !(e.target instanceof Element)) return;
     const box = e.target.closest('label')?.control;
     const el = e.target.closest(DONE_BY) || (box?.matches(DONE_BY) && box);
     // A label's click passes on to its checkbox: one follow. A checkbox clicked itself has already
@@ -61,7 +61,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const cardsHere = () => I.links.length && I.settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
   // Dashboard widgets and the pet (features/widgets.js); palette hub.
-  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || ((I.settings.enhance.notes || I.settings.enhance.pet) && location.pathname === '/'));
+  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || I.settings.enhance.notes || I.settings.enhance.pet);
   const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
   const remindHere = () => I.links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]);
@@ -306,7 +306,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   };
   const canvasNewsBadge = (host, cid, n, kind) => {
     let pill = host.querySelector(`:scope > .gz-new[data-kind="${kind}"]`);
-    if (!n) return pill?.remove();
+    if (!n) { if (kind === 'grades') globalThis.GZ_CTX.gradeMoment(cid, n, host); return pill?.remove(); }
     if (!pill) {
       pill = document.createElement('a'); pill.className = 'gz-new'; pill.dataset.kind = kind;
       pill.href = `/courses/${cid}/${kind === 'grades' ? 'grades' : 'modules'}`;
@@ -316,6 +316,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     if (pill.textContent !== text) pill.textContent = text;
     const label = t(KIND[kind], { n });
     if (pill.getAttribute('aria-label') !== label) pill.setAttribute('aria-label', label);
+    if (kind === 'grades') globalThis.GZ_CTX.gradeMoment(cid, n, pill);
   };
   const renderCanvasNew = () => {
     const { newgrades, newcontent } = I.settings.enhance;
@@ -416,7 +417,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   };
   const syncNav = () => {
     if (isPreview || window.top !== window) return;
-    if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons') need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
+    if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons' || (I.links.length && globalThis.GZ_CTX?.parts()?.nav)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
     else globalThis.GZ_NAV_UI?.sync();
   };
 

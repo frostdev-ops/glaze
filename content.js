@@ -220,11 +220,29 @@
     return true;
   });
 
-  // ---- completion burst (Expressive) -----------------------------------------------------------
-  // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed.
+  // ---- moments and the completion burst --------------------------------------------------------
+  // 'glaze:moment' on the document: something happened that a Look's effect (features/motionx.js) or a mod may answer,
+  // with its name and, if it has a place, where. `once` keys one that must not repeat on this page.
+  const told = new Set();
+  const moment = (name, el, once) => {
+    if (once !== undefined) { if (told.has(once)) return; told.add(once); }
+    const r = el?.getBoundingClientRect();
+    document.dispatchEvent(new CustomEvent('glaze:moment', { detail: r?.width ? { name, x: r.left + r.width / 2, y: r.top + r.height / 2 } : { name } }));
+  };
+  // A Look with animations, effects or a pointer effect (GZ_CTX.parts()) brings features/motionx.js in.
+  const moveParts = () => {
+    const p = GZ_CTX.parts();
+    if (globalThis.GZ_MOTIONX || p?.anim || p?.fx || p?.cursor) need('features/motionx.js', () => globalThis.GZ_MOTIONX).then(() => GZ_MOTIONX.sync(), () => {});
+  };
+  document.addEventListener('glaze:parts', moveParts);
+  // Ultra's review circle is role=checkbox; aria-checked turning "true" is the item being completed. The dots are
+  // Expressive's, and a Look's own effect for it replaces them.
   const celebrate = (el) => {
+    if (globalThis.GZ_LX?.quiet(location.pathname, document)) return;
     const r = el.getBoundingClientRect();
     if (!r.width) return;
+    moment('complete', el);
+    if (html.getAttribute('data-gz-motion') !== 'expressive' || globalThis.GZ_MOTIONX?.has('complete') || globalThis.GZ_MODS?.replaces('effect:complete')) return;
     const b = document.createElement('div');
     b.className = 'gz-burst';
     b.style.left = `${r.left + r.width / 2}px`;
@@ -237,6 +255,13 @@
     document.body.append(b);
     setTimeout(() => b.remove(), 900);
   };
+
+  const reviewing = new WeakMap();
+  document.addEventListener('click', (e) => {
+    if (!e.isTrusted) return;
+    const el = e.target.closest?.('.js-review-state-icon-button');
+    if (el && el.getAttribute('aria-checked') !== 'true') reviewing.set(el, Date.now() + 5000);
+  }, true);
 
   // ---- the student's courses -------------------------------------------------------------------
   // Every course and its color, for the editor's course list, the course menu and the tint on pages that don't show
@@ -384,6 +409,9 @@
   let dirty = new Set();
   let full = false;
   const hid = () => tabFrame && html.hasAttribute('data-gz-ctab-framed');
+  // The Look's LMS rules (features/rules.js), once it has any: each pass puts them back on what the page redrew.
+  const syncRules = () => { if (globalThis.GZ_RULES) GZ_RULES.sync(); else if (GZ_CTX.parts()?.rules?.length) need('features/rules.js', () => globalThis.GZ_RULES).then(() => GZ_RULES.sync(), () => {}); };
+  document.addEventListener('glaze:parts', syncRules);
   const flush = () => {
     timer = 0;
     if (hid()) { dirty.clear(); full = true; return; }
@@ -398,7 +426,9 @@
     if (tip && ultraTipShown()) hideTip();
     X.paintCourses();
     if (tintKey() !== tinted || lookHere() !== looked || surfaceCourse() !== html.style.getPropertyValue('--gz-surface-course')) applySettings();
+    globalThis.GZ_XPARTS_PAGE?.pass();
     placeScene();
+    syncRules();
     if (!said) return;
     if (all) X.syncNav();
     X.renderProgress();
@@ -409,6 +439,7 @@
     syncDownloads();
     syncDocTools();
     syncCourseMenu();
+    globalThis.GZ_MODS?.pass();
     X.syncTodo();
     X.syncCardTasks();
     X.syncWidgets();
@@ -429,8 +460,7 @@
     X.lift();
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {
-        if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true'
-          && html.getAttribute('data-gz-motion') === 'expressive' && r.target.matches('.js-review-state-icon-button')) celebrate(r.target);
+        if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true' && Date.now() <= (reviewing.get(r.target) || 0)) { reviewing.delete(r.target); celebrate(r.target); }
         // A circle that changes changes its item's due-date chip.
         const item = r.target.closest('.content-list-item');
         if (item) dirty.add(item);
@@ -457,6 +487,7 @@
     X.lift();
     recordCourses();
     if (!ultra) X.paintCourses();
+    syncRules();
     if (!words()) { wordsLate = true; return; }
     tagExtras([document.body]);
     watchDrafts();
@@ -633,11 +664,11 @@
     // Canvas: a title that only repeats the text beside it, uncut.
     if (!ultra && titled && !hinted && !titled.closest('#header') && squash(textOf(titled)) === squash(titled.getAttribute('title') || '') && titled.scrollWidth <= titled.clientWidth + 1) titled = null;
     hideTip();
-    const text = titled?.getAttribute('title')?.trim();
+    const title = titled?.getAttribute('title'), text = title?.trim();
     if (titled && !text && !hinted) return;
     if (text) {
       tipFor = titled;
-      titled.dataset.gzTitle = text;
+      titled.dataset.gzTitle = title;
       titled.removeAttribute('title');
       if (!titled.hasAttribute('aria-label') && !titled.textContent.trim()) { titled.setAttribute('aria-label', text); titled.dataset.gzAria = '1'; }
     }
@@ -702,9 +733,16 @@
   // item ('inside'). A new item's own "New" ('item') is a plain label. Clicks are taken in the capture
   // phase so the card or row around a pill (itself a link or a toggle) doesn't act instead.
   const KIND = { grades: '{n} new grades: open the gradebook', items: '{n} new items: open the course', inside: '{n} new items: show them' };
+  const gradeCounts = new Map();
+  const gradeMoment = (cid, n, el) => {
+    if (!Number.isFinite(n)) return;
+    const was = gradeCounts.get(cid);
+    gradeCounts.set(cid, n);
+    if (was !== undefined && n > was) moment('grade', el);
+  };
   const cardBadge = (el, cid, count, kind = 'grades') => {
     let pill = el.querySelector(`:scope > .gz-new[data-kind="${kind}"]`);
-    if (!count) return pill?.remove();
+    if (!count) { if (kind === 'grades') gradeMoment(cid, count, el); return pill?.remove(); }
     if (!pill) {
       pill = Object.assign(document.createElement('span'), { className: 'gz-new' });
       pill.dataset.kind = kind;
@@ -718,6 +756,7 @@
       if (KIND[kind]) pill.setAttribute('aria-label', t(KIND[kind], { n: count }));
     }
     pill.dataset.cid = cid;
+    if (kind === 'grades') gradeMoment(cid, count, pill);
   };
   // Ultra's pills (X.openNew), registered here on every site so they still come before the other listeners.
   for (const ev of ['click', 'keydown', 'pointerdown', 'mousedown']) document.addEventListener(ev, (e) => X.openNew(e), true);
@@ -930,24 +969,34 @@
     } else if (!want && have) have.remove();
   };
 
-  // ---- animated background (bg.kind "scene") ----------------------------------------------------
-  // lib/scene.js and three.js (~520 KB) load only once a scene is picked, and only in a page of its own
+  // ---- animated background (bg.kind "scene", "shader", "layers", "media") --------------------------------
+  // lib/scene.js and three.js (~520 KB) load only once a scene is picked (a video or animation: lib/scene-media.js), and only in a page of its own
   // (solo) or the editor's preview; a course tab's hidden frame lets its canvas go. The canvas lives in
   // the topmost full-screen layer (see extras.css); flush() moves it when a course or item panel opens or closes.
   const LAYERS = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
   const sceneFrame = solo || location.protocol !== 'https:';
   let scene = null; // { update, draw, stop } from lib/scene.js
   let sceneCanvas = null;
-  let sceneLoad = null;
+  const sceneLoad = {}; // module file → its import
+  let sceneFile = ''; // the module the running scene came from
   let sceneFailed = false; // no WebGL, or the module was blocked: the gradient under it stays
+  let sceneBad = ''; // a background this device couldn't draw (lib/scene.js onFail): the gradient stays until it changes
+  // GZ_CTX.parts() supplies the background after first paint and announces changes with glaze:parts.
+  const partsOf = () => globalThis.GZ_CTX?.parts() ?? null;
+  const bgKind = () => globalThis.GZ_XPARTS_PAGE?.bgKind(partsOf()?.bg) || worn.bg.kind;
+  const sceneKind = () => { const k = bgKind(), b = partsOf()?.bg; return k === 'scene' || (k === 'shader' ? !!b?.shader?.src : k === 'media' ? !!b?.media : k === 'layers' && !!b?.layers?.length); };
+  const sceneModule = () => (bgKind() === 'media' ? 'lib/scene-media.js' : 'lib/scene.js');
+  const sceneSig = () => JSON.stringify([bgKind(), worn.bg.scene, partsOf()?.bg]);
   // ponytail: the last visible layer in document order is taken as the top one, which holds while
   // Ultra stacks panels in DOM order. Compare z-index if a panel ever opens under the canvas.
   // LAYERS is Ultra's; Canvas has no layer picked yet, so its scene goes in the body (canvas.css places it).
+  let modBg = null; // a mod's background (features/mods.js), in the scene's place while the student has it on
   const placeScene = () => {
-    if (!sceneCanvas) return;
+    const c = modBg || sceneCanvas;
+    if (!c) return;
     const home = (ultra && [...document.querySelectorAll(LAYERS)].filter((e) => e.getClientRects().length).pop()) || document.body;
-    if (sceneCanvas.parentNode === home) return;
-    home.append(sceneCanvas);
+    if (c.parentNode === home) return;
+    home.append(c);
     scene?.draw();
   };
   const stopScene = () => {
@@ -959,7 +1008,10 @@
   const sceneOpts = () => {
     const { dim, amount, pace } = GZ_SCENE_LOOK(worn.bg.intensity);
     return {
+      kind: bgKind(),
       name: worn.bg.scene,
+      x: partsOf(),
+      palette,
       ground: palette['--gz-surface-2'],
       colors: GZ_BG_COLORS(worn.bg.colors, palette),
       dim,
@@ -970,19 +1022,27 @@
   const syncScene = () => {
     // Cut off by a reload of Glaze: the scene keeps its last frame (lib/scene.js) until the page loads again.
     if (!chrome.runtime?.id) return;
-    if (!settings.enabled || !links.length || worn.bg.kind !== 'scene' || !sceneFrame || sceneFailed || !document.body || hid()) return stopScene();
-    if (scene) return scene.update(sceneOpts());
-    sceneLoad ||= import(chrome.runtime.getURL('lib/scene.js'));
-    sceneLoad.then((mod) => {
-      if (!chrome.runtime?.id || scene || !links.length || worn.bg.kind !== 'scene' || hid()) return;
-      sceneCanvas = document.createElement('canvas');
-      sceneCanvas.id = 'gz-scene';
-      sceneCanvas.setAttribute('aria-hidden', 'true');
-      placeScene();
-      scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id);
+    if (modBg) { stopScene(); return placeScene(); }
+    if (!settings.enabled || !links.length || !sceneKind() || !sceneFrame || sceneFailed || !document.body || hid() || (sceneBad && sceneBad === sceneSig())) return stopScene();
+    const file = sceneModule();
+    if (scene && sceneFile !== file) stopScene();
+    const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL; // its checker (lib/glsl.js) first
+    if (scene && !wait) return scene.update(sceneOpts());
+    sceneLoad[file] ||= import(chrome.runtime.getURL(file));
+    Promise.all([sceneLoad[file], wait && need('lib/glsl.js', () => globalThis.GZ_GLSL).catch(() => {})]).then(([mod]) => {
+      if (!settings.enabled || !sceneFrame || sceneFailed || (sceneBad && sceneBad === sceneSig()) || !chrome.runtime?.id || !links.length || !sceneKind() || hid() || (bgKind() === 'shader' && !globalThis.GZ_GLSL) || file !== sceneModule()) return;
+      if (!scene) {
+        sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
+        sceneCanvas.id = 'gz-scene';
+        sceneCanvas.setAttribute('aria-hidden', 'true');
+        placeScene();
+        sceneFile = file;
+        scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, () => { sceneBad = sceneSig(); stopScene(); });
+      }
       scene.update(sceneOpts());
     }).catch(() => { sceneFailed = true; stopScene(); });
   };
+  document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
 
   // ---- course colors and tint ------------------------------------------------------------------
   // Every course its own color (GZ_COURSE_COLORS), worked out from the course list recordCourses
@@ -1186,11 +1246,11 @@
     X.paintNav(s.nav);
     // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
-    const kind = s.bg.kind === 'image' && !s.bg.image ? 'gradient' : s.bg.kind;
+    const kind = bgKind() === 'image' && !s.bg.image ? 'gradient' : bgKind();
     setAttr('data-gz-bg', kind);
     setAttr('data-gz-scene', kind === 'scene' && s.bg.scene);
     // A scene's gradient fallback (until it draws, or without WebGL) takes its dim from intensity.
-    const look = kind === 'scene' && GZ_SCENE_LOOK(s.bg.intensity);
+    const look = (kind === 'scene' || kind === 'shader' || kind === 'layers' || kind === 'media') && GZ_SCENE_LOOK(s.bg.intensity);
     setVar('--gz-bg-dim', `${look ? Math.round(look.dim * 100) : s.bg.dim}%`);
     setVar('--gz-bg-blur', `${look ? 0 : s.bg.blur}px`);
     GZ_BG_COLORS(s.bg.colors, colors).forEach((c, i) => setVar(`--gz-bg-${i + 1}`, c));
@@ -1201,6 +1261,7 @@
     // Motion: the system's reduced-motion setting wins over the level unless told otherwise.
     setAttr('data-gz-motion', s.motion.followSystem && calmMQ.matches ? 'off' : s.motion.level);
     if (s.motion.level === 'expressive') need('features/light.js', () => globalThis.GZ_LIGHT).catch(() => {}); // the pointer light
+    moveParts();
     setAttr('data-gz-no-trans', !s.motion.transitions);
     setAttr('data-gz-no-enter', !s.motion.enter);
     setAttr('data-gz-no-hover', !s.motion.hover);
@@ -1326,6 +1387,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       syncFooter();
       startSweep();
       syncScene();
+      moveParts();
     });
   };
   const disable = () => {
@@ -1333,6 +1395,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     globalThis.GZ_PEEK?.hide();
     if (!ultra) globalThis.GZ_DOWNLOAD?.stop();
     globalThis.GZ_KEYS?.off();
+    globalThis.GZ_MOTIONX?.off();
     globalThis.GZ_CMD?.close();
     for (const id of ['gz-progress', 'gz-calc', 'gz-gpa']) document.getElementById(id)?.remove();
     for (const p of document.querySelectorAll('.gz-new, .gz-card-grade')) p.remove();
@@ -1352,6 +1415,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     syncPageFade();
     stopScene();
     stopSweep();
+    syncRules();
     clearSettings();
     globalThis.GZ_NAV_UI?.sync();
     syncDocTools();
@@ -1373,22 +1437,30 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
   const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
   if (!partIn) takePart();
+  // Moodle has no part: a worn Look's nav layout (x.nav, features/nav.js) is all Glaze does to its nav.
+  if (moodle) X.syncNav = () => { if (window.top === window && ((links.length && GZ_CTX.parts()?.nav) || globalThis.GZ_NAV_UI)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), no); };
+  // Wearing or taking off a Look can change the nav's layout (GZ_CTX.parts).
+  document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 
   // The helpers a file loaded by need() may use (features/*.js): this frame's, through one name. The part's are asked
   // of it when called, so a part that comes late still answers.
-  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
+  globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf,
     nickOf: (cid) => X.nickOf(cid), courseList: () => courseList, courseColors, varText, cardUI,
     setCourses: (c) => { settings = { ...settings, courses: c }; applySettings(); },
     // Draft backup, Ultra's what-if calculator, the document buttons and your place in a course (W0d).
     draftEditor: DRAFT_ED, draftAt, docButton, setVar, setDark, PREVIEWS, DOC, darkTheme: () => darkTheme,
+    // Look parts stay off on courses with their own Look; changes fire `glaze:parts`.
+    parts: () => (on(settings) && (!isPreview || html.dataset.previewPage !== 'quiz') && !lookHere() && (globalThis.GZ_MODS ? GZ_MODS.parts(globalThis.GZ_XPARTS_PAGE?.now() || null) : globalThis.GZ_XPARTS_PAGE?.now())) || null,
+    background: (el) => { if (modBg && modBg !== el) modBg.remove(); modBg = el || null; syncScene(); },
     canvasCourseKey, ROWS, holding: () => X.holding(), tapped: () => tapped, acted: () => acted, placeAsked: () => placeAsked, solo, tabFrame, scene: () => { syncScene(); if (full && !timer && !hid()) timer = setTimeout(flush); },
     ...Object.fromEntries(['me', 'canvasCourses', 'profile', 'canvasPeek', 'moduleItems', 'myCourses', 'courseItems', 'bookFor', 'courseColor'].map((k) => [k, (...a) => X.ctx[k](...a)])) });
 
   // Independent card/widget stores aren't theme settings; don't transfer them on every page load.
+  let lookX;
   const load = () => new Promise((res) => {
-    try { chrome.storage.sync.get(Object.keys(GZ_DEFAULTS), (raw) => res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw))); }
+    try { chrome.storage.sync.get([...Object.keys(GZ_DEFAULTS), 'lookX'], (raw) => { lookX = chrome.runtime.lastError ? undefined : raw?.lookX; res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw)); }); }
     catch { res(GZ_SANITIZE()); }
   }).then((s) => {
     // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
@@ -1410,11 +1482,28 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     else enable();
   });
   if (on(settings)) enable();
+  // Load parts after the theme, only when present.
+  const partsIn = (m) => {
+    if (solo && !isPreview && (m || lookX || globalThis.GZ_XPARTS_PAGE)) need('features/lookparts.js', () => globalThis.GZ_XPARTS_PAGE).then(() => GZ_XPARTS_PAGE.read(), () => {});
+  };
+  // Mods start only in the top frame; parts also reach live course tabs.
+  const modsIn = (parts = false) => {
+    if (solo && !isPreview && on(settings)) local((l) => l.get('mods', (r) => {
+      if (parts) partsIn(r?.mods?.length);
+      if (!r?.mods?.length || window.top !== window || (globalThis.GZ_MODS && globalThis.GZ_MODWIDGETS)) return;
+      chrome.runtime.sendMessage({ type: 'glaze:modpage', op: 'list' }).then((a) => {
+        if (a?.mods?.length && !globalThis.GZ_MODS && chrome.runtime.getManifest().sandbox) need('features/mods.js', () => globalThis.GZ_MODS).then(() => GZ_MODS.start());
+        if (a?.plain?.length && !globalThis.GZ_MODWIDGETS) need('features/modwidgets.js', () => globalThis.GZ_MODWIDGETS).then(() => GZ_MODWIDGETS.start());
+      }, no);
+    }));
+  };
+  ready.then(() => modsIn(true));
   // The preview is fed the editor's state directly, before it is saved, and ignores storage so a
   // save landing late can't undo an edit that is further along.
   if (isPreview) {
     addEventListener('message', (e) => {
-      if (e.origin !== location.origin || !e.data?.gzPreview) return;
+      if (e.origin !== location.origin || e.source !== parent || !e.data?.gzPreview) return;
+      globalThis.GZ_XPARTS_PAGE?.preview(e.data.gzPreviewParts);
       const was = settings.enabled && links.length > 0;
       settings = GZ_SANITIZE(e.data.gzPreview);
       if (settings.enabled && !was) enable();
@@ -1423,6 +1512,9 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     });
   }
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (changes.lookX && area === 'sync') lookX = changes.lookX.newValue;
+    if (area === 'local' && Object.keys(changes).some((k) => /^mod(s$|:|Dev$|Order$|sBlocklist$)/.test(k))) modsIn(true);
+    else if (changes.lookX && (area !== 'sync' || !changes.enabled)) partsIn();
     if (area === 'local' && changes.seenCourses) {
       courseList = changes.seenCourses.newValue || {};
       reapply();
@@ -1434,6 +1526,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
       if (on(s) && !was) enable();
       else if (!on(s) && was) disable();
       else if (on(s)) applySettings();
+      if (changes.enabled) modsIn(true);
     });
   });
   // Moodle's course is on <body>: its tint and look before that is drawn.

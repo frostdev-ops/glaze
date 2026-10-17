@@ -27,7 +27,7 @@ const worker = (local = {}, syncStore = {}) => {
   });
   const listeners = [];
   const context = vm.createContext({
-    URL, console, TextEncoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
+    URL, console, TextEncoder, TextDecoder, Blob, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
       runtime: {
@@ -144,6 +144,43 @@ test('rotation: a favorite still decoding when the student turns rotation off or
   assert.ok((await turn).ok);
   assert.equal(w.sync.look.font, 'jetbrains-mono');
   assert.equal(w.local.rotateState.i, 0);
+});
+
+test('rotation: a favorite brings its parts with it, a built-in Look clears them, and parts changed meanwhile drop the turn', async () => {
+  const G = require('../defaults.js');
+  const X = require('../lib/lookparts.js');
+  const parts = { x: { cursor: { kind: 'glow' } } };
+  const mine = { x: { cursor: { kind: 'ripple' } } };
+  const settings = async () => ({ ...structuredClone(G.GZ_SANITIZE({ extras: { rotate: '6h' } })), lookX: await X.pack(mine) });
+  const due = { mode: '6h 08:00', at: 1, i: -1 };
+  const forest = G.GZ_PRESETS.find(([n]) => n === 'Forest')[1];
+  const favorite = async (parts, during) => {
+    const w = worker({ rotateLooks: ['glaze2:fav'], rotateState: due }, await settings());
+    let done;
+    w.context.held = new Promise((r) => { done = r; });
+    const begun = new Promise((r) => { w.context.begun = r; });
+    vm.runInContext('GZ_SHARE.decode = () => { globalThis.begun(); return globalThis.held; };', w.context);
+    const turn = w.send({ type: 'glaze:rotate' });
+    await begun;
+    during?.(w);
+    done({ colors: forest, look: {}, bg: { kind: 'shader' }, card: {}, cards: [], parts });
+    return { w, r: await turn };
+  };
+  let { w, r } = await favorite(parts);
+  assert.ok(r.ok);
+  assert.equal(w.sync.bg.kind, 'shader');
+  assert.deepEqual(await X.unpack(w.sync.lookX), parts, 'the code\'s parts replace the ones worn');
+  ({ w, r } = await favorite(null));
+  assert.ok(r.ok);
+  assert.equal(w.sync.lookX, '', 'a code without parts leaves none');
+  ({ w, r } = await favorite(parts, (x) => { x.sync.lookX = 'x1:changed'; }));
+  assert.deepEqual(r, { ok: false, error: 'changed' });
+  assert.equal(w.sync.lookX, 'x1:changed');
+  // Built-in Looks have no parts.
+  w = worker({ rotateState: due }, await settings());
+  assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
+  assert.equal(w.sync.bg.kind, 'scene');
+  assert.equal(w.sync.lookX, '');
 });
 
 // ---- the page -------------------------------------------------------------------------------------------------------
@@ -356,4 +393,225 @@ test('page: "Your pictures" read answering after the page is hidden makes no blo
   p.held.shift().release();
   await settle();
   assert.equal(p.blobs.size, 0);
+});
+
+
+// The real popup/editor helper, with callback storage and the worker's queued messages sharing one store.
+const ui = (w) => {
+  const pending = [], c = w.context.chrome;
+  for (const a of ['sync', 'local']) for (const method of ['get', 'set', 'remove']) {
+    const original = c.storage[a][method];
+    c.storage[a][method] = (v, cb) => { const p = original(v); if (cb) p.then((r) => cb(r)); return p; };
+  }
+  c.runtime.sendMessage = (m, cb) => { const p = w.send(m, w.editor); if (cb) p.then(cb); return p; };
+  w.context.GZ_I18N = { t: (s) => s, ui: () => 'en' };
+  vm.runInContext(read('ui.js') + ';globalThis.UI = GZ_UI;', w.context);
+  return { save: (s, keys) => { const p = new Promise((resolve) => w.context.UI.save(s, keys, resolve)); pending.push(p); return p; }, done: () => Promise.all(pending) };
+};
+
+test('overlapping editor Looks share the worker queue, so the last Look and its parts win together', async () => {
+  const G = require('../defaults.js');
+  const X = require('../lib/lookparts.js');
+  const w = worker(), u = ui(w);
+  let release, begun;
+  const held = new Promise((r) => { release = r; });
+  const started = new Promise((r) => { begun = r; });
+  const set = w.context.chrome.storage.sync.set;
+  w.context.chrome.storage.sync.set = (patch, cb) => {
+    const p = (async () => { if (patch.lookX?.h) { begun(); await held; } return set(patch); })();
+    if (cb) p.then(cb);
+    return p;
+  };
+  const noise = Array.from(require('node:crypto').randomBytes(8000), (b) => String.fromCharCode(33 + b % 94)).join('').replaceAll('/', '~');
+  const first = { ...G.GZ_DEFAULTS, bg: { kind: 'shader' }, parts: { x: { bg: { shader: { src: noise } } } } };
+  u.save(first, ['bg', 'parts']);
+  await started;
+  u.save({ ...G.GZ_DEFAULTS, bg: { kind: 'solid' }, parts: null }, ['bg', 'parts']);
+  await tick(20);
+  release();
+  assert.deepEqual(await u.done(), ['', '']);
+  assert.equal(w.sync.bg.kind, 'solid');
+  assert.equal(w.sync.lookX, '');
+  assert.equal(w.local.lookX, undefined);
+});
+
+test('backup restore stores or clears parts in the same sync write as its Look, and rejects malformed parts', async () => {
+  const X = require('../lib/lookparts.js');
+  const old = await X.pack({ x: { cursor: { kind: 'glow' } } });
+  const w = worker({ lookX: old }, { lookX: { h: X.hash(old) }, bg: { kind: 'solid' } });
+  const writes = [], set = w.context.chrome.storage.sync.set;
+  w.context.chrome.storage.sync.set = async (p) => { writes.push(structuredClone(p)); return set(p); };
+  const restore = (parts) => w.send({ type: 'glaze:todo', restore: { tasks: {}, settings: { bg: { kind: 'shader' } }, ...(parts !== undefined && { parts }) } }, w.editor);
+  const P = { x: { cursor: { kind: 'ripple' } } };
+  assert.ok((await restore(P)).ok);
+  assert.deepEqual(await X.unpack(w.sync.lookX), P);
+  assert.ok(writes.every((p) => Object.hasOwn(p, 'bg') && Object.hasOwn(p, 'lookX')));
+  assert.ok((await restore()).ok);
+  assert.equal(w.sync.lookX, '');
+  const before = structuredClone(w.sync);
+  assert.equal((await restore({ x: { cursor: { kind: 'laser' } } })).ok, false);
+  assert.deepEqual(w.sync, before);
+});
+
+test('picking a popup palette clears the old Look parts in its saved keys', () => {
+  const G = require('../defaults.js');
+  const w = worker(), u = ui(w);
+  const s = { ...structuredClone(G.GZ_DEFAULTS), parts: { x: { cursor: { kind: 'glow' } } } };
+  const keys = w.context.UI.pickPreset(s, 'Frost', G.GZ_PRESET('Frost'));
+  assert.equal(s.parts, null);
+  assert.ok(keys.includes('parts'));
+});
+
+
+test('an editor Look sends its nav and captured parts in one queued request', async () => {
+  const G = require('../defaults.js');
+  const w = worker(), u = ui(w), sent = [];
+  const send = w.context.chrome.runtime.sendMessage;
+  w.context.chrome.runtime.sendMessage = (m, cb) => { sent.push(structuredClone(m)); return send(m, cb); };
+  const first = { x: { cursor: { kind: 'glow' } } };
+  const s = { ...G.GZ_DEFAULTS, parts: first };
+  u.save(s, ['bg', 'nav', 'parts']);
+  s.parts = { x: { cursor: { kind: 'ripple' } } };
+  await u.done();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].type, 'glaze:look');
+  assert.deepEqual(sent[0].patch.nav, s.nav);
+  assert.deepEqual(await require('../lib/lookparts.js').unpack(w.sync.lookX), first);
+});
+
+test('a refused Look write preserves the native nav and its local pictures', async () => {
+  const G = require('../defaults.js'), X = require('../lib/lookparts.js');
+  require('../lib/nav.js');
+  const nav = G.GZ_SANITIZE({ nav: { k: 'image', i: 'abcdefghijkl', brand: 'custom', li: 'mnopqrstuvwx' } }).nav;
+  const before = { nav, lookX: await X.pack({ x: { cursor: { kind: 'glow' } } }), bg: { kind: 'solid' } };
+  const pictures = { 'navLogo:mnopqrstuvwx': 'logo bytes', 'cardImg:abcdefghijkl': 'picture bytes' };
+  const w = worker(structuredClone(pictures), structuredClone(before));
+  const set = w.context.chrome.storage.sync.set;
+  w.context.chrome.storage.sync.set = (patch) => Object.hasOwn(patch, 'lookX') ? Promise.reject(new Error('quota')) : set(patch);
+  const patch = { nav: { k: 'solid', brand: 'glaze', li: '' }, bg: { kind: 'gradient' } };
+  assert.equal((await w.send({ type: 'glaze:look', parts: null, patch }, w.editor)).ok, false);
+  assert.deepEqual(w.sync, before);
+  assert.deepEqual(w.local, pictures);
+  for (const nav of [null, false, '', 'solid', []]) {
+    assert.equal((await w.send({ type: 'glaze:look', parts: null, patch: { ...patch, nav } }, w.editor)).ok, false);
+    assert.deepEqual(w.sync, before);
+    assert.deepEqual(w.local, pictures);
+  }
+  // The queue survives refusal; success commits nav, background and parts in one write before cleaning pictures.
+  const writes = [];
+  w.context.chrome.storage.sync.set = (patch) => { writes.push(structuredClone(patch)); return set(patch); };
+  assert.equal((await w.send({ type: 'glaze:look', parts: null, patch }, w.editor)).ok, true);
+  assert.equal(writes.length, 1);
+  assert.deepEqual(Object.keys(writes[0]).sort(), ['bg', 'lookX', 'nav']);
+  assert.equal(w.sync.nav.k, 'solid');
+  assert.equal(w.sync.lookX, '');
+  assert.deepEqual(w.local, {});
+});
+
+test('a partial Look nav patch preserves personal pictures through the parts quota fallback', async () => {
+  const G = require('../defaults.js'), X = require('../lib/lookparts.js');
+  require('../lib/nav.js');
+  const nav = G.GZ_SANITIZE({ nav: { k: 'image', i: 'abcdefghijkl', brand: 'custom', li: 'mnopqrstuvwx' } }).nav;
+  const pictures = { 'navLogo:mnopqrstuvwx': 'logo bytes', 'cardImg:abcdefghijkl': 'picture bytes' };
+  const w = worker(structuredClone(pictures), { nav });
+  const set = w.context.chrome.storage.sync.set, writes = [];
+  w.context.chrome.storage.sync.set = (patch) => {
+    writes.push(structuredClone(patch));
+    return typeof patch.lookX === 'string' ? Promise.reject(new Error('item quota')) : set(patch);
+  };
+  const parts = { x: { cursor: { kind: 'trail', len: 24 } } };
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts, patch: { nav: { labels: 'small' }, bg: { kind: 'solid' } } }, w.editor), { ok: true });
+  assert.equal(writes.length, 2, 'one rejected packed write, then one combined device fallback');
+  assert.equal(w.sync.nav.labels, 'small');
+  assert.equal(w.sync.nav.i, nav.i);
+  assert.equal(w.sync.nav.li, nav.li);
+  assert.deepEqual(await X.fromStored(w.sync.lookX, { get: async () => w.local }), parts);
+  assert.deepEqual(Object.fromEntries(Object.entries(w.local).filter(([k]) => k !== 'lookX')), pictures);
+});
+
+
+test('the queued Look writer limits page callers to theme changes and refuses arbitrary storage keys', async () => {
+  const w = worker();
+  const message = { type: 'glaze:look', parts: null, patch: { colors: { '--gz-accent': '#123456' } } };
+  const denied = { ok: false, error: 'sender' };
+  assert.deepEqual(await w.send(message, { id: 'other', tab: {}, url: `${SITE}/courses/1` }), denied);
+  assert.deepEqual(await w.send({ ...message, parts: { x: { cursor: { kind: 'glow' } } } }), denied);
+  assert.deepEqual(await w.send({ ...message, patch: { lookX: 'forged' } }, w.editor), denied);
+  assert.deepEqual(await w.send({ ...message, patch: JSON.parse('{"__proto__":{}}') }, w.editor), denied);
+  assert.deepEqual(w.sync, {});
+  const moodle = { id: 'glaze', tab: {}, url: 'https://moodle.example.edu/my/' };
+  assert.deepEqual(await w.send(message, moodle), { ok: true });
+  assert.equal(w.sync.lookX, '');
+  const popup = { id: 'glaze', url: 'chrome-extension://x/popup.html' };
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts: { x: { cursor: { kind: 'glow' } } }, patch: {} }, popup), { ok: true });
+});
+
+
+test('a command palette palette choice clears the previous Look parts through the shared writer', async () => {
+  const X = require('../lib/lookparts.js');
+  const w = worker({}, { lookX: await X.pack({ x: { cursor: { kind: 'glow' } } }) });
+  ui(w);
+  const source = read('features/palette.js');
+  const store = source.slice(source.indexOf('  const store ='), source.indexOf('  const paletteItems ='));
+  const palettes = source.split('\n').find((line) => line.includes('...GZ_ALL_PRESETS(s.presets).map')).trim().slice(3, -1);
+  vm.runInContext(`(() => { const s = GZ_DEFAULTS, t = (s) => s; ${store}; (${palettes})[0].run(); })()`, w.context);
+  await tick(30);
+  assert.equal(w.sync.lookX, '');
+});
+
+test('rotation does not announce a favorite that could not be decoded or worn', async () => {
+  const before = { mode: '6h 08:00', at: 1, i: 0 };
+  const w = worker({ rotateState: before, rotateLooks: ['glaze1:bad'] }, { extras: { rotate: '6h', at: '08:00' } });
+  w.context.GZ_SHARE = { decode: () => Promise.reject(new Error('bad code')) };
+  assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
+  assert.equal(L.turned(before, w.local.rotateState), false);
+});
+
+test('queued builder edits merge only their named parts into the latest Look', async () => {
+  const X = require('../lib/lookparts.js');
+  const original = { x: { cursor: { kind: 'glow' }, nav: { place: 'left' } } };
+  const latest = { x: { cursor: { kind: 'trail' }, nav: { place: 'left' }, bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(uC1, 1.0); }' }, layers: [{ k: 'noise' }] },
+    anim: { 'card.enter': { s: [{ at: 0, o: 0 }, { at: 1, o: 1 }] } }, fx: { complete: { kind: 'ring' } } },
+    m: [{ id: 'abcdefghijklmnop', h: 'A'.repeat(43), name: 'Garden' }] };
+  const w = worker({}, { lookX: await X.pack(latest), bg: { kind: 'shader' } });
+  const edit = { type: 'glaze:look', parts: { x: { ...original.x, nav: { place: 'dock' } } }, partKeys: ['nav'], patch: { version: 2 } };
+  assert.deepEqual(await w.send(edit, w.editor), { ok: true });
+  assert.deepEqual(await X.unpack(w.sync.lookX), { ...latest, x: { ...latest.x, nav: { place: 'dock' } } });
+  assert.equal(w.sync.bg.kind, 'shader');
+  // A second stale editor removes its nav without removing the newly added shader or cursor.
+  assert.deepEqual(await w.send({ ...edit, parts: original, partKeys: ['rules'] }, w.editor), { ok: true });
+  assert.equal((await X.unpack(w.sync.lookX)).x.nav.place, 'dock');
+  assert.deepEqual(await w.send({ ...edit, parts: { x: { cursor: original.x.cursor } } }, w.editor), { ok: true });
+  const left = structuredClone(latest); delete left.x.nav;
+  assert.deepEqual(await X.unpack(w.sync.lookX), left);
+});
+
+test('a background or motion builder edit merges only its own part, keeping the nav builder\'s', async () => {
+  const X = require('../lib/lookparts.js');
+  const stored = { x: { nav: { place: 'dock' }, cursor: { kind: 'glow' } } };
+  const w = worker({}, { lookX: await X.pack(stored) });
+  // A stale page copy without the nav: only the cursor is written.
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts: { x: { cursor: { kind: 'trail' } } }, partKeys: ['cursor'], patch: {} }, w.editor), { ok: true });
+  assert.deepEqual(await X.unpack(w.sync.lookX), { x: { nav: { place: 'dock' }, cursor: { kind: 'trail' } } });
+});
+
+test('builder merges refuse malformed part names and unavailable device parts without writing', async () => {
+  const w = worker({}, { lookX: { h: 'on-another-device' } });
+  const edit = { type: 'glaze:look', parts: { x: { nav: { place: 'top' } } }, partKeys: ['nav'], patch: {} };
+  const before = structuredClone(w.sync);
+  assert.equal((await w.send(edit, w.editor)).ok, false);
+  assert.deepEqual(w.sync, before);
+  for (const partKeys of ['nav', [], ['__proto__'], ['lookX'], ['nav', 'nav']]) {
+    assert.equal((await w.send({ ...edit, partKeys }, w.editor)).ok, false);
+    assert.deepEqual(w.sync, before);
+  }
+});
+
+test('the shared editor save forwards builder part keys through the queued writer', async () => {
+  const X = require('../lib/lookparts.js'), G = require('../defaults.js');
+  const w = worker({}, { lookX: await X.pack({ x: { cursor: { kind: 'trail' } } }) });
+  ui(w);
+  const result = await new Promise((done) => w.context.UI.save({ ...G.GZ_DEFAULTS, parts: { x: { nav: { place: 'top' } } } }, ['parts'], done, undefined, ['nav']));
+  assert.equal(result, '');
+  assert.deepEqual(await X.unpack(w.sync.lookX), { x: { cursor: { kind: 'trail' }, nav: { place: 'top' } } });
 });

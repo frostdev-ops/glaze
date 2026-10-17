@@ -13,6 +13,7 @@ const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-b9-'));
   let context;
   try {
+    await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(temp, 'profile'), { executablePath: chromePath, headless: true, viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce', hasTouch: true, isMobile: true, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--renderer-process-limit=1'] });
     context.setDefaultTimeout(8000);
     let requests = 0;

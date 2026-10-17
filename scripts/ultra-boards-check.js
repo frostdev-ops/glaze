@@ -1,10 +1,11 @@
 // Ultra's boards, headless (B7b): the real extension on synthetic Courses, Institution and start pages built from
-// docs/spikes/B7.md (B0's anchors; invented courses and modules), served under a made-up school's address. Nothing
+// the B7 spike (B0's anchors; invented courses and modules), served under a made-up school's address. Nothing
 // leaves the machine: Ultra's API is answered from test/fixtures, every other request is aborted and DNS is mapped to
 // nowhere. It checks that the Courses page's tiles float where the panel was without covering Ultra's To Do; that
 // they move only in Edit layout, by pointer (snapped, with a guide; Alt: free) and by keys (announced), and are where
 // they were after a reload; that a narrow window stacks them and keeps the layout; the Dashboard's tabs (arrow keys,
-// remembered, headed Dashboard, with Better To Do and no overlap when fresh); a widget floating over every page, once, on
+// remembered, headed Dashboard, with Better To Do and no overlap when fresh); course cards picked, styled and given a
+// picture in the boards' Course cards dialog (B10); a widget floating over every page, once, on
 // a course's page clear of the nav and its top bar, and an old (B5) float carried over; and the opt-in landing (once,
 // never on a reload). Screenshots: both boards and a course page, light and dark, 1280 and 375.
 //   NODE_PATH=/path/to/node_modules node scripts/ultra-boards-check.js [out dir for screenshots]   (needs playwright)
@@ -13,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const zlib = require('zlib');
 const G = require('../defaults.js');
 require('../lib/widgets.js'); // its settings in GZ_SPEC
 
@@ -23,6 +25,13 @@ const O = 'https://bb.school.test';
 const fx = (n) => fs.readFileSync(path.join(__dirname, '..', 'test/fixtures', `ultra-${n}.json`), 'utf8');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 let fails = 0;
+// A tiny picture for the Course cards dialog's "Choose a picture": a 4×4 PNG, drawn here (two colors in stripes).
+const png = () => {
+  const chunk = (type, data) => { const b = Buffer.alloc(8 + data.length + 4); b.writeUInt32BE(data.length); b.write(type, 4); data.copy(b, 8); b.writeUInt32BE(zlib.crc32(b.subarray(4, 8 + data.length)), 8 + data.length); return b; };
+  const head = Buffer.alloc(13); head.writeUInt32BE(4, 0); head.writeUInt32BE(4, 4); head[8] = 8; head[9] = 2; // 8-bit RGB
+  const rows = Buffer.concat(Array.from({ length: 4 }, (_, y) => Buffer.from([0, ...Array.from({ length: 4 }, () => (y % 2 ? [0x22, 0x88, 0x55] : [0xee, 0xaa, 0x22])).flat()])));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+};
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails++; };
 
 // Ultra's frame: the MUI drawer (200px, B7.md) and the page right of it; under 768px the drawer goes (Ultra's phone layout).
@@ -97,12 +106,14 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'b7b-'));
-  const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
-    executablePath: CHROME, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
-    args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
-  });
+  let ctx;
   const errors = [];
   try {
+    await require('./wait-for-browser.js')();
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
+      executablePath: CHROME, headless: true, viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York',
+      args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],
+    });
     const requests = [];
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
@@ -143,6 +154,24 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await page.waitForSelector(where === '/ultra/course' ? `${tile('quotes')}` : '#gz-dash[data-board="dash"] section.gz-w', { timeout: 15000 });
       await page.waitForTimeout(700); // the agenda and the notes arrive
     };
+    const editingStill = async (label) => {
+      // Quotes turn on a wall-clock boundary, even halfway through Done. Hold that content still, not the layout.
+      const cycling = await page.evaluate(() => {
+        const b = document.querySelector('section.gz-w[data-tile="quotes"] button[aria-pressed="false"]');
+        b?.click(); return !!b;
+      });
+      try {
+        await stable();
+        const geometry = () => page.evaluate(() => [...document.querySelectorAll('#gz-dash .gz-w, #gz-room > .gz-w')].map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.tile, r.left, r.top + scrollY, r.width, r.height]; }));
+        const before = JSON.stringify(await geometry());
+        for (const state of ['Edit layout', 'Done']) {
+          await page.click('.gz-dash-edit'); await stable();
+          ok(JSON.stringify(await geometry()) === before, `${label}: ${state} keeps tile dimensions and spots`);
+        }
+      } finally {
+        if (cycling) await page.evaluate(() => document.querySelector('section.gz-w[data-tile="quotes"] button[aria-pressed="true"]')?.click());
+      }
+    };
     const notes = { [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
 
     if (!process.env.B10_ONLY) {
@@ -162,6 +191,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         ok(await page.evaluate(() => document.querySelector('#gz-panel .gz-dash-grid').hasAttribute('data-stack') && !!document.querySelector('#gz-panel .gz-dash-grid section.gz-w')), 'Courses, 375px: the tiles stack in the panel');
         ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Courses, 375px: no sideways scroll');
       }
+      await editingStill(`Courses ${width}`);
       await shot(`courses-light-${width}`);
       await open('/ultra/institution-page', width);
       if (width === 1280) {
@@ -175,6 +205,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         const used = await page.evaluate(() => { const g = document.querySelector('#gz-dash .gz-dash-grid').getBoundingClientRect(); const t = [...document.querySelectorAll('#gz-dash section.gz-w')].map((e) => e.getBoundingClientRect()); return { left: Math.min(...t.map((r) => r.left)) - g.left, right: g.right - Math.max(...t.map((r) => r.right)) }; });
         ok(Math.abs(used.left - used.right) <= 1, `Dashboard, fresh: in the middle of its room (${Math.round(used.left)} | ${Math.round(used.right)})`);
       } else ok(await page.evaluate(() => document.querySelector('#gz-dash .gz-dash-grid').hasAttribute('data-stack')), 'Dashboard, 375px: stacked');
+      await editingStill(`Dashboard ${width}`);
       await shot(`dash-light-${width}`);
     }
 
@@ -205,7 +236,8 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     const t0 = await rect(tile('timer')), tg = await grab('timer');
     await page.mouse.move(tg.left + 60, tg.top + 5);
     await page.mouse.down();
-    await page.mouse.move(n.right + 16 + 4 + 60 + (tg.left - t0.left), n.top + 5 + 5 + (tg.top - t0.top), { steps: 8 });
+    // Let go a pixel off both lines, so no other tile's line is nearer (the column's tiles can line up there too).
+    await page.mouse.move(n.right + 16 + 1 + 60 + (tg.left - t0.left), n.top + 5 + 1 + (tg.top - t0.top), { steps: 8 });
     const guides = await page.evaluate(() => [...document.querySelectorAll('#gz-room .gz-guide')].filter((g) => !g.hidden).length);
     ok(guides >= 1, `a guide shows on the line it meets (${guides})`);
     await shot('courses-drag-guide-light-1280');
@@ -225,15 +257,34 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     const q1 = await rect(tile('quotes'));
     ok(Math.abs(q1.left - (n.left + 77)) < 1.5 && Math.abs(q1.top - (n.top + 133)) < 1.5, `Alt places it freely, over the notes (${Math.round(q1.left - n.left)}, ${Math.round(q1.top - n.top)}; from ${Math.round(q0.left - n.left)}, ${Math.round(q0.top - n.top)})`);
     ok(await page.evaluate(() => +document.querySelector('section.gz-w[data-tile="quotes"]').style.zIndex > +document.querySelector('section.gz-w[data-tile="notes"]').style.zIndex), 'the one moved last is on top');
-    // Keys: one grid step, said, the handle keeps the focus.
-    await page.focus(`${tile('timer')} .gz-w-grip`);
+    // Keys: one grid step, said, the tile keeps the focus.
+    await page.focus(tile('timer'));
     await page.keyboard.press('ArrowLeft');
     const tk = await rect(tile('timer'));
     ok(Math.abs(tk.left - (tm.left - 16)) < 1, 'ArrowLeft: one grid step');
     ok(await page.evaluate(() => /^Moved Focus timer: \d+ px from the left, \d+ px from the top$/.test(document.querySelector('#gz-dash .gz-sr').textContent)), 'the move is said');
-    ok(await page.evaluate(() => document.activeElement?.classList.contains('gz-w-grip')), 'the handle keeps the focus');
+    ok(await page.evaluate(() => document.activeElement?.dataset.tile === 'timer'), 'the tile keeps the focus');
     await page.keyboard.press('Shift+ArrowDown');
     ok(Math.abs((await rect(tile('timer'))).top - (tk.top + 64)) < 1, 'Shift+ArrowDown: four steps');
+    // Anywhere on it while editing, its content too (which waits meanwhile): a drag by the middle of its body.
+    const tb = await rect(`${tile('timer')} .gz-w-body`), t1 = await rect(tile('timer'));
+    ok(await page.evaluate(() => document.querySelector('section.gz-w[data-tile="timer"] .gz-w-body').inert && !document.querySelector('.gz-w-grip, .gz-w-size')), 'editing: its content waits; no handle, no size picker');
+    await page.mouse.move(tb.left + 40, tb.top + 20); await page.mouse.down(); await page.mouse.move(tb.left + 40 - 160, tb.top + 20, { steps: 6 }); await page.mouse.up();
+    await stable();
+    ok(t1.left - (await rect(tile('timer'))).left > 140, 'a drag by its body moves it');
+    // Its corner: dragged, it resizes (snapped), on top, kept.
+    const rc = await rect(`${tile('timer')} .gz-w-resize`), t2 = await rect(tile('timer'));
+    await page.mouse.move(rc.left + 9, rc.top + 9); await page.mouse.down(); await page.mouse.move(rc.left + 9 + 70, rc.top + 9 + 90, { steps: 8 }); await page.mouse.up();
+    await until(layout, (l) => Number.isInteger(l?.boards?.courses?.find((x) => x.id === 'timer')?.w), 'timer resize not saved');
+    await stable();
+    const t3 = await rect(tile('timer'));
+    ok(t3.width > t2.width + 40 && t3.bottom - t3.top > t2.bottom - t2.top + 50 && Math.abs(t3.left - t2.left) < 1, `the corner resizes it, its left edge where it was (${Math.round(t2.width)} → ${Math.round(t3.width)})`);
+    await shot('courses-resize-light-1280');
+    // A double-click on its corner: its own size again.
+    await page.dblclick(`${tile('timer')} .gz-w-resize`);
+    await until(layout, (l) => !('w' in (l?.boards?.courses?.find((x) => x.id === 'timer') || { w: 1 })), 'timer size not reset');
+    await stable();
+    ok(Math.abs((await rect(tile('timer'))).width - t2.width) < 1, 'a double-click on the corner: its own size again');
     await shot('courses-overlap-edit-light-1280');
     await page.click('#gz-toolbar .gz-dash-edit'); // Done
     const kept = await rect(tile('quotes'));
@@ -454,13 +505,64 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await page.waitForSelector('#gz-toolbar .gz-dash-edit');
       ok(!(await layout()).boards.courses.some((x) => x.id.startsWith('course:')), `B10 ${preset} ${width}: opt-in, native list stays`);
       await page.click('#gz-toolbar .gz-dash-edit');
-      await page.waitForSelector('.gz-course-add');
+      await page.waitForSelector('.gz-course-open');
       await stable();
       const count = requests.length;
       const native = await page.locator('article.course-element-card').count();
-      await page.click('.gz-course-add');
+      // The Course cards dialog: modal, labelled, the focus in it; every course, as a small card; all of them one click.
+      await page.click('.gz-course-open');
+      await page.waitForSelector('#gz-ccm[open] .gz-ccm-item');
+      ok(await page.evaluate(() => { const d = document.getElementById('gz-ccm'); return d.matches(':modal') && d.contains(document.activeElement) && document.getElementById(d.getAttribute('aria-labelledby'))?.textContent === 'Course cards'; }), `B10 ${preset} ${width}: the Course cards dialog is modal and labelled, the focus in it`);
+      ok(await page.locator('#gz-ccm .gz-ccm-item article[data-gz-card-preview]').count() === native, `B10 ${preset} ${width}: each course is in it as a small card`);
+      ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.getElementById('gz-ccm').scrollWidth <= document.getElementById('gz-ccm').clientWidth), `B10 ${preset} ${width}: the dialog fits, no sideways scroll`);
+      await page.click('#gz-ccm .gz-ccm-tools button.gz-w-main'); // Select all: highlighted while the board has none
       await page.waitForSelector(`${courseTile} .gz-course-card`);
       await stable();
+      ok(await page.evaluate((n) => document.querySelector('#gz-ccm .gz-ccm-count').textContent === `On this board: ${n}. Room for ${48 - n} more.` && document.querySelectorAll('#gz-ccm .gz-ccm-item[data-on]').length === n, native), `B10 ${preset} ${width}: Select all ticks them all, and the count says so`);
+      await page.mouse.move(0, 0); await shot(`b10-modal-${preset.toLowerCase()}-${width}`);
+      ok(await page.locator('#gz-ccm .gz-ccm-tools button').evaluateAll((es) => es.every((e) => e.getBoundingClientRect().top === es[0].getBoundingClientRect().top)), `B10 ${preset} ${width}: selection buttons stay together`);
+      const rowBefore = await page.locator('#gz-ccm .gz-ccm-card').evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(), g = e.closest('.gz-ccm-grid').getBoundingClientRect(); return { left: r.left - g.left, top: r.top - g.top, width: r.width }; }).filter((r, i, rs) => r.top === rs[0].top));
+      await page.click('#gz-ccm .gz-ccm-item .gz-ccm-style');
+      await page.waitForSelector('#gz-ccm .gz-ccm-look:not([hidden])');
+      ok(await page.evaluate((before) => {
+        const cards = [...document.querySelectorAll('#gz-ccm .gz-ccm-card')].slice(0, before.length).map((e) => e.getBoundingClientRect());
+        const look = document.querySelector('#gz-ccm .gz-ccm-look').getBoundingClientRect(), grid = document.querySelector('#gz-ccm .gz-ccm-grid').getBoundingClientRect();
+        return cards.every((r, i) => r.left - grid.left === before[i].left && r.top - grid.top === before[i].top && r.width === before[i].width) && Math.abs(look.left - grid.left) < 1 && Math.abs(look.width - grid.width) < 1 && look.top >= Math.max(...cards.map((r) => r.bottom));
+      }, rowBefore), `B10 ${preset} ${width}: Style spans below its row without displacing its neighbours`);
+      await page.mouse.move(0, 0); await shot(`b10-modal-style-${preset.toLowerCase()}-${width}`);
+      if (preset === 'Paper' && width === 1280) {
+        // A look from the dialog: the second course a gradient, then a picture from this computer; both on its board card.
+        const item = page.locator('#gz-ccm .gz-ccm-item').nth(1), id = await item.locator('article').getAttribute('data-course-id');
+        const ukey = `ultra:${O}/${id}`, onBoard = `${courseTile} article.gz-course-card[data-course-id="${id}"]`;
+        await item.locator('.gz-ccm-style').click();
+        await item.locator('.gz-ccm-kinds label', { hasText: 'Gradient' }).click();
+        await page.waitForSelector(`${onBoard}[data-gz-card="gradient"]`);
+        ok(await item.locator('article[data-gz-card="gradient"]').count() === 1, 'B10: a gradient chosen in the dialog shows on its card and its preview');
+        await opts.evaluate(() => { globalThis.quickWrites = 0; globalThis.countQuickWrites = (ch, area) => { if (area === 'sync' && ch.ucards) quickWrites++; }; chrome.storage.onChanged.addListener(countQuickWrites); });
+        await item.locator('input[type="color"]').evaluate((e) => { for (const c of ['#123456', '#234567', '#345678']) { e.value = c; e.dispatchEvent(new Event('input', { bubbles: true })); } });
+        await page.waitForFunction((id) => document.querySelector(`#gz-ccm article[data-course-id="${id}"]`).style.getPropertyValue('--gz-card-c') === '#345678', id);
+        ok(await opts.evaluate(() => quickWrites === 0), 'B10: quick color previews before a sync write');
+        await until(() => opts.evaluate(async (k) => (await chrome.storage.sync.get('ucards')).ucards?.[k]?.c, ukey), (c) => c === '#345678', 'quick color was not saved');
+        ok(await opts.evaluate(() => { chrome.storage.onChanged.removeListener(countQuickWrites); return quickWrites === 1; }), 'B10: rapid color input settles into one sync write');
+        await item.locator('.gz-ccm-kinds label', { hasText: 'Picture' }).click();
+        await item.locator('input[type="file"]').setInputFiles({ name: 'lab.png', mimeType: 'image/png', buffer: png() });
+        await page.waitForSelector(`${onBoard}[data-gz-card="image"]`);
+        const kept = await opts.evaluate(async (k) => { const { ucards } = await chrome.storage.sync.get('ucards'); const s = ucards?.[k]; const img = s?.i && (await chrome.storage.local.get(`ultraCardImg:${s.i}`))[`ultraCardImg:${s.i}`]; return { k: s?.k, local: !!s?.i && !s.u, img: /^data:image\/(webp|jpeg);base64,/.test(img || '') }; }, ukey);
+        ok(kept.k === 'image' && kept.local && kept.img, `B10: a picture from this computer is kept on it, as the card's own (${JSON.stringify(kept)})`);
+        ok(await item.locator('article[data-gz-card="image"]').count() === 1 && await page.locator(onBoard).evaluate((e) => /data:image\//.test(getComputedStyle(e).getPropertyValue('--gz-card-img'))), 'B10: the picture shows on the board card and the preview');
+        await page.mouse.move(0, 0); await shot('b10-modal-picture-paper-1280');
+        // The full editor, over the dialog; Esc closes only it, and the focus goes back to the course's Style.
+        await item.locator('button', { hasText: 'Card style and bookmarks' }).click();
+        await page.waitForSelector('#gz-ce[open]');
+        ok(await page.evaluate(() => document.getElementById('gz-ce').matches(':modal') && document.getElementById('gz-ccm').open), 'B10: the card editor opens over the dialog');
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('#gz-ce', { state: 'detached' });
+        ok(await page.evaluate((cid) => document.getElementById('gz-ccm')?.open && document.activeElement === [...document.querySelectorAll('#gz-ccm .gz-ccm-item')].find((li) => li.querySelector('article').dataset.courseId === cid)?.querySelector('.gz-ccm-style'), id), 'B10: Esc closes the editor only, the focus back on Style');
+        await opts.evaluate(() => chrome.storage.sync.remove('ucards'));
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('#gz-ccm', { state: 'detached' });
+      ok(await page.evaluate(() => document.activeElement?.classList.contains('gz-course-open')), `B10 ${preset} ${width}: Esc closes the dialog, the focus back on its button`);
       const nativeColor = await page.locator(`${courseTile} .gz-course-card`).evaluateAll((es) => es.map((e) => ({ id: e.dataset.courseId, classes: e.className, color: getComputedStyle(e.querySelector('.course-banner')).backgroundColor })));
       ok(nativeColor.some((c) => /course-color-3/.test(c.classes)) && new Set(nativeColor.map((c) => c.color)).size > 1, 'B10: native slot colours reach the banner before any custom card style');
       ok(await page.locator(courseTile).count() >= native, `B10 ${preset} ${width}: each loaded course is a tile`);
@@ -469,10 +571,14 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await opts.evaluate(() => chrome.storage.sync.set({ ucards: { ['ultra:https://bb.school.test/_101_1']: { k: 'gradient', c: '#aa2244', d: '#2255aa', a: 45 } }, ulinks: { ['ultra:https://bb.school.test/_101_1']: [{ n: 'Course calendar', u: 'https://bb.school.test/ultra/calendar', i: 'calendar' }] } }));
       await page.waitForSelector(`${courseTile} article[data-gz-card="gradient"]`);
       ok(await page.locator(`${courseTile} .gz-bm a`).count() > 0, 'B10: existing bookmark and style painter applies');
+      // While editing, a card is a thing to move: its menu waits until Done.
       const menuButton = page.locator(`${courseTile} .gz-cm-btn`).first();
+      ok(await menuButton.evaluate((b) => !!b.closest('[inert]')), 'B10: editing, the card\'s content waits');
+      await page.click('#gz-toolbar .gz-dash-edit');
       await menuButton.click(); await page.waitForSelector('#gz-cm');
       ok(await page.locator('#gz-cm').count() === 1, 'B10: existing course menu opens');
       await page.keyboard.press('Escape');
+      await page.click('#gz-toolbar .gz-dash-edit');
       const geometry = await page.locator(courseTile).evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, term: e.querySelector('.gz-course-term').textContent }; }));
       ok(geometry.every((a) => a.l >= 0 && a.r <= width && geometry.every((b) => a === b || a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t)), `B10 ${preset} ${width}: cards fit without overlap`);
       ok(requests.length === count, `B10 ${preset} ${width}: adding cards starts no requests (${requests.length - count})`);
@@ -487,24 +593,29 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await first.locator('.gz-w-fold').click();
       if (width === 1280) {
         const before = await first.boundingBox();
-        await first.locator('.gz-w-grip').focus(); await page.keyboard.press('ArrowDown');
+        await first.focus(); await page.keyboard.press('ArrowDown');
         await until(layout, (l) => Number.isFinite(l.boards.courses.find((x) => x.id === key)?.y), 'course move not saved');
         await stable();
         const after = await first.boundingBox();
-        ok(Math.abs(after.y - before.y - 16) < 1, 'B10: keyboard movement uses the shared grip');
+        ok(Math.abs(after.y - before.y - 16) < 1, 'B10: keyboard movement on the card itself');
+        await first.locator('.gz-w-resize').focus(); await page.keyboard.press('Shift+ArrowRight');
+        await until(layout, (l) => l.boards.courses.find((x) => x.id === key)?.w === Math.round(after.width) + 64, 'course resize not saved');
+        await page.reload(); await page.waitForSelector(tile(key)); await stable();
+        ok(Math.round((await page.locator(tile(key)).boundingBox()).width) === Math.round(after.width) + 64, 'B10: size survives reload');
       }
-      await first.locator('.gz-w-size').selectOption('m');
-      await until(layout, (l) => l.boards.courses.find((x) => x.id === key)?.size === 'm', 'course size not saved');
-      await page.reload(); await page.waitForSelector(`${courseTile}[data-size="m"]`); await stable();
-      ok(await page.locator(`${courseTile}[data-size="m"]`).count() === 1, 'B10: size survives reload');
-      // Same-origin in-app navigation; modified clicks are left as native link behaviour.
+      // Same-origin in-app navigation (not while editing); modified clicks are left as native link behaviour.
+      if (await page.locator('#gz-toolbar .gz-dash-edit[aria-pressed="true"]').count()) await page.click('#gz-toolbar .gz-dash-edit');
       const route = await page.locator(`${courseTile} .course-title`).first().getAttribute('href');
       await page.evaluate(() => { window.__b10SameDocument = true; });
       await page.locator(`${courseTile} .course-title`).first().click();
       ok(page.url() === route && await page.evaluate(() => window.__b10SameDocument === true), 'B10: course link opens in-app');
       await page.goto(`${O}/ultra/institution-page`); await page.waitForSelector('#gz-dash .gz-dash-edit');
-      await page.click('#gz-dash .gz-dash-edit'); await page.waitForSelector('.gz-course-pick');
-      await page.click('.gz-course-add'); await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+      await page.click('#gz-dash .gz-dash-edit'); await page.waitForSelector('.gz-course-open');
+      await page.click('.gz-course-open'); await page.waitForSelector('#gz-ccm[open] .gz-ccm-item');
+      ok(await page.locator('#gz-ccm .gz-ccm-tools button.gz-w-main').count() === 0, 'B10: the Dashboard\'s dialog doesn\'t push Select all');
+      await page.locator('#gz-ccm .gz-ccm-item .gz-ccm-pick').first().click();
+      await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+      await page.keyboard.press('Escape'); await page.waitForSelector('#gz-ccm', { state: 'detached' });
       ok(await page.locator(courseTile).count() === 1, 'B10: Dashboard adds one chosen course');
       ok((await layout()).boards.courses.filter((x) => x.id.startsWith('course:')).length > 1, 'B10: Dashboard keeps the Courses layout');
       await page.mouse.move(0, 0); await shot(`b10-dash-${preset.toLowerCase()}-${width}`);
@@ -513,17 +624,20 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       while (await page.locator(courseTile).count()) await page.locator(`${courseTile} button[aria-label^="Remove "]`).first().click();
       ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-course-tiles') && getComputedStyle(document.querySelector('.course-columns')).display !== 'none'), 'B10: removing every card restores Ultra');
     }
-    // The accepted To Do resize change keeps its height independently beside the course-card layout fields.
+    // The To Do resized by its corner keeps its height independently beside the course-card layout fields.
     const todoLayout = require('../lib/widgets.js').layout(base);
     for (const board of ['courses', 'dash']) todoLayout.boards[board].find((x) => x.id === 'todo').on = true;
     await store(settingsFor('Paper', { enhance: { ...G.GZ_DEFAULTS.enhance, notes: false, widgets: true, todo: true } }), { widgetLayout: todoLayout });
     await page.setViewportSize({ width: 1280, height: 1400 });
     await page.goto(`${O}/ultra/institution-page`); await page.waitForSelector(`${tile('todo')} #gz-todo`);
-    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => getComputedStyle(e).resize === 'vertical' && getComputedStyle(e).overflowY === 'auto'), 'To Do: tile keeps the resize handle and inner scrolling');
-    await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => { e.style.height = '512px'; });
-    await until(layout, (l) => l.boards.dash.find((x) => x.id === 'todo')?.h === 512, 'To Do resize not saved');
+    await page.click('#gz-dash .gz-dash-edit');
+    const tc = await page.locator(`${tile('todo')} .gz-w-resize`).boundingBox();
+    await page.mouse.move(tc.x + 9, tc.y + 9); await page.mouse.down(); await page.mouse.move(tc.x + 9 + 40, tc.y + 9 + 160, { steps: 8 }); await page.mouse.up();
+    await until(layout, (l) => Number.isInteger(l.boards.dash.find((x) => x.id === 'todo')?.h), 'To Do resize not saved');
+    const todoH = (await layout()).boards.dash.find((x) => x.id === 'todo').h;
+    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e, h) => e.style.height === `${h}px` && getComputedStyle(e).overflowY === 'auto', todoH), 'To Do: resized by its corner, its list scrolling inside');
     await page.reload(); await page.waitForSelector(`${tile('todo')} #gz-todo`);
-    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => e.style.height === '512px'), 'To Do: resized height survives reload');
+    ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e, h) => e.style.height === `${h}px`, todoH), 'To Do: resized height survives reload');
     await page.goto(`${O}/ultra/course`); await page.waitForSelector(`${tile('todo')} #gz-todo`);
     ok(await page.locator(`${tile('todo')} > .gz-w-body`).evaluate((e) => e.style.height === ''), 'To Do: Courses keeps its independent height');
     // A full board: unchanged passes must settle, and toggling Glaze must restore the native list exactly.
@@ -539,9 +653,11 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         return node;
       }));
     });
-    await page.click('#gz-toolbar .gz-dash-edit'); await page.waitForSelector('.gz-course-add');
+    await page.click('#gz-toolbar .gz-dash-edit'); await page.waitForSelector('.gz-course-open');
     await stable(); const stressRequests = requests.length, started = Date.now();
-    await page.click('.gz-course-add'); await page.waitForSelector(`${courseTile} .gz-course-card`); await stable();
+    await page.click('.gz-course-open'); await page.waitForSelector('#gz-ccm[open] .gz-ccm-item');
+    await page.click('#gz-ccm .gz-ccm-tools button.gz-w-main');
+    await page.waitForSelector(`${courseTile} .gz-course-card`); await page.keyboard.press('Escape'); await stable();
     const stressMs = Date.now() - started;
     ok(await page.locator(courseTile).count() === 48 && (await layout()).boards.courses.filter((x) => x.id.startsWith('course:')).length === 48, `B10: 48-card board mounts and persists (${stressMs} ms including geometry settling)`);
     const writes = await page.evaluate(async () => {
@@ -555,6 +671,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     await page.waitForSelector(`${courseTile} .gz-pet`);
     ok(await page.locator(`${courseTile} .gz-pet`).first().evaluate((e) => getComputedStyle(e).animationName === 'none'), 'B10: reduced motion stills the shared card pet');
     await page.evaluate(() => { document.documentElement.setAttribute('data-gz-motion', 'expressive'); document.documentElement.removeAttribute('data-gz-no-hover'); });
+    await page.click('#gz-toolbar .gz-dash-edit'); // Done: hover is for cards in use
     await page.locator(`${courseTile} .gz-course-card`).first().hover();
     ok(await page.locator(`${courseTile} .gz-course-card`).first().evaluate((e) => getComputedStyle(e).transform !== 'none' && getComputedStyle(e, '::before').animationName === 'gz-card-fall'), 'B10: shared hover growth and particles reach board cards');
     await opts.evaluate(() => chrome.storage.sync.set({ enabled: false }));
@@ -565,8 +682,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     ok(await page.locator(courseTile).count() === 48, 'B10: re-enabling restores the saved board');
     ok(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 5).join(' | ')}` : ''}`);
   } finally {
-    await ctx.close();
-    fs.rmSync(tmp, { recursive: true, force: true });
+    try { await ctx?.close(); } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
   }
   console.log(`${fails ? 'FAILED' : 'passed'}; screenshots in ${out}`);
   process.exitCode = fails ? 1 : 0;

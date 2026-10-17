@@ -1,5 +1,5 @@
 // Planning on Blackboard Ultra pages (B2): Better To Do, tasks on cards and reminders in a VM with an inert DOM, storage
-// and worker, on Ultra's anchors (docs/spikes/B0.md, page anchors): where each goes, that only Ultra is asked (lib/ultra.js
+// and worker, on Ultra's anchors (page anchors): where each goes, that only Ultra is asked (lib/ultra.js
 // pageDue, never Canvas's planner), that a tick stays on this device whatever todo.sync says, and when content-ultra.js
 // loads each. The module's closure is reached by a probe appended to its return value here, in the test only.
 const test = require('node:test');
@@ -170,7 +170,7 @@ test('a tick on Ultra stays on this device, even with "Tick off in Canvas too" o
   vm.runInContext(probe(read('features/todo.js'), 'onChange, render, get: () => ({ box })'), p.c);
   p.c.GZ_TODO_UI.sync(true);
   await settle();
-  const tick = { dataset: { act: 'done' }, checked: true, closest: () => ({ dataset: { key: 'assignment:_603_1' } }) };
+  const tick = { dataset: { act: 'done' }, checked: true, getBoundingClientRect: () => ({ left: 0, top: 0, width: 20, height: 20 }), closest: () => ({ dataset: { key: 'assignment:_603_1' } }) };
   p.c.GZ_TODO_UI.probe.onChange({ target: tick, isTrusted: true });
   await settle();
   assert.deepEqual(p.calls, [], 'nothing is written to Blackboard');

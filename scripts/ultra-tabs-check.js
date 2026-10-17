@@ -1,5 +1,5 @@
 // Ultra's course tabs, headless (B8): the real extension on a synthetic Ultra (test/fixtures/ultra-course.html, built from
-// docs/spikes/B8.md: the sticky two-row course bar, course panels, items opened over them, an SPA router), served under a
+// the B8 spike: the sticky two-row course bar, course panels, items opened over them, an SPA router), served under a
 // made-up school's address. Nothing leaves the machine: every other request is aborted and DNS is mapped to nowhere.
 // It opens courses, then checks: tabs open, switch, close (×, middle click, Delete), pin, move (keyboard, drag) and cap;
 // a switch shows the course's copy at once and fades to the live page, back where the tab was (page and scroll), and never
@@ -31,6 +31,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails
 (async () => {
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'b8-'));
+  await require('./wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
     executablePath: CHROME, headless: true, viewport: { width: 1280, height: 860 },
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],

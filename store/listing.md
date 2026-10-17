@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 3.0.3
+# Chrome Web Store listing — Glaze 3.0.4
 
 ## Name
 
@@ -16,7 +16,13 @@ Productivity
 
 Make Blackboard Ultra, Canvas and Moodle feel like yours. Glaze restyles your courses with palettes, fonts, backgrounds and motion, and adds tools for planning and studying right where you do your coursework. It works at any school using Blackboard Ultra, Canvas or Moodle, including on a school's own domain. What Glaze keeps stays on your device.
 
-NEW IN 3.0.3
+NEW IN 3.0.4
+
+• Mods: add backgrounds, animations, widgets, nav layouts and page tweaks others have made, from a code, a link, a file or the gallery. Each mod shows what it reads and why before you add it, and runs sandboxed.
+• Build your own dashboard or rail widget with no code.
+• Looks can have a looping video, animated picture or Lottie animation as their background.
+
+FROM 3.0.3
 
 • Choose one pet character for the habitat, Study buddy, Blackboard navigation badge and course-card pet. Their visibility controls stay separate, and progress stays with your school's account.
 • The original Cat and Bunny join the character selector. Pets react to focus sessions and completed tasks, respect reduced motion and pause while hidden.
@@ -103,11 +109,13 @@ Open source (MIT): https://github.com/frostdev-ops/glaze
 
 Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Anthology Inc. Moodle is a registered trademark of Moodle Pty Ltd. Glaze is an independent project and is not affiliated with or endorsed by any of these companies or any school.
 
-## What's new in 3.0.3
+## What's new in 3.0.4
 
 Prepared release copy; the Chrome Web Store has no separate What's New field.
 
-Glaze 3.0.3 shares your selected pet character across the habitat, Study buddy, Blackboard navigation badge and course-card pet, with separate visibility controls and account-specific progress. The original Cat and Bunny join the selector. Blackboard file previews refresh expired viewer tickets and retry while uploaded files convert.
+Glaze 3.0.4 adds mods: backgrounds, animations, widgets, nav layouts and page tweaks you can share like Looks. Each mod declares what it reads and why, code runs sandboxed, updates are signed by their author, and a no-code builder makes widgets. Looks can also use video and animated backgrounds.
+
+Glaze 3.0.3 shared your selected pet character across the habitat, Study buddy, Blackboard navigation badge and course-card pet, with separate visibility controls and account-specific progress. The original Cat and Bunny join the selector. Blackboard file previews refresh expired viewer tickets and retry while uploaded files convert.
 
 ## Single-purpose statement
 
@@ -137,15 +145,17 @@ Injects and registers Glaze's packaged content scripts after recognizing Canvas 
 
 ### Web-accessible resources
 
-The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, features/apps.css, features/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. lib/scene.js and the bundled lib/three.min.js draw animated backgrounds. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
+The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css, features/apps.css, features/lookx.css), bundled fonts, logos, stickers, pointers and pet sprites provide the theme in the page. lib/scene.js and the bundled lib/three.min.js draw animated backgrounds, and lib/scene-media.js with the bundled Lottie player (lib/lottie/) plays a video or animation behind the page. reader.html opens a file the user imports, and reads only with a one-use pass from Glaze's worker. Chrome requires these packaged files to be web-accessible to load them into LMS pages.
 
 ## Remote code
 
-None. All executable code ships in the package, including the bundled three.js (MIT), PDF.js (Apache-2.0) and Tesseract OCR engine (Apache-2.0). The extension's own pages allow 'wasm-unsafe-eval' only so the packaged OCR engine's WebAssembly can run; it never runs in LMS pages. Optional web fonts and background images are data, not code.
+Glaze's built-in executable code ships in the package, including three.js (MIT), lottie-web's light player (MIT, without expression support), PDF.js (Apache-2.0) and Tesseract OCR (Apache-2.0). Chrome also supports user-installed mods: JavaScript comes from bundles the user chooses to install, including author-signed channel updates, and runs in an isolated sandbox without extension APIs. Glaze does not fetch mod code to run automatically from us. Firefox and Safari use declarative mod parts only. The extension's own pages allow 'wasm-unsafe-eval' for packaged OCR WebAssembly; mod code runs only in the sandbox. Web fonts, images, videos and animations are data.
+
+Mod data access requires declared and granted permissions; personal data reaches only a DOM-less Worker. Brokered requests require a declared and granted exact HTTPS host, omit cookies and referrers, and refuse redirects. A mod granted both data and network access can send that data to those hosts. A mod without data access may use a frame UI that contacts other sites, and linked Look media contacts its chosen host. Install prompts disclose capabilities; mod bundles, grants, settings and per-mod storage stay on the device. Channel and optional signed blocklist requests are described in PRIVACY.md.
 
 ## Data usage (privacy practices tab)
 
-Glaze does not collect user data: nothing reaches the developer except share-session content the user chooses to share, which is encrypted on the device before upload, so the relay (share.frostdev.io) cannot read it. Answer the data-use certifications as before: no sale, no use unrelated to the single purpose, no creditworthiness or lending use.
+Glaze has no analytics and does not sell user data or use it for unrelated purposes, creditworthiness or lending. Optional share sessions and mod channels send encrypted content to the selected relay. The optional signed blocklist sends a fixed credential-free GET without student identifiers. User-installed mods and linked media may contact other hosts as described above; a mod granted personal data and network access can send that data to its granted hosts. These services receive ordinary connection information such as an IP address. Keep the store's data-use answers consistent with these behaviors and PRIVACY.md.
 
 ## Screenshot and promo delivery
 

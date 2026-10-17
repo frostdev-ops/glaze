@@ -1,0 +1,9 @@
+{
+  "glaze": 1,
+  "name": "Breathing Space",
+  "version": "1.0.0",
+  "author": { "name": "Your name" },
+  "ui": {
+    "rail": [{ "id": "breathe", "name": "Breathing space", "file": "rail.html" }]
+  }
+}

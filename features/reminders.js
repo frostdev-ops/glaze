@@ -200,6 +200,8 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   };
   const keepStreak = (b, now) => {
     const s = R.streak(b, st.streak, T.dayOf(now, who.tz));
+    // Longer than it was a moment ago on this page (the last open item due today done): the Look's effect.
+    if (run && s.current > run.current) ctx.moment?.('streak', null, `streak ${s.start} ${s.current}`);
     run = s;
     const was = st.streak;
     if (writing || (was && s.start === was.start && s.best === was.best && s.asOf === was.asOf)) return;

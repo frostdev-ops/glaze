@@ -13,6 +13,7 @@
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const ctx = globalThis.GZ_CTX;
+  if (!ctx || !globalThis.GZ_CTABS_LIB) return null; // a frame-only injection can outlive its document
   const L = GZ_CTABS_LIB;
   const { t } = ctx;
   const html = document.documentElement;
@@ -62,7 +63,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const safePath = (...a) => (a.length ? L.safe(a[0], a[1]) : L.safe(location.pathname, location.search));
 
   // ---- where the strip goes -------------------------------------------------------------------------------------
-  // The course's top bar (docs/spikes/B8.md): div.bb-course-navigation, sticky, two rows (the header, then the tools in
+  // The course's top bar: div.bb-course-navigation, sticky, two rows (the header, then the tools in
   // .js-course-navigation). A panel opened over the course is the last visible layer that doesn't hold the bar.
   const LAYER = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
   const bars = document.getElementsByClassName('bb-course-navigation');

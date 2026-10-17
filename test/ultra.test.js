@@ -1,5 +1,5 @@
 // lib/ultra.js: Blackboard Ultra's answers in the shapes Glaze's features use, on the synthetic fixtures
-// (test/fixtures/ultra-*.json, shapes from docs/spikes/B0.md).
+// (test/fixtures/ultra-*.json).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -14,7 +14,7 @@ const o = 'https://lms.example.edu';
 const project = (items, fields) => items.map((i) => Object.fromEntries(fields.split(',').filter((k) => k in i).map((k) => [k, i[k]])));
 const LTI = /synthetic-lti-(secret|key)/;
 
-// ---- the LTI credential fields (docs/spikes/B0.md, Safety notes) ---------------------------------------------------
+// ---- the LTI credential fields (the B0 spike's safety notes) ---------------------------------------------------
 test('private content is asked for without contentDetail, by both callers', () => {
   for (const f of [U.PEEK_FIELDS, U.FILES_FIELDS]) assert.doesNotMatch(f, /contentDetail|\//);
   assert.match(src('features/previews.js'), /\/children\?fields=\$\{GZ_ULTRA\.PEEK_FIELDS\}/);

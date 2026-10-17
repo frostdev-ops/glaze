@@ -1,0 +1,7 @@
+body { margin: 0; height: 100vh; display: grid; justify-items: center; align-content: center; gap: 6px; font: 13px system-ui, sans-serif; color: var(--gz-ink, #222); }
+#orb { width: 44px; height: 44px; border-radius: 50%; background: var(--gz-accent, #17c8f4); animation: breathe 8s ease-in-out infinite; }
+:root[data-motion="off"] #orb { animation: none; }
+:root[data-paused] #orb { animation-play-state: paused; }
+@keyframes breathe { 50% { transform: scale(0.55); opacity: 0.6; } }
+button { font: inherit; color: inherit; background: transparent; border: 1px solid var(--gz-line-strong, #888); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+p { margin: 0; }

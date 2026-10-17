@@ -1,6 +1,23 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-15_
+_Last updated: 2026-10-17_
+
+## User-installed mods
+
+Chrome can run JavaScript from mod bundles you choose to install, including author-signed channel updates.
+Glaze does not fetch mod code to run automatically from us. Code runs in an isolated sandbox without extension APIs;
+Firefox and Safari use declarative parts only. Courses, to-dos and grades require declared and granted permissions,
+are scoped to the requesting school's origin, and reach only a DOM-less Worker. Brokered network requests require
+a declared and granted exact HTTPS host, omit cookies and referrers, and refuse redirects. A mod granted both data
+and network access can send that data to its granted hosts. A mod without data access may have a frame UI that can
+contact other sites; linked Look media also contacts its chosen host. Those sites receive ordinary connection
+information, including your IP address. Information rendered on a school page is visible as page content.
+
+Installed bundles, grants, settings, per-mod storage, author trust pins and runtime stop status stay in device-local
+extension storage. The optional mod-development tools also keep your author signing key there; protect exported
+key backups. Removing a mod removes its installed bundle and editor settings. Per-mod storage and its private-data classification remain
+on this device for a reinstall; its author/version trust pin remains until you explicitly clear it. Channel traffic and the optional signed blocklist are described below. Glaze adds no analytics
+or default notifications for mods.
 
 ## 3.0.1 surface settings and local pets
 
@@ -15,6 +32,24 @@ Ultra performance changes reuse the page's existing gradebook reads and ignore i
 no stored fields, requests to other sites, or activity collection. The synthetic performance harness is development-only.
 The shared JSON reader refuses redirects, including redirects to an external sign-in page. File/media downloads keep
 their separate, existing URL handling.
+
+## Signed mod blocklist
+
+On Chrome, while Glaze and its synced blocklist setting are on and at least one installed mod contains code, Glaze
+asks `https://frostdev.io/glaze/mods/api/blocklist` at most daily (failed attempts retry after an hour). This fixed GET
+has no cookies, referrer, query string, request body or student identifiers. Declarative-only mods, Firefox and Safari
+never cause this request. The signed list and check timestamps stay in device-local storage. Turning the setting off
+stops checks; previously blocked mods stay blocked, including when the last verified list is out of date.
+
+## Mod channels
+
+A mod installed from a channel link is checked against that link's relay when the editor opens, on **Check now**, and
+at most daily while a page runs it; **Stop following** or removing the mod ends this. An author's **Publish to a
+channel** uploads the signed mod to their selected relay. Both are encrypted share-session requests without cookies,
+referrer or student identifiers; the relay sees what it sees for any session (described below). The check state stays
+in device-local storage. The install prompt and followed mod name the relay host. After publishing a newer version,
+Glaze requests deletion of the previous bundle file, best effort; older relays without file deletion retain it until
+session deletion or expiry. Recipients and operator backups may keep copies.
 
 ## Optional encrypted share sessions
 
@@ -286,8 +321,9 @@ services, which receive ordinary connection information such as your IP address.
 
 Ultra appearance uses the visible course-card banners and existing color slots; it makes no LMS API requests. Linked images load from their chosen HTTPS hosts, exactly as on Canvas. The Ultra document viewer has no added iframe injection or host access.
 
-The browser extension ships as static files and loads no remote scripts. Its built-in fonts, three.js (used by the
-animated backgrounds), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
+Glaze's built-in features ship as static files and load no remote scripts; user-installed mods are described above.
+Its built-in fonts, three.js (used by the
+animated backgrounds), lottie-web's light player (used for Lottie animations), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
 you import) are bundled. It makes requests in these cases:
 
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
@@ -567,6 +603,13 @@ you import) are bundled. It makes requests in these cases:
   anywhere else.
 - **Background image.** If you choose an image background, your browser loads the `https://` link you
   typed, like any image on a web page. That site sees an ordinary image request.
+- **Video, animated picture or animation background.** If a Look's background is a video, an animated picture or a Lottie
+  animation named by an `https://` link on a public website, your browser loads it from that site when a page is shown,
+  like a background image, and that site sees an ordinary request. A Lottie file is fetched by Glaze's background
+  worker instead, with no cookies, no referrer, no redirects and at most 1 MiB, because a page may not read other sites'
+  files. The editor, and the preview of a theme code, name the site before you apply the Look. A Look can also name a file
+  kept on your computer by its SHA-256; such a file reaches you only through a share session (encrypted end to end, like a
+  shared note's file) or because you chose it in the editor, and Reset everything removes it.
 - **Sidebar pictures.** A sidebar picture linked by `https://` is loaded by your browser from that host when
   shown. The editor also reads it for its contrast warning when the host permits that; the preview of a theme
   code names its sidebar image host before you apply it. Files selected from your device cause no upload.
@@ -592,14 +635,20 @@ your Dashboard notes are links too, opened in a new tab without telling the site
 
 ## The Looks gallery
 
-The Looks gallery at `https://frostdev.io/glaze/looks` is an ordinary website. Glaze makes no request
-to it; you visit it yourself, from the editor's Open the gallery button or any other link, and
+The Looks gallery at `https://frostdev.io/glaze/looks` is an ordinary website. You visit it yourself,
+from the editor's Open the gallery button or any other link, and
 frostdev.io sees that visit like any other (see its [privacy page](https://frostdev.io/privacy)). On
 the gallery's pages only, Glaze runs a small script that waits for you to click **Use this Look in
 Glaze**. That click passes the Look's code, name and author from the page to Glaze's editor on your
-device; nothing is sent anywhere, and the editor applies nothing until you choose **Use this theme**.
+device; the editor applies nothing until you choose **Use this theme**.
 If a Look's code names a background image on another site, the editor's preview loads it from that
-site, as for any pasted theme code, and says which site it is.
+site, as for any pasted theme code, and says which site it is. If the Look's background is a video or animation file the
+gallery keeps and this device doesn't already keep, that click also makes Glaze download that one file from
+`https://frostdev.io/glaze/looks/api/media/<its SHA-256>`, with no cookies or referrer. The request names the file's hash;
+the gallery still receives your network address and normal browser headers. The file is checked and kept by its hash
+for the editor's preview; Glaze makes this request only then. A mod from the gallery carries its background file inside
+its signed bundle, downloaded when you click **Use in Glaze**. Sharing your own Look there is the
+website's own form, which you fill in yourself; Glaze takes no part in it.
 
 ## Recognizing Canvas and Moodle
 
@@ -611,7 +660,7 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
   typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, and Safari update-check timestamp described above.
   Notes' text, pictures and attachments are in the extension's own IndexedDB.
 - No permission for reading PDFs and photos. The extension's own pages may compile WebAssembly (`'wasm-unsafe-eval'` in
-  its content security policy), which the OCR engine needs; it still runs only code that ships in the package, and
+  its content security policy), which the OCR engine needs; the reader runs only code that ships in the package, and
   never in the LMS page. The reader page is web-accessible so an import can open it in a frame; it reads a file only
   with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
   make it read anything.

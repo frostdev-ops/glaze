@@ -1,6 +1,6 @@
 // Performance budget (W0). What every Ultra, Canvas and Moodle page pays for, checked statically, so a change can't
 // quietly grow it: the size of each site's first content script, the size of the detector every other https page runs, no fast
-// timers, and no new whole-page sweeps. The runtime numbers (time to themed, no light frame) are in docs/spikes/W0-perf.md.
+// timers, and no new whole-page sweeps.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -25,7 +25,37 @@ const size = (f) => fs.statSync(path.join(root, f)).size;
 // Ultra resets to the measured c30814e release total. B11 surface hooks fit its existing 2% allowance;
 // pet/editor code stays lazy. Moodle resets its stale 171,507 baseline to the measured 172,222-byte release;
 // the course-surface correction keeps the complete change within release + 2%. Canvas retains its original baseline.
-const FIRST_SCRIPT_BASELINE = { ultra: 225195, canvas: 201446, moodle: 172222 };
+// Look parts (mods phase 1) add hooks to content.js, by the owner's decision (2026-10-16): LMS rules 427 bytes on every
+// site; the nav layout (x.nav) 525 on Ultra, 545 on Canvas and 488 on Moodle; and the Look's parts themselves (package A)
+// 794 on every site: GZ_CTX.parts(), the check for a Look that has parts, the preview hand-over and two more values of
+// defaults.js's bg.kind. Everything else about them loads on demand (lib/lookparts.js, features/lookparts.js).
+const FIRST_SCRIPT_BASELINE = { ultra: 225195 + 427 + 525 + 794, canvas: 201446 + 427 + 545 + 794, moodle: 172222 + 427 + 488 + 794 };
+// Look parts put small hooks in the first script; the owner approved raising the baseline for them
+// (2026-10-16). One line per package, the bytes it added: the motion package's moment emitter ('glaze:moment', the
+// completion and new-grade call sites) and the hook that loads features/motionx.js when a Look has animations, effects or a
+// pointer effect.
+// Measured against 56c6aaf, including the review fixes and each site's emitter call sites.
+// The scene package's: starting lib/scene.js for a shader or layers Look once the parts are in, and remembering what a device
+// could not draw (syncScene), including the pending-load eligibility recheck: 1,178 bytes on every site. Measured against 316b924.
+const LOOK_PARTS = [{ ultra: 1955, canvas: 2035, moodle: 1947 }, { ultra: 1178, canvas: 1178, moodle: 1178 }];
+// Code mods (mods phase 2, package S), by the owner's decision: the loader that asks the worker for mods
+// that are on and only then loads features/mods.js, and asks again when they or Glaze's switch change: at most 732 bytes on every
+// site. Measured against 9a54ae1; re-reading the list after loading saves 6 bytes.
+// API v1 (package A2): the mods' Look parts over the student's in GZ_CTX.parts(), a mod's background in the scene's place,
+// the sweep's call to the mods (cards, the nav) and a replaced completion effect: 439 bytes on every site, measured
+// against aa2ed9f.
+// Declarative widgets (mods-widgets package): the same loader also starts features/modwidgets.js on every browser, since it
+// no longer waits for the manifest's sandbox: 256 bytes on every site. Measured against 3e613b9.
+// Installed mods' Look parts (mods-parts package): loading features/lookparts.js when mods are installed, re-reading on a
+// change to them, their order or the blocklist, and a mod's background kind in the scene: 125 bytes on every site.
+// Measured against eb00d4dd.
+const CODE_MODS = { ultra: 732 + 439 + 256 + 125, canvas: 732 + 439 + 256 + 125, moodle: 732 + 439 + 256 + 125 };
+// Media backgrounds (mods phase 4), raised by what they add, as the Look parts' hooks were: the scene sync picks lib/scene-media.js
+// instead of lib/scene.js for a video or animation (the module's name, its element and the check that the right one is running)
+// and defaults.js's bg.kind has 'media': 479 bytes on every site. Measured against 795dfd5. The player, Lottie and the file
+// handling all load on demand.
+// Mod background visibility: repaint CSS from the effective kind when parts change, 59 bytes against 1d0c9b43.
+const MEDIA_BG = { ultra: 479 + 59, canvas: 479 + 59, moodle: 479 + 59 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -34,8 +64,8 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const budget = Math.round(FIRST_SCRIPT_BASELINE[site] * 1.02);
-    assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${FIRST_SCRIPT_BASELINE[site]} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + MEDIA_BG[site], budget = Math.round(baseline * 1.02);
+    assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
 
@@ -57,7 +87,7 @@ test('the detector that runs on every other https page stays under 2 KB', () => 
 // first content script, loaded on demand or in the extension's pages. Not the vendored three.js or OCR engine, nor the tools,
 // tests and app wrappers around the extension, nor the share relay (server/), which runs on a server.
 const NOT_SHIPPED = new Set(['scripts', 'test', 'safari', 'store', 'assets', 'dist', 'release', 'node_modules', 'docs', 'server']);
-const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js']); // pdf.js is .mjs, not scanned
+const VENDORED = new Set(['lib/three.min.js', 'lib/tesseract/tesseract-core-simd-lstm.js', 'lib/lottie/lottie_light_canvas.min.js']); // pdf.js is .mjs, not scanned
 const shipped = (dir = '') => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
   const rel = dir ? `${dir}/${e.name}` : e.name;
   if (e.name.startsWith('.')) return [];
@@ -175,7 +205,7 @@ test('the scans see the code they are meant to', () => {
 // the whole page (measured: 95 ms of style per press on a 9,400-element outline; 0.2 ms without those rules). Ultra's sheets:
 // no class tests or descendant `*` in a :has(), and a :has() before a combinator sits on a class, id or attribute, or a tag
 // that is not a page container.
-const ULTRA_SHEETS = ['theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css'];
+const ULTRA_SHEETS = ['theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css', 'features/rules.css', 'features/navlayout.css'];
 // The containers a page is built of: flagged, one may hold the whole page.
 const BROAD = new Set(['', '*', 'html', 'body', 'div', 'span', 'section', 'main']);
 const hasRules = (css) => {

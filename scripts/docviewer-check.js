@@ -25,6 +25,7 @@ const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) proce
 
 (async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'w9-'));
+  await require('./wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), {
     executablePath: CHROME, headless: true, viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce', colorScheme: 'dark',
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND'],

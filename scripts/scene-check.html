@@ -1,0 +1,363 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>scene check</title>
+<body style="margin:0;background:#202020">
+<script src="/lib/i18n.js"></script>
+<script src="/lib/glsl.js"></script>
+<script type="module">
+// The page half of scripts/scene-check.mjs: lib/scene.js driven the way content.js drives it, in a real browser with a real
+// GPU (or SwiftShader). Sets window.__result = { checks: [{ name, ok, detail }], data, shots } and window.__done.
+// ?run=builtins,examples,heavy,refused,compile,still,lost,layers,hazards   ?base=1 when /base/lib/scene.js is the version to compare to.
+const params = new URLSearchParams(location.search);
+const run = (params.get('run') || 'builtins,examples,heavy,refused,compile,still,lost,layers,hazards').split(',');
+const out = { checks: [], data: {}, shots: {} };
+window.__result = out;
+const check = (name, ok, detail) => out.checks.push({ name, ok: !!ok, detail });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const G = globalThis.GZ_GLSL;
+
+// ---- instrumentation: every context three makes, every shader source it hands to GL, draws and animation frames ----
+const contexts = [];
+const getContext = HTMLCanvasElement.prototype.getContext;
+HTMLCanvasElement.prototype.getContext = function (t, ...a) { const c = getContext.call(this, t, ...a); if (c && t === 'webgl2' && !contexts.includes(c)) contexts.push(c); return c; };
+const sources = [];
+const shaderSource = WebGL2RenderingContext.prototype.shaderSource;
+WebGL2RenderingContext.prototype.shaderSource = function (s, text) { sources.push(text); return shaderSource.call(this, s, text); };
+const count = { draws: 0, raf: 0 };
+for (const fn of ['drawArrays', 'drawElements']) { const o = WebGL2RenderingContext.prototype[fn]; WebGL2RenderingContext.prototype[fn] = function (...a) { count.draws++; return o.apply(this, a); }; }
+const raf = window.requestAnimationFrame.bind(window);
+window.requestAnimationFrame = (cb) => { count.raf++; return raf(cb); };
+const rate = async (ms) => { const a = { ...count }; await sleep(ms); return { draws: count.draws - a.draws, raf: count.raf - a.raf, perSec: +(((count.draws - a.draws) * 1000) / ms).toFixed(1) }; };
+// Math.random seeded, so two modules building a scene get the same dust.
+let seed = 1;
+const random = Math.random;
+const seeded = () => { seed = 1; Math.random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }; };
+const unseeded = () => { Math.random = random; };
+
+const mkCanvas = () => { const c = document.createElement('canvas'); c.style.cssText = 'position:fixed;left:0;top:0;width:1440px;height:900px'; document.body.append(c); return c; };
+// What the page would show: the canvas copied to a 2D one in the same task as the draw (it is cleared once presented).
+const pixels = (canvas) => { const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(canvas, 0, 0); return x.getImageData(0, 0, c.width, c.height).data; };
+const stats = (data) => {
+  let sum = 0, sq = 0, n = 0, alpha = 0;
+  const seen = new Set();
+  for (let i = 0; i < data.length; i += 4) { const l = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]; sum += l; sq += l * l; n++; alpha += data[i + 3]; if (seen.size < 5000) seen.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]); }
+  const mean = sum / n;
+  return { mean: +mean.toFixed(1), std: +Math.sqrt(sq / n - mean * mean).toFixed(1), colours: seen.size, alpha: +(alpha / n).toFixed(1) };
+};
+const differing = (a, b) => { if (a.length !== b.length) return -1; let d = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++; return d; };
+const shot = (name, canvas) => { out.shots[name] = canvas.toDataURL('image/png'); };
+const PALETTE = { '--gz-accent': '#5eead4', '--gz-accent-hi': '#a78bfa', '--gz-ink-muted': '#94a3b8' };
+const OPTS = { kind: 'scene', name: 'mist', ground: '#0b0a1a', colors: ['#5eead4', '#a78bfa', '#f472b6'], dim: 0.05, amount: 0.7, speed: 0, palette: PALETTE };
+const watch = (mod, canvas, live = () => true) => { const w = { steps: [], fails: [] }; w.scene = mod.start(canvas, live, (...a) => w.fails.push(a), (s) => w.steps.push(s)); return w; };
+const shaderOpts = (src, o = {}) => ({ ...OPTS, kind: 'shader', x: { bg: { shader: { src } } }, ...o });
+const layerOpts = (layers, o = {}) => ({ ...OPTS, kind: 'layers', x: { bg: { layers } }, ...o });
+const fetchText = async (url) => (await fetch(url)).text();
+
+const mod = await import('/lib/scene.js');
+const base = params.get('base') === '1' ? await import('/base/lib/scene.js') : null;
+const dbg = contexts[0] || document.createElement('canvas').getContext('webgl2');
+const info = dbg.getExtension('WEBGL_debug_renderer_info');
+out.data.renderer = info ? dbg.getParameter(info.UNMASKED_RENDERER_WEBGL) : 'unknown';
+const EXAMPLES = {};
+for (const f of ['aurora', 'starfield', 'liquid']) EXAMPLES[f] = await fetchText(`/assets/shaders/${f}.glsl`);
+const MIN = 'vec4 scene(vec2 uv) { return vec4(uv, 0., 1.); }';
+const NAMES = ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'waves', 'dust'];
+
+// ---- builtins: the same shaders and the same pixels as before, alone and as a single layer -------------------------------
+if (run.includes('builtins')) {
+  const d = out.data.builtins = {};
+  for (const name of NAMES) {
+    const row = d[name] = {};
+    const draw = (m, o) => {
+      const before = sources.length, c = mkCanvas(), w = watch(m, c);
+      seeded(); // after start(): three draws its object UUIDs from the same stream, and dust is placed by it
+      w.scene.update(o);
+      w.scene.draw();
+      const result = { px: pixels(c), src: sources.slice(before), size: [c.width, c.height], steps: w.steps.length, fails: w.fails.length };
+      w.scene.stop(); c.remove(); unseeded();
+      return result;
+    };
+    const now = draw(mod, { ...OPTS, name });
+    row.repeat = differing(draw(mod, { ...OPTS, name }).px, now.px); // the GPU drawing the same thing twice, the yardstick for the rest
+    row.size = now.size; row.std = stats(now.px).std;
+    check(`${name}: draws something, with no guard step and no failure at motion off`, stats(now.px).std > 2 && !now.steps && !now.fails, JSON.stringify({ std: row.std, steps: now.steps, fails: now.fails }));
+    if (base) {
+      const was = draw(base, { ...OPTS, name });
+      row.sameSource = JSON.stringify(was.src) === JSON.stringify(now.src);
+      row.differingBytes = differing(was.px, now.px);
+      check(`${name}: the shaders handed to GL are the same text as before`, row.sameSource, `${was.src.length} vs ${now.src.length} sources`);
+      check(`${name}: the picture is the same bytes as before (still frame, ${now.size.join("x")}), or as close as it is to itself`, row.differingBytes <= row.repeat, `${row.differingBytes} bytes differ; drawing it twice differs by ${row.repeat}`);
+    }
+    const layer = draw(mod, layerOpts([{ k: 'scene', name, amount: 100, speed: 100, blend: 'normal' }]));
+    row.layerDifferingBytes = differing(layer.px, now.px);
+    check(`${name}: as the only layer, at full amount, it is the same picture as the scene, or as close as it is to itself`, row.layerDifferingBytes <= row.repeat, `${row.layerDifferingBytes} bytes differ; drawing it twice differs by ${row.repeat}`);
+  }
+  // Animated, with the guard watching, for a few seconds each: the dearest built-ins on this GPU must not be stepped down.
+  for (const name of ['mist', 'graveyard', 'pumpkins', 'waves']) {
+    const c = mkCanvas(), w = watch(mod, c);
+    w.scene.update({ ...OPTS, name, speed: 1 });
+    const r = await rate(2500);
+    d[name].live = { ...r, steps: w.steps.map((s) => [s.level, s.why, s.ms]), fails: w.fails.map((f) => f[0]) };
+    check(`${name}: animated for 2.5 s at its own scale: about 30 fps, no step down`, r.perSec > 20 && r.perSec < 32 && !w.steps.length && !w.fails.length, JSON.stringify(d[name].live));
+    w.scene.stop(); c.remove();
+  }
+}
+
+// ---- examples: the three shaders from the spike, through the real checker and the real compiler -------------------------
+if (run.includes('examples')) {
+  const d = out.data.examples = {};
+  for (const [name, src] of Object.entries(EXAMPLES)) {
+    const row = d[name] = { check: G.check(src), estimate: G.estimate(src) };
+    check(`${name}: passes the checker`, row.check.ok, JSON.stringify(row.check.errors));
+    const gl = document.createElement('canvas').getContext('webgl2');
+    const compiled = G.compile(gl, src);
+    check(`${name}: compiles on this device as ESSL 1.00 (the editor's check)`, compiled.ok, JSON.stringify(compiled.errors));
+    const c = mkCanvas(), before = sources.length, w = watch(mod, c);
+    const t0 = performance.now();
+    w.scene.update(shaderOpts(src, { speed: 1 }));
+    row.firstUpdateMs = +(performance.now() - t0).toFixed(1);
+    row.probeSize = [c.width, c.height];
+    row.hidden = c.style.visibility === 'hidden';
+    await sleep(1500);
+    const r = await rate(2000);
+    w.scene.draw();
+    row.px = stats(pixels(c)); row.live = r; row.size = [c.width, c.height]; row.steps = w.steps; row.fails = w.fails;
+    shot(`example-${name}`, c);
+    const frag = sources.slice(before).find((s) => s.includes('void main()') && s.includes('scene(vUv)'));
+    check(`${name}: the fragment source is three's #version 100 plus GZ_GLSL.wrap(src)`, frag && frag.startsWith('#version 100\n') && frag.endsWith(G.wrap(src)), frag?.slice(0, 40));
+    check(`${name}: the first frame is the 72x45 probe, and the canvas is hidden for it`, row.probeSize[0] === 72 && row.probeSize[1] === 45 && row.hidden, JSON.stringify({ probe: row.probeSize, hidden: row.hidden }));
+    check(`${name}: drawn at 0.6, about 30 fps, nothing stepped down`, row.size[0] === 864 && r.perSec > 20 && r.perSec < 32 && w.steps.length === 1 && w.steps[0].level === 0 && w.steps[0].why === 'probe' && !w.fails.length, JSON.stringify({ size: row.size, perSec: r.perSec, steps: w.steps, fails: w.fails }));
+    check(`${name}: the picture has detail`, row.px.std > 5 && row.px.colours > 200, JSON.stringify(row.px));
+    w.scene.stop(); c.remove();
+  }
+}
+
+// ---- heavy: valid but over budget, walked down ----------------------------------------------------------------------------
+if (run.includes('heavy')) {
+  const d = out.data.heavy = {};
+  const heavy = (outer, inner) => `vec4 scene(vec2 uv) { float s = 0.; for (int i = 0; i < ${outer}; i++) { for (int j = 0; j < ${inner}; j++) { s += sin(float(i * ${inner} + j) * .013 + uv.x * 40.) * cos(float(j) * .31 + uv.y * 30. + uTime); } } return vec4(.5 + .5 * sin(s * .01), .4, .6, 1.); }`;
+  const nested = (n) => `vec4 scene(vec2 uv) { float s = uv.x; for (int i = 0; i < ${n}; i++) for (int j = 0; j < ${n}; j++) for (int k = 0; k < ${n}; k++) s += sin(s + float(i + j + k) * .1) * .001; return vec4(s, uv, 1.); }`;
+  // ?only=text keeps the cases whose name has it; ?wait=ms is how long to watch each (a CPU renderer takes seconds a frame).
+  const only = params.get('only') || '', wait = +(params.get('wait') || 12000);
+  for (const [name, src] of [['64 x 64 sin/cos pairs', heavy(64, 64)], ['64 x 64 x 4 pairs', heavy(64, 256)], ['nested 32 x 32 x 32', nested(32)], ['256 x 256 pairs', heavy(256, 256)]].filter(([n]) => n.includes(only))) {
+    const row = d[name] = { estimate: G.estimate(src), check: G.check(src).ok };
+    if (!row.check) {
+      const before = count.draws, c = mkCanvas(), w = watch(mod, c);
+      w.scene.update(shaderOpts(src, { speed: 1 })); await sleep(0);
+      check(`${name}: refused before GL by the tighter static budget`, row.estimate > G.COST_LIMIT && w.fails[0]?.[0] === 'refused' && count.draws === before, JSON.stringify({ estimate: row.estimate, fails: w.fails }));
+      w.scene.stop(); c.remove(); continue;
+    }
+    check(`${name}: passes the checker (${row.estimate} operations)`, row.check, row.estimate);
+    const c = mkCanvas(), w = watch(mod, c), t0 = performance.now(), at = [];
+    w.scene.update(shaderOpts(src, { speed: 1 }));
+    // Poll (this is the test, not Glaze) until nothing has happened for 1.5 s.
+    for (let quiet = t0; performance.now() - t0 < wait && performance.now() - quiet < 1500 || performance.now() - t0 < 2000;) {
+      await sleep(25);
+      if (w.steps.length > at.length) { at.push(Math.round(performance.now() - t0)); quiet = performance.now(); }
+    }
+    row.steps = w.steps.map((s, i) => ({ level: s.level, scale: s.scale, still: s.still, ms: s.ms, why: s.why, atMs: at[i] }));
+    row.fails = w.fails.map((f) => [f[0], f[2]]);
+    row.final = [c.width, c.height];
+    row.after = await rate(1000);
+    const first = row.steps.find((s) => s.level >= 1);
+    check(`${name}: stepped down off the 0.6 scale`, !!first, JSON.stringify(row.steps));
+    check(`${name}: the first step down came within 1.5 s of the shader being set`, first && first.atMs < 1500, JSON.stringify(row.steps));
+    check(`${name}: what it measured was over the 12 ms budget (or a stall, or the probe)`, first && (first.ms > 12 || first.why === 'stalled' || first.why === 'probe'), JSON.stringify(first));
+    w.scene.stop(); c.remove();
+  }
+}
+
+// ---- refused: a shader the checker says no to never reaches GL ---------------------------------------------------------------
+if (run.includes('refused')) {
+  const d = out.data.refused = {};
+  const nest = (n) => `vec4 scene(vec2 uv) { float s = uv.x; for (int i = 0; i < ${n}; i++) for (int j = 0; j < ${n}; j++) for (int k = 0; k < ${n}; k++) s += sin(s) * .001; return vec4(s); }`;
+  for (const [name, src, want] of [
+    ['#extension', `// MARKER-refused\n#extension GL_OES_standard_derivatives : enable\n${MIN}`, /#extension/],
+    ['author uniform', `// MARKER-refused\nuniform float k;\n${MIN}`, /uniform/],
+    ['nested 256^3 loops (compiles in 0.5 ms and would hang a GPU)', nest(256), /Too heavy|passes|256/],
+    ['non-ASCII', `// MARKER-refused é\n${MIN}`, /ASCII/],
+    ['an uncountable loop bound', 'vec4 scene(vec2 uv) { float s = 0.; for (int i = 0; i < int(1e5); i++) s += .1; return vec4(s); } // MARKER-refused', /Can't tell/],
+  ]) {
+    const c = mkCanvas(), w = watch(mod, c), before = { sources: sources.length, draws: count.draws };
+    w.scene.update(shaderOpts(src, { speed: 1 }));
+    await sleep(300);
+    const row = d[name] = { sources: sources.length - before.sources, draws: count.draws - before.draws, fails: w.fails.map((f) => [f[0], f[1].slice(0, 2)]) };
+    check(`${name}: refused ('refused', with a message), nothing handed to GL`, row.sources === 0 && w.fails.length === 1 && w.fails[0][0] === 'refused' && want.test(w.fails[0][1].map((e) => GZ_I18N.t(e.message, e.vars)).join(' ')), JSON.stringify(row));
+    check(`${name}: no frame was drawn, and the scene is stopped`, row.draws === 0, `${row.draws} draws`);
+    check(`${name}: its source text reached no shaderSource call`, !sources.some((s) => s.includes('MARKER-refused')), '');
+    w.scene.stop(); c.remove();
+  }
+}
+
+// ---- compile: what the device's compiler says, with the author's lines -------------------------------------------------------
+if (run.includes('compile')) {
+  const d = out.data.compile = {};
+  const body = (x) => `vec4 scene(vec2 uv) {\n  float s = 0.;\n  ${x}\n  return vec4(s);\n}`;
+  const gl = document.createElement('canvas').getContext('webgl2');
+  for (const [name, src, line] of [
+    ['fwidth (no derivatives in ESSL 1.00 under WebGL2)', body('s = fwidth(uv.x);'), 3],
+    ['integer % (ESSL 3.00 only)', body('int k = 5 % 2; s = float(k);'), 3],
+    ['array constructor (ESSL 3.00 only)', body('float a[2] = float[2](1., 2.); s = a[0];'), 3],
+    ['undeclared identifier', body('s += foo;'), 3],
+    ['type mismatch', body('float t = vec2(1.);'), 3],
+    ['syntax error: missing ;', body('s += 1.'), 4],
+    ['returns vec3', 'vec4 scene(vec2 uv) {\n  return vec3(1.);\n}', 2],
+    ['an error on line 150 of a long file', `${'// pad\n'.repeat(148)}vec4 scene(vec2 uv) {\n  return vec4(nope);\n}`, 150],
+  ]) {
+    const row = d[name] = { check: G.check(src).ok };
+    check(`${name}: the checker lets it through (the device is the judge)`, row.check, JSON.stringify(G.check(src).errors));
+    const editor = G.compile(gl, src);
+    row.editor = editor.errors.map((e) => `${e.line}: ${GZ_I18N.t(e.message, e.vars)}`.slice(0, 90));
+    check(`${name}: the editor's compile check reports line ${line}`, !editor.ok && editor.errors.some((e) => e.line === line), JSON.stringify(row.editor));
+    const c = mkCanvas(), w = watch(mod, c);
+    w.scene.update(shaderOpts(src, { speed: 1 }));
+    await sleep(500);
+    row.scene = w.fails.map((f) => [f[0], f[1].map((e) => e.line)]);
+    const after = await rate(300);
+    check(`${name}: the scene reports 'compile' with line ${line} and stops drawing`, w.fails.length === 1 && w.fails[0][0] === 'compile' && w.fails[0][1].some((e) => e.line === line) && after.draws === 0, JSON.stringify({ scene: row.scene, drawsAfter: after.draws }));
+    w.scene.stop(); c.remove();
+  }
+}
+
+// ---- still: motion off ---------------------------------------------------------------------------------------------------------
+if (run.includes('still')) {
+  const d = out.data.still = {};
+  {
+    const c = mkCanvas(), w = watch(mod, c), a = { ...count };
+    w.scene.update({ ...OPTS, name: 'graveyard', speed: 0 });
+    await sleep(1000);
+    d.builtin = { draws: count.draws - a.draws, raf: count.raf - a.raf, steps: w.steps.length };
+    check('a built-in scene, motion off: one frame, no animation frame asked for, nothing measured', d.builtin.draws === 1 && d.builtin.raf === 0 && !d.builtin.steps, JSON.stringify(d.builtin));
+    w.scene.stop(); c.remove();
+  }
+  for (const [name, src] of Object.entries(EXAMPLES)) {
+    const c = mkCanvas(), w = watch(mod, c), a = { ...count };
+    w.scene.update(shaderOpts(src, { speed: 0 }));
+    await sleep(1000);
+    const row = d[name] = { draws: count.draws - a.draws, raf: count.raf - a.raf, size: [c.width, c.height], steps: w.steps.map((s) => [s.level, s.why]), fails: w.fails.length };
+    const settled = await rate(800);
+    w.scene.draw();
+    row.px = stats(pixels(c)); row.stableAfter = settled.draws;
+    shot(`still-${name}`, c);
+    check(`${name} shader, motion off: the probe's two frames and one picture at 0.6, then nothing`, row.draws === 3 && row.size[0] === 864 && settled.draws === 0 && settled.raf === 0 && row.steps.length === 1 && row.px.std > 5, JSON.stringify(row));
+    w.scene.stop(); c.remove();
+  }
+}
+
+// ---- lost: the context goes ----------------------------------------------------------------------------------------------------
+if (run.includes('lost')) {
+  const d = out.data.lost = {};
+  {
+    const c = mkCanvas(), w = watch(mod, c);
+    w.scene.update(shaderOpts(EXAMPLES.liquid, { speed: 1 }));
+    await sleep(1000);
+    const lose = contexts.at(-1).getExtension('WEBGL_lose_context');
+    const t0 = performance.now();
+    lose.loseContext();
+    await sleep(300);
+    const r = await rate(500);
+    lose.restoreContext();
+    await sleep(600);
+    const later = await rate(500);
+    d.custom = { fails: w.fails.map((f) => f[0]), drawsAfterLoss: r.draws, drawsAfterRestore: later.draws, ms: Math.round(performance.now() - t0) };
+    check('a shader, context lost: onFail(lost), no more frames, and a restore does not bring it back', w.fails.length === 1 && w.fails[0][0] === 'lost' && r.draws === 0 && later.draws === 0, JSON.stringify(d.custom));
+    w.scene.stop(); c.remove();
+  }
+  {
+    const c = mkCanvas(), w = watch(mod, c);
+    w.scene.update({ ...OPTS, name: 'mist', speed: 1 });
+    await sleep(800);
+    const lose = contexts.at(-1).getExtension('WEBGL_lose_context');
+    lose.loseContext();
+    await sleep(300);
+    const r = await rate(500);
+    lose.restoreContext();
+    await sleep(800);
+    const later = await rate(1000);
+    d.builtin = { fails: w.fails.length, drawsAfterLoss: r.draws, drawsAfterRestore: later.draws };
+    check('a built-in scene, context lost: no failure, drawing stops, and three brings it back on restore', !w.fails.length && r.draws === 0 && later.draws > 15, JSON.stringify(d.builtin));
+    w.scene.stop(); c.remove();
+  }
+}
+
+// ---- layers --------------------------------------------------------------------------------------------------------------------
+if (run.includes('layers')) {
+  const d = out.data.layers = {};
+  // Every particle shape, large, on a flat ground.
+  seeded();
+  const sheet = async (name, layers) => {
+    const c = mkCanvas(), w = watch(mod, c);
+    w.scene.update(layerOpts(layers, { speed: 0 }));
+    w.scene.draw();
+    d[name] = { px: stats(pixels(c)), fails: w.fails.length, size: [c.width, c.height] };
+    shot(`layers-${name}`, c);
+    check(`layers ${name}: draws, nothing refused`, d[name].px.std > 3 && !w.fails.length, JSON.stringify(d[name]));
+    w.scene.stop(); c.remove();
+  };
+  const dots = (shape, extra = {}) => ({ k: 'particles', shape, count: 5, size: 64, twinkle: 0, amount: 100, blend: 'normal', c: ['#f472b6', '#5eead4', '#fde68a'], ...extra });
+  await sheet('shapes-a', [dots('dot'), dots('star'), dots('snow'), dots('heart')]);
+  await sheet('shapes-b', [dots('leaf'), dots('spark'), dots('star', { blend: 'add' }), dots('heart', { blend: 'screen' })]);
+  await sheet('gradients', [{ k: 'gradient', style: 'conic', angle: 20, c: ['#f472b6', '#5eead4', '#a78bfa'], amount: 100 }, { k: 'gradient', style: 'radial', c: ['#000000', '#ffffff'], blend: 'multiply', amount: 80 }, { k: 'noise', scale: 30, blend: 'screen', amount: 50, c: ['#a78bfa', '#5eead4'] }]);
+  unseeded();
+  // A real stack, animated, under the guard.
+  {
+    const layers = [
+      { k: 'gradient', style: 'linear', angle: 160, c: ['#0b0a1a', '#1e1b4b', '#312e81'], amount: 100, blend: 'normal' },
+      { k: 'scene', name: 'borealis', amount: 80, speed: 100, blend: 'add' },
+      { k: 'noise', scale: 40, amount: 40, speed: 60, blend: 'screen', c: ['accent', '#a78bfa'] },
+      { k: 'particles', shape: 'snow', count: 150, size: 14, speed: 100, drift: 190, twinkle: 40, amount: 85, blend: 'normal', c: ['#ffffff'] },
+    ];
+    const c = mkCanvas(), w = watch(mod, c);
+    w.scene.update(layerOpts(layers, { speed: 1 }));
+    await sleep(1500);
+    const r = await rate(2000);
+    w.scene.draw();
+    d.stack = { px: stats(pixels(c)), live: { ...r, framesPerSec: +(r.perSec / layers.length).toFixed(1) }, size: [c.width, c.height], steps: w.steps.map((s) => [s.level, s.why, s.ms]), fails: w.fails.map((f) => f[0]) };
+    shot('layers-stack', c);
+    check('a four-layer stack animates at about 30 fps under the guard with no step down', d.stack.live.framesPerSec > 20 && d.stack.live.framesPerSec < 32 && !w.steps.length && !w.fails.length && d.stack.px.std > 5, JSON.stringify(d.stack));
+    // Changing amounts and colours is cheap and keeps the same programs: no new shader sources.
+    const before = sources.length;
+    w.scene.update(layerOpts(layers.map((l) => ({ ...l, amount: 50, c: ['#ff0000'] })), { speed: 1 }));
+    await sleep(200);
+    check('changing amount and colours compiles nothing new', sources.length === before, `${sources.length - before} sources`);
+    w.scene.stop(); c.remove();
+  }
+}
+
+// ---- hazards: loops the compiler accepts and the checker must refuse (compile only, never drawn) -------------------------------
+if (run.includes('hazards')) {
+  const d = out.data.hazards = {};
+  const gl = document.createElement('canvas').getContext('webgl2');
+  const accepts = (src) => {
+    const s = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(s, `#version 100\n${G.wrap(src)}`);
+    gl.compileShader(s);
+    const ok = gl.getShaderParameter(s, gl.COMPILE_STATUS), log = gl.getShaderInfoLog(s).slice(0, 100);
+    gl.deleteShader(s);
+    return { ok, log };
+  };
+  const loop = (head) => `vec4 scene(vec2 uv) { float s = 0.; for ${head} { s += .1; } return vec4(s); }`;
+  for (const [name, src] of [
+    ['a step of zero', loop('(int i = 0; i < 4; i += 0)')],
+    ['counting the wrong way', loop('(int i = 0; i < 4; i--)')],
+    ['counting down with i++', loop('(int i = 8; i > 0; i++)')],
+    ['int(1e5) as the bound', loop('(int i = 0; i < int(1e5); i++)')],
+    ['1000 * 1000 as the bound', loop('(int i = 0; i < 1000 * 1000; i++)')],
+    ['a const made of consts', `const int K = 1000;\nconst int K2 = K * K;\n${loop('(int i = 0; i < K2; i++)')}`],
+    ['100000 passes', loop('(int i = 0; i < 100000; i++)')],
+    ['256 x 256 x 256 nested', 'vec4 scene(vec2 uv) { float s = 0.; for (int i = 0; i < 256; i++) for (int j = 0; j < 256; j++) for (int k = 0; k < 256; k++) s += .1; return vec4(s); }'],
+    ['a callee declared before it is defined', 'float h(float x);\nvec4 scene(vec2 uv) { float s = 0.; for (int i = 0; i < 256; i++) s = h(s); return vec4(s); }\nfloat h(float x) { for (int j = 0; j < 256; j++) for (int k = 0; k < 256; k++) x += sin(x); return x; }'],
+    ['a comment before a function macro', '/* before */ #define F(x) x+x+x+x\n/* before */ #define H(x) F(F(F(F(x))))\nvec4 scene(vec2 uv) { return vec4(H(uv.x)); }'],
+    ['comment-obscured chained macros', '/* before */ #define A0 sin(s)\n' + Array.from({ length: 4 }, (_, i) => `/* before */ #define A${i + 1} (A${i}+A${i}+A${i}+A${i})`).join('\n') + '\n' + loop('(int i = 0; i < 64; i++)').replace('s += .1;', 's += A4;')],
+    ['an inactive macro redefinition after the scene', '#define N 100000\n' + loop('(int i = 0; i < N; i++)') + '\n#if 0\n#undef N\n#define N 1\n#endif'],
+    ['a shadowed constant', 'const int N = 100000; float f() { const int N = 1; return 1.; }\n' + loop('(int i = 0; i < N; i++)')],
+    ['a counter whose final increment overflows', loop('(int i = 2147483647; i <= 2147483647; i++)')],
+  ]) {
+    const angle = accepts(src), mine = G.check(src);
+    d[name] = { angleAccepts: angle.ok, checkRefuses: !mine.ok, why: mine.errors[0] && GZ_I18N.t(mine.errors[0].message, mine.errors[0].vars).slice(0, 70) };
+    check(`${name}: the checker refuses it (ANGLE ${angle.ok ? 'accepts it' : 'refuses it too'})`, !mine.ok, JSON.stringify(d[name]));
+  }
+}
+
+window.__done = true;
+</script>

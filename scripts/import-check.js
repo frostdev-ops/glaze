@@ -46,6 +46,7 @@ const frames = (page) => page.evaluate(() => document.querySelectorAll('iframe[s
   m.content_scripts.push({ ...glaze.find((e) => e.matches.includes('https://*.instructure.com/*')), matches: ['http://localhost/*'], exclude_matches: undefined });
   m.host_permissions.push('http://localhost/*');
   fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify(m));
+  await require('./wait-for-browser.js')();
   const ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
     executablePath: fs.existsSync(CHROME) ? CHROME : undefined, headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1,
     reducedMotion: 'reduce', locale: 'en-US', timezoneId: 'America/New_York', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],

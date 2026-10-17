@@ -1,0 +1,10 @@
+{
+  "glaze": 1,
+  "name": "Course Initials",
+  "version": "1.0.0",
+  "author": { "name": "Your name" },
+  "permissions": [
+    { "id": "courses", "why": "Reads your course names to put a badge on each course card." }
+  ],
+  "hooks": "hooks.js"
+}

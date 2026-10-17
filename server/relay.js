@@ -438,7 +438,7 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       return send(res, status, error ? { error } : {});
     }
     const m = ROUTE.exec(url.pathname);
-    const kind = !m ? null : m[3] ? { GET: 'getBlob', PUT: 'putBlob' }[req.method] : m[2] === 'trim' ? req.method === 'POST' && 'trim'
+    const kind = !m ? null : m[3] ? { GET: 'getBlob', PUT: 'putBlob', DELETE: 'deleteBlob' }[req.method] : m[2] === 'trim' ? req.method === 'POST' && 'trim'
       : m[2] === 'expiry' ? req.method === 'POST' && 'expiry' : { GET: 'read', POST: 'append', DELETE: 'delete' }[req.method];
     if (!kind) return send(res, m ? 405 : 404, { error: m ? 'method' : 'unknown' });
     if (!take(ip, kind === 'read' || kind === 'getBlob' ? 'read' : 'write')) return send(res, 429, { error: 'rate' });
@@ -531,6 +531,19 @@ const relay = ({ db: file = 'share.db', store = diskStore('share-blobs'), ipHead
       if (outcome === 'failed') { await store.del(key).catch((e) => console.error('relay: file store:', e.message)); throw failed; }
       await doom(sid, m[3], b.length);
       throw outcome === 'fenced' ? fenced() : Object.assign(new Error('upload lost'), { status: 409 });
+    }
+    if (kind === 'deleteBlob') {
+      const sig = sigOf(req.headers['x-glaze-sig']);
+      if (!sig || !signed(row.pub, sid, 'blob-delete', m[3], Buffer.alloc(0), sig)) return send(res, 403, { error: 'signature' });
+      const meta = q.blob.get(sid, m[3]);
+      if (!meta) return send(res, 204, '');
+      if (meta.at !== null) return send(res, 409, { error: 'uploading' });
+      // Track a failed store delete for the same reconciliation used by abandoned uploads.
+      const now = Date.now();
+      write(() => { q.dropBlob.run(sid, m[3]); q.doom.run(sid, m[3], meta.size, now, now); });
+      await store.del(`${sid}/${m[3]}`);
+      write(() => q.undoom.run(sid, m[3]));
+      return send(res, 204, '');
     }
     if (kind === 'getBlob') {
       const meta = q.blob.get(sid, m[3]);

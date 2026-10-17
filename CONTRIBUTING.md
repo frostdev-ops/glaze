@@ -19,7 +19,7 @@ extension reload. Run `node --test` before sending a change.
 
 ## Conventions
 
-- No build step, no dependencies, no bundler. Vanilla JS, plain CSS, files loaded directly. The one exception is `lib/three.min.js`, a checked-in, tree-shaken three.js; `scripts/vendor-three.sh` rebuilds it, and only an upgrade needs that.
+- No build step, no dependencies, no bundler. Vanilla JS, plain CSS, files loaded directly. The exceptions are `lib/three.min.js`, a checked-in, tree-shaken three.js (`scripts/vendor-three.sh` rebuilds it), and lottie-web's official light canvas player in `lib/lottie/` (`scripts/vendor-lottie.sh` fetches it by a pinned hash); only an upgrade needs either.
 - Keep diffs small and focused. One change per PR.
 - Defaults live in exactly one place: `defaults.js`. Don't duplicate a colour or a toggle elsewhere.
 - Every setting reaches the page as a `--gz-*` variable or an `html[data-gz-*]` attribute. CSS matches on those; it never waits on JavaScript.
