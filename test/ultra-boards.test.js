@@ -1076,11 +1076,11 @@ test('Course cards: a tick, Select all and Select none are one layout change eac
   const full = W.layout({ todo: true, boards: { courses: Array.from({ length: W.COURSE_MAX - 1 }, (_, i) => ({ id: ckey(`_${500 + i}_1`), on: true })) } });
   const r = cardsPage({ local: { widgetLayout: full } });
   const { dlg: d2 } = await openCards(r);
-  assert.equal(d2.querySelector('.gz-ccm-count').textContent, `On this board: 0. Room for 1 more.`);
+  assert.equal(d2.querySelector('.gz-ccm-count').textContent, `On this board: 47. Room for 1 more.`);
   r.doc.fire(buttonIn(d2.querySelector('.gz-ccm-tools'), 'Select all'), 'click');
   await settle();
   assert.equal(layoutSends(r).at(-1).ops.length, 1, 'only what fits');
-  assert.equal(d2.querySelector('.gz-ccm-count').textContent, 'On this board: 1. Room for 0 more.');
+  assert.equal(d2.querySelector('.gz-ccm-count').textContent, 'On this board: 48. Room for 0 more.');
   assert.deepEqual(['_102_1', '_103_1'].map((id) => input(itemOf(d2, id), 'checkbox').disabled), [true, true]);
   assert.equal(input(itemOf(d2, '_102_1'), 'checkbox').title, `Up to ${W.COURSE_MAX} course cards per board.`);
   assert.equal(buttonIn(d2.querySelector('.gz-ccm-tools'), 'Select all').disabled, true);
@@ -1169,7 +1169,78 @@ test("Course cards: a course's look changes from the dialog, saved as the card e
   assert.equal(ce.querySelector('h2').textContent, 'Card for Biology');
   p.doc.fire(ce.querySelector('.gz-ce-done'), 'click');
   await settle();
-  assert.equal(p.doc.getElementById('gz-ce'), null);
+  assert.ok(!p.doc.getElementById('gz-ce'));
   assert.ok(p.doc.activeElement === style, 'back on the course\'s Style');
   assert.ok(p.doc.getElementById('gz-ccm').open);
+});
+
+test('Course cards: distinct Ultra ids keep distinct style panels and radio groups', async () => {
+  const p = cardsPage({ courses: [{ ...COURSES[0], id: '_1_11' }, { ...COURSES[1], id: '_11_1' }] });
+  const { dlg } = await openCards(p);
+  for (const btn of dlg.querySelectorAll('.gz-ccm-style')) p.doc.fire(btn, 'click');
+  await settle();
+  const panels = dlg.querySelectorAll('.gz-ccm-look');
+  assert.equal(new Set(panels.map((x) => x.id)).size, 2);
+  assert.equal(new Set(panels.map((x) => input(x, 'radio').name)).size, 2);
+});
+
+test('Course cards: clicking dialog padding keeps it open; only the backdrop closes it', async () => {
+  const p = cardsPage();
+  const { dlg } = await openCards(p);
+  dlg.box = { left: 20, top: 20, width: 320, height: 500 };
+  dlg.dispatchEvent({ type: 'click', target: dlg, clientX: 25, clientY: 25 });
+  assert.ok(dlg.isConnected && dlg.open, 'padding is inside the dialog');
+  dlg.dispatchEvent({ type: 'click', target: dlg, clientX: 5, clientY: 5 });
+  assert.equal(dlg.isConnected, false, 'outside its bounds is the backdrop');
+});
+
+test('Course cards: late course metadata updates names, code and terms without replacing the active controls', async () => {
+  const courses = structuredClone(COURSES);
+  const p = cardsPage({ courses });
+  const { dlg } = await openCards(p);
+  const bio = itemOf(dlg, '_101_1'), style = bio.querySelector('.gz-ccm-style');
+  p.doc.fire(style, 'click');
+  await settle();
+  const color = input(bio, 'radio', 'solid'); color.focus();
+  Object.assign(courses[0], { name: 'Biology II', code: 'BIO-202', term: 'Summer 2027' });
+  p.c.GZ_COURSE_CARDS.sync();
+  await settle();
+  assert.equal(itemOf(dlg, '_101_1').querySelector('.course-title').textContent, 'Biology II');
+  assert.equal(itemOf(dlg, '_101_1').querySelector('.course-id').textContent, 'BIO-202');
+  assert.equal(itemOf(dlg, '_101_1').closest('section').querySelector('h3').textContent, 'Summer 2027');
+  courses.push({ ...COURSES[0], id: '_104_1', name: 'Physics' });
+  p.c.GZ_COURSE_CARDS.sync();
+  await settle();
+  assert.equal(dlg.querySelectorAll('.gz-ccm-item').length, 4);
+  assert.ok(p.doc.activeElement === color && color.isConnected, 'late courses keep focus and the open panel');
+  assert.ok(itemOf(dlg, '_101_1') === bio);
+});
+
+test('Course cards: leaving the board closes its stacked editor and a pending open cannot revive it', async () => {
+  const p = cardsPage();
+  const { dlg } = await openCards(p);
+  p.doc.fire(itemOf(dlg, '_101_1').querySelector('.gz-ccm-style'), 'click');
+  await settle();
+  const more = buttonIn(dlg, 'Card style and bookmarks');
+  p.doc.fire(more, 'click'); await settle();
+  assert.ok(p.doc.getElementById('gz-ce')?.open);
+  p.ui.sync(false); await settle();
+  assert.ok(!p.doc.getElementById('gz-ce'));
+  assert.equal(p.doc.getElementById('gz-ccm'), null);
+  const q = cardsPage(); const { dlg: d2 } = await openCards(q);
+  q.doc.fire(itemOf(d2, '_101_1').querySelector('.gz-ccm-style'), 'click'); await settle();
+  q.doc.fire(buttonIn(d2, 'Card style and bookmarks'), 'click');
+  q.ui.sync(false); await settle();
+  assert.ok(!q.doc.getElementById('gz-ce'), 'an async open rechecks its parent');
+});
+
+test('Course cards: the count includes saved courses not yet listed, and another tab updates ticks', async () => {
+  const layout = W.layout({ todo: true, boards: { courses: [{ id: ckey('_999_1'), on: true }] } });
+  const p = cardsPage({ local: { widgetLayout: layout } });
+  const { dlg } = await openCards(p);
+  assert.equal(dlg.querySelector('.gz-ccm-count').textContent, 'On this board: 1. Room for 47 more.');
+  p.store.widgetLayout = W.apply(layout, { ops: [{ s: 'courses', id: ckey('_101_1'), set: { on: true } }] });
+  p.changed({ widgetLayout: { newValue: p.store.widgetLayout } }); await settle();
+  assert.equal(input(itemOf(dlg, '_101_1'), 'checkbox').checked, true);
+  assert.equal(dlg.querySelector('.gz-ccm-count').textContent, 'On this board: 2. Room for 46 more.');
 });

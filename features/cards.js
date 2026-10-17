@@ -284,6 +284,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (!await close()) return;
     let d;
     try { d = await read(); } catch { return; }
+    if (back && !back.isConnected) return;
     const card = cardOf(key);
     const name = nameOf(card);
     const courseColor = () => colorOf(key);
@@ -600,7 +601,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   // A picture's average color, through its filter, for the contrast line; null when its site doesn't allow reading it.
   const average = (url, f) => K.average(url, f);
 
-  return { paint, open, styleOf, setKind, setLink, setPicture, say: told };
+  return { paint, open, closeFor: (parent) => ed?.back && parent.contains(ed.back) ? close() : Promise.resolve(true), styleOf, setKind, setLink, setPicture, say: told };
 })();
 // The module as the script's last value: how lib/background.js knows it ran to the end.
 GZ_CARD_UI;

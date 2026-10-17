@@ -899,6 +899,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       board: b,
       on: (key) => rows().some((x) => x.id === key && x.on),
       room,
+      count: () => rows().filter((x) => x.on && W.course(x.id)?.origin === location.origin).length,
       set: (keys, on) => {
         if (board !== b) return;
         if (on) nativeShown = false; // the cards show, not Ultra's list

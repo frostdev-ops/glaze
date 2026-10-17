@@ -225,7 +225,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     const name = title(c.key);
     const box = make('input', { type: 'checkbox' });
     const card = make('article', {}, make('div', { className: 'course-banner', ariaHidden: 'true' }),
-      make('div', { className: 'element-details' }, make('span', { className: 'course-title', textContent: name }), c.code && make('span', { className: 'course-id', textContent: c.code })));
+      make('div', { className: 'element-details' }, make('span', { className: 'course-title', textContent: name }), make('span', { className: 'course-id', textContent: c.code })));
     card.dataset.courseId = c.id;
     card.setAttribute('data-gz-card-preview', '');
     tone(card, c.id);
@@ -247,12 +247,20 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     return it;
   };
   const fillPicker = () => {
-    const rows = list(), groups = new Map();
+    const rows = list(), groups = new Map(), previous = pick.items, focus = document.activeElement;
     for (const c of rows) { const g = groups.get(c.term) || []; g.push(c); groups.set(c.term, g); }
     pick.items = new Map();
     pick.terms = [];
     pick.list.replaceChildren(...[...groups].map(([term, cs], n) => {
-      const its = cs.map(item);
+      const its = cs.map((c) => {
+        const it = previous.get(c.key) || item(c);
+        it.c = c;
+        setText(it.card.querySelector('.course-title'), title(c.key));
+        setText(it.card.querySelector('.course-id'), c.code || '');
+        it.li.querySelector('.gz-ccm-style').setAttribute('aria-label', ctx.t('Style of {name}', { name: title(c.key) }));
+        it.look?.panel.querySelector('[role="radiogroup"]').setAttribute('aria-label', ctx.t('Card for {name}', { name: title(c.key) }));
+        return it;
+      });
       for (const it of its) pick.items.set(it.c.key, it);
       const name = term || ctx.t('Other courses');
       const head = make('h3', { id: `gz-ccm-t${n}`, textContent: name });
@@ -265,13 +273,14 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       pick.terms.push({ sec, its });
       return sec;
     }));
-    pick.keys = rows.map((c) => c.key).join();
+    pick.keys = JSON.stringify(rows.map((c) => [c, title(c.key)]));
+    if (focus?.isConnected && focus !== document.activeElement) focus.focus({ preventScroll: true });
     UI()?.paint();
   };
   // What the dialog shows follows the board and the courses: ticks, what still fits, the search.
   const syncPicker = () => {
     if (!pick?.dlg.isConnected) return;
-    if (list().map((c) => c.key).join() !== pick.keys) fillPicker();
+    if (JSON.stringify(list().map((c) => [c, title(c.key)])) !== pick.keys) fillPicker();
     const room = pick.o.room(), q = pick.query.value.trim().toLocaleLowerCase();
     let on = 0;
     for (const it of pick.items.values()) {
@@ -293,12 +302,13 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     put(pick.none, 'disabled', !shown.some((it) => it.box.checked));
     // The first time on the Courses page, every course is one click away.
     put(pick.all, 'className', `gz-w-btn gz-w-small${pick.o.board === 'courses' && !on ? ' gz-w-main' : ''}`);
-    put(pick.count, 'textContent', ctx.t('On this board: {on}. Room for {n} more.', { on, n: room }));
+    put(pick.count, 'textContent', ctx.t('On this board: {on}. Room for {n} more.', { on: pick.o.count?.() ?? on, n: room }));
   };
   const closePicker = (refocus = true) => {
     const p = pick;
     if (!p) return;
     pick = null;
+    UI()?.closeFor(p.dlg);
     if (p.dlg.open) p.dlg.close();
     p.dlg.remove();
     if (refocus) p.o.back()?.focus({ preventScroll: true });
@@ -326,7 +336,11 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
         b(ctx.t('Done'), () => closePicker(), { className: 'gz-w-btn gz-w-main' })));
     // Esc closes it (the dialog's own cancel), as do a press on the backdrop, × and Done; the focus goes back.
     dlg.addEventListener('close', () => { if (pick?.dlg === dlg) closePicker(); });
-    dlg.addEventListener('click', (e) => { if (e.target === dlg) closePicker(); });
+    dlg.addEventListener('click', (e) => {
+      if (e.target !== dlg) return;
+      const r = dlg.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closePicker();
+    });
     document.body.append(dlg);
     fillPicker();
     syncPicker();
