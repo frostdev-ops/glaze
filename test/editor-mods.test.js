@@ -285,3 +285,14 @@ test('dev folder scans bound depth and empty directory counts before reading fil
   await assert.rejects(ctx.walk(many), /./);
   assert.ok(visited <= M.CAP.files * M.CAP.depth + 1);
 });
+
+
+test('author creation in the editor uses the shared worker operation', async () => {
+  const source = fs.readFileSync(require.resolve('../lib/editor-mods.js'), 'utf8');
+  const start = source.indexOf('    const makeKey = async () =>'), end = source.indexOf("    $('mod-export-signed')", start);
+  const requests = [], key = {};
+  const ctx = vm.createContext({ send: async (m) => { requests.push(m.op); return { ok: true, key, created: false }; }, say() {}, keySaid: {}, t });
+  vm.runInContext(`${source.slice(start, end)}\nthis.makeKey = makeKey;`, ctx);
+  assert.equal(await ctx.makeKey(), key);
+  assert.deepEqual(requests, ['author']);
+});

@@ -933,3 +933,24 @@ test('broker: concurrent replacement edits and updates preserve other switches w
   await Promise.all([send({ op: 'remove', id: v1.id }), set({ bg: true })]);
   assert.equal(key in w.store.local, false, 'a queued edit cannot recreate removed state');
 });
+
+
+test('broker: concurrent first author requests retain one signing identity', async () => {
+  const w = worker();
+  const ask = () => w.send({ type: 'glaze:mods', op: 'author' }, EDITOR);
+  const both = await Promise.all([ask(), ask()]);
+  assert.ok(both.every((r) => r.ok), 'both editors receive an author key');
+  assert.equal(both[0].key.x === both[1].key.x, true, 'both requests use the same identity');
+  assert.equal(both.filter((r) => r.created).length, 1, 'only one key is generated');
+  assert.equal(w.store.local.modAuthor.x === both[0].key.x, true, 'the returned identity remains stored');
+  assert.equal(await M.keyPair(both[0].key), true);
+  const again = await ask();
+  assert.equal(again.created, false);
+  assert.equal(again.key.x === both[0].key.x, true);
+  const damaged = worker({ modAuthor: { damaged: true } });
+  const refused = await damaged.send({ type: 'glaze:mods', op: 'author' }, EDITOR);
+  assert.equal(refused.ok, false, 'an existing damaged key is never silently overwritten');
+  assert.equal(damaged.store.local.modAuthor.damaged, true);
+  const failed = await M.change({ op: 'author' }, { local: { get: async () => ({}), set: async () => false } });
+  assert.deepEqual(failed, { ok: false, error: 'write' }, 'no signing identity is returned unless it was retained');
+});

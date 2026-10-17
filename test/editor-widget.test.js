@@ -211,7 +211,8 @@ test('saving a widget never changes a new draft opened while signing', async () 
     author: async () => { await held; return {}; }, local: { get: async () => ({}), set: async () => {} },
     B: () => ({ pack: async (files, m) => ({ id: 'a', manifest: m, prompt: m, version: m.version, bytes: new Uint8Array(), hash: 'h' }),
       plan: () => ({ action: 'update', newPermissions: [] }) }),
-    bump: WE.bump, send: async (m) => m.op === 'list' ? { mods: [{ id: 'a', version: '1.0.5' }] } : { ok: true, action: 'update' },
+    bump: WE.bump, send: async (m) => { if (m.op === 'author') { await held; return { ok: true, key: {}, created: false }; }
+      return m.op === 'list' ? { mods: [{ id: 'a', version: '1.0.5' }] } : { ok: true, action: 'update' }; },
     std: () => '', say() {} });
   vm.runInContext(`${code}\nthis.save = save;`, ctx);
   const saving = ctx.save(true);
