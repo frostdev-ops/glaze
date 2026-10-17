@@ -453,7 +453,7 @@ interface GlazeLookParts {
   bg?: {
     shader?: { src: string };
     layers?: Record<string, unknown>[];
-    /** In overrides, src and type must match the media declared in mod.json. */
+    /** src: an https address, or in mod.json `./<path>` for a file in the bundle (.webm, .mp4, .webp, .avif, .json). In overrides, src and type must match the media declared in mod.json. */
     media?: { type: 'video' | 'image' | 'lottie'; src: string; fit?: 'cover' | 'contain' | 'fill'; dim?: number; loop?: boolean };
   };
   anim?: Record<string, unknown>;

@@ -636,13 +636,17 @@ your Dashboard notes are links too, opened in a new tab without telling the site
 ## The Looks gallery
 
 The Looks gallery at `https://frostdev.io/glaze/looks` is an ordinary website. Glaze makes no request
-to it; you visit it yourself, from the editor's Open the gallery button or any other link, and
+to it except the one below; you visit it yourself, from the editor's Open the gallery button or any other link, and
 frostdev.io sees that visit like any other (see its [privacy page](https://frostdev.io/privacy)). On
 the gallery's pages only, Glaze runs a small script that waits for you to click **Use this Look in
 Glaze**. That click passes the Look's code, name and author from the page to Glaze's editor on your
 device; nothing is sent anywhere, and the editor applies nothing until you choose **Use this theme**.
 If a Look's code names a background image on another site, the editor's preview loads it from that
-site, as for any pasted theme code, and says which site it is. Sharing your own Look there is the
+site, as for any pasted theme code, and says which site it is. If the Look's background is a video or animation file the
+gallery keeps, that click also makes Glaze download that one file from
+`https://frostdev.io/glaze/looks/api/media/<its SHA-256>`, with no cookies, referrer or anything about you, and keep it on
+this device (checked and named by its hash) for the editor's preview; Glaze makes this request only then. A mod from the
+gallery carries its background file inside its signed bundle. Sharing your own Look there is the
 website's own form, which you fill in yourself; Glaze takes no part in it.
 
 ## Recognizing Canvas and Moodle

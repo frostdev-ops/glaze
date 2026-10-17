@@ -136,6 +136,7 @@ running code go on top of all of these. Turning the mod off, removing it or reor
 |---|---|
 | `bg.shader` | `{ src }`: a fragment shader in GLSL ES 1.00, ASCII, at most 8 KiB, written as `vec4 scene(vec2 uv)` (`uv` 0 to 1, y up; rgb is the colour, a how much covers the ground). Uniforms `uTime` `uAspect` `uPx` `uAmount` `uGround` `uC1` `uC2` `uC3`, helpers `hash` `noise` `fbm` `amt` `rot` `px`. Checked by `lib/glsl.js` before anything draws. |
 | `bg.layers` | 1 to 4 layers, bottom first: `scene`, `noise`, `gradient` or `particles`. |
+| `bg.media` | `{ type, src, fit?, dim?, loop? }`: a looping `video`, an animated `image` (WebP or AVIF) or a `lottie` animation. `src` is an `https:` address (the install prompt names its host), or `./<path>`, a file in the bundle: `.webm` or `.mp4` for a video, `.webp` or `.avif` for a picture, `.json` for Lottie. The file must be what `type` says and within a Look background's limits (video 12 MiB, picture 6 MiB, Lottie 1 MiB, and the bundle's 2 MiB in all), or the bundle is refused; it is checked again each time a page asks for it. A video file may be in a bundle only as this. The gallery takes only `./` files. |
 | `anim` | Keyframes for `page.enter` `panel.enter` `card.enter` `tile.enter` `rail.open` `tooltip.in` `card.hover` `button.press`. |
 | `fx` | Effects for `complete` `submit` `grade` `streak` `timer.done` `look.rotate`. |
 | `cursor` | `trail`, `sparkle`, `ripple` or `glow`. |
