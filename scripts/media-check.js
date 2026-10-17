@@ -4,7 +4,8 @@
 // without controls, really playing, frozen on its first frame with motion off, paused while the tab is hidden, and the
 // gradient left alone, with nothing thrown, when it can't load. Pixels are read from screenshots, so "playing" and "frozen" are
 // what a person would see. Then the editor: the builder's controls write the part, a file is kept and listed and removed, and
-// the preview frame draws it and tells its parent.
+// the preview frame draws it and tells its parent. Then a mod's own background file (an animated WebP and a Lottie file in its
+// bundle, `mod:<id>/<path>` on the page), and a gallery Look's file fetched from the gallery's media address (routed here).
 //   nice -n 10 NODE_PATH=/path/to/node_modules node scripts/media-check.js [out-dir]
 // One headless browser at a time across agents: wait while another is running. Every profile is temporary, and no request
 // leaves the fixture (a host-resolver rule maps every name to nothing, and the page's own routes answer).
@@ -25,11 +26,16 @@ const fixture = '<!doctype html><html lang="en"><head><base href="//ultra-cdn.in
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The frame colours of anim.webp (48x48, three frames of 100 ms), and the spin.json box (red, 40 wide, from x 40 to 160 in a 200x120 design).
 const FRAMES = [[0, 255, 80], [100, 155, 80], [200, 55, 80]];
+const M = require(path.join(ext, 'lib/media.js'));
+const S = require(path.join(ext, 'lib/share.js'));
 const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
 
 (async () => {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-media-check-')));
   const results = [], errors = [], blocked = [], served = [];
+  // The gallery, routed: its Looks page, and its media files by name (what each name serves, and which were asked for).
+  let galleryPage = '';
+  const galleryFiles = new Map(), galleryAsked = [];
   const check = (name, ok, detail) => { results.push({ name, ok: !!ok, detail: ok ? undefined : detail }); };
   let context, failure;
   try {
@@ -42,6 +48,13 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     await context.route('**/*', (r) => {
       const u = new URL(r.request().url());
       if (u.protocol === 'chrome-extension:') return r.continue();
+      if (u.origin === 'https://frostdev.io') {
+        if (u.pathname === '/glaze/looks/') return r.fulfill({ contentType: 'text/html', body: galleryPage });
+        const h = u.pathname.startsWith('/glaze/looks/api/media/') ? u.pathname.slice(23) : '';
+        if (h) galleryAsked.push(h);
+        if (galleryFiles.has(h)) return r.fulfill({ status: 200, headers: { 'content-type': 'image/webp', 'cache-control': 'public, max-age=31536000, immutable', etag: `"${h}"` }, body: galleryFiles.get(h) });
+        return r.fulfill({ status: 404, body: 'no' });
+      }
       if (u.origin !== origin) { blocked.push(u.href); return r.abort(); }
       if (u.pathname.startsWith('/ultra')) return r.fulfill({ contentType: 'text/html', body: fixture });
       if (u.pathname.startsWith('/learn/api/')) return r.fulfill({ json: u.pathname.endsWith('/users/me') ? { id: '_900_1' } : { results: [] } });
@@ -408,6 +421,63 @@ const near = (a, b, tol = 24) => a.every((v, i) => Math.abs(v - b[i]) <= tol);
     check('  adding it puts a re-encoded pet in the library, marked with where it came from', !!added && /^data:image\/webp/.test(added.data) && added.name === 'Mochi 2' && added.spriteVersionNumber === 2, JSON.stringify(added)?.slice(0, 200));
     check('  and the mods list now says it is added', await pets.waitForFunction(() => /Mochi 2 · Garden Added/.test(document.getElementById('pet-library').textContent), null, { timeout: 10000 }).then(() => true, () => false), (await pets.locator('#pet-library').textContent()).slice(-300));
     await pets.close();
+
+    // ---- a mod's own background file ----------------------------------------------------------------------------------
+    // An animated WebP in the mod's bundle, laid over the Look as `mod:<id>/bg/a.webp` and asked of the worker, cleaned.
+    // The student's kind is media too, so the fixture's surfaces let the background show for the pixel checks.
+    const bgMod = (media, files) => record({ manifest: { ...record().manifest, packs: undefined, parts: { bg: { media } } }, files });
+    const seedBg = async (mod) => { await seed('subtle', mod); await opts.evaluate(async (bg) => chrome.storage.sync.set({ bg }), { ...D.GZ_DEFAULTS.bg, kind: 'media' }); };
+    await seedBg(bgMod({ type: 'image', src: './bg/a.webp', fit: 'fill', dim: 0 }, { 'bg/a.webp': b64('anim.webp') }));
+    page = await open();
+    check('a mod\'s bundled animated picture is its background', await sceneThere(page) && await waitFor(page, "document.querySelector('#gz-scene img')?.complete"), 'no scene');
+    check('  it is an img of a blob the page made from the worker\'s cleaned copy', (await isolated(page, "(document.querySelector('#gz-scene img')?.currentSrc || '').slice(0, 5)")) === 'blob:', 'src');
+    const modColours = [];
+    for (let i = 0; i < 14; i++) { modColours.push(await pixel(page, 900, 600)); await sleep(60); }
+    check('  it moves (more than one of its frames on screen)', new Set(modColours.map((c) => FRAMES.findIndex((f) => near(f, c, 30))).filter((i) => i >= 0)).size >= 2, JSON.stringify(modColours));
+    await shot(page, 'mod-image');
+    await page.close();
+    await seedBg(bgMod({ type: 'lottie', src: './spin.json', fit: 'cover', dim: 0 }, { 'spin.json': b64('spin.json') }));
+    page = await open();
+    check('a mod\'s bundled Lottie file is its background, drawn by the player', await sceneThere(page) && await waitFor(page, "document.querySelector('#gz-scene canvas')"), 'no canvas');
+    await sleep(300);
+    check('  the red box is on screen', !!(await redSpan(page)), 'no red');
+    await page.close();
+    await seedBg(bgMod({ type: 'image', src: './bg/a.webp', fit: 'fill', dim: 0 }, { 'bg/a.webp': b64('anim.webp') }));
+    await opts.evaluate(async (id) => { const k = `mod:${id}`; const r = (await chrome.storage.local.get(k))[k]; await chrome.storage.local.set({ [k]: { ...r, enabled: false } }); }, MOD);
+    page = await open();
+    await sleep(2000);
+    check('the mod turned off: no background from its file', (await isolated(page, "!document.getElementById('gz-scene')")) === true, 'scene');
+    await page.close();
+
+    // ---- a gallery Look's file -----------------------------------------------------------------------------------------
+    const cleaned = Buffer.from(M.check(new Uint8Array(fs.readFileSync(path.join(fixtures, 'anim.webp'))), 'bg').bytes);
+    const good = await M.sha(new Uint8Array(cleaned)), wrong = 'B'.repeat(43);
+    galleryFiles.set(good, cleaned).set(wrong, fs.readFileSync(path.join(fixtures, 'still.webp')));
+    const useLook = async (h) => {
+      await wipe();
+      const code = await S.encode(D.GZ_SANITIZE({ bg: { kind: 'media' } }), {}, { x: { bg: { media: { type: 'image', src: `file:${h}`, fit: 'fill', dim: 0 } } } });
+      galleryPage = `<!doctype html><title>Looks</title><a href="/glaze/looks/how" data-glaze-use data-code="${code}" data-name="Spin" data-author="kai">Use this Look in Glaze</a>`;
+      // The editor already open (opts) takes the offer: openOptionsPage reuses its tab.
+      const g = await context.newPage();
+      g.on('pageerror', (e) => errors.push(`gallery: ${e.message}`));
+      await g.goto('https://frostdev.io/glaze/looks/');
+      await g.click('a[data-glaze-use]');
+      const e = opts;
+      await g.close();
+      await e.waitForFunction(() => !document.getElementById('share-offer').hidden, null, { timeout: 15000 });
+      return e;
+    };
+    await ed.close();
+    let ged = await useLook(good);
+    const keptGallery = await opts.evaluate(async (h) => (await chrome.storage.local.get(`lookMedia:${h}`))[`lookMedia:${h}`]?.t, good);
+    check('Use this Look: the worker fetched the Look\'s file from the gallery and kept it by its name', galleryAsked.includes(good) && keptGallery === 'image/webp', JSON.stringify([galleryAsked, keptGallery]));
+    check('  the editor previews the Look with that file as its background', await ged.waitForFunction(() => !!document.getElementById('preview')?.contentDocument?.querySelector('#gz-scene img, #gz-scene canvas'), null, { timeout: 15000 }).then(() => true, () => false), 'no scene in the preview');
+    if (out) await ged.screenshot({ path: path.join(out, 'gallery-look.png') });
+    ged = await useLook(wrong);
+    const keptWrong = await opts.evaluate(async () => Object.keys(await chrome.storage.local.get(null)).filter((k) => k.startsWith('lookMedia:')));
+    check('a file that is not the one the Look names: asked for, not kept, and the Look is still offered', galleryAsked.includes(wrong) && keptWrong.length === 0, JSON.stringify(keptWrong));
+    await sleep(2000);
+    check('  the preview shows no background from it', await ged.evaluate(() => !document.getElementById('preview')?.contentDocument?.querySelector('#gz-scene img, #gz-scene video')), 'scene');
 
     assert.deepEqual(errors, [], `page errors: ${errors.join(' | ')}`);
     assert.deepEqual(blocked.filter((u) => !/ultra-cdn\.invalid/.test(u)), [], 'no request left the fixture');
