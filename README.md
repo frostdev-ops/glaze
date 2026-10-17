@@ -23,7 +23,7 @@ domain. No account, no analytics: what Glaze keeps stays on your device.
 
 - **Your look:** palettes, fonts, frosted glass, gradients, animated scenes and video backgrounds, a color or Look per
   course, styled course cards, stickers and pointers. Share a Look as one line of text, or browse the free
-  [Looks gallery](https://frostdev.io/glaze/looks).
+  [Looks gallery](https://frostdev.io/glaze/looks) and [Mods gallery](https://frostdev.io/glaze/mods).
 - **Plan your week:** Better To Do with your own tasks and focus sessions, reminders, a class schedule read from your
   timetable, and calendar export or Google Calendar sync.
 - **Know your grades:** what-if calculators that follow your course's own rules, a GPA with past terms, trends and a goal,

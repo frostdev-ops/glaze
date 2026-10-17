@@ -16,7 +16,7 @@ The settings editor has eight tabs: **Look, Blackboard, Canvas, Moodle, Study to
 
 ## Mods
 
-From Glaze 3.0.4: add backgrounds, animations, widgets, nav layouts and page tweaks made by others, each showing what it reads and why before you add it, or build your own widget with no code. Looks can have video and animated backgrounds too.
+From Glaze 3.0.4: add backgrounds, animations, widgets, nav layouts and page tweaks made by others, each showing what it reads and why before you add it, or build your own widget with no code. Reviewed mods are in the [Mods gallery](https://frostdev.io/glaze/mods). Looks can have video and animated backgrounds too.
 
 **User-installed mods:** Chrome can run JavaScript from mod bundles you choose to install, including author-signed channel updates. Glaze does not fetch mod code to run automatically from us. Code runs in an isolated sandbox without extension APIs; Firefox and Safari use declarative parts only. Courses, to-dos and grades are available only with declared and granted permissions, and only to a DOM-less Worker. Brokered network requests require a declared and granted exact HTTPS host and omit cookies and referrers. A mod with both data and network access can send that data to its granted hosts. A mod without data access may use a frame UI that can contact other sites; linked Look media also contacts its chosen host. Mod bundles, grants, settings and per-mod storage stay on this device. See [PRIVACY.md](../PRIVACY.md) for channels and the optional signed blocklist.
 
