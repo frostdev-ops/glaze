@@ -67,12 +67,12 @@ test('a card storage answer held across reload does not resume painting', async 
 });
 
 test('stale sticker draw and place callbacks bail before constructing asset elements', () => {
-  const source = read('features/lookx.js'); let removed = 0, made = 0;
+  const source = read('features/lookx.js'); let removed = 0, made = 0, stopped = 0;
   const c = { ctx: { on: () => false }, editing: true, list: [{}], layer: { remove: () => removed++ },
-    sheet: () => { throw new Error('invalidated getURL'); }, make: () => made++ };
+    dropLotties: () => stopped++, sheet: () => { throw new Error('invalidated getURL'); }, make: () => made++ };
   const drawStart = source.indexOf('  const draw = '), drawEnd = source.indexOf('  // A change to one sticker', drawStart);
   const draw = vm.runInNewContext(`${source.slice(drawStart, drawEnd)} draw`, c);
-  assert.doesNotThrow(draw); assert.equal(removed, 1); assert.equal(made, 0);
+  assert.doesNotThrow(draw); assert.equal(stopped, 1); assert.equal(removed, 1); assert.equal(made, 0);
   const placeStart = source.indexOf('  const place = '), placeEnd = source.indexOf('  // ---- sticker mode', placeStart);
   const place = vm.runInNewContext(`${source.slice(placeStart, placeEnd)} place`, {
     ctx: c.ctx, editing: true, layer: { getBoundingClientRect: () => { throw new Error('stale placement'); } },
