@@ -1,6 +1,7 @@
 // Canvas's dashboard cards, loaded on demand (content.js syncCards, and its course menu's "Card style and
 // bookmarks"): the card settings (sync `card`), each card's own style and bookmarks (`cards`, `links`), the pet,
-// the create button and the editor. What is kept and what it paints is lib/cards.js; how it looks is canvas.css.
+// the create button and the editor. On Ultra, its boards' Course cards dialog (features/coursecards.js) saves a card's
+// style and picture through here too (setKind, setLink, setPicture), as the editor does. What is kept and what it paints is lib/cards.js; how it looks is canvas.css.
 // Classic script in content.js's isolated world, through GZ_CTX; a second injection keeps the first.
 var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   const { need, t, capi } = globalThis.GZ_CTX;
@@ -88,6 +89,8 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
       const own = editing?.key === key ? editing : null;
       const style = key ? K.pick(own ? { ...d.cards, [key]: own.style } : d.cards, key, order.get(key)) : null;
       dress(el, style && K.paint(style, src(d, style)));
+      // A preview (the Course cards dialog's) wears the style, and nothing that is used: no bookmarks, no pet.
+      if (el.hasAttribute('data-gz-card-preview')) continue;
       if (ultra) prop(el, '--gz-card-banner-h', on && card.condensed ? `${el.querySelector('.course-banner')?.offsetHeight || card.height}px` : '');
       if (!ultra && !el.classList.contains('ic-DashboardCard')) continue;
       bookmarks(el, key && d.card.icons ? (own ? own.links.map(K.link).filter(Boolean) : d.links[key]) : null);
@@ -205,6 +208,16 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   }, true);
   document.addEventListener('pointerdown', (e) => { if (mk && !mk.box.contains(e.target) && !mk.btn.contains(e.target)) closeMk(); }, true);
 
+  // The course color a card shows (a pick on it, else its Ultra slot's as Glaze tones it): what a new color or gradient
+  // starts from, in the editor and the Course cards dialog.
+  const colorOf = (key) => {
+    const el = cardOf(key);
+    return C.hex(C.parse(el?.style.getPropertyValue('--gz-course-raw') || (ultra && GZ_CTX.courseColor?.(el?.className.match(/course-color-(\d+)/)?.[1])) || '') || { r: 128, g: 128, b: 128 });
+  };
+  // The style a kind starts as ('' is the course's own color): from what the card wore (`was`) and `base`, its color.
+  const starting = (v, was, base) => (v === 'solid' ? { k: 'solid', c: was?.c || base }
+    : v === 'gradient' ? { k: 'gradient', c: was?.c || base, d: was?.d || C.mix(base, '#000000', 0.5), a: was?.a ?? 135 } : null);
+
   // ---- the editor: a dialog for one course's style and bookmarks ----
   // Every change shows on the card at once (editing, above) and is saved half a second after the last one.
   let ed = null; // { key, dlg, style, links, note, … }
@@ -261,23 +274,24 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (dlg.open) dlg.close();
     dlg.remove();
     paint();
-    document.getElementById(`gz-cm-${ultra ? key.split('/').pop() : key}`)?.focus({ preventScroll: true });
+    (e.back?.isConnected ? e.back : document.getElementById(`gz-cm-${ultra ? key.split('/').pop() : key}`))?.focus({ preventScroll: true });
     return true;
   };
 
-  const open = async (key) => {
+  // back: what has the focus once it closes (the Course cards dialog's button); else the card's menu button.
+  const open = async (key, back = null) => {
     if (ultra && /^_\d+_\d+$/.test(key)) key = `ultra:${location.origin}/${key}`;
     if (!await close()) return;
     let d;
     try { d = await read(); } catch { return; }
     const card = cardOf(key);
     const name = nameOf(card);
-    const courseColor = () => C.hex(C.parse(cardOf(key)?.style.getPropertyValue('--gz-course-raw') || (ultra && GZ_CTX.courseColor?.(cardOf(key)?.className.match(/course-color-(\d+)/)?.[1])) || '') || { r: 128, g: 128, b: 128 });
+    const courseColor = () => colorOf(key);
     const dlg = make('dialog', { id: 'gz-ce' });
     dlg.setAttribute('aria-labelledby', 'gz-ce-title');
     const note = make('p', { className: 'gz-ce-note', hidden: true });
     note.setAttribute('role', 'alert');
-    ed = { key, dlg, note, style: d.cards[key] ? { ...d.cards[key] } : null, links: (d.links[key] || []).map((l) => ({ ...l })) };
+    ed = { key, dlg, note, back, style: d.cards[key] ? { ...d.cards[key] } : null, links: (d.links[key] || []).map((l) => ({ ...l })) };
     editing = ed;
 
     // -- style --
@@ -383,7 +397,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
         const v = r.value;
         // A picture: the card keeps what it wears until the picture has an address or a file.
         if (v === 'image') { for (const [g, rows] of Object.entries(groups)) for (const row of rows) row.hidden = g !== 'image'; url.focus(); return; }
-        change(v === 'solid' ? { k: 'solid', c: was?.c || base } : v === 'gradient' ? { k: 'gradient', c: was?.c || base, d: was?.d || C.mix(base, '#000000', 0.5), a: was?.a ?? 135 } : null, false);
+        change(starting(v, was, base), false);
         fill();
       });
     }
@@ -539,24 +553,54 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (!here()) return;
     await turn(mine, async () => {
       if (!here()) return;
-      const s = { ...base, k: 'image' };
-      delete s.u;
-      delete s.i;
-      const r = await send({ key: mine.key, style: s, links: mine.links.map(K.link).filter(Boolean), image: url });
+      const r = await keep(mine.key, base, url, mine.links.map(K.link).filter(Boolean));
       if (!r.ok) { if (ed === mine) say(t(SAID[r.error] || SAID.write)); return; }
-      if (data) data.imgs[`${imageKey}${r.id}`] = url;
       // The draft takes the saved picture, unless a newer pick has started since.
       if (mine.pick !== rev) return;
       mine.leave = false;
-      mine.style = K.style({ ...s, i: r.id });
+      mine.style = r.style;
       paint();
     });
   };
+  // A picture's data URL saved as `key`'s own, over `base` (a picture style's filter, focus…); its bookmarks too when
+  // given. → the worker's answer, with the style as saved.
+  const keep = async (key, base, url, links) => {
+    const s = { ...base, k: 'image' };
+    delete s.u;
+    delete s.i;
+    const r = await send({ key, style: s, ...(links && { links }), image: url });
+    if (!r.ok) return r;
+    if (data) data.imgs[`${imageKey}${r.id}`] = url;
+    return { ...r, style: K.style({ ...s, i: r.id }) };
+  };
+
+  // ---- one course's style, saved without the editor (Ultra's Course cards dialog) ----
+  // Each is one save through the worker, as the editor's are, the course's bookmarks left as they are, and answers
+  // { ok, style (as saved) } or { ok: false, error }; say(answer) is what to tell the student.
+  const styleOf = async (key) => { try { return (await read()).cards[key] || null; } catch { return null; } };
+  const saved = async (key, style) => { const r = await send({ key, style }); return r.ok ? { ...r, style: style && K.style(style) } : r; };
+  // A kind ('' the course's color, 'solid', 'gradient'), from what the card wears; `c`, a color it should have.
+  const setKind = async (key, v, c) => {
+    const was = await styleOf(key);
+    return saved(key, starting(v, c ? { ...was, c } : was, colorOf(key)));
+  };
+  const setLink = async (key, url) => {
+    const was = await styleOf(key);
+    const s = K.style({ ...(was?.k === 'image' ? was : {}), k: 'image', u: url, i: undefined });
+    return s?.u ? saved(key, s) : { ok: false, error: 'link' };
+  };
+  const setPicture = async (key, file) => {
+    const was = await styleOf(key);
+    let url;
+    try { url = await K.picture(file); } catch (e) { return { ok: false, error: e.message === 'cap' ? 'cap' : 'file' }; }
+    return keep(key, was?.k === 'image' ? was : { k: 'image' }, url);
+  };
+  const told = (r) => (r.ok ? '' : t(r.error === 'link' ? 'Use an https:// link to an image.' : r.error === 'file' ? "That file isn't a picture Glaze can read." : SAID[r.error] || SAID.write));
 
   // A picture's average color, through its filter, for the contrast line; null when its site doesn't allow reading it.
   const average = (url, f) => K.average(url, f);
 
-  return { paint, open };
+  return { paint, open, styleOf, setKind, setLink, setPicture, say: told };
 })();
 // The module as the script's last value: how lib/background.js knows it ran to the end.
 GZ_CARD_UI;
