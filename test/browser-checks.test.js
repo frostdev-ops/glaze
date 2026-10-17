@@ -49,3 +49,12 @@ test('browser wait fails closed if the probe fails or another browser never exit
 test('the mod channel browser check is available alongside the Mods section check', () => {
   assert.ok(fs.existsSync(path.join(scripts, 'mods-channel-check.js')));
 });
+
+test('the blocklist browser check seeds complete installed manifests for the real editor', () => {
+  const source = fs.readFileSync(path.join(scripts, 'blocklist-check.js'), 'utf8');
+  const fixture = source.slice(source.indexOf('const record = '), source.indexOf('\n(async () =>'));
+  const rec = vm.runInNewContext(`${fixture}\nrecord('aaaaaaaaaaaaaaaa')`);
+  const files = Object.fromEntries(Object.entries(rec.files || {}).map(([p, b]) => [p, new Uint8Array(Buffer.from(b, 'base64'))]));
+  assert.doesNotThrow(() => require('../lib/modbundle.js').clean(rec.manifest, files));
+  assert.equal(typeof rec.manifest.author.name, 'string');
+});

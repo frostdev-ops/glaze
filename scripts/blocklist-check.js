@@ -23,7 +23,8 @@ const sign = (list) => ({ list, sig: crypto.sign(null, Buffer.from(`glaze-blockl
 const BAD = 'aaaaaaaaaaaaaaaa', OTHER = 'bbbbbbbbbbbbbbbb';
 const now = Date.now(), iso = (t) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const list = (seq, over = {}) => ({ v: 1, seq, issued: iso(now - 36e5), expires: iso(now + 6 * 864e5), mods: [BAD], bundles: [], authors: [], reasons: { [BAD]: 'Sends grades to a third party.' }, ...over });
-const record = (id) => ({ id, manifest: { name: id, hooks: 'hooks.js' }, hash: 'h'.repeat(43), key: 'k'.repeat(43), version: '1.0.0', grants: {}, enabled: true });
+const record = (id) => ({ id, manifest: { glaze: 1, name: id, version: '1.0.0', author: { name: 'Check author', key: 'k'.repeat(43) }, hooks: 'hooks.js' },
+  files: { 'hooks.js': 'dm9pZCAwOw==' }, hash: 'h'.repeat(43), key: 'k'.repeat(43), version: '1.0.0', grants: {}, enabled: true });
 
 (async () => {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-blocklist-')));
