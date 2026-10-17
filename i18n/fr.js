@@ -2494,6 +2494,8 @@
   "author key {key}": "clé d’auteur {key}",
   "Reviewed": "Vérifié",
   "Dev": "Dev",
+  "Its background loads from {host}: that site can see your address and when you use it.": "Son arrière-plan est chargé depuis {host} : ce site peut voir votre adresse et quand vous l’utilisez.",
+  "It asks for no data or page of its own.": "Il ne demande ni données ni page à lui.",
   "It asks for nothing: no data, no network and no page of its own.": "Il ne demande rien : ni données, ni réseau, ni page à lui.",
   "It now also asks for what is marked New.": "Il demande maintenant aussi ce qui est marqué Nouveau.",
   "It asks for:": "Il demande :",

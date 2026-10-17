@@ -2494,6 +2494,8 @@
   "author key {key}": "clave de autor {key}",
   "Reviewed": "Revisado",
   "Dev": "Dev",
+  "Its background loads from {host}: that site can see your address and when you use it.": "Su fondo se carga desde {host}: ese sitio puede ver tu dirección y cuándo lo usas.",
+  "It asks for no data or page of its own.": "No pide datos ni una página propia.",
   "It asks for nothing: no data, no network and no page of its own.": "No pide nada: ni datos, ni red, ni página propia.",
   "It now also asks for what is marked New.": "Ahora también pide lo marcado como Nuevo.",
   "It asks for:": "Pide:",
