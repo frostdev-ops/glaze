@@ -154,12 +154,21 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await page.waitForTimeout(700); // the agenda and the notes arrive
     };
     const editingStill = async (label) => {
-      await stable();
-      const geometry = () => page.evaluate(() => [...document.querySelectorAll('#gz-dash .gz-w, #gz-room > .gz-w')].map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.tile, r.left, r.top + scrollY, r.width, r.height]; }));
-      const before = JSON.stringify(await geometry());
-      for (const state of ['Edit layout', 'Done']) {
-        await page.click('.gz-dash-edit'); await stable();
-        ok(JSON.stringify(await geometry()) === before, `${label}: ${state} keeps tile dimensions and spots`);
+      // Quotes turn on a wall-clock boundary, even halfway through Done. Hold that content still, not the layout.
+      const cycling = await page.evaluate(() => {
+        const b = document.querySelector('section.gz-w[data-tile="quotes"] button[aria-pressed="false"]');
+        b?.click(); return !!b;
+      });
+      try {
+        await stable();
+        const geometry = () => page.evaluate(() => [...document.querySelectorAll('#gz-dash .gz-w, #gz-room > .gz-w')].map((e) => { const r = e.getBoundingClientRect(); return [e.dataset.tile, r.left, r.top + scrollY, r.width, r.height]; }));
+        const before = JSON.stringify(await geometry());
+        for (const state of ['Edit layout', 'Done']) {
+          await page.click('.gz-dash-edit'); await stable();
+          ok(JSON.stringify(await geometry()) === before, `${label}: ${state} keeps tile dimensions and spots`);
+        }
+      } finally {
+        if (cycling) await page.evaluate(() => document.querySelector('section.gz-w[data-tile="quotes"] button[aria-pressed="true"]')?.click());
       }
     };
     const notes = { [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
@@ -510,8 +519,15 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
       await stable();
       ok(await page.evaluate((n) => document.querySelector('#gz-ccm .gz-ccm-count').textContent === `On this board: ${n}. Room for ${48 - n} more.` && document.querySelectorAll('#gz-ccm .gz-ccm-item[data-on]').length === n, native), `B10 ${preset} ${width}: Select all ticks them all, and the count says so`);
       await page.mouse.move(0, 0); await shot(`b10-modal-${preset.toLowerCase()}-${width}`);
+      ok(await page.locator('#gz-ccm .gz-ccm-tools button').evaluateAll((es) => es.every((e) => e.getBoundingClientRect().top === es[0].getBoundingClientRect().top)), `B10 ${preset} ${width}: selection buttons stay together`);
+      const rowBefore = await page.locator('#gz-ccm .gz-ccm-card').evaluateAll((es) => es.map((e) => { const r = e.getBoundingClientRect(), g = e.closest('.gz-ccm-grid').getBoundingClientRect(); return { left: r.left - g.left, top: r.top - g.top, width: r.width }; }).filter((r, i, rs) => r.top === rs[0].top));
       await page.click('#gz-ccm .gz-ccm-item .gz-ccm-style');
       await page.waitForSelector('#gz-ccm .gz-ccm-look:not([hidden])');
+      ok(await page.evaluate((before) => {
+        const cards = [...document.querySelectorAll('#gz-ccm .gz-ccm-card')].slice(0, before.length).map((e) => e.getBoundingClientRect());
+        const look = document.querySelector('#gz-ccm .gz-ccm-look').getBoundingClientRect(), grid = document.querySelector('#gz-ccm .gz-ccm-grid').getBoundingClientRect();
+        return cards.every((r, i) => r.left - grid.left === before[i].left && r.top - grid.top === before[i].top && r.width === before[i].width) && Math.abs(look.left - grid.left) < 1 && Math.abs(look.width - grid.width) < 1 && look.top >= Math.max(...cards.map((r) => r.bottom));
+      }, rowBefore), `B10 ${preset} ${width}: Style spans below its row without displacing its neighbours`);
       await page.mouse.move(0, 0); await shot(`b10-modal-style-${preset.toLowerCase()}-${width}`);
       if (preset === 'Paper' && width === 1280) {
         // A look from the dialog: the second course a gradient, then a picture from this computer; both on its board card.
@@ -521,6 +537,12 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         await item.locator('.gz-ccm-kinds label', { hasText: 'Gradient' }).click();
         await page.waitForSelector(`${onBoard}[data-gz-card="gradient"]`);
         ok(await item.locator('article[data-gz-card="gradient"]').count() === 1, 'B10: a gradient chosen in the dialog shows on its card and its preview');
+        await opts.evaluate(() => { globalThis.quickWrites = 0; globalThis.countQuickWrites = (ch, area) => { if (area === 'sync' && ch.ucards) quickWrites++; }; chrome.storage.onChanged.addListener(countQuickWrites); });
+        await item.locator('input[type="color"]').evaluate((e) => { for (const c of ['#123456', '#234567', '#345678']) { e.value = c; e.dispatchEvent(new Event('input', { bubbles: true })); } });
+        await page.waitForFunction((id) => document.querySelector(`#gz-ccm article[data-course-id="${id}"]`).style.getPropertyValue('--gz-card-c') === '#345678', id);
+        ok(await opts.evaluate(() => quickWrites === 0), 'B10: quick color previews before a sync write');
+        await until(() => opts.evaluate(async (k) => (await chrome.storage.sync.get('ucards')).ucards?.[k]?.c, ukey), (c) => c === '#345678', 'quick color was not saved');
+        ok(await opts.evaluate(() => { chrome.storage.onChanged.removeListener(countQuickWrites); return quickWrites === 1; }), 'B10: rapid color input settles into one sync write');
         await item.locator('.gz-ccm-kinds label', { hasText: 'Picture' }).click();
         await item.locator('input[type="file"]').setInputFiles({ name: 'lab.png', mimeType: 'image/png', buffer: png() });
         await page.waitForSelector(`${onBoard}[data-gz-card="image"]`);
