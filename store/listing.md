@@ -149,11 +149,13 @@ The theme stylesheets (theme.css, motion.css, extras.css, canvas.css, moodle.css
 
 ## Remote code
 
-None. All executable code ships in the package, including the bundled three.js (MIT), lottie-web's light player (MIT, no expression support, so nothing in an animation file is ever run), PDF.js (Apache-2.0) and Tesseract OCR engine (Apache-2.0). The extension's own pages allow 'wasm-unsafe-eval' only so the packaged OCR engine's WebAssembly can run; it never runs in LMS pages. Optional web fonts, background images, videos and animations are data, not code.
+Glaze's built-in executable code ships in the package, including three.js (MIT), lottie-web's light player (MIT, without expression support), PDF.js (Apache-2.0) and Tesseract OCR (Apache-2.0). Chrome also supports user-installed mods: JavaScript comes from bundles the user chooses to install, including author-signed channel updates, and runs in an isolated sandbox without extension APIs. Glaze does not fetch mod code to run automatically from us. Firefox and Safari use declarative mod parts only. The extension's own pages allow 'wasm-unsafe-eval' for packaged OCR WebAssembly; mod code runs only in the sandbox. Web fonts, images, videos and animations are data.
+
+Mod data access requires declared and granted permissions; personal data reaches only a DOM-less Worker. Brokered requests require a declared and granted exact HTTPS host, omit cookies and referrers, and refuse redirects. A mod granted both data and network access can send that data to those hosts. A mod without data access may use a frame UI that contacts other sites, and linked Look media contacts its chosen host. Install prompts disclose capabilities; mod bundles, grants, settings and per-mod storage stay on the device. Channel and optional signed blocklist requests are described in PRIVACY.md.
 
 ## Data usage (privacy practices tab)
 
-Glaze does not collect user data: nothing reaches the developer except share-session content the user chooses to share, which is encrypted on the device before upload, so the relay (share.frostdev.io) cannot read it. Answer the data-use certifications as before: no sale, no use unrelated to the single purpose, no creditworthiness or lending use.
+Glaze has no analytics and does not sell user data or use it for unrelated purposes, creditworthiness or lending. Optional share sessions and mod channels send encrypted content to the selected relay. The optional signed blocklist sends a fixed credential-free GET without student identifiers. User-installed mods and linked media may contact other hosts as described above; a mod granted personal data and network access can send that data to its granted hosts. These services receive ordinary connection information such as an IP address. Keep the store's data-use answers consistent with these behaviors and PRIVACY.md.
 
 ## Screenshot and promo delivery
 

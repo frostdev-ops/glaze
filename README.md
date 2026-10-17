@@ -9,6 +9,8 @@
 
 **New in 3.0.4:** Mods. Add backgrounds, animations, widgets, nav layouts and page tweaks made by others, each showing what it reads and why before you add it, or build your own widget with no code. Looks can have video and animated backgrounds too.
 
+**User-installed mods:** Chrome can run JavaScript from mod bundles you choose to install, including author-signed channel updates. Glaze does not fetch mod code to run automatically from us. Code runs in an isolated sandbox without extension APIs; Firefox and Safari use declarative parts only. Courses, to-dos and grades are available only with declared and granted permissions, and only to a DOM-less Worker. Brokered network requests require a declared and granted exact HTTPS host and omit cookies and referrers. A mod with both data and network access can send that data to its granted hosts. A mod without data access may use a frame UI that can contact other sites; linked Look media also contacts its chosen host. Mod bundles, grants, settings and per-mod storage stay on this device. See [PRIVACY.md](PRIVACY.md) for channels and the optional signed blocklist.
+
 **From 3.0.3:** Choose one pet character for the habitat, Study buddy, Blackboard navigation badge and course-card pet. The original Cat and Bunny join the character selector, and Blackboard file previews refresh expired viewer tickets and retry while uploaded files convert.
 
 
@@ -306,7 +308,7 @@ Course tabs show an automatic short name by default, with common term/section wr
 Reminders, what you've snoozed or muted and your streak stay on your device as well, and so do your marks on documents; reminders show only inside Canvas and Blackboard pages, and Glaze has no notifications permission.
 With Gradescope in To Do on, Glaze reads your own Gradescope course pages (read-only, signed in as you) and keeps the assignments on your device; nothing from Gradescope goes anywhere else.
 It has no analytics. Glaze's writes anywhere are opt-in: with Better To Do's "Tick off in Canvas too" on, ticking an item
-marks it done or not done in your own Canvas planner, as Canvas's List View does, and with Google Calendar sync connected it writes to the one calendar it made in your Google account. The extension's other requests are read-only and go to your own Blackboard, Canvas or Moodle site
+marks it done or not done in your own Canvas planner, as Canvas's List View does, and with Google Calendar sync connected it writes to the one calendar it made in your Google account. Apart from the optional sharing and mods described above, the extension's other requests are read-only and go to your own Blackboard, Canvas or Moodle site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards; on Canvas a course's assignment groups when you use its what-if calculator;
 on Blackboard each course's grading schemas for the GPA, a course's grade categories when its what-if needs their names, this term's

@@ -1,6 +1,23 @@
 # Privacy Policy — Glaze
 
-_Last updated: 2026-10-15_
+_Last updated: 2026-10-17_
+
+## User-installed mods
+
+Chrome can run JavaScript from mod bundles you choose to install, including author-signed channel updates.
+Glaze does not fetch mod code to run automatically from us. Code runs in an isolated sandbox without extension APIs;
+Firefox and Safari use declarative parts only. Courses, to-dos and grades require declared and granted permissions,
+are scoped to the requesting school's origin, and reach only a DOM-less Worker. Brokered network requests require
+a declared and granted exact HTTPS host, omit cookies and referrers, and refuse redirects. A mod granted both data
+and network access can send that data to its granted hosts. A mod without data access may have a frame UI that can
+contact other sites; linked Look media also contacts its chosen host. Those sites receive ordinary connection
+information, including your IP address. Information rendered on a school page is visible as page content.
+
+Installed bundles, grants, settings, per-mod storage, author trust pins and runtime stop status stay in device-local
+extension storage. The optional mod-development tools also keep your author signing key there; protect exported
+key backups. Removing a mod removes its data and settings, while its author/version trust pin remains until you
+explicitly clear it. Channel traffic and the optional signed blocklist are described below. Glaze adds no analytics
+or default notifications for mods.
 
 ## 3.0.1 surface settings and local pets
 
@@ -304,7 +321,8 @@ services, which receive ordinary connection information such as your IP address.
 
 Ultra appearance uses the visible course-card banners and existing color slots; it makes no LMS API requests. Linked images load from their chosen HTTPS hosts, exactly as on Canvas. The Ultra document viewer has no added iframe injection or host access.
 
-The browser extension ships as static files and loads no remote scripts. Its built-in fonts, three.js (used by the
+Glaze's built-in features ship as static files and load no remote scripts; user-installed mods are described above.
+Its built-in fonts, three.js (used by the
 animated backgrounds), lottie-web's light player (used for Lottie animations), pdf.js and the Tesseract OCR engine with its six language models (used to read PDFs and photos
 you import) are bundled. It makes requests in these cases:
 
@@ -637,7 +655,7 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
   typed-text backups, Looks history and favorites, Dashboard notes and widgets, the notes app's index, Google Calendar sync's state, and Safari update-check timestamp described above.
   Notes' text, pictures and attachments are in the extension's own IndexedDB.
 - No permission for reading PDFs and photos. The extension's own pages may compile WebAssembly (`'wasm-unsafe-eval'` in
-  its content security policy), which the OCR engine needs; it still runs only code that ships in the package, and
+  its content security policy), which the OCR engine needs; the reader runs only code that ships in the package, and
   never in the LMS page. The reader page is web-accessible so an import can open it in a frame; it reads a file only
   with a one-use pass that Glaze's import gets from its own background worker, so a site that framed it itself can't
   make it read anything.
