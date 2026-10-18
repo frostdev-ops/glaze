@@ -15,7 +15,7 @@ extension reload. Run `node --test` before sending a change.
 - `theme.css` (palette and page polish), `motion.css` (motion levels), `extras.css` (backgrounds and extras).
 - `defaults.js` — the settings schema, defaults, presets and `GZ_SANITIZE`. `lib/` — pure helpers with tests in `test/`, plus `scene.js` (the animated backgrounds) and the vendored `three.min.js`.
 - `popup.*`, `options.*`, `ui.*` — the popup, the editor and what they share. `preview.html` is the editor's mock Ultra page.
-- `DECISIONS.md` — what was chosen, what was turned down, and why.
+- [Development](docs/development.md) — architecture, supported build paths, feature gates and release requirements.
 
 ## Conventions
 

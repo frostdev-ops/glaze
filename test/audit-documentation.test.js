@@ -46,3 +46,13 @@ test('GZ-04 control: availability wording distinguishes a build gate from an ord
   assert.ok(unavailable.test('Google Calendar sync is pending verification.'));
   assert.ok(!unavailable.test('Google Calendar sync is off until you connect.'));
 });
+
+test('GZ-07: named contributor and feature-decision documents resolve in a fresh checkout', () => {
+  const missing = [];
+  for (const file of ['CONTRIBUTING.md', 'lib/gcal.js']) {
+    for (const name of new Set(read(file).match(/\b[A-Z][A-Z0-9_-]*\.md\b/g) || [])) {
+      if (!fs.existsSync(path.join(root, name))) missing.push(`${file} refers to missing ${name}`);
+    }
+  }
+  assert.deepEqual(missing, [], 'contributors must be able to follow the stated decision references');
+});
