@@ -131,7 +131,7 @@ const UO = 'https://lms.example.edu';
 const ufix = (n) => JSON.parse(fs.readFileSync(require.resolve(`./fixtures/ultra-${n}.json`), 'utf8'));
 const U_NOW = Date.parse('2026-10-15T12:00:00Z'); // in the fixtures' Fall 2026 term
 class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_NOW])); } static now() { return U_NOW; } }
-const ultraPage = () => {
+const ultraPage = ({ partial = false } = {}) => {
   const S = { enabled: true, enhance: { insights: true, streak: false } };
   const asked = [], sent = [];
   // Ultra's header tools, and B5's panel bar (features/widgets.js) with its What Glaze can do.
@@ -140,6 +140,7 @@ const ultraPage = () => {
   const doc = { body: new El('body'), activeElement: null, createElement: (t) => new El(t), createElementNS: (ns, t) => new El(t),
     querySelector: (sel) => ({ 'div.base-courses-header-container div.base-header-tools': tools, '#gz-toolbar': bar })[sel] || null };
   const books = { _101_1: ufix('grades'), _102_1: ufix('grades-status') };
+  if (partial) books._101_1.paging = { nextPage: '?offset=200' };
   const context = vm.createContext({
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => true, settings: () => S, need: () => Promise.resolve(), myCourses: async () => ufix('memberships').results },
     GZ_TODO: require('../lib/todo.js'), GZ_GRADECALC: require('../lib/gradecalc.js'), GZ_INSIGHTS: require('../lib/insights.js'), GZ_I18N: require('../lib/i18n.js'),
@@ -157,8 +158,20 @@ const ultraPage = () => {
   context.window.top = context.window;
   vm.runInContext(fs.readFileSync(require.resolve('../lib/ultra.js'), 'utf8'), context);
   const ui = vm.runInContext(source, context);
-  return { ui, asked, sent, tools, bar, S };
+  return { ui, asked, sent, tools, bar, S, doc };
 };
+
+test('GZ-01: Insights retains a partial marker and withholds grade trends for a capped gradebook', async () => {
+  const p = ultraPage({ partial: true });
+  p.ui.open(); await settle(50);
+  const course = p.sent.find((m) => m.op === 'put')?.rec.courses.find((c) => c.id === '_101_1');
+  assert.ok(course, 'retain useful work summaries');
+  assert.equal(course.more, true);
+  assert.deepEqual([...course.trend], [], 'a partial gradebook cannot establish the course trend');
+  assert.equal(p.asked.filter((a) => a.url.includes('/courses/_101_1/gradebook/grades')).length, 10, 'retain the page cap');
+  const texts = (el) => [el.textContent, ...(el.children || []).flatMap(texts)].join(' ');
+  assert.ok(texts(p.doc.body).includes("Some work couldn't be counted, so these figures leave it out:"));
+});
 
 test("on Ultra: a button in the Courses page's header, and this term read from Ultra, each course's gradebook", async () => {
   const p = ultraPage();

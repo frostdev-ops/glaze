@@ -2700,4 +2700,5 @@
   "Toy ball": "Speelbal",
   "Yarn ball": "Bol wol",
   "{name}. Drag outside to play; W takes it out, H returns it, Delete puts it away.": "{name}. Sleep naar buiten om te spelen; W haalt het naar buiten, H brengt het terug, Delete bergt het op.",
+  "Some scores could not be read. The calculator needs the complete gradebook.": "Sommige cijfers konden niet worden gelezen. De rekenhulp heeft het volledige cijferoverzicht nodig.",
 };

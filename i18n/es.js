@@ -2700,4 +2700,5 @@
   "Toy ball": "Pelota de juguete",
   "Yarn ball": "Ovillo de lana",
   "{name}. Drag outside to play; W takes it out, H returns it, Delete puts it away.": "{name}. Arrástralo fuera para jugar; W lo saca, H lo devuelve y Supr lo guarda.",
+  "Some scores could not be read. The calculator needs the complete gradebook.": "No se pudieron leer algunas notas. La calculadora necesita el libro de calificaciones completo.",
 };

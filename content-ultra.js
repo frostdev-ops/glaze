@@ -32,10 +32,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // One /users/me for everything that asks at once; asked again only if it failed.
   let meId = null;
   const me = () => (meId ||= api('/users/me').then((m) => m.id).catch((e) => { meId = null; throw e; }));
-  // The student's courses, once per page: names for the command palette, and each membership's
-  // due-date exception setting.
+  const covered = (rows, complete) => Object.defineProperty(rows, 'complete', { value: complete });
+  // One page of memberships, shared by names and due-date exceptions.
   let memberships = null;
-  const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`)).then((j) => j.results || []).catch(() => (memberships = null, [])));
+  const myCourses = () => (memberships ||= me().then((id) => api(`/users/${id}/memberships?expand=course&limit=200`))
+    .then((j) => covered(j.results || [], !j.paging?.nextPage)).catch(() => (memberships = null, covered([], false))));
   // Planning (features/todo.js…), as Canvas's part: lib/ultra.js reads; each file loaded once on, asked again as it lands.
   const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
@@ -64,24 +65,23 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     });
     return Promise.all([excepted, ...dates]).then(([exc, ...when]) => new Set(waiting.filter((g, i) => !exc(g.columnId) && GZ_GRADES.late(when[i], g.column.dueDate)).map((g) => g.columnId)));
   };
-  // cid → { at, pending, results, grades (by content item), overall, late (column ids), key }. Lateness is
-  // asked only by the due-date chips (late = true), so a course card never costs attempt requests. An
-  // answer that changes anything re-tags the page.
+  // Per-course gradebook cache. Only due-date chips ask for lateness; changed answers re-tag the page.
   const books = new Map();
   const bookFor = (cid, late = false) => {
     let b = books.get(cid);
     if (!b || (!b.pending && (Date.now() - b.at > 60000 || (late && !b.late)))) {
       b = { key: '', ...b, at: Date.now(), pending: true };
       books.set(cid, b);
-      // ponytail: one page, Ultra's cap of 200 grades; items past that show only their countdown.
+      // One page (200 grades); calculators reject an incomplete answer.
       me().then((id) => api(`/courses/${cid}/gradebook/grades?userId=${id}&limit=200&includeNoGradeItems=true&expand=column`))
         .then((j) => (late || b.late ? lateIn(cid, j.results) : Promise.resolve(undefined)).then((lateCols) => {
           b.pending = false;
-          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])]]);
+          const complete = !j.paging?.nextPage;
+          const key = JSON.stringify([j.results.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade]), [...(lateCols || [])], complete]);
           b.late = lateCols;
-          b.results = j.results;
+          b.results = covered(j.results, complete);
           if (key === b.key) return;
-          Object.assign(b, { grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results, locale()), late: lateCols, key });
+          Object.assign(b, { grades: GZ_PAGE.gradesByContent(j.results), overall: GZ_PAGE.overall(j.results, locale()), key });
           onBook();
         }))
         .catch(() => { b.pending = false; });

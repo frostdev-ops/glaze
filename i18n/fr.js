@@ -2700,4 +2700,5 @@
   "Toy ball": "Balle de jeu",
   "Yarn ball": "Pelote de laine",
   "{name}. Drag outside to play; W takes it out, H returns it, Delete puts it away.": "{name}. Faites-le glisser dehors pour jouer ; W le sort, H le ramène, Suppr le range.",
+  "Some scores could not be read. The calculator needs the complete gradebook.": "Certaines notes n’ont pas pu être lues. Le calculateur a besoin du carnet de notes complet.",
 };
