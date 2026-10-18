@@ -9,5 +9,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Node 22's deflate-raw stream accepts trailing junk; 26 follows the browser contract.
+          node-version: 26
       - run: node --test

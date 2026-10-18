@@ -81,7 +81,10 @@ const worker = ({ fetch } = {}) => {
   const change = (changes) => on.changed.forEach((f) => f(changes, 'sync'));
   const tick = () => new Promise(setImmediate);
   // A glaze2 code is read (for a background file to fetch) before it is offered.
-  const settle = async () => { for (let i = 0; i < 50; i++) await tick(); };
+  const settle = async () => {
+    for (let i = 0; i < 1000 && !local.galleryOffer; i++) await new Promise((r) => setTimeout(r, 5));
+    assert.ok(local.galleryOffer, 'the gallery hand-off finishes');
+  };
   return { send, change, tick, settle, timers, local, sync, opened, hold };
 };
 
@@ -327,6 +330,6 @@ test('a gallery Look\'s background file is fetched from the gallery and kept by 
   // Not from the gallery's pages: nothing is fetched.
   const x = worker({ fetch: () => assert.fail('fetched') });
   x.send({ gallery: { code, name: 'Spin' } }, { url: 'https://evil.example/glaze/looks/', frameId: 0 });
-  await x.settle();
+  for (let i = 0; i < 50; i++) await x.tick();
   assert.deepEqual(x.local, {});
 });
