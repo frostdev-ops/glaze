@@ -331,6 +331,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     let d = null; try { d = f.el.contentDocument; } catch { /* gone */ }
     return { cid: showing, path: f.ready && d ? safePath(d.location.pathname, d.location.search) : null, doc: d, frame: f };
   };
+  const petSurface = (petKey) => {
+    if (!on || signedOut || framed || preview || !who || petKey !== `pet:${location.origin}/${who}` || !showing || pic || !host?.hasAttribute('data-on')) return null;
+    const { doc, path, frame: f } = surface();
+    try {
+      if (!f?.ready || !f.el.isConnected || f.el.parentElement !== host || f.el.inert || f.el.style.visibility === 'hidden' || !doc?.body || f.uid !== who || f.accountDoc !== doc || doc.location.origin !== location.origin || !path?.startsWith(`/ultra/courses/${showing}/`)) return null;
+      return { doc, frame: f.el };
+    } catch { return null; }
+  };
   let shooting = null, shotAt = -1e9;
   const shoot = () => {
     if (shooting) return shooting;
@@ -446,7 +454,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if ((built && now - changed > 300) || now - t0 > 8000) {
         mo?.disconnect();
         f.ready = true;
-        if (showing === cid) { f.el.style.visibility = ''; unpicture(); later(600); }
+        if (showing === cid) { f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
         return;
       }
       setTimeout(step, 50);
@@ -533,6 +541,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (f && !f.ready) picture(cid, f);
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     ctx.scene();
+    globalThis.GZ_PET_WORLD?.refresh();
     try { if (cid) sessionStorage.setItem('gz-ctabs-shown', cid); else sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
     // Keyboard focus goes with it: into the frame, or back to this page's strip.
     if (f) f.el.focus();
@@ -557,7 +566,15 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const id = typeof cid === 'string' && /^_\d+_\d+$/.test(cid) ? cid : null;
     if (op === 'visit' && id) visit(id);
     else if (op === 'shut' && id) shut(id, e.data.keys === true);
-    else if (op === 'account' && who && /^_\d+_\d+$/.test(e.data.uid) && e.data.uid !== who) { send({ op: 'drop', signout: true }); revoke(); }
+    else if (op === 'account' && /^_\d+_\d+$/.test(e.data.uid)) {
+      if (who && e.data.uid !== who) { send({ op: 'drop', signout: true }); revoke(); }
+      else {
+        const f = frames.get(from); let doc = null; try { doc = f.el.contentDocument; } catch { /* gone */ }
+        if (f.accountDoc !== doc && f.ready) { f.ready = false; watch(from, f); }
+        f.uid = e.data.uid; f.accountDoc = doc;
+      }
+      globalThis.GZ_PET_WORLD?.refresh();
+    }
     else if (op === 'edited') frames.get(from).dirty = true;
     else if (op === 'pin' && id) pinTab(id);
     else if (op === 'move' && id && Number.isInteger(e.data.to)) moveTab(id, e.data.to);
@@ -565,8 +582,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const x = tabs.find((x) => x.cid === from), kept = L.clean([{ cid: from, path: e.data.path, top: e.data.top }])[0];
       if (x && kept && (x.path !== kept.path || x.top !== kept.top)) { x.path = kept.path; x.top = kept.top; save(); }
     }
-    else if (op === 'loaded') frames.get(from).el.contentWindow.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin);
-    else if (op === 'moved' && from === showing) later(700);
+    else if (op === 'loaded') { frames.get(from).el.contentWindow.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin); globalThis.GZ_PET_WORLD?.refresh(); }
+    else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); later(700); }
     else if (op === 'away' && typeof url === 'string' && url.length < 1300 && /^\/ultra(\/|$)/.test(url)) { drop(from); show(''); route(url); }
   });
   if (framed && !preview) {
@@ -836,6 +853,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     sync(false);
     tabs = [];
     loaded = false;
+    globalThis.GZ_PET_WORLD?.stop();
   };
   const invalidate = (next) => {
     if (next <= epoch) return;
@@ -862,7 +880,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     addEventListener('message', (e) => { if (e.data?.gzPreview) follow(); });
     follow();
   }
-  return { sync, held, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
+  return { sync, held, petSurface, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
 
 GZ_CTABS;

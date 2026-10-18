@@ -12,6 +12,8 @@ Drag the pet outside to enable wandering and inside to return home. W and H perf
 
 Wandering uses visible element geometry to approach cards/headings, climb edges, sit on top, and hide/peek behind cards. A mask occludes the part behind an element; page content and controls are never activated or edited. Perches track scrolling and disappear safely when their source element is removed. Forms, navigation, editable elements, assessments and tool pages are excluded.
 
+Blackboard's live course tabs share the same top-level companion. The active course frame supplies its surfaces, pointer activity and scrolling only after its current document confirms the same school account. Switching tabs detaches the previous frame's listeners; hidden frames have no separate pet. Loading, unconfirmed, external and assessment frames are excluded.
+
 ## Local learning and needs
 
 `lib/petbrain.js` is a versioned online contextual bandit with twelve activities and twenty-six bounded numeric features. It combines contextual tanh predictions, diagonal confidence estimates, faster and slower reward averages, six time-of-day buckets and a bounded action-transition matrix. Recent-action fatigue limits repetition without forcing a settled pet to move. The old five-action/twelve-feature model migrates by preserving its existing weights and counts.

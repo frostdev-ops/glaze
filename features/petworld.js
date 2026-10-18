@@ -25,9 +25,10 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     let cursor = { x: -1000, y: -1000 }, cursorAt = 0, cursorSpeed = 0, pointerForm = false, typedAt = -Infinity, scrolledAt = -Infinity, movedAt = -Infinity, celebratedAt = -Infinity, playedAt = -Infinity;
     let energy = .8, idleUntil = 0, idlePose = 'idle', activity = null, toy = null, observedAt = -Infinity, observedAction = '', xpSeen = null, wasStill = false, facing = 1;
     let groundY = 0, offscreenAt = 0, recovery = null, geometryDirty = false, focusTimer = null, anchor = null;
+    let viewDoc = document, viewFrame = null, viewBlocked = false, frameOffs = [];
     const recent = [];
     const facingPose = (delta) => { if (Math.abs(delta) > 8) facing = Math.sign(delta); return facing < 0 ? 'running-left' : 'running-right'; };
-    const typing = () => performance.now() - typedAt < 3500 || !!document.activeElement?.matches('input,textarea,select,[contenteditable="true"],[role="textbox"]');
+    const typing = () => performance.now() - typedAt < 3500 || !!(document.activeElement === viewFrame ? viewDoc.activeElement : document.activeElement)?.matches('input,textarea,select,[contenteditable="true"],[role="textbox"]');
     const features = (surface) => B.vector({
       focus, pointerNear: Math.hypot(cursor.x - (wandering ? -window.scrollX : stage?.getBoundingClientRect().left || 0) - b.x - b.w / 2, cursor.y - (wandering ? -window.scrollY : stage?.getBoundingClientRect().top || 0) - b.y - b.h / 2) < 180,
       needs: { ...data.needs, energy: energy * 100 }, hour: new Date().getHours(), kind: surface?.kind || surface?.id,
@@ -45,18 +46,25 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     };
     const on = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); offs.push(() => el.removeEventListener(type, fn, opts)); };
     const still = () => reduced?.matches || document.documentElement.getAttribute('data-gz-motion') === 'off';
-    const quiet = () => /\/quizzes\/|\/assessment\/|\/(?:attempt|lti)(?:\/|$)|\/external_tools\//.test(location.pathname) || !!document.querySelector('iframe#tool_content');
+    const quiet = () => /\/quizzes\/|\/assessments?\/|\/(?:attempt|lti)(?:\/|$)|\/external_tools\//.test(viewDoc.location.pathname) || !!viewDoc.querySelector('iframe#tool_content');
     const pageSize = () => ({ width: Math.min(1e8, Math.max(window.innerWidth, document.documentElement.scrollWidth, document.body?.scrollWidth || 0)), height: Math.min(1e8, Math.max(window.innerHeight, document.documentElement.scrollHeight, document.body?.scrollHeight || 0)) });
     const scrollAnchor = (el) => {
       const nodes = [];
+      const doc = el?.ownerDocument;
+      if (doc && doc !== document && doc.scrollingElement) { const n = doc.scrollingElement; nodes.push({ el: n, x: n.scrollLeft, y: n.scrollTop }); }
       for (let n = el, i = 0; n && i < 30; n = n.parentElement, i++) {
-        if (n === document.scrollingElement || n === document.documentElement || n.closest?.('.gz-game,.gz-game-dialog,.gz-game-world')) continue;
+        if (n === doc?.scrollingElement || n === doc?.documentElement || n.closest?.('.gz-game,.gz-game-dialog,.gz-game-world')) continue;
         const style = globalThis.getComputedStyle?.(n);
         if (style && (/auto|scroll/.test(style.overflowX) && n.scrollWidth > n.clientWidth || /auto|scroll/.test(style.overflowY) && n.scrollHeight > n.clientHeight)) nodes.push({ el: n, x: n.scrollLeft, y: n.scrollTop });
       }
       return { nodes, x: -nodes.reduce((n, p) => n + p.x, 0), y: -nodes.reduce((n, p) => n + p.y, 0) };
     };
-    const anchorAt = (x, y) => scrollAnchor(document.elementsFromPoint?.(x - window.scrollX, y - window.scrollY).find((el) => !el.closest?.('.gz-game,.gz-game-dialog,.gz-game-world,.gz-game-home')));
+    const frameOffset = () => { const r = viewFrame?.getBoundingClientRect(); return { x: r ? r.left + viewFrame.clientLeft : 0, y: r ? r.top + viewFrame.clientTop : 0 }; };
+    const anchorAt = (x, y) => {
+      const p = frameOffset(), cx = x - window.scrollX, cy = y - window.scrollY;
+      const doc = viewFrame && cx >= p.x && cy >= p.y && cx < p.x + viewFrame.clientWidth && cy < p.y + viewFrame.clientHeight ? viewDoc : document;
+      return scrollAnchor(doc.elementsFromPoint?.(cx - (doc === document ? 0 : p.x), cy - (doc === document ? 0 : p.y)).find((el) => !el.closest?.('.gz-game,.gz-game-dialog,.gz-game-world,.gz-game-home')));
+    };
     const extent = (at) => {
       const box = pageSize();
       for (const p of at?.nodes || []) if (p.el.isConnected) { box.width += Math.max(0, p.el.scrollWidth - p.el.clientWidth); box.height += Math.max(0, p.el.scrollHeight - p.el.clientHeight); }
@@ -68,13 +76,13 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       const next = F.step({ ...body, x: body.x - x, y: body.y - y }, { ...options, height: options.height - y, platforms: options.platforms?.map((p) => ({ ...p, x: p.x - x, y: p.y - y })) });
       return { ...next, x: next.x + x, y: next.y + y };
     };
-    const pageRect = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height }; };
+    const pageRect = (el) => { const r = el.getBoundingClientRect(), p = el.ownerDocument === viewDoc && viewFrame ? frameOffset() : { x: 0, y: 0 }; return { x: r.left + p.x + window.scrollX, y: r.top + p.y + window.scrollY, w: r.width, h: r.height }; };
     const perchable = (s) => s.y >= window.scrollY + b.h && s.y <= window.scrollY + window.innerHeight && Math.min(s.x + s.w, window.scrollX + window.innerWidth) - Math.max(s.x, window.scrollX) >= b.w;
     const perchX = (s) => Math.max(Math.max(s.x, window.scrollX), Math.min(Math.min(s.x + s.w, window.scrollX + window.innerWidth) - b.w, s.x + (s.w - b.w) / 2));
     const visible = (p, margin = 0) => p.x + p.w > window.scrollX - margin && p.x < window.scrollX + window.innerWidth + margin && p.y + p.h > window.scrollY - margin && p.y < window.scrollY + window.innerHeight + margin;
     const worldHost = () => { if (!world.isConnected) document.documentElement.append(world); return world; };
     const homeVisible = () => { const r = stage?.getBoundingClientRect(); return r && r.width > 0 && r.bottom > 0 && r.top < window.innerHeight; };
-    const allowed = () => alive && !!chrome.runtime?.id && !document.hidden && (wandering ? !quiet() : homeVisible());
+    const allowed = () => alive && !!chrome.runtime?.id && !document.hidden && !viewBlocked && (wandering ? !quiet() : homeVisible());
     const art = (id) => { const img = make('img', ''); img.src = chrome.runtime.getURL(`assets/art/stickers/${P.DECOR[id].art}.webp`); img.alt = ''; img.draggable = false; return img; };
     const display = () => { actor.style.left = '0'; actor.style.top = '0'; actor.style.transform = `translate3d(${b.x}px,${b.y}px,0)`; };
     const play = (state, message = '') => {
@@ -144,8 +152,8 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       else {
         // Observe only geometry; never activate a page control or change student content.
         const active = outing?.surface.el || activity?.target?.el;
-        const elements = new Set([...document.querySelectorAll('h1,h2,h3,article,section,[role="region"],.ic-DashboardCard,.element-card,.gz-w')].slice(0, 80));
-        if (active?.isConnected) elements.add(active);
+        const elements = new Set([...viewDoc.querySelectorAll('h1,h2,h3,article,section,[role="region"],.ic-DashboardCard,.element-card,.gz-w')].slice(0, 80));
+        if (active?.isConnected && active.ownerDocument === viewDoc) elements.add(active);
         for (const el of elements) {
           if (el.closest('.gz-game,.gz-game-dialog,.gz-game-world,form,nav,header,aside,[role="navigation"],[contenteditable="true"]') || el.querySelector('input,textarea,select,[contenteditable="true"]')) continue;
           const r = pageRect(el);
@@ -349,6 +357,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       clearTimeout(timer); timer = 0;
       if (!alive) return;
       if (!chrome.runtime?.id || (!stage?.isConnected && !wandering)) { destroy(); return; }
+      syncSurface();
       if (wandering && anchor?.nodes.some((p) => !p.el.isConnected)) anchor = anchorAt(b.x + b.w / 2, b.y + b.h / 2);
       actor.hidden = !allowed(); if (toy) toy.hidden = actor.hidden; for (const p of floating.values()) p.el.hidden = actor.hidden;
       if (actor.hidden) { if (awake) player?.sleep(); awake = false; return; }
@@ -402,10 +411,12 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       target.focus({ preventScroll: true });
     };
     const move = (e) => {
+      const offset = viewFrame && e.target?.ownerDocument === viewDoc ? frameOffset() : { x: 0, y: 0 };
+      const clientX = e.clientX + offset.x, clientY = e.clientY + offset.y;
       if (e.isTrusted) {
         const now = performance.now(), elapsed = Math.max(16, now - cursorAt);
-        cursorSpeed = cursorAt ? Math.min(3000, Math.hypot(e.clientX - cursor.x, e.clientY - cursor.y) / elapsed * 1000) : 0;
-        cursor = { x: e.clientX, y: e.clientY }; cursorAt = now;
+        cursorSpeed = cursorAt ? Math.min(3000, Math.hypot(clientX - cursor.x, clientY - cursor.y) / elapsed * 1000) : 0;
+        cursor = { x: clientX, y: clientY }; cursorAt = now;
         pointerForm = !e.target.closest?.('.gz-game-actor,.gz-game-item,.gz-game-home') && !!e.target.closest?.('input,textarea,select,button,a,[role="button"],[contenteditable="true"],[role="textbox"]');
       }
       if (!drag || e.pointerId !== drag.pointer) return;
@@ -499,6 +510,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       if (!alive) return;
       alive = false; clearActivity(); clearTimeout(timer); clearTimeout(reaction); player?.stop();
       for (const off of offs) off(); offs = [];
+      for (const off of frameOffs) off(); frameOffs = [];
       for (const p of props) p.el.remove(); for (const p of floating.values()) p.el.remove(); floating.clear(); actor.remove(); home.remove(); world.remove();
       chrome.storage.onChanged.removeListener(changed); reduced?.removeEventListener('change', wake); motion?.disconnect();
       if (current?.key === key) current = null;
@@ -508,10 +520,12 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     on(actor, 'click', (e) => { if (!e.isTrusted || e.target.closest('.gz-game-home')) return; if (suppressClick) { suppressClick = false; return; } playedAt = performance.now(); feedback('pet'); play('playing', t('Happy to see you!')); });
     on(actor, 'keydown', (e) => { if (!e.isTrusted || e.target !== actor) return; const k = e.key.toLowerCase(); if (['w', 'h', 'escape'].includes(k)) { e.preventDefault(); changeMode(k === 'w'); } else if (k === ' ' || k === 'enter') { e.preventDefault(); playedAt = performance.now(); feedback('play'); play('playing'); } });
     on(document, 'visibilitychange', wake); on(window, 'resize', () => { if (stage && data) renderProps(); wake(); });
-    on(document, 'keydown', (e) => { if (e.isTrusted && (e.target.matches?.('input,textarea,select,[contenteditable="true"],[role="textbox"]') || e.target.closest?.('[contenteditable="true"]'))) typedAt = performance.now(); }, { passive: true });
-    on(window, 'scroll', (e) => {
+    const typed = (e) => { if (e.isTrusted && (e.target.matches?.('input,textarea,select,[contenteditable="true"],[role="textbox"]') || e.target.closest?.('[contenteditable="true"]'))) typedAt = performance.now(); };
+    on(document, 'keydown', typed, { passive: true });
+    const scrolled = (e) => {
+      const target = e.target.nodeType === 9 ? e.target.scrollingElement : e.target;
       const shift = (at) => {
-        const p = at?.nodes.find((p) => p.el === e.target);
+        const p = at?.nodes.find((p) => p.el === target);
         if (!p) return null;
         const dx = p.x - p.el.scrollLeft, dy = p.y - p.el.scrollTop;
         p.x -= dx; p.y -= dy; at.x += dx; at.y += dy;
@@ -520,8 +534,8 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       const moved = wandering && shift(anchor);
       if (moved && !drag) {
         b.x += moved.dx; b.y += moved.dy; groundY += moved.dy;
-        if (outing?.surface.el && e.target.contains(outing.surface.el)) { outing.surface = { ...outing.surface, x: outing.surface.x + moved.dx, y: outing.surface.y + moved.dy }; }
-        if (activity?.target?.el && !activity.toy && e.target.contains(activity.target.el)) { activity.target = { ...activity.target, x: activity.target.x + moved.dx, y: activity.target.y + moved.dy }; }
+        if (outing?.surface.el && target.contains(outing.surface.el)) { outing.surface = { ...outing.surface, x: outing.surface.x + moved.dx, y: outing.surface.y + moved.dy }; }
+        if (activity?.target?.el && !activity.toy && target.contains(activity.target.el)) { activity.target = { ...activity.target, x: activity.target.x + moved.dx, y: activity.target.y + moved.dy }; }
         if (recovery) recovery.goal = null;
         display();
       }
@@ -530,13 +544,32 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         if (moved && p !== movingItem) { p.x += moved.dx; p.y += moved.dy; p.ground += moved.dy; putProp(p); }
       }
       scrolledAt = performance.now(); geometryDirty = true; if (!timer && allowed() && !still()) wake();
-    }, { passive: true, capture: true });
+    };
+    on(window, 'scroll', scrolled, { passive: true, capture: true });
+    const syncSurface = () => {
+      const next = globalThis.GZ_CTABS?.petSurface?.(key), doc = next?.doc || document, frame = next?.frame || null;
+      const blocked = document.documentElement.hasAttribute('data-gz-ctab-framed') && !next;
+      const changed = viewDoc !== doc || viewFrame !== frame || viewBlocked !== blocked;
+      viewBlocked = blocked;
+      if (viewDoc === doc && viewFrame === frame) return changed;
+      for (const off of frameOffs) off(); frameOffs = [];
+      viewDoc = doc; viewFrame = frame;
+      clearActivity(); surfaces = []; lastScan = -Infinity; geometryDirty = true; nextAction = 0; cursorAt = 0; pointerForm = false;
+      anchor = wandering ? anchorAt(b.x + b.w / 2, b.y + b.h / 2) : null;
+      for (const p of floating.values()) p.anchor = anchorAt(p.x + p.w / 2, p.y + p.h / 2);
+      if (frame) {
+        const bind = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); frameOffs.push(() => el.removeEventListener(type, fn, opts)); };
+        bind(doc, 'pointermove', move, { passive: true }); bind(doc, 'keydown', typed, { passive: true });
+        bind(doc, 'scroll', scrolled, { passive: true, capture: true }); bind(frame, 'load', wake);
+      }
+      return changed;
+    };
     on(window, 'pagehide', destroy, { once: true });
     const motion = typeof MutationObserver === 'function' ? new MutationObserver(wake) : null;
     motion?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-gz-motion'] });
     chrome.storage.onChanged.addListener(changed); reduced?.addEventListener('change', wake);
     try { chrome.storage.local.get('widgetTimer', (r) => { if (alive) { updateFocus(r?.widgetTimer, true); if (data) wake(); } }); } catch { /* reloaded */ }
-    return { key, attach, detach, play, destroy, refresh: () => { if (path !== location.pathname || (!timer && allowed() && !still())) { path = location.pathname; wake(); } } };
+    return { key, attach, detach, play, destroy, refresh: () => { const changed = syncSurface(), nextPath = viewDoc.location.pathname; geometryDirty = true; if (changed || path !== nextPath || (!timer && allowed() && !still())) { path = nextPath; wake(); } } };
   };
   return { mount, refresh: () => current?.refresh(), stop: () => current?.destroy() };
 })();
