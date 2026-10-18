@@ -56,7 +56,7 @@ test('no stickers on a quiz being taken or reviewed, or a tool\'s page: Canvas, 
 });
 
 test('every bundled sticker is a file, named after its pack and name', () => {
-  assert.equal(L.BUNDLED.size, 55);
+  assert.equal(L.BUNDLED.size, 57);
   for (const id of L.BUNDLED.keys()) assert.ok(fs.existsSync(path.join(__dirname, '..', L.file(id))), id);
   assert.equal(L.BUNDLED.get('cozy-autumn/steaming-cocoa-mug'), 'Steaming cocoa mug');
 });

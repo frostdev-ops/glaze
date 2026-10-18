@@ -471,6 +471,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     // Every pet surface uses this character, account record and the same timer/task reactions.
     buddy(body, options = {}) {
       let st = { happyAt: 0, patAt: 0, running: false }, wait = 0, todoKey = '', petKey = '', alive = true, sleeping = false, player = null, sprite = '', pose = null;
+      let attentionWait = 0, attentionAt = 0, attentionBlocked = 0, gaze = -1, gazing = false;
       const saved = {}, versions = new Map();
       const img = make('img', { alt: '', draggable: false, decoding: 'async' });
       const read = (keys) => {
@@ -498,7 +499,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         const label = selected ? t('Play with {name}', { name: selected.name }) : t('Pet your study buddy');
         pet.setAttribute('aria-label', label);
         const identity = selected?.data || selected?.path || '';
-        const changed = identity !== sprite;
+        const changed = identity !== sprite || !!(selected && !player && globalThis.GZ_PET_PLAYER);
         if (changed) {
           sprite = identity; player?.stop(); player = null;
           pet.replaceChildren(img);
@@ -513,25 +514,25 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         const art = m.mood === 'happy' ? 'study-buddy-happy' : m.mood === 'sleepy' && wear === 'plain' ? 'study-buddy-sleepy' : P?.WEAR[wear].art || 'study-buddy';
         const src = chrome.runtime.getURL(`assets/art/stickers/critters/${art}.webp`);
         if (img.src !== src) img.src = src;
-        player?.rest(m.mood === 'happy' ? 'jumping' : st.running ? 'running' : m.mood === 'sleepy' ? 'sleeping' : 'idle');
+        player?.rest(options.resting || (m.mood === 'happy' ? 'jumping' : st.running ? 'running' : m.mood === 'sleepy' ? 'sleeping' : 'idle'));
         if (changed && pose) player?.play(...pose);
         if (body.dataset.mood !== (m.mood || 'awake')) body.dataset.mood = m.mood || 'awake';
         if (sleeping || document.visibilityState === 'hidden') player?.sleep(); else player?.wake();
         if (m.until && !sleeping && document.visibilityState !== 'hidden') wait = setTimeout(paint, m.until - Date.now() + 50);
       };
-      const win = () => { st.happyAt = Date.now(); put({ widgetBuddy: { happyAt: st.happyAt, patAt: st.patAt } }); paint(); };
+      const win = () => { st.happyAt = Date.now(); attentionBlocked = Date.now() + 1600; gazing = false; clearTimeout(attentionWait); put({ widgetBuddy: { happyAt: st.happyAt, patAt: st.patAt } }); paint(); };
       const pat = (state = 'waving') => {
         if (!alive || !validContext()) return;
         st.patAt = Date.now();
+        attentionBlocked = Date.now() + 1600; gazing = false;
         put({ widgetBuddy: { happyAt: st.happyAt, patAt: st.patAt } });
         const data = globalThis.GZ_PET_BRAIN && globalThis.GZ_PET?.view(saved[petKey]);
         if (petKey && data && ctx.settings().enhance.pet) {
-          const hour = new Date().getHours() / 24 * Math.PI * 2;
           send({ type: 'glaze:pet', key: petKey, tz: me?.tz, op: 'interact', event: state === 'jumping' ? 'play' : 'pet', action: 'greet',
-            context: [1, st.running ? 1 : 0, 1, data.needs.mood / 50 - 1, data.needs.playful / 50 - 1, data.needs.energy / 50 - 1, Math.sin(hour), Math.cos(hour), 0, 0, 0, data.habitat === 'aquarium' ? 1 : 0] });
+            context: GZ_PET_BRAIN.vector({ focus: W.cleanTimer(saved.widgetTimer).phase === 'work' && st.running, pointerNear: true, needs: data.needs, wandering: false, water: data.habitat === 'aquarium' }) });
         }
         paint();
-        player?.set(state);
+        player?.play(state);
         const w = make('span', { className: 'gz-w-cheer', textContent: t(CHEERS[Math.floor(Math.random() * CHEERS.length)]) });
         w.setAttribute('aria-hidden', 'true');
         pet.after(w);
@@ -542,13 +543,20 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       pet.append(img);
       if (options.interactive !== false) {
         pet.addEventListener('keydown', (e) => { if (e.isTrusted && ['Enter', ' '].includes(e.key)) { e.preventDefault(); e.stopPropagation(); pat('jumping'); } });
-        pet.addEventListener('pointermove', (e) => {
-          if (!e.isTrusted || !player || (globalThis.GZ_PET_SPRITES?.BUILTIN[choiceId()]?.spriteVersionNumber || saved.petSprites?.[choiceId()]?.spriteVersionNumber) !== 2) return;
-          const rect = pet.getBoundingClientRect(); player.set('look', GZ_PET_SPRITES.direction(e.clientX - rect.left - rect.width / 2, e.clientY - rect.top - rect.height / 2));
-        });
-        pet.addEventListener('pointerleave', () => player?.set('idle'));
       }
-      const choiceId = () => typeof saved.petCharacter === 'string' ? saved.petCharacter : globalThis.GZ_PET?.view(saved[petKey])?.sprite || '';
+      const releaseGaze = () => { clearTimeout(attentionWait); if (gazing) { gazing = false; player?.set('idle'); } };
+      const watch = (e) => {
+        const now = Date.now();
+        if (!e.isTrusted || !alive || !player || sleeping || document.hidden || now < attentionBlocked || now - attentionAt < 80) return;
+        if (!validContext() || pet.isConnected === false) { stop(); return; }
+        attentionAt = now;
+        const r = pet.getBoundingClientRect(), dx = e.clientX - r.left - r.width / 2, dy = e.clientY - r.top - r.height / 2;
+        if (!r.width || r.bottom < 0 || r.top > innerHeight || Math.hypot(dx, dy) > 420) { releaseGaze(); return; }
+        const direction = GZ_PET_SPRITES.direction(dx, dy);
+        if (!gazing || direction !== gaze) { gaze = direction; gazing = true; player.set('look', direction); }
+        clearTimeout(attentionWait); attentionWait = setTimeout(releaseGaze, 1800);
+      };
+      if (options.attention !== false) document.addEventListener('pointermove', watch, { passive: true });
       const onStore = (ch, a) => {
         if (!alive || a !== 'local') return;
         if (!validContext()) { stop(); return; }
@@ -565,9 +573,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           st.patAt = Math.max(st.patAt, +ch.widgetBuddy.newValue?.patAt || 0);
         }
         if (ch.widgetBuddy || ch.petCharacter || ch.petSprites || ch[petKey]) paint();
-        if (ch[petKey] && globalThis.GZ_PET) {
+        if (ch[petKey] && globalThis.GZ_PET_BRAIN && globalThis.GZ_PET) {
           const before = GZ_PET.view(ch[petKey].oldValue), after = GZ_PET.view(ch[petKey].newValue);
-          if (before && after && after.xp > before.xp) player?.set(after.level > before.level ? 'level-up' : 'xp');
+          if (before && after && after.xp > before.xp) { attentionBlocked = Date.now() + 900; gazing = false; player?.play(after.level > before.level ? 'level-up' : 'xp'); }
         }
       };
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
@@ -575,9 +583,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const show = () => paint();
       const stop = () => {
         if (!alive) return;
-        alive = false; clearTimeout(wait); player?.stop();
+        alive = false; clearTimeout(wait); clearTimeout(attentionWait); player?.stop();
         try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
-        document.removeEventListener?.('visibilitychange', show); removeEventListener('pagehide', stop);
+        document.removeEventListener?.('visibilitychange', show); document.removeEventListener?.('pointermove', watch); removeEventListener('pagehide', stop);
       };
       document.addEventListener('visibilitychange', show); addEventListener('pagehide', stop, { once: true });
       read(['widgetTimer', 'widgetBuddy', 'petCharacter', 'petSprites']);
@@ -588,7 +596,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       }, () => {});
       Promise.all(['lib/petbrain.js', 'lib/pet.js', 'lib/petsprites.js', 'lib/petplayer.js'].map((file) => ctx.need(file, () => ({ 'lib/petbrain.js': globalThis.GZ_PET_BRAIN, 'lib/pet.js': globalThis.GZ_PET, 'lib/petsprites.js': globalThis.GZ_PET_SPRITES, 'lib/petplayer.js': globalThis.GZ_PET_PLAYER })[file]))).then(paint, () => {});
       Promise.resolve().then(paint);
-      return { wake: () => { sleeping = false; paint(); }, sleep: () => { sleeping = true; clearTimeout(wait); player?.sleep(); }, update: paint, play: (state, direction) => { pose = [state, direction]; player?.play(state, direction); }, stop };
+      return { wake: () => { sleeping = false; paint(); }, sleep: () => { sleeping = true; clearTimeout(wait); releaseGaze(); player?.sleep(); }, update: paint, play: (state, direction) => { pose = [state, direction]; attentionBlocked = Date.now() + 900; gazing = false; player?.play(state, direction); }, stop };
     },
   };
 

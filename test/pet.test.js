@@ -95,7 +95,7 @@ test('the broker reads only this confirmed account and ignores another accountâ€
   const area = { local: { get: async (keys) => { reads = keys; return Object.fromEntries(keys.filter((k) => k in stored).map((k) => [k, stored[k]])); }, set: async (patch) => { writes++; Object.assign(stored, patch); return true; } } };
   const result = await P.change({ key, op: 'read', xp: 9000, tz: 'UTC' }, area);
   assert.equal(result.data.xp, 0);
-  assert.deepEqual(reads, [key, tk, 'insights:https://school.test/3', 'remind:https://school.test/3', 'todoCache', 'petCharacter']);
+  assert.deepEqual(reads, [key, tk, 'insights:https://school.test/3', 'remind:https://school.test/3', 'todoCache', 'petCharacter', 'widgetTimer']);
   assert.equal(writes, 0);
   assert.equal((await P.change({ key, op: 'wear', wear: 'bandana' }, area)).error, 'locked');
   assert.equal((await P.change({ key, op: 'decor', item: 'books', cell: 8 }, area)).ok, true);

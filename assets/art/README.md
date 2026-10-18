@@ -103,3 +103,15 @@ The Glaze droplet (`pets/glaze/`) is new original animation based on Glaze’s o
 ## All-character reaction atlases (2026-10-17)
 
 Every existing bundled character has a new native-alpha `pets/<id>/reactions.webp`: Ember, Luna, Mochi, Sprout, Pebble, Rime, Glaze, Cat, Bunny and Classic study buddy. Each512×768 sheet has24 generated frames in a4×6 grid: climbing, sleeping, playing, peeking, XP and level-up. These are additional local atlases; original base sheets retain their format. Full exact generation prompts, source paths, identity corrections and crop/packing evidence are recorded in [pet-reactions.md](pet-reactions.md). No account data or student content was used in generation.
+
+## Pet toys (2026-10-17)
+
+`stickers/habitat/toy-ball.webp` (11,330 bytes) and `stickers/habitat/yarn-ball.webp` (13,222 bytes) are original 256 × 256 transparent WebP sprites, generated with the built-in `image_gen` tool, inspected, then resized/padded and encoded without altering the illustrations. Both are under this repository's MIT license. Source PNGs remain in the generating session's Codex generated-images directory `01a14c48-0682-7972-8d9d-3b42788cbda7`, files `exec-d56d5f52-a5eb-489b-abb8-47a41f6a53f4.png` and `exec-d8e4cc6b-ac76-4689-93ea-59343540c78c.png`.
+
+Exact ball prompt:
+
+> Use case: stylized-concept. Asset type: transparent pet toy sprite for Glaze's cozy illustrated study pet habitat, viewed from front with a slightly top-down 3D feel. Primary request: one small round soft rubber toy ball, mint green and pale yellow curved panels, warm soft watercolor-gouache illustration with clean edges, subtle volume, cute and tactile, recognizable at 40 pixels. Single ball only, centered with generous transparent padding, no floor plane, no cast shadow outside object, no pet, no text, no watermark. Real transparent alpha background.
+
+Exact yarn prompt:
+
+> Use case: stylized-concept. Asset type: transparent pet toy sprite for Glaze's cozy illustrated study pet habitat, viewed from front with a slightly top-down 3D feel. Primary request: one small round lilac yarn ball, soft winding strands of wool, one short loose curl of yarn alongside it, warm soft watercolor-gouache illustration with clean edges, subtle volume, cute and tactile, recognizable at 40 pixels. Single yarn toy only, centered with generous transparent padding, no floor plane, no cast shadow outside object, no pet, no text, no watermark. Real transparent alpha background.

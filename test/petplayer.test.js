@@ -3,9 +3,11 @@ const S = require('../lib/petsprites.js');
 const page = () => {
   const timers = new Map(), docEvents = new Map(), winEvents = new Map(), motionEvents = new Map(); let n = 0, observer, motionObserver, image, draws = 0, revoked = 0, now = 0, lastFrame = [], motionLevel = 'subtle';
   const canvas = { isConnected: true, getContext: () => ({ clearRect() {}, drawImage(...args) { draws++; lastFrame = args.slice(1, 3); } }) };
-  const context = { GZ_PET_SPRITES: S, console, document: { documentElement: { getAttribute: () => motionLevel }, hidden: false, addEventListener: (k, f) => docEvents.set(k, f), removeEventListener: (k) => docEvents.delete(k) },
+  const scratch = () => ({ getContext: () => ({ clearRect() {}, drawImage() {} }) });
+  const context = { GZ_PET_SPRITES: S, console, document: { createElement: scratch, documentElement: { getAttribute: () => motionLevel }, hidden: false, addEventListener: (k, f) => docEvents.set(k, f), removeEventListener: (k) => docEvents.delete(k) },
     window: { addEventListener: (k, f) => winEvents.set(k, f), removeEventListener: (k) => winEvents.delete(k) },
     performance: { now: () => now }, setTimeout: (f) => { timers.set(++n, f); return n; }, clearTimeout: (id) => timers.delete(id),
+    requestAnimationFrame: (f) => { timers.set(++n, f); return n; }, cancelAnimationFrame: (id) => timers.delete(id),
     matchMedia: () => motion, Image: class { constructor() { image = this; } },
     IntersectionObserver: class { constructor(f) { observer = f; } observe() {} disconnect() {} },
     MutationObserver: class { constructor(f) { motionObserver = f; } observe() {} disconnect() {} },

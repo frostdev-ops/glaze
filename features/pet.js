@@ -4,6 +4,8 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const button = (text, run) => { const b = make('button', { type: 'button', textContent: text }); b.addEventListener('click', run); return b; };
   const NAMES = { books: 'Books', plant: 'Mushroom', moon: 'Moon', stars: 'Stars', plain: 'Classic buddy', bandana: 'Mint bandana', happy: 'Happy buddy' };
+  const ACTIVITIES = { walk: 'Exploring', perch: 'Perching', hide: 'Hide and seek', rest: 'Resting', greet: 'Saying hello', investigate: 'Investigating', follow: 'Following your pointer', play: 'Playing', study: 'Studying beside you', groom: 'Grooming', stretch: 'Stretching', home: 'Returning home' };
+  const TIMES = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Night' };
   let ready;
   const start = () => (ready ||= Promise.all([ctx.need('lib/petbrain.js', () => globalThis.GZ_PET_BRAIN), ctx.need('lib/pet.js', () => globalThis.GZ_PET), ctx.need('lib/todo.js', () => globalThis.GZ_TODO), ctx.need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI), ctx.need('lib/petphysics.js', () => globalThis.GZ_PET_PHYSICS), ctx.need('features/petworld.js', () => globalThis.GZ_PET_WORLD)]).catch((e) => { ready = null; throw e; }));
   const send = (m) => new Promise((resolve) => { try { chrome.runtime.sendMessage({ type: 'glaze:pet', ...m }, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
@@ -14,8 +16,14 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
     if (tile) tile.hidden = true;
     const pet = make('div', { className: 'gz-game' });
     const stage = make('div', { className: 'gz-game-habitat' });
+    const level = make('p', { className: 'gz-game-level' }), controls = make('div', { className: 'gz-game-controls' });
+    pet.append(level, stage, controls);
     stage.setAttribute('aria-label', t('Your buddy’s habitat'));
     const status = make('p', { className: 'gz-game-status', role: 'status' });
+    const activity = make('p', { className: 'gz-game-hint' });
+    stage.addEventListener('glaze:pet-intent', (e) => {
+      if (alive && Object.hasOwn(ACTIVITIES, e.detail?.action)) activity.textContent = t('Activity: {activity}', { activity: t(ACTIVITIES[e.detail.action]) });
+    });
     const art = (path, cls) => make('img', { src: chrome.runtime.getURL(`assets/art/stickers/${path}.webp`), alt: '', className: cls, width: 72, height: 72, decoding: 'async' });
     const paint = () => {
       if (!alive || !data || !chrome.runtime?.id) return;
@@ -25,7 +33,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       const progress = make('progress', { max: d.next ? d.next - d.floor : 1, value: d.next ? d.xp - d.floor : 1 });
       progress.setAttribute('aria-label', t('Pet experience'));
       const meters = make('div', { className: 'gz-game-meters' });
-      for (const [id, name] of [['mood', 'Mood'], ['playful', 'Playfulness'], ['energy', 'Energy']]) {
+      for (const [id, name] of [['mood', 'Mood'], ['playful', 'Playfulness'], ['energy', 'Energy'], ['bond', 'Bond'], ['curiosity', 'Curiosity'], ['comfort', 'Comfort']]) {
         const value = Math.round(d.needs[id]), meter = make('meter', { min: 0, max: 100, low: 25, high: 75, optimum: 100, value });
         meter.setAttribute('aria-label', t(name));
         meters.append(make('label', {}, make('span', { textContent: t(name) }), meter, make('small', { textContent: `${value}/100` })));
@@ -52,6 +60,7 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
         positions.forEach((name, i) => select.append(make('option', { value: String(i), textContent: t(name), selected: d.decor[id] === i })));
         select.addEventListener('change', () => update({ op: 'decor', item: id, cell: select.value === '' ? null : Number(select.value) }));
         const add = button('', (e) => { if (e.isTrusted) update({ op: 'place', item: id, position: { x: 50, y: item.shelf ? 52 : 25 } }); });
+        add.dataset.control = `supply:${id}`;
         add.disabled = d.level < item.level; add.draggable = !add.disabled; add.className = 'gz-game-supply'; add.dataset.item = id;
         add.title = `${name} · ${t('Level {level}', { level: item.level })}`; add.setAttribute('aria-label', add.title);
         add.append(art(item.art, ''), make('span', { textContent: name }), make('small', { textContent: t('Level {level}', { level: item.level }) }));
@@ -70,13 +79,20 @@ var GZ_PET_UI = globalThis.GZ_PET_UI || (() => {
       const learning = make('input', { type: 'checkbox', checked: d.learning }); learning.dataset.control = 'learning';
       learning.addEventListener('change', (e) => { if (e.isTrusted) update({ op: 'learning', learning: learning.checked }); });
       const forget = button(t('Reset learned behavior'), (e) => { if (e.isTrusted) update({ op: 'forget' }); });
-      const learned = make('details', {}, make('summary', { textContent: t('How your buddy learns') }), make('p', { textContent: t('Your buddy learns from petting, play, being moved away from elements, and going in or out of its habitat. Mood, playfulness, energy, focus-timer state and time of day shape its choices. Learning stays on your device; no typed text is read or sent. Time away never hurts your buddy or your XP.') }), make('p', { textContent: t('Learned interactions: {n}', { n: d.brain.counts.reduce((n, value) => n + value, 0) }) }), forget);
+      forget.dataset.control = 'forget';
+      const profile = GZ_PET_BRAIN.describe(d.brain), interactions = d.brain.counts.reduce((n, value) => n + value, 0);
+      const learned = make('details', {}, make('summary', { textContent: t('How your buddy learns') }), make('p', { textContent: t('Your buddy remembers which activities you welcome, learns daily routines and familiar places, and settles down while you type or focus. Petting, play, moving it away and habitat changes shape its preferences. Learning stays on this device; no typed text is read or sent. Time away never hurts your buddy or your XP.') }), make('p', { textContent: t('Learned interactions: {n}', { n: interactions }) }), make('p', { textContent: t('Familiarity: {n}/100', { n: profile.familiarity }) }));
+      if (interactions && Object.hasOwn(ACTIVITIES, profile.favorite)) learned.append(make('p', { textContent: t('Favorite activity: {activity}', { activity: t(ACTIVITIES[profile.favorite]) }) }));
+      if (Object.hasOwn(TIMES, profile.habit)) learned.append(make('p', { textContent: t('Preferred time: {time}', { time: t(TIMES[profile.habit]) }) }));
+      learned.append(forget);
+      learned.querySelector('summary').dataset.control = 'learned';
       learned.open = !!wasOpen[2];
       const rules = make('details', {}, make('summary', { textContent: t('How XP works') }), make('p', { textContent: t('Handed in: 20 XP on time, 10 XP late, 15 XP when timing is unknown. A kept do-on plan: 8 XP. Each verified streak day: 5 XP. Focus sessions give no XP.') }), make('p', { textContent: t('Your buddy keeps growing across semesters, with no final level. Progress stays with this school account on this device. Missing days never take progress away; unticking work removes its XP.') }), make('p', { textContent: t('Streak XP uses only days already checked by Streak, through yesterday. Restores add days once; switching it off keeps earned XP.') }));
       decor.querySelector('summary').dataset.control = 'decor';
       rules.querySelector('summary').dataset.control = 'rules';
       decor.open = !!wasOpen[0]; rules.open = !!wasOpen[1];
-      pet.replaceChildren(make('p', { className: 'gz-game-level', textContent: t('Level {level} · {xp} XP', { level: d.level, xp: d.xp }) }), stage, tray, meters, progress,
+      level.textContent = t('Level {level} · {xp} XP', { level: d.level, xp: d.xp });
+      controls.replaceChildren(activity, tray, meters, progress,
         make('p', { textContent: d.next ? t('{xp} XP to the next level', { xp: d.next - d.xp }) : t('All rewards unlocked') }),
         make('p', { className: 'gz-game-breakdown', textContent: t('Work {work} · Plans {plans} · Streak {streak}', { work: d.work, plans: d.plans, streak: d.streakXp }) }),
         make('p', { className: 'gz-game-hint', textContent: t('Drag your buddy out to explore, and back in to come home. W: wander · H: home. Drag furniture, or use arrow keys; Delete puts it away.') }),
