@@ -60,6 +60,7 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
       last = '';
       cmd.stop();
       cmd.found = null;
+      cmd.searchNote = '';
       cmd.seeking = false;
       live.textContent = '';
       show();
@@ -68,44 +69,50 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
       if (!allowed()) return void quit();
       const c = (ctl = new AbortController());
       try {
-        let courses, adapter = {};
+        let courses, adapter = {}, complete = true;
         if (ultra) {
           const U = globalThis.GZ_ULTRA;
           // shortcut: at most 30 requests per query and two pages (400 rows) per list; raise only after measuring large schools.
           const r = U.read({ origin: location.origin, signal: c.signal, maxPages: 2, maxRequests: 30 });
           sources ||= S.cache(300000, 301);
-          courses = sources.get('courses');
-          if (!courses) {
+          let courseSource = sources.get('courses');
+          if (!courseSource) {
             const mem = await ctx.myCourses();
             if (c.signal.aborted) return;
-            const terms = await r.terms().catch(() => []);
+            const terms = await r.terms().catch(() => { complete = false; return []; });
             if (c.signal.aborted) return;
             courses = Object.entries(U.courses(mem, { terms })).filter(([, x]) => !x.org)
               .map(([id, x]) => ({ id, name: x.name, course_code: x.code, term: x.term, closed: x.closed }));
-            if (courses.length) sources.set('courses', courses); // a failed lookup answers [] (content-ultra.js myCourses): ask again
+            courseSource = { rows: courses, complete: complete && mem.complete !== false && terms.complete !== false };
+            if (courses.length) sources.set('courses', courseSource); // a failed lookup answers [] (content-ultra.js myCourses): ask again
           }
+          courses = courseSource.rows;
+          complete = courseSource.complete;
           // shortcut: first 100 open current-term courses, so all three source lists fit the 301-entry cache.
           const now = Date.now(), here = ctx.courseId();
-          courses = S.order(courses.filter((x) => !x.closed && (x.id === here || !x.term || S.current(x, now))), here, now, (id) => /^_\d+_\d+$/.test(id)).slice(0, 100);
+          const eligible = S.order(courses.filter((x) => !x.closed && (x.id === here || !x.term || S.current(x, now))), here, now, (id) => /^_\d+_\d+$/.test(id));
+          if (eligible.length > 100) complete = false;
+          courses = eligible.slice(0, 100);
           adapter = { kinds: U.SEARCH_KINDS, conc: 3, load: async (course, k) => {
             const key = `${course.id}|${k.kind}`;
-            let rows = sources.get(key);
-            if (!rows) {
-              if (Date.now() < (retry.get(key) || 0)) return [];
+            let source = sources.get(key);
+            if (!source) {
+              if (Date.now() < (retry.get(key) || 0)) { complete = false; return []; }
               try {
-                rows = (await r.search(course, k, (html) => GZ_DOCTEXT.html(html)))
-                  .map(({ text, ...row }) => ({ ...row, index: S.fold(`${row.title} ${text}`) }));
+                const rows = await r.search(course, k, (html) => GZ_DOCTEXT.html(html));
+                source = { complete: rows.complete !== false, rows: rows.map(({ text, ...row }) => ({ ...row, index: S.fold(`${row.title} ${text}`) })) };
                 retry.delete(key);
               } catch (e) {
-                if (c.signal.aborted || e.message === 'Ultra request budget') return [];
-                if (!/^HTTP (403|404)$/.test(e.message)) { retry.set(key, Date.now() + (e.message === 'HTTP 429' ? 30000 : 3000)); return []; }
-                rows = [];
+                if (c.signal.aborted || e.message === 'Ultra request budget') { complete = false; return []; }
+                if (!/^HTTP (403|404)$/.test(e.message)) { complete = false; retry.set(key, Date.now() + (e.message === 'HTTP 429' ? 30000 : 3000)); return []; }
+                source = { rows: [], complete: true };
               }
               if (c.signal.aborted) return [];
-              sources.set(key, rows);
+              sources.set(key, source);
             }
+            if (!source.complete) complete = false;
             const q = S.fold(term);
-            return rows.filter((x) => x.until >= Date.now() && x.index.includes(q));
+            return source.rows.filter((x) => x.until >= Date.now() && x.index.includes(q));
           } };
         } else { kept ||= S.cache(); courses = S.order(await ctx.canvasCourses(), ctx.canvasCourseId(), Date.now()); }
         const n = await S.search({
@@ -115,7 +122,10 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
             show(true);
           },
         });
-        if (!c.signal.aborted) live.textContent = n ? t('Results from your courses: {n}', { n }) : t('Nothing found in your courses.');
+        if (!c.signal.aborted) {
+          cmd.searchNote = complete ? '' : t('Search is partial. Narrow your query or open a course to search further.');
+          live.textContent = [n ? t('Results from your courses: {n}', { n }) : complete ? t('Nothing found in your courses.') : '', cmd.searchNote].filter(Boolean).join(' ');
+        }
       } catch { /* unavailable tools or a signed-out session leave the ordinary palette usable */ }
       if (c.signal.aborted) return;
       cmd.seeking = false;
@@ -130,6 +140,7 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
       cmd.stop();
       live.textContent = '';
       cmd.found = term ? [] : null;
+      cmd.searchNote = '';
       cmd.seeking = !!term;
       if (first === true && term) cmd.head = cmd.shown.slice();
       show(first === true);

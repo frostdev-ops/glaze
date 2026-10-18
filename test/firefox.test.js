@@ -9,7 +9,8 @@ const { execFileSync } = require('child_process');
 test('package-firefox.sh builds a Firefox manifest whose background scripts all ship', () => {
   const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-firefox-'));
   try {
-    execFileSync('sh', ['scripts/package-firefox.sh'], { cwd: path.join(__dirname, '..'), env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    // Exercise package format from any source checkout; the separate release-readiness tests enforce provenance.
+    execFileSync('sh', ['scripts/package-firefox.sh', '--development'], { cwd: path.join(__dirname, '..'), env: { ...process.env, DIST: dist }, stdio: 'pipe' });
     const version = require('../manifest.json').version;
     const zip = path.join(dist, `glaze-v${version}-firefox.zip`);
     const files = new Set(execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).split('\n'));

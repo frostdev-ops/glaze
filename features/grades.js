@@ -146,6 +146,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   const load = (st) => {
     if (st.status === 'loading' || st.status === 'ready') return st.p;
     st.status = 'loading';
+    st.partial = false;
     st.v++;
     whatIf();
     const { cid, row } = st;
@@ -160,7 +161,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         if (st.gone.length) st.open = true;
         if (r.gone.length) keep(st);
         if (Object.keys(old).length) migrate(st, old, Object.keys(was.kept.s));
-      }, () => { st.status = 'failed'; }).then(() => { st.v++; whatIf(); }));
+      }, (e) => { st.status = 'failed'; st.partial = e.code === 'incomplete'; }).then(() => { st.v++; whatIf(); }));
     }
     return (st.p = Promise.all([
       getAll(`/courses/${cid}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`),
@@ -224,7 +225,13 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (!st) { W.set(cid, (st = { cid, status: 'start', v: 0, open: false, target: '' })); begin(st); }
     if (st.status === 'none' && again(st)) begin(st);
     if (['start', 'asking', 'none'].includes(st.status)) return old?.remove();
-    if (ultra && st.status === 'ready') { const b = pageBook(cid); if (b.results && b.key !== st.book) rebuild(st, b.results, b.key); }
+    if (ultra && st.status === 'ready') {
+      const b = pageBook(cid);
+      if (b.results && b.key !== st.book) {
+        if (b.results.complete === false) Object.assign(st, { status: 'failed', partial: true, v: st.v + 1 });
+        else rebuild(st, b.results, b.key);
+      }
+    }
     const key = `${cid} ${st.v} ${locale()}`;
     if (old?.dataset.key === key && (ultra ? old.previousElementSibling === anchor : old.nextElementSibling === anchor)) return;
     const box = old?.dataset.key === key ? old : drawWhatIf(st);
@@ -240,7 +247,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     // Opening it asks for the course's work; after a failure, opening it again (or Try again) asks once more.
     box.addEventListener('toggle', () => { st.open = box.open; if (box.open && (st.status === 'idle' || st.status === 'failed')) load(st); });
     if (st.status !== 'ready') {
-      box.append(make('p', { className: 'gz-calc-note', textContent: st.status === 'failed' ? t("Glaze couldn't load this course's scores.") : t('Loading your scores…') }));
+      box.append(make('p', { className: 'gz-calc-note', textContent: st.partial ? t('Some scores could not be read. The calculator needs the complete gradebook.') : st.status === 'failed' ? t("Glaze couldn't load this course's scores.") : t('Loading your scores…') }));
       if (st.status === 'failed') {
         const retry = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Try again') });
         retry.dataset.f = 'retry';
@@ -429,7 +436,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   };
   const ultraList = async () => {
     await ultraIn();
-    return GZ_ULTRA.current(await X.myCourses(), Date.now()).courses.filter((c) => /^_\d+_\d+$/.test(c.m.userId || ''))
+    const memberships = await X.myCourses();
+    if (memberships.complete === false) throw new Error('Incomplete Ultra memberships');
+    return GZ_ULTRA.current(memberships, Date.now()).courses.filter((c) => /^_\d+_\d+$/.test(c.m.userId || ''))
       .map((c) => ({ id: c.id, name: c.name, course_code: c.code, term: c.term, enrollments: [{ type: 'student', user_id: c.m.userId }] }));
   };
   // A course's grade as Canvas's enrollment gives it: Blackboard's own overall figure and the letter it writes (or the
@@ -438,6 +447,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const rows = bookOf(c);
     const e = c.enrollments[0];
     if (!rows) return e;
+    if (rows.complete === false || D.raw.get(c.id)?.complete === false) return Object.assign(e, { computed_current_score: null, computed_current_grade: null });
     if (rows.some((r) => r?.column?.externalGrade)) schemeFor(c.id); // a scale is its overall column's, so only with one
     const g = GZ_ULTRA.grade(rows, D.raw.get(c.id) || []);
     if (D.raw.get(c.id)) D.schemes.set(c.id, g.scale || false);
@@ -565,6 +575,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const box = make('section', { id: 'gz-gpa' }, make('h2', { id: 'gz-gpa-h', textContent: t('GPA') }), figs);
     box.setAttribute('aria-labelledby', 'gz-gpa-h');
     const fig = (value, name, sub) => make('div', { className: 'gz-gpa-fig' }, make('b', { textContent: two(value) }), make('span', { textContent: name }), sub ? make('small', { textContent: sub }) : '');
+    const incomplete = () => ultra && D.list.some((c) => D.books.get(c.id)?.complete === false || D.raw.get(c.id)?.complete === false);
     const cells = [];
     const figures = () => {
       const rows = rowsOf().filter((r) => !r.out);
@@ -585,7 +596,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       }
       // A what-if under Canvas's letter whose scheme didn't come: say so rather than read it on another scale.
       const unread = rows.filter((r) => r.needs && D.schemes.get(String(r.c.id)) === false);
-      figs.replaceChildren(...(out.length ? out : [make('p', { className: 'gz-gpa-note', textContent: t('No grade yet') })]),
+      figs.replaceChildren(...(incomplete() ? [make('p', { className: 'gz-gpa-note', textContent: t('Some scores could not be read. The calculator needs the complete gradebook.') })] : out.length ? out : [make('p', { className: 'gz-gpa-note', textContent: t('No grade yet') })]),
         ...unread.map((r) => make('p', { className: 'gz-gpa-note', textContent: t('Give {name} a grading scale below to count its what-if grade.', { name: r.c.name || r.c.course_code || '' }) })));
       for (const f of cells) f();
       drawHist();
@@ -663,7 +674,14 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       if (!hist.open) return;
       Promise.all([gpaIn(), X.need('features/gpaterms.js', () => globalThis.GZ_GPA_TERMS)]).then(() => {
         D.past ||= GZ_GPA.clean(null);
-        if (hist.open && hist.isConnected) GZ_GPA_TERMS.draw(histBody, { rows: () => rowsOf().filter((r) => !r.out), past: () => D.past, save: savePast, needFor, schemeFor, schemes: D.schemes, two, pct });
+        if (hist.open && hist.isConnected) {
+          if (incomplete()) {
+            GZ_GPA_TERMS.stop();
+            histBody.textContent = t('Some scores could not be read. The calculator needs the complete gradebook.');
+            return;
+          }
+          GZ_GPA_TERMS.draw(histBody, { rows: () => rowsOf().filter((r) => !r.out), past: () => D.past, save: savePast, needFor, schemeFor, schemes: D.schemes, two, pct });
+        }
       }, () => { histBody.textContent = t("Glaze couldn't load this. Try again in a moment."); });
     }
     hist.addEventListener('toggle', () => { D.hist = hist.open; drawHist(); });

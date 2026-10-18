@@ -114,6 +114,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
   const ultraTerm = async () => {
     await ctx.need('lib/ultra.js', () => globalThis.GZ_ULTRA);
     const mem = await ctx.myCourses();
+    if (mem.complete === false) throw new Error('Incomplete Ultra memberships');
     const uid = mem.find((m) => /^_\d+_\d+$/.test(m?.userId || ''))?.userId;
     return { p: { id: uid }, term: GZ_ULTRA.current(mem, Date.now()), tz: GZ_TODO.zone(Intl.DateTimeFormat().resolvedOptions().timeZone) };
   };
@@ -121,7 +122,7 @@ var GZ_INSIGHTS_UI = globalThis.GZ_INSIGHTS_UI || (() => {
     const r = GZ_ULTRA.read({ origin: location.origin, live: go });
     const rows = await r.grades(c.id, uid);
     const excepted = await GZ_ULTRA.excepts(r, c.m, c.id, rows, at);
-    return { id: c.id, name: c.name, q: false, more: false, items: GZ_ULTRA.work(rows, at, excepted), trend: GZ_ULTRA.trend(rows, tz), gp: '' };
+    return { id: c.id, name: c.name, q: false, more: rows.complete === false, items: GZ_ULTRA.work(rows, at, excepted), trend: rows.complete === false ? [] : GZ_ULTRA.trend(rows, tz), gp: '' };
   };
 
   // What's saved, at once if it's this term's; then, unless it's fresh, Canvas asked again and the answer kept.

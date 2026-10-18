@@ -7,6 +7,24 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$root"
+development=false
+case "${1:-}" in
+  '') ;;
+  --development) development=true ;;
+  *) echo 'usage: sh scripts/package-firefox.sh [--development]' >&2; exit 2 ;;
+esac
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+commit=$(git rev-parse --verify HEAD 2>/dev/null || printf unknown)
+dirty=false
+git diff --quiet HEAD -- 2>/dev/null || dirty=true
+if [ "$development" = false ]; then
+  if [ "$branch" != dev/firefox ] || [ "$dirty" = true ]; then
+    echo 'Firefox release packages require a clean dev/firefox checkout. Use --development only for local checks.' >&2
+    exit 1
+  fi
+else
+  echo 'Building a Firefox development package; do not upload it to a store.' >&2
+fi
 dist=${DIST:-dist}
 version=$(node -p 'require("./manifest.json").version')
 DIST=$dist ./package.sh >/dev/null
@@ -26,11 +44,13 @@ var GZ_GCAL_AUTH = {
   clear: async () => {},
 };
 JS
-node - "$stage/manifest.json" "$stage/lib/background.js" <<'JS'
+node - "$stage/manifest.json" "$stage/lib/background.js" "$development" "$branch" "$commit" "$dirty" <<'JS'
 const fs = require('fs');
 const path = require('path');
-const [file, background] = process.argv.slice(2);
+const [file, background, development, branch, commit, dirty] = process.argv.slice(2);
 const m = JSON.parse(fs.readFileSync(file, 'utf8'));
+if (development === 'true') m.name = `${m.name} (Firefox development)`;
+fs.writeFileSync(path.join(path.dirname(file), 'glaze-build.json'), JSON.stringify({ target: 'firefox', development: development === 'true', branch, commit, dirty: dirty === 'true' }, null, 2) + '\n');
 // Every importScripts call in the worker, in order, as paths from the package root.
 const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\(([^)]*)\)/g)]
   .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.join('lib', f)));

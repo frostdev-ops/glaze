@@ -1,0 +1,16 @@
+/* LMS rules (features/rules.js adds this sheet while a Look's rules are worn): what the attributes and variables it puts
+   on a part's elements mean. Values only ever arrive as --gz-r-* variables, cleaned by lib/parts.js. The three :not(#…)
+   lift each rule over the LMS's and Glaze's own id selectors (#site-wrap, #application, #page), !important against theirs. */
+[data-gz-r-hide]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { display: none !important; }
+[data-gz-r-st~="bg"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { background: var(--gz-r-bg) !important; }
+[data-gz-r-st~="fg"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { color: var(--gz-r-fg) !important; }
+/* A part's text is often set again on what it holds (a title's link): those take the part's colour. */
+[data-gz-r-st~="fg"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) :not(svg *) { color: inherit !important; }
+[data-gz-r-st~="bc"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { border-color: var(--gz-r-bc) !important; }
+[data-gz-r-st~="bw"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { border-width: var(--gz-r-bw) !important; border-style: solid !important; }
+[data-gz-r-st~="r"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { border-radius: var(--gz-r-r) !important; }
+[data-gz-r-st~="p"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { padding: var(--gz-r-p) !important; }
+[data-gz-r-st~="g"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { gap: var(--gz-r-g) !important; }
+[data-gz-r-st~="sh"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { box-shadow: var(--gz-r-sh) !important; }
+[data-gz-r-st~="o"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { opacity: var(--gz-r-o) !important; }
+[data-gz-r-st~="f"]:not(#gz-r0):not(#gz-r1):not(#gz-r2) { font-family: var(--gz-r-f) !important; }

@@ -76,7 +76,7 @@ const GZ_FONTS = (() => {
     if (!f || !(f.google || f.files)) return Promise.resolve(false);
     const key = family(f);
     if (loading.has(key)) return loading.get(key);
-    const get = (url, as) => fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer' }).then((r) => (r.ok ? r[as]() : Promise.reject(r.status)));
+    const get = (url, as) => fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer', ...(as === 'arrayBuffer' && { cache: 'force-cache' }) }).then((r) => (r.ok ? r[as]() : Promise.reject(r.status)));
     const list = f.files
       ? Promise.resolve(Object.entries(f.files).map(([weight, url]) => ({ weight, url })))
       // A family without one of the three weights is asked for again plainly.

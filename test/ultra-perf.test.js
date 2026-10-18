@@ -4,13 +4,30 @@ const fs = require('node:fs'), vm = require('node:vm');
 const source = fs.readFileSync(process.env.PERF_ULTRA_SOURCE || require.resolve('../content-ultra.js'), 'utf8');
 const settle = () => new Promise(setImmediate);
 const light = vm.runInNewContext(fs.readFileSync(require.resolve('../features/light.js'), 'utf8'), { document: { addEventListener() {} } });
+const covered = vm.runInNewContext(`(${source.match(/  const covered = ([^\n]+);/)[1]})`);
+
+test('GZ-01: the one-page gradebook cache preserves coverage and redraws when only coverage changes', async () => {
+  const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
+  let changed = 0, now = 100000, partial = true;
+  const bookFor = vm.runInNewContext(`${source.slice(start, end)} bookFor`, {
+    books: new Map(), covered, Date: { now: () => now }, me: async () => '_900_1',
+    api: async () => ({ results: [], ...(partial && { paging: { nextPage: '?offset=200' } }) }),
+    GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null }, locale: () => 'en', onBook: () => changed++,
+  });
+  bookFor('_101_1'); await settle();
+  assert.equal(bookFor('_101_1').results.complete, false);
+  partial = false; now += 60001;
+  bookFor('_101_1'); await settle();
+  assert.equal(bookFor('_101_1').results.complete, true);
+  assert.equal(changed, 2);
+});
 
 test('an unchanged gradebook remembers a successful empty late-status answer', async () => {
   const start = source.indexOf('  const bookFor = '), end = source.indexOf('  // undefined until', start);
   let requests = 0, changed = 0, now = 100000, fail = false;
   const books = new Map();
   const bookFor = vm.runInNewContext(`${source.slice(start, end)} bookFor`, {
-    books, Date: { now: () => now }, me: async () => '_900_1',
+    books, covered, Date: { now: () => now }, me: async () => '_900_1',
     api: async () => { requests++; if (fail) throw new Error('offline'); return { results: [] }; }, lateIn: async () => new Set(),
     GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null }, locale: () => 'en', onBook: () => changed++,
   });

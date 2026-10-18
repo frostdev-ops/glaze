@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Glaze preview</title>
 <!-- A small mock of Ultra built from its real class names, so the real stylesheets style it.
      content.js runs here exactly as on Blackboard (it adds the sheets and applies settings);
@@ -9,8 +10,30 @@
      The <style> below is only the layout Ultra's own CSS would provide: no colors. -->
 <style>
   body { margin: 0; font-size: 14px; line-height: 1.5; }
-  #site-wrap { min-height: 100vh; }
+  #site-wrap { min-height: 100vh; display: grid; grid-template-columns: var(--gz-nav-width, 200px) minmax(0, 1fr); }
+  #site-wrap > section { grid-column: 2; }
+  .MuiDrawer-root { grid-column: 1; grid-row: 1 / 3; min-width: 0; }
+  .MuiDrawer-paper { box-sizing: border-box; width: var(--gz-nav-width, 200px); min-height: 100vh; display: flex; flex-direction: column; }
+  .makeStylesfooter-preview { margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; font-size: 11px; }
+  .MuiListItemButton-root { display: flex; align-items: center; gap: 12px; }
+  .makeStylesnavigation-preview ul { list-style: none; padding: 0; }
+  .makeStylesnavigation-preview svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+  html[data-gz-nav-collapsed] #site-wrap { grid-template-columns: 80px minmax(0, 1fr); }
+  html[data-gz-nav-place] #site-wrap { grid-template-columns: 0 minmax(0, 1fr); } /* a Look's nav as a bar or dock (features/navlayout.css) */
+  html[data-gz-nav-collapsed] .MuiDrawer-root { position: relative; }
+  html[data-gz-nav-collapsed] .MuiDrawer-paper { width: 80px; }
+  /* Desktop mock scaffold only: keep the collapsed column while the real rail overlays at full width. */
+  html[data-preview-viewport="desktop"][data-gz-nav-collapsed][data-gz-nav-expanded] .MuiDrawer-paper { position: absolute; inset: 0 auto auto 0; z-index: 1300; width: var(--gz-nav-width, 200px); min-height: 100%; box-shadow: var(--gz-shadow); }
+  #base_tools { display: flex; gap: 8px; padding: 8px; }
+  #base_tools a { display: flex; align-items: center; gap: 6px; padding: 8px; text-decoration: none; }
+  #base_tools svg { width: 20px; height: 20px; }
+  .course-columns { padding: 14px; }
+  .course-element-card { overflow: hidden; }
+  .course-banner { min-height: 80px; background: var(--gz-course); }
+  .course-title, .course-status { padding: 8px 12px; }
   .panel-wrap { position: relative; min-height: 100vh; }
+  div.bb-course-navigation { position: sticky; top: 0; z-index: 10; }
+  bb-course-navigation { display: block; }
   course-page-header > header { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; }
   [data-analytics-id="course.header.home"] { display: grid; place-items: center; width: 30px; height: 30px; }
   .pv-course { flex: 1; font-size: 0.875rem; }
@@ -43,26 +66,79 @@
   .bb-editor-container { font-size: 0.9rem; }
   .ql-editor p { margin: 0 0 0.6em; }
   .pv-inline { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+
+  [data-preview-view][hidden], [data-preview-widget][hidden], [data-preview-notes][hidden], [data-preview-todo][hidden] { display: none !important; }
+  #preview-menu, #preview-backdrop { display: none; }
+  .preview-dashboard { padding: 24px; min-width: 0; }
+  .mock-content { padding: 24px; min-width: 0; }
+  .mock-cards { display: flex; gap: 24px; flex-wrap: wrap; }
+  .mock-cards article { min-width: 0; width: var(--gz-card-w,262px); }
+  .mock-cards h2 { font-size: 1.1rem; padding: 12px; }
+  #application.ic-app { min-height: 100vh; padding-left: 84px; }
+  #header.ic-app-header { position: fixed; inset: 0 auto 0 0; width: 84px; }
+  .ic-app-header__menu-list { list-style: none; padding: 8px; }
+  .ic-app-header__menu-list-link { display: grid; gap: 8px; padding: 16px 2px; text-align: center; text-decoration: none; }
+  .ic-DashboardCard__header_image { height: var(--gz-card-h,146px); background: linear-gradient(135deg,#146983,#6ab2a2); }
+  .mock-module { padding: 18px; margin-block: 16px; }
+  .mock-module h3 { margin-top: 0; }
+  #page-wrapper .navbar { display: flex; align-items: center; gap: 24px; padding: 16px 24px; }
+  #region-main { padding: 24px; }
+  .dashboard-card { border: 1px solid var(--gz-line); border-radius: var(--gz-radius); }
+  .dashboard-card .card-img { height: 140px; background: linear-gradient(135deg,#146983,#6ab2a2); }
+  .mock-document { border: 1px solid var(--gz-line); padding: 32px; max-width: 50rem; line-height: 1.7; }
+  @media (max-width: 899px) {
+    #site-wrap, html[data-gz-nav-collapsed] #site-wrap { display: block; }
+    #preview-menu { display: block; padding: 12px; margin: 8px; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
+    .MuiDrawer-root { display: none; position: fixed !important; inset: 0; z-index: 1400; }
+    html[data-preview-nav-open] .MuiDrawer-root { display: block; }
+    .MuiDrawer-paper, html[data-gz-nav-collapsed] .MuiDrawer-paper { position: relative; width: min(var(--gz-nav-width,200px),85vw); height: 100vh; overflow: auto; }
+    html[data-preview-nav-open] #preview-backdrop { display: block; position: fixed; inset: 0; border: 0; background: rgb(0 0 0 / .45); }
+    #application.ic-app { padding-left: 0; padding-top: 65px; }
+    #header.ic-app-header { inset: 0 0 auto; width: auto; height: 65px; overflow: hidden; }
+    .ic-app-header__menu-list { display: flex; margin: 0; }
+    .ic-app-header__menu-list-link { padding: 12px; }
+    #region-main, .mock-content { padding: 16px; }
+  }
 </style>
 </head>
 <body>
+<button type="button" id="preview-menu" aria-controls="preview-drawer" aria-expanded="false">Navigation</button>
 <div id="site-wrap">
-  <section class="course course-color-2">
+  <aside class="MuiDrawer-root" id="preview-drawer" aria-label="Navigation"><button id="preview-backdrop" type="button" tabindex="-1" aria-label="Close navigation"></button><div class="MuiPaper-root MuiDrawer-paper">
+    <header class="makeStylesroot-preview themed-logo-background-primary-fill"><a class="MuiLink-root" href="/ultra/course" aria-label="Home"><img class="makeStyleslogoContainer-preview" src="icons/icon.svg" width="160" height="40" alt="School"></a></header>
+    <nav class="makeStylesnavigation-preview" aria-label="Global navigation"><ul class="makeStylesroot-preview">
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/profile"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M4 21v-3a8 8 0 0 1 16 0v3"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Alexandria Montgomery-Wellington</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/institution-page"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 10h18M6 10v10M12 10v10M18 10v10M3 21h18M3 8l9-5 9 5"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Institution page</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/stream"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m3 12 5-7 5 14 4-7h4"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Activity</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root Mui-selected" href="/ultra/course"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Courses</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/organization"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 21V7l9-4 9 4v14M8 10h1m6 0h1M8 14h1m6 0h1M10 21v-4h4v4"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Organizations</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/calendar"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18v15H3zM3 10h18M7 3v5M17 3v5"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Calendar</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/messages"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5h18v14H3zM3 5l9 8 9-8"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Messages</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/grades"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 3h14v18H5zM9 8h6M9 12h6M9 16h6"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Grades</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="/ultra/tools"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16v14H4zM8 7V3h8v4M4 12h16"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Tools</span></span></a></li>
+      <li><a class="MuiButtonBase-root MuiListItemButton-root" href="#"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10 4H4v16h6M8 12h13m-4-4 4 4-4 4"/></svg><span class="MuiListItemText-root"><span class="MuiTypography-root">Sign out</span></span></a></li>
+    </ul></nav>
+    <footer class="makeStylesfooter-preview"><a class="MuiLink-root MuiLink-underlineHover" href="#privacy">Privacy</a><a class="MuiLink-root MuiLink-underlineHover" href="#terms">Terms</a><a class="MuiLink-root MuiLink-underlineHover" href="#accessibility">Accessibility</a></footer>
+  </div></aside>
+  <section class="multi-column-view" data-preview-view="courses"><div class="course-columns"><article class="element-card course-element-card course-color-2" data-course-id="_1_1"><div class="course-banner"></div><h2 class="course-title">Computer Science</h2><div class="course-status">Open</div></article><article class="element-card course-element-card course-color-3" data-course-id="_2_1"><div class="course-banner"></div><h2 class="course-title">Spanish</h2><div class="course-status">Open</div></article></div></section>
+  <section class="course course-color-2" data-preview-view="outline tabs">
   <div class="panel-wrap">
-    <course-page-header><header>
-      <a class="MuiButtonBase-root" data-analytics-id="course.header.home" aria-label="Home" href="#">
-        <svg class="MuiSvgIcon-root" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>
-      </a>
-      <span class="pv-course">FA26-CS101-01</span>
-      <span class="MuiBadge-badge" title="Students can see this course">OPEN</span>
-    </header></course-page-header>
-    <div class="bb-course-navigation"><div class="makeStylestoolbar-0">
-      <ul class="MuiList-root bb-ui-navigation-list-horizontal">
-        <li><a class="MuiListItemButton-root" aria-current="page" href="#">Content</a></li>
-        <li><a class="MuiListItemButton-root" href="#">Calendar</a></li>
-        <li><a class="MuiListItemButton-root" href="#">Gradebook</a></li>
-      </ul>
-    </div></div>
+    <div class="bb-course-navigation"><bb-course-navigation>
+      <course-page-header><header>
+        <a class="MuiButtonBase-root" data-analytics-id="course.header.home" aria-label="Home" href="#">
+          <svg class="MuiSvgIcon-root" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>
+        </a>
+        <span class="pv-course">FA26-CS101-01</span>
+        <span class="MuiBadge-badge" title="Students can see this course">OPEN</span>
+      </header></course-page-header>
+      <div class="makeStylestoolbar-0"><div class="js-course-navigation"><nav>
+        <ul class="MuiList-root bb-ui-navigation-list-horizontal">
+          <li><a class="MuiListItemButton-root" aria-current="page" href="#">Content</a></li>
+          <li><a class="MuiListItemButton-root" href="#">Calendar</a></li>
+          <li><a class="MuiListItemButton-root" href="#">Gradebook</a></li>
+        </ul>
+      </nav></div></div>
+    </bb-course-navigation></div>
 
     <main class="pv route-view-container">
       <h2 class="pv-h">Course Content</h2>
@@ -120,7 +196,10 @@
     </main>
   </div>
   </section>
+<section data-preview-view="dashboard" class="preview-dashboard"><h1>Dashboard</h1><p>Today · your study space</p><div id="gz-dash"><div class="gz-dash-grid"><article class="gz-w" data-size="s" data-preview-widget><header class="gz-w-head"><h3>Focus timer</h3></header><p class="gz-w-clock" data-preview-timer>25:00</p><button type="button">Start</button></article><article class="gz-w" data-size="s" data-preview-widget><header class="gz-w-head"><h3>Quote</h3></header><p class="gz-w-quote">Start with the smallest next step.</p></article><article class="gz-w" data-size="s" data-preview-notes><header class="gz-w-head"><h3>Notes</h3></header><p>A place for your ideas.</p></article><article class="gz-w" data-size="s" data-preview-todo><header class="gz-w-head"><h3>Better To Do</h3></header><p>Today</p><label><input type="checkbox"> Read chapter 4</label><p>Tomorrow · Draft presentation</p></article></div></div></section>
 </div>
+<template id="mock-canvas"><div id="application" class="ic-app"><header id="header" class="ic-app-header"><nav><ul class="ic-app-header__menu-list"><li><a class="ic-app-header__menu-list-link" href="#">Dashboard</a></li><li><a class="ic-app-header__menu-list-link" href="#">Courses</a></li><li><a class="ic-app-header__menu-list-link" href="#">Calendar</a></li><li><a class="ic-app-header__menu-list-link" href="#">Inbox</a></li></ul></nav></header><main id="content" class="mock-content"><div data-preview-view="courses"><h1>Dashboard</h1><div class="ic-DashboardCard__box mock-cards"><article class="ic-DashboardCard"><div class="ic-DashboardCard__header_image"></div><h2 class="ic-DashboardCard__header-title">Computer Science</h2><p class="ic-DashboardCard__header-subtitle">CS101 · Fall 2026</p><p>89% · 2 upcoming tasks</p></article><article class="ic-DashboardCard"><div class="ic-DashboardCard__header_image"></div><h2 class="ic-DashboardCard__header-title">Spanish</h2><p class="ic-DashboardCard__header-subtitle">SPAN110 · Fall 2026</p><p>92% · 1 upcoming task</p></article></div></div><div data-preview-view="outline"><h1>Computer Science</h1><div class="item-group-condensed"><article class="ig-row mock-module"><h3>Module 4: Creating a presentation</h3><p class="ig-details">Read the chapter, then build your first presentation.</p><a href="#">Assignment · Tall Oaks presentation</a></article><article class="ig-row mock-module"><h3>Discussion: Digital security</h3><p>Due Thursday · 10 points</p></article></div></div><section data-preview-view="dashboard" class="preview-dashboard"><h1>Dashboard</h1><p>Today · your study space</p><div id="gz-dash"><div class="gz-dash-grid"><article class="gz-w" data-size="s" data-preview-widget><header class="gz-w-head"><h3>Focus timer</h3></header><p class="gz-w-clock" data-preview-timer>25:00</p><button type="button">Start</button></article><article class="gz-w" data-size="s" data-preview-widget><header class="gz-w-head"><h3>Quote</h3></header><p class="gz-w-quote">Start with the smallest next step.</p></article><article class="gz-w" data-size="s" data-preview-notes><header class="gz-w-head"><h3>Notes</h3></header><p>A place for your ideas.</p></article><article class="gz-w" data-size="s" data-preview-todo><header class="gz-w-head"><h3>Better To Do</h3></header><p>Today</p><label><input type="checkbox"> Read chapter 4</label><p>Tomorrow · Draft presentation</p></article></div></div></section><div data-preview-view="document"><h1>Document viewer</h1><div id="gz-doc-tools"><button type="button">Pen</button><button type="button">Highlight</button><button type="button">Download</button></div><article class="mock-document"><h2>Research and presentation</h2><p>Bring one clear idea to each slide. Use examples to connect your evidence with the point you want to make.</p><p>Keep a short list of the questions your audience might ask.</p></article></div><div data-preview-view="quiz"><h1>Practice quiz</h1><div class="question display_question mock-module"><h2>Question 1</h2><p>Which choice helps a reader follow an argument?</p><label><input type="radio" name="mock-answer"> A clear topic sentence</label><p><button type="button" class="Button Button--primary">Next</button></p></div></div></main></div></template>
+<template id="mock-moodle"><div id="page-wrapper"><nav class="navbar"><strong>My learning</strong><a href="#">Dashboard</a><a href="#">My courses</a></nav><div id="page" class="drawers"><main id="region-main"><div data-preview-view="courses"><h1>My courses</h1><div class="mock-cards" data-region="course-view-content"><article class="card dashboard-card" data-region="course-content" data-course-id="5"><div class="card-img"></div><h2 class="coursename">Computer Science</h2><p class="card-body">CS101 · 45% complete</p></article><article class="card dashboard-card" data-region="course-content" data-course-id="6"><div class="card-img"></div><h2 class="coursename">Spanish</h2><p class="card-body">SPAN110 · 60% complete</p></article></div></div><div data-preview-view="outline"><h1>Computer Science</h1><ul class="course-content topics"><li class="section main mock-module"><h2 class="sectionname">Week 4: Presenting ideas</h2><ul class="section"><li class="activity assign"><div class="activity-item"><h3>Presentation project</h3><p>Plan a short presentation with one point per slide.</p><button type="button" class="btn btn-outline-secondary">Mark as done</button></div></li></ul></li></ul></div><div data-preview-view="dashboard"><h1>Dashboard</h1><section class="block card mock-module"><h2 class="card-title">Timeline</h2><p>Today · Read chapter 4</p><p>Tomorrow · Presentation project</p><button type="button" class="btn btn-primary">View courses</button></section></div></main></div></div></template>
 <script src="lib/color.js"></script>
 <script src="lib/i18n.js"></script>
 <script src="lib/page.js"></script>
@@ -128,7 +207,22 @@
 <script src="lib/fonts.js"></script>
 <script src="lib/drafts.js"></script>
 <script src="lib/zip.js"></script>
+<script src="lib/glsl.js"></script>
+<script src="features/schedule.js"></script>
+<script src="features/light.js"></script>
+<script src="lib/surfaces.js"></script>
 <script src="defaults.js"></script>
-<script src="content.js"></script>
+<script src="lib/coursetabs.js"></script>
+<script src="lib/nav.js"></script>
+<script src="lib/nav-items.js"></script>
+<script src="lib/navlayout.js"></script>
+<script src="lib/cards.js"></script>
+<script src="lib/widgets.js"></script>
+<script src="lib/pet.js"></script>
+<script src="lib/motionx.js"></script>
+<script src="lib/parts.js"></script>
+<script src="lib/lookparts.js"></script>
+<script src="features/lookparts.js"></script>
+<script src="lib/editor-preview.js"></script>
 </body>
 </html>

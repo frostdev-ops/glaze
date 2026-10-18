@@ -22,18 +22,26 @@ const GZ_I18N = (() => {
     'Downloads {fonts} (web fonts).': { one: 'Downloads {fonts} (a web font).', other: 'Downloads {fonts} (web fonts).' },
   };
 
-  // tag → [the locale Intl formats in, its catalogue]. A language Glaze has, in any region (es-MX gets
-  // es; pt-PT gets pt-BR), else English: words and numbers then stay one language.
+  // The languages Glaze has besides English, one catalogue each in i18n/. The extension's own pages load them
+  // all; a page on the LMS loads only its own, on demand (content.js), so one may not be in yet.
+  const CODES = ['de', 'es', 'fr', 'nl', 'pt-BR'];
+  const base = (l) => l.split('-')[0].toLowerCase();
+  const canon = (tag) => { try { return Intl.getCanonicalLocales(tag || 'en')[0] || 'en'; } catch { return 'en'; } };
+  // A language Glaze has, in any region: es-MX gets es; pt-PT gets pt-BR.
+  const codeOf = (loc) => (CODES.includes(loc) ? loc : CODES.find((k) => base(k) === base(loc)));
+  // The catalogue a page in `tag` needs: 'i18n/de.js', or null in English and in a language Glaze doesn't have.
+  const file = (tag) => { const c = codeOf(canon(tag)); return c ? `i18n/${c}.js` : null; };
+
+  // tag → [the locale Intl formats in, its catalogue]. Without one, English: words and numbers then stay one language.
   const picked = new Map();
   const pick = (tag) => {
     if (picked.has(tag)) return picked.get(tag);
-    let loc = 'en';
-    try { loc = Intl.getCanonicalLocales(tag || 'en')[0] || 'en'; } catch { /* not a locale */ }
-    const base = (l) => l.split('-')[0].toLowerCase();
-    const langs = globalThis.GZ_LANGS || {};
-    const code = langs[loc] ? loc : Object.keys(langs).find((k) => base(k) === base(loc));
-    const out = code ? [loc, langs[code]] : [base(loc) === 'en' ? loc : 'en', {}];
-    picked.set(tag, out);
+    const loc = canon(tag);
+    const code = codeOf(loc);
+    const cat = code && globalThis.GZ_LANGS?.[code];
+    const out = cat ? [loc, cat] : [base(loc) === 'en' ? loc : 'en', {}];
+    // A catalogue that is still on its way isn't remembered as English.
+    if (cat || !code) picked.set(tag, out);
     return out;
   };
   const locale = (tag) => pick(tag)[0];
@@ -80,7 +88,7 @@ const GZ_I18N = (() => {
     d.title = say(d.title);
   };
 
-  return { EN, t, locale, num, pct, ui, page };
+  return { EN, CODES, file, t, locale, num, pct, ui, page };
 })();
 
 if (typeof module !== 'undefined') {

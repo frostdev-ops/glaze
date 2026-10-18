@@ -773,6 +773,26 @@ test("Ultra what-if: under the overall grade, by the course's own recipe (Blackb
   assert.deepEqual(p.state.asked, [], 'nothing asked of Ultra: the page had the gradebook');
 });
 
+test('GZ-01: a partial page gradebook never becomes an authoritative what-if calculation', async () => {
+  const rows = Object.defineProperty(ufix('grades').results, 'complete', { value: false });
+  const p = ultraPage({ books: { _101_1: rows } });
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  assert.match(p.box().textContent, /needs the complete gradebook/);
+  assert.deepEqual(totals(p), []);
+});
+
+test('GZ-01: a newly truncated gradebook removes an already open calculation without changing saved work', async () => {
+  const p = ultraPage();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  assert.equal(totals(p)[0], '88%');
+  const saved = JSON.stringify(p.store.data);
+  p.books._101_1 = Object.defineProperty(ufix('grades').results, 'complete', { value: false });
+  p.UI.render(); await settle(10);
+  assert.match(p.box().textContent, /needs the complete gradebook/);
+  assert.deepEqual(totals(p), []);
+  assert.equal(JSON.stringify(p.store.data), saved);
+});
+
 test("Ultra what-if: Glaze 2.2's saved scores move over, the graded one goes with a word, and the old store goes", async () => {
   const store = shared({ whatIf: { _101_1: { _603_1: 100, _601_1: 50 }, _777_1: { _1_1: 5 } } });
   const p = ultraPage({ store });
@@ -985,6 +1005,25 @@ test("Ultra GPA: on Grades, above the terms, this term's courses with Blackboard
 
 // The public content API's answer for a course, as B4 measured it: id, parentId, title, body, contentHandler.id and
 // availability.available only. An Ultra document is a page whose text can sit in its blocks (its children).
+for (const part of ['grades', 'schemas']) test(`GZ-01: truncated ${part} suppress GPA totals and current-term history calculations`, async () => {
+  const partial = (results) => ({ results, paging: { nextPage: '?offset=200' } });
+  const p = ultraPage({ path: '/ultra/grades', enhance: { gpa: true }, books: {}, answers: {
+    '/gradebook/schemas': part === 'schemas' ? partial([]) : { results: [] },
+    '/courses/_101_1/gradebook/grades?': part === 'grades' ? partial(ufix('grades').results) : { results: ufix('grades').results },
+    '/courses/_102_1/gradebook/grades?': { results: ufix('grades-status').results },
+    '/gradebook/grades?': { results: [] },
+  } });
+  let histories = 0;
+  p.ctx.GZ_GPA_TERMS = { draw: () => histories++, stop() {} };
+  p.UI.render(); await settle(30);
+  assert.match(p.gpa().textContent, /needs the complete gradebook/);
+  assert.equal(p.gpa().querySelector('.gz-gpa-fig'), null, 'do not calculate a GPA from the remaining courses');
+  const history = p.gpa().querySelector('.gz-gpa-hist');
+  history.open = true; history.fire('toggle'); await settle(20);
+  assert.equal(histories, 0, 'do not save or project the incomplete current term through the history panel');
+  assert.match(p.gpa().querySelector('.gz-gpa-hist-body').textContent, /needs the complete gradebook/);
+});
+
 const CONTENTS = { results: [
   { id: '_720_1', parentId: '_700_1', title: 'Week 1', contentHandler: { id: 'resource/x-bb-folder' }, availability: { available: 'Yes' } },
   { id: '_721_1', parentId: '_720_1', title: 'Reading: cells', body: '<p>The cell membrane.</p>', contentHandler: { id: 'resource/x-bb-document' }, availability: { available: 'Yes' } },

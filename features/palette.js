@@ -193,7 +193,8 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
       li.addEventListener('click', (e) => runCmd(i, e));
       return li;
     }));
-    if (cmd.seeking || !cmd.shown.length) cmd.list.insertBefore(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: t(cmd.seeking ? 'Searching your courses…' : cmd.loading ? 'Loading…' : 'Nothing matches.') }), cmd.list.children[at] || null);
+    if (cmd.seeking || !cmd.shown.length) cmd.list.insertBefore(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: cmd.searchNote || t(cmd.seeking ? 'Searching your courses…' : cmd.loading ? 'Loading…' : 'Nothing matches.') }), cmd.list.children[at] || null);
+    else if (cmd.searchNote) cmd.list.append(Object.assign(document.createElement('li'), { className: 'gz-cmd-empty', textContent: cmd.searchNote }));
     mark();
   };
   const mark = () => {

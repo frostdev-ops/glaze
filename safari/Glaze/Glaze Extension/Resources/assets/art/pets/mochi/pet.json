@@ -1,0 +1,9 @@
+{
+  "id": "mochi",
+  "name": "Mochi",
+  "description": "A cozy playful lilac-gray plush cat with a cream muzzle and belly, round dark eyes, rounded ears and a curled tail.",
+  "spriteVersionNumber": 2,
+  "spritesheet": "spritesheet.webp",
+  "displayName": "Mochi",
+  "spritesheetPath": "spritesheet.webp"
+}

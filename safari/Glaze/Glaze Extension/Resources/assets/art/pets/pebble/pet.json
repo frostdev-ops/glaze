@@ -1,0 +1,9 @@
+{
+  "id": "pebble",
+  "name": "Pebble",
+  "description": "A calm caramel plush capybara with kind dark eyes and a broad soft muzzle.",
+  "spriteVersionNumber": 2,
+  "spritesheet": "spritesheet.webp",
+  "displayName": "Pebble",
+  "spritesheetPath": "spritesheet.webp"
+}

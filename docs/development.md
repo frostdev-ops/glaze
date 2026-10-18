@@ -24,7 +24,7 @@ grade calculators, loads on demand from `features/` the first time a page needs 
 ```
 
 Writes `dist/glaze-v<version>.zip`, ready for the Chrome Web Store. Requires `node` and `zip`.
-`sh scripts/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons.
+From a clean `dev/firefox` checkout, `sh scripts/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons. The Firefox compatibility branch must include the intended main release, as [Releasing](../RELEASING.md) describes. Other checkouts require an explicit `--development` argument; that produces a visibly named development build for local checks, not a store upload. Each Firefox ZIP records its source commit and development status in `glaze-build.json`.
 For a release, `sh scripts/release.sh` builds everything into `release/<version>/`; see [RELEASING.md](../RELEASING.md).
 
 ```sh
@@ -45,6 +45,10 @@ as the `cws-publisher` service account through `gcloud` impersonation, so no key
 Google account needs the Service Account Token Creator role on it, and the service account must be
 added under **Account** in the Developer Dashboard. The listing text, screenshots and privacy answers
 aren't in the API; edit those in the dashboard. The publisher and item IDs default to Glaze's; override them with `CWS_PUBLISHER_ID` and `CWS_EXTENSION_ID` (the publisher ID is in the dashboard's address, after `/devconsole/`).
+
+## Google Calendar sync
+
+Google Calendar sync is unavailable in the current build while Google verification is pending. Keep the build-time switch in `lib/gcal.js` off until verification and an authorized release enable it. While off, the editor hides connection controls, the worker refuses sync operations, and packages omit the OAuth client and optional identity permission. Calendar export (.ics) remains available.
 
 ## Safari
 
@@ -80,6 +84,13 @@ reference brings everything under it. Every build script copies the package into
 and then runs `node scripts/safari-resources.js` on it, which stops the build if the package has a file the
 project doesn't list. Add a new top-level file or folder to both extension targets in Xcode;
 `test/safari-resources.test.js` checks the project against everything the package ships.
+
+For direct development in `safari/Glaze/Glaze.xcodeproj`, refresh the checked-in generated resources
+with `bash scripts/sync-safari-resources.sh --refresh` after changing extension sources. Both extension
+targets check every packaged file before copying resources and stop with that command if the bundle
+is stale. The check uses Node, Python 3, zip and unzip; the Xcode phase also searches the usual Homebrew
+binary directories. `bash scripts/sync-safari-resources.sh --check` runs the same check without building
+or signing an app. Release scripts continue to stage and validate a fresh temporary copy.
 
 `scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
 Use it only when you mean to regenerate the project. It doesn't know about the iPhone and iPad targets below.

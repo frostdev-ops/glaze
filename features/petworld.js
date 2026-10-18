@@ -82,7 +82,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const visible = (p, margin = 0) => p.x + p.w > window.scrollX - margin && p.x < window.scrollX + window.innerWidth + margin && p.y + p.h > window.scrollY - margin && p.y < window.scrollY + window.innerHeight + margin;
     const worldHost = () => { if (!world.isConnected) document.documentElement.append(world); return world; };
     const homeVisible = () => { const r = stage?.getBoundingClientRect(); return r && r.width > 0 && r.bottom > 0 && r.top < window.innerHeight; };
-    const allowed = () => alive && !!chrome.runtime?.id && !document.hidden && !viewBlocked && (wandering ? !quiet() : homeVisible());
+    const allowed = () => alive && !globalThis.GZ_CTABS?.revoked?.() && !!chrome.runtime?.id && !document.hidden && !viewBlocked && (wandering ? !quiet() : homeVisible());
     const art = (id) => { const img = make('img', ''); img.src = chrome.runtime.getURL(`assets/art/stickers/${P.DECOR[id].art}.webp`); img.alt = ''; img.draggable = false; return img; };
     const display = () => { actor.style.left = '0'; actor.style.top = '0'; actor.style.transform = `translate3d(${b.x}px,${b.y}px,0)`; };
     const play = (state, message = '') => {
@@ -101,6 +101,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       lastScan = 0; display();
     };
     const commit = async (patch) => {
+      if (!alive || globalThis.GZ_CTABS?.revoked?.()) return;
       const reply = await save(patch);
       if (!alive) return;
       if (reply?.ok && reply.data) setData(reply.data);
@@ -356,7 +357,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const tick = () => {
       clearTimeout(timer); timer = 0;
       if (!alive) return;
-      if (!chrome.runtime?.id || (!stage?.isConnected && !wandering)) { destroy(); return; }
+      if (!chrome.runtime?.id || globalThis.GZ_CTABS?.revoked?.() || (!stage?.isConnected && !wandering)) { destroy(); return; }
       syncSurface();
       if (wandering && anchor?.nodes.some((p) => !p.el.isConnected)) anchor = anchorAt(b.x + b.w / 2, b.y + b.h / 2);
       actor.hidden = !allowed(); if (toy) toy.hidden = actor.hidden; for (const p of floating.values()) p.el.hidden = actor.hidden;
@@ -569,7 +570,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     motion?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-gz-motion'] });
     chrome.storage.onChanged.addListener(changed); reduced?.addEventListener('change', wake);
     try { chrome.storage.local.get('widgetTimer', (r) => { if (alive) { updateFocus(r?.widgetTimer, true); if (data) wake(); } }); } catch { /* reloaded */ }
-    return { key, attach, detach, play, destroy, refresh: () => { const changed = syncSurface(), nextPath = viewDoc.location.pathname; geometryDirty = true; if (changed || path !== nextPath || (!timer && allowed() && !still())) { path = nextPath; wake(); } } };
+    return { key, attach, detach, play, destroy, refresh: () => { if (globalThis.GZ_CTABS?.revoked?.()) { destroy(); return; } const changed = syncSurface(), nextPath = viewDoc.location.pathname; geometryDirty = true; if (changed || path !== nextPath || (!timer && allowed() && !still())) { path = nextPath; wake(); } } };
   };
   return { mount, refresh: () => current?.refresh(), stop: () => current?.destroy() };
 })();
