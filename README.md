@@ -30,6 +30,8 @@ domain. No account, no analytics: what Glaze keeps stays on your device.
   and syllabus import.
 - **Your dashboard:** widgets you place anywhere (notes, agenda, focus timer, music, your course cards), course tabs on
   Blackboard, and Ctrl/⌘K search across your courses.
+- **Pets:** a [study buddy that grows across semesters](docs/pet-habitat.md), with local learning, mood and playfulness,
+  habitats you decorate, and optional wandering, perching and hide-and-seek.
 - **Mods:** backgrounds, animations, widgets and page tweaks made by others, each showing what it reads and why before you
   add it, or build your own widget with no code.
 

@@ -13,6 +13,7 @@ const BG = require('../lib/editor-xbg.js');
 const M = require('../lib/editor-xmotion.js');
 const MX = require('../lib/motionx.js');
 const XE = require('../lib/editor-xparts.js');
+const PET = require('../lib/pet.js');
 
 const root = path.join(__dirname, '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -56,6 +57,7 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
 const JS = ['sharing/sessions.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 // Tables and generated labels reach t() through variables, not literal arguments.
 const tableWords = [
+  ...Object.values(PET.DECOR).map((item) => item.name), ...Object.values(PET.HABITATS),
   ...['ultra', 'canvas', 'moodle'].flatMap((site) => P.list(site).map((p) => p.label)),
   ...fromJs(read('lib/lookparts.js'), /\badd\s*\(/g),
   ...Object.values(XP.KIND_WORD), ...Object.values(XE.NAMES),

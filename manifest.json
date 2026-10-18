@@ -154,6 +154,7 @@
         "fonts/*.woff2",
         "assets/art/pets/*/sprites.webp",
         "assets/art/pets/*/spritesheet.webp",
+        "assets/art/pets/*/reactions.webp",
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
         "features/lookx.css",

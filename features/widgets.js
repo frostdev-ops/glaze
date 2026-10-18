@@ -63,7 +63,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   let W = null; // lib/widgets.js
   let o = null; // the widgets settings (storage.sync widgets)
   let lay = null; // the layout (storage.local widgetLayout)
-  let on = false, starting = null, editing = false;
+  let on = false, starting = null, editing = false, petResumeReady = false;
   let me = null; // { uid, tz }
   // bar: a board's buttons (Edit layout, Reminders, Insights, What Glaze can do; on the Courses page, Hide widgets too),
   // in the Courses page's header (#gz-toolbar) or atop the Dashboard's grid. hidden: Hide widgets, on this device.
@@ -470,7 +470,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
 
     // Every pet surface uses this character, account record and the same timer/task reactions.
     buddy(body, options = {}) {
-      let st = { happyAt: 0, patAt: 0, running: false }, wait = 0, todoKey = '', petKey = '', alive = true, sleeping = false, player = null, sprite = '';
+      let st = { happyAt: 0, patAt: 0, running: false }, wait = 0, todoKey = '', petKey = '', alive = true, sleeping = false, player = null, sprite = '', pose = null;
       const saved = {}, versions = new Map();
       const img = make('img', { alt: '', draggable: false, decoding: 'async' });
       const read = (keys) => {
@@ -489,16 +489,17 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (!alive) return;
         if (!validContext()) { stop(); return; }
         if (pet.isConnected === false) { stop(); return; }
-        const P = globalThis.GZ_PET, S = globalThis.GZ_PET_SPRITES;
+        const P = globalThis.GZ_PET_BRAIN && globalThis.GZ_PET, S = globalThis.GZ_PET_SPRITES;
         const data = P?.view(saved[petKey]);
         options.onData?.(data);
         const m = W.mood(st, Date.now());
         const choice = typeof saved.petCharacter === 'string' ? saved.petCharacter : data?.sprite || (['cat', 'bunny'].includes(ctx.settings().card?.pet) ? ctx.settings().card.pet : '');
-        const selected = S?.picture(choice, saved.petSprites);
+        const selected = S?.picture(choice, saved.petSprites) || (!choice && (!data?.wear || data.wear === 'plain') ? S?.picture('study-buddy') : null);
         const label = selected ? t('Play with {name}', { name: selected.name }) : t('Pet your study buddy');
         pet.setAttribute('aria-label', label);
         const identity = selected?.data || selected?.path || '';
-        if (identity !== sprite) {
+        const changed = identity !== sprite;
+        if (changed) {
           sprite = identity; player?.stop(); player = null;
           pet.replaceChildren(img);
           if (selected && globalThis.GZ_PET_PLAYER) {
@@ -512,7 +513,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         const art = m.mood === 'happy' ? 'study-buddy-happy' : m.mood === 'sleepy' && wear === 'plain' ? 'study-buddy-sleepy' : P?.WEAR[wear].art || 'study-buddy';
         const src = chrome.runtime.getURL(`assets/art/stickers/critters/${art}.webp`);
         if (img.src !== src) img.src = src;
-        player?.rest(m.mood === 'happy' ? 'jumping' : st.running ? 'running' : m.mood === 'sleepy' ? 'waiting' : 'idle');
+        player?.rest(m.mood === 'happy' ? 'jumping' : st.running ? 'running' : m.mood === 'sleepy' ? 'sleeping' : 'idle');
+        if (changed && pose) player?.play(...pose);
         if (body.dataset.mood !== (m.mood || 'awake')) body.dataset.mood = m.mood || 'awake';
         if (sleeping || document.visibilityState === 'hidden') player?.sleep(); else player?.wake();
         if (m.until && !sleeping && document.visibilityState !== 'hidden') wait = setTimeout(paint, m.until - Date.now() + 50);
@@ -522,6 +524,12 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (!alive || !validContext()) return;
         st.patAt = Date.now();
         put({ widgetBuddy: { happyAt: st.happyAt, patAt: st.patAt } });
+        const data = globalThis.GZ_PET_BRAIN && globalThis.GZ_PET?.view(saved[petKey]);
+        if (petKey && data && ctx.settings().enhance.pet) {
+          const hour = new Date().getHours() / 24 * Math.PI * 2;
+          send({ type: 'glaze:pet', key: petKey, tz: me?.tz, op: 'interact', event: state === 'jumping' ? 'play' : 'pet', action: 'greet',
+            context: [1, st.running ? 1 : 0, 1, data.needs.mood / 50 - 1, data.needs.playful / 50 - 1, data.needs.energy / 50 - 1, Math.sin(hour), Math.cos(hour), 0, 0, 0, data.habitat === 'aquarium' ? 1 : 0] });
+        }
         paint();
         player?.set(state);
         const w = make('span', { className: 'gz-w-cheer', textContent: t(CHEERS[Math.floor(Math.random() * CHEERS.length)]) });
@@ -557,6 +565,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
           st.patAt = Math.max(st.patAt, +ch.widgetBuddy.newValue?.patAt || 0);
         }
         if (ch.widgetBuddy || ch.petCharacter || ch.petSprites || ch[petKey]) paint();
+        if (ch[petKey] && globalThis.GZ_PET) {
+          const before = GZ_PET.view(ch[petKey].oldValue), after = GZ_PET.view(ch[petKey].newValue);
+          if (before && after && after.xp > before.xp) player?.set(after.level > before.level ? 'level-up' : 'xp');
+        }
       };
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       body.append(pet);
@@ -574,9 +586,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         todoKey = `todo:${location.origin}/${me.uid}`; petKey = `pet:${location.origin}/${me.uid}`;
         read([petKey]);
       }, () => {});
-      Promise.all(['lib/pet.js', 'lib/petsprites.js', 'lib/petplayer.js'].map((file) => ctx.need(file, () => ({ 'lib/pet.js': globalThis.GZ_PET, 'lib/petsprites.js': globalThis.GZ_PET_SPRITES, 'lib/petplayer.js': globalThis.GZ_PET_PLAYER })[file]))).then(paint, () => {});
+      Promise.all(['lib/petbrain.js', 'lib/pet.js', 'lib/petsprites.js', 'lib/petplayer.js'].map((file) => ctx.need(file, () => ({ 'lib/petbrain.js': globalThis.GZ_PET_BRAIN, 'lib/pet.js': globalThis.GZ_PET, 'lib/petsprites.js': globalThis.GZ_PET_SPRITES, 'lib/petplayer.js': globalThis.GZ_PET_PLAYER })[file]))).then(paint, () => {});
       Promise.resolve().then(paint);
-      return { wake: () => { sleeping = false; paint(); }, sleep: () => { sleeping = true; clearTimeout(wait); player?.sleep(); }, update: paint, play: (state) => player?.set(state), stop };
+      return { wake: () => { sleeping = false; paint(); }, sleep: () => { sleeping = true; clearTimeout(wait); player?.sleep(); }, update: paint, play: (state, direction) => { pose = [state, direction]; player?.play(state, direction); }, stop };
     },
   };
 
@@ -1311,6 +1323,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const sync = (want) => {
     on = !!want;
     board = boardOf();
+    if (globalThis.GZ_PET_UI?.resume) GZ_PET_UI.resume();
+    else if (ctx.settings().enhance.pet && on && !petResumeReady && !(loadingMore.get('pet') > Date.now())) {
+      loadingMore.set('pet', Infinity);
+      ctx.need('features/pet.js', () => globalThis.GZ_PET_UI).then(() => { petResumeReady = true; loadingMore.delete('pet'); globalThis.GZ_PET_UI?.resume?.(); }, () => loadingMore.set('pet', Date.now() + 60000));
+    }
     if (!on) { teardown(true); drawn = null; return; }
     if (!starting) starting = start().then(draw, () => {
       if (on && board === 'dash') document.documentElement.setAttribute('data-gz-dash', 'ip');
@@ -1366,11 +1383,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
 
   const avatar = (body, options = {}) => {
-    let alive = true, sleeping = false, live;
+    let alive = true, sleeping = false, live, pose;
     ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(() => {
-      if (alive && validContext() && body.isConnected !== false) { W ||= globalThis.GZ_WIDGETS; live = WIDGETS.buddy(body, options); if (sleeping) live.sleep(); }
+      if (alive && validContext() && body.isConnected !== false) { W ||= globalThis.GZ_WIDGETS; live = WIDGETS.buddy(body, options); if (sleeping) live.sleep(); if (pose) live.play(...pose); }
     }).catch(() => {});
-    return { wake: () => { sleeping = false; live?.wake(); }, sleep: () => { sleeping = true; live?.sleep(); }, play: (state) => live?.play(state), stop: () => { alive = false; live?.stop(); } };
+    return { wake: () => { sleeping = false; live?.wake(); }, sleep: () => { sleeping = true; live?.sleep(); }, play: (state, direction) => { pose = [state, direction]; live?.play(state, direction); }, stop: () => { alive = false; live?.stop(); } };
   };
   return { sync, hub: open, register, declare, who: account, avatar };
 })();
