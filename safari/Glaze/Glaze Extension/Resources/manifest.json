@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "2.2.0",
-  "description": "Restyle Blackboard Ultra and Canvas: palettes, fonts, backgrounds and motion, plus handy extras.",
+  "version": "3.0.5",
+  "description": "Restyle Blackboard Ultra, Canvas and Moodle: palettes, fonts, backgrounds and motion, plus handy extras.",
   "default_locale": "en",
   "permissions": [
     "storage",
     "scripting",
+    "unlimitedStorage",
     "nativeMessaging"
   ],
   "host_permissions": [
-    "https://*/*"
+    "<all_urls>"
   ],
   "minimum_chrome_version": "113",
   "browser_specific_settings": {
@@ -38,6 +39,9 @@
   "background": {
     "service_worker": "lib/background.js"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "options_ui": {
     "page": "options.html"
   },
@@ -45,24 +49,43 @@
     {
       "matches": [
         "https://*/ultra",
-        "https://*/ultra/*",
-        "https://*.instructure.com/*"
+        "https://*/ultra/*"
       ],
       "js": [
         "lib/color.js",
-        "i18n/de.js",
-        "i18n/es.js",
-        "i18n/fr.js",
-        "i18n/nl.js",
-        "i18n/pt-BR.js",
         "lib/i18n.js",
         "lib/page.js",
         "lib/grades.js",
         "lib/fonts.js",
-        "lib/drafts.js",
-        "lib/zip.js",
+        "lib/surfaces.js",
         "defaults.js",
+        "lib/nav.js",
+        "content-ultra.js",
         "content.js"
+      ],
+      "exclude_matches": [
+        "https://*.instructure.com/*"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://*.instructure.com/*"
+      ],
+      "js": [
+        "lib/color.js",
+        "lib/i18n.js",
+        "lib/page.js",
+        "lib/grades.js",
+        "lib/fonts.js",
+        "lib/surfaces.js",
+        "defaults.js",
+        "content-canvas.js",
+        "content.js"
+      ],
+      "exclude_matches": [
+        "https://canvadocs.instructure.com/*"
       ],
       "run_at": "document_start",
       "all_frames": true
@@ -80,6 +103,29 @@
         "lib/detect.js"
       ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://frostdev.io/glaze/looks",
+        "https://frostdev.io/glaze/looks/*",
+        "https://frostdev.io/glaze/mods",
+        "https://frostdev.io/glaze/mods/*"
+      ],
+      "js": [
+        "lib/gallery.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://canvadocs.instructure.com/*"
+      ],
+      "js": [
+        "lib/ink.js",
+        "lib/surfaces.js",
+        "features/docviewer.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [
@@ -89,7 +135,21 @@
         "motion.css",
         "extras.css",
         "canvas.css",
-        "fonts/*.woff2"
+        "moodle.css",
+        "fonts/*.woff2",
+        "assets/art/pets/*/sprites.webp",
+        "assets/art/pets/*/spritesheet.webp",
+        "assets/art/pets/*/reactions.webp",
+        "assets/art/stickers/*/*.webp",
+        "assets/art/cursors/*/*.png",
+        "features/lookx.css",
+        "features/rules.css",
+        "features/navlayout.css",
+        "features/apps.css",
+        "features/surfaces.css",
+        "assets/logo.svg",
+        "assets/logo-dark.svg",
+        "icons/icon.svg"
       ],
       "matches": [
         "https://*/*"
@@ -99,6 +159,9 @@
       "resources": [
         "lib/scene.js",
         "lib/three.min.js",
+        "lib/scene-media.js",
+        "lib/lottie/lottie_light_canvas.min.js",
+        "reader.html",
         "fonts/*.woff2"
       ],
       "matches": [

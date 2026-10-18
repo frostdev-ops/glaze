@@ -4,10 +4,28 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawnSync, execFileSync } = require('node:child_process');
+const S = require('../scripts/safari-resources.js');
 
 const root = path.join(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const manifest = JSON.parse(read('manifest.json'));
+const resources = path.join(root, 'safari/Glaze/Glaze Extension/Resources');
+
+// This checks the direct-development project. Release staging has separate passing coverage.
+test('GZ-05: a direct Xcode resource bundle has the canonical extension version', () => {
+  for (const [target, files] of Object.entries(S.bundled())) {
+    assert.ok(files.has('manifest.json'), `${target} must bundle its manifest`);
+  }
+  const direct = JSON.parse(fs.readFileSync(path.join(resources, 'manifest.json'), 'utf8'));
+  assert.equal(direct.version, manifest.version,
+    'the checked-in project currently bundles old resources unless a release staging script is used');
+});
+
+test('GZ-05: direct Xcode resources include the current eager entry points', () => {
+  const eager = [...new Set(manifest.content_scripts.flatMap((s) => [...(s.js || []), ...(s.css || [])]))];
+  const missing = eager.filter((file) => !fs.existsSync(path.join(resources, file)));
+  assert.deepEqual(missing, [], 'direct development builds must not silently omit current extension entry points');
+});
 
 // Only the executed run bodies count; action names and YAML comments cannot satisfy validation.
 const jobs = (yaml) => {

@@ -5,6 +5,24 @@
 // 2.1.x, never before; `node --test` lists a todo while the newest notes are ahead of the manifest.
 const GZ_NEWS = (() => {
   const NOTES = {
+    '3.0.2': [
+      "Faster Blackboard Ultra: clicks, hovers and page changes no longer restyle the whole page.",
+      "Course tabs keep up to four pages live on every computer again, and no longer close when idle.",
+    ],
+    '3.0.1': [
+      "Surface opacity, tint, frost, shadows and borders now follow your Look and rounded corners.",
+      "Seven animated pets, plus local ChatGPT pet imports. Your XP and decorations stay.",
+      "Lighter Blackboard course tabs: hidden pages rest and snapshots update less often.",
+      "Solid backgrounds skip glass blur. Expressive pointer light loads only when needed.",
+    ],
+    '3.0': [
+      'Blackboard Ultra gets a Glaze Dashboard, and widgets and course cards you can place anywhere.',
+      'Course tabs on Blackboard: keep courses open and switch between them like browser tabs.',
+      'Better To Do on Blackboard and Canvas. Tasks on cards and reminders, if you turn them on.',
+      "On Blackboard, search inside your courses with Ctrl+K and hide folders you don't use.",
+      "Glaze themes Moodle too, with course totals, what's due and keyboard shortcuts.",
+      'Settings in tabs with search, and optional encrypted share sessions for notes and Looks.',
+    ],
     '2.2': [
       "Glaze works on Canvas now, on your school's own address or on instructure.com.",
       "The extras come along, on Canvas's Modules, Assignments, Grades and To Do.",

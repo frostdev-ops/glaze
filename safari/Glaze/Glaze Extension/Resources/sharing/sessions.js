@@ -1,0 +1,246 @@
+// Extension-only UI: links are never rendered, put in a URL, or handed to an LMS content script.
+(() => {
+  GZ_I18N.page();
+  const t = (k, v) => GZ_I18N.t(k, v, GZ_I18N.ui());
+  const $ = (s) => document.querySelector(s);
+  const human = (e) => e.isTrusted && (navigator.userActivation?.isActive ?? true);
+  let state, busy = false, dead = false, relayLoaded = false;
+  const LOOK_KEYS = ['look', 'colors', 'auto', 'presets'];
+  const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+  let lookRevision = 0, lookTimer = 0;
+  const paintLook = async () => {
+    const turn = ++lookRevision;
+    clearTimeout(lookTimer);
+    try {
+      const settings = GZ_SANITIZE(await chrome.storage.sync.get(LOOK_KEYS));
+      if (dead || turn !== lookRevision || !chrome.runtime?.id) return;
+      const html = document.documentElement, vars = GZ_SURFACES.vars({ look: settings.look, bg: { kind: 'solid' } });
+      // Keep this standalone page's original role colors until the user overrides its surfaces.
+      vars['--gz-surface-tint'] = GZ_ACTIVE_COLORS(settings, darkMQ.matches)['--gz-accent'];
+      vars['--gz-radius'] = `${settings.look.radius}px`;
+      for (const [key, value] of Object.entries(vars)) { if (value) html.style.setProperty(key, value); else html.style.removeProperty(key); }
+      html.setAttribute('data-gz-depth', String(settings.look.depth));
+      if (settings.auto.on && settings.auto.mode === 'schedule') {
+        const at = GZ_SCHEDULE_NEXT(settings.auto.from, settings.auto.to, new Date());
+        if (at) lookTimer = setTimeout(paintLook, Math.max(0, at - Date.now()) + 20);
+      }
+    } catch { /* A failed read leaves the existing appearance and local copies intact. */ }
+  };
+  chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && LOOK_KEYS.some((key) => changes[key])) paintLook(); });
+  darkMQ.addEventListener('change', paintLook);
+  paintLook();
+  const say = (k, err = false) => { $('#status').textContent = t(k); $('#status').classList.toggle('error', err); };
+  const send = async (op, rest = {}) => {
+    const r = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op, ...rest });
+    if (!r?.ok) throw new Error(r?.error || 'storage');
+    return r;
+  };
+  const make = (tag, text, props = {}) => Object.assign(document.createElement(tag), { ...(text === undefined ? {} : { textContent: text }), ...props });
+  const act = async (f, { reload = true, interrupt = false } = {}) => {
+    if (busy && !interrupt) return;
+    busy = true;
+    try { await f(); if (reload && !dead) await load(); }
+    catch (e) { if (!dead) { say('Could not finish. Your local copies are kept. Try again.', true); if (e.ui) $('#status').textContent += ' ' + e.ui; } }
+    finally { busy = false; }
+  };
+  const button = (key, f, options) => {
+    const b = make('button', t(key), { type: 'button' });
+    b.addEventListener('click', (e) => { if (human(e)) act(f, options); }); return b;
+  };
+  const permission = async (servers) => {
+    const origins = [];
+    for (const server of new Set(servers)) {
+      if (GZ_RELAY.normalize(server) !== server) return false;
+      if (!await chrome.permissions.contains({ origins: [server + '/*'] })) origins.push(server + '/*');
+    }
+    return !origins.length || chrome.permissions.request({ origins });
+  };
+  const confirmHost = (server) => (server === state.defaultRelay && server === state.relay) || confirm(server === state.defaultRelay
+    ? t('This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?', { host: new URL(server).host, selected: new URL(state.relay).host })
+    : t('This share is hosted on {host}, not frostdev.io. Connect to this server? Glaze cannot vouch for its operator.', { host: new URL(server).host }));
+  const relayValue = () => $('#relay-kind').value === 'default' ? state.defaultRelay : GZ_RELAY.normalize($('#relay-url').value);
+  const relayStatus = (text, err = false) => { $('#relay-status').textContent = text; $('#relay-status').classList.toggle('error', err); };
+  const names = { pending: 'Changes saved locally, waiting to send', live: 'Up to date', offline: 'Offline — local copy kept', gone: 'Deleted on the relay — local copy kept', incomplete: 'More changes remain. Sync again.' };
+  const sources = () => {
+    const kind = $('#kind').value;
+    const rows = state.sources.filter((s) => s.kind === kind);
+    $('#sources').replaceChildren(...rows.map((s, i) => {
+      const label = make('label', undefined, { className: 'source' });
+      const input = make('input', undefined, { type: kind === 'notes' ? 'radio' : 'checkbox', name: 'source', value: String(i) });
+      input.source = s;
+      label.append(input, make('span', s.title), make('small', s.key.slice(s.key.indexOf(':') + 1)));
+      return label;
+    }));
+    if (state.partial) $('#sources').append(make('p', t('Only the first {n} items are listed.', { n: 3000 })));
+    $('#sources').hidden = kind === 'look';
+  };
+  const render = () => {
+    $('#connection').textContent = t(state.on ? 'Sharing is on while a shared surface is open.' : 'Sharing is paused. Create, join or resume to connect.');
+    $('#resume').hidden = state.on && state.sessions.every((s) => s.server === state.defaultRelay || state.hosts.includes(s.server));
+    $('#pause').hidden = !state.on;
+    $('#create-relay').textContent = t('New sessions will use {server}.', { server: state.relay });
+    if (!relayLoaded) {
+      $('#relay-kind').value = state.relay === state.defaultRelay ? 'default' : 'custom';
+      $('#relay-url').value = state.relay === state.defaultRelay ? '' : state.relay;
+      $('#relay-custom').hidden = $('#relay-kind').value !== 'custom'; relayLoaded = true;
+    }
+    $('#sessions').replaceChildren(...state.sessions.map((s) => {
+      const el = make('article');
+      el.append(make('h3', s.title), make('p', t(state.on ? names[s.status] || names.offline : 'Paused — local copy kept')), make('small', t(s.edit ? 'Edit access' : 'View access')), make('small', t('Hosted on {server}', { server: s.server })));
+      const items = make('ul'); for (const x of s.items) items.append(make('li', x.title)); el.append(items);
+      el.append(make('p', t('Editing devices, last seen. Names are self-chosen; view-only devices cannot announce themselves.')));
+      const members = make('ul'); for (const m of s.members) members.append(make('li', `${m.name} · ${new Date(m.at).toLocaleString()}`)); el.append(members);
+      const row = make('div', undefined, { className: 'row' });
+      row.append(button('Read local session', async () => {
+        const r = await send('read', { sid: s.sid });
+        const content = make('div');
+        for (const x of Object.values(r.view)) if (x.html !== undefined) { content.append(make('h4', x.title || '…'), make('p', GZ_NOTES.text(x.html))); }
+        el.append(content);
+      }, { reload: false }));
+      row.append(button('Copy view invite', async () => { const r = await send('link', { sid: s.sid }); await navigator.clipboard.writeText(r.link); say('Invite copied. Keep it private.'); }));
+      if (s.edit) row.append(button('Copy edit invite', async () => { const r = await send('link', { sid: s.sid, edit: true }); await navigator.clipboard.writeText(r.link); say('Invite copied. Keep it private.'); }));
+      if (!s.bound && ['notes', 'todo'].includes(s.kind)) {
+        const select = make('select', undefined, { ariaLabel: t('Local account for the copy') });
+        const keys = state.accounts.filter((k) => k.startsWith(s.kind === 'notes' ? 'notesIdx:' : 'todo:'));
+        for (const key of keys) select.append(make('option', key.slice(key.indexOf(':') + 1), { value: key }));
+        row.append(select, button('Copy into Notes or To Do', () => send('attach', { sid: s.sid, key: select.value })));
+      }
+      if (s.kind === 'look') row.append(button('Use this Look', () => send('useLook', { sid: s.sid })));
+      if (s.edit) row.append(button('Re-upload retained files', () => send('reupload', { sid: s.sid })));
+      if (s.creator) {
+        const label = make('label', undefined, { className: 'check' });
+        const cb = make('input', undefined, { type: 'checkbox', checked: s.expire });
+        cb.addEventListener('change', (e) => { if (!human(e)) { cb.checked = s.expire; return; } act(() => send('expiry', { sid: s.sid, on: cb.checked })); });
+        label.append(cb, make('span', t('Delete after a year unused'))); el.append(label);
+        row.append(button('Delete session from relay', async () => {
+          if (confirm(t('Delete the encrypted session and its files from the relay? Device copies and older backups remain.'))) await send('delete', { sid: s.sid });
+        }, { interrupt: true }));
+      }
+      row.append(button('Leave this device', async () => {
+        if (confirm(t('Forget this session’s keys on this device? Your Notes and To Do copies remain. This does not delete it from the relay.'))) await send('leave', { sid: s.sid });
+      }, { interrupt: true }));
+      el.append(row); return el;
+    }));
+    if (!state.sessions.length) $('#sessions').append(make('p', t('No sessions on this device.')));
+  };
+  const load = async () => { state = await send('list'); if (!dead) { render(); if (!$('#sources').children.length) sources(); } };
+  $('#kind').addEventListener('change', (e) => { if (human(e)) sources(); });
+  $('#pause').addEventListener('click', (e) => { if (human(e)) act(() => send('pause'), { interrupt: true }); });
+  $('#resume').addEventListener('click', (e) => {
+    if (!human(e) || busy || !state) return;
+    const servers = [...new Set(state.sessions.filter((s) => s.status !== 'gone').map((s) => s.server))];
+    const unconfirmed = servers.filter((s) => s !== state.defaultRelay && !state.hosts.includes(s));
+    if (!unconfirmed.every(confirmHost)) return;
+    const p = permission(servers); act(async () => { if (await p) await send('resume', { confirmServers: unconfirmed }); });
+  });
+  $('#relay-kind').addEventListener('change', () => { $('#relay-custom').hidden = $('#relay-kind').value !== 'custom'; relayStatus(''); });
+  $('#relay-url').addEventListener('input', () => relayStatus(''));
+  $('#relay-save').addEventListener('click', (e) => {
+    if (!human(e) || busy || !state) return;
+    const server = relayValue();
+    if (!server) return relayStatus(t('Enter an HTTPS origin, or HTTP localhost or 127.0.0.1, without a path, query, fragment or credentials.'), true);
+    act(async () => { await send('relaySave', { server }); if ($('#relay-kind').value === 'custom') $('#relay-url').value = server; relayStatus(t('Relay saved for new sessions. Existing sessions keep their own server.')); });
+  });
+  $('#relay-test').addEventListener('click', (e) => {
+    if (!human(e) || busy || !state) return;
+    const server = relayValue();
+    if (!server) return relayStatus(t('Enter an HTTPS origin, or HTTP localhost or 127.0.0.1, without a path, query, fragment or credentials.'), true);
+    const p = permission([server]);
+    relayStatus(t('Testing {server}…', { server }));
+    act(async () => {
+      if (!await p) return relayStatus(t('Host permission was not granted. No connection was made.'), true);
+      const r = await send('relayTest', { server });
+      const messages = { connected: 'Connected to {server}.', timeout: 'Connection to {server} timed out.', http: 'The relay returned HTTP {status}.', invalid: 'The server did not return a valid Glaze health response.', cancelled: 'Connection test cancelled.', network: 'Could not connect. Check the URL, TLS and relay availability; redirects are refused.' };
+      relayStatus(t(messages[r.result], { server, status: r.status }), r.result !== 'connected');
+    }, { reload: false });
+  });
+  $('#refresh').addEventListener('click', (e) => { if (human(e)) act(async () => { for (const s of state.sessions) await send('sync', { sid: s.sid }); }); });
+  $('#create').addEventListener('click', (e) => {
+    if (!human(e) || busy || !state) return;
+    const chosen = [...$('#sources').querySelectorAll('input:checked')].map((x) => x.source);
+    const kind = $('#kind').value, title = $('#title').value.trim();
+    if (!title || (kind !== 'look' && (!chosen.length || !chosen.every((x) => x.key === chosen[0].key)))) return say('Choose a name and items from one local account.', true);
+    const server = state.relay, p = permission([server]);
+    act(async () => {
+      if (!await p) return;
+      await send('create', { kind, title, server, key: chosen[0]?.key, folder: chosen[0]?.folder, ids: chosen.flatMap((x) => x.ids || []), name: $('#name').value, expire: $('#expire').checked });
+      say('Session saved locally. Share an invite when it is up to date.');
+    });
+  });
+  $('#join').addEventListener('click', (e) => {
+    if (!human(e) || busy || !state) return;
+    // The key exists only in this extension-owned input until the trusted Join click, then in the worker.
+    const link = $('#invite').value.trim(); $('#invite').value = '';
+    const server = GZ_RELAY.invite(link);
+    if (!server) return say('Paste a valid Glaze invite link using HTTPS, or HTTP localhost or 127.0.0.1.', true);
+    if (!confirmHost(server)) return;
+    const p = permission([server]); act(async () => { if (await p) await send('join', { link, confirmServer: server, name: $('#name').value }); });
+  });
+  const query = new URLSearchParams(location.search), key = query.get('notes');
+  if (key && GZ_NOTES.KEY.test(key)) {
+    $('#backup').hidden = false;
+    $('#import-notes').addEventListener('click', (e) => { if (human(e)) $('#import-file').click(); });
+    $('#import-file').addEventListener('change', (e) => {
+      if (!e.isTrusted) return;
+      const file = e.target.files[0]; e.target.value = '';
+      if (!file) return;
+      act(async () => {
+        const cap = GZ_NOTES.LIMIT.total + (64 << 20);
+        if (file.size > cap) throw Object.assign(new Error('big'), { ui: t('That file is too big to import (up to {size}).', { size: Math.round(cap / 1048576) + ' MB' }) });
+        $('#status').textContent = t('Reading {name}…', { name: file.name });
+        let zip, json, data;
+        try {
+          zip = GZ_DOCTEXT.unzip(new Uint8Array(await file.arrayBuffer()), { limits: { input: cap, entry: 64 << 20, total: cap, entries: 20000 } });
+          json = await zip.text('notes.json');
+          data = GZ_NOTES.parseExport(json, { site: new URL(key.slice(9)).origin });
+        } catch { throw Object.assign(new Error('bad'), { ui: t("That isn't a notes export from Glaze, or it's damaged.") }); }
+        const shareKeys = await zip.text('share-keys.json');
+        if (shareKeys !== null && shareKeys !== undefined) await send('importKeys', { keys: JSON.parse(shareKeys) });
+        for (const [i, f] of data.files.entries()) {
+          $('#status').textContent = t('Importing… {n} of {all}', { n: i + 1, all: data.files.length + data.notes.length });
+          const bytes = await zip.bytes(f.path);
+          if (!bytes || bytes.length !== f.size) throw Object.assign(new Error('missing'), { ui: t('Left out: {names}', { names: f.name }) });
+          const owner = data.notes.find((n) => GZ_NOTES.refs(n.html).has(f.id));
+          if (owner) await send('notesFile', { key, file: { id: f.id, note: owner.id, kind: f.kind, name: f.name, data: GZ_NOTES.b64(bytes) } });
+        }
+        const raw = JSON.parse(json);
+        let done = 0, skipped = 0;
+        for (let i = 0; i < data.notes.length || i === 0; i += 5) {
+          const r = await send('notesImport', { key, json: JSON.stringify({ format: raw.format, version: raw.version, site: raw.site, folders: data.folders, files: data.files, notes: data.notes.slice(i, i + 5) }) });
+          done += r.done; skipped += r.skipped;
+        }
+        say('Notes and share keys imported locally. Resume to reconnect.');
+        $('#status').textContent += ' ' + t('Notes imported: {n}', { n: done }) + (skipped ? ' · ' + t('Skipped, already here and not older: {n}', { n: skipped }) : '');
+      });
+    });
+    $('#export-notes').addEventListener('click', (e) => {
+      if (!human(e)) return;
+      act(async () => {
+        const r = await send('backupNotes', { key }).catch(() => { throw Object.assign(new Error('read'), { ui: t("Couldn't read your notes. Nothing was saved.") }); });
+        const data = r.data, seen = new Set();
+        for (const [i, n] of data.notes.entries()) {
+          $('#status').textContent = t('Exporting… {n} of {all}', { n: i + 1, all: data.notes.length });
+          const body = await send('notesRead', { key, id: n.id }).catch(() => { throw Object.assign(new Error('read'), { ui: t("Couldn't export “{title}”. Nothing was saved.", { title: n.title }) }); });
+          if (body.rev !== n.rev) throw new Error('changed'); // A mixed-revision archive is not a backup.
+          n.html = body.html;
+          for (const id of GZ_NOTES.refs(n.html)) if (!seen.has(id)) {
+            seen.add(id); const f = await send('notesGetFile', { key, id });
+            data.files.push({ id, ...f, bytes: GZ_NOTES.unb64(f.data) });
+          }
+        }
+        const entries = GZ_NOTES.exportZip(data);
+        entries.push({ name: 'share-keys.json', data: new TextEncoder().encode(JSON.stringify(data.keys, null, 2)), date: new Date() });
+        const url = URL.createObjectURL(new Blob(GZ_ZIP.zip(entries), { type: 'application/zip' }));
+        const a = make('a', undefined, { href: url, download: 'glaze-notes.zip' }); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        say('Notes and share keys exported. Keep the backup private.');
+        $('#status').textContent += ' ' + t('Notes exported: {n}', { n: data.notes.length });
+      });
+    });
+  }
+  let port;
+  try { port = chrome.runtime.connect({ name: 'glaze:sessions' }); port.onMessage.addListener(() => { if (!busy) load().catch(() => say('Could not finish. Your local copies are kept. Try again.', true)); }); }
+  catch { say('Could not finish. Your local copies are kept. Try again.', true); }
+  addEventListener('pagehide', () => { dead = true; lookRevision++; clearTimeout(lookTimer); $('#invite').value = ''; port?.disconnect(); });
+  addEventListener('online', () => { if (!dead) { port?.postMessage({ online: true }); load().catch(() => {}); } });
+  load().catch(() => say('Could not finish. Your local copies are kept. Try again.', true));
+})();

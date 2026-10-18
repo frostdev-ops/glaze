@@ -7,6 +7,8 @@ const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
 const hint = (msg) => { $('#hint').textContent = msg || ''; $('#hint').hidden = !msg; $('#hint').classList.toggle('err', !!msg); };
 const LEVELS = ['off', 'subtle', 'expressive'];
 const level = (l) => t(l[0].toUpperCase() + l.slice(1));
+// Auto light and dark, cycled from its tile; the schedule's times are set in the editor.
+const AUTO = [['off', 'Off'], ['device', 'Follow the system'], ['schedule', 'On a schedule']];
 
 GZ_UI.load().then((s) => {
   const save = (keys) => GZ_UI.save(s, keys, hint);
@@ -29,10 +31,21 @@ GZ_UI.load().then((s) => {
     $('#motion').dataset.level = s.motion.level;
     $('#motion-name').textContent = level(s.motion.level);
     $('#motion').setAttribute('aria-label', t('Motion: {level}', { level: level(s.motion.level) }));
+    const mode = s.auto.on ? s.auto.mode : 'off';
+    const name = t(AUTO.find(([m]) => m === mode)[1]);
+    $('#auto-name').textContent = mode === 'schedule' ? `${name} · ${s.auto.from}–${s.auto.to}` : name;
+    $('#auto').setAttribute('aria-label', t('Auto light and dark: {mode}', { mode: $('#auto-name').textContent }));
     if (s.auto.on) hint(t('Auto light/dark is on. Picking a palette turns it off.'));
   };
 
   $('#enabled').addEventListener('click', () => { s.enabled = !s.enabled; save(['enabled']); render(); });
+  $('#auto').addEventListener('click', () => {
+    const next = AUTO[(AUTO.findIndex(([m]) => m === (s.auto.on ? s.auto.mode : 'off')) + 1) % AUTO.length][0];
+    s.auto = { ...s.auto, on: next !== 'off', mode: next === 'off' ? s.auto.mode : next };
+    if (!s.auto.on) hint();
+    save(['auto']);
+    render();
+  });
   $('#motion').addEventListener('click', () => {
     s.motion.level = LEVELS[(LEVELS.indexOf(s.motion.level) + 1) % LEVELS.length];
     save(['motion']);
@@ -41,6 +54,15 @@ GZ_UI.load().then((s) => {
   // All eight looks on a sheet over the tiles; picking one closes it.
   $('#look').addEventListener('click', () => {
     GZ_UI.looks($('#looks'), s, (L) => { save(GZ_UI.pickLook(s, L)); render(); $('#sheet').close(); });
+    // The theme worn before this one, from the history the background keeps (lib/history.js).
+    chrome.storage.local.get('lookHistory', (r) => {
+      const back = GZ_HISTORY.previous(GZ_HISTORY.entries(r?.lookHistory), s);
+      const b = $('#previous');
+      b.hidden = !back;
+      if (!back) return;
+      b.title = t('Back to {name}', { name: GZ_UI.themeName(GZ_HISTORY.theme(back.theme)) });
+      b.onclick = () => { Object.assign(s, GZ_HISTORY.wear(s, back)); save(GZ_HISTORY.KEYS); render(); $('#sheet').close(); };
+    });
     $('#sheet').showModal();
   });
   $('#back').addEventListener('click', () => $('#sheet').close());
@@ -60,7 +82,7 @@ GZ_UI.load().then((s) => {
   render();
 });
 
-// Due this week, as Blackboard or Canvas last told the content script (the popup can't ask them): the count and
+// Due this week, as Blackboard, Canvas or Moodle last told the content script (the popup can't ask them): the count and
 // the next three, to read. A list over a day old is left out; it would miss what was added since.
 chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'seenCourses'], (r) => GZ_UI.load().then((s) => {
   const now = new Date();
@@ -68,7 +90,7 @@ chrome.storage.local.get(['dueWeek', 'dueWeekAt', 'seenCourses'], (r) => GZ_UI.l
   const due = fresh ? (r.dueWeek || []).filter((d) => d.due >= now) : [];
   $('#due-n').textContent = fresh ? due.length : '–';
   const note = (text) => Object.assign(document.createElement('li'), { className: 'note', textContent: text });
-  $('#due-list').replaceChildren(...(!fresh ? [note(t("Open Blackboard or Canvas to see what's due."))] : !due.length ? [note(t('Nothing due in the next seven days.'))]
+  $('#due-list').replaceChildren(...(!fresh ? [note(t("Open Blackboard, Canvas or Moodle to see what's due."))] : !due.length ? [note(t('Nothing due in the next seven days.'))]
     : due.slice(0, 3).map((d) => {
       const { rel, sub } = GZ_PAGE.describe(new Date(d.due), true, now, GZ_I18N.ui());
       const li = document.createElement('li');

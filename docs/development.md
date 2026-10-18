@@ -85,6 +85,13 @@ and then runs `node scripts/safari-resources.js` on it, which stops the build if
 project doesn't list. Add a new top-level file or folder to both extension targets in Xcode;
 `test/safari-resources.test.js` checks the project against everything the package ships.
 
+For direct development in `safari/Glaze/Glaze.xcodeproj`, refresh the checked-in generated resources
+with `bash scripts/sync-safari-resources.sh --refresh` after changing extension sources. Both extension
+targets check every packaged file before copying resources and stop with that command if the bundle
+is stale. The check uses Node, Python 3, zip and unzip; the Xcode phase also searches the usual Homebrew
+binary directories. `bash scripts/sync-safari-resources.sh --check` runs the same check without building
+or signing an app. Release scripts continue to stage and validate a fresh temporary copy.
+
 `scripts/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
 Use it only when you mean to regenerate the project. It doesn't know about the iPhone and iPad targets below.
 

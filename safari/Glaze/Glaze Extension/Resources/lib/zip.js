@@ -1,6 +1,7 @@
 // A zip archive in the store method (course files are PDFs, slides and pictures: already compressed),
 // with UTF-8 names. Pure, so node can test it. Classic script for the content script; module.exports for node.
-const GZ_ZIP = (() => {
+// Loaded on demand (content.js need()): a second injection into the same frame keeps the first.
+var GZ_ZIP = globalThis.GZ_ZIP || (() => {
   const TABLE = new Uint32Array(256).map((_, i) => {
     let c = i;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
@@ -73,4 +74,6 @@ const GZ_ZIP = (() => {
   return { crc32, zip, safeName, unique, canvasUnopened, canvasFiles, canvasURL };
 })();
 
-if (typeof module !== 'undefined') module.exports = GZ_ZIP;
+// Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how
+// lib/background.js knows it ran to the end.
+if (typeof module !== 'undefined') module.exports = GZ_ZIP; else GZ_ZIP;

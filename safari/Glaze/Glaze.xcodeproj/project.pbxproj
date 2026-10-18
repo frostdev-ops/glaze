@@ -330,6 +330,7 @@
 			buildPhases = (
 				3B8EDA83307C30D500B0DD77 /* Sources */,
 				3B8EDA84307C30D500B0DD77 /* Frameworks */,
+				A13D981BFA2040A08E873801 /* Verify extension resources */,
 				3B8EDA85307C30D500B0DD77 /* Resources */,
 			);
 			buildRules = (
@@ -364,6 +365,7 @@
 			buildPhases = (
 				3B8EDC0F307C30D500B0DD77 /* Sources */,
 				3B8EDC10307C30D500B0DD77 /* Frameworks */,
+				A13D981BFA2040A08E873802 /* Verify extension resources */,
 				3B8EDC11307C30D500B0DD77 /* Resources */,
 			);
 			buildRules = (
@@ -507,6 +509,33 @@
 			);
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A13D981BFA2040A08E873801 /* Verify extension resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Verify extension resources";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "case \"$SRCROOT\" in\n  */safari/Glaze)\n    export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n    /bin/bash \"$SRCROOT/../../scripts/sync-safari-resources.sh\" --check\n    ;;\n  *) echo \"Temporary release project: resources validated by the staging script.\" ;;\nesac\n";
+		};
+		A13D981BFA2040A08E873802 /* Verify extension resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Verify extension resources";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "case \"$SRCROOT\" in\n  */safari/Glaze)\n    export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\n    /bin/bash \"$SRCROOT/../../scripts/sync-safari-resources.sh\" --check\n    ;;\n  *) echo \"Temporary release project: resources validated by the staging script.\" ;;\nesac\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		3B8EDA68307C30D300B0DD77 /* Sources */ = {
@@ -690,6 +719,7 @@
 		3B8EDA92307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze Extension" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = YES;
@@ -724,6 +754,7 @@
 		3B8EDA93307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze Extension" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = YES;
@@ -910,6 +941,7 @@
 		3B8EDC18307C30D500B0DD77 /* Debug configuration for PBXNativeTarget "Glaze iOS Extension" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -940,6 +972,7 @@
 		3B8EDC19307C30D500B0DD77 /* Release configuration for PBXNativeTarget "Glaze iOS Extension" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;

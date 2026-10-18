@@ -16,7 +16,7 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) {
   --gz-bg-tint: color-mix(in srgb, var(--gz-surface-2) var(--gz-bg-dim, 60%), transparent);
   --gz-bg-art: var(--gz-bg-grad), var(--gz-surface-2);
   --gz-bg-grain: linear-gradient(transparent, transparent);
-  background: var(--gz-surface-2) !important;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
 }
 /* Fine grey noise a few percent strong: it breaks up the 8-bit banding of soft gradients. Under the
    tint, so dimming quiets it too. */
@@ -39,8 +39,9 @@ html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offca
   filter: blur(var(--gz-bg-blur, 0px));
 }
 /* Cards over a picture: a little see-through, never so much that text sits on the image. */
-html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer) {
-  background: color-mix(in srgb, var(--gz-surface) 88%, transparent) !important;
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .panel, .todo-item, article, .content-list-item .itemContainer),
+html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap .content-list-item .content-list-item .itemContainer {
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 88%), transparent) !important;
 }
 
 /* Aurora: richer art, and in Expressive the whole layer drifts. It moves by transform only, so
@@ -49,16 +50,18 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.element-card, .MuiCard-root, .pa
 html[data-gz-bg="aurora"]::before,
 html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before {
   inset: -18%;
-  background: linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
+  background: var(--gz-surface-grain, none), linear-gradient(var(--gz-bg-tint), var(--gz-bg-tint)), var(--gz-bg-grain),
     radial-gradient(42% 34% at 22% 26%, color-mix(in srgb, var(--gz-bg-1) 46%, transparent), transparent 70%),
     radial-gradient(38% 40% at 78% 70%, color-mix(in srgb, var(--gz-bg-2) 36%, transparent), transparent 70%),
     radial-gradient(30% 28% at 62% 18%, color-mix(in srgb, var(--gz-bg-3) 28%, transparent), transparent 70%),
     radial-gradient(34% 30% at 30% 86%, color-mix(in srgb, var(--gz-bg-2) 20%, transparent), transparent 70%),
-    var(--gz-surface-2);
+    var(--gz-surface-paint-2, var(--gz-surface-2));
   animation: gz-aurora 42s ease-in-out infinite alternate;
   animation-play-state: var(--gz-ambient);
-  will-change: transform;
 }
+/* Promoted only where it drifts: a promoted layer holds its own GPU copy. */
+html[data-gz-motion="expressive"][data-gz-bg="aurora"]::before,
+html[data-gz-motion="expressive"][data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)::before { will-change: transform; }
 @keyframes gz-aurora {
   0% { transform: translate3d(-5%, -3%, 0) rotate(-4deg) scale(1); }
   50% { transform: translate3d(4%, 2%, 0) rotate(3deg) scale(1.06); }
@@ -77,6 +80,11 @@ html[data-gz-bg="aurora"] :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.
   z-index: -1;
   pointer-events: none;
   filter: blur(var(--gz-bg-blur, 0px));
+}
+/* No blur set, no filter: even blur(0) gives the layer an offscreen copy on the GPU. Every element is a style
+   container, so this reads the --gz-bg-blur content.js sets on <html>. */
+@container style(--gz-bg-blur: 0px) {
+  html::before, html :is(.panel-wrap, .bb-offcanvas-panel)::before, #gz-scene { filter: none; }
 }
 
 /* Expressive: a soft light follows the pointer across a hovered card (content.js feeds
@@ -143,6 +151,8 @@ html[data-gz-enhance-overall] #site-wrap [data-gz-grade]::after {
 #site-wrap [data-gz-chip="later"], #site-wrap [data-gz-chip="muted"] { --gz-chip: var(--gz-ink-muted); }
 /* A course card's overall grade, beside its status, in the same chip and bands. */
 html[data-gz-enhance-overall] #site-wrap [data-gz-grade]::after { content: attr(data-gz-grade); }
+/* Card grades only on hover: shown while the card is pointed at or holds focus. */
+html[data-gz-enhance-gradeHover] #site-wrap :is(article.course-element-card, a[class*="courseCard"]):not(:hover, :focus-within) [data-gz-grade]::after { opacity: 0; }
 html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
   content: attr(data-gz-pct);
   margin-left: 0.45em; padding-left: 0.45em; border-left: 1px solid color-mix(in srgb, currentColor 30%, transparent);
@@ -153,8 +163,8 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
 #gz-peek {
   position: fixed; z-index: 2147483002; width: 300px; max-width: calc(100vw - 16px); padding: 0.6rem 0.75rem 0.55rem;
   pointer-events: none; font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
-  background: color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); backdrop-filter: blur(var(--gz-glass));
-  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-tip-bg) 94%, transparent); backdrop-filter: blur(var(--gz-glass));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
   animation: var(--gz-tip-in);
 }
 #gz-peek .gz-peek-head { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-faint); margin-bottom: 0.35rem; }
@@ -172,7 +182,7 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
 #gz-progress {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem 0.75rem; align-items: baseline;
   margin: 0 0 calc(14px * var(--gz-space)); padding: 0.7rem 1rem 0.8rem;
-  background: var(--gz-surface); border: 1px solid var(--gz-line); border-radius: var(--gz-radius);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius);
   font-size: 0.85rem; color: var(--gz-ink-muted);
 }
 #gz-progress b { color: var(--gz-ink); font-variant-numeric: tabular-nums; }
@@ -189,15 +199,15 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem;
   margin: 0 0 0.5rem; padding: 0.45rem 0.5rem 0.45rem 0.85rem;
   font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
-  background: color-mix(in srgb, var(--gz-accent) 12%, var(--gz-surface));
-  border: 1px solid color-mix(in srgb, var(--gz-accent) 40%, var(--gz-line)); border-radius: var(--gz-radius);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent) 12%, var(--gz-surface-paint, var(--gz-surface)));
+  border: 1px solid color-mix(in srgb, var(--gz-accent) 40%, var(--gz-border-line, var(--gz-line))); border-radius: var(--gz-radius);
   animation: var(--gz-enter);
 }
 .gz-draft[hidden] { display: none; }
 .gz-draft span { flex: 1 1 12rem; }
 .gz-draft button {
   padding: 0.25rem 0.8rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
-  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-line-strong); border-radius: 999px;
+  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px;
 }
 .gz-draft button:first-of-type { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
 .gz-draft button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
@@ -207,7 +217,7 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
   flex: none; align-self: center; display: inline-grid; place-items: center; min-width: 1.6rem; height: 1.6rem;
   margin: 0 0 0 0.5rem; padding: 0; font: 600 12px/1 var(--gz-font); color: var(--gz-ink-muted);
   background: linear-gradient(90deg, var(--gz-accent-soft) var(--gz-pct, 0%), transparent 0);
-  border: 1px solid var(--gz-line-strong); border-radius: 999px; cursor: pointer; opacity: 0;
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; cursor: pointer; opacity: 0;
   transition: opacity var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease);
 }
 .gz-dl::before { content: "\2193"; }
@@ -219,19 +229,19 @@ html[data-gz-enhance-inline] #site-wrap [data-gz-pct]::after {
 /* Keyboard shortcut list. */
 #gz-keys {
   position: fixed; inset: 0; z-index: 2147483003; display: grid; place-items: center;
-  background: color-mix(in srgb, var(--gz-surface-2) 55%, transparent); backdrop-filter: blur(4px);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 55%), transparent); backdrop-filter: blur(4px);
   animation: gz-fade var(--gz-t) var(--gz-ease) both;
 }
 #gz-keys .gz-keys-panel {
   width: min(360px, calc(100vw - 32px)); padding: 1rem 1.25rem 1.1rem; font-family: var(--gz-font);
-  color: var(--gz-ink); background: var(--gz-surface); border: 1px solid var(--gz-line-strong);
+  color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
   border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-enter);
 }
 #gz-keys h2 { margin: 0 0 0.6rem; font-size: 15px; }
 #gz-keys dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 1rem; align-items: center; }
 #gz-keys dt { display: flex; gap: 0.25rem; }
 #gz-keys dd { margin: 0; color: var(--gz-ink-muted); font-size: 13px; }
-#gz-keys kbd { min-width: 1.6em; padding: 0.1rem 0.4rem; text-align: center; font: 600 12px/1.5 ui-monospace, Menlo, monospace; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-bottom-width: 2px; border-radius: 6px; }
+#gz-keys kbd { min-width: 1.6em; padding: 0.1rem 0.4rem; text-align: center; font: 600 12px/1.5 ui-monospace, Menlo, monospace; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-bottom-width: 2px; border-radius: calc(var(--gz-radius, 12px) * 1 / 2); }
 
 /* New grades: a badge on gradebook rows and course cards (content.js sets the label). */
 html[data-gz-enhance-newgrades] [data-gz-new]::after {
@@ -265,51 +275,21 @@ html .gz-new[data-kind="inside"] { color: var(--gz-accent); background: transpar
 html .gz-new[data-kind="inside"]:hover { background: color-mix(in srgb, var(--gz-accent) 14%, transparent); box-shadow: inset 0 0 0 1px var(--gz-accent); }
 html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([data-gz-enhance-newcontent]) .gz-new:not([data-kind="grades"]) { display: none; }
 
-/* What-if calculator, under the gradebook's header. */
-#gz-calc {
-  margin: 0 0 calc(14px * var(--gz-space)); padding: 0.2rem 1rem;
-  background: var(--gz-surface); border: 1px solid var(--gz-line); border-radius: var(--gz-radius);
-  font-size: 0.875rem; color: var(--gz-ink-muted);
-}
-#gz-calc[open] { padding-bottom: 0.9rem; }
-#gz-calc summary { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.55rem 0; cursor: pointer; color: var(--gz-ink); font-weight: 600; }
-#gz-calc summary b { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--gz-accent); }
-#gz-calc h3 { margin: 0.4rem 0 0.35rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gz-ink-faint); }
-#gz-calc ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
-#gz-calc li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; }
-#gz-calc .gz-calc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gz-ink); }
-#gz-calc .gz-calc-score { font-variant-numeric: tabular-nums; white-space: nowrap; }
-#gz-calc input {
-  width: 5.5em; padding: 0.15rem 0.45rem; font: inherit; text-align: right; font-variant-numeric: tabular-nums;
-  color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 6px;
-}
-#gz-calc input:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
-#gz-calc .gz-calc-note { margin: 0.2rem 0 0.5rem; color: var(--gz-ink-faint); }
-#gz-calc .gz-calc-out { margin: 0.6rem 0 0; color: var(--gz-ink); }
-#gz-calc .gz-calc-out:empty { display: none; }
-#gz-calc .gz-calc-target { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.75rem; }
-#gz-calc .gz-calc-clear {
-  margin-top: 0.45rem; padding: 0.15rem 0.7rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
-  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-line-strong); border-radius: 999px;
-}
-#gz-calc .gz-calc-clear[hidden] { display: none; }
-#gz-calc .gz-calc-clear:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
-
 /* Command palette. */
 #gz-cmd {
   position: fixed; inset: 0; z-index: 2147483003; display: grid; justify-items: center; align-items: start; padding-top: min(14vh, 120px);
-  background: color-mix(in srgb, var(--gz-surface-2) 55%, transparent); backdrop-filter: blur(4px);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 55%), transparent); backdrop-filter: blur(4px);
   animation: gz-fade var(--gz-t) var(--gz-ease) both;
 }
 #gz-cmd .gz-cmd-panel {
   width: min(600px, calc(100vw - 32px)); max-height: min(70vh, 560px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden; font: 14px/1.4 var(--gz-font); color: var(--gz-ink);
-  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
   animation: var(--gz-enter-panel);
 }
 #gz-cmd input {
   margin: 0; padding: 0.9rem 1.1rem; font: inherit; font-size: 16px; color: var(--gz-ink);
-  background: transparent; border: 0; border-bottom: 1px solid var(--gz-line); outline: none; box-shadow: none;
+  background: transparent; border: 0; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); outline: none; box-shadow: none;
 }
 #gz-cmd input::placeholder { color: var(--gz-ink-faint); }
 #gz-cmd ul { list-style: none; margin: 0; padding: 0.35rem; overflow: auto; overscroll-behavior: contain; }
@@ -319,11 +299,12 @@ html:not([data-gz-enhance-newgrades]) .gz-new[data-kind="grades"], html:not([dat
 #gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
 #gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
-#gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-line); }
-/* Dark documents: the preview frame inverted, with hues turned back, on dark palettes only. 0.9 so
+#gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+/* Documents in a dark palette (enhance.docPages): the preview frame dimmed, or inverted with hues turned back. 0.9 so
    white paper lands near the surface rather than on pure black. */
 #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { transition: filter var(--gz-t-slow) var(--gz-ease); }
-html[data-gz-dark-theme][data-gz-enhance-darkDocs] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: invert(0.9) hue-rotate(180deg); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: brightness(0.8); }
+html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe { filter: invert(0.9) hue-rotate(180deg); }
 
 /* Document buttons: a column of round buttons in the bottom-right gutter. Where the window is too
    narrow for a gutter, the document makes room for one instead of sitting under them. */
@@ -336,8 +317,8 @@ html[data-gz-footer] #gz-doc-tools { bottom: calc(var(--gz-footer-h) + 0.75rem);
 @container (max-width: 58rem) { html[data-gz-doc-tools] #site-wrap .document-body { padding-right: 3.5rem !important; } }
 #gz-doc-tools button {
   display: grid; place-items: center; width: 2.5rem; height: 2.5rem; padding: 0; cursor: pointer;
-  color: var(--gz-ink-muted); background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent);
-  backdrop-filter: blur(var(--gz-glass)); border: 1px solid var(--gz-line-strong); border-radius: 999px; box-shadow: var(--gz-shadow);
+  color: var(--gz-ink-muted); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  backdrop-filter: blur(var(--gz-glass)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; box-shadow: var(--gz-shadow);
   transition: color var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), scale var(--gz-t) var(--gz-ease);
 }
 #gz-doc-tools button:hover { color: var(--gz-ink); border-color: var(--gz-accent); }
@@ -370,23 +351,24 @@ html[data-gz-focus] #site-wrap div:has(> .js-content-navigator-previous, > .js-c
 html .gz-cm-btn {
   position: absolute; top: var(--gz-cm-top, 8px); right: var(--gz-cm-right, 8px); z-index: 2;
   display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer; opacity: 0;
-  background: color-mix(in srgb, var(--gz-surface) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass));
-  border: 1px solid var(--gz-line-strong); border-radius: 999px; box-shadow: var(--gz-rest-shadow);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent);
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; box-shadow: var(--gz-rest-shadow);
   transition: opacity var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), scale var(--gz-t-slow) var(--gz-spring) !important;
 }
 html #site-wrap .gz-cm-btn { color: var(--gz-ink-muted) !important; }
 html #site-wrap .gz-cm-btn:is(:hover, :focus-visible, [aria-expanded="true"]) { color: var(--gz-accent) !important; border-color: var(--gz-accent); }
-*:is(:hover, :focus-within) > .gz-cm-btn, html .gz-cm-btn:is(:focus-visible, [aria-expanded="true"]) { opacity: 1; }
+/* The glass only while it shows: a blur on an invisible button was a GPU layer on every card. */
+*:is(:hover, :focus-within) > .gz-cm-btn, html .gz-cm-btn:is(:focus-visible, [aria-expanded="true"]) { opacity: 1; backdrop-filter: blur(var(--gz-glass)); }
 html .gz-cm-btn:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 .gz-cm-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
-@media (hover: none) { html .gz-cm-btn { opacity: 0.85; } }
+@media (hover: none) { html .gz-cm-btn { opacity: 0.85; backdrop-filter: blur(var(--gz-glass)); } }
 @media (pointer: coarse) { html .gz-cm-btn { width: 36px; height: 36px; } }
 
 #gz-cm {
   position: fixed; z-index: 2147483002; box-sizing: border-box; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto;
   display: grid; gap: 0.35rem; padding: 0.8rem 0.9rem 0.9rem; font: 13px/1.4 var(--gz-font); color: var(--gz-ink);
-  background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
   transform-origin: var(--gz-cm-origin, top right); animation: var(--gz-tip-in);
 }
 #gz-cm * { box-sizing: border-box; }
@@ -398,7 +380,7 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 /* The nickname field: Blackboard's name is the placeholder. */
 #gz-cm input.gz-cm-nick {
   width: 100%; margin: 0; padding: 0.4rem 0.6rem; font: inherit; color: var(--gz-ink) !important;
-  background: var(--gz-surface-2) !important; border: 1px solid var(--gz-line-strong) !important; border-radius: var(--gz-radius-sm) !important;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important;
 }
 #gz-cm input.gz-cm-nick::placeholder { color: var(--gz-ink-faint); }
 #gz-cm input.gz-cm-nick:focus { border-color: var(--gz-accent) !important; outline: none; }
@@ -411,7 +393,7 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 #gz-cm .gz-cm-colorhead .gz-cm-cap { margin-top: 0; }
 #gz-cm .gz-cm-reset {
   padding: 0.1rem 0.7rem; font: 600 12px/1.5 var(--gz-font); cursor: pointer;
-  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-line-strong); border-radius: 999px;
+  color: var(--gz-ink-muted); background: transparent; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px;
 }
 #gz-cm .gz-cm-reset[hidden] { display: none; }
 #gz-cm .gz-cm-reset:hover { color: var(--gz-accent); border-color: var(--gz-accent); }
@@ -449,8 +431,8 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 #gz-cm .gz-cm-looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
 #gz-cm .gz-cm-look {
   min-width: 0; padding: 0.35rem 0.4rem 0.35rem 0.6rem; text-align: left; font-weight: 600; font-size: 11.5px; line-height: 1.3; cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gz-ink-muted); background: var(--gz-surface-2);
-  border: 1px solid var(--gz-line-strong); border-radius: var(--gz-radius-sm);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--gz-ink-muted); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
 }
 #gz-cm .gz-cm-look:hover { transform: var(--gz-lift); }
 #gz-cm .gz-cm-look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
@@ -467,3 +449,157 @@ html[data-gz-hide-tab-grades] .bb-ui-navigation-list-horizontal li:has(> a[href*
 html[data-gz-hide-tab-messages] .bb-ui-navigation-list-horizontal li:has(> a[href*="/messages"]),
 html[data-gz-hide-tab-groups] .bb-ui-navigation-list-horizontal li:has(> a[href*="/groups/"]),
 html[data-gz-hide-tab-achievements] .bb-ui-navigation-list-horizontal li:has(> a[href*="/achievements"]) { display: none !important; }
+
+/* ---- the card editor (features/cards.js): a modal dialog, and the course menu's way into it ---- */
+#gz-cm .gz-cm-more {
+  margin-top: 0.5rem; padding: 0.4rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; color: var(--gz-accent);
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
+}
+#gz-cm .gz-cm-more:hover { border-color: var(--gz-accent); }
+#gz-ce {
+  box-sizing: border-box; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 24px); padding: 0; overflow: auto;
+  font: 13px/1.45 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
+  border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-tip-in);
+}
+#gz-ce::backdrop { background: rgb(0 0 0 / 0.35); }
+#gz-ce * { box-sizing: border-box; }
+#gz-ce .gz-ce-in { display: grid; gap: 0.75rem; padding: 1rem 1.1rem 1.1rem; }
+#gz-ce .gz-ce-head { display: flex; align-items: center; gap: 0.75rem; }
+#gz-ce h2 { flex: 1; min-width: 0; margin: 0; font: 600 16px/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-ce button, #gz-ce select, #gz-ce input:not([type="range"], [type="color"], [type="radio"], [type="checkbox"]) {
+  font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm);
+  padding: 0.35rem 0.6rem; margin: 0; height: auto; min-height: 2rem; box-shadow: none;
+}
+#gz-ce button { cursor: pointer; }
+#gz-ce button:hover:not(:disabled) { border-color: var(--gz-accent); }
+#gz-ce button:disabled { opacity: 0.45; cursor: default; }
+#gz-ce :focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+#gz-ce input[type="color"] { width: 2.5rem; height: 2rem; padding: 2px; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
+#gz-ce input[type="range"] { accent-color: var(--gz-accent); }
+#gz-ce .gz-ce-x { min-height: 0; width: 2rem; height: 2rem; padding: 0; border-radius: 999px; font-size: 18px; line-height: 1; }
+#gz-ce .gz-ce-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+#gz-ce .gz-ce-tabs button { border: 0; border-radius: 0; background: transparent; color: var(--gz-ink-muted); padding: 0.4rem 0.8rem; box-shadow: inset 0 -2px 0 transparent; }
+#gz-ce .gz-ce-tabs button[aria-selected="true"] { color: var(--gz-accent); box-shadow: inset 0 -2px 0 var(--gz-accent); }
+#gz-ce .gz-ce-panel { display: grid; gap: 0.6rem; }
+#gz-ce [hidden] { display: none !important; }
+#gz-ce .gz-ce-kinds { display: flex; flex-wrap: wrap; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; overflow: hidden; width: max-content; max-width: 100%; }
+#gz-ce .gz-ce-kinds label { display: flex; align-items: center; padding: 0.35rem 0.8rem; cursor: pointer; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-kinds input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+#gz-ce .gz-ce-kinds label:has(input:checked) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); }
+#gz-ce .gz-ce-kinds label:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
+#gz-ce .gz-ce-field { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) auto; align-items: center; gap: 0.6rem; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-field output { min-width: 3rem; text-align: right; font-variant-numeric: tabular-nums; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-field input[type="color"] { justify-self: start; }
+#gz-ce .gz-ce-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+#gz-ce .gz-ce-row > .gz-ce-field { flex: 1 1 auto; }
+#gz-ce .gz-ce-desc { margin: 0; font-size: 12px; color: var(--gz-ink-faint); }
+#gz-ce .gz-ce-note { margin: 0; padding: 0.45rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-err) 16%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ce .gz-ce-contrast { margin: 0; padding: 0.45rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-ok) 14%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ce .gz-ce-contrast.gz-ce-warn { background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-warn) 20%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ce .gz-ce-check { display: flex; align-items: center; gap: 0.4rem; color: var(--gz-ink-muted); white-space: nowrap; }
+#gz-ce .gz-ce-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+#gz-ce .gz-ce-links li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.5rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); }
+#gz-ce .gz-ce-links li input[type="text"] { flex: 1 1 7rem; min-width: 0; }
+#gz-ce .gz-ce-links li input[translate="no"] { flex: 2 1 12rem; }
+#gz-ce .gz-ce-links li .gz-ce-check { margin-right: auto; }
+#gz-ce .gz-ce-links li button { min-height: 1.8rem; padding: 0 0.6rem; }
+#gz-ce .gz-ce-icon { display: grid; place-items: center; color: var(--gz-ink-muted); }
+#gz-ce .gz-ce-foot { display: flex; justify-content: space-between; gap: 0.6rem; padding-top: 0.25rem; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+#gz-ce .gz-ce-done { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); font-weight: 600; }
+@media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
+
+#gz-ce svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- course tabs (features/coursetabs.js) ----
+   One tab per course opened, in the course's sticky top bar (above its two rows, between them or below them), at the
+   header of an item opened over the course, or above a page outside a course. Until the file is in, data-gz-ctabs
+   (content-ultra.js: this browser tab's last strip, else the defaults) holds the strip's place, so nothing jumps when
+   it arrives; the bar grows by the strip, so it never covers Ultra's own controls. */
+html[data-gz-ctabs] { --gz-ctabs-h: 40px; }
+html[data-gz-ctabs~="small"] { --gz-ctabs-h: 34px; }
+html[data-gz-ctabs~="large"] { --gz-ctabs-h: 48px; }
+html[data-gz-ctabs] div.bb-course-navigation { height: auto !important; max-height: none !important; }
+html[data-gz-ctabs~="above"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
+html[data-gz-ctabs~="below"] div.bb-course-navigation:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h) !important; }
+html[data-gz-ctabs~="between"] div.bb-course-navigation:not(:has(#gz-ctabs)) div:has(> .js-course-navigation) { margin-top: var(--gz-ctabs-h) !important; }
+html[data-gz-ctabs~="page"] #main-content-inner:not(:has(> #gz-ctabs)) { padding-top: var(--gz-ctabs-h) !important; }
+/* Full routed pages have one header, not the course bar's two rows. Reserve before the lazy feature arrives. */
+html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-top: var(--gz-ctabs-h); }
+html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
+html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas)); }
+#gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
+#gz-ctabs {
+  position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 8px; box-sizing: border-box; flex: none; width: 100%;
+  height: var(--gz-ctabs-h, 40px); padding: 6px 12px 0; margin: 0; font: 500 13px/1.2 var(--gz-font, inherit); color: var(--gz-ink-muted);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
+  border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
+}
+/* Over a solid background the strip and the document buttons would blur a flat colour: a GPU layer for nothing. Same fill. */
+html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter: none; }
+#gz-ctabs[data-size="small"] { font-size: 12px; }
+#gz-ctabs[data-size="large"] { font-size: 14px; }
+#gz-ctabs:not([data-shape="tab"]) { align-items: center; padding-top: 0; }
+#gz-ctabs .gz-ctabs-list { display: flex; align-items: inherit; align-self: stretch; gap: 4px; flex: 1; min-width: 0; overflow: auto hidden; scrollbar-width: none; }
+#gz-ctabs .gz-ctabs-list::-webkit-scrollbar { display: none; }
+#gz-ctabs .gz-ctab {
+  position: relative; display: flex; align-items: center; gap: 7px; box-sizing: border-box; flex: 0 1 var(--gz-ctab-w, 180px); min-width: min(104px, var(--gz-ctab-w, 180px));
+  max-width: var(--gz-ctab-w, 180px); height: calc(var(--gz-ctabs-h, 40px) - 10px); padding: 0 6px 0 11px; border: 1px solid transparent;
+  border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 55%), transparent); color: var(--gz-ink-muted);
+  cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: pan-x; outline: none;
+  transition: background-color var(--gz-t, 0.2s) var(--gz-ease, ease), color var(--gz-t, 0.2s) var(--gz-ease, ease);
+}
+#gz-ctabs[data-shape="tab"] .gz-ctab { height: calc(var(--gz-ctabs-h, 40px) - 6px); border-bottom: 0; border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)) var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)) 0 0; margin-bottom: -1px; }
+#gz-ctabs[data-shape="pill"] .gz-ctab { border-radius: 999px; }
+#gz-ctabs[data-shape="square"] .gz-ctab { border-radius: calc(var(--gz-radius, 12px) * 1 / 6); }
+#gz-ctabs .gz-ctab:hover { background: var(--gz-surface-grain, none), var(--gz-row-hover, color-mix(in srgb, var(--gz-ink) 8%, var(--gz-surface-paint, var(--gz-surface)))); color: var(--gz-ink); }
+#gz-ctabs .gz-ctab[aria-selected="true"] { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+#gz-ctabs .gz-ctab[aria-selected="true"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: calc(var(--gz-radius, 12px) * 1 / 6); background: var(--gz-accent); }
+#gz-ctabs[data-shape="tab"] .gz-ctab[aria-selected="true"]::after { top: -1px; bottom: auto; left: 8px; right: 8px; }
+#gz-ctabs .gz-ctab:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
+#gz-ctabs .gz-ctab[data-drag] { z-index: 2; cursor: grabbing; box-shadow: var(--gz-shadow); }
+/* Each course's own colour (--gz-course, as Course colors resolves it): the dot or icon, a tint, or more of it. */
+#gz-ctabs .gz-ctab-mark { flex: none; display: grid; place-items: center; }
+#gz-ctabs[data-mark="none"] .gz-ctab-mark { display: none; }
+#gz-ctabs[data-mark="dot"] .gz-ctab-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--gz-course, var(--gz-accent)); }
+#gz-ctabs[data-mark="icon"] .gz-ctab-mark svg { display: block; width: 16px; height: 16px; fill: none; stroke: var(--gz-course, var(--gz-accent)); stroke-width: 1.8; stroke-linejoin: round; }
+#gz-ctabs[data-color="tint"] .gz-ctab[class*="course-color-"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 14%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ctabs[data-color="tint"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 24%, var(--gz-surface-paint, var(--gz-surface))); border-color: color-mix(in oklab, var(--gz-course) 55%, transparent); }
+#gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 30%, var(--gz-surface-paint, var(--gz-surface))); color: var(--gz-ink); }
+#gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 42%, var(--gz-surface-paint, var(--gz-surface))); border-color: var(--gz-course); }
+#gz-ctabs:is([data-color="tint"], [data-color="theme"]) .gz-ctab[class*="course-color-"][aria-selected="true"]::after { background: var(--gz-course); }
+#gz-ctabs .gz-ctab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x):hover { background: color-mix(in srgb, var(--gz-ink) 14%, transparent); color: var(--gz-ink); }
+#gz-ctabs .gz-ctab:not(:hover, :focus-visible, [data-pin]) .gz-ctab-pin { display: none; }
+#gz-ctabs .gz-ctab:not(:hover, :focus-visible, [aria-selected="true"]) .gz-ctab-x { visibility: hidden; }
+#gz-ctabs .gz-ctab[data-pin] .gz-ctab-pin { color: var(--gz-accent); }
+#gz-ctabs .gz-ctab[data-pin] .gz-ctab-x { display: none; }
+#gz-ctabs .gz-ctabs-note { flex: 0 1 auto; align-self: center; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-ctabs .gz-ctabs-note:empty { display: none; }
+/* Narrow: the word lies over the strip's own end for its few seconds (a click lets it go), not over the tabs' room. */
+@media (max-width: 700px) {
+  #gz-ctabs .gz-ctabs-note {
+    position: absolute; z-index: 3; top: 3px; bottom: 3px; right: 6px; max-width: calc(100% - 12px); display: flex; align-items: center; padding: 0 10px;
+    white-space: normal; line-height: 1.2; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
+    border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: var(--gz-shadow); cursor: pointer;
+  }
+}
+/* A tab's switch: the course's copy on screen (an inert shadow tree) until Ultra's live page is built, the strip on top
+   of it where it was, then a fade to the live page. Under Ultra's dialogs (MUI's 1300), over its panels. */
+/* Course tabs' live frames (features/coursetabs.js): over the whole window, above Glaze's footer; shown only while a tab's
+   frame is picked. Floating widgets stay over them. */
+#gz-ctabs-frames { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1250; visibility: hidden; background: var(--gz-ground, Canvas); }
+#gz-ctabs-frames[data-on] { visibility: visible; }
+#gz-ctabs-frames > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+#gz-ctabs-frames > .gz-ctabs-pic { position: absolute; inset: 0; z-index: 1; overflow: hidden; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
+html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
+html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
+/* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
+html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }
+/* Nor is the page itself drawn, its background layer and scene included: the frame covers it, and every glass panel and
+   layer under it is GPU memory. Hidden, not removed: it keeps its layout, scroll and state. The ground shows until the
+   frame paints. */
+html[data-gz-ctab-framed]::before, html[data-gz-ctab-framed] :is(#site-wrap, #gz-scene) { visibility: hidden !important; }
+/* Native dialogs and notices can live inside the covered app and still sit above the frame. */
+html[data-gz-ctab-framed] #site-wrap :is(#gz-ctabs, #gz-footer, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"], .MuiModal-root, .MuiPopover-root, .MuiSnackbar-root):not(.MuiModal-hidden, .MuiModal-hidden *, [aria-hidden="true"], [aria-hidden="true"] *, [hidden], [hidden] *) { visibility: visible; }

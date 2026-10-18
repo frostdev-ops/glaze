@@ -1,0 +1,9 @@
+{
+  "id": "ember",
+  "name": "Ember",
+  "description": "A warm rust-orange plush fox with a cream muzzle and chest, dark paws, bright eyes, and a compact fluffy tail.",
+  "spriteVersionNumber": 2,
+  "spritesheet": "spritesheet.webp",
+  "displayName": "Ember",
+  "spritesheetPath": "spritesheet.webp"
+}
