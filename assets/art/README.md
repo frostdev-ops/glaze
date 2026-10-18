@@ -1,5 +1,33 @@
 # Glaze art
 
+
+## Expanded habitats and Classic buddy motion (2026-10-17)
+
+Built-in OpenAI `image_gen` produced four original transparent habitat sprites in `stickers/habitat/`: `shelf`, `pet-bed`, `kelp`, and `sandcastle`. Each final WebP is 256×256, at most 24 KB, with native alpha. Delivery processing trims transparent padding, resizes and encodes only; it does not draw art. The four sprites are also available in the habitat sticker pack. `pets/study-buddy/sprites.webp` is a new 512×512, four-column/four-row base atlas for the existing Classic Shiba: idle, rightward walking, hop, and curious peek poses. Leftward walking mirrors its walking row. It was generated from Glaze's existing study-buddy sticker as the sole identity reference.
+
+Exact built-in generation prompts:
+
+### shelf
+
+Use case: stylized-concept. Asset type: transparent game furniture sprite for Glaze's student pet habitat. Primary request: a small wall-mounted wooden bookshelf, straight front view, with a thick pale oak horizontal shelf, two rounded brackets, no books or objects on top so a pet can stand on it. Style: original cozy rounded clay/enamel game art, calm muted mint and pale oak, cream highlights, a slate inner outline and subtle pale outer keyline. Simple chunky silhouette, readable at 96 pixels. Composition: one complete centered isolated shelf with generous transparent padding, horizontal shelf, no perspective tilt. Native transparent background. No text, no logo, no watermark, no backdrop or ground shadow.
+
+### pet-bed
+
+Use case: stylized-concept. Asset type: transparent game furniture sprite for Glaze's student pet habitat. Primary request: a cozy oval mint pet bed with a thick rounded rim and a soft lilac cushion, front three-quarter view, low enough that the pet can sleep on top. Style: original cozy rounded clay/enamel game art, calm muted mint/teal/lilac, cream highlights, a slate inner outline and subtle pale outer keyline. Simple chunky silhouette, readable at 64 pixels. Composition: one complete centered isolated item with generous transparent padding. Native transparent background. No pet or animal, no text, logo, watermark, backdrop, or ground shadow.
+
+### kelp
+
+Use case: stylized-concept. Asset type: transparent game furniture sprite for Glaze's student pet habitat. Primary request: a small aquarium planting of three curved mint and teal kelp fronds growing from two smooth cream pebbles, front view, compact upright silhouette. Style: original cozy rounded clay/enamel game art, calm muted mint/teal/lilac, cream highlights, a slate inner outline and subtle pale outer keyline. Simple chunky silhouette, readable at 64 pixels. Composition: one complete centered isolated item with generous transparent padding. Native transparent background. No pet or animal, no text, logo, watermark, backdrop, or ground shadow.
+
+### sandcastle
+
+Use case: stylized-concept. Asset type: transparent game furniture sprite for Glaze's student pet habitat. Primary request: a tiny friendly aquarium castle made of pale cream stone with two round towers, lilac roofs and one dark teal arched doorway, front view. Style: original cozy rounded clay/enamel game art, calm muted mint/teal/lilac, cream highlights, a slate inner outline and subtle pale outer keyline. Simple chunky silhouette, readable at 64 pixels. Composition: one complete centered isolated item with generous transparent padding. Native transparent background. No pet or animal, no text, logo, watermark, backdrop, or ground shadow.
+
+### study-buddy base
+
+Use case: stylized-concept. Asset type: a production animation sprite sheet for the ORIGINAL Glaze study buddy shown in the reference. Keep exactly this orange-and-cream Shiba puppy character, same markings, proportions, rounded clay/enamel shading, slate inner outline and pale outer keyline. Make ONE perfectly regular 4 column by 4 row sprite sheet, 16 square equal cells, on native transparent background. No gutters outside the equal grid, no dividing lines, labels or text. Each entire dog fits in its own cell with generous clear margins, equal scale, no overlap. Row 1: four seated idle frames front view: neutral, inhale, blink, neutral. Row 2: four walking RIGHT frames, clear right-facing side profile and alternating paws. Row 3: four hop frames: crouch, takeoff, airborne, land. Row 4: four peek and hide poses front view: curious head tilt left, curious head tilt right, paws up with happy eyes, return seated. Do not draw walls, furniture, objects, ground or shadows around characters. Feet of all grounded poses aligned close to each cell bottom. Preserve consistent character anatomy across all cells. Transparent background throughout.
+
+
 Original bitmap art made for Glaze, MIT like the rest of the repo. Created with the built-in OpenAI `image_gen` tool (2026-10-15). No competitor artwork was used or inspected. Generated source masters and discarded variants remain outside this repository.
 
 The prompts follow Glaze's own Frost, Midnight, Forest, Ember and Rose palettes and its rounded glass Looks: calm frosted glass/clay shading, chunky silhouettes, muted mint/teal/lilac or autumn colors, cream highlights, a slate inner outline and a pale outer keyline. Every subject was generated separately; each animal animation was requested as one sheet. Delivery processing only crops, resizes, encodes and assembles generated raster content while retaining its native alpha. No artwork was drawn programmatically.
@@ -71,3 +99,19 @@ Rime is the owner’s existing arctic-fox pet, reused at their request. Its `pet
 
 
 The Glaze droplet (`pets/glaze/`) is new original animation based on Glaze’s own logo, under the same MIT license: 1,783,056 bytes, SHA-256 `4a0653c6b961c4757e2c634de2bc7367b317e373767bb91b84728f69578a7473`. It uses the same 73-frame v2 layout. Its flexible body deliberately turns and narrows in the side-looking poses: final gaze registration spans 5 pixels, with a 1.307 maximum width ratio; the jump lifts 53 pixels and returns within 1 pixel. Three separate blind reviews matched every horizontal/vertical direction axis. Subtle near-horizontal cues, anatomical transparent gaps and larger gaze-family transitions are recorded in the external QA report rather than presented as zero differences. No QA composites or source strips ship.
+
+## All-character reaction atlases (2026-10-17)
+
+Every existing bundled character has a new native-alpha `pets/<id>/reactions.webp`: Ember, Luna, Mochi, Sprout, Pebble, Rime, Glaze, Cat, Bunny and Classic study buddy. Each512×768 sheet has24 generated frames in a4×6 grid: climbing, sleeping, playing, peeking, XP and level-up. These are additional local atlases; original base sheets retain their format. Full exact generation prompts, source paths, identity corrections and crop/packing evidence are recorded in [pet-reactions.md](pet-reactions.md). No account data or student content was used in generation.
+
+## Pet toys (2026-10-17)
+
+`stickers/habitat/toy-ball.webp` (11,330 bytes) and `stickers/habitat/yarn-ball.webp` (13,222 bytes) are original 256 × 256 transparent WebP sprites, generated with the built-in `image_gen` tool, inspected, then resized/padded and encoded without altering the illustrations. Both are under this repository's MIT license. Source PNGs remain in the generating session's Codex generated-images directory `01a14c48-0682-7972-8d9d-3b42788cbda7`, files `exec-d56d5f52-a5eb-489b-abb8-47a41f6a53f4.png` and `exec-d8e4cc6b-ac76-4689-93ea-59343540c78c.png`.
+
+Exact ball prompt:
+
+> Use case: stylized-concept. Asset type: transparent pet toy sprite for Glaze's cozy illustrated study pet habitat, viewed from front with a slightly top-down 3D feel. Primary request: one small round soft rubber toy ball, mint green and pale yellow curved panels, warm soft watercolor-gouache illustration with clean edges, subtle volume, cute and tactile, recognizable at 40 pixels. Single ball only, centered with generous transparent padding, no floor plane, no cast shadow outside object, no pet, no text, no watermark. Real transparent alpha background.
+
+Exact yarn prompt:
+
+> Use case: stylized-concept. Asset type: transparent pet toy sprite for Glaze's cozy illustrated study pet habitat, viewed from front with a slightly top-down 3D feel. Primary request: one small round lilac yarn ball, soft winding strands of wool, one short loose curl of yarn alongside it, warm soft watercolor-gouache illustration with clean edges, subtle volume, cute and tactile, recognizable at 40 pixels. Single yarn toy only, centered with generous transparent padding, no floor plane, no cast shadow outside object, no pet, no text, no watermark. Real transparent alpha background.

@@ -61,25 +61,25 @@ test('P3: duplicate planner rows without Insights are safe and counted once', ()
   assert.equal(view(state).work, 20);
 });
 test('P3: oversized state fails closed, including valid-looking large day lists', () => {
-  assert.equal(P.clean({ days: Array.from({ length: 10000 }, (_, i) => today - i) }), null);
-  assert.equal(P.view({ earned: Object.fromEntries(Array.from({ length: 5000 }, (_, i) => [`work:assignment:${i}`, 20])) }), null);
+  assert.equal(P.clean({ days: Array.from({ length: P.MAX_DAYS + 1 }, (_, i) => today - i) }), null);
+  assert.equal(P.view({ earned: Object.fromEntries(Array.from({ length: P.MAX + 1 }, (_, i) => [`work:assignment:${i}`, 20])) }), null);
 });
 test('future day numbers cannot mint XP', () => {
   assert.equal(view({ days: [today + 100000] }).streakXp, 0);
 });
 test('an oversized stored record is neither replaced nor awarded XP by the broker', async () => {
-  const key = 'pet:https://school.test/3', raw = { days: Array.from({ length: 10000 }, (_, i) => today - i) };
+  const key = 'pet:https://school.test/3', raw = { days: Array.from({ length: P.MAX_DAYS + 1 }, (_, i) => today - i) };
   let writes = 0;
   const result = await P.change({ key, op: 'read', tz }, { local: { get: async () => ({ [key]: raw }), set: async () => { writes++; return true; } } });
   assert.equal(result.ok, false); assert.equal(writes, 0);
 });
 
 test('capacity exhaustion preserves every settled contribution and the original stored record', async () => {
-  const key = 'pet:https://school.test/3', raw = { earned: Object.fromEntries(Array.from({ length: 4096 }, (_, i) => [`work:assignment:${i + 10}`, 20])) };
+  const key = 'pet:https://school.test/3', raw = { earned: Object.fromEntries(Array.from({ length: P.MAX }, (_, i) => [`work:assignment:${i + 10}`, 20])) };
   const before = JSON.stringify(raw); let writes = 0;
   const result = await P.change({ key, op: 'read', tz }, { local: { get: async () => ({ [key]: raw, 'insights:https://school.test/3': insights }), set: async () => { writes++; return true; } } });
   assert.equal(result.ok, false); assert.equal(result.error, 'history'); assert.equal(writes, 0);
-  assert.equal(result.data.work, 4096 * 20); assert.equal(JSON.stringify(raw), before);
+  assert.equal(result.data.work, P.MAX * 20); assert.equal(JSON.stringify(raw), before);
 });
 test('unsubmitted work that has never earned XP does not create zero-credit history', () => {
   const state = run({ planner: [{ ...row, sub: { submitted: false } }], cache: { at: now } });

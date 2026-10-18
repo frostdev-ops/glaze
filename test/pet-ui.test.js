@@ -9,7 +9,7 @@ const page = ({ delayed = false, record = { earned: { 'work:assignment:1': 20 } 
     addEventListener: (type, f) => events.push({ type, f }), removeEventListener: (type, f) => { const i = events.findIndex((x) => x.type === type && x.f === f); if (i >= 0) events.splice(i, 1); } });
   const profile = delayed ? new Promise((res) => { release = res; }) : Promise.resolve({ uid: '3', tz: 'UTC' });
   const c = { document: doc, console, URL, Date, Intl, Map, Set, Object, Number, Math, Array, String, Promise,
-    GZ_PET: P, GZ_TODO: T, GZ_CTX: { site: 'canvas', t: (k) => k, settings: () => ({ enabled: true, enhance: { pet: true } }), need: async () => {} },
+    GZ_PET: P, GZ_PET_BRAIN: require('../lib/petbrain.js'), GZ_TODO: T, GZ_CTX: { site: 'canvas', t: (k) => k, settings: () => ({ enabled: true, enhance: { pet: true } }), need: async () => {} },
     location: { origin: 'https://canvas.test' }, setTimeout: (f, ms) => { timers.set(++next, { f, ms }); return next; }, clearTimeout: (id) => timers.delete(id),
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://x/${p}`, sendMessage: (m, cb) => cb({ ok: true, data: P.view(record) }) },
       storage: { onChanged: { addListener: (f) => storage.push(f), removeListener: (f) => { const i = storage.indexOf(f); if (i >= 0) storage.splice(i, 1); } } } } };

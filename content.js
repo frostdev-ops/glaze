@@ -454,8 +454,8 @@
     if (!chrome.runtime?.id) { observer?.disconnect(); observer = null; return; }
     // A course tab's hidden frame: no sweep until it is shown (GZ_CTX scene), then one full pass.
     if (hid()) { dirty.clear(); full = true; return; }
-    // Native-parent removals still need remount/teardown; only changes inside our UI and the light's are irrelevant.
-    records = records.filter((r) => !globalThis.GZ_LIGHT?.owns(r) && !(ultra && r.target.closest?.('[id^="gz-"]')));
+    // Keep native-parent removals for remount/teardown; ignore owned UI internals.
+    records = records.filter((r) => !globalThis.GZ_LIGHT?.owns(r) && !r.target.closest?.('.gz-game,.gz-game-dialog,.gz-game-world') && !(ultra && r.target.closest?.('[id^="gz-"]')));
     if (!records.length) return;
     X.lift();
     for (const r of records) {

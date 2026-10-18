@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
@@ -154,6 +154,7 @@
         "fonts/*.woff2",
         "assets/art/pets/*/sprites.webp",
         "assets/art/pets/*/spritesheet.webp",
+        "assets/art/pets/*/reactions.webp",
         "assets/art/stickers/*/*.webp",
         "assets/art/cursors/*/*.png",
         "features/lookx.css",

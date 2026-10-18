@@ -31,7 +31,7 @@ For a release, `sh scripts/release.sh` builds everything into `release/<version>
 node --test
 ```
 
-Runs the tests for the colour, settings and page-text logic. No dependencies to install.
+Runs the tests for the colour, settings and page-text logic. Use Node 26, matching CI and the browser's strict compression-stream behavior. No dependencies to install.
 
 ### Publishing to the Chrome Web Store
 
