@@ -6,6 +6,23 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.5] — 2026-10-17
+
+### Added
+- Career-long pets with continuing levels, account-scoped progress and settings-backup transfer across semesters.
+- Room, garden, aquarium and cloud habitats, freely placed furniture, shelves, water physics and draggable ball/yarn toys that invite a short play session outside the habitat.
+- Local adaptive behavior with twelve activities, six needs meters, learned routines and toy preferences. Petting, play, moving away, habitat changes and time of day shape the pet's choices; learning can be disabled or reset independently of XP.
+- New climbing, sleeping, playing, peeking, XP and level-up animations for all ten bundled characters.
+
+### Changed
+- Pets spend more time settled on favorite perches, watch the cursor and make short excursions. Typing, scrolling and focus discourage active behavior.
+- Shared pet animations blend frames and transition smoothly between poses, while idle, hidden and reduced-motion displays use less work.
+- Wandering pets and dropped toys belong to page content, including native scrolling panes and the active same-account Blackboard course frame. Awake pets gently return into view after scrolling; sleeping pets stay settled.
+
+### Fixed
+- Older task backups preserve settled pet XP and newer learned state. Shared timer and XP feedback is applied once across tabs.
+- Furniture placement, keyboard focus, habitat-dialog handoff, lazy avatar loading and recovery onto partially visible perches remain consistent.
+
 ## [3.0.4] — 2026-10-17
 
 ### Added
