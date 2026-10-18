@@ -24,7 +24,7 @@ grade calculators, loads on demand from `features/` the first time a page needs 
 ```
 
 Writes `dist/glaze-v<version>.zip`, ready for the Chrome Web Store. Requires `node` and `zip`.
-`sh scripts/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons.
+From a clean `dev/firefox` checkout, `sh scripts/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons. The Firefox compatibility branch must include the intended main release, as [Releasing](../RELEASING.md) describes. Other checkouts require an explicit `--development` argument; that produces a visibly named development build for local checks, not a store upload. Each Firefox ZIP records its source commit and development status in `glaze-build.json`.
 For a release, `sh scripts/release.sh` builds everything into `release/<version>/`; see [RELEASING.md](../RELEASING.md).
 
 ```sh
