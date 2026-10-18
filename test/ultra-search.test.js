@@ -75,7 +75,7 @@ test('public readers page only the same list, preserve projection, refuse redire
 });
 
 // The actual shared search UI, with synthetic API responses and a minimal palette DOM.
-const ui = ({ hold = false, count = 2, loading = null, members = null, failure = null } = {}) => {
+const ui = ({ hold = false, count = 2, loading = null, members = null, failure = null, answer = null } = {}) => {
   let clock = now;
   const calls = new Map();
   const timers = [], requests = [], changed = [], pending = [];
@@ -103,6 +103,7 @@ const ui = ({ hold = false, count = 2, loading = null, members = null, failure =
         pending.push(resolve);
         init.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
       });
+      if (answer) return json(answer(u));
       return json({ results: count > 2 ? [] : fixture[u.pathname.split('/').at(-1)] || [] });
     },
     setTimeout: (fn, ms) => { const x = { fn, ms }; timers.push(x); return x; }, clearTimeout: (x) => { if (x) x.fn = null; },
@@ -313,4 +314,42 @@ test('switching search off with the palette closed drops what was cached', async
   await p.attach();
   await p.type('lab');
   assert.ok(lists(p) > before, 'asked again after search was switched off');
+});
+
+test('GZ-02: a page-limited search and its cached result must not announce exhaustive absence', async () => {
+  const p = ui({ count: 1, answer: (u) => {
+    if (!u.pathname.endsWith('/contents')) return { results: [] };
+    const offset = +(u.searchParams.get('offset') || 0);
+    const next = new URL(u);
+    next.searchParams.set('offset', offset + 200);
+    return {
+      results: [{ id: `_${900 + offset}_1`, title: offset === 400 ? 'Unseenneedle document' : 'Ordinary document',
+        availability: { available: 'Yes', adaptiveRelease: {} }, contentHandler: { id: 'resource/x-bb-document' } }],
+      ...(offset < 400 && { paging: { nextPage: next.pathname + next.search } }),
+    };
+  } });
+  await p.attach();
+  await p.type('unseenneedle');
+  const coldMessage = p.live.textContent, asked = p.requests.length;
+  const offsets = p.requests.filter((r) => new URL(r.url).pathname.endsWith('/contents'))
+    .map((r) => +(new URL(r.url).searchParams.get('offset') || 0));
+  assert.deepEqual(offsets, [0, 200], 'the matching third page is outside the intended two-page cap');
+  assert.equal(p.cmd.found.length, 0);
+  await p.type('unseenneedles');
+  assert.equal(p.requests.length, asked, 'exercise the real warm-cache path too');
+  for (const message of [coldMessage, p.live.textContent]) {
+    assert.match(message, /partial|incomplete|limited|not all|searched (?:portion|part|items)|narrow|more|budget/i,
+      'screen-reader status must explain that the search did not cover all available content');
+  }
+});
+
+test('GZ-02: exhausting the query request budget must not announce exhaustive absence', async () => {
+  const p = ui({ count: 30 });
+  await p.attach();
+  await p.type('unseenneedle');
+  assert.equal(p.requests.length, 30, 'keep the existing network budget');
+  assert.equal(p.cmd.seeking, false);
+  assert.equal(p.cmd.found.length, 0);
+  assert.match(p.live.textContent, /partial|incomplete|limited|not all|searched (?:portion|part|items)|narrow|more|budget/i,
+    'unsearched course lists must not be described as having no matching items');
 });

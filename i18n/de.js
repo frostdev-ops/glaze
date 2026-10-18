@@ -2700,5 +2700,6 @@
   "Toy ball": "Spielball",
   "Yarn ball": "Wollknäuel",
   "{name}. Drag outside to play; W takes it out, H returns it, Delete puts it away.": "{name}. Zum Spielen nach draußen ziehen; W holt es heraus, H bringt es zurück, Entf verstaut es.",
+  "Search is partial. Narrow your query or open a course to search further.": "Die Suche ist unvollständig. Grenze deine Suche ein oder öffne einen Kurs, um weiterzusuchen.",
   "Some scores could not be read. The calculator needs the complete gradebook.": "Einige Noten konnten nicht gelesen werden. Der Rechner benötigt das vollständige Notenbuch.",
 };
