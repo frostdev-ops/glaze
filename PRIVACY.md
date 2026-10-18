@@ -700,6 +700,8 @@ To recognize Canvas and Moodle on any school's domain, Glaze checks the head of 
 
 ## Google user data
 
+Google Calendar sync is unavailable in the current build while Google verification is pending. The following describes its use of Google data in a future build that enables this optional feature; calendar file export does not require it.
+
 Glaze's use and transfer of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including
 the Limited Use requirements. Glaze uses Google Calendar access only to keep the Glaze calendar in step with your

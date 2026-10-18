@@ -22,7 +22,7 @@ as do your stickers, your own sticker and pointer pictures and Look rotation's l
 the Looks gallery is a website you visit yourself, and Glaze sends it nothing. Canvas's own what-if scores and editor recovery remain with Canvas.
 Better To Do's own tasks and plans stay on your device too, with a two-minute copy of your Canvas planner items or Blackboard due items.
 A calendar file you export (.ics) is made on your device and saved by your browser; it holds your course and assignment names, and Glaze keeps no copy.
-With Google Calendar sync connected (Chrome, off until you connect), Glaze sends the same events to the Glaze calendar in your Google account and reads back changes to them there, directly between your browser and Google (`www.googleapis.com`, and `oauth2.googleapis.com` to revoke access on Disconnect); Chrome keeps the sign-in.
+Google Calendar sync is unavailable in this build while Google verification is pending. In a future build that enables it, optional sync would send the same events to the Glaze calendar in your Google account and read changes there, directly between your browser and Google (`www.googleapis.com`, and `oauth2.googleapis.com` to revoke access on Disconnect); Chrome would keep the sign-in. Calendar file export remains available without connecting Google.
 Dashboard notes, the widgets' layout, the timer and the music link you type stay on your device. So do the notes app's notes, folders, pictures and attachments, in Glaze's own storage (not the school page's); its Canvas link picker reads your own Canvas site, and only a link and title are kept. A music widget contacts its
 player (Spotify, YouTube through youtube-nocookie.com, Apple Music) only after you press Load player.
 Your class schedule stays on your device: the file, page or text you import is read there and never uploaded, and a calendar link is read only when it is on your own Canvas or Blackboard site.
@@ -30,7 +30,7 @@ Course tabs show an automatic short name by default, with common term/section wr
 Reminders, what you've snoozed or muted and your streak stay on your device as well, and so do your marks on documents; reminders show only inside Canvas and Blackboard pages, and Glaze has no notifications permission.
 With Gradescope in To Do on, Glaze reads your own Gradescope course pages (read-only, signed in as you) and keeps the assignments on your device; nothing from Gradescope goes anywhere else.
 It has no analytics. Glaze's writes anywhere are opt-in: with Better To Do's "Tick off in Canvas too" on, ticking an item
-marks it done or not done in your own Canvas planner, as Canvas's List View does, and with Google Calendar sync connected it writes to the one calendar it made in your Google account. Apart from the optional sharing and mods described above, the extension's other requests are read-only and go to your own Blackboard, Canvas or Moodle site
+marks it done or not done in your own Canvas planner, as Canvas's List View does. Apart from the optional sharing and mods described above, the extension's other requests are read-only and go to your own Blackboard, Canvas or Moodle site
 (folder previews; a folder's files when you click Download all; your grades and submission status for due dates, new-grade badges, the calculator and
 your overall grade on course cards; on Canvas a course's assignment groups when you use its what-if calculator;
 on Blackboard each course's grading schemas for the GPA, a course's grade categories when its what-if needs their names, this term's

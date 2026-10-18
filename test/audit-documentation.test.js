@@ -29,3 +29,20 @@ for (const [name, subject, facts, anchor] of topics) {
       `the short guide omits ${name}; its generic full-policy link does not resolve the missing description`);
   });
 }
+
+const unavailable = /unavailable|not (?:yet )?available|not enabled|disabled|coming soon|future|not shipped|pending (?:verification|approval)|off until Google|when (?:available|supported)|where available/i;
+for (const file of ['README.md', 'docs/privacy.md']) {
+  test(`GZ-04: ${file} does not advertise disabled Google Calendar sync as connectable`, () => {
+    if (G.ON) return;
+    const claims = sentences(read(file)).filter((s) => /Google Calendar sync/i.test(s));
+    const unqualified = claims.filter((s) => !unavailable.test(s));
+    assert.deepEqual(unqualified, [],
+      'Google Calendar sync is disabled at build time; current feature claims must disclose that or be removed');
+  });
+}
+
+test('GZ-04 control: availability wording distinguishes a build gate from an ordinary connection toggle', () => {
+  assert.ok(unavailable.test('Google Calendar sync is unavailable in this build.'));
+  assert.ok(unavailable.test('Google Calendar sync is pending verification.'));
+  assert.ok(!unavailable.test('Google Calendar sync is off until you connect.'));
+});
