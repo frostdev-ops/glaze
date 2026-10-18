@@ -6,6 +6,17 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.6] — 2026-10-18
+
+### Fixed
+- Blackboard readers preserve incomplete-data status when pagination reaches its limit. Grade calculators, GPA totals and current-term history withhold calculations from partial gradebooks or grading schemas; Insights marks partial work and omits its grade trend. Saved what-if scores remain intact.
+- Course search identifies partial coverage in both visible results and screen-reader announcements, including cached searches and exhausted page or request budgets. Existing read limits remain.
+- The short privacy guide explains encrypted sharing, mod permissions, conditional blocklist requests and sensitive keys in private backups, with links to the full policy.
+- Public documentation identifies Google Calendar sync as unavailable while verification is pending; calendar file export remains available.
+- Direct Safari development resources match the current extension. Both Xcode extension targets reject stale, missing or obsolete generated resources before copying them into an app.
+- Tag packaging runs the full suite on Node 26 before producing an artifact. Firefox release packaging requires its compatibility branch and clean tracked sources; explicitly requested development packages are visibly identified and record their source commit.
+- Contributor and feature-decision references point to maintained development documentation.
+
 ## [3.0.5] — 2026-10-17
 
 ### Added
