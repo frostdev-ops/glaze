@@ -824,7 +824,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // ---- closing, pinning, moving ---------------------------------------------------------------------------------
   const shut = (cid, keys) => {
     if (framed) return toTop('shut', { cid, keys: !!keys });
-    const cur = showing || here();
+    const cur = showing || here() || (closedCourse && waiting);
     const r = L.close(tabs, cid);
     tabs = r.tabs;
     snaps.delete(cid);
@@ -978,6 +978,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   let awayFrom = '';
   const pass = () => {
     if (!on) return;
+    if (!framed && ctx.site === 'canvas' && closedCourse && !showing && !waiting && !tabs.length) { route('/courses'); return; }
     observeView();
     const cid = here();
     // In a tab's frame, its page leaving its course (another course, a page outside one): the page around goes there.
