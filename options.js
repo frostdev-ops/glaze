@@ -41,6 +41,12 @@ const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
 const embedded = window.top !== window;
 if (embedded) {
   document.documentElement.setAttribute('data-embedded', '');
+  // Shown only once the worker confirms this frame was opened by Glaze's navigation in this tab (a one-use ticket): a
+  // site framing Settings on its own gets an empty page.
+  const ticket = new URLSearchParams(location.search).get('t') || '';
+  history.replaceState(null, '', location.pathname + location.hash);
+  chrome.runtime.sendMessage({ type: 'glaze:settings-claim', ticket }).then((r) => { if (r?.ok) document.documentElement.setAttribute('data-embed-ok', ''); }, () => {});
+  addEventListener('message', (e) => { if (e.source === window.parent && e.data?.gzSettings === 'go' && /^#[a-z]+(\/[a-z-]+)?$/.test(e.data.hash || '')) location.hash = e.data.hash; });
   $('.embed-tools').hidden = false;
   const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
   const ownTab = () => { chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + location.hash }).then(leave, () => {}); };

@@ -90,7 +90,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
 const SANDBOX_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
 test('Glaze\'s pages may compile WebAssembly for the OCR engine, nothing more; Settings (as a page beside the navigation), the reader, the Notes share panel and the mods host are the pages a site may frame, and load only Glaze\'s files', () => {
   assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'", sandbox: SANDBOX_CSP });
-  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['options.html', 'reader.html', 'sharing/quick.html', 'mods/host.html']);
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'sharing/quick.html', 'options.html', 'mods/host.html']);
   // The Notes share panel: Glaze's files only, no network from the page itself (the worker talks to the relay).
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'sharing/quick.html'), 'utf8'), /<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">/);
   const reader = fs.readFileSync(path.join(__dirname, '..', 'reader.html'), 'utf8');

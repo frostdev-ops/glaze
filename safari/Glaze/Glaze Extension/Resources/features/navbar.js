@@ -455,7 +455,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (what === 'settings' || what === 'customize') {
       const tab = () => send(what === 'customize' ? { type: 'glaze:sessions-open', section: 'navigation/bar' } : 'options');
       if (isPreview) { tab(); return; }
-      X.need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then((p) => { if (!p?.open(what === 'customize' ? 'navigation/bar' : '')) tab(); }, tab);
+      X.need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then(() => globalThis.GZ_SETTINGS_PAGE?.open(what === 'customize' ? 'navigation/bar' : '')).then((opened) => { if (!opened) tab(); }, tab);
       return;
     }
     if (what === 'search') { X.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
@@ -478,9 +478,18 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     else if (act === 'tab-pin') api.pin(cid);
     else if (act === 'tab-close') api.shut(cid);
   };
+  // Glaze reloaded or updated under an open page: this copy can't reach Glaze any more, and Chrome doesn't run the new one
+  // here until the page loads again. The bar stays, as plain links: a link loads its page (with Glaze running again), and
+  // anything else reloads this one.
+  const orphaned = (e, path) => {
+    const a = path.find((n) => n instanceof HTMLAnchorElement && n.href);
+    if (a && /^https?:/.test(a.href)) { if (a.target !== '_blank') { e.preventDefault(); location.assign(a.href); } return; }
+    if (path.some((n) => n instanceof HTMLButtonElement)) { e.preventDefault(); location.reload(); }
+  };
   const click = (e) => {
     if (e.type === 'auxclick' && e.button !== 1) return;
     const path = e.composedPath();
+    if (!chrome.runtime?.id) { if (e.type === 'click') orphaned(e, path); return; }
     const target = path.find((n) => n.dataset && (n.dataset.id !== undefined || n.dataset.act));
     // Somewhere else picked in the bar leaves Glaze's settings page, as leaving any page.
     if (target && e.type === 'click' && target.dataset.id !== 'glaze:settings' && !['customize', 'panel-close', 'panel-retry', 'tab-pin', 'tab-close'].includes(target.dataset.act)) globalThis.GZ_SETTINGS_PAGE?.close();
@@ -566,6 +575,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     emit('collapse', {});
   };
   const sync = () => {
+    // Orphaned (orphaned() above): the bar stays as it is drawn, rather than leave the page without any navigation.
+    if (host && !chrome.runtime?.id) return;
     if (!on()) { stop(); return; }
     if (!read) { read = true; get(['navbarItems', 'navItems']).then((r) => { prefs = M.clean(r.navbarItems); legacy = r.navItems ? N.clean(r.navItems) : null; sig = ''; sync(); }); }
     if (applied !== settings()) { rail = null; peekTo(false); applied = settings(); }

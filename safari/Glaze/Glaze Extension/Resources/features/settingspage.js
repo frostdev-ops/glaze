@@ -27,15 +27,20 @@ var GZ_SETTINGS_PAGE = globalThis.GZ_SETTINGS_PAGE || (() => {
     if (back && history.state?.gzSettings) { back = false; history.back(); }
     globalThis.GZ_NAVBAR_UI?.sync();
   };
-  const open = (section = '') => {
+  // Settings shows itself in a frame only with a one-use ticket the worker gives this tab (lib/background.js).
+  const ticket = () => new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:settings-ticket' }, (r) => res(chrome.runtime.lastError || !r?.ok ? '' : r.ticket)); } catch { res(''); } });
+  const open = async (section = '') => {
     if (!chrome.runtime?.id) return false;
-    const url = chrome.runtime.getURL('options.html') + (/^[a-z]+(\/[a-z-]+)?$/.test(section) ? `#${section}` : '');
-    if (host) { frame.src = url; frame.focus(); return true; }
+    const hash = /^[a-z]+(\/[a-z-]+)?$/.test(section) ? `#${section}` : '';
+    if (host) { if (hash) frame.contentWindow?.postMessage({ gzSettings: 'go', hash }, '*'); frame.focus(); return true; }
+    const t = await ticket();
+    if (!/^[0-9a-f]{32}$/.test(t) || host) return !!host;
+    const url = `${chrome.runtime.getURL('options.html')}?t=${t}${hash}`;
     host = document.createElement('div');
     host.id = 'gz-settings-page';
     // Styled through the CSSOM: a school's style-src can refuse a <style>, never these.
     for (const [k, v] of [['all', 'initial'], ['position', 'fixed'], ['z-index', '1255'], ['inset-inline-end', '0px'], ['display', 'block'],
-      ['background', 'var(--gz-surface-grain, none), var(--gz-ground, #0b1220)'], ['color-scheme', 'normal']]) host.style.setProperty(k, v);
+      ['background-color', 'var(--gz-surface, #0b1220)'], ['color-scheme', 'normal']]) host.style.setProperty(k, v);
     frame = document.createElement('iframe');
     frame.title = 'Glaze';
     frame.allow = 'clipboard-write';
