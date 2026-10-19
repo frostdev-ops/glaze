@@ -1108,6 +1108,25 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     leave: () => { if (on && showing) show(''); },
     // The bar began or stopped holding the tabs: the strip and its first-paint word follow.
     place: () => { if (on) flag(); place(); },
+    // The document of the course tab's frame on screen (for its course menu), or null when this page is what shows.
+    doc: () => {
+      const f = on && !framed && showing && frames.get(showing);
+      try { const d = f?.el.contentDocument; return d?.location.origin === location.origin ? d : null; } catch { return null; }
+    },
+    // An address of this site: in a course's frame when a frame is on screen and it is a course page (on Canvas any
+    // course's, through its own frame; on Ultra the shown course's), else on this page, as a click on it here would go.
+    open: (href) => {
+      let u; try { u = new URL(String(href), location.origin); } catch { return; }
+      if (!on || framed || u.origin !== location.origin) return;
+      const url = L.safe(u.pathname, u.search), cid = url && (ctx.site === 'canvas' ? u.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] : showing);
+      if (showing && cid && L.owns(u.pathname, cid)) {
+        if (ctx.site === 'canvas') return openAt(cid, url);
+        try { frames.get(showing).el.contentWindow.location.assign(location.origin + url); } catch { /* gone */ }
+        return;
+      }
+      if (showing) show('');
+      route(u.pathname + u.search + u.hash);
+    },
   };
   return { sync, held, petSurface, bar, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
