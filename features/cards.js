@@ -51,7 +51,8 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
   };
   const keyOf = (el) => {
     if (ultra) return /^_\d+_\d+$/.test(el.dataset.courseId) ? `ultra:${location.origin}/${el.dataset.courseId}` : null;
-    const id = el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
+    // The Course cards dialog's previews (features/coursecards.js) name their course; a card names it in its link.
+    const id = el.hasAttribute('data-gz-card-preview') ? /^\d+$/.exec(el.dataset.courseId || '')?.[0] : el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
     return id ? `canvas:${location.origin}/${id}` : null;
   };
   const nameOf = (el) => el?.getAttribute('aria-label') || el?.querySelector(ultra ? '.course-title' : '.ic-DashboardCard__header-title')?.title || el?.querySelector('.course-title')?.textContent || '';
@@ -83,7 +84,7 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (ultra) for (const k of ['width', 'gap', 'height']) attr(html, `data-gz-card-${k}`, on && card[k] !== K.SPEC[k][0] ? '' : false);
     // A theme's set goes round the courses in the order they first show.
     const order = new Map();
-    for (const el of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard, .planner-grouping')) {
+    for (const el of document.querySelectorAll(ultra ? CARD : '.ic-DashboardCard, .planner-grouping, .gz-course-card[data-gz-card-preview]')) {
       const key = on && keyOf(el);
       if (key && !order.has(key)) order.set(key, order.size);
       const q = quick.get(key);

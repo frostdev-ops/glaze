@@ -35,11 +35,14 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   // more: tiles other files add (features/widgets.js MORE: { id: { size } }), after the built-in ones and off until added.
   const MORE_ID = /^[a-z][a-z0-9]{1,15}$/;
   const COURSE_MAX = 48, COURSE_TOTAL = 384; // eight full school boards, bounded together
+  // A course card's tile: course:<site>/<course id>, Ultra's _1_1 ids or Canvas's numbers (canvas). Sites are https, but
+  // for a development build's local Canvas (http://localhost, which a store build never runs on).
   const course = (key) => {
     if (typeof key !== 'string' || key.length > 300 || !key.startsWith('course:')) return null;
     try {
       const u = new URL(key.slice(7));
-      if (u.protocol === 'https:' && /^\/_\d+_\d+$/.test(u.pathname) && key === `course:${u.origin}${u.pathname}`) return { origin: u.origin, id: u.pathname.slice(1) };
+      const canvas = /^\/\d{1,20}$/.test(u.pathname);
+      if ((u.protocol === 'https:' || (u.protocol === 'http:' && u.hostname === 'localhost')) && (canvas || /^\/_\d+_\d+$/.test(u.pathname)) && key === `course:${u.origin}${u.pathname}`) return { origin: u.origin, id: u.pathname.slice(1), canvas };
     } catch { /* not a course key */ }
     return null;
   };
@@ -102,7 +105,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
       const courses = [], counts = new Map();
       for (const x of list) {
         const c = course(x?.id);
-        if (b === 'cdash' || !c || courses.includes(x.id) || courses.length >= COURSE_TOTAL || (counts.get(c.origin) || 0) >= COURSE_MAX) continue;
+        if (!c || c.canvas !== (b === 'cdash') || courses.includes(x.id) || courses.length >= COURSE_TOTAL || (counts.get(c.origin) || 0) >= COURSE_MAX) continue;
         courses.push(x.id); counts.set(c.origin, (counts.get(c.origin) || 0) + 1);
       }
       return [b, each(list, [...ids, ...courses], (x) => btile(x, more, starts))];
@@ -315,7 +318,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
         continue;
       }
       if (course(o.id)) {
-        if (!['courses', 'dash'].includes(o.s)) continue;
+        if (course(o.id).canvas ? o.s !== 'cdash' : !['courses', 'dash'].includes(o.s)) continue;
         const rows = l.boards[o.s];
         if (o.remove === true) { l = { ...l, boards: { ...l.boards, [o.s]: rows.filter((x) => x.id !== o.id) } }; continue; }
         if (!rows.some((x) => x.id === o.id) && o.set && rows.filter((x) => course(x.id)?.origin === course(o.id).origin).length < COURSE_MAX && rows.filter((x) => course(x.id)).length < COURSE_TOTAL)

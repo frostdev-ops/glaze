@@ -1,6 +1,11 @@
-// Ultra's board cards: Glaze DOM over already-loaded metadata, gradebooks and the stored planner. No reader is started.
+// The boards' course cards: Glaze DOM over already-loaded metadata, gradebooks and the stored planner. No reader is started.
+// Ultra's on its Courses page and Dashboard; Canvas's on its Dashboard, where a card is drawn as Canvas's own
+// (.ic-DashboardCard), so everything Glaze does to Canvas's cards (grades, new items, tasks, bookmarks, styles, the course
+// menu) is done to it too, from the course list Canvas's page has already asked for.
 var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const ctx = GZ_CTX, W = GZ_WIDGETS;
+  const ultra = ctx.site === 'ultra';
+  const ID = ultra ? /^_\d+_\d+$/ : /^\d{1,20}$/;
   const cards = new Map(), nativeCards = new Map(), mounted = new Set(), watched = new WeakSet();
   let identity = null, notify = () => {}, uid = '', data = {}, prefs = {}, cache = null, L = null, gs = null, gen = 0;
   const get = (area, keys) => new Promise((resolve) => { try { chrome.storage[area].get(keys, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
@@ -18,7 +23,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
   const tone = (card, id) => {
-    const c = cards.get(id), color = GZ_COURSE_VARS(ctx.courseColors()[id]);
+    const c = cards.get(id), color = ultra ? GZ_COURSE_VARS(ctx.courseColors()[id]) : GZ_COURSE_VARS(c?.color && { color: c.color });
     const classes = `gz-course-card${/^(10|[1-9])$/.test(c?.slot) ? ` course-color-${c.slot}` : ''}`;
     if (card.className !== classes) card.className = classes;
     for (const k of ['--gz-pick', '--gz-course-raw']) {
@@ -39,10 +44,45 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     if (!p || typeof p.then !== 'function' || watched.has(p)) return;
     watched.add(p); p.then((v) => { if (live()) then(v); else watched.delete(p); }, () => watched.delete(p));
   };
+  // Canvas: each course from what its page shows (its cards: the nickname, code, term, color and picture Canvas drew),
+  // else the course list the page asked for (content-canvas.js canvasCourses), else what Glaze last saw (seenCourses).
+  let canvasRows = null;
+  const COLOR = /^(rgba?\([\d.,\s%]+\)|#[0-9a-f]{3,8})$/i;
+  const picture = (v) => {
+    const u = /^url\("([^"]+)"\)$/.exec(v || '')?.[1];
+    try { const p = u && new URL(u, location.origin); return p && /^https?:$/.test(p.protocol) ? p.href : ''; } catch { return ''; }
+  };
+  const canvasCards = () => {
+    const mine = `canvas:${location.origin}/`, list = {}, api = {}, shown = {};
+    for (const [k, c] of Object.entries(ctx.courseList())) if (k.startsWith(mine) && ID.test(k.slice(mine.length)) && c?.name) list[k.slice(mine.length)] = c;
+    for (const r of canvasRows || []) if (ID.test(String(r?.id)) && typeof r.name === 'string') api[r.id] = r;
+    nativeCards.clear();
+    for (const el of document.querySelectorAll('.ic-DashboardCard:not([data-gz-tile-card])')) {
+      const id = el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1];
+      if (!id || !ID.test(id) || nativeCards.has(id)) continue;
+      nativeCards.set(id, el);
+      const text = (sel) => { const e = el.querySelector(sel); return (e?.getAttribute('title') || e?.textContent || '').trim(); };
+      const hero = el.querySelector('.ic-DashboardCard__header_hero');
+      shown[id] = { name: text('.ic-DashboardCard__header-title'), code: text('.ic-DashboardCard__header-subtitle'), term: text('.ic-DashboardCard__header-term'),
+        color: COLOR.test(hero?.style.backgroundColor || '') ? hero.style.backgroundColor : '', image: picture(el.querySelector('.ic-DashboardCard__header_image')?.style.backgroundImage) };
+    }
+    for (const id of new Set([...Object.keys(shown), ...Object.keys(api), ...Object.keys(list)])) {
+      const n = shown[id] || {}, a = api[id] || {}, l = list[id] || {};
+      cards.set(id, { id, name: n.name || a.name || l.name || id, code: n.code || a.course_code || l.code || '', term: n.term || a.term?.name || '',
+        color: n.color || (COLOR.test(l.color || '') ? l.color : ''), image: n.image || '' });
+    }
+    if (!canvasRows) watch(ctx.canvasCourses(), (rows) => { canvasRows = Array.isArray(rows) ? rows : []; sync(); });
+  };
   const sync = (changed = notify) => {
     notify = changed;
     if (!live()) return;
     const before = JSON.stringify([...cards]);
+    if (!ultra) {
+      canvasCards();
+      if (before !== JSON.stringify([...cards])) notify();
+      render();
+      return;
+    }
     // Only this site's records; a second Blackboard on the same device has its own scoped keys.
     for (const [id, c] of Object.entries(ctx.courseList())) if (/^_\d+_\d+$/.test(id) && c.site === location.origin)
       cards.set(id, { ...cards.get(id), id, name: c.name, code: c.code || '', slot: c.slot });
@@ -75,8 +115,44 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     if (before !== JSON.stringify([...cards])) notify();
     render();
   };
+  // A Canvas card as Canvas draws one, marked as a board's (data-gz-tile-card): a link to the course, its picture under
+  // its color, its name, code and term. Glaze's own additions to Canvas's cards come to it from their usual passes.
+  const fillCanvas = (body, id) => {
+    let alive = true;
+    const hero = make('div', { className: 'ic-DashboardCard__header_hero' });
+    hero.setAttribute('aria-hidden', 'true');
+    const image = make('div', { className: 'ic-DashboardCard__header_image' }, hero);
+    const name = make('span'), heading = make('h2', { className: 'ic-DashboardCard__header-title ellipsis' }, name);
+    const code = make('div', { className: 'ic-DashboardCard__header-subtitle ellipsis' }), term = make('div', { className: 'ic-DashboardCard__header-term ellipsis' });
+    const link = make('a', { className: 'ic-DashboardCard__link', href: `/courses/${id}` }, make('div', { className: 'ic-DashboardCard__header_content' }, heading, code, term));
+    const card = make('div', { className: 'ic-DashboardCard' }, make('div', { className: 'ic-DashboardCard__header' }, image, link));
+    card.setAttribute('data-gz-tile-card', '');
+    card.dataset.courseId = id;
+    body.append(card);
+    const set = (el, k, v) => { if ((el.getAttribute(k) || '') !== v) { if (v) el.setAttribute(k, v); else el.removeAttribute(k); } };
+    const update = () => {
+      if (!alive || !live()) return;
+      const c = cards.get(id) || {}, shown = c.name || ctx.t('Course card');
+      setText(name, shown); set(heading, 'title', shown); set(card, 'aria-label', shown);
+      setText(code, c.code || ''); set(code, 'title', c.code || '');
+      setText(term, c.term || ''); set(term, 'title', c.term || '');
+      // Written only when what it comes from changed (a style read back is normalized, so it isn't compared).
+      const look = JSON.stringify([c.image, c.color]);
+      if (look !== painted) {
+        painted = look;
+        image.style.backgroundImage = c.image ? `url("${c.image}")` : '';
+        hero.style.backgroundColor = c.color || '';
+        hero.style.opacity = c.image ? '0.6' : '';
+      }
+    };
+    let painted = '';
+    mounted.add(update); update();
+    ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
+    return { update, wake: update, stop: () => { alive = false; mounted.delete(update); } };
+  };
   const fill = (body, api) => {
     const key = W.course(api.id), id = key.id;
+    if (!ultra) return fillCanvas(body, id);
     let alive = true;
     const banner = make('div', { className: 'course-banner', ariaHidden: 'true' });
     const link = make('a', { className: 'course-title', href: `${location.origin}/ultra/courses/${id}/outline` });
@@ -148,7 +224,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   // them, and that editor ("Card style and bookmarks", over this dialog) for everything else.
   // o: { board, on(key) (on this board now), has(key) (a saved record), count(), room() (how many more fit), set(keys, on), back() (the button it came from) }.
   let pick = null; // { dlg, o, list, items: Map(key -> { li, box, card, c, look }), terms: [{ sec, its }], count, empty, all, none, query, keys }
-  const cardKey = (c) => `ultra:${location.origin}/${c.id}`;
+  const cardKey = (c) => `${ultra ? 'ultra' : 'canvas'}:${location.origin}/${c.id}`;
   const UI = () => globalThis.GZ_CARD_UI;
   const b = (text, run, props = {}, label = '') => {
     const e = make('button', { type: 'button', className: 'gz-w-btn gz-w-small', textContent: text, ...props });
@@ -305,11 +381,11 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     for (const { sec, its } of pick.terms) put(sec, 'hidden', its.every((it) => it.li.hidden));
     const shown = shownItems();
     put(pick.empty, 'hidden', !!shown.length);
-    put(pick.empty, 'textContent', ctx.t(pick.items.size ? 'No courses match.' : 'No courses yet. They show here once Blackboard has listed them.'));
+    put(pick.empty, 'textContent', ctx.t(pick.items.size ? 'No courses match.' : ultra ? 'No courses yet. They show here once Blackboard has listed them.' : 'No courses yet. They show here once Canvas has listed them.'));
     put(pick.all, 'disabled', shown.every((it) => it.box.checked || it.box.disabled));
     put(pick.none, 'disabled', !shown.some((it) => it.box.checked));
     // The first time on the Courses page, every course is one click away.
-    put(pick.all, 'className', `gz-w-btn gz-w-small${pick.o.board === 'courses' && !on ? ' gz-w-main' : ''}`);
+    put(pick.all, 'className', `gz-w-btn gz-w-small${pick.o.board !== 'dash' && !on ? ' gz-w-main' : ''}`);
     put(pick.count, 'textContent', ctx.t('On this board: {on}. Room for {n} more.', { on: pick.o.count?.() ?? on, n: room }));
   };
   const closePicker = (refocus = true) => {

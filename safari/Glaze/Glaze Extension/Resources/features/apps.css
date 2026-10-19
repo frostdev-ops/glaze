@@ -768,6 +768,10 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { 
 
 /* Ultra course tiles (opt-in): React keeps its own list, filters and term picker intact. */
 html[data-gz-course-tiles] .courses-panel .course-columns { display: none !important; }
+/* Canvas's (opt-in): its own card view steps aside while its cards are on the Dashboard's board, where each fills its tile. */
+html[data-gz-course-tiles] #DashboardCard_Container { display: none !important; }
+#gz-dash .gz-w .ic-DashboardCard[data-gz-tile-card] { display: block; width: auto; margin: 0; animation: none; border: 0; border-radius: 0; box-shadow: none; }
+#gz-dash .gz-w[data-tile^="course:"] > .gz-w-body { padding: 0; overflow: hidden; border-radius: 0 0 var(--gz-radius) var(--gz-radius); }
 /* The boards' Course cards dialog (features/coursecards.js): the hub's box, wider, a grid of small cards by term. */
 #gz-ccm { width: min(48rem, calc(100vw - 1rem)); max-height: calc(100vh - 2rem); box-sizing: border-box; }
 #gz-ccm * { box-sizing: border-box; }

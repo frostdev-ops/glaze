@@ -431,8 +431,8 @@ test('global floats taller than the available room use the bounded scrolling sta
 
 test('course tiles are site-scoped, bounded and confined to Ultra boards', () => {
   const key = (n, host = 'bb.test') => `course:https://${host}/_${n}_1`;
-  assert.deepEqual(W.course(key(1)), { origin: 'https://bb.test', id: '_1_1' });
-  for (const bad of ['course:1', 'course:https://bb.test/1', key(1) + '?x', key(1) + '#x', 'course:https://a@bb.test/_1_1', 'course:http://bb.test/_1_1', 'course:https://bb.test:443/_1_1']) assert.equal(W.course(bad), null, bad);
+  assert.deepEqual(W.course(key(1)), { origin: 'https://bb.test', id: '_1_1', canvas: false });
+  for (const bad of ['course:1', 'course:https://bb.test/1/2', 'course:https://bb.test/_1', key(1) + '?x', key(1) + '#x', 'course:https://a@bb.test/_1_1', 'course:http://bb.test/_1_1', 'course:https://bb.test:443/_1_1']) assert.equal(W.course(bad), null, bad);
   const rows = Array.from({ length: 80 }, (_, n) => ({ id: key(n), on: true, term: '<img>'.repeat(100), extra: 'gone' }));
   const l = W.layout({ todo: true, tiles: rows, boards: { courses: rows, dash: [{ id: key(1, 'other.test'), on: true }], pages: rows } });
   assert.equal(l.boards.courses.filter((x) => W.course(x.id)).length, W.COURSE_MAX);
@@ -541,6 +541,20 @@ test('layout edits keep mod tile placements from tabs where the mod is not runni
   assert.deepEqual(restored.tiles.find((x) => x.id === id), raw.tiles.find((x) => x.id === id));
   assert.deepEqual(restored.boards.dash.find((x) => x.id === id), raw.boards.dash.find((x) => x.id === id));
   assert.equal(restored.boards.dash.find((x) => x.id === 'notes').fold, true);
+});
+
+test("Canvas course tiles: Canvas's numeric ids, on Canvas's Dashboard board only, bounded per school", () => {
+  const key = (n, host = 'canvas.test') => `course:https://${host}/${n}`;
+  assert.deepEqual(W.course(key(27)), { origin: 'https://canvas.test', id: '27', canvas: true });
+  assert.deepEqual(W.course('course:http://localhost:3000/27'), { origin: 'http://localhost:3000', id: '27', canvas: true }, "a development build's local Canvas");
+  for (const bad of ['course:http://canvas.test/27', `course:https://canvas.test/${'9'.repeat(21)}`, 'course:https://canvas.test/027x']) assert.equal(W.course(bad), null, bad);
+  const ultraKey = 'course:https://bb.test/_1_1';
+  const l = W.apply(W.layout({}), { ops: [{ s: 'cdash', id: key(27), set: { on: true, term: 'Fall 2026' } }, { s: 'courses', id: key(28), set: { on: true } }, { s: 'dash', id: key(29), set: { on: true } }, { s: 'cdash', id: ultraKey, set: { on: true } }] });
+  assert.deepEqual(l.boards.cdash.filter((x) => W.course(x.id)).map((x) => [x.id, x.on, x.term]), [[key(27), true, 'Fall 2026']]);
+  assert.ok(!l.boards.courses.some((x) => W.course(x.id)) && !l.boards.dash.some((x) => W.course(x.id)), "Canvas's never on Ultra's boards, Ultra's never on Canvas's");
+  const many = Array.from({ length: 60 }, (_, n) => ({ id: key(n + 1), on: true }));
+  assert.equal(W.layout({ boards: { cdash: many } }).boards.cdash.filter((x) => W.course(x.id)).length, W.COURSE_MAX);
+  assert.deepEqual(W.apply(l, { ops: [{ s: 'cdash', id: key(27), remove: true }] }).boards.cdash.filter((x) => W.course(x.id)), [], 'removed');
 });
 
 test('kept: an update keeps what a device without a stored layout showed, and adds nothing the widgets switch now turns on', () => {
