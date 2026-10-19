@@ -43,7 +43,7 @@ const worker = (local = {}, syncStore = {}) => {
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { send, local, sync: syncStore, context, editor: { id: 'glaze', tab: {}, url: 'chrome-extension://x/options.html' } };
+  return { send, local, sync: syncStore, context, editor: { id: 'glaze', tab: {}, frameId: 0, url: 'chrome-extension://x/options.html' } };
 };
 
 test('stickers: two tabs changing one page at once both land (changes, not whole-page copies)', async () => {

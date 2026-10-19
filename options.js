@@ -34,6 +34,33 @@ const hint = (msg, err = false) => {
 const finder = $('#find');
 let followSection = () => {}, searchPreview = () => {};
 const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
+
+// Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
+// The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
+// mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway.
+const embedded = window.top !== window;
+if (embedded) {
+  document.documentElement.setAttribute('data-embedded', '');
+  $('.embed-tools').hidden = false;
+  const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
+  const ownTab = () => { chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + location.hash }).then(leave, () => {}); };
+  $('#embed-close').addEventListener('click', leave);
+  $('#embed-tab').addEventListener('click', ownTab);
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, select, textarea, dialog, [role="dialog"], [role="menu"]')) return;
+    e.preventDefault(); leave();
+  });
+  const make = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  for (const [panel, name] of [['sharing', 'Sharing and sync'], ['mods', 'Mods'], ['backup', 'Backup and privacy']]) {
+    const box = document.querySelector(`[data-editor-panel="${panel}"]`);
+    if (!box) continue;
+    const go = make('button', { type: 'button', className: 'primary', textContent: t('Open in a new tab') });
+    go.addEventListener('click', ownTab);
+    box.setAttribute('data-gated', '');
+    box.prepend(make('div', { className: 'embed-gate' }, make('h2', { textContent: t(name) }),
+      make('p', { textContent: t('This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.') }), go));
+  }
+}
 const filter = () => {
   const words = GZ_FIND.parse(finder.value);
   const on = words.length > 0;

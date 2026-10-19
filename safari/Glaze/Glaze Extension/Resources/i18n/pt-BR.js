@@ -2824,4 +2824,5 @@
   "Only in the navigation": "Só na navegação",
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Só na navegação precisa da navegação do Glaze com as abas de curso ativadas. Sem elas, as abas ficam acima da barra do curso.",
   "That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab.": "Essa página não pode abrir dentro de uma aba de curso, então o curso voltou. Abra o link com Ctrl ou Cmd para vê-la em uma nova aba.",
+  "This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.": "Esta parte do Glaze guarda suas chaves, backups e as permissões dos mods, então abre em uma aba própria, onde nenhum site consegue alcançá-la.",
 };

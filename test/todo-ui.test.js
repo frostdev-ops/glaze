@@ -364,7 +364,7 @@ test("the worker takes To Do writes from a Canvas page for its own site's accoun
     if (!kept) res('ignored');
   });
   const page = { id: 'glaze', tab: {}, url: 'https://school.instructure.com/courses/1' };
-  const editor = { id: 'glaze', tab: {}, url: 'chrome-extension://x/options.html' };
+  const editor = { id: 'glaze', tab: {}, frameId: 0, url: 'chrome-extension://x/options.html' };
   const nope = { ok: false, error: 'sender' };
   const own = 'todo:https://school.instructure.com/3';
   const add = { type: 'glaze:todo', key: own, edits: [['task', { id: 'n', title: 'New' }]] };
@@ -374,6 +374,7 @@ test("the worker takes To Do writes from a Canvas page for its own site's accoun
   assert.deepEqual(await send(add, { ...page, url: 'https://evil.example/' }), nope, 'a site Glaze does not run on');
   assert.deepEqual(await send({ type: 'glaze:todo', restore: { tasks: {}, settings: { version: 2 } } }, page), nope, 'a Canvas page cannot restore a backup');
   assert.deepEqual(await send(add, editor), nope, 'the editor only restores');
+  assert.deepEqual(await send({ type: 'glaze:todo', restore: { tasks: {}, settings: { version: 2 } } }, { ...editor, frameId: 4 }), nope, 'Settings shown inside a school page cannot restore a backup: only its own tab');
   const r = await send(add, page);
   assert.equal(r.ok, true);
   assert.deepEqual(store.local[own].tasks.map((x) => x.id), ['n']);

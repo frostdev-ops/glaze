@@ -161,6 +161,7 @@
         "features/rules.css",
         "features/navlayout.css",
         "features/navbar.css",
+        "options.html",
         "features/apps.css",
         "features/surfaces.css",
         "features/coursetabs.css",

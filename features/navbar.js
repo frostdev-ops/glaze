@@ -451,7 +451,13 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 
   // ---- acting ---------------------------------------------------------------------------------------------------------
   const glaze = (what, e) => {
-    if (what === 'settings' || what === 'customize') { send(what === 'customize' ? { type: 'glaze:sessions-open', section: 'navigation/bar' } : 'options'); return; }
+    // Settings opens as a page of the site, beside the bar (features/settingspage.js); the editor's preview keeps a tab.
+    if (what === 'settings' || what === 'customize') {
+      const tab = () => send(what === 'customize' ? { type: 'glaze:sessions-open', section: 'navigation/bar' } : 'options');
+      if (isPreview) { tab(); return; }
+      X.need('features/settingspage.js', () => globalThis.GZ_SETTINGS_PAGE).then((p) => { if (!p?.open(what === 'customize' ? 'navigation/bar' : '')) tab(); }, tab);
+      return;
+    }
     if (what === 'search') { X.need('features/palette.js', () => globalThis.GZ_CMD).then(() => GZ_CMD.open(), () => {}); return; }
     if (what === 'notes') { X.need('features/notes.js', () => globalThis.GZ_NOTES_UI).then(() => GZ_NOTES_UI.open({ event: e }), () => {}); return; }
     // To Do lives on the site's home (the Glaze Dashboard on Ultra, the Canvas dashboard): go there.
@@ -476,6 +482,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (e.type === 'auxclick' && e.button !== 1) return;
     const path = e.composedPath();
     const target = path.find((n) => n.dataset && (n.dataset.id !== undefined || n.dataset.act));
+    // Somewhere else picked in the bar leaves Glaze's settings page, as leaving any page.
+    if (target && e.type === 'click' && target.dataset.id !== 'glaze:settings' && !['customize', 'panel-close', 'panel-retry', 'tab-pin', 'tab-close'].includes(target.dataset.act)) globalThis.GZ_SETTINGS_PAGE?.close();
     if (e.type === 'auxclick' && target?.dataset.act !== 'tab') return;
     if (!target) {
       if (path.includes(el.toggle)) { e.preventDefault(); pinTo(!(lay.open || peek)); }
@@ -572,10 +580,13 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     rows = lay.tabs && api ? api.rows() : [];
     // A course tab shown over the page is in Courses, whatever the page under it is.
     const framed = !!globalThis.GZ_CTABS?.showing?.();
-    const native = site.read().map((n) => (framed ? { ...n, active: n.id === 'course' } : n));
+    // Glaze's settings open as the page: nothing else is where you are.
+    const glazePage = !!globalThis.GZ_SETTINGS_PAGE?.isOpen();
+    const native = site.read().map((n) => (glazePage ? { ...n, active: false } : framed ? { ...n, active: n.id === 'course' } : n));
     const look = X.parts()?.nav ? L.clean(X.parts().nav) : null;
     model = M.build({ native, prefs, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
       names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') } });
+    if (glazePage) for (const i of model.items) if (i.id === 'glaze:settings') i.active = true;
     const next = JSON.stringify([model, rows, lay, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url]);
     if (next !== sig) { sig = next; render(); emit('change', view()); } else if (measured !== geometry()) layout();
   };
