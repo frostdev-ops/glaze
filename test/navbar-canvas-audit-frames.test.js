@@ -21,7 +21,7 @@ function reservation(framed = '12', site = 'canvas') {
   const context = vm.createContext({ framed, ctx: { site }, html, parent, navWatch: null,
     MutationObserver: class { constructor(fn) { this.fn = fn; observers.push(this); } observe(node, options) { this.node = node; this.options = options; this.active = true; } disconnect() { this.active = false; } },
     document: { addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {},
-    onScroll() {}, onLeave() {}, onCourseLink() {}, onHide() {}, onResize() {}, onStore() {}, bar: { place() {} }, chrome: { runtime: {} },
+    onScroll() {}, onLeave() {}, onCourseLink() {}, onPress() {}, onPop() {}, onHide() {}, onResize() {}, onStore() {}, bar: { place() {} }, chrome: { runtime: {} },
   });
   const api = vm.runInContext(part('  const navRoom =', '  const start =') + '\n({ navRoom, listen });', context);
   return { ...api, parentValues, ownValues, writes, observers, parentHtml };
@@ -100,7 +100,7 @@ function messages(shown = 'page') {
   let listener, synced = 0, watched = 0, kept = 0;
   vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), {
     L, PAGE: 'page', framed: '', preview: false, showing: shown, on: true, ctx: { site: 'canvas' }, location: { origin },
-    frames: new Map([[shown, f]]), who: '42',
+    frames: new Map([[shown, f]]), spare: new Map(), next: new Map(), who: '42',
     addEventListener: (_, fn) => { listener = fn; },
     GZ_NAVBAR_UI: { sync: () => synced++ }, watch: () => watched++, later() {}, keepPage: () => kept++,
   });
@@ -132,7 +132,7 @@ test('a replaced course-frame document schedules readiness before the navbar men
   assert.equal(h.f.ready, true); assert.equal(synced, 1);
 });
 
-test('BUG: same-document course-frame navigation refreshes the navbar course menu', { todo: 'fixed in coursetabs.js on the Canvas branch' }, () => {
+test('same-document course-frame navigation refreshes the navbar course menu', () => {
   const h = messages('12');
   // A same-document Canvas route retains accountDoc, so the account handshake does
   // not start a new readiness watch. pass() sends moved for the new route instead.

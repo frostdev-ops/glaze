@@ -23,6 +23,10 @@ class NavEl extends El {
   set dir(v) { this.setAttribute('dir', v); }
   get href() { return this._href ? new URL(this._href, this.doc.location.href).href : ''; }
   set href(v) { this._href = v; this.setAttribute('href', v); }
+  get origin() { return this.href && new URL(this.href).origin; }
+  get pathname() { return this.href && new URL(this.href).pathname; }
+  get search() { return this.href && new URL(this.href).search; }
+  get hash() { return this.href && new URL(this.href).hash; }
   get offsetLeft() { return this.box?.left || 0; }
   get offsetTop() { return this.box?.top || 0; }
   get scrollWidth() { return this.clientWidth; }
@@ -124,7 +128,7 @@ async function setup({ path = '/', shown = '', frameDoc = null, width = 1440, na
   const click = (target, extra = {}) => {
     const path = []; for (let e = target; e; e = e.parentNode) path.push(e);
     const event = { type: 'click', button: 0, ...extra, composedPath: () => path, defaultPrevented: false,
-      preventDefault() { this.defaultPrevented = true; } };
+      preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} };
     root.dispatchEvent(event); return event;
   };
   const key = (value, extra = {}) => { const e = { type: 'keydown', key: value, ...extra, preventDefault() { this.defaultPrevented = true; } }; root.dispatchEvent(e); return e; };
@@ -261,14 +265,14 @@ test('Skip to content focuses the visible Canvas frame instead of the covered pa
   assert.deepEqual(focused, [true, true], 'the visible course or page content must receive focus');
 });
 
-test('BUG: same-site custom navbar links preserve running Canvas frames', { todo: 'fixed in coursetabs.js on the Canvas branch' }, async () => {
+test('same-site custom navbar links preserve running Canvas frames', async () => {
   const h = await setup({ shown: '12', frameDoc: course(), prefs: { links: [{ id: 'aaaaaaaaaaaa', n: 'Calendar shortcut', u: origin + '/calendar', i: 'calendar', tab: false }] } });
   const link = h.root.querySelector('.rail [data-id="link:aaaaaaaaaaaa"]'), event = h.click(link);
   // The document's Canvas link handler sees the shadow host as event.target.
   // Exercise that real fallback too: it cannot rescue a shadow-root anchor.
   const source = read('features/coursetabs.js');
   const outerClick = vm.runInNewContext(source.slice(source.indexOf('  const onCourseLink ='), source.indexOf('  // A course page in its course')) + '\nonCourseLink;', {
-    L: require('../lib/coursetabs.js'), Element: NavEl, on: true, preview: false, framed: '', PAGE: 'page',
+    L: require('../lib/coursetabs.js'), Element: NavEl, on: true, preview: false, framed: '', PAGE: 'page', showing: '',
     document: h.document, location: h.document.location, frames: new Map([['12', {}]]), here: () => '',
     openPage: (url) => h.routed.push(origin + url), openAt: (_, url) => h.routed.push(origin + url),
   });

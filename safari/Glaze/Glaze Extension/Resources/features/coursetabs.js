@@ -528,9 +528,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // if new), and in a tab's frame a link to another course goes to that course's frame: the page around never reloads.
   // A download, a link to a part of the same page or one opened elsewhere goes as the browser would take it.
   // Run after the page's handlers: Canvas action links may submit a form or cancel navigation themselves.
-  // The link pressed, inside a shadow root too (Glaze's bar), where the page's target is the root's host.
-  const anchorOf = (e) => (e.composedPath?.() || []).find((n) => n instanceof Element && n.localName === 'a' && n.hasAttribute('href'))
-    || (e.target instanceof Element && e.target.closest('a[href]'));
   const onCourseLink = (e) => {
     if (!on || !e.isTrusted || preview || e.defaultPrevented) return;
     const a = anchorOf(e);
@@ -539,6 +536,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       || (!a.target && document.querySelector('base[target]'))) return;
     toFrame(e, a);
   };
+  // The link pressed, inside a shadow root too (Glaze's bar), where the page's target is the root's host.
+  const anchorOf = (e) => (e.composedPath?.() || []).find((n) => n instanceof Element && n.localName === 'a' && n.hasAttribute('href'))
+    || (e.target instanceof Element && e.target.closest('a[href]'));
   const toFrame = (e, a) => {
     if (a.localName !== 'a' || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.defaultPrevented || a.hasAttribute('download')
       || (a.target && a.target !== '_self') || a.origin !== location.origin || a.hash) return false;
