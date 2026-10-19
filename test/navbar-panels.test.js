@@ -159,7 +159,7 @@ test('shared panel rendering drops malformed rows and unsafe URLs before drawing
   const panel = make('div');
   const draw = vm.runInNewContext(urls() + between('  const panelRow =', '  const panelTo =') + '\ndrawPanel;', { PAGE: 'page', keepPage() {},
     URL, location, isPreview: false, M, make, put: (e, ...kids) => { e.append(...kids); return e; }, part: (e) => e, icon: () => make('svg'), badge: () => make('b'), mark: () => 'AB',
-    byId: () => ({ label: 'Courses' }), t: (s) => s, el: { panel },
+    byId: () => ({ label: 'Courses' }), t: (s) => s, el: { panel }, site: {},
   });
   const title = '<img src=x onerror=alert(1)>';
   draw('course', { title, sections: [{ rows: [null, { label: 'Bad', href: 'javascript:alert(1)' }, { label: 'Blob', href: 'blob:https://school.test/id' }, { label: title, href: '/courses/12' }, { label: 'Help', href: 'https://help.test/' }] }], foot: [{ label: 'Sign out', run: 'logout' }] });

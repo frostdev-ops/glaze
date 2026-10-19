@@ -13,6 +13,9 @@ const origin = 'https://school.instructure.com';
 // APIs they use; boxes are deterministic, not a browser/CSS layout simulation.
 class NavEl extends El {
   get localName() { return this.tagName.toLowerCase(); }
+  get ownerDocument() { return this.doc; }
+  get tabIndex() { return Number(this.getAttribute('tabindex') || 0); }
+  set tabIndex(v) { this.setAttribute('tabindex', String(v)); }
   get childNodes() { return this.children; }
   get childElementCount() { return this.children.filter((e) => e instanceof El).length; }
   get classList() { return Object.assign(this.className.split(/\s+/).filter(Boolean), { contains: (c) => this.className.split(/\s+/).includes(c) }); }
@@ -86,7 +89,12 @@ async function setup({ path = '/', shown = '', frameDoc = null, width = 1440, na
   }
   document.body.append(menu);
   const settings = G.GZ_SANITIZE({ navbar: { ...navbar }, enhance: { tabs: true } });
-  const state = { shown, frameDoc, count: shown ? 1 : 0, accept: true }, routed = [], assigned = [], events = {}, animation = new Map();
+  const state = { shown, count: shown ? 1 : 0, accept: true }, routed = [], assigned = [], events = {}, animation = new Map();
+  const frame = document.createElement('iframe'); document.body.append(frame);
+  Object.defineProperty(state, 'frameDoc', { get: () => frame.contentDocument, set: (doc) => {
+    frame.contentDocument = doc; if (doc) doc.defaultView = { frameElement: frame };
+  } });
+  state.frameDoc = frameDoc;
   let tick = 0, adapter;
   const bar = { rows: () => ['12', '34'].map((cid) => ({ cid, label: `Course ${cid}`, full: `Course ${cid}`, cur: state.shown === cid, pin: false, color: '' })),
     doc: () => state.shown ? state.frameDoc : null, open: (href) => { routed.push(href); return state.accept; }, leave() { state.leaves = (state.leaves || 0) + 1; }, place() {} };
@@ -120,7 +128,7 @@ async function setup({ path = '/', shown = '', frameDoc = null, width = 1440, na
     root.dispatchEvent(event); return event;
   };
   const key = (value, extra = {}) => { const e = { type: 'keydown', key: value, ...extra, preventDefault() { this.defaultPrevented = true; } }; root.dispatchEvent(e); return e; };
-  return { ui, state, settings, context, events, document, host, root, bar, adapter, routed, assigned, click, key,
+  return { ui, state, settings, context, events, document, host, root, bar, adapter, routed, assigned, frame, click, key,
     room: () => ['--gz-navbar-left', '--gz-navbar-top'].map((k) => document.documentElement.style.getPropertyValue(k)) };
 }
 
@@ -284,4 +292,96 @@ test('the Courses panel marks the visible framed course as current', async () =>
   assert.equal(h.ui.model().course, true); assert.equal(h.ui.model().menu.name, 'Course 34');
   const data = await h.adapter.panel('course');
   assert.deepEqual(plain(data.sections[0].rows.filter((r) => r.current).map((r) => r.href)), [origin + '/courses/34']);
+});
+
+test('Skip to content handles the outer page and unreadable frame documents', async () => {
+  for (const shown of ['', '12']) {
+    const h = await setup({ shown, frameDoc: null });
+    h.click(h.root.querySelector('.skip'));
+    assert.ok(h.document.activeElement === h.document.getElementById('content'));
+  }
+  const h = await setup(); h.bar.doc = () => { throw Error('gone'); };
+  h.click(h.root.querySelector('.skip'));
+  assert.ok(h.document.activeElement === h.document.getElementById('content'));
+});
+
+test('Skip and Canvas panels ignore hidden, inert, detached and replaced frame documents', async () => {
+  for (const invalidate of [
+    (h) => { h.frame.style.visibility = 'hidden'; },
+    (h) => { h.frame.inert = true; },
+    (h) => h.frame.remove(),
+    (h) => { h.frame.contentDocument = page('/calendar'); },
+    (h) => { h.state.frameDoc.defaultView = null; },
+    (h) => { h.state.frameDoc.location = new URL('https://other.test/courses/34'); },
+    (h) => { Object.defineProperty(h.state.frameDoc, 'location', { get() { throw Error('gone'); } }); },
+  ]) {
+    const h = await setup({ path: '/courses/12', shown: '34', frameDoc: course('/courses/34') }), doc = h.state.frameDoc;
+    // Like bar.doc(), return the selected same-origin document even while its frame is hidden.
+    h.bar.doc = () => doc; invalidate(h);
+    h.click(h.root.querySelector('.skip'));
+    assert.ok(h.document.activeElement === h.document.getElementById('content'));
+    assert.equal(doc.focused, null, 'unavailable frame content must not receive focus');
+    const data = await h.adapter.panel('course');
+    assert.deepEqual(plain(data.sections[0].rows.filter((r) => r.current).map((r) => r.href)), [origin + '/courses/12']);
+  }
+});
+
+test('Skip releases frame tabindex on surface changes and preserves authored values on stop', async () => {
+  for (const change of ['leave', 'replace', 'detach', 'stop']) for (const tabindex of [null, '2']) {
+    const h = await setup({ shown: '12', frameDoc: course() }), main = h.state.frameDoc.getElementById('content');
+    if (tabindex !== null) main.setAttribute('tabindex', tabindex);
+    h.click(h.root.querySelector('.skip'));
+    assert.equal(main.getAttribute('tabindex'), tabindex || '-1');
+    if (change === 'leave') h.state.shown = '';
+    if (change === 'replace') h.state.frameDoc = course('/courses/12/grades');
+    if (change === 'detach') h.frame.remove();
+    if (change === 'stop') h.settings.navbar.on = false;
+    h.ui.sync();
+    assert.equal(main.getAttribute('tabindex'), tabindex, change);
+  }
+  const h = await setup({ shown: '12', frameDoc: course() }), main = h.state.frameDoc.getElementById('content');
+  h.click(h.root.querySelector('.skip')); main.setAttribute('tabindex', '3');
+  h.settings.navbar.on = false; h.ui.sync();
+  assert.equal(main.getAttribute('tabindex'), '3', 'a later site-authored value survives cleanup');
+});
+
+test('top course-menu focus follows the destination across reordering and removal', async () => {
+  for (const change of ['reorder', 'remove', 'course']) {
+    const h = await setup({ shown: '12', frameDoc: course(), navbar: { place: 'top' } });
+    h.root.querySelector('.tsub [data-id="cm:1"]').focus();
+    const doc = course(change === 'course' ? '/courses/34/grades' : '/courses/12/grades'), list = doc.getElementById('section-tabs');
+    if (change === 'reorder') list.prepend(list.children[1]);
+    if (change === 'remove') list.children[1].remove();
+    h.state.frameDoc = doc; h.ui.sync();
+    if (change === 'reorder') assert.equal(h.root.activeElement?.href, origin + '/courses/12/assignments');
+    else assert.equal(h.root.activeElement, null, 'a missing destination must not focus an unrelated course link');
+  }
+});
+
+test('cached Canvas panel rows follow the course and outer page on reopening', async () => {
+  const h = await setup({ path: '/courses/12', shown: '34', frameDoc: course('/courses/34') });
+  let requests = 0;
+  h.context.fetch = async () => { requests++; return new Response(JSON.stringify([{ id: 12, name: 'Course 12' }, { id: 34, name: 'Course 34' }])); };
+  const open = async () => {
+    h.click(h.root.querySelector('.rail [data-id="course"]'));
+    await new Promise(setImmediate);
+    return h.root.querySelector('.panel [aria-current="page"]')?.href;
+  };
+  assert.equal(await open(), origin + '/courses/34');
+  for (const shown of ['12', '']) {
+    h.click(h.root.querySelector('.panel .close'));
+    h.state.shown = shown; h.state.frameDoc = course('/courses/12'); h.ui.sync();
+    assert.equal(await open(), origin + '/courses/12');
+  }
+  assert.equal(requests, 1, 'the cached response was reused');
+});
+
+test('an open Canvas panel updates its current row without replacing focused controls', async () => {
+  const h = await setup({ shown: '34', frameDoc: course('/courses/34') });
+  h.click(h.root.querySelector('.rail [data-id="course"]')); await new Promise(setImmediate);
+  const link = h.root.querySelector('.panel [aria-current="page"]'); link.focus();
+  h.state.shown = '12'; h.state.frameDoc = course('/courses/12'); h.ui.sync();
+  assert.equal(h.root.querySelector('.panel [aria-current="page"]')?.href, origin + '/courses/12');
+  assert.ok(h.root.activeElement === link, 'updating current state preserves panel focus');
+  assert.equal(link.getAttribute('part'), 'panel-row');
 });

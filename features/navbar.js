@@ -21,6 +21,7 @@
 //                              menu, read from doc (the page, or the course tab's frame on screen)
 //   panel(id) -> Promise<{ title, filter, sections: [{ label, rows: [{ label, sub, href, color, icon, badge, current,
 //                run, tab }] }], foot: [rows], empty } | null>   (optional) an item marked panel, drawn as Glaze's panel
+//   current(href) -> bool      (optional) a panel link's current state, including cached and already drawn rows
 //   run(what)                  (optional) a panel row's action that isn't a link (signing out)
 var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const X = globalThis.GZ_CTX, M = GZ_NAVBAR, L = GZ_NAV_LAYOUT, N = GZ_NAV_ITEMS, html = document.documentElement;
@@ -48,6 +49,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   let cmenu = null, panel = '', panelFrom = null, panelTurn = 0;
   let wx = null, docked = false; // Glaze's widgets (features/navbar-widgets.js), once any is on; the dock open over the page
   const skipMain = new Set(); // Elements given a temporary focus target by Skip to content.
+  const mainAt = () => { try { return site.main(tabsApi()?.doc?.() || document); } catch { return site.main(); } };
   const panels = new Map(); // id -> { at, data }: a panel's rows, kept a minute
   const listeners = new Map(), mods = new Map(); // event -> Set(fn); owner -> Map(id -> item)
   const emit = (event, data) => { for (const fn of listeners.get(event) || []) { try { fn(data); } catch { /* one listener's error isn't the bar's */ } } };
@@ -257,6 +259,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   };
   const render = () => {
     const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tsub, .tabs, .sheet, .menu'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
+    const focusedCourse = focused?.startsWith('cm:') && active.href;
     const tabAt = focusedTab ? [...pane.querySelectorAll('.ctab-go')].findIndex((e) => e.dataset.cid === active.dataset.cid) : -1, wasMenu = menu;
     brandInto(el.brand); brandInto(el.tbrand);
     // The rail: groups, a divider between, the course tabs, the active marker that glides from item to item.
@@ -351,7 +354,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (wasMenu && lay.place === 'top' && wide() && !(wasMenu === 'more' ? el.tmore : el.tacc).hidden) menuTo(wasMenu, false);
     const restore = active === el.brand || active === el.tbrand ? active
       : focusedTab ? pane?.querySelector(`[data-act="${focusedTab.split('|')[0]}"][data-cid="${CSS.escape(focusedTab.split('|')[1])}"]`)
-        : focused ? pane?.querySelector(`[data-id="${CSS.escape(focused)}"]:not(.brand)`) : active?.classList.contains('more') ? el.more : active?.dataset.act === 'customize' ? pane?.querySelector('[data-act="customize"]') : null;
+        : focusedCourse ? [...(pane?.querySelectorAll('[data-id]') || [])].find((e) => e.dataset.id.startsWith('cm:') && e.href === focusedCourse)
+          : focused ? pane?.querySelector(`[data-id="${CSS.escape(focused)}"]:not(.brand)`) : active?.classList.contains('more') ? el.more : active?.dataset.act === 'customize' ? pane?.querySelector('[data-act="customize"]') : null;
     const nearby = tabAt >= 0 ? [...pane.querySelectorAll('.ctab-go')].at(Math.min(tabAt, pane.querySelectorAll('.ctab-go').length - 1)) || pane.querySelector('a, button') : null;
     const target = restore || nearby || (active?.isConnected ? active : sheetOpen ? el.sheet.querySelector('a[href], button:not([disabled])') : wasMenu ? el.menu.querySelector('a, button') || (wasMenu === 'more' ? el.tmore : el.tacc) : null);
     if (target?.getClientRects().length) target.focus({ preventScroll: true });
@@ -576,10 +580,10 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     }
   };
   const panelRow = (r) => {
-    const link = r.href && !r.run;
-    const e = part(make(link ? 'a' : 'button', { className: 'row' }), r.current ? 'panel-row active' : 'panel-row');
+    const link = r.href && !r.run, current = link && site.current ? site.current(r.href) : r.current;
+    const e = part(make(link ? 'a' : 'button', { className: 'row' }), current ? 'panel-row active' : 'panel-row');
     if (link) { e.href = r.href; if (r.tab || !sameSite(r.href)) { e.target = '_blank'; e.rel = 'noopener noreferrer'; } } else { e.type = 'button'; e.dataset.run = r.run || ''; }
-    if (r.current) e.setAttribute('aria-current', 'page');
+    if (current) e.setAttribute('aria-current', 'page');
     const lead = r.color ? part(make('span', { className: 'dot', textContent: mark(r.label) }), 'course-dot') : icon(M.PICKS.includes(r.icon) ? r.icon : 'chevron');
     if (r.color) lead.style.setProperty('--c', r.color);
     const text = make('span', { className: 'text' }, make('span', { className: 'name', textContent: r.label }), r.sub ? make('small', { textContent: r.sub }) : null);
@@ -719,7 +723,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       else if (path.includes(el.more)) { e.preventDefault(); sheetTo(!sheetOpen); }
       else if (path.includes(el.tmore)) { e.preventDefault(); menuTo(menu === 'more' ? '' : 'more'); }
       else if (path.includes(el.tacc)) { e.preventDefault(); if (model.account?.panel && site.panel) panelTo(panel === 'profile' ? '' : 'profile', el.tacc); else menuTo(menu === 'account' ? '' : 'account'); }
-      else if (path.includes(el.skip)) { e.preventDefault(); const main = site.main(tabsApi()?.doc?.()); if (main) { if (!main.hasAttribute('tabindex')) { skipMain.add(main); main.tabIndex = -1; } main.focus(); } }
+      else if (path.includes(el.skip)) { e.preventDefault(); const main = mainAt(); if (main) { if (!main.hasAttribute('tabindex')) { skipMain.add(main); main.tabIndex = -1; } main.focus(); } }
       return;
     }
     const act = target.dataset.act;
@@ -820,6 +824,14 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     host.dataset.motion = html.getAttribute('data-gz-motion') || '';
     host.toggleAttribute('data-footer', html.hasAttribute('data-gz-footer'));
     const api = tabsApi();
+    if (skipMain.size) {
+      const main = mainAt();
+      for (const old of skipMain) if (old !== main) { if (old.getAttribute('tabindex') === '-1') old.removeAttribute('tabindex'); skipMain.delete(old); }
+    }
+    if (panel && site.current) for (const e of el.panel.querySelectorAll('a.row')) {
+      const current = site.current(e.href); part(e, current ? 'panel-row active' : 'panel-row');
+      if (current) e.setAttribute('aria-current', 'page'); else e.removeAttribute('aria-current');
+    }
     cmenu = readMenu();
     lay = M.layout(settings(), { width: innerWidth, course: inCourse(), rail, tabs: !!api, menu: !!cmenu });
     rows = lay.tabs && api ? api.rows() : [];
