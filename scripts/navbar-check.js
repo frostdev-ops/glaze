@@ -23,12 +23,12 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
   fs.mkdirSync(out, { recursive: true });
   const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-navbar-run-')));
   let ctx;
+  const errors = [];
   try {
     await require('./wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'p'), { executablePath: CHROME, headless: true, viewport: { width: 1440, height: 900 }, locale: 'en-US',
       args: [`--disable-extensions-except=${src}`, `--load-extension=${src}`, '--host-resolver-rules=MAP * ~NOTFOUND'] });
     const page = await ctx.newPage();
-    const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
     await page.goto(`chrome-extension://${extensionId(src)}/preview.html?site=ultra`);
@@ -46,6 +46,14 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     ok(await space() === '272px', 'the page keeps the open rail\'s room');
     ok(await page.evaluate(() => getComputedStyle(document.getElementById('site-wrap')).gridTemplateColumns.startsWith('272px')), 'the page starts beside the rail');
     ok(await page.evaluate(() => document.documentElement.getAttribute('data-gz-navbar')) === 'rail auto float tabs', 'the page is told where the bar is');
+    ok(await page.evaluate(() => {
+      const html = document.documentElement, footer = html.hasAttribute('data-gz-footer');
+      html.removeAttribute('data-gz-footer');
+      const list = Object.assign(document.createElement('div'), { className: 'course-org-list' }), cards = document.createElement('div');
+      cards.setAttribute('data-gz-vh', ''); list.append(cards); document.getElementById('site-wrap').append(list);
+      const grows = getComputedStyle(cards).maxHeight === 'none'; list.remove();
+      html.toggleAttribute('data-gz-footer', footer); return grows;
+    }), 'course cards can grow beyond one viewport with the footer off');
     ok(await page.evaluate(() => getComputedStyle(document.querySelector('.MuiDrawer-paper nav')).visibility) === 'hidden', "Ultra's own nav is out of sight, still in the page");
     ok(await bar((r) => r.querySelector('.item[aria-current="page"]')?.dataset.id) === 'course', 'the current page is marked');
     ok(await bar((r) => r.querySelector('.rail').hasAttribute('data-open') && getComputedStyle(r.querySelector('.label')).opacity === '1'), 'labels show while open');
@@ -111,6 +119,13 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     ok((await bar((r) => [...r.querySelectorAll('.tab')].map((t) => t.dataset.id || 'more'))).join(' ') === 'institution-page course calendar messages more', 'its tabs: home, courses, calendar, inbox and More');
     ok(await bar((r) => r.querySelector('.tab[data-active]')?.dataset.id) === 'course', 'the current tab is marked');
     await shot('phone');
+    ok(await page.evaluate(() => {
+      const f = Object.assign(document.createElement('div'), { id: 'gz-ctabs-frames' });
+      f.style.bottom = '32px'; document.body.append(f);
+      const tabs = document.getElementById('gz-navbar').shadowRoot.querySelector('.tabs');
+      const fits = f.getBoundingClientRect().bottom <= tabs.getBoundingClientRect().top;
+      f.remove(); return fits;
+    }), 'a phone course frame leaves room for the bottom bar as well as the footer');
     await bar((r) => r.querySelector('.more').click());
     await until((r) => r.querySelector('.sheet').hasAttribute('data-open') && r.activeElement?.closest('.sheet') !== null, (v) => v === true, 'More opens the sheet and moves focus into it');
     ok((await bar((r) => [...r.querySelectorAll('.sheet .row:not(.ctab-go)')].map((e) => e.dataset.id || e.dataset.act))).join(' ') === 'stream organization grades tools profile logout customize', 'the sheet has the rest, the account, signing out and Customize');
@@ -201,8 +216,33 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await shot('top');
     await bar((r) => r.querySelector('.tacc').click());
     await until((r) => [...r.querySelectorAll('.menu .row')].map((e) => e.dataset.id || e.dataset.act).join(' '), (v) => v === 'profile customize', 'the account opens its menu (its sign-out link was taken away above)');
+    await page.evaluate(() => { document.querySelector('.MuiBadge-badge').textContent = '8'; });
+    await until((r) => r.querySelector('.titems [data-id="messages"] .badge')?.textContent, (v) => v === '8', 'a badge changes while the account menu is open');
+    ok(await bar((r) => !r.querySelector('.menu').hidden && r.activeElement?.dataset.id === 'profile' && !!r.activeElement.closest('.menu')), 'a redraw preserves the open menu and its focused entry');
     await page.keyboard.press('Escape');
     ok(await bar((r) => r.querySelector('.menu').hidden && r.activeElement === r.querySelector('.tacc')), 'Escape closes it and focus goes back');
+    await bar((r) => r.querySelector('.tacc').click());
+    await page.keyboard.press('Tab');
+    ok(await bar((r) => r.querySelector('.menu').hidden), 'Tab dismisses a top bar menu');
+    await bar((r) => r.querySelector('.tacc').focus());
+    await page.keyboard.press('ArrowDown');
+    ok(await bar((r) => !r.querySelector('.menu').hidden && r.activeElement?.closest('.menu') !== null), 'Down on the account opens its menu');
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 900, height: 800 });
+    const longBrand = await page.evaluate(() => {
+      const img = document.querySelector('.MuiDrawer-paper header img'), was = img.alt;
+      img.alt = 'W'.repeat(80); GZ_NAVBAR_UI.sync();
+      const r = document.getElementById('gz-navbar').shadowRoot;
+      const fits = r.querySelector('.tacc').getBoundingClientRect().right <= r.querySelector('.topbar').getBoundingClientRect().right;
+      img.alt = was; GZ_NAVBAR_UI.sync(); return fits;
+    });
+    ok(longBrand, 'a long school name keeps the account within the top bar');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => { document.documentElement.dir = 'rtl'; GZ_NAVBAR_UI.sync(); });
+    await bar((r) => { r.activeElement?.blur(); r.querySelector('.tacc').focus(); });
+    await page.waitForTimeout(200);
+    await until((r) => { const tip = r.querySelector('.tip'), b = tip.getBoundingClientRect(); return [tip.hasAttribute('data-on'), b.left, b.right, innerWidth, getComputedStyle(tip).transform]; }, (v) => v[0] && v[1] >= 0 && v[2] <= v[3], 'a top bar tooltip stays on screen in RTL');
+    await page.evaluate(() => { document.documentElement.dir = ''; GZ_NAVBAR_UI.sync(); });
     await page.setViewportSize({ width: 1000, height: 800 });
     await until((r) => r.querySelector('.topbar').hasAttribute('data-compact') || !r.querySelector('.tmore').hidden, Boolean, 'a narrower window: icons first, then More');
     const over = await bar((r) => [...r.querySelectorAll('.titems .item[data-over]')].map((e) => e.dataset.id));
@@ -212,6 +252,28 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       await page.keyboard.press('Escape');
     }
     await shot('top-narrow');
+    const fitted = await bar((r) => {
+      r.querySelector('.tlist').style.flex = '0 0 180px';
+      r.querySelector('.tmore').hidden = true;
+      dispatchEvent(new Event('resize'));
+      const box = r.querySelector('.titems');
+      return box.scrollWidth <= box.clientWidth + 1;
+    });
+    ok(fitted, 'one fit reserves More before deciding which items fit');
+    await page.waitForTimeout(100); // size observers settle before measuring unchanged passes
+    ok(await bar((r) => {
+      let reads = 0;
+      const box = r.querySelector('.titems');
+      const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollWidth');
+      Object.defineProperty(box, 'scrollWidth', { configurable: true, get() { reads++; return desc.get.call(this); } });
+      for (let i = 0; i < 10; i++) GZ_NAVBAR_UI.sync();
+      delete box.scrollWidth;
+      return reads === 0;
+    }), 'unchanged Ultra flushes do not refit the top bar');
+    await bar((r) => { r.querySelector('.tlist').style.flex = ''; dispatchEvent(new Event('resize')); });
+    await bar((r) => { r.querySelector('.tlist').style.flex = '0 0 180px'; });
+    await until((r) => { const b = r.querySelector('.titems'); return b.scrollWidth <= b.clientWidth + 1; }, Boolean, 'changed bar sizes refit without an Ultra flush or window resize');
+    await bar((r) => { r.querySelector('.tlist').style.flex = ''; });
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // ---- embedded ----
@@ -229,6 +291,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       await page.evaluate(() => { history.pushState(null, '', '/ultra/courses/_1_1/outline'); dispatchEvent(new PopStateEvent('popstate')); });
       await page.waitForTimeout(150);
       const v = await page.evaluate(() => [document.getElementById('gz-navbar')?.dataset.place, document.documentElement.getAttribute('data-gz-navbar'), getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-left').trim()]);
+      if (course === 'icons') ok(await bar((r) => ['.toggle', '.pin'].every((s) => getComputedStyle(r.querySelector(s)).display === 'none')), 'icons inside a course hides the pin and expand controls');
       await page.evaluate(() => { history.back(); });
       await page.waitForTimeout(150);
       return v;
@@ -236,8 +299,18 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     ok((await inCourse('same')).join('|') === 'rail|rail open float tabs|272px', 'inside a course: the same bar');
     ok((await inCourse('icons')).join('|') === 'rail|rail icons float tabs|96px', 'inside a course: icons only');
     ok((await inCourse('top')).join('|') === 'top|top float tabs|0px', 'inside a course: a top bar');
-    ok((await inCourse('hide')).join('|') === 'none|none float tabs|0px', 'inside a course: hidden');
+    ok((await inCourse('hide')).join('|') === 'none|none float|0px', 'a hidden navbar hands course tabs back to their strip');
     await until((r) => r.host.dataset.place, (v) => v === 'rail', 'back outside, the bar as it was');
+
+    await send({ on: true, rail: 'open' });
+    await until((r) => r.querySelectorAll('.courses .ctab-go').length, (v) => v === 3, 'course tabs are ready for keyboard actions');
+    await bar((r) => r.querySelector('.courses .ctab-go[data-cid="_2_1"]').focus());
+    await page.keyboard.press('p');
+    await until((r) => r.querySelector('.courses .ctab-go[data-cid="_2_1"] .pinned') !== null, Boolean, 'P pins the focused course tab');
+    ok(await bar((r) => r.activeElement?.dataset.cid === '_2_1'), 'pinning keeps focus on the course tab');
+    await page.keyboard.press('Delete');
+    await until((r) => r.querySelector('.courses .ctab-go[data-cid="_2_1"]') === null, Boolean, 'Delete closes the focused course tab');
+    ok(await bar((r) => r.activeElement?.dataset.act === 'tab' && !!r.activeElement.closest('.courses')), 'closing a tab focuses a surviving course tab');
 
     // ---- off again: Ultra's drawer comes back ----
     await send({ on: false });
@@ -258,13 +331,25 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
       window.dispatchEvent(new Event('pagehide'));
     });
     await page.waitForTimeout(100);
+    ok(await page.evaluate(() => !document.getElementById('gz-navbar')), 'pagehide cancels queued navbar work');
+    await page.evaluate(() => GZ_NAVBAR_UI.sync());
+    ok(await page.evaluate(() => !document.getElementById('gz-navbar')), 'a late sync cannot remount the navbar before pageshow');
     await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); });
     await until((r) => !!r && !r.host.hidden, Boolean, 'the navbar remounts after pagehide');
     await page.evaluate(() => { document.getElementById('gz-navbar').remove(); GZ_NAVBAR_UI.sync(); });
     await until((r) => !!r && !r.host.hidden, Boolean, 'a removed navbar host is replaced');
+
+    const editor = await ctx.newPage();
+    editor.on('pageerror', (e) => errors.push(String(e)));
+    await editor.goto(`chrome-extension://${extensionId(src)}/options.html#navigation/bar`);
+    await editor.waitForSelector('#nbar-items li', { state: 'attached', timeout: 5000 });
+    await editor.locator('#navbar input[name="navbar.place"][value="top"]').evaluate((e) => e.click());
+    const controls = await editor.locator('#navbar [data-navbar-rail]').evaluate((e) => [e.hidden, getComputedStyle(e).display]);
+    ok(controls[0] && controls[1] === 'none', `top-only navigation hides the editor's rail controls (${controls.join(', ')})`);
+    await editor.close();
     ok(!errors.length, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
   } catch (e) {
-    ok(false, `ran to the end (${e.message})`);
+    ok(false, `ran to the end (${e.message}${errors.length ? `; ${errors.join(' | ')}` : ''})`);
   } finally {
     await ctx?.close();
     fs.rmSync(tmp, { recursive: true, force: true });
