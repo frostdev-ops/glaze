@@ -1186,10 +1186,10 @@
   // crossfade (canvas.css, Page transitions). An at-rule can't sit under an attribute selector, so the opt-in is
   // a style element that exists only while motion and entrances are on. A page that is revealed inside a
   // transition is marked, so its own entrances (a second movement) stay off; sticky, because letting go would
-  // restart them.
+  // restart them. Not in a tab's frame: its next page opts in too late.
   let fade = null;
   const syncPageFade = () => {
-    const want = !ultra && links.length && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-enter');
+    const want = !ultra && !tabFrame && links.length && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-enter');
     if (want && !fade) {
       fade = document.createElement('style');
       fade.textContent = '@view-transition { navigation: auto; }';
