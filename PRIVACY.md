@@ -79,6 +79,21 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
 
 ## What Glaze stores
 
+- **Glaze navigation** (Canvas, Blackboard Ultra and Moodle, on by default): Glaze draws its own bar from the
+  site's own navigation, which stays in the page, hidden. Its settings sync in `navbar` (placement, style, rail state,
+  course behavior, logo choice) and the capped `navbarItems` item (names, icons, groups, hidden items, phone tabs, up to
+  eight links, Glaze's own items and widgets). To draw the bar before a site's menu arrives, the last items read on that
+  site (their ids, names up to 80 characters and paths, at most 20) are kept per site as `navbarSeen:<origin>` in local
+  storage, on this device only. Opening one of the site's own menus as a Glaze panel asks your own school site, with
+  your existing session, for what that menu itself shows: on Canvas your favorite or active courses, groups, account
+  links, recent history, admin accounts or the school's help links (`/api/v1/users/self/favorites/courses`,
+  `/api/v1/courses`, `/api/v1/users/self/groups`, `/api/v1/users/self/tabs`, `/api/v1/users/self/history`,
+  `/api/v1/accounts`, `/help_links` or `/api/v1/accounts/self/help_links`); on Moodle your notifications or
+  conversations (Moodle's own `message_popup_get_popup_notifications` and `core_message_get_conversations` services).
+  Panel rows stay in page memory for a minute and are never stored or sent anywhere else. Navigation widgets (clock,
+  next due, focus timer, pet; off until you turn them on) use the same timer, planner readers and pet progress as the
+  rail widgets below and record nothing more. Mods' navigation widgets show in the bar with only the permissions you
+  granted those mods.
 - **Blackboard navigation:** drawer layout and expansion are local presentation only and add no storage or requests. Precise size/spacing, label overflow, item style/background, active indicator, logo size/alignment, footer visibility and hover-expansion choices sync in `nav`; up to eight custom link names,
   http/https URLs, built-in icon choices, new-tab preferences, native-item order/hidden choices and rail-widget
   switches/order/position sync in the separate capped `navItems` item. A link is contacted only when you click it;
