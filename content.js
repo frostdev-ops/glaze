@@ -846,11 +846,15 @@
   // Expired copies go; with backup off, all copies go. Top frame only.
   const tidyDrafts = () => {
     if (window.top !== window) return;
-    // Without key listing, skip cleanup rather than transfer unrelated local artwork.
-    local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => ks && s.get(ks.filter((k) => k.startsWith('draft:')), (all) => {
+    const sweep = (s, all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
       need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
-    })).catch(() => {}));
+    };
+    local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => {
+      if (ks) return s.get(ks.filter((k) => k.startsWith('draft:')), (all) => sweep(s, all));
+      // Without key listing everything is read, local artwork too: at most once a day, so old copies still go.
+      s.get('draftsSwept', (r) => { if (!(r?.draftsSwept > Date.now() - 864e5)) { s.set({ draftsSwept: Date.now() }); s.get(null, (all) => sweep(s, all)); } });
+    }).catch(() => {}));
   };
 
   // ---- download all (Extras) -------------------------------------------------------------------

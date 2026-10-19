@@ -171,6 +171,8 @@ test('module progress shares its in-flight request and reuses its rendered bar',
 test('module progress retries after a failed Modules API request', async () => {
   let attempts = 0; const p = page({ where: '/courses/31/modules', api: async () => { if (++attempts === 1) throw new Error('503'); return modules(); } }); p.addModules();
   p.site.renderProgress(); await settle(); assert.equal(p.doc.getElementById('gz-progress'), null);
+  for (let i = 0; i < 10; i++) { p.site.renderProgress(); await settle(); }
+  assert.equal(attempts, 1, 'a failing Canvas is not asked again on every pass');
   await p.advance(60000); p.site.renderProgress(); await settle();
   assert.equal(attempts, 2, 'reqs must release a failed course so the already-evicted Modules promise can retry');
   assert.equal(p.doc.getElementById('gz-progress')?.dataset.v, '0/1 en');
@@ -185,19 +187,27 @@ test('module progress refreshes expired completion data after a BFCache restore'
 });
 
 test('course frames reuse the top page course-list and color requests', async () => {
-  const requests = [], api = async (s) => { requests.push(s); return s === '/users/self/colors' ? {} : [course()]; };
+  let who = '42';
+  const requests = [], api = async (s) => { requests.push(s); return s === '/users/self/colors' ? {} : s === '/users/self/profile' ? { id: who } : [course()]; };
   const top = page({ api }); await top.site.record();
   const frame = page({ api, where: '/courses/31/modules', frame: '31', parent: top.c, store: top.store, session: top.session }); await frame.site.record();
   assert.equal(frame.input.courseList[`canvas:${origin}/31`]?.name, 'Course 31');
-  assert.deepEqual([requests.filter((s) => s.startsWith('/courses?')).length, requests.filter((s) => s === '/users/self/colors').length], [1, 1], 'a registered course frame is solo too, but its parent already fetched these records');
+  const counts = () => [requests.filter((s) => s.startsWith('/courses?')).length, requests.filter((s) => s === '/users/self/colors').length];
+  assert.deepEqual(counts(), [1, 1], 'a registered course frame is solo too, but its parent already fetched these records');
+  // Another account signed in since: its own courses, never the snapshot of the one before.
+  who = '99';
+  const other = page({ api, where: '/courses/31/modules', frame: '31', parent: top.c, store: top.store, session: top.session }); await other.site.record();
+  assert.deepEqual(counts(), [2, 2]);
 });
 
-test('hidden modules in course frames reuse the top page profile identity', async () => {
+test('who is signed in is always Canvas\'s word, never the page\'s own storage', async () => {
   let profiles = 0; const api = async () => { profiles++; return { id: '42' }; }, top = page({ api }); await top.site.ctx.profile();
+  top.session.set?.('gz-canvas-profile', JSON.stringify({ at: Date.now(), value: { id: '99' } }));
   const frame = page({ api, where: '/courses/31/modules', frame: '31', parent: top.c, store: top.store, session: top.session, enhance: { progress: false, hideFolders: true } });
   const { row } = frame.addModules(); frame.site.renderProgress(); await settle();
   assert.ok(row.querySelector('.gz-folder-eye'), 'the frame still needs usable hide-module controls');
-  assert.equal(profiles, 1, 'syncFolders/me() must not repeat the top page profile request');
+  assert.equal(String((await frame.site.ctx.profile()).id), '42', 'a forged identity in sessionStorage is not used');
+  assert.equal(profiles, 2, 'each page asks Canvas once');
 });
 
 test('dashboard course grades include courses beyond the first API page', async () => {

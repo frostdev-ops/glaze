@@ -33,7 +33,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // Same tab and origin, briefly: navigation needn't ask for the same courses and colors again.
   try {
     const kept = JSON.parse(sessionStorage.getItem(COURSE_CACHE)), age = Date.now() - kept?.at;
-    if (age >= 0 && age < 60000 && Array.isArray(kept.list) && kept.colors && typeof kept.colors === 'object') canvasSnapshot = kept;
+    if (age >= 0 && age < 60000 && /^\d+$/.test(kept.uid) && Array.isArray(kept.list) && kept.colors && typeof kept.colors === 'object') canvasSnapshot = kept;
   } catch { /* blocked or empty */ }
   // Follow Canvas's next link, never off this API; a broken cycle or huge account stops at twenty pages.
   const readCourses = async () => {
@@ -54,18 +54,16 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     }
     return out;
   };
-  const canvasCourses = () => (canvasList ||= canvasSnapshot ? Promise.resolve(canvasSnapshot.list) : readCourses()
-    .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
   let mine = null;
-  const profile = () => (mine ||= capi('/users/self/profile').then((p) => { try { if (/^\d+$/.test(p?.id)) sessionStorage.setItem('gz-canvas-profile', JSON.stringify({ at: Date.now(), value: p })); } catch { /* blocked or full */ } return p; }).catch((e) => { mine = null; throw e; }));
-  // Like courses/colors, identity follows same-tab frames and navigation for sixty seconds.
-  try {
-    const kept = JSON.parse(sessionStorage.getItem('gz-canvas-profile')), age = Date.now() - kept?.at;
-    if (age >= 0 && age < 60000 && /^\d+$/.test(kept.value?.id)) mine = Promise.resolve(kept.value);
-  } catch { /* blocked or empty */ }
-  const record = () => Promise.all([canvasCourses(), canvasSnapshot ? canvasSnapshot.colors : capi('/users/self/colors').catch(() => null)]).then(([list, colors]) => {
+  const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
+  // Who is signed in is always Canvas's word on this page (the page's own storage could say anything); a snapshot counts
+  // only for that account, so one signed in a moment ago never lends its courses or grades.
+  const snap = () => (canvasSnapshot ? profile().then((p) => (String(p?.id) === canvasSnapshot.uid ? canvasSnapshot : null), () => null) : Promise.resolve(null));
+  const canvasCourses = () => (canvasList ||= snap().then((s) => s ? s.list : readCourses()
+    .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return []; }))); // asked again after a minute
+  const record = () => snap().then((s) => Promise.all([canvasCourses(), s ? s.colors : capi('/users/self/colors').catch(() => null), profile().catch(() => null)])).then(([list, colors, me]) => {
     // Failed reads must not turn into a fresh, empty snapshot.
-    if (coursesRead && colors) try { sessionStorage.setItem(COURSE_CACHE, JSON.stringify({ at: Date.now(), list, colors })); } catch { /* blocked or full */ }
+    if (coursesRead && colors && /^\d+$/.test(me?.id)) try { sessionStorage.setItem(COURSE_CACHE, JSON.stringify({ at: Date.now(), uid: String(me.id), list, colors })); } catch { /* blocked or full */ }
     const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
       name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors?.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
     }]));
@@ -273,6 +271,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     const cid = canvasCourseId();
     const list = I.observer && I.settings.enabled && I.settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
     if (!list) return old?.remove();
+    if (reqs?.cid === cid && Date.now() - reqs.failed < 60000) return old?.remove(); // a failed request is asked again after a minute
     const load = canvasModules(cid);
     if (reqs?.cid !== cid || reqs.load !== load) {
       const r = (reqs = { cid, load });
@@ -280,7 +279,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
       load.then((mods) => {
         r.progress = GZ_PAGE.canvasProgress(mods);
         if (reqs === r) canvasProgress();
-      }).catch(() => { if (reqs === r) reqs = null; }); // a failed request must not pin the course
+      }).catch(() => { if (reqs === r) r.failed = Date.now(); }); // a failed request must not pin the course
       return;
     }
     if (!reqs.progress?.total) return old?.remove();

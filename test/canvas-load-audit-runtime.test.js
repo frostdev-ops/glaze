@@ -136,7 +136,7 @@ const page = ({ frame = '', body = false, marker = true, wrapper = true, cached 
     sessionStorage: { getItem: (k) => session.get(k) ?? null, setItem: (k, v) => session.set(k, String(v)), removeItem: (k) => session.delete(k) },
     fetch: async (url) => {
       requests.push(url);
-      const value = url.includes('/users/self/colors') ? { custom_colors: {} } : [];
+      const value = url.includes('/users/self/colors') ? { custom_colors: {} } : url.includes('/users/self/profile') ? { id: '42' } : [];
       return { ok: true, url, text: async () => JSON.stringify(value), headers: { get: () => null } };
     },
     chrome: {
@@ -346,8 +346,12 @@ test('Canvas skips sticker storage when stickers, rotation and custom cursor are
   assert.equal(reads.length, 0, `${reads.length} route-specific sticker storage reads with every Look extra off`);
 });
 
-test('Canvas startup without storage.getKeys does not transfer unrelated local artwork', async () => {
-  const p = await boot({ getKeys: false, local: { unrelatedArtwork: 'x'.repeat(1024 * 1024) } });
-  const bulk = p.storage.filter((r) => r.area === 'local' && r.keys === null);
-  assert.equal(bulk.length, 0, `draft cleanup read all local storage (${bulk.reduce((n, r) => n + r.bytes, 0)} bytes) with drafts off`);
+test('Canvas startup without storage.getKeys reads all local storage for draft cleanup at most once a day', async () => {
+  const local = { unrelatedArtwork: 'x'.repeat(1024 * 1024) };
+  const bulk = (p) => p.storage.filter((r) => r.area === 'local' && r.keys === null);
+  const first = await boot({ getKeys: false, local });
+  assert.equal(bulk(first).length, 1, 'old and switched-off copies still go where keys cannot be listed');
+  assert.ok('draftsSwept' in local, 'the sweep is noted');
+  const again = await boot({ getKeys: false, local });
+  assert.equal(bulk(again).length, 0, `read all local storage again (${bulk(again).reduce((n, r) => n + r.bytes, 0)} bytes) the same day`);
 });
