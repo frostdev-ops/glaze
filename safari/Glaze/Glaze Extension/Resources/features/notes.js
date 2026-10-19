@@ -829,16 +829,24 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
 
   // ---- sharing -------------------------------------------------------------------------------------------------------
   // Glaze's share panel (sharing/quick.html) is an extension frame: its invite links and keys never enter this page, and
-  // it posts nothing back. note: the note to share ('' for the account's shared notes and joining); the same again closes it.
+  // it posts nothing back. The worker gives each opening a one-use ticket for this tab, account and note; the frame sits in
+  // a closed shadow root so the page's scripts cannot read that address and frame a panel of their own with it.
+  // note: the note to share ('' for the account's shared notes and joining); the same again closes it.
   const share = async (note) => {
     if (!el.share.hidden && el.share.note === note) { el.share.hidden = true; el.share.replaceChildren(); return; }
+    const my = gen, key = me.key;
     // A note is shared as stored, so a new or edited one is saved first.
     if (note && (!(await settle()) || !cur?.rev)) return say(t("Couldn't save the open note, so it can't be shared yet. Try again in a moment."));
-    if (!el.share) return;
-    const frame = make('iframe', { src: `${chrome.runtime.getURL('sharing/quick.html')}?key=${encodeURIComponent(me.key)}${note ? `&note=${note}` : ''}`, title: t('Share') });
+    const r = await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:quick-ticket', key, note }, (x) => res(chrome.runtime.lastError ? null : x)); } catch { res(null); } });
+    if (my !== gen || !el.share || key !== me?.key || (note && note !== cur?.id)) return;
+    if (!r?.ok || !/^[0-9a-f]{32}$/.test(r.ticket || '')) return say(t('Could not finish. Your local copies are kept. Try again.'));
+    const frame = make('iframe', { src: `${chrome.runtime.getURL('sharing/quick.html')}?t=${r.ticket}`, title: t('Share') });
     frame.setAttribute('allow', 'clipboard-write');
+    frame.setAttribute('style', 'display: block; width: 100%; height: min(22rem, 45vh); border: 0; color-scheme: normal;');
+    const holder = make('div', { className: 'gz-nt-share-frame' });
+    holder.attachShadow({ mode: 'closed' }).append(frame);
     el.share.note = note;
-    el.share.replaceChildren(make('div', { className: 'gz-nt-row gz-nt-share-head' }, make('strong', { textContent: t(note ? 'Share' : 'Shared notes') }), button(t('Close'), () => share(note))), frame);
+    el.share.replaceChildren(make('div', { className: 'gz-nt-row gz-nt-share-head' }, make('strong', { textContent: t(note ? 'Share' : 'Shared notes') }), button(t('Close'), () => share(note))), holder);
     el.share.hidden = false;
   };
 

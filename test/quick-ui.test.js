@@ -40,9 +40,9 @@ const device = (t, server) => {
   t.after(() => d.worker.stop());
   return d;
 };
-const seed = async (d) => {
+const seed = async (d, key = NK) => {
   const id = crypto.randomUUID();
-  assert.equal((await N.run({ key: NK, op: 'save', id, base: 0, sid: crypto.randomUUID(), copy: crypto.randomUUID(), title: 'Biology', html: '<p>Kept note</p>' }, { local: d.local }, d.notes)).ok, true);
+  assert.equal((await N.run({ key, op: 'save', id, base: 0, sid: crypto.randomUUID(), copy: crypto.randomUUID(), title: 'Biology', html: '<p>Kept note</p>' }, { local: d.local }, d.notes)).ok, true);
   return id;
 };
 const sharedNote = async (d) => {
@@ -66,7 +66,7 @@ const page = async (d, { note = '', relay: selected } = {}) => {
   ids.get('ask').append(ids.get('ask-text'), ids.get('ask-yes'), ids.get('ask-no'));
   Object.assign(doc, { createElement: make, querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s) });
   const context = vm.createContext({ document: doc, URL, URLSearchParams, console, setTimeout, clearTimeout, Date,
-    location: { search: new URLSearchParams({ key: NK, note }).toString() },
+    location: { search: '?t=ticket' },
     navigator: { userActivation: { isActive: true }, clipboard: { writeText: async (v) => { copied.push(v); } } },
     GZ_I18N: { page() {}, ui() {}, t: (k, vars) => k.replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? '') }, GZ_RELAY: R,
     GZ_SANITIZE: () => ({ look: { radius: 12 }, auto: { on: false } }), GZ_SURFACES: { vars: () => ({}) }, GZ_ACTIVE_COLORS: () => ({ '--gz-accent': '#abc' }),
@@ -77,7 +77,7 @@ const page = async (d, { note = '', relay: selected } = {}) => {
           calls.push(clone(m));
           if (['leave', 'delete'].includes(m.op)) d.worker.stop();
           await d.hold?.(m);
-          try { const value = await d.worker.handle(m); if (m.op === 'list' && selected) value.relay = selected; return value; }
+          try { const value = await d.worker.handle({ ...m, scope: { key: NK, note } }); /* scoped, as the worker scopes a ticketed panel */ if (m.op === 'list' && selected) value.relay = selected; return value; }
           catch (e) { return { ok: false, error: e.message }; }
         } },
     },
@@ -186,4 +186,24 @@ test('quick offline Join retains its keys and appears after the promised Setting
   assert.ok(p.button('Leave'));
   const session = (await joined.send('list')).sessions[0];
   assert.match((await N.run({ key: NK, op: 'load', id: session.notes[0] }, { local: joined.local }, joined.notes)).html, /Kept note/);
+});
+
+test('a scoped panel sees and acts on only its Notes account, and shares only its own note', async (t) => {
+  const server = await start(t), d = device(t, server), { id, sid } = await sharedNote(d);
+  const OTHER = 'notesIdx:https://school.instructure.com/6';
+  d.local.data[OTHER] = N.clean({});
+  const other = await seed(d, OTHER);
+  const { sid: otherSid } = await d.send('create', { kind: 'notes', title: 'Elsewhere', key: OTHER, ids: [other] });
+  const scope = { key: NK, note: id }, scoped = (op, rest = {}) => d.send(op, { ...rest, scope });
+  const list = await scoped('list');
+  assert.deepEqual(list.sessions.map((s) => s.sid), [sid]);
+  assert.ok(list.sources.every((s) => s.key === NK) && list.accounts.every((k) => k === NK));
+  assert.deepEqual(list.scope, scope);
+  await assert.rejects(scoped('link', { sid: otherSid }), /bad/, 'another account\'s invite');
+  await assert.rejects(scoped('leave', { sid: otherSid }), /bad/);
+  await assert.rejects(scoped('create', { kind: 'notes', title: 'x', key: OTHER, ids: [other] }), /bad/, 'another account');
+  await assert.rejects(scoped('create', { kind: 'notes', title: 'x', key: NK, ids: [id, other] }), /bad/, 'more than its note');
+  await assert.rejects(scoped('create', { kind: 'look', title: 'x' }), /bad/, 'not a Look');
+  await assert.rejects(d.send('create', { kind: 'notes', title: 'x', key: NK, ids: [id], scope: { key: NK, note: '' } }), /bad/, 'the account view shares nothing');
+  assert.ok((await scoped('link', { sid, edit: true })).link);
 });

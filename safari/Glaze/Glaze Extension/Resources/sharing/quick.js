@@ -1,16 +1,25 @@
 // The Notes share panel: an extension frame that features/notes.js puts inside its Notes view. Invite links and keys
 // stay in this frame and the worker; the school page around it cannot read them, and nothing here is posted to it.
-// Cross-origin frames get no confirm dialogs, so questions are asked inline. ?key= is the Notes account, ?note= the open note.
+// Cross-origin frames get no confirm dialogs, so questions are asked inline. ?t= is the one-use ticket notes.js got for
+// this panel; the worker answers it with the one Notes account and note it may show (state.scope), and nothing else.
 (() => {
   GZ_I18N.page();
   const t = (k, v) => GZ_I18N.t(k, v, GZ_I18N.ui());
   const $ = (s) => document.querySelector(s);
-  const human = (e) => e.isTrusted && (navigator.userActivation?.isActive ?? true);
+  // A click counts only on a control that has been on screen for half a second, and, where the browser can tell
+  // (IntersectionObserver v2), unobscured and not faded or moved by the page around the frame: a page cannot slip the
+  // panel under a pointer and borrow the click.
+  const shown = new WeakMap();
+  let watcher = null;
+  try {
+    watcher = new IntersectionObserver((entries) => { for (const e of entries) shown.set(e.target, (e.isVisible ?? e.isIntersecting) ? shown.get(e.target) || Date.now() : 0); },
+      { threshold: 1, trackVisibility: true, delay: 100 });
+  } catch { /* no observer: no page around to hide it either */ }
+  const watch = (el) => { watcher?.observe(el); return el; };
+  const human = (e) => e.isTrusted && (navigator.userActivation?.isActive ?? true)
+    && (!watcher || (shown.get(e.currentTarget) > 0 && Date.now() - shown.get(e.currentTarget) >= 500));
   const make = (tag, text, props = {}) => Object.assign(document.createElement(tag), { ...(text === undefined ? {} : { textContent: text }), ...props });
-  const query = new URLSearchParams(location.search);
-  const key = /^notesIdx:https?:\/\/[a-z\d.-]+(?::\d+)?\/(\d{1,20}|_\d{1,20}_\d{1,20})$/i.test(query.get('key') || '') ? query.get('key') : '';
-  const note = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(query.get('note') || '') ? query.get('note') : '';
-  let state, busy = false, dead = false;
+  let state, busy = false, dead = false, key = '', note = '';
 
   const LOOK_KEYS = ['look', 'colors', 'auto', 'presets'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)');
@@ -53,7 +62,7 @@
   };
   const button = (label, f, cls = '') => {
     const b = make('button', t(label), { type: 'button', className: cls });
-    b.addEventListener('click', (e) => { if (human(e)) f(e); }); return b;
+    b.addEventListener('click', (e) => { if (human(e)) f(e); }); return watch(b);
   };
   // A question answered with a real click in this frame; that click is also what a permission prompt needs.
   let answer = null;
@@ -108,7 +117,8 @@
       return li;
     }));
   };
-  const load = async () => { state = await send('list'); if (!dead) render(); };
+  const load = async () => { state = await send('list'); ({ key = '', note = '' } = state.scope || {}); if (!dead) render(); };
+  for (const b of document.querySelectorAll('button')) watch(b);
 
   $('#resume').addEventListener('click', (e) => {
     if (!human(e) || busy || !state) return;
@@ -140,8 +150,7 @@
     const p = permission([server]);
     act(async () => {
       if (!await p) return say('Host permission was not granted. No connection was made.', undefined, true);
-      const { sid } = await send('join', { link, confirmServer: server, name: $('#name').value || state.name });
-      const joined = (await send('list')).sessions.find((s) => s.sid === sid);
+      const joined = await send('join', { link, confirmServer: server, name: $('#name').value || state.name }), sid = joined.sid;
       if (joined?.kind === 'notes') { await send('attach', { sid, key }); say('Joined. The shared notes are in a folder named “{title}”.', { title: joined.title }); }
       else if (joined?.kind) say('Joined. That invite is not for notes; open All sharing settings to use it.');
       else say('Joined, but the relay could not be reached yet. Add it to Notes from All sharing settings once it connects.', undefined, true);
@@ -154,6 +163,5 @@
   catch { say('Could not finish. Your local copies are kept. Try again.', undefined, true); }
   addEventListener('pagehide', () => { dead = true; lookRevision++; clearTimeout(lookTimer); $('#invite').value = ''; port?.disconnect(); });
   addEventListener('online', () => { if (!dead) { port?.postMessage({ online: true }); load().catch(() => {}); } });
-  if (!key) say('Open this from Notes.', undefined, true);
-  else load().catch(() => say('Could not finish. Your local copies are kept. Try again.', undefined, true));
+  load().then(() => { if (!key) say('Open this from Notes.', undefined, true); }, () => say('Open this from Notes.', undefined, true));
 })();

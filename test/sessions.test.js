@@ -299,21 +299,21 @@ test('session worker accepts only exact extension pages; an LMS or another exten
   assert.equal((await send('exportKeys', SETTINGS, 'glaze', { origin: 'chrome-extension://glaze' }, { payload: 'x'.repeat(33 << 20) })).error, 'sender');
   // The Notes share panel: only as a subframe of the extension's own origin, and never for keys, backups or the relay setting.
   for (const op of ['exportKeys', 'importKeys', 'backupNotes', 'notesRead', 'relaySave', 'relayTest', 'pause', 'useLook']) assert.equal((await send(op, QUICK, 'glaze', { frameId: 3, origin: 'chrome-extension://glaze' })).error, 'sender', op);
-  for (const extra of [{ frameId: 0, origin: 'chrome-extension://glaze' }, { frameId: 3, origin: 'https://school.instructure.com' }, { frameId: 3 }]) assert.equal((await send('list', QUICK, 'glaze', extra)).error, 'sender');
+  for (const extra of [{ frameId: 0, origin: 'chrome-extension://glaze' }, { frameId: 3, origin: 'https://school.instructure.com' }, { frameId: 3 }]) assert.equal((await send('list', QUICK, 'glaze', extra)).error, 'sender', JSON.stringify(extra));
   assert.ok(!imported.includes('sharing.js'), 'refused callers do not even load the crypto dependency');
 });
 
 test('E1 Settings is the session caller in its exact top frame; the Notes panel frame gets quick operations only', async () => {
-  const listeners = [], handled = [], area = localArea();
+  const scopes = [], listeners = [], handled = [], area = localArea();
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
-    GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(m.op); return { ok: true }; } }) },
+    GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(m.op); scopes.push(m.scope); return { ok: true }; } }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
   const editor = { id: 'glaze', url: 'chrome-extension://glaze/options.html#sharing/relay', origin: 'chrome-extension://glaze', frameId: 0 };
-  const send = (op, sender = editor) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op, server: 'http://127.0.0.1:8787' }, sender, resolve) === true) return; });
+  const send = (op, sender = editor, rest = {}) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op, server: 'http://127.0.0.1:8787', ...rest }, sender, resolve) === true) return; });
   for (const sender of [{ ...editor, frameId: 1 }, { ...editor, origin: 'https://school.instructure.com' }, { ...editor, id: 'other' },
     { ...editor, url: 'chrome-extension://glaze/preview.html' }, { ...editor, url: 'https://school.instructure.com/options.html' },
     { ...editor, url: 'chrome-extension://glaze/options.html.evil' }, { ...editor, url: 'chrome-extension://other/options.html' }]) {
@@ -324,8 +324,26 @@ test('E1 Settings is the session caller in its exact top frame; the Notes panel 
   // Settings owns every session operation now that Share sessions is a Settings tab.
   for (const op of ['relaySave', 'relayTest', 'list', 'create']) assert.equal((await send(op)).ok, true);
   assert.deepEqual(handled, ['relaySave', 'relayTest', 'list', 'create']);
-  const quick = { id: 'glaze', url: 'chrome-extension://glaze/sharing/quick.html?key=x', origin: 'chrome-extension://glaze', frameId: 4, tab: { id: 9 } };
-  assert.equal((await send('list', quick)).ok, true); assert.equal((await send('relaySave', quick)).error, 'sender');
+  // The Notes panel: a one-use ticket that a known LMS top frame asks for, for a Notes account on its own site, claimed by
+  // the first panel frame in that tab; the worker scopes every call to that account and note.
+  const lms = { id: 'glaze', url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com', frameId: 0, tab: { id: 9, url: 'https://school.instructure.com/courses/1' } };
+  const ask = (m, sender) => new Promise((resolve) => { for (const f of listeners) if (f(m, sender, resolve) === true) return; resolve({ ok: false, error: 'unhandled' }); });
+  const NKEY = 'notesIdx:https://school.instructure.com/5', NOTE = '11111111-1111-4111-8111-111111111111';
+  assert.equal((await ask({ type: 'glaze:quick-ticket', key: 'notesIdx:https://elsewhere.example.edu/5', note: '' }, lms)).ok, false, 'only an account on the asking site');
+  assert.equal((await ask({ type: 'glaze:quick-ticket', key: NKEY, note: '' }, { ...lms, frameId: 2 })).ok, false, 'only a top frame');
+  assert.equal((await ask({ type: 'glaze:quick-ticket', key: NKEY, note: '' }, { ...editor })).ok, false, 'not from an extension page');
+  const { ticket } = await ask({ type: 'glaze:quick-ticket', key: NKEY, note: NOTE }, lms);
+  assert.match(ticket, /^[0-9a-f]{32}$/);
+  const quick = { id: 'glaze', url: `chrome-extension://glaze/sharing/quick.html?t=${ticket}`, origin: 'chrome-extension://glaze', frameId: 4, documentId: 'doc1', tab: { id: 9 } };
+  assert.equal((await send('list', { ...quick, url: 'chrome-extension://glaze/sharing/quick.html?key=' + NKEY })).error, 'sender', 'no ticket');
+  assert.equal((await send('list', { ...quick, tab: { id: 10 } })).error, 'sender', 'another tab');
+  assert.equal((await send('list', { ...quick, frameId: 0 })).error, 'sender', 'the panel is never a top frame');
+  assert.equal((await send('list', quick, { scope: { key: 'forged' } })).ok, true, 'claimed by the first frame');
+  assert.deepEqual(JSON.parse(JSON.stringify(scopes.at(-1))), { key: NKEY, note: NOTE }, 'the worker sets the scope; a sent one is dropped');
+  assert.equal((await send('list', { ...quick, documentId: 'doc2' })).error, 'sender', 'a second frame with the same ticket');
+  assert.equal((await send('relaySave', quick)).error, 'sender');
+  assert.equal((await send('list', editor, { scope: { key: NKEY } })).ok, true);
+  assert.equal(scopes.at(-1), undefined, 'Settings is never scoped, and cannot be scoped by a sent value');
 });
 
 test('E1 synced relay changes refresh an open Sharing tab without scheduling network work', async () => {
