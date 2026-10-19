@@ -69,6 +69,10 @@ html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter:
 .gz-ctabs-retry p { margin: 0 0 12px; }
 .gz-ctabs-retry button { font: inherit; margin-inline-end: 8px; padding: 6px 12px; cursor: pointer; }
 html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
+/* A Canvas course loading behind the page on screen (features/coursetabs.js reveal): a light sweeping along its tab. */
+#gz-ctabs .gz-ctab[data-loading]::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, transparent, var(--gz-course, var(--gz-accent)), transparent) 0 0 / 40% 100% no-repeat; animation: gz-ctab-load 0.9s linear infinite; }
+@keyframes gz-ctab-load { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+html[data-gz-motion="off"] #gz-ctabs .gz-ctab[data-loading]::before { animation: none; background: var(--gz-course, var(--gz-accent)); opacity: 0.5; }
 html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
 /* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
 html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }

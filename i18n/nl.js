@@ -1566,6 +1566,7 @@
   "Course tabs": "Cursustabbladen",
   "On Canvas and Blackboard Ultra, each course you open gets a tab. Pick a tab to return to its live page, including an open test or assignment. Up to four extra course pages stay live; edited pages stay until you close them.": "In Canvas en Blackboard Ultra krijgt elke cursus die je opent een tabblad. Kies een tabblad om terug te keren naar de actieve pagina, inclusief een open toets of opdracht. Maximaal vier extra cursuspagina’s blijven actief; bewerkte pagina’s blijven totdat je ze sluit.",
   "Close a course tab before opening another to keep your unsaved work.": "Sluit een cursustabblad voordat je een ander opent om je niet-opgeslagen werk te behouden.",
+  "{name} has unsaved work, so it stays where it was.": "{name} heeft niet-opgeslagen werk en blijft daarom waar het was.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Zet een tabblad vast om het te houden, sleep tabbladen in de gewenste volgorde, sluit er een met het × of de middelste muisknop. Met het toetsenbord: de pijltjestoetsen gaan van tabblad naar tabblad, Delete sluit er een, P zet het vast, en Shift met een pijltjestoets verplaatst het.",
   "Above the course's bar": "Boven de cursusbalk",
   "Between its rows": "Tussen de rijen",

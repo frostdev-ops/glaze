@@ -1566,6 +1566,7 @@
   "Course tabs": "Kurs-Tabs",
   "On Canvas and Blackboard Ultra, each course you open gets a tab. Pick a tab to return to its live page, including an open test or assignment. Up to four extra course pages stay live; edited pages stay until you close them.": "In Canvas und Blackboard Ultra bekommt jeder geöffnete Kurs einen Tab. Wähle einen Tab, um zu seiner laufenden Seite zurückzukehren, auch zu einem offenen Test oder einer Aufgabe. Bis zu vier weitere Kursseiten bleiben geöffnet; bearbeitete Seiten bleiben, bis du sie schließt.",
   "Close a course tab before opening another to keep your unsaved work.": "Schließe einen Kurs-Tab, bevor du einen weiteren öffnest, um deine ungespeicherte Arbeit zu behalten.",
+  "{name} has unsaved work, so it stays where it was.": "{name} hat ungespeicherte Arbeit und bleibt deshalb, wo es war.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Hefte einen Tab an, um ihn zu behalten, ziehe Tabs in die gewünschte Reihenfolge, schließe einen mit seinem × oder der mittleren Maustaste. Mit der Tastatur: Die Pfeiltasten wechseln zwischen Tabs, Entf schließt einen, P heftet ihn an, und Umschalt mit einer Pfeiltaste verschiebt ihn.",
   "Above the course's bar": "Über der Kursleiste",
   "Between its rows": "Zwischen ihren Zeilen",
