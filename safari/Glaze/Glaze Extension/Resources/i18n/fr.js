@@ -2829,4 +2829,8 @@
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Seulement dans la navigation demande la navigation Glaze avec ses onglets de cours activés. Sans eux, les onglets se placent au-dessus de la barre du cours.",
   "That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab.": "Cette page ne peut pas s’ouvrir dans un onglet de cours, le cours est donc revenu. Ouvrez son lien avec Ctrl ou Cmd pour la voir dans un nouvel onglet.",
   "This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.": "Cette partie de Glaze contient vos clés, vos sauvegardes et les autorisations des mods ; elle s’ouvre donc dans un onglet à part, hors de portée des sites web.",
+  "Couldn't load this. Try again in a moment.": "Impossible de charger ceci. Réessayez dans un instant.",
+  "Nothing here yet.": "Rien ici pour l’instant.",
+  "The course's menu in the navigation": "Le menu du cours dans la navigation",
+  "On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.": "Sur Canvas et Moodle, les pages d’un cours (Accueil, Modules, Notes…) figurent dans la navigation, sous le nom du cours, au lieu d’un menu à côté de la page. Avec une barre en haut, elles forment une deuxième ligne en dessous.",
 };

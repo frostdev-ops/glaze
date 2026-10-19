@@ -2829,4 +2829,8 @@
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Alleen in de navigatie vraagt om Glaze-navigatie met cursustabbladen aan. Zonder die staan de tabbladen boven de balk van de cursus.",
   "That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab.": "Die pagina kan niet in een cursustabblad openen, dus de cursus is terug. Open de link met Ctrl of Cmd om hem in een nieuw tabblad te zien.",
   "This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.": "Dit deel van Glaze bevat je sleutels, back-ups en de rechten van mods, dus het opent in een eigen tabblad, waar geen website erbij kan.",
+  "Couldn't load this. Try again in a moment.": "Dit kon niet worden geladen. Probeer het zo opnieuw.",
+  "Nothing here yet.": "Hier staat nog niets.",
+  "The course's menu in the navigation": "Het menu van de cursus in de navigatie",
+  "On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.": "Op Canvas en Moodle staan de eigen pagina’s van een cursus (Start, Modules, Cijfers…) in de navigatie, onder de naam van de cursus, in plaats van in een menu naast de pagina. Met een bovenbalk vormen ze een tweede rij eronder.",
 };

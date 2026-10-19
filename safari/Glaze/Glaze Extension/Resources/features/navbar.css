@@ -210,6 +210,54 @@ a { color: inherit; text-decoration: none; }
 
 /* ---- mobile: the bottom bar, the More sheet ---- */
 .tabs, .sheet { display: none; }
+/* ---- inside a course: its own menu, in the rail (a group under its name) or a second row under the top bar ---- */
+.cm-name { display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-name::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 3px; background: var(--c, var(--gz-accent, #17c8f4)); }
+.rail:not([data-open]) .cm-name { color: transparent; padding-inline: 0; justify-content: center; }
+.tsub {
+  position: fixed; z-index: 1; inset-inline: calc(var(--gutter) + 12px); top: calc(var(--gutter) + 56px); height: 40px; display: flex; align-items: center; gap: 4px;
+  padding: 0 8px; overflow: hidden; background: var(--nb-bg); border: 1px solid var(--nb-line); border-top: 0; border-radius: 0 0 14px 14px;
+  backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+.tsub[hidden] { display: none; }
+:host([data-style="embed"]) .tsub { inset-inline: 0; border-radius: 0; border-width: 0 0 1px; }
+.tsub .cm-name { flex: none; max-width: 22%; padding: 0 10px 0 4px; }
+.tsub .item { flex: none; width: auto; height: 32px; gap: 6px; padding: 0 10px; font-size: 13px; }
+.tsub .item svg { width: 17px; height: 17px; }
+.tsub .item .label { opacity: 1; transform: none; }
+.tsub .item[aria-current="page"] { background: var(--nb-active); }
+
+/* ---- a site's own menus as Glaze's panels ---- */
+.panel {
+  position: fixed; z-index: 3; display: flex; flex-direction: column; width: 320px; max-height: calc(100vh - 24px); padding: 8px; border-radius: 18px;
+  background: var(--gz-surface, #121d2f); border: 1px solid var(--nb-line); box-shadow: 0 18px 50px rgb(0 0 0 / 0.4); color: var(--gz-ink, #e8eef8);
+  animation: gz-nb-panel 180ms var(--ease) both;
+}
+.panel[hidden] { display: none; }
+@keyframes gz-nb-panel { from { opacity: 0; transform: translateX(-6px); } }
+:host([dir="rtl"]) .panel { animation-name: gz-nb-panel-rtl; }
+@keyframes gz-nb-panel-rtl { from { opacity: 0; transform: translateX(6px); } }
+:host([data-place="top"]) .panel { max-height: min(70vh, 560px); animation-name: gz-nb-panel-down; }
+@keyframes gz-nb-panel-down { from { opacity: 0; transform: translateY(-6px); } }
+.panel header { display: flex; align-items: center; gap: 8px; padding: 6px 6px 8px 10px; }
+.panel h2 { flex: 1; margin: 0; font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel .close { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: var(--gz-ink-muted, #a9b8cf); }
+.panel .close:hover { background: var(--nb-hover); }
+.panel .close svg { width: 18px; height: 18px; }
+.panel .find { margin: 0 4px 6px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--nb-line); background: var(--nb-hover); color: inherit; font: inherit; font-size: 14px; }
+.panel .body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; }
+.panel .foot { display: flex; flex-direction: column; gap: 2px; padding-top: 6px; margin-top: 6px; border-top: 1px solid var(--nb-line); }
+.panel .row { height: auto; min-height: 44px; padding: 6px 12px; gap: 12px; border-radius: 10px; font-size: 14px; }
+.panel .row[hidden] { display: none; }
+.panel .row .text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.panel .row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel .row small { font-size: 12px; font-weight: 500; color: var(--gz-ink-muted, #8fa8c0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel .row svg { flex: none; width: 18px; height: 18px; }
+.panel .group-label { padding: 10px 12px 4px; }
+.panel .note { margin: 8px 12px; font-size: 14px; color: var(--gz-ink-muted, #8fa8c0); }
+.panel[data-phone] { inset: auto 8px calc(84px + env(safe-area-inset-bottom, 0px)) 8px; width: auto; max-height: 70vh; animation-name: gz-nb-panel-up; }
+@keyframes gz-nb-panel-up { from { opacity: 0; transform: translateY(8px); } }
+
 @media (max-width: 899.98px) {
   .rail, .tip, .topbar, .menu, :host([data-place="top"]) :is(.topbar, .menu:not([hidden])) { display: none; }
   :host([data-place="top"]) .tabs { display: flex; }
@@ -255,4 +303,5 @@ a { color: inherit; text-decoration: none; }
 
 /* ---- motion: off, and the student's reduced motion ---- */
 :host([data-motion="off"]) *, :host([data-motion="off"]) *::before { transition: none !important; }
-@media (prefers-reduced-motion: reduce) { * , *::before { transition-duration: 1ms !important; transition-delay: 0ms !important; } }
+:host([data-motion="off"]) .panel { animation: none; }
+@media (prefers-reduced-motion: reduce) { * , *::before { transition-duration: 1ms !important; transition-delay: 0ms !important; } .panel { animation: none; } }

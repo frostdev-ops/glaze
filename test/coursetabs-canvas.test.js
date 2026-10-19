@@ -144,3 +144,30 @@ test('with a course frame running, Canvas course links open in their course\'s f
   assert.deepEqual(frame.click('/courses/13/pages/notes'), [true, true]);
   assert.deepEqual(frame.sent, [['open', '/courses/13/pages/notes']], 'another course goes to the page around it');
 });
+
+test('the navigation bar reads the shown course frame and opens addresses in it, else on the page', () => {
+  const run = (site, showing, frames) => {
+    const calls = [];
+    const bar = vm.runInNewContext(part('  const bar = {', '  return { sync') + '\nbar;', {
+      L, on: true, framed: '', signedOut: false, showing, frames, location: { origin }, URL, ctx: { site }, tabs: [],
+      openAt: (cid, url) => calls.push(['frame', cid, url]), show: (c) => calls.push(['show', c]), route: (u) => calls.push(['page', u]),
+      rowsOf: () => [], visit() {}, shut() {}, pinTab() {}, moveTab() {}, flag() {}, place() {},
+    });
+    return { bar, calls };
+  };
+  const doc = { location: { origin } }, assigned = [];
+  const frame = { el: { contentDocument: doc, contentWindow: { location: { assign: (u) => assigned.push(u) } } } };
+  let { bar, calls } = run('canvas', '12', new Map([['12', frame]]));
+  assert.equal(bar.doc(), doc);
+  bar.open('/courses/13/modules?x=1'); bar.open(`${origin}/courses/12/grades`); bar.open('/calendar#today'); bar.open('https://evil.test/courses/12');
+  assert.deepEqual(calls, [['frame', '13', '/courses/13/modules?x=1'], ['frame', '12', '/courses/12/grades'], ['show', ''], ['page', '/calendar#today']]);
+  ({ bar, calls } = run('canvas', '', new Map()));
+  assert.equal(bar.doc(), null, 'no frame on screen: no document');
+  bar.open('/courses/13/modules');
+  assert.deepEqual(calls, [['page', '/courses/13/modules']], 'no frame on screen: the page goes there');
+  ({ bar, calls } = run('ultra', '_2_1', new Map([['_2_1', frame]])));
+  bar.open('/ultra/courses/_2_1/grades');
+  assert.deepEqual(assigned, [`${origin}/ultra/courses/_2_1/grades`], "Ultra: the shown course's own page in its frame");
+  bar.open('/ultra/courses/_3_1/outline');
+  assert.deepEqual(calls, [['show', ''], ['page', '/ultra/courses/_3_1/outline']]);
+});
