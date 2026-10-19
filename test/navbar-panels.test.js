@@ -80,7 +80,7 @@ const urls = () => between(source.includes('  const safeHref =') ? '  const safe
 test('course menus keep all native pages, including courses with more than 24 links', () => {
   const items = Array.from({ length: 30 }, (_, i) => ({ label: `Page ${i}`, href: `/courses/12/pages/${i}` }));
   items[0].tab = true;
-  const read = vm.runInNewContext(urls() + between('  const readMenu =', '  // ---- drawing') + '\nreadMenu;', { PAGE: 'page', keepPage() {},
+  const read = vm.runInNewContext(urls() + between('  const readMenu =', '  // ---- drawing') + '\nreadMenu;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     URL, location, isPreview: false, M, settings: () => ({}), inCourse: () => true,
     site: { menu: () => ({ items }) }, tabsApi: () => null, document: {},
   });
@@ -90,7 +90,7 @@ test('course menus keep all native pages, including courses with more than 24 li
 
 test('course menu destinations reject blob and credential URLs', () => {
   const items = ['blob:https://school.test/id', 'https://user:pass@school.test/courses/12', '/courses/12/modules'].map((href) => ({ label: 'Page', href }));
-  const read = vm.runInNewContext(urls() + between('  const readMenu =', '  // ---- drawing') + '\nreadMenu;', { PAGE: 'page', keepPage() {},
+  const read = vm.runInNewContext(urls() + between('  const readMenu =', '  // ---- drawing') + '\nreadMenu;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     URL, location, isPreview: false, M, settings: () => ({}), inCourse: () => true,
     site: { menu: () => ({ items }) }, tabsApi: () => null, document: {},
   });
@@ -99,7 +99,7 @@ test('course menu destinations reject blob and credential URLs', () => {
 
 test('panel and course links navigate when the course-tab controller declines them', () => {
   const assigned = [];
-  const open = vm.runInNewContext(between('  const openHere =', '  const sameSite =') + '\nopenHere;', { PAGE: 'page', keepPage() {},
+  const open = vm.runInNewContext(between('  const openHere =', '  const sameSite =') + '\nopenHere;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     tabsApi: () => ({ open: () => false }), location: { assign: (href) => assigned.push(href) },
   });
   open('/profile');
@@ -108,7 +108,7 @@ test('panel and course links navigate when the course-tab controller declines th
 
 test('inactive course tabs explicitly decline navigation', () => {
   const src = fs.readFileSync(require.resolve('../features/coursetabs.js'), 'utf8');
-  const open = vm.runInNewContext('({' + src.slice(src.lastIndexOf('    open: (href) => {'), src.indexOf('\n  };', src.lastIndexOf('    open: (href) => {'))) + '\n}).open;', { PAGE: 'page', keepPage() {},
+  const open = vm.runInNewContext('({' + src.slice(src.lastIndexOf('    open: (href) => {'), src.indexOf('\n  };', src.lastIndexOf('    open: (href) => {'))) + '\n}).open;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     URL, location, on: false, framed: false,
   });
   assert.equal(open('/profile'), false);
@@ -119,7 +119,7 @@ test('a delayed panel response preserves focus after the user tabs into page con
   const close = { focus: () => focused++ }, outside = {};
   const root = { activeElement: close, querySelectorAll: () => [] };
   const el = { panel: { hidden: true, replaceChildren() {}, querySelector: () => close, contains: (e) => e === close } };
-  const open = vm.runInNewContext(between('  const panelTo =', '  const outsidePanel =') + '\npanelTo;', { PAGE: 'page', keepPage() {},
+  const open = vm.runInNewContext(between('  const panelTo =', '  const outsidePanel =') + '\npanelTo;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     host: {}, panel: '', panelTurn: 0, panelFrom: null, panels: new Map(), root, el,
     site: { panel: () => new Promise((r) => { resolve = r; }) },
     drawPanel() {}, menuTo() {}, sheetTo() {}, placePanel() {}, emit() {}, outsidePanel() {},
@@ -138,7 +138,7 @@ test('a settled Canvas frame refreshes the shared course menu after navigation',
   let now = 0, next, synced = 0;
   const doc = { body: {}, location: { origin: location.origin, pathname: '/courses/12/modules' }, querySelector: () => ({}), documentElement: { matches: () => false }, addEventListener() {} };
   const f = { el: { contentDocument: doc, style: {} } };
-  const watch = vm.runInNewContext(src.slice(src.indexOf('  const watch = (cid, f)'), src.indexOf('  const open = (cid, url)')) + '\nwatch;', { PAGE: 'page', keepPage() {},
+  const watch = vm.runInNewContext(src.slice(src.indexOf('  const watch = (cid, f)'), src.indexOf('  const open = (cid, url)')) + '\nwatch;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     performance: { now: () => now }, frames: new Map([['12', f]]), ctx: { site: 'canvas' }, location,
     L: { owns: () => true }, shown: () => true, loading: () => false,
     MutationObserver: class { observe() {} disconnect() {} }, setTimeout: (fn) => { next = fn; },
@@ -157,7 +157,7 @@ test('shared panel rendering drops malformed rows and unsafe URLs before drawing
     setAttribute() {}, addEventListener() {},
   });
   const panel = make('div');
-  const draw = vm.runInNewContext(urls() + between('  const panelRow =', '  const panelTo =') + '\ndrawPanel;', { PAGE: 'page', keepPage() {},
+  const draw = vm.runInNewContext(urls() + between('  const panelRow =', '  const panelTo =') + '\ndrawPanel;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     URL, location, isPreview: false, M, make, put: (e, ...kids) => { e.append(...kids); return e; }, part: (e) => e, icon: () => make('svg'), badge: () => make('b'), mark: () => 'AB',
     byId: () => ({ label: 'Courses' }), t: (s) => s, el: { panel }, site: {},
   });

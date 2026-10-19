@@ -25,7 +25,13 @@ test('scripted Canvas navigation leaves the page frame intact and asks its owner
     assert.equal(p.bar.open(href), true, `${framed}: the caller must not replace its own document`);
     assert.deepEqual(p.calls, [['open', href]]);
   }
-  for (const [framed, href] of [['page', '/calendar'], ['12', '/courses/12/modules'], ['page', '/courses/12#unit'], ['12', '/logout'], ['12', '/api/v1/courses'], ['page', '/courses/12/files/8/download']]) {
+  // Its own pages: turned to by its owner, which keeps this one live.
+  for (const [framed, href] of [['page', '/calendar'], ['12', '/courses/12/modules']]) {
+    const p = navigation({ framed });
+    assert.equal(p.bar.open(href), true);
+    assert.deepEqual(p.calls, [['go', href]]);
+  }
+  for (const [framed, href] of [['page', '/courses/12#unit'], ['12', '/logout'], ['12', '/api/v1/courses'], ['page', '/courses/12/files/8/download']]) {
     const p = navigation({ framed });
     assert.equal(p.bar.open(href), false, `${href} keeps native navigation in the frame`);
     assert.deepEqual(p.calls, []);
@@ -93,7 +99,7 @@ function pages({ saved = new Map(), shooting = null } = {}) {
     contentWindow: { location: { assign() {} }, postMessage() {} }, addEventListener() {},
     focus() { document.activeElement = this; focused.push(this.name); }, remove() {},
   }) };
-  const c = vm.createContext({ L, PAGE: 'page', LIVE: 4, frames, host, document, shooting, showTurn: 0, showing: '', shownFrom: '',
+  const c = vm.createContext({ L, PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, LIVE: 4, frames, host, document, shooting, showTurn: 0, showing: '', shownFrom: '',
     on: true, signedOut: false, framed: '', preview: false, closedCourse: '', tabs: [{ cid: '12' }], who: '42', loaded: true, last: undefined,
     ctx: { site: 'canvas', courseId: () => '5', me: async () => '42', scene() {} }, location: { origin, pathname: '/courses/5', search: '' },
     performance: { now: () => now }, MutationObserver: class { observe() {} disconnect() {} },
@@ -204,7 +210,7 @@ test('the page frame copies and clears navbar room without adding a polling loop
 
 test('page-frame passes retain outside pages and report a course navigation once', () => {
   const sent = [], moves = [];
-  const c = vm.createContext({ on: true, framed: 'page', PAGE: 'page', preview: false, showing: '', loaded: true,
+  const c = vm.createContext({ on: true, framed: 'page', PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, preview: false, showing: '', loaded: true,
     last: '', lastPath: '/', awayFrom: '', location: { pathname: '/', search: '' }, here: () => '',
     observeView() {}, flag() {}, place() {}, draw() {}, lay() {}, moved: () => moves.push('moved'), toTop: (op, m) => sent.push([op, m.url]),
   });
@@ -218,7 +224,7 @@ test('page-frame passes retain outside pages and report a course navigation once
 test('Canvas navigation messages require the visible owned frame and validate non-course URLs', () => {
   for (const from of ['page', '12']) {
     const own = {}, calls = [], f = { el: { contentWindow: own } }; let listener;
-    const c = vm.createContext({ L, PAGE: 'page', ctx: { site: 'canvas' }, framed: '', preview: false, on: true, showing: from,
+    const c = vm.createContext({ L, PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, ctx: { site: 'canvas' }, framed: '', preview: false, on: true, showing: from,
       location: { origin }, frames: new Map([[from, f]]), addEventListener: (event, fn) => { listener = fn; },
       split: (url) => { const i = url.indexOf('?'); return i < 0 ? [url, ''] : [url.slice(0, i), url.slice(i + 1)]; },
       pageable: (path) => !/^\/(?:login|logout|api)(?:\/|$)/.test(path),
@@ -247,7 +253,7 @@ test('a page URL that redirects off-site cannot repeatedly reload its own redire
     set src(url) { srcs.push(url); }, remove() { this.removed = true; },
   };
   const frames = new Map([['12', {}]]);
-  const c = vm.createContext({ PAGE: 'page', frames, tabs: [], location: { origin }, document: { createElement: () => el },
+  const c = vm.createContext({ PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, frames, tabs: [], location: { origin }, document: { createElement: () => el },
     showing: 'page', waiting: '', showTurn: 0, host: { prepend() {} }, watch() {}, t: (s) => s,
     show: (cid) => shown.push(cid), wait() {}, say: (s) => notices.push(s),
   });
@@ -268,7 +274,7 @@ test('course frames still recover to their course root after an off-site load on
       addEventListener: (event, fn) => { load = fn; }, set src(url) { srcs.push(url); },
     };
     const open = vm.runInNewContext(part('  const open = ', '  // The picture over a frame') + '\nopen;', {
-      L, PAGE: 'page', tabs: [{ cid }], location: { origin }, document: { createElement: () => el }, frames,
+      L, PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, tabs: [{ cid }], location: { origin }, document: { createElement: () => el }, frames,
       showing: cid, waiting: '', host: { prepend() {} }, watch() {}, say() {}, t: (s) => s,
     });
     open(cid, L.homeOf(cid) + '?view=1'); load();

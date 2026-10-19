@@ -88,7 +88,7 @@ test('closing the surrounding Canvas course preserves another course’s edited 
 test('Canvas frame commands require an owned same-origin frame and numeric IDs', () => {
   let listen; const mine = {}, actions = [];
   vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  if (framed && !preview) {'), {
-    L, ctx: { site: 'canvas' }, framed: '', preview: false, on: true, location: { origin },
+    L, ctx: { site: 'canvas' }, framed: '', preview: false, on: true, location: { origin }, spare: new Map(), next: new Map(),
     addEventListener: (event, fn) => { listen = fn; }, frames: new Map([['12', { el: { contentWindow: mine } }]]),
     visit: (cid) => actions.push(cid),
   });
@@ -116,11 +116,11 @@ test('Ultra’s provisional sheets keep their order in the shared core’s compl
   assert.deepEqual(Array.from(sheets.slice(0, early.length)), Array.from(early), 'connected early sheets are reused by index and must not displace the course-tab stylesheet');
 });
 
-test('with a course frame running, Canvas links open in a frame instead of reloading the page; course links do from a page outside a course', () => {
-  const run = (framed, frameCount, here = '') => {
+test('Canvas links open in a frame instead of reloading the page; in a frame, its own pages are turned to by the page around', () => {
+  const run = (framed, frameCount, here = '', at = '/courses/5') => {
     const opened = [], pages = [], sent = [];
     const toFrame = vm.runInNewContext(part('  const toFrame = ', '  // A course page in its course') + '\ntoFrame;', {
-      L, framed, PAGE: 'page', here: () => here, frames: { size: frameCount }, location: { origin }, openAt: (cid, url) => opened.push([cid, url]), openPage: (url) => pages.push(url), toTop: (op, m) => sent.push([op, m.url]),
+      L, framed, PAGE: 'page', showing: '', here: () => here, frames: { size: frameCount }, location: { origin, pathname: at, search: '' }, openAt: (cid, url) => opened.push([cid, url]), openPage: (url) => pages.push(url), toTop: (op, m) => sent.push([op, m.url]),
     });
     const click = (href, more = {}) => {
       const u = new URL(href, origin);
@@ -141,22 +141,26 @@ test('with a course frame running, Canvas links open in a frame instead of reloa
     assert.deepEqual(page.click(href, more), [false, false], `${href} ${JSON.stringify(more)} goes as the browser takes it`);
   }
   const course = run('', 0, '5');
-  assert.deepEqual(course.click('/courses/12/modules'), [false, false], 'no frame to keep on a course page: the page loads as usual');
-  assert.deepEqual(course.click('/calendar'), [false, false]);
-  const dash = run('', 0, '');
+  assert.deepEqual(course.click('/courses/5/modules'), [true, true], 'no frame yet on a course page: its own pages open in its frame, this page stays live under it');
+  assert.deepEqual(course.click('/calendar'), [true, true]);
+  assert.deepEqual(course.click('/courses/5'), [false, false], 'this very page again reloads, as it would');
+  assert.deepEqual([course.opened, course.pages], [[['5', '/courses/5/modules']], ['/calendar']]);
+  const dash = run('', 0, '', '/');
   assert.deepEqual(dash.click('/courses/12'), [true, true], 'from the Dashboard a course opens in its frame: the Dashboard stays');
   assert.deepEqual(dash.opened, [['12', '/courses/12']]);
-  assert.deepEqual(dash.click('/calendar'), [false, false], 'with no frame yet, another page outside a course loads as usual');
-  const frame = run('12', 0);
-  assert.deepEqual(frame.click('/courses/12/modules'), [false, false], 'its own course stays in its frame');
+  assert.deepEqual(dash.click('/calendar'), [true, true], 'another page outside a course goes to the page frame');
+  const frame = run('12', 0, '12', '/courses/12/assignments');
+  assert.deepEqual(frame.click('/courses/12/modules'), [true, true], 'its own course: turned to by the page around, this page kept');
+  assert.deepEqual(frame.click('/courses/12/assignments'), [false, false], 'its own page again reloads in place');
   assert.deepEqual(frame.click('/courses/13/pages/notes'), [true, true]);
   assert.deepEqual(frame.click('/conversations'), [true, true]);
   assert.deepEqual(frame.click('/logout'), [false, false]);
-  assert.deepEqual(frame.sent, [['open', '/courses/13/pages/notes'], ['open', '/conversations']], 'another course and a page outside one go to the page around it');
-  const pageFrame = run('page', 0);
-  assert.deepEqual(pageFrame.click('/calendar'), [false, false], 'the page frame keeps its own pages');
+  assert.deepEqual(frame.sent, [['go', '/courses/12/modules'], ['open', '/courses/13/pages/notes'], ['open', '/conversations']], 'another course and a page outside one go to the page around it');
+  const pageFrame = run('page', 0, '', '/calendar');
+  assert.deepEqual(pageFrame.click('/conversations'), [true, true], 'the page frame turns to its own pages through the page around');
+  assert.deepEqual(pageFrame.click('/calendar'), [false, false]);
   assert.deepEqual(pageFrame.click('/courses/12'), [true, true]);
-  assert.deepEqual(pageFrame.sent, [['open', '/courses/12']], 'a course from the page frame goes to its own frame');
+  assert.deepEqual(pageFrame.sent, [['go', '/conversations'], ['open', '/courses/12']], 'a course from the page frame goes to its own frame');
 });
 
 test('the navigation bar reads the shown course frame and opens addresses in it, else on the page', () => {
@@ -181,7 +185,7 @@ test('the navigation bar reads the shown course frame and opens addresses in it,
   ({ bar, calls } = run('canvas', '', new Map()));
   assert.equal(bar.doc(), null, 'no frame on screen: no document');
   bar.open('/courses/13/modules');
-  assert.deepEqual(calls, [['page', '/courses/13/modules']], 'no frame on a course page: the page goes there');
+  assert.deepEqual(calls, [['frame', '13', '/courses/13/modules']], 'no frame yet, on a course page: still in a frame, this page never reloads');
   ({ bar, calls } = run('canvas', '', new Map(), ''));
   bar.open('/courses/13/modules');
   assert.deepEqual(calls, [['frame', '13', '/courses/13/modules']], 'from a page outside a course, a course opens in its frame');
