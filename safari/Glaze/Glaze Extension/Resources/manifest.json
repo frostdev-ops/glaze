@@ -173,7 +173,8 @@
     {
       "resources": [
         "sharing/quick.html",
-        "options.html"
+        "options.html",
+        "preview.html"
       ],
       "matches": [
         "https://*/*"

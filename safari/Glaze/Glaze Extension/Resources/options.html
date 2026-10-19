@@ -22,7 +22,7 @@
   .brand { display: flex; align-items: center; gap: 0.6rem; }
   /* Opened as a page of the school's site (features/settingspage.js): its own tools, and what holds keys and grants sent
      to a tab of its own. */
-  .embed-tools { display: flex; gap: .4rem; margin-inline-start: auto; }
+  .embed-tools { display: flex; gap: .4rem; }
   .embed-tools[hidden] { display: none; }
   html[data-embedded] .embed-gate { display: grid; gap: .75rem; justify-items: start; max-width: 40rem; margin: 2rem auto; padding: 1.25rem 1.5rem; border-radius: calc(var(--gz-radius, 12px) * 7 / 6);
     background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); }
@@ -31,7 +31,9 @@
   html[data-embedded] [data-editor-panel][data-gated] > :not(.embed-gate) { display: none !important; }
   html[data-embedded]:not([data-embed-ok]) body { visibility: hidden; }
   .brand img { width: 24px; height: 24px; }
-  .editor-tabs { display: flex; gap: .35rem; flex: 1 0 100%; overflow-x: auto; padding-block: .2rem; }
+  /* One row of search, status and switches; the tabs under it. */
+  .editor-tabs { display: flex; gap: .35rem; flex: 1 0 100%; order: 1; overflow-x: auto; padding-block: .2rem; }
+  .top > #hint { flex: 1 1 auto; min-width: 0; }
   .editor-tabs button { flex: none; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); font-size: 13px; }
   .editor-tabs [aria-selected="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
   .top nav a { color: var(--gz-ink-muted); text-decoration: none; font-size: 13px; padding: 0.25rem 0.6rem; border-radius: 999px; }
