@@ -34,10 +34,12 @@ test('Canvas width check accepts the same saved object with storage key order ch
 test('Ultra check removes its temporary profile even when Chrome cannot launch', async () => {
   const script = file('ultra'), req = createRequire(script), removed = [];
   const blocked = new Error('launch blocked');
+  let waited = false;
   const result = vm.runInNewContext(fs.readFileSync(script, 'utf8'), {
     __dirname: path.dirname(script), console: { log() {} },
     process: { env: {}, argv: ['node', script, '/tmp/board-check-output'] },
-    require: (id) => id === 'playwright' ? { chromium: { launchPersistentContext: async () => { throw blocked; } } }
+    require: (id) => id === './wait-for-browser.js' ? async () => { waited = true; }
+      : id === 'playwright' ? { chromium: { launchPersistentContext: async () => { assert.equal(waited, true); throw blocked; } } }
       : id === 'fs' ? { ...fs, mkdirSync() {}, mkdtempSync: () => '/tmp/board-check-profile', rmSync: (p) => removed.push(p) } : req(id),
   });
   await assert.rejects(result, (e) => e === blocked);

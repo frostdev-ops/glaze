@@ -2810,4 +2810,11 @@
   "Drag a handle to reorder, or focus it and use the arrow keys; past the end of a group, an item moves into the next one.": "Ziehe einen Griff zum Umsortieren oder fokussiere ihn und nutze die Pfeiltasten; über das Ende einer Gruppe hinaus wandert ein Eintrag in die nächste.",
   "Up to eight links.": "Bis zu acht Links.",
   "Use an http or https link and a name.": "Verwende einen http- oder https-Link und einen Namen.",
+  "Close this panel and open Share again.": "Schließe dieses Fenster und öffne Teilen erneut.",
+  "Sharing controls need visibility protection. Open Settings from Glaze to share.": "Die Steuerelemente zum Teilen benötigen einen Sichtbarkeitsschutz. Öffne zum Teilen die Einstellungen von Glaze.",
+  "Resume sharing from Settings before using this panel.": "Setze das Teilen in den Einstellungen fort, bevor du dieses Fenster verwendest.",
+  "Click this button directly to continue.": "Klicke direkt auf diese Schaltfläche, um fortzufahren.",
+  "This button must be fully visible and uncovered. Try again, or open All sharing settings.": "Diese Schaltfläche muss vollständig sichtbar und unverdeckt sein. Versuche es erneut oder öffne Alle Freigabeeinstellungen.",
+  "The sharing panel moved. Wait a moment, then click again.": "Das Freigabefenster wurde verschoben. Warte einen Moment und klicke dann erneut.",
+  "Wait a moment with this button fully visible, then click again.": "Lass diese Schaltfläche einen Moment vollständig sichtbar und klicke dann erneut.",
 };
