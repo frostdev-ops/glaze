@@ -11,7 +11,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let n = 0; n < 8; n++) await new Promise(setImmediate); };
 const page = async ({ accepted = false, granted = true, selected = G.SERVER, hosts = [] } = {}) => {
   class Element {
-    constructor() { this.children = []; this.events = {}; this.value = ''; this.hidden = false; this.classList = { toggle() {} }; }
+    constructor() { this.children = []; this.events = {}; this.value = ''; this.hidden = false; this.classList = { toggle() {}, contains: () => false }; }
     addEventListener(name, fn) { this.events[name] = fn; }
     append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; }
@@ -31,7 +31,7 @@ const page = async ({ accepted = false, granted = true, selected = G.SERVER, hos
       permissions: { contains: async ({ origins }) => { calls.push(['contains', origins]); return granted; }, request: async ({ origins }) => { calls.push(['request', origins]); return true; } },
       runtime: {
         id: 'glaze', sendMessage: async (m) => { calls.push(m.op); if (m.op === 'relaySave') state.relay = m.server; return m.op === 'list' ? structuredClone(state) : { ok: true, result: 'connected' }; },
-        connect: () => ({ onMessage: { addListener() {} }, disconnect() {}, postMessage() {} }),
+        connect: () => ({ onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() {}, postMessage() {} }),
       },
     },
   });
