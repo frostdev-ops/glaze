@@ -58,6 +58,7 @@ test('turning the bar off restores tabindex added by Skip to content', () => {
     // Mirror the browser's reflected tabindex property in this small DOM stand-in.
     Object.defineProperty(main, 'tabIndex', { set(v) { this.setAttribute('tabindex', String(v)); } });
     const context = vm.createContext({ document: doc, html, el: { skip }, host: new El('div', doc), site: { main: () => main, unobserve() {} },
+      chrome: { runtime: { id: "glaze" } }, clearLogo() {},
       enter: 0, leave: 0, frame: 0, queued: 0, sheetOpen: false, sizes: null, words: '', panels: new Map(),
       clearTimeout() {}, cancelAnimationFrame() {}, menuTo() {}, panelTo() {}, emit() {} });
     const declarations = src.slice(src.indexOf('  let cmenu ='), src.indexOf('  const panels ='));
