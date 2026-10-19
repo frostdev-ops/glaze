@@ -24,7 +24,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const wide = () => matchMedia('(min-width: 900px)').matches;
 
   let host = null, root, el = {}, model = null, sig = '', prefs = M.clean(), legacy = null, read = false;
-  let rail = null, peek = false, shown = false, sheetOpen = false, enter = 0, leave = 0, queued = false, placed = false;
+  let rail = null, applied = null, peek = false, shown = false, sheetOpen = false, enter = 0, leave = 0, queued = false, placed = false, frame = 0;
   const listeners = new Map(), mods = new Map(); // event -> Set(fn); owner -> Map(id -> item)
   const emit = (event, data) => { for (const fn of listeners.get(event) || []) { try { fn(data); } catch { /* one listener's error isn't the bar's */ } } };
   const settings = () => X.settings().navbar || {};
@@ -39,7 +39,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     root = host.attachShadow({ mode: 'open' });
     const sheet = make('link', { rel: 'stylesheet', href: chrome.runtime.getURL('features/navbar.css') });
     // Unstyled, the bar would flash as a list: it shows once its sheet is in.
-    sheet.addEventListener('load', () => { if (host && on()) { host.hidden = false; layout(); } }, { once: true });
+    const mounted = host;
+    sheet.addEventListener('load', () => { if (host === mounted && on()) { host.hidden = false; layout(); } }, { once: true });
     el.skip = part(make('a', { className: 'skip', href: '#', textContent: t('Skip to content') }), 'skip');
     el.brand = part(make('a', { className: 'brand' }), 'brand');
     el.top = make('div', { className: 'slot' }); el.top.dataset.slot = 'top';
@@ -57,12 +58,11 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.tip = make('div', { className: 'tip' }); el.tip.setAttribute('aria-hidden', 'true');
     el.pill = part(make('span', { className: 'pill', hidden: true }), 'indicator');
     el.tabs = part(make('nav', { className: 'tabs' }, el.pill), 'bar tabs');
-    el.scrim = make('div', { className: 'scrim' });
-    el.sheet = part(make('div', { className: 'sheet', role: 'dialog' }), 'sheet');
+    el.sheet = part(make('dialog', { className: 'sheet', id: 'gz-navbar-more' }), 'sheet');
     el.sheet.setAttribute('aria-modal', 'true');
     for (const n of [el.rail, el.tabs]) n.setAttribute('aria-label', t('Glaze navigation'));
     el.sheet.setAttribute('aria-label', t('More navigation'));
-    root.append(sheet, el.skip, el.rail, el.tip, el.tabs, el.scrim, el.sheet);
+    root.append(sheet, el.skip, el.rail, el.tip, el.tabs, el.sheet);
     root.addEventListener('click', click);
     root.addEventListener('keydown', key);
     el.rail.addEventListener('pointerenter', pointIn);
@@ -71,7 +71,11 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.rail.addEventListener('focusout', focusOut);
     for (const ev of ['pointerover', 'focusin']) el.rail.addEventListener(ev, tipFor);
     for (const ev of ['pointerout', 'focusout']) el.rail.addEventListener(ev, () => tip(null));
-    el.scrim.addEventListener('click', () => sheetTo(false));
+    el.sheet.addEventListener('cancel', (e) => { e.preventDefault(); sheetTo(false); });
+    el.sheet.addEventListener('click', (e) => {
+      const r = el.sheet.getBoundingClientRect();
+      if (e.target === el.sheet && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) sheetTo(false);
+    });
     (document.body || html).append(host);
     site.observe(queue);
   };
@@ -104,7 +108,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     return a;
   };
   const render = () => {
-    const focused = root.activeElement?.dataset?.id;
+    const active = root.activeElement, pane = active?.closest('.rail, .tabs, .sheet'), focused = active?.dataset?.id;
     const brand = site.brand();
     const mode = settings().brand || 'glaze';
     el.brand.hidden = mode === 'none';
@@ -147,7 +151,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       return put(e, icon(item.icon), make('span', { textContent: item.label }), b ? badge(b) : null);
     });
     el.more = part(make('button', { type: 'button', className: 'tab more' }, icon('more'), make('span', { textContent: t('More') })), 'tab more');
-    el.more.setAttribute('aria-haspopup', 'dialog'); el.more.setAttribute('aria-expanded', String(sheetOpen));
+    el.more.setAttribute('aria-haspopup', 'dialog'); el.more.setAttribute('aria-expanded', String(sheetOpen)); el.more.setAttribute('aria-controls', el.sheet.id);
     el.tabs.replaceChildren(el.pill, ...tabs, el.more);
     const row = (item) => { const b = badgeOf(item); return put(node(item, 'row', 'row'), icon(item.icon), make('span', { textContent: item.label }), b ? badge(b) : null); };
     const rows = [make('div', { className: 'handle' })];
@@ -159,7 +163,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     custom.dataset.act = 'customize';
     rows.push(custom);
     el.sheet.replaceChildren(...rows);
-    if (focused) root.querySelector(`[data-id="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    const restore = active === el.brand ? el.brand : focused ? pane?.querySelector(`[data-id="${CSS.escape(focused)}"]:not(.brand)`) : active?.classList.contains('more') ? el.more : active?.dataset.act === 'customize' ? custom : null;
+    (restore || (sheetOpen ? el.sheet.querySelector('a, button') : null))?.focus({ preventScroll: true });
     placed = false;
     layout();
   };
@@ -200,7 +205,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       el.pill.style.setProperty('--w', `${target.offsetWidth}px`);
       el.pill.style.setProperty('--x', `${rtl ? target.offsetLeft + target.offsetWidth - el.tabs.clientWidth + 6 : target.offsetLeft - 6}px`);
     }
-    if (!placed) { placed = true; requestAnimationFrame(() => { el.ind.style.transition = ''; el.pill.style.transition = ''; }); }
+    if (!placed) { placed = true; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { frame = 0; el.ind.style.transition = ''; el.pill.style.transition = ''; }); }
   };
   const tip = (target) => {
     if (!el.tip) return;
@@ -223,7 +228,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     clearTimeout(enter); enter = 0;
     leave = setTimeout(() => { leave = 0; if (!el.rail.contains(root.activeElement)) peekTo(false); }, 220);
   };
-  const focusIn = (e) => { if (!pinned() && e.target !== el.toggle && e.target !== el.pin) peekTo(true); };
+  const focusIn = (e) => { if (!pinned() && e.target !== el.toggle) peekTo(true); };
   const focusOut = (e) => { if (!el.rail.contains(e.relatedTarget)) { clearTimeout(leave); leave = setTimeout(() => { leave = 0; if (!el.rail.matches(':hover') && !el.rail.contains(root.activeElement)) peekTo(false); }, 220); } };
   // Pinning is saved for every page and tab (the worker writes it); the bar follows at once.
   const pinTo = (open) => {
@@ -231,16 +236,18 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     peekTo(false);
     // The editor's preview shows it without saving: the editor's own control saves.
     if (isPreview) { layout(); return; }
-    send({ type: 'glaze:navbar', patch: { rail } }).then((r) => { if (!r?.ok) { rail = null; layout(); } });
+    const mounted = host, choice = rail;
+    send({ type: 'glaze:navbar', patch: { rail } }).then((r) => { if (!r?.ok && host === mounted && rail === choice) { rail = null; layout(); } });
     layout();
   };
   const sheetTo = (open) => {
-    if (sheetOpen === open || !host) return;
+    if (sheetOpen === open || !host || open && wide()) return;
     sheetOpen = open;
-    el.sheet.toggleAttribute('data-open', open); el.scrim.toggleAttribute('data-open', open);
+    el.sheet.toggleAttribute('data-open', open);
+    if (open) el.sheet.showModal(); else el.sheet.close();
     el.more?.setAttribute('aria-expanded', String(open));
     emit('sheet', { open });
-    if (open) el.sheet.querySelector('a, button')?.focus({ preventScroll: true }); else if (root.activeElement && el.sheet.contains(root.activeElement)) el.more?.focus({ preventScroll: true });
+    if (open) el.sheet.querySelector('a, button')?.focus({ preventScroll: true }); else (wide() ? el.toggle : el.more)?.focus({ preventScroll: true });
   };
 
   // ---- acting ---------------------------------------------------------------------------------------------------------
@@ -272,6 +279,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (!pinned()) peekTo(false);
   };
   const key = (e) => {
+    if (sheetOpen && e.key === 'Tab') {
+      const items = [...el.sheet.querySelectorAll('a, button')], first = items[0], last = items.at(-1);
+      if (e.shiftKey && root.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && root.activeElement === last) { e.preventDefault(); first?.focus(); }
+      return;
+    }
     if (e.key === 'Escape') {
       if (sheetOpen) { e.preventDefault(); sheetTo(false); return; }
       if (peek) { e.preventDefault(); peekTo(false); el.toggle.focus({ preventScroll: true }); }
@@ -290,7 +303,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   // ---- the loop -------------------------------------------------------------------------------------------------------
   const stop = () => {
     clearTimeout(enter); clearTimeout(leave); enter = leave = 0;
+    cancelAnimationFrame(frame); frame = 0;
     if (!host) return;
+    if (sheetOpen) sheetTo(false);
     site?.unobserve();
     host.remove(); host = null; root = null; el = {}; sig = ''; model = null; peek = false; shown = false; sheetOpen = false; rail = null;
     html.style.removeProperty('--gz-navbar-space');
@@ -299,6 +314,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const sync = () => {
     if (!on()) { stop(); return; }
     if (!read) { read = true; get(['navbarItems', 'navItems']).then((r) => { prefs = M.clean(r.navbarItems); legacy = r.navItems ? N.clean(r.navItems) : null; sig = ''; sync(); }); }
+    if (applied !== settings()) { rail = null; peekTo(false); applied = settings(); }
+    if (host && !host.isConnected) stop();
     if (!host) mount();
     host.setAttribute('dir', (html.dir || document.body?.dir) === 'rtl' ? 'rtl' : 'ltr');
     host.dataset.motion = html.getAttribute('data-gz-motion') || '';
@@ -320,6 +337,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   addEventListener('resize', () => { if (host) { tip(null); if (!wide()) { peekTo(false); } else sheetTo(false); layout(); } });
   document.addEventListener('visibilitychange', () => { if (host && document.visibilityState === 'visible') queue(); });
   addEventListener('pagehide', stop);
+  addEventListener('pageshow', (e) => { if (e.persisted) queue(); });
 
   // ---- the API (mods: features/mods.js; Looks style the parts) --------------------------------------------------------
   // What a reader sees: the items, groups and state, never the elements.
@@ -335,8 +353,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const label = raw.label.replace(/[\p{Cc}\p{Bidi_Control}]/gu, ' ').replace(/\s+/g, ' ').trim();
     if (!label || [...label].length > 40) return null;
     let href = '';
-    if (raw.href !== undefined) {
-      try { const u = new URL(raw.href, location.href); if (u.protocol !== 'https:' && u.origin !== location.origin) return null; href = u.href; } catch { return null; }
+    if (raw.href !== undefined && raw.href !== '') {
+      if (typeof raw.href !== 'string' || raw.href.length > 512) return null;
+      try { const u = new URL(raw.href, location.href); if (!['http:', 'https:'].includes(u.protocol) || u.protocol !== 'https:' && u.origin !== location.origin || u.username || u.password || u.href.length > 512) return null; href = u.href; } catch { return null; }
     }
     if (raw.icon !== undefined && !M.PICKS.includes(raw.icon)) return null;
     if (raw.badge !== undefined && !(typeof raw.badge === 'number' || (typeof raw.badge === 'string' && [...raw.badge].length <= 4))) return null;
@@ -359,8 +378,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     update: (owner, id, patch) => {
       const had = mods.get(owner)?.get(`mod:${owner}.${id}`);
       if (!had || !patch || typeof patch !== 'object') return false;
-      const { owner: _o, id: _i, select, ...rest } = had;
-      const item = check(owner, { ...rest, label: rest.label, ...patch, id, ...(select && { select }) });
+      const { owner: _o, id: _i, ...rest } = had;
+      const item = check(owner, { ...rest, ...patch, id });
       if (!item) return false;
       mods.get(owner).set(item.id, item); queue(); return true;
     },
@@ -371,7 +390,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       const item = byId(id);
       if (!item || item.hidden && !item.native) return false;
       emit('navigate', { id });
-      if (item.action) glaze(item.action);
+      if (item.owner) { mods.get(item.owner)?.get(item.id)?.select?.(); if (item.href) location.assign(item.href); }
+      else if (item.action) glaze(item.action);
       else if (item.native) { if (!site.go(id)) location.assign(item.href); }
       else if (item.href) location.assign(item.href);
       return true;
@@ -386,7 +406,7 @@ function GZ_NAVBAR_ULTRA(X) {
   const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation"]';
   let mo = null, watched = null, notify = null;
   const rootOf = () => document.querySelector(ROOT);
-  const anchors = () => [...(rootOf()?.querySelectorAll('a[href]') || [])];
+  const anchors = () => { const root = rootOf(); return [...(root?.querySelectorAll('a[href]') || []), ...(root?.closest('.MuiDrawer-paper')?.querySelectorAll('footer a[href], [class*="makeStylesfooter"] a[href]') || [])]; };
   const idOf = (a) => GZ_NAV.native(a.getAttribute('href'));
   // Its words without its badge's: every text node outside a badge.
   const labelOf = (a) => {

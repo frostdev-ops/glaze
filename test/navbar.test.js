@@ -99,6 +99,18 @@ test("mods' items go to their slot or the group they name, else the last group",
   assert.equal(M.build({ native: ULTRA, mods, prefs: M.clean({ items: { 'mod:a.top': { hidden: true } } }) }).slots.top.length, 0, 'the student can hide a mod item');
 });
 
+test('the model accepts the longest mod API id', () => {
+  const id = `mod:${'a'.repeat(48)}.${'b'.repeat(32)}`;
+  const m = M.build({ mods: [{ owner: 'a', id, label: 'Longest' }] });
+  assert.ok(m.items.some((i) => i.id === id));
+});
+
+test('mobile keeps mod slot items reachable', () => {
+  const m = M.build({ native: ULTRA, mods: [{ owner: 'a', id: 'mod:a.top', label: 'Top', slot: 'top' }, { owner: 'a', id: 'mod:a.bottom', label: 'Bottom', slot: 'bottom' }] });
+  const mobile = [...m.tabs, ...m.sheet.flatMap((g) => g.items)];
+  for (const key of ['mod:a.top', 'mod:a.bottom']) assert.equal(mobile.filter((i) => i.id === key).length, 1, key);
+});
+
 test('the rail is open on wide windows by default, and the page keeps its room', () => {
   assert.equal(M.railOpen('auto', 1280), true); assert.equal(M.railOpen('auto', 1279), false);
   assert.equal(M.railOpen('open', 900), true); assert.equal(M.railOpen('icons', 2000), false);
@@ -112,7 +124,7 @@ test('the rail is open on wide windows by default, and the page keeps its room',
   assert.ok(NI.ICONS.every((i) => M.PICKS.includes(i)), "every link icon a Look may give is one of the bar's");
 });
 
-test('only the editor and an Ultra top frame may pin the rail, and only the rail', async () => {
+test('the editor may change navbar fields; an Ultra top frame may only pin its rail', async () => {
   const source = read('lib/background.js');
   const store = { navbar: { on: true, rail: 'auto', brand: 'school' } };
   const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromUltra: async (s) => s.ultra === true });
@@ -120,10 +132,14 @@ test('only the editor and an Ultra top frame may pin the rail, and only the rail
   assert.equal(await h.allow({ patch: { rail: 'open' } }, { ultra: true, frameId: 0 }), true);
   assert.equal(await h.allow({ patch: { rail: 'icons' } }, { editor: true }), true);
   for (const [m, s] of [[{ patch: { rail: 'open' } }, { ultra: true, frameId: 2 }], [{ patch: { rail: 'open' } }, { frameId: 0 }], [{ patch: { on: false } }, { ultra: true, frameId: 0 }],
-    [{ patch: { rail: 'open', on: false } }, { editor: true }], [{ patch: { rail: 'auto' } }, { editor: true }], [{ patch: ['open'] }, { editor: true }], [{}, { editor: true }]]) assert.equal(await h.allow(m, s), false, JSON.stringify([m, s]));
+    [{ patch: { rail: 'open', on: false } }, { ultra: true, frameId: 0 }], [{ patch: { rail: 'auto' } }, { ultra: true, frameId: 0 }], [{ patch: ['open'] }, { editor: true }], [{}, { editor: true }],
+    [{ patch: {} }, { editor: true }], [{ patch: { badges: 'false' } }, { editor: true }], [{ patch: { unknown: true } }, { editor: true }]]) assert.equal(await h.allow(m, s), false, JSON.stringify([m, s]));
+  assert.equal(await h.allow({ patch: { rail: 'auto', badges: false } }, { editor: true }), true);
   const sync = { get: async () => structuredClone(store), set: async (p) => { Object.assign(store, p); return true; } };
   assert.equal((await h.run({ patch: { rail: 'icons' } }, { sync })).ok, true);
   assert.deepEqual(store.navbar, { on: true, rail: 'icons', peek: true, badges: true, brand: 'school' });
+  await h.run({ patch: { badges: false } }, { sync });
+  assert.deepEqual(store.navbar, { on: true, rail: 'icons', peek: true, badges: false, brand: 'school' });
   assert.match(source, /'features\/navbar\.js'\) \? \['lib\/nav\.js', 'lib\/nav-items\.js', 'lib\/navlayout\.js', 'lib\/navbar\.js'\]/, 'the model loads with the bar');
   assert.ok(require('../manifest.json').web_accessible_resources.some((w) => w.resources.includes('features/navbar.css')), 'the shadow root can load its sheet');
 });
@@ -145,6 +161,7 @@ test("a mod's items are checked: name, icon, address, badge, place; one owner ca
   const ui = vm.runInContext(read('features/navbar.js'), ctx);
   assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'star', href: 'https://due.test/', badge: 3, group: 'main' }), true);
   for (const bad of [{ id: 'Next', label: 'x' }, { id: 'a', label: '' }, { id: 'a', label: 'x'.repeat(41) }, { id: 'a', label: 'x', href: 'javascript:alert(1)' }, { id: 'a', label: 'x', href: 'http://plain.test/' },
+    ...['blob:https://school.test/id', 'https://user:pass@due.test/', null, 1, {}].map((href) => ({ id: 'a', label: 'x', href })),
     { id: 'a', label: 'x', icon: 'skull' }, { id: 'a', label: 'x', badge: 'toolong' }, { id: 'a', label: 'x', slot: 'side' }, null]) assert.equal(ui.add('countdown', bad), false, JSON.stringify(bad));
   assert.equal(ui.add('Bad Owner', { id: 'a', label: 'x' }), false);
   assert.equal(ui.update('other', 'next', { label: 'Hijack' }), false);
@@ -154,4 +171,28 @@ test("a mod's items are checked: name, icon, address, badge, place; one owner ca
   for (let i = 0; i < 8; i++) ui.add('many', { id: `i${i}`, label: `Item ${i}` });
   assert.equal(ui.add('many', { id: 'i8', label: 'Ninth' }), false, 'at most eight a mod');
   assert.equal(ui.remove('countdown', 'next'), true);
+});
+
+test('a navbar control saves only its edit, preserving a pin from another tab', () => {
+  const stored = { navbar: { ...G.GZ_SANITIZE().navbar, rail: 'open' } }, sent = [];
+  const ctx = vm.createContext({ s: G.GZ_SANITIZE(), clearTimeout() {}, addEventListener() {}, hint() {}, syncSettings() {}, t: (k) => k, chrome: {
+    runtime: { sendMessage: (m, cb) => { sent.push(m); Object.assign(stored.navbar, m.patch); cb({ ok: true }); } },
+    storage: { sync: { set: (patch, cb) => { Object.assign(stored, patch); cb(); } } },
+  } });
+  vm.runInContext(read('ui.js') + '\nglobalThis.UI = GZ_UI;', ctx);
+  const editor = read('options.js');
+  vm.runInContext(editor.slice(editor.indexOf('  const pending = new Set()'), editor.indexOf('  // Relay preference')) + "\nset('navbar.badges', false); save(['navbar']);", ctx);
+  assert.equal(stored.navbar.rail, 'open');
+  assert.equal(stored.navbar.badges, false);
+  assert.equal(JSON.stringify(sent), JSON.stringify([{ type: 'glaze:navbar', patch: { badges: false } }]));
+});
+
+test('a navbar edit batched with Look parts merges in the worker queue too', async () => {
+  const stored = { navbar: { ...G.GZ_SANITIZE().navbar, rail: 'icons' } };
+  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, GZ_XPARTS: { write: async (_area, _parts, patch) => { Object.assign(stored, patch); return true; } } });
+  const source = read('lib/background.js');
+  const h = vm.runInContext(`({${source.match(/\n {2}look: \{([\s\S]*?)\n {2}\},/)[1]}})`, ctx);
+  assert.equal((await h.run({ patch: { navbar: { badges: false } } }, { sync: { get: async () => structuredClone(stored) } })).ok, true);
+  assert.equal(stored.navbar.rail, 'icons');
+  assert.equal(stored.navbar.badges, false);
 });
