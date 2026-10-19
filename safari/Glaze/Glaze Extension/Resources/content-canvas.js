@@ -6,10 +6,6 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const { C, html, isPreview, need, t, locale, capi, canvasCourseKey, canvasCourseId, celebrate, markDue, drawProgress, cardBadge, KIND, cardsInView, inView, tagExtras, setVar, setAttr } = I;
 
   // ---- completion burst (Expressive) -----------------------------------------------------------
-  // Canvas: a module item's "Mark as done" button (the page's own, or the newer assignment page's) and the
-  // planner's checkboxes (the dashboard's List View). Canvas flips either once its request succeeds, so a
-  // click is followed for five seconds and bursts there if it turns done; only a click starts one, so a page
-  // that loads done never does. A module item's icon on the Modules page only changes as that page loads.
   const DONE_BY = '#mark-as-done-checkbox, #set-module-item-completion-button, input[data-testid="planner-item-completed-checkbox"]';
   const isDone = (el) => (el.matches('input') ? el.checked : el.classList.contains('btn-success') || !!el.querySelector('svg[name="IconComplete"]'));
   let following = null;
@@ -32,13 +28,9 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   }, true);
 
   // ---- the student's courses -------------------------------------------------------------------
-  // Canvas: its course list and colors, once a page load (content.js recordCourses), for the editor's course list, the
-  // course menu and the tint. One course list with scores serves this, the cards and the command palette.
-  // ponytail: the first 100 courses, no paging.
   let canvasList = null;
   const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
     .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
-  // Your profile (id, time zone), asked once a page for whoever needs it; again after a failure.
   let mine = null;
   const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
   const record = () => Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
@@ -54,37 +46,26 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   });
 
   // ---- code on demand ------------------------------------------------------------------------------
-  // Better To Do (features/todo.js)
   const todoHere = () => I.links.length && I.settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
   const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
-  // Tasks on the Dashboard's course cards (features/cardtasks.js), from the same planner answer.
   const cardsHere = () => I.links.length && I.settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
-  // Dashboard widgets and the pet (features/widgets.js); palette hub.
   const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || I.settings.enhance.notes || I.settings.enhance.pet);
   const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
-  // Reminders and the streak (features/reminders.js): any page, top frame, once one is on.
   const remindHere = () => I.links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
-  // Syllabus import (features/syllabus.js): a course's home and Syllabus page, top frame.
   const sylHere = () => I.links.length && window.top === window && I.settings.enhance.syllabus && /^\/courses\/\d+(\/assignments\/syllabus)?\/?$/.test(location.pathname);
   const syncSyl = () => (sylHere() ? need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.sync(sylHere()), () => {}) : globalThis.GZ_SYL_UI?.sync(false));
-  // Insights (Dashboard).
   const syncInsights = () => (globalThis.GZ_INSIGHTS_UI || (I.links.length && I.settings.enhance.insights && location.pathname === '/')) && need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.sync(), () => {});
-  // The what-if calculator (a course's Grades) and the GPA (Dashboard) are features/grades.js, asked for where on.
   const canvasGrades = () => {
     const e = I.settings.enhance;
     if (I.observer && (globalThis.GZ_GRADES_UI || (e.calc && /^\/courses\/\d+\/grades\/?$/.test(location.pathname)) || (e.gpa && location.pathname === '/'))) {
       need('features/grades.js', () => globalThis.GZ_GRADES_UI).then(() => GZ_GRADES_UI.render(), () => {});
     }
   };
-  // A canvadocs frame (features/docviewer.js) asking for the palette and its file: features/docs.js answers.
   addEventListener('message', (e) => { if (e.data?.gz === 'docs?' && /^https:\/\/canvadocs(-[\w-]+)?\.instructure\.com$/.test(e.origin)) need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.ask(e), () => {}); });
 
   // ---- grades on course cards (Extras) ---------------------------------------------------------
-  // The dashboard's cards (card view) get Ultra's chip, on the course code's line: the course's current score
-  // (GZ_PAGE.canvasOverall), drawn by canvas.css from the same attributes, from the course list above.
-  // The chip is drawn after the course code (canvas.css), inside the card's link: a click on it opens the grades.
   addEventListener('click', (e) => {
     const el = I.settings.enhance.overall && e.target.closest?.('.ic-DashboardCard [data-gz-grade]');
     const r = el && document.createRange();
@@ -405,9 +386,13 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     }
   };
 
-  // ---- the global navigation (features/nav.js) --------------------------------------------------
+  // ---- the global navigation (features/navbar.js) --------------------------------------------------
   const paintNav = (n, picture) => {
-    if (window.top !== window) return;
+    if (window.top !== window) { setAttr('data-gz-navbar-frame', I.tabFrame && I.settings.navbar.on && (I.settings.navbar.cmenu !== false && I.settings.navbar.course !== 'hide' ? 'menu' : '')); return; }
+    // Reserve the bar's room before its lazy renderer arrives, using GZ_NAVBAR.layout's words.
+    const b = I.settings.navbar, c = /^\/courses\/\d+(?:\/|$)/.test(location.pathname) ? b?.course : 'same';
+    const p = c === 'same' ? b?.place : c === 'icons' ? 'rail' : c === 'hide' ? 'none' : 'top';
+    if (!globalThis.GZ_NAVBAR_UI?.live()) setAttr('data-gz-navbar', !!b?.on && !/^\/(?:login|logout)(?:\/|$)/.test(location.pathname) && `${p}${p === 'rail' ? ` ${c === 'icons' ? 'icons' : b.rail}` : ''} ${b.style}${p !== 'none' && b.tabs && I.settings.enhance.tabs ? ' tabs' : ''}${p !== 'none' && /^\/courses\/\d+(?:\/|$)/.test(location.pathname) && b.cmenu !== false && document.querySelector('#section-tabs a[href]') ? ' menu' : ''}`);
     setAttr('data-gz-nav-size', n.size !== 'medium' || n.labels !== 'normal' || n.collapsed ? n.size : false);
     for (const k of ['labels', 'collapsed', 'f']) setAttr(`data-gz-nav-${k}`, n[k]);
     setAttr('data-gz-nav-no-logo', !n.logo);
@@ -423,13 +408,14 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     setAttr('data-gz-ctabs', !!I.links.length && I.solo && !!I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.() && (at ?? 'above medium'));
   };
   const syncNav = () => {
-    if (isPreview || window.top !== window) return;
+    if (window.top !== window || /^\/(?:login|logout)(?:\/|$)/.test(location.pathname)) return;
+    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings.navbar?.on)) need('features/navbar-canvas.js', () => globalThis.GZ_NAVBAR_CANVAS).then(() => need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), () => setAttr('data-gz-navbar', false));
     if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons' || (I.links.length && globalThis.GZ_CTX?.parts()?.nav)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
     else globalThis.GZ_NAV_UI?.sync();
   };
 
   return {
-    record, planner: () => todoHere() || cardsHere(), tagCards: tagCanvasCards, tagExtras: tagCanvasExtras, lift: liftCourses,
+    record, stop: () => globalThis.GZ_NAVBAR_UI?.sync(), planner: () => todoHere() || cardsHere(), tagCards: tagCanvasCards, tagExtras: tagCanvasExtras, lift: liftCourses,
     renderProgress: canvasProgress, renderNew: renderCanvasNew, renderCalc: canvasGrades, paintCourses, paintNav, paintTabs, syncNav,
     syncTodo, syncCardTasks, syncWidgets, syncRemind, syncSyl,
     syncInsights: () => {

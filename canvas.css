@@ -1538,3 +1538,45 @@ html[data-gz-ctabs]:not([data-gz-ctabs~="nav"]) #sticky-container { top: var(--g
 html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs))::before { order: 99; }
 html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point, #gz-scene) { visibility: hidden !important; }
 html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"]) { visibility: visible; }
+
+/* Glaze navigation replaces only Canvas's navigation chrome. Portal trays, dialogs and alerts stay outside these rules.
+   The words reserve first-paint room; the renderer supplies the same dimensions inline once mounted. */
+html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
+html[data-gz-navbar] :is(#header, #mobile-header) { display: none !important; }
+/* Canvas's native support forms and other trays must stay above the replacement bar. */
+html[data-gz-navbar] #nav-tray-portal { z-index: 1261 !important; }
+html[data-gz-navbar~="menu"] :is(#left-side, #mobileContextNavContainer, .ic-app-nav-toggle-and-crumbs #courseMenuToggle) { display: none !important; }
+html[data-gz-navbar~="menu"] #main { margin-inline: 0 !important; }
+html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
+html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
+html[data-gz-navbar] #wrapper { margin-inline: 0 !important; margin-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top); }
+/* Canvas can give its wrapper a direction of its own. Reserve room on the same side as the bar. */
+html[dir="rtl"][data-gz-navbar] #wrapper { margin-left: 0 !important; margin-right: var(--gz-navbar-left) !important; }
+html[data-gz-navbar] .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) { top: var(--gz-navbar-top); }
+html[data-gz-navbar] #sticky-container { top: calc(var(--gz-navbar-top) + var(--gz-ctabs-row, 0px)); max-height: calc(100vh - var(--gz-navbar-top) - var(--gz-ctabs-row, 0px)); }
+html[data-gz-navbar][data-gz-ctabs~="nav"] #sticky-container { top: var(--gz-navbar-top); max-height: calc(100vh - var(--gz-navbar-top)); }
+html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
+@media (min-width: 900px) {
+  html[data-gz-navbar~="rail"] { --gz-navbar-left: 96px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="embed"] { --gz-navbar-left: 72px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="open"] { --gz-navbar-left: 272px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
+  html[data-gz-navbar~="top"] { --gz-navbar-top: 80px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top: 56px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="menu"] { --gz-navbar-top: 124px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="embed"][data-gz-navbar~="menu"] { --gz-navbar-top: 100px; }
+}
+@media (min-width: 1280px) {
+  html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left: 272px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
+}
+@media (max-width: 899.98px) {
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) body { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { bottom: calc(96px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)) !important; }
+}
+
+html[data-gz-navbar-frame] :is(#header, #mobile-header) { display: none !important; }
+html[data-gz-navbar-frame] #wrapper { margin-inline: 0 !important; }
+html[data-gz-navbar-frame~="menu"] :is(#left-side, #mobileContextNavContainer, #courseMenuToggle) { display: none !important; }
+html[data-gz-navbar-frame~="menu"] #main { margin-inline: 0 !important; }

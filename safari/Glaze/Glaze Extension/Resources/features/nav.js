@@ -23,8 +23,9 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const forget = () => { if (loaded) URL.revokeObjectURL(loaded.src); loaded = null; };
   const sync = () => {
     const n = X.nav();
-    // Glaze's own bar (features/navbar.js) stands in for Ultra's or Moodle's nav: leave the native links intact.
-    const on = X.on() && X.settings().enabled && !(X.site === 'ultra' && X.settings().navbar?.on) && !(X.site === 'moodle' && X.settings().navbar?.on);
+    // Glaze's own bar (features/navbar.js) stands in for Canvas's, Ultra's and Moodle's nav; their older layout steps aside.
+    let on = X.on() && X.settings().enabled && !(X.site === 'ultra' && X.settings().navbar?.on) && !(X.site === 'moodle' && X.settings().navbar?.on);
+    on &&= !(X.site === 'canvas' && X.settings().navbar?.on);
     rail?.sync(on);
     // A bar or a dock has no collapsed rail to expand.
     overlay?.sync(on && !rail.placed());

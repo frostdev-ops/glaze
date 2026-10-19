@@ -13,10 +13,10 @@
 //   home() -> id               the logo's item                          main() -> the page's main element
 //   observe(fn), unobserve()   call fn when the site's nav changes
 //   inCourse() -> bool         (optional) a course is open
-//   menu(doc) -> { name, color, items: [{ key, label, href, active, badge }] } | null   (optional) the open course's own
+//   menu(doc) -> { name, color, items: [{ key, label, href, active, badge, tab }] } | null   (optional) the open course's own
 //                              menu, read from doc (the page, or the course tab's frame on screen)
 //   panel(id) -> Promise<{ title, filter, sections: [{ label, rows: [{ label, sub, href, color, icon, badge, current,
-//                run }] }], foot: [rows], empty } | null>   (optional) an item marked panel, drawn as Glaze's panel
+//                run, tab }] }], foot: [rows], empty } | null>   (optional) an item marked panel, drawn as Glaze's panel
 //   run(what)                  (optional) a panel row's action that isn't a link (signing out)
 var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const X = globalThis.GZ_CTX, M = GZ_NAVBAR, L = GZ_NAV_LAYOUT, N = GZ_NAV_ITEMS, html = document.documentElement;
@@ -47,21 +47,22 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const listeners = new Map(), mods = new Map(); // event -> Set(fn); owner -> Map(id -> item)
   const emit = (event, data) => { for (const fn of listeners.get(event) || []) { try { fn(data); } catch { /* one listener's error isn't the bar's */ } } };
   const settings = () => X.settings().navbar || {};
-  const on = () => !sleeping && !!site && !!chrome.runtime?.id && X.on() && X.settings().enabled && !!settings().on && (isPreview || window.top === window);
+  const on = () => !(X.site === 'canvas' && /^\/(?:login|logout)(?:\/|$)/.test(location.pathname)) && !sleeping && !!site && !!chrome.runtime?.id && X.on() && X.settings().enabled && !!settings().on && (isPreview || window.top === window);
   const tabsApi = () => (X.settings().enhance?.tabs && globalThis.GZ_CTABS?.bar) || null;
   // Inside a course: its own page, or one of Glaze's course tabs showing over the page.
   const inCourse = () => !!site?.inCourse?.() || !!globalThis.GZ_CTABS?.showing?.();
   const byId = (id) => model?.items.find((i) => i.id === id) || cmenu?.items.find((i) => i.id === id) || null;
   // A page of this site: through the course tabs where they run (into the course's frame, or leaving it), else a load.
-  const openHere = (href) => { const api = tabsApi(); if (api?.open) api.open(href); else location.assign(href); };
-  const sameSite = (href) => { try { return new URL(href, location.href).origin === location.origin; } catch { return false; } };
+  const openHere = (href) => { const api = tabsApi(); if (!api?.open || api.open(href) === false) location.assign(href); };
+  const safeHref = (href) => { if (typeof href !== 'string' || !href.trim()) return null; try { const u = new URL(href, location.href); return !u.username && !u.password && (/^https?:$/.test(u.protocol) || isPreview && u.protocol === location.protocol && u.host === location.host) ? u : null; } catch { return null; } };
+  const sameSite = (href) => { const u = safeHref(href); return !!u && (u.origin === location.origin || isPreview && u.protocol === location.protocol && u.host === location.host); };
   // The open course's own menu, from the page or the course tab's frame on screen: its pages, each with an icon by what it is.
   const readMenu = () => {
     if (settings().cmenu === false || !site?.menu || !inCourse()) return null;
     let m = null;
     try { m = site.menu(tabsApi()?.doc?.() || document); } catch { return null; }
-    const items = (Array.isArray(m?.items) ? m.items : []).slice(0, 24).filter((x) => x && typeof x.label === 'string' && typeof x.href === 'string' && sameSite(x.href))
-      .map((x, at) => ({ id: `cm:${at}`, key: String(x.key || ''), label: x.label.replace(/\s+/g, ' ').trim().slice(0, 60), href: x.href, active: !!x.active, badge: typeof x.badge === 'string' || typeof x.badge === 'number' ? String(x.badge).slice(0, 4) : '', icon: M.courseIcon(x.key, x.label), course: true }))
+    const items = (Array.isArray(m?.items) ? m.items : []).filter((x) => x && typeof x.label === 'string' && typeof x.href === 'string' && sameSite(x.href))
+      .map((x, at) => ({ id: `cm:${at}`, key: String(x.key || ''), label: x.label.replace(/\s+/g, ' ').trim().slice(0, 60), href: x.href, active: !!x.active, tab: x.tab === true, badge: typeof x.badge === 'string' || typeof x.badge === 'number' ? String(x.badge).slice(0, 4) : '', icon: M.courseIcon(x.key, x.label), course: true }))
       .filter((x) => x.label);
     return items.length ? { name: String(m.name || '').replace(/\s+/g, ' ').trim().slice(0, 80), color: /^#[0-9a-f]{3,8}$/i.test(m.color || '') ? m.color : '', items } : null;
   };
@@ -150,7 +151,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const label = (text, i) => { const s = part(make('span', { className: 'label', textContent: text }), 'label'); if (i !== undefined) s.style.setProperty('--i', i); return s; };
   // One item: a link where it goes somewhere (open in a new tab works), a button where Glaze does something.
   const node = (item, cls, partName) => {
-    const link = item.href && !item.action;
+    const link = item.href && !item.action && !item.panel;
     const e = make(link ? 'a' : 'button', { className: cls });
     if (link) { e.href = item.href; if (item.tab) { e.target = '_blank'; e.rel = 'noopener noreferrer'; } } else e.type = 'button';
     e.dataset.id = item.id;
@@ -523,7 +524,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const panelRow = (r) => {
     const link = r.href && !r.run;
     const e = part(make(link ? 'a' : 'button', { className: 'row' }), r.current ? 'panel-row active' : 'panel-row');
-    if (link) { e.href = r.href; if (!sameSite(r.href)) { e.target = '_blank'; e.rel = 'noopener noreferrer'; } } else { e.type = 'button'; e.dataset.run = r.run || ''; }
+    if (link) { e.href = r.href; if (r.tab || !sameSite(r.href)) { e.target = '_blank'; e.rel = 'noopener noreferrer'; } } else { e.type = 'button'; e.dataset.run = r.run || ''; }
     if (r.current) e.setAttribute('aria-current', 'page');
     const lead = r.color ? part(make('span', { className: 'dot', textContent: mark(r.label) }), 'course-dot') : icon(M.PICKS.includes(r.icon) ? r.icon : 'chevron');
     if (r.color) lead.style.setProperty('--c', r.color);
@@ -532,6 +533,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     return put(e, lead, text, b ? badge(b) : null);
   };
   const drawPanel = (id, data, state) => {
+    const cleanRows = (rows, limit) => (Array.isArray(rows) ? rows : []).filter((r) => r && typeof r.label === 'string' && r.label.trim())
+      .map((r) => ({ ...r, href: typeof r.href === 'string' ? safeHref(r.href)?.href || '' : '', run: typeof r.run === 'string' ? r.run : '', color: /^#[0-9a-f]{3,8}$/i.test(r.color || '') ? r.color : '' }))
+      .filter((r) => r.href || r.run).slice(0, limit);
     const item = byId(id);
     const close = part(make('button', { type: 'button', className: 'close' }, icon('close')), 'panel-close');
     close.dataset.act = 'panel-close'; close.setAttribute('aria-label', t('Close'));
@@ -543,8 +547,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       kids.push(make('p', { className: 'note', textContent: t("Couldn't load this. Try again in a moment.") }), retry);
     } else {
       const body = make('div', { className: 'body' });
-      const sections = (Array.isArray(data.sections) ? data.sections : []).filter((x) => Array.isArray(x?.rows) && x.rows.length);
-      for (const sec of sections) body.append(...(sec.label ? [part(make('div', { className: 'group-label', textContent: sec.label }), 'group-label')] : []), ...sec.rows.slice(0, 200).map(panelRow));
+      const sections = (Array.isArray(data.sections) ? data.sections : []).map((x) => ({ label: x?.label, rows: cleanRows(x?.rows, 200) })).filter((x) => x.rows.length);
+      for (const sec of sections) body.append(...(sec.label ? [part(make('div', { className: 'group-label', textContent: sec.label }), 'group-label')] : []), ...sec.rows.map(panelRow));
       if (!sections.length) body.append(make('p', { className: 'note', textContent: data.empty || t('Nothing here yet.') }));
       if (data.filter && sections.reduce((n, x) => n + x.rows.length, 0) > 6) {
         const find = make('input', { type: 'search', className: 'find', placeholder: t('Filter') });
@@ -553,7 +557,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
         kids.push(find);
       }
       kids.push(body);
-      if (Array.isArray(data.foot) && data.foot.length) kids.push(make('div', { className: 'foot' }, ...data.foot.slice(0, 8).map(panelRow)));
+      const foot = cleanRows(data.foot, 8);
+      if (foot.length) kids.push(make('div', { className: 'foot' }, ...foot.map(panelRow)));
     }
     el.panel.replaceChildren(...kids);
     el.panel.setAttribute('aria-label', title.textContent);
@@ -637,7 +642,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const prow = el.panel && path.includes(el.panel) && path.find((n) => n.classList?.contains('row') && n.parentElement && !n.dataset.act);
     if (prow && e.type === 'click') {
       if (prow.dataset.run !== undefined && prow.tagName === 'BUTTON') { e.preventDefault(); const what = prow.dataset.run; panelTo('', null, false); site.run?.(what); return; }
-      if (prow.href && sameSite(prow.href) && plain(e)) { e.preventDefault(); const href = prow.href; panelTo('', null, false); openHere(href); return; }
+      if (prow.href && prow.target !== '_blank' && sameSite(prow.href) && plain(e)) { e.preventDefault(); const href = prow.href; panelTo('', null, false); openHere(href); return; }
       if (prow.href) { panelTo('', null, false); return; }
     }
     const target = path.find((n) => n.dataset && (n.dataset.id !== undefined || n.dataset.act));
@@ -660,11 +665,11 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (act) { e.preventDefault(); sheetTo(false); menuTo('', false); glaze(act, e); return; }
     const item = byId(target.dataset.id);
     if (!item) return;
-    // A site's own menu (Courses, Account, Help…) opens as Glaze's panel; with a modifier, its own page in a new tab.
-    if (item.panel && site.panel && plain(e)) { e.preventDefault(); sheetTo(false); panelTo(panel === item.id ? '' : item.id, target); return; }
+    // A site's own menu (Courses, Account, Help…) is a button opening Glaze's panel.
+    if (item.panel && site.panel) { e.preventDefault(); sheetTo(false); panelTo(panel === item.id ? '' : item.id, target); return; }
     emit('navigate', { id: item.id });
     // The course's own pages: through the course tabs where they run, so a course tab's frame follows.
-    if (item.course) { if (plain(e)) { e.preventDefault(); openHere(item.href); } sheetTo(false); if (!lay.open) peekTo(false); return; }
+    if (item.course) { if (plain(e) && !item.tab) { e.preventDefault(); openHere(item.href); } sheetTo(false); if (!lay.open) peekTo(false); return; }
     if (item.owner) { if (!item.href) e.preventDefault(); mods.get(item.owner)?.get(item.id)?.select?.(); }
     else if (item.action) { e.preventDefault(); glaze(item.action, e); }
     // The site's own items go through its own links, so its router (and its trays) handle them as it would.

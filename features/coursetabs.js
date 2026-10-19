@@ -620,7 +620,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         f.stale = null;
         if (waiting === cid && showing !== cid) { show(cid); return; }
         if (waiting === cid) wait('');
-        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
+        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
         return;
       }
       if (now - t0 > 8000 && !f.slow) {
@@ -675,9 +675,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
       const img = Object.assign(document.createElement('img'), { src: snap.shot, alt: '', draggable: false });
+      // A Canvas frame sits inside the navigation's room; crop that same room from the full-window picture.
+      const view = ctx.site === 'canvas' && html.hasAttribute('data-gz-navbar') ? host.getBoundingClientRect() : { x: 0, y: 0 };
       // Blurred, with a spinner over it: a picture of the page, not the page, until the page itself is ready.
       const root = box.attachShadow({ mode: 'closed' });
-      root.innerHTML = `<style>img{position:absolute;top:0;left:0;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}
+      root.innerHTML = `<style>img{position:absolute;top:${-view.y}px;left:${-view.x}px;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}
 .s{position:absolute;top:50%;left:50%;width:2.25rem;height:2.25rem;margin:-1.125rem;box-sizing:border-box;border-radius:50%;border:3px solid color-mix(in srgb,var(--gz-ink,#fff) 25%,transparent);border-top-color:var(--gz-accent,#6fdcff);animation:r .8s linear infinite}
 @keyframes r{to{transform:rotate(1turn)}}:host([data-still]) .s{animation:none}</style><div class="s" role="progressbar"></div>`;
       root.querySelector('.s').setAttribute('aria-label', t('Loading…'));
@@ -982,7 +984,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
   };
   const onHide = () => { if (on) saveNow(); };
-  const onResize = () => { lay(); if (ctx.site === 'canvas') place(); };
+  const onResize = () => {
+    lay();
+    if (ctx.site === 'canvas') {
+      // A picture made at the old viewport no longer fits; keep the live frame through the resize.
+      if (pic) { const f = frames.get(showing); if (f) f.el.style.visibility = ''; unpicture(true); }
+      place();
+    }
+  };
   let navWatch = null;
   const listen = (yes) => {
     const f = yes ? 'addEventListener' : 'removeEventListener';
@@ -1155,16 +1164,17 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // An address of this site: in a course's frame when a frame is on screen and it is a course page (on Canvas any
     // course's, through its own frame; on Ultra the shown course's), else on this page, as a click on it here would go.
     open: (href) => {
-      let u; try { u = new URL(String(href), location.origin); } catch { return; }
-      if (!on || framed || u.origin !== location.origin) return;
+      let u; try { u = new URL(String(href), location.origin); } catch { return false; }
+      if (!on || framed || u.origin !== location.origin) return false;
       const url = L.safe(u.pathname, u.search), cid = url && (ctx.site === 'canvas' ? u.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] : showing);
       if (showing && cid && L.owns(u.pathname, cid)) {
-        if (ctx.site === 'canvas') return openAt(cid, url);
-        try { frames.get(showing).el.contentWindow.location.assign(location.origin + url); } catch { /* gone */ }
-        return;
+        if (ctx.site === 'canvas') { openAt(cid, url); return true; }
+        try { frames.get(showing).el.contentWindow.location.assign(location.origin + url); } catch { return false; }
+        return true;
       }
       if (showing) show('');
       route(u.pathname + u.search + u.hash);
+      return true;
     },
   };
   return { sync, held, petSurface, bar, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };

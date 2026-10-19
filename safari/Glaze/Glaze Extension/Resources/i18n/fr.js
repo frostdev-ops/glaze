@@ -2783,7 +2783,7 @@
   "Open the rail while you point at it": "Ouvrir le rail quand tu le survoles",
   "Show unread counts": "Afficher le nombre de non lus",
   "No logo": "Aucun logo",
-  "Blackboard uses Glaze navigation, set up in the Navigation tab. The styles here are for Canvas, and for Blackboard's own navigation while Glaze navigation is off.": "Blackboard utilise la navigation Glaze, réglée dans l'onglet Navigation. Les styles ici sont pour Canvas, et pour la navigation de Blackboard tant que la navigation Glaze est désactivée.",
+  "Blackboard and Canvas use Glaze navigation, set up in the Navigation tab. These styles apply to the site's own navigation while Glaze navigation is off.": "Blackboard et Canvas utilisent la navigation Glaze, configurée dans l’onglet Navigation. Ces styles s’appliquent à la navigation du site lorsque la navigation Glaze est désactivée.",
   "Glaze navigation settings": "Réglages de la navigation Glaze",
   "Navigation items": "Éléments de navigation",
   "Glaze's own navigation, the same in every Look, in place of the site's.": "La navigation propre à Glaze, la même dans chaque Look, à la place de celle du site.",
@@ -2836,5 +2836,6 @@
   "All notifications": "Toutes les notifications",
   "No notifications": "Aucune notification",
   "All messages": "Tous les messages",
-  "No conversations": "Aucune conversation"
+  "No conversations": "Aucune conversation",
+  "ePortfolios": "Portfolios électroniques"
 };
