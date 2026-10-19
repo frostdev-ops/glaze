@@ -85,6 +85,7 @@ const BROKER = {
         parts = { ...(Object.keys(x).length && { x }), ...(current?.m && { m: current.m }) };
         if (!Object.keys(parts).length) parts = null;
       }
+      if (Object.hasOwn(patch, 'navbar')) patch.navbar = GZ_SANITIZE({ navbar: { ...(await area.sync.get('navbar')).navbar, ...patch.navbar } }).navbar;
       if (Object.hasOwn(patch, 'nav')) {
         const nav = patch.nav;
         if (!nav || typeof nav !== 'object' || Array.isArray(nav)) return { ok: false, error: 'bad' };
@@ -139,12 +140,15 @@ const BROKER = {
       && (fromEditor(s) || (!m.image && !m.logoImage && !m.items && !m.nav.i && !m.nav.li && !!await fromCanvas(s))),
     run: (m, area) => GZ_NAV_STORE.change({ nav: m.nav, image: m.image, logoImage: m.logoImage, items: m.items }, area),
   },
-  // Glaze's own navigation bar (lib/navbar.js): an Ultra page pins or unpins its rail; the editor saves the rest itself.
+  // Glaze's own navigation bar (lib/navbar.js): an Ultra page pins its rail; the editor changes only its edited fields.
   navbar: {
-    allow: async (m, s) => !!m.patch && typeof m.patch === 'object' && !Array.isArray(m.patch) && Object.keys(m.patch).length === 1 && ['open', 'icons'].includes(m.patch.rail)
-      && (fromEditor(s) || (s.frameId === 0 && !!await fromUltra(s))),
+    allow: async (m, s) => {
+      if (!m.patch || typeof m.patch !== 'object' || Array.isArray(m.patch) || !Object.keys(m.patch).length) return false;
+      if (fromEditor(s)) { const n = GZ_SANITIZE({ navbar: m.patch }).navbar; return Object.keys(m.patch).every((k) => Object.hasOwn(n, k) && n[k] === m.patch[k]); }
+      return Object.keys(m.patch).length === 1 && ['open', 'icons'].includes(m.patch.rail) && s.frameId === 0 && !!await fromUltra(s);
+    },
     run: async (m, { sync }) => {
-      const navbar = GZ_SANITIZE({ navbar: { ...(await sync.get('navbar')).navbar, rail: m.patch.rail } }).navbar;
+      const navbar = GZ_SANITIZE({ navbar: { ...(await sync.get('navbar')).navbar, ...m.patch } }).navbar;
       return { ok: await sync.set({ navbar }) };
     },
   },

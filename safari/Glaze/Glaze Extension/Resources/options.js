@@ -183,16 +183,17 @@ GZ_UI.load().then((s) => {
   geometry.observe($('.top')); geometry.observe($('.preview-stage'));
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
-  const pending = new Set(), pendingNav = new Set();
+  const pending = new Set(), pendingNav = new Set(), pendingNavbar = new Set();
   let timer = 0, partKeys = [], saving = 0, settingsRead = 0;
   const flush = () => {
     clearTimeout(timer);
     timer = 0;
     if (!pending.size) return;
     const navPatch = pendingNav.size ? Object.fromEntries([...pendingNav].map((k) => [k, s.nav[k]])) : undefined;
+    const navbarPatch = pendingNavbar.size ? Object.fromEntries([...pendingNavbar].map((k) => [k, s.navbar[k]])) : undefined;
     saving++;
-    GZ_UI.save(s, [...pending], (err) => { saving--; hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined);
-    pending.clear(); pendingNav.clear(); partKeys = [];
+    GZ_UI.save(s, [...pending], (err) => { saving--; hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined, navbarPatch);
+    pending.clear(); pendingNav.clear(); pendingNavbar.clear(); partKeys = [];
   };
   const save = (keys, soon = false, parts) => {
     settingsRead++;
@@ -205,7 +206,7 @@ GZ_UI.load().then((s) => {
   addEventListener('pagehide', flush);
 
   const get = (path) => path.startsWith('nav.') && Object.hasOwn(GZ_NAV.dimensions(s.nav), path.slice(4)) ? GZ_NAV.dimensions(s.nav)[path.slice(4)] : path.split('.').reduce((o, k) => o[k], s);
-  const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); };
+  const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); if (ks[0] === 'navbar') pendingNavbar.add(last); };
   const group = (path) => path.split('.')[0];
 
   // Relay preference and explicit health action; sessions themselves are lib/sessions-ui.js's.

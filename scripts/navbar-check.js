@@ -33,7 +33,7 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
     await page.goto(`chrome-extension://${extensionId(src)}/preview.html?site=ultra`);
     await page.waitForFunction(() => globalThis.GZ_CTX);
-    const send = (navbar) => page.evaluate((s) => window.postMessage({ gzPreview: s }, location.origin), G.GZ_SANITIZE({ navbar, enhance: { dashboard: true }, motion: { level: 'subtle' } }));
+    const send = (navbar, extra = {}) => page.evaluate((s) => window.postMessage({ gzPreview: s }, location.origin), G.GZ_SANITIZE({ navbar, enhance: { dashboard: true }, motion: { level: 'subtle' }, ...extra }));
     const bar = (fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gz-navbar')?.shadowRoot, a), [String(fn), arg]);
     const until = async (read, check, label, arg) => { const end = Date.now() + 5000; let v; while (Date.now() < end) { v = await bar(read, arg); if (check(v)) { ok(true, label); return v; } await page.waitForTimeout(50); } ok(false, `${label} (last: ${JSON.stringify(v)})`); return v; };
     const space = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-space').trim());
@@ -63,6 +63,11 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await page.evaluate(() => { const a = document.querySelector('.MuiDrawer-paper a[href="/ultra/messages"]'); a.append(Object.assign(document.createElement('span'), { className: 'MuiBadge-badge', textContent: '3' })); });
     await until((r) => r.querySelector('[data-id="messages"] .badge')?.textContent, (v) => v === '3', "Ultra's unread count shows on the bar");
     ok(await bar((r) => r.querySelector('[data-id="messages"] .label').textContent) === 'Messages', "the count isn't part of the name");
+    await bar((r) => r.querySelector('.list [data-id="institution-page"]').focus());
+    await page.evaluate(() => { document.querySelector('.MuiBadge-badge').textContent = '7'; });
+    await until((r) => r.querySelector('[data-id="messages"] .badge')?.textContent, (v) => v === '7', 'a badge redraw lands while the home item has focus');
+    ok(await bar((r) => r.activeElement?.matches('.list [data-id="institution-page"]')), 'focus stays on the home item rather than its brand link');
+    await bar((r) => r.activeElement?.blur());
 
     // ---- icons: the collapsed rail, tooltips, the peek ----
     await bar((r) => r.querySelector('.toggle').click());
@@ -113,13 +118,87 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await shot('phone-more');
     await page.keyboard.press('Escape');
     ok(await bar((r) => !r.querySelector('.sheet').hasAttribute('data-open') && r.activeElement?.classList.contains('more')), 'Escape closes it and focus goes back to More');
+
+    await bar((r) => r.querySelector('.more').click());
+    await bar((r) => r.querySelector('.customize').focus());
+    await page.keyboard.press('Tab');
+    ok(await bar((r) => r.activeElement === r.querySelector('.sheet .row')), 'Tab wraps within the More dialog');
+    await page.keyboard.press('Shift+Tab');
+    ok(await bar((r) => r.activeElement === r.querySelector('.customize')), 'Shift+Tab wraps within the More dialog');
+    await bar((r) => r.querySelector('.sheet [data-id="grades"]').focus());
+    await page.evaluate(() => { document.querySelector('.MuiBadge-badge').textContent = '4'; });
+    await until((r) => r.querySelector('.sheet [data-id="messages"] .badge')?.textContent || r.querySelector('.tab[data-id="messages"] .badge')?.textContent, (v) => v === '4', 'a badge redraw lands while More is open');
+    ok(await bar((r) => r.activeElement?.dataset.id === 'grades' && !!r.activeElement?.closest('.sheet')), 'a redraw preserves focus in the visible sheet');
+    await page.evaluate(() => { const main = document.querySelector('main'); main.tabIndex = -1; main.focus(); });
+    ok(await bar((r) => !!r.activeElement?.closest('.sheet')), 'the modal sheet keeps page content inert');
+    await page.keyboard.press('Escape');
+
+    await bar((r) => r.querySelector('.more').click());
+    await page.mouse.click(3, 3);
+    ok(await bar((r) => !r.querySelector('.sheet').open && r.activeElement === r.querySelector('.more')), 'a backdrop click closes More and restores focus');
+
+    // The adapter must follow a new drawer, including account/sign-out links outside its nav.
+    await page.evaluate(() => {
+      const drawer = document.querySelector('.MuiDrawer-paper'), next = drawer.cloneNode(true);
+      const footer = document.createElement('footer'); footer.append(next.querySelector('a[href="#"]')); next.append(footer); drawer.replaceWith(next);
+      next.querySelector('.MuiBadge-badge').textContent = '5';
+    });
+    await until((r) => r.querySelector('.tab[data-id="messages"] .badge')?.textContent, (v) => v === '5', 'a replacement drawer updates the bar');
+    ok(await bar((r) => !!r.querySelector('.sheet [data-id="logout"]')), 'sign out remains available in the drawer footer');
+
+    await page.evaluate(() => {
+      window.__selected = 0;
+      GZ_NAVBAR_UI.add('review', { id: 'action', label: 'Review action', select: () => window.__selected++ });
+    });
+    await until(() => GZ_NAVBAR_UI.model()?.items.some((i) => i.id === 'mod:review.action'), Boolean, 'a mod action enters the model');
+    await page.evaluate(() => { GZ_NAVBAR_UI.go('mod:review.action'); });
+    ok(await page.evaluate(() => window.__selected) === 1, 'go invokes a mod action');
+    await page.evaluate(() => { GZ_NAVBAR_UI.update('review', 'action', { badge: 2 }); });
+    await until(() => GZ_NAVBAR_UI.model()?.items.find((i) => i.id === 'mod:review.action')?.badge, (v) => v === '2', 'a mod action update lands');
+    ok(await bar((r) => r.querySelector('.sheet [data-id="mod:review.action"]')?.tagName) === 'BUTTON', 'updating an action keeps it a button');
+    await page.evaluate(() => { GZ_NAVBAR_UI.clear('review'); });
     await page.setViewportSize({ width: 1440, height: 900 });
+
+    await send({ on: true, rail: 'icons', peek: false });
+    await until((r) => r.querySelector('.rail').hasAttribute('data-open'), (v) => v === false, 'settings select the icons rail');
+    await bar((r) => r.querySelector('.toggle').click());
+    await send({ on: true, rail: 'auto', peek: false });
+    await send({ on: true, rail: 'icons', peek: false });
+    await until((r) => r.querySelector('.rail').hasAttribute('data-open'), (v) => v === false, 'settings supersede a local pin choice');
+    await send({ on: false });
+    await page.waitForTimeout(100);
+    await send({ on: true, rail: 'icons', peek: false });
+    await until((r) => r && !r.host.hidden && !r.querySelector('.rail').hasAttribute('data-open'), Boolean, 'the collapsed rail is ready for keyboard focus');
+    await bar((r) => r.querySelector('.pin').focus());
+    ok(await bar((r) => r.querySelector('.rail').hasAttribute('data-open')), 'keyboard focus reveals the collapsed pin control');
+    await send({ on: true, brand: 'none' });
+    await until((r) => getComputedStyle(r.querySelector('.brand')).display, (v) => v === 'none', 'No logo hides the brand');
+    await page.evaluate(() => { document.querySelector('.MuiDrawer-paper footer a[href="#"]').remove(); });
+    await until((r) => getComputedStyle(r.querySelector('.out')).display, (v) => v === 'none', 'a removed sign-out link hides its control');
 
     // ---- off again: Ultra's drawer comes back ----
     await send({ on: false });
     await page.waitForTimeout(300);
     ok(await page.evaluate(() => !document.getElementById('gz-navbar') && !document.documentElement.style.getPropertyValue('--gz-navbar-space')), 'turning it off takes the bar away');
     ok(await page.evaluate(() => getComputedStyle(document.querySelector('.MuiDrawer-paper nav')).visibility) === 'visible', "Ultra's own nav is back");
+
+    await send({ on: true });
+    await until((r) => !!r && !r.host.hidden, Boolean, 'the bar can be enabled again');
+    await send({ on: true }, { enhance: { dashboard: false } });
+    await page.waitForTimeout(300);
+    await send({ on: true }, { enabled: false, enhance: { dashboard: false } });
+    await until((r) => !r, Boolean, 'turning Glaze off removes its navbar');
+    await send({ on: true });
+    await until((r) => !!r && !r.host.hidden, Boolean, 'turning Glaze back on remounts its navbar');
+    await page.evaluate(() => {
+      document.querySelector('.MuiBadge-badge').textContent = '6'; GZ_NAVBAR_UI.sync();
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    await page.waitForTimeout(100);
+    await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); });
+    await until((r) => !!r && !r.host.hidden, Boolean, 'the navbar remounts after pagehide');
+    await page.evaluate(() => { document.getElementById('gz-navbar').remove(); GZ_NAVBAR_UI.sync(); });
+    await until((r) => !!r && !r.host.hidden, Boolean, 'a removed navbar host is replaced');
     ok(!errors.length, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
   } catch (e) {
     ok(false, `ran to the end (${e.message})`);

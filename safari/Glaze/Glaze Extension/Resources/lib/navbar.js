@@ -55,7 +55,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
   // Mobile's four tabs before More, each the first of its row this page has.
   const TABS = [['institution-page', 'dashboard', 'home'], ['course'], ['calendar'], ['messages']];
   const LINK = /^link:([a-z0-9]{12})$/;
-  const MOD = /^mod:[a-z0-9][a-z0-9_.-]{0,79}$/;
+  const MOD = /^mod:[a-z0-9][a-z0-9_-]{0,47}\.[a-z][a-z0-9-]{0,31}$/;
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   const text = (v, max) => (typeof v === 'string' ? [...v.replace(/[\p{Cc}\p{Bidi_Control}]/gu, '').replace(/\s+/g, ' ').trim()].slice(0, max).join('') : '');
   // An id the student may place, hide or rename: a native item, one of their links, a Glaze item or a mod's item.
@@ -155,13 +155,14 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     }
     const shown = (list) => list.filter((i) => !i.hidden);
     const visible = groups.map((g) => ({ ...g, items: shown(g.items) })).filter((g) => g.items.length);
-    const all = visible.flatMap((g) => g.items);
+    const mobile = [{ id: 'top', label: '', items: shown(slots.top) }, ...visible, { id: 'bottom', label: '', items: shown(slots.bottom) }];
+    const all = mobile.flatMap((g) => g.items);
     // Mobile: the student's tabs, else the default's, then whatever comes first, to four; the rest go in the More sheet.
     const want = p.tabs.length ? p.tabs.map((id) => [id]) : TABS;
     const tabs = [];
     for (const row of want) { const i = all.find((x) => row.includes(x.id) && !tabs.includes(x)); if (i) tabs.push(i); }
     for (const i of all) { if (tabs.length >= 4) break; if (!tabs.includes(i)) tabs.push(i); }
-    const sheet = visible.map((g) => ({ ...g, items: g.items.filter((i) => !tabs.includes(i)) })).filter((g) => g.items.length);
+    const sheet = mobile.map((g) => ({ ...g, items: g.items.filter((i) => !tabs.includes(i)) })).filter((g) => g.items.length);
     const foot = (id) => { const i = pool.get(id); return i && !i.hidden ? i : null; };
     return { groups: visible, slots: { top: shown(slots.top), bottom: shown(slots.bottom) }, account: foot('profile'), signout: foot('logout'), tabs, sheet, items: [...pool.values()] };
   };
