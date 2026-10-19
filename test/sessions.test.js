@@ -108,6 +108,42 @@ test('Pause during a pending consent read cannot let the older Create enable sha
   } finally { release(true); worker.stop(); }
 });
 
+test('a scoped panel cannot restart paused sessions outside its account', async (t) => {
+  for (const owner of ['bound', 'copy', 'unbound']) for (const op of ['resume', 'create', 'join']) await t.test(`${owner} ${op}`, async () => {
+    const d = device('http://127.0.0.1:1'), id = await seed(d), scope = { key: NK, note: id, id: 'panel-a' };
+    try {
+      const foreign = { st: G.create('collection', { server: 'http://127.0.0.1:1' }), kind: 'notes', title: 'Other account', bind: { key: 'notesIdx:https://school.instructure.com/6', map: {}, files: {} } };
+      if (owner === 'copy') foreign.copy = { key: foreign.bind.key, notes: [] };
+      if (owner !== 'bound') delete foreign.bind;
+      await d.db.put('sessions', foreign.st.sid, foreign);
+      await d.local.set({ shareOn: false, shareName: 'Keep name', shareHosts: [] });
+      const saved = clone(d.local.data), records = await d.db.all('sessions');
+      const joined = G.create('collection', { server: 'http://127.0.0.1:1' });
+      const message = op === 'create' ? { kind: 'notes', title: 'Scoped', key: NK, ids: [id] }
+        : op === 'join' ? { link: G.link(joined.server, { sid: joined.sid, seed: G.unb64(joined.seed) }, true) } : {};
+      await assert.rejects(d.send(op, { ...message, name: 'Changed name', scope }), /confirmation/);
+      assert.deepEqual(d.local.data, saved, 'no settings or consent changes before Settings confirms');
+      assert.deepEqual(await d.db.all('sessions'), records, 'no session added or changed');
+      assert.equal(d.requests.length, 0);
+    } finally { d.worker.stop(); }
+  });
+});
+
+test('scoped activation keeps existing account consent and already-enabled background sharing', async () => {
+  const d = device('http://127.0.0.1:1'), scope = { key: NK, note: '', id: 'panel-a' };
+  try {
+    const own = { st: G.create('collection', { server: 'http://127.0.0.1:1' }), kind: 'notes', title: 'Own account', bind: { key: NK, map: {}, files: {} } };
+    await d.db.put('sessions', own.st.sid, own);
+    await d.local.set({ shareOn: false });
+    assert.equal((await d.send('resume', { scope })).ok, true);
+    const foreign = { ...own, st: G.create('collection', { server: 'http://127.0.0.1:1' }), bind: { ...own.bind, key: 'notesIdx:https://school.instructure.com/6' } };
+    await d.db.put('sessions', foreign.st.sid, foreign);
+    assert.equal((await d.send('resume', { scope })).ok, true, 'existing global consent stays valid');
+    await d.local.set({ shareOn: false });
+    assert.equal((await d.send('resume')).ok, true, 'Settings can restart every account');
+  } finally { d.worker.stop(); }
+});
+
 test('disk relay: create, read/edit join, local files, offline restart catch-up and explicit file re-upload', async (t) => {
   const { url } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
