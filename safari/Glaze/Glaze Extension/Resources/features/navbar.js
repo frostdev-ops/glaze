@@ -835,7 +835,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (host && !host.isConnected) stop();
     if (!host) mount();
     // A mod's nav stands in for the bar (features/mods.js): the bar hides, and still keeps the page's room.
-    host.style.display = globalThis.GZ_MODS?.navStands?.() ? 'none' : '';
+    const stands = !!globalThis.GZ_MODS?.navStands?.();
+    if (stands !== (host.style.display === 'none')) host.style.display = stands ? 'none' : '';
     host.setAttribute('dir', (html.dir || document.body?.dir) === 'rtl' ? 'rtl' : 'ltr');
     host.dataset.motion = html.getAttribute('data-gz-motion') || '';
     host.toggleAttribute('data-footer', html.hasAttribute('data-gz-footer'));
