@@ -42,6 +42,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   let host = null, root, el = {}, sizes = null, model = null, rows = [], sig = '', prefs = M.clean(), legacy = null, read = false, lay = null, words = '';
   let rail = null, applied = null, peek = false, shown = false, sheetOpen = false, menu = '', enter = 0, leave = 0, queued = 0, placed = false, frame = 0, sleeping = false, measured = '';
   let cmenu = null, panel = '', panelFrom = null, panelTurn = 0;
+  const skipMain = new Set(); // Elements given a temporary focus target by Skip to content.
   const panels = new Map(); // id -> { at, data }: a panel's rows, kept a minute
   const listeners = new Map(), mods = new Map(); // event -> Set(fn); owner -> Map(id -> item)
   const emit = (event, data) => { for (const fn of listeners.get(event) || []) { try { fn(data); } catch { /* one listener's error isn't the bar's */ } } };
@@ -554,7 +555,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const had = root.activeElement && el.panel.contains(root.activeElement);
     drawPanel(panel, data || kept?.data, state);
     placePanel();
-    if (had || focus) (el.panel.querySelector('.find, .body .row, .row') || el.panel.querySelector('.close'))?.focus({ preventScroll: true });
+    if (had) (el.panel.querySelector('.find, .body .row, .row') || el.panel.querySelector('.close'))?.focus({ preventScroll: true });
   };
   const outsidePanel = (e) => { if (!e.composedPath().includes(host)) panelTo('', null, false); };
 
@@ -599,7 +600,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       else if (path.includes(el.more)) { e.preventDefault(); sheetTo(!sheetOpen); }
       else if (path.includes(el.tmore)) { e.preventDefault(); menuTo(menu === 'more' ? '' : 'more'); }
       else if (path.includes(el.tacc)) { e.preventDefault(); if (model.account?.panel && site.panel) panelTo(panel === 'profile' ? '' : 'profile', el.tacc); else menuTo(menu === 'account' ? '' : 'account'); }
-      else if (path.includes(el.skip)) { e.preventDefault(); const main = site.main(); if (main) { if (!main.hasAttribute('tabindex')) main.tabIndex = -1; main.focus(); } }
+      else if (path.includes(el.skip)) { e.preventDefault(); const main = site.main(); if (main) { if (!main.hasAttribute('tabindex')) { skipMain.add(main); main.tabIndex = -1; } main.focus(); } }
       return;
     }
     const act = target.dataset.act;
@@ -667,6 +668,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (sheetOpen) sheetTo(false);
     menuTo('', false);
     panelTo('', null, false);
+    for (const main of skipMain) if (main.getAttribute('tabindex') === '-1') main.removeAttribute('tabindex');
+    skipMain.clear();
     site?.unobserve();
     sizes?.disconnect(); sizes = null;
     // Closing a dialog or removing a focused bar can schedule focusout's delayed peek close.

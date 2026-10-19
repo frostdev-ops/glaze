@@ -33,13 +33,24 @@ const until = async (fn, timeout = 30000) => { const end = Date.now() + timeout;
     worker.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
     await worker.evaluate(() => chrome.storage.local.set({ moodle: ['http://localhost/*'] }));
     const page = await ctx.newPage();
-    page.on('pageerror', (e) => errors.push(String(e)));
-    page.on('request', (r) => { const u = new URL(r.url()); if (u.pathname.endsWith('/lib/ajax/service.php')) services.push({ origin: u.origin, method: u.searchParams.get('info') }); });
+    page.on('pageerror', (e) => errors.push(e.stack || String(e)));
+    page.on('request', (r) => { const u = new URL(r.url()); if (u.pathname.endsWith('/lib/ajax/service.php')) services.push({ origin: u.origin, method: u.searchParams.get('info'), verb: r.method(), session: !!u.searchParams.get('sesskey') }); });
     const bar = (fn) => page.evaluate((s) => (0, eval)(s)(document.getElementById('gz-navbar')?.shadowRoot), String(fn));
     const mounted = () => until(() => bar((r) => !!r && !r.host.hidden));
     const shot = (name) => page.screenshot({ path: path.join(out, name + '.png') });
     const settings = async (patch) => { await worker.evaluate(async (patch) => { const s = (await chrome.storage.sync.get('navbar')).navbar; await chrome.storage.sync.set({ navbar: { ...s, ...patch } }); }, patch); await new Promise((r) => setTimeout(r, 300)); };
     await page.goto(`chrome-extension://${id}/preview.html?site=moodle`); await mounted();
+    ok(await page.evaluate(() => {
+      const adapter = GZ_NAVBAR_MOODLE(GZ_CTX);
+      return ['data-toggle', 'data-bs-toggle'].every((toggle) => {
+        // Boost 4.5 and 5.0 core/moremenu_children, including a link inside More.
+        const doc = document.implementation.createHTMLDocument('Boost course');
+        doc.body.className = 'course-5';
+        doc.body.innerHTML = `<div class="secondary-navigation"><ul><li data-key="coursehome"><a href="${location.origin}/course/view.php?id=5" ${toggle}="tab">Course</a></li><li class="dropdown"><a href="#" ${toggle}="dropdown">More</a><ul class="dropdown-menu"><li data-key="participants"><a href="${location.origin}/user/index.php?id=5" ${toggle}="tab" aria-current="true">Participants</a></li></ul></li></ul></div>`;
+        const items = adapter.menu(doc)?.items;
+        return items?.length === 2 && items[1].key === 'participants' && items[1].active;
+      });
+    }), 'Boost 4.x and 5.0 course tabs and active More links integrate');
     ok(await bar((r) => r.querySelector('[data-id="dashboard"]') && r.querySelector('[data-id="notifications"] .badge')?.textContent === '2'), 'preview draws Moodle items and badges');
     ok(await page.locator('nav.navbar').evaluate((e) => getComputedStyle(e).display === 'none'), 'preview native header is hidden');
     await shot('preview-rail');
@@ -88,12 +99,12 @@ const until = async (fn, timeout = 30000) => { const end = Date.now() + timeout;
     const courseId = new URL(courseHref).searchParams.get('id');
     blockId = localPhp(`$course = $DB->get_record('course', ['id' => ${+courseId}], '*', MUST_EXIST); if (strpos($course->idnumber, 'GLZ-') !== 0) { throw new Exception('not a test course'); } $PAGE->set_course($course); $PAGE->set_context(context_course::instance($course->id)); $PAGE->set_pagelayout('course'); $PAGE->set_url('/course/view.php', ['id' => $course->id]); $PAGE->blocks->add_region('side-pre'); $block = $PAGE->blocks->add_block('calendar_month', 'side-pre', 0, false, 'course-view-*'); echo $block->instance->id;`);
     assert.match(blockId, /^\d+$/);
-    await page.goto(courseHref); await mounted();
+    await settings({ on: false });
+    await page.goto(courseHref);
     const nativeStyles = () => page.evaluate(() => {
       const nav = getComputedStyle(document.querySelector('nav.navbar')), page = getComputedStyle(document.getElementById('page')), wrap = getComputedStyle(document.getElementById('page-wrapper'));
-      return [nav.display, nav.height, page.marginTop, page.height, wrap.paddingTop, wrap.paddingInlineStart, getComputedStyle(document.querySelector('.secondary-navigation')).display];
+      return [nav.display, nav.height, page.marginTop, page.height, wrap.paddingTop, wrap.paddingInlineStart, getComputedStyle(document.querySelector('.secondary-navigation')).display, getComputedStyle(document.querySelector('.btn-footer-popover')).bottom];
     });
-    await settings({ on: false }); await until(() => bar((r) => !r));
     const original = await nativeStyles();
     await settings({ on: true }); await mounted();
     await until(() => bar((r) => r.querySelector('.cmenu [data-id^="cm:"]')));
@@ -102,6 +113,9 @@ const until = async (fn, timeout = 30000) => { const end = Date.now() + timeout;
     ok(await bar((r) => r.querySelector('.cmenu').textContent.includes('Activities') && r.querySelector('.cmenu').textContent.includes('Competencies')), 'serialized course overflow pages remain available'); await shot('local-course-rail');
     const drawers = async (name) => {
       for (const target of ['courseindex', 'blocks']) {
+        await page.mouse.move(page.viewportSize().width / 2, page.viewportSize().height / 2);
+        await page.evaluate(() => document.activeElement?.blur());
+        await until(async () => await page.locator('.tooltip.show').count() === 0);
         const drawer = page.locator(`#theme_boost-drawers-${target}`);
         ok(await drawer.count() === 1, name + ' ' + target + ' drawer is available');
         if (!await drawer.evaluate((e) => e.classList.contains('show'))) {
@@ -110,34 +124,71 @@ const until = async (fn, timeout = 30000) => { const end = Date.now() + timeout;
         }
         await new Promise((r) => setTimeout(r, 400));
         ok(await drawer.evaluate((e) => e.classList.contains('show')), name + ' ' + target + ' drawer opens');
-        ok(await drawer.evaluate((e) => { const r = e.getBoundingClientRect(), s = document.documentElement.style; const tabs = document.getElementById('gz-navbar').shadowRoot.querySelector('.tabs'), bottom = getComputedStyle(tabs).display === 'none' ? innerHeight : tabs.getBoundingClientRect().top; return r.bottom <= bottom + 1 && r.x >= parseFloat(s.getPropertyValue('--gz-navbar-left') || 0) - 1 && r.y >= parseFloat(s.getPropertyValue('--gz-navbar-top') || 0) - 1; }), name + ' ' + target + ' drawer clears the bar');
+        ok(await drawer.evaluate((e) => { const r = e.getBoundingClientRect(), s = document.documentElement.style, side = parseFloat(s.getPropertyValue('--gz-navbar-left') || 0); const tabs = document.getElementById('gz-navbar').shadowRoot.querySelector('.tabs'), bottom = getComputedStyle(tabs).display === 'none' ? innerHeight : tabs.getBoundingClientRect().top; return r.bottom <= bottom + 1 && r.x >= (document.documentElement.dir === 'rtl' ? 0 : side) - 1 && r.right <= innerWidth - (document.documentElement.dir === 'rtl' ? side : 0) + 1 && r.y >= parseFloat(s.getPropertyValue('--gz-navbar-top') || 0) - 1; }), name + ' ' + target + ' drawer clears the bar');
         await shot(name + '-' + target);
         await drawer.locator('[data-action="closedrawer"]').first().click();
         await until(() => drawer.evaluate((e) => !e.classList.contains('show')));
       }
     };
     await drawers('local-rail');
+    const headerAndFooter = async (name) => {
+      ok(await page.locator('#page-header').evaluate((e) => { const r = e.getBoundingClientRect(), s = document.documentElement.style, side = parseFloat(s.getPropertyValue('--gz-navbar-left') || 0); return r.top >= parseFloat(s.getPropertyValue('--gz-navbar-top') || 0) - 1 && (document.documentElement.dir === 'rtl' ? r.right <= innerWidth - side + 1 : r.left >= side - 1); }), name + ' page header clears the bar');
+      // Course pages do not always contain a sticky footer: exercise its CSS with an inert fixed element.
+      ok(await page.evaluate(() => {
+        const existing = document.getElementById('sticky-footer'), e = existing || Object.assign(document.createElement('div'), { id: 'sticky-footer' });
+        if (!existing) { e.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:48px'; document.body.append(e); }
+        const r = e.getBoundingClientRect(), s = getComputedStyle(document.documentElement), side = parseFloat(s.getPropertyValue('--gz-navbar-left') || 0), tabs = document.getElementById('gz-navbar').shadowRoot.querySelector('.tabs'), bottom = getComputedStyle(tabs).display === 'none' ? innerHeight : tabs.getBoundingClientRect().top;
+        const fits = r.left >= (document.documentElement.dir === 'rtl' ? 0 : side) - 1 && r.right <= innerWidth - (document.documentElement.dir === 'rtl' ? side : 0) + 1 && r.bottom <= bottom + 1;
+        if (!existing) e.remove(); return fits;
+      }), name + ' sticky footer clears the bar');
+    };
+    await headerAndFooter('local-rail');
+    await page.evaluate(() => { document.documentElement.dir = 'rtl'; });
+    await settings({ rail: 'icons' });
+    await until(() => bar((r) => r.host.dir === 'rtl'));
+    await drawers('local-rtl'); await headerAndFooter('local-rtl');
+    await page.evaluate(() => { document.documentElement.dir = ''; });
+    await settings({ rail: 'open' });
     await settings({ place: 'top' });
     await until(() => bar((r) => !r.querySelector('.tsub').hidden));
     ok(await page.evaluate(() => parseFloat(document.documentElement.style.getPropertyValue('--gz-navbar-top')) === 124), 'top course row reserves its full height'); await drawers('local-top');
+    await headerAndFooter('local-top');
     await settings({ cmenu: false });
     ok(await page.locator('.secondary-navigation').evaluate((e) => getComputedStyle(e).display !== 'none'), 'course menu switch restores secondary navigation');
     await settings({ cmenu: true });
+    await page.setViewportSize({ width: 768, height: 900 });
+    await until(() => bar((r) => getComputedStyle(r.querySelector('.tabs')).display !== 'none'));
+    // Boost animates the fixed footer controls when the viewport changes.
+    await until(() => page.locator('.btn-footer-popover').evaluate((e) => e.getBoundingClientRect().bottom <= document.getElementById('gz-navbar').shadowRoot.querySelector('.tabs').getBoundingClientRect().top));
+    ok(await page.evaluate(() => {
+      const tabs = document.getElementById('gz-navbar').shadowRoot.querySelector('.tabs');
+      const communication = Object.assign(document.createElement('button'), { className: 'btn btn-icon btn-footer-communication' });
+      document.getElementById('page-footer').append(communication);
+      try { return [document.querySelector('.btn-footer-popover'), communication].every((e) => getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().bottom <= tabs.getBoundingClientRect().top); }
+      finally { communication.remove(); }
+    }), '768px fixed footer controls clear the bottom navigation');
     await page.setViewportSize({ width: 390, height: 844 });
     await until(() => bar((r) => getComputedStyle(r.querySelector('.tabs')).display !== 'none'));
     await bar((r) => r.querySelector('.tabs [data-act="more"], .tabs .more').click());
     await until(() => bar((r) => r.querySelector('.sheet').open));
     ok(await bar((r) => r.querySelector('.sheet').textContent.includes('Participants')), 'phone More sheet includes the course menu'); await shot('local-phone-sheet');
-    await page.keyboard.press('Escape'); await drawers('local-phone');
+    await page.keyboard.press('Escape'); await drawers('local-phone'); await headerAndFooter('local-phone');
+    const main = page.locator('#region-main [role="main"], #region-main, main').first();
+    const originalTabindex = await main.getAttribute('tabindex');
+    await bar((r) => r.querySelector('.skip').click());
     await settings({ on: false });
     await until(() => bar((r) => !r));
+    ok(await main.getAttribute('tabindex') === originalTabindex, 'off restores the Skip to content focus target');
     ok(await page.locator('nav.navbar').evaluate((e) => getComputedStyle(e).display !== 'none') && await page.locator('.secondary-navigation').evaluate((e) => getComputedStyle(e).display !== 'none'), 'off restores native header and secondary nav');
     ok(await page.evaluate(() => !document.documentElement.hasAttribute('data-gz-navbar') && !document.documentElement.style.getPropertyValue('--gz-navbar-left')), 'off clears navbar room and attributes'); await shot('local-phone-off');
     await page.setViewportSize({ width: 1440, height: 1000 });
     ok(JSON.stringify(await nativeStyles()) === JSON.stringify(original), 'off restores the original desktop Moodle geometry'); await shot('local-desktop-off');
     ok(await worker.evaluate(async () => { const all = await chrome.storage.local.get(null), rows = Object.entries(all).filter(([k]) => k.startsWith('navbarSeen:http://localhost:8081')); return rows.length > 0 && rows.every(([, items]) => items.every((i) => typeof i.path === 'string' && !i.path.includes('sesskey') && (!i.path.includes('?') || i.path.endsWith('?redirect=0')))); }), 'last-seen navigation caches paths without session keys');
-    ok(services.filter((s) => /get_popup_notifications|get_conversations/.test(s.method)).every((s) => s.origin === 'http://localhost:8081'), 'panel AJAX stays on the local Moodle origin');
-    ok(!errors.some((e) => /navbar|GZ_NAV/.test(e)), 'no navigation runtime errors');
+    for (const method of ['message_popup_get_popup_notifications', 'core_message_get_conversations']) {
+      const requests = services.filter((s) => s.method === method);
+      ok(requests.length > 0 && requests.every((s) => s.origin === 'http://localhost:8081' && s.verb === 'POST' && s.session), method + ' uses local POST with a session key');
+    }
+    ok(errors.length === 0, 'no page or extension worker runtime errors');
     fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ checks, errors, services }, null, 2));
     console.log(`${checks.length} checks passed; screenshots: ${out}`);
   } catch (e) {

@@ -17,7 +17,7 @@ function GZ_NAVBAR_MOODLE(X) {
   const entries = (box) => {
     const data = props(box);
     const keys = new Map(data.map((i) => [i.href, i.key]));
-    const items = [...(box?.querySelectorAll('a[href]:not([data-bs-toggle], [data-toggle], .dropdown-toggle)') || [])].map((a) => ({ key: a.dataset.key || a.closest('[data-key]')?.dataset.key || keys.get(a.href) || '', label: label(a), href: safe(a.getAttribute('href')), active: a.matches('.active, .mds-nav-pill--selected, [aria-current="page"]') || !!a.closest('li.active') }));
+    const items = [...(box?.querySelectorAll('a[href]:not([data-bs-toggle="dropdown"], [data-toggle="dropdown"], .dropdown-toggle)') || [])].map((a) => ({ key: a.dataset.key || a.closest('[data-key]')?.dataset.key || keys.get(a.href) || '', label: label(a), href: safe(a.getAttribute('href')), active: a.matches('.active, .mds-nav-pill--selected, [aria-current="page"], [aria-current="true"], [aria-selected="true"]') || !!a.closest('li.active') }));
     // Recent Moodle measures away overflow links before its menu opens. Their server data still describes the course.
     for (const i of data) if (i.href && !items.some((a) => a.href === safe(i.href))) items.push({ key: i.key, label: String(i.text || ''), href: safe(i.href), active: !!i.active });
     return items.filter((i) => i.href && i.label);
@@ -91,8 +91,8 @@ function GZ_NAVBAR_MOODLE(X) {
   return {
     read, panel, inCourse,
     go: (id) => { const item = read().find((i) => i.id === id); if (!item) return false; const a = links().find((a) => a.href === item.href) || (id === 'logout' && logout()); if (a) a.click(); else location.assign(item.href); return true; },
-    brand: () => { const a = document.querySelector('.navbar-brand'), img = a?.querySelector('img'); return { src: img?.currentSrc || img?.src || '', name: (img?.alt || a?.textContent || document.title).trim().slice(0, 80) }; },
-    avatar: () => { const img = user()?.querySelector('img'); return img?.currentSrc || img?.src || ''; },
+    brand: () => { const a = document.querySelector('.navbar-brand'), img = a?.querySelector('img'); return { src: safe(img?.currentSrc || img?.src), name: (img?.alt || a?.textContent || document.title).trim().slice(0, 80) }; },
+    avatar: () => { const img = user()?.querySelector('img'); return safe(img?.currentSrc || img?.src); },
     home: () => GZ_NAV_LAYOUT.moodle(document.querySelector('.navbar-brand')?.href) === 'home' ? 'home' : 'dashboard',
     main: () => document.querySelector('#region-main [role="main"], #region-main, main'),
     menu: (doc) => {
@@ -101,7 +101,7 @@ function GZ_NAVBAR_MOODLE(X) {
       const key = X.canvasCourseKey?.(), color = X.courseList?.()[key]?.color || '';
       return items.length ? { name: (doc.querySelector('#page-header h1, .page-header-headings h1')?.textContent || '').trim(), color, items } : null;
     },
-    observe: (fn) => { notify = fn; mo?.disconnect(); mo = new MutationObserver(fn); for (const box of [nav(), document.querySelector('.secondary-navigation')]) if (box) mo.observe(box, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'href', 'src', 'aria-current', 'data-react-props'] }); },
+    observe: (fn) => { notify = fn; mo?.disconnect(); mo = new MutationObserver(fn); for (const box of [nav(), document.querySelector('.secondary-navigation')]) if (box) mo.observe(box, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'href', 'src', 'aria-current', 'aria-selected', 'data-react-props'] }); },
     unobserve: () => { mo?.disconnect(); mo = null; notify = null; },
   };
 }

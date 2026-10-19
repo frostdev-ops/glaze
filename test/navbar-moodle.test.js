@@ -31,12 +31,49 @@ test('Moodle first paint words exactly match layout, with no course tabs', () =>
   const paint = src.match(/X\.paintNav = \(\) => \{([\s\S]*?)\n    \};/)[1];
   for (const patch of [{}, { place: 'top' }, { rail: 'open' }, { style: 'embed' }, { course: 'icons' }, { course: 'top' }, { course: 'hide' }, { cmenu: false }, { on: false }]) {
     const b = { ...G.GZ_SANITIZE().navbar, ...patch };
-    for (const [pathname, cls, course] of [['/my/', '', false], ['/course/view.php', '', true], ['/mod/assign/view.php', 'course-5 context-78', true], ['/my/courses.php', 'course-1', false]]) {
+    for (const [pathname, cls, course, menu = course] of [['/my/', '', false], ['/course/view.php', '', true], ['/mod/assign/view.php', 'course-5 context-78', true], ['/my/courses.php', 'course-1', false], ['/mod/quiz/attempt.php', 'course-5', true, false]]) {
       let words;
       const win = {}; win.top = win;
-      vm.runInNewContext('(() => {' + paint + '})()', { settings: { navbar: b }, document: { body: { className: cls } }, location: { pathname }, globalThis: {}, window: win, setAttr: (k, v) => { words = v; } });
-      assert.equal(words, b.on && M.layout(b, { course, menu: course, tabs: false }).words, JSON.stringify([patch, pathname]));
+      vm.runInNewContext('(() => {' + paint + '})()', { settings: { navbar: b }, document: { body: { className: cls }, querySelector: () => menu ? {} : null }, location: { pathname }, globalThis: {}, window: win, setAttr: (k, v) => { words = v; } });
+      assert.equal(words, b.on && M.layout(b, { course, menu, tabs: false }).words, JSON.stringify([patch, pathname]));
     }
+  }
+});
+
+test('Moodle brand and avatar reject remote and non-http images', () => {
+  let src = '';
+  const img = { get currentSrc() { return src; }, alt: 'School' };
+  const box = { querySelector: () => img };
+  const context = vm.createContext({ URL, location: { href: root + '/my/', origin: 'https://school.test' }, document: { querySelector: () => box } });
+  vm.runInContext(fs.readFileSync(require.resolve('../features/navbar-moodle.js'), 'utf8'), context);
+  const adapter = context.GZ_NAVBAR_MOODLE({ t: (s) => s });
+  for (src of ['https://else.test/avatar.png', 'data:image/svg+xml,<svg/>', 'javascript:alert(1)', 'https://user:pass@school.test/avatar.png']) {
+    assert.equal(adapter.brand().src, '', src);
+    assert.equal(adapter.avatar(), '', src);
+  }
+  src = root + '/theme/image.php';
+  assert.equal(adapter.brand().src, src);
+  assert.equal(adapter.avatar(), src);
+});
+
+test('Moodle panels use session-authenticated same-origin POST and reject failed services', async () => {
+  const requests = [];
+  const logout = { href: root + '/login/logout.php?sesskey=local-test-key%20%2B%26' };
+  const context = vm.createContext({ URL, AbortSignal, location: { href: root + '/my/', origin: 'https://school.test' },
+    document: { querySelector: () => ({ querySelector: () => logout }) },
+    fetch: async (url, options) => { requests.push([new URL(url), options]); return { ok: true, json: async () => [{ data: { notifications: [] } }] }; } });
+  vm.runInContext(fs.readFileSync(require.resolve('../features/navbar-moodle.js'), 'utf8'), context);
+  const adapter = context.GZ_NAVBAR_MOODLE({ t: (s) => s });
+  assert.equal((await adapter.panel('notifications')).sections[0].rows.length, 0);
+  const [url, options] = requests[0];
+  assert.equal(url.origin, 'https://school.test');
+  assert.equal(url.pathname, '/moodle/lib/ajax/service.php');
+  assert.equal(url.searchParams.get('sesskey'), 'local-test-key +&');
+  assert.equal(options.method, 'POST'); assert.equal(options.credentials, 'same-origin'); assert.equal(options.redirect, 'error');
+  assert.equal(JSON.parse(options.body)[0].methodname, 'message_popup_get_popup_notifications');
+  for (const response of [{ ok: false }, { ok: true, json: async () => [{ error: true }] }, { ok: true, json: async () => [] }, { ok: true, json: async () => { throw Error('invalid JSON'); } }]) {
+    context.fetch = async () => response;
+    await assert.rejects(adapter.panel('notifications'));
   }
 });
 

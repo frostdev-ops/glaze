@@ -1451,13 +1451,13 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
   const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
   if (!partIn) takePart();
-  // Moodle's first paint uses the same words as lib/navbar.js; the adapter and renderer load only while on.
+  // Moodle: first paint and lazy navigation.
   if (moodle) {
     X.paintNav = () => {
       if (window.top !== window) return;
       const b = settings.navbar, course = /\bcourse-(?!1\b)\d+\b/.test(document.body?.className || '') || /\/course\/(view|section)\.php$/.test(location.pathname), c = course ? b.course : 'same';
       const place = c === 'same' ? b.place : c === 'icons' ? 'rail' : c === 'hide' ? 'none' : 'top';
-      if (!globalThis.GZ_NAVBAR_UI?.live()) setAttr('data-gz-navbar', b.on && `${place}${place === 'rail' ? ` ${c === 'icons' ? 'icons' : b.rail}` : ''} ${b.style}${place !== 'none' && course && b.cmenu ? ' menu' : ''}`);
+      if (!globalThis.GZ_NAVBAR_UI?.live()) setAttr('data-gz-navbar', b.on && `${place}${place === 'rail' ? ` ${c === 'icons' ? 'icons' : b.rail}` : ''} ${b.style}${place !== 'none' && course && b.cmenu && document.querySelector('.secondary-navigation a[href]:not([href^="#"])') ? ' menu' : ''}`);
     };
     X.syncNav = () => {
       if (window.top !== window) return;
