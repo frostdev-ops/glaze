@@ -19,7 +19,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
     gpa: 'Grade point average', gpaPlus: 'Plus/minus grade points', gpaWeighted: 'Weighted grade points', gpaAfter: 'Grade point average below the cards', todo: 'Better To Do', cardTasks: 'Tasks on course cards', gradescope: 'Gradescope in To Do', search: 'Search in your courses',
     remind: 'Due-date reminders', remindExam: 'Exam reminders', remindPlan: 'Plan reminders', remindClass: 'Class reminders', streak: 'Streak', pet: 'Pet habitat',
     docTheme: 'Document viewer in your palette', docInk: 'Pen and highlighter on documents',
-    notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights' };
+    notes: 'Notes', widgets: 'Widgets', syllabus: 'Syllabus import', insights: 'Insights', hideFolders: 'Hide modules' };
   // Ultra's: its own, and the planning switches, which work on both sites.
   const ULTRA_EXTRAS = { ...EXTRAS, hideFolders: 'Hide folders', pet: 'Pet habitat', dashboard: 'Glaze Dashboard', tabs: 'Course tabs', ...Object.fromEntries(['todo', 'cardTasks', 'gradescope', 'remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].map((k) => [k, CANVAS_EXTRAS[k]])) };
   // A path on this site, or a full address (a Canvas tab can be another site's, an external tool's): web pages only.

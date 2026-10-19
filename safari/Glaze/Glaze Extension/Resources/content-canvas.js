@@ -217,8 +217,15 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     }
     return c.p;
   };
+  // Hidden modules (features/folders.js), where a course lists its modules; who you are keys what you hid.
+  let meP = null;
+  const me = () => (meP ||= profile().then((p) => String(p.id), (e) => { meP = null; throw e; }));
+  const syncFolders = () => (I.links.length && I.settings.enhance.hideFolders && document.getElementById('context_modules')
+    ? need('lib/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('features/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(true, me()), () => {})
+    : globalThis.GZ_FOLDER_UI?.sync(false));
   let reqs = null; // { cid, progress: { done, total } | null }, null when the whole total isn't known
   const canvasProgress = () => {
+    syncFolders();
     const old = document.getElementById('gz-progress');
     const cid = canvasCourseId();
     const list = I.observer && I.settings.enabled && I.settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
@@ -415,7 +422,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   };
 
   return {
-    record, stop: () => globalThis.GZ_NAVBAR_UI?.sync(), planner: () => todoHere() || cardsHere(), tagCards: tagCanvasCards, tagExtras: tagCanvasExtras, lift: liftCourses,
+    record, stop: () => { globalThis.GZ_FOLDER_UI?.sync(false); globalThis.GZ_NAVBAR_UI?.sync(); }, planner: () => todoHere() || cardsHere(), tagCards: tagCanvasCards, tagExtras: tagCanvasExtras, lift: liftCourses,
     renderProgress: canvasProgress, renderNew: renderCanvasNew, renderCalc: canvasGrades, paintCourses, paintNav, paintTabs, syncNav,
     syncTodo, syncCardTasks, syncWidgets, syncRemind, syncSyl,
     syncInsights: () => {
