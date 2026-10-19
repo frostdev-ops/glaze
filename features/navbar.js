@@ -836,7 +836,10 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (!host) mount();
     // A mod's nav stands in for the bar (features/mods.js): the bar hides, and still keeps the page's room.
     const stands = !!globalThis.GZ_MODS?.navStands?.();
-    if (stands !== (host.style.display === 'none')) host.style.display = stands ? 'none' : '';
+    if (stands !== host.hasAttribute('data-replaced')) {
+      host.toggleAttribute('data-replaced', stands);
+      if (stands) { menuTo('', false); sheetTo(false); dockTo(false, false); tip(null); }
+    }
     host.setAttribute('dir', (html.dir || document.body?.dir) === 'rtl' ? 'rtl' : 'ltr');
     host.dataset.motion = html.getAttribute('data-gz-motion') || '';
     host.toggleAttribute('data-footer', html.hasAttribute('data-gz-footer'));
@@ -946,7 +949,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       const item = byId(id);
       if (!item || item.hidden && !item.native || item.href && !sameSite(item.href)) return false;
       emit('navigate', { id });
-      if (item.owner) { mods.get(item.owner)?.get(item.id)?.select?.(); if (item.href) location.assign(item.href); }
+      if (item.panel && site.panel) panelTo(panel === id ? '' : id);
+      else if (item.course) openHere(item.href);
+      else if (item.owner) { mods.get(item.owner)?.get(item.id)?.select?.(); if (item.href) location.assign(item.href); }
       else if (item.action) glaze(item.action);
       else if (item.native) goNative(id);
       else if (item.href) location.assign(item.href);

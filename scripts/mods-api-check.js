@@ -189,12 +189,12 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
       // With Glaze's bar drawn, the replacement stands in for the bar; without it, for Ultra's own nav.
       const barLive = await inPage(page, () => !!globalThis.GZ_NAVBAR_UI?.live());
       const native = () => page.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation"]')).display);
-      const glazeBar = () => page.evaluate(() => getComputedStyle(document.getElementById('gz-navbar')).display);
-      if (barLive) ok(await glazeBar() !== 'none', 'Glaze\'s bar shows while the replacement is off');
+      const glazeBar = () => page.evaluate(() => [...(document.getElementById('gz-navbar')?.shadowRoot?.querySelectorAll('.rail, .topbar, .tabs') || [])].some((e) => getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden'));
+      if (barLive) ok(await glazeBar(), 'Glaze\'s bar shows while the replacement is off');
       else ok(await native() !== 'none', 'the nav is Ultra\'s while the replacement is off');
       const nativeBefore = await native();
       await set('local', { [`modReplace:${ID.nav}`]: { nav: true } });
-      await until(async () => (barLive ? await glazeBar() === 'none' : await native() === 'none'), 'nav replaced');
+      await until(async () => (barLive ? !await glazeBar() : await native() === 'none'), 'nav replaced');
       t = await until(async () => { const x = await tree(page); return x.all.some((n) => n.nodeName === 'BUTTON' && x.text(n) === 'Mod home') && x; }, 'mod nav drawn');
       ok(t.all.some((n) => t.attr(n, 'role') === 'navigation' && t.attr(n, 'aria-label') === 'Nav'), 'the mod\'s nav takes its place, as navigation');
       if (barLive) {
@@ -205,7 +205,7 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
       }
       ok((await stats(page)).ready[ID.nav] !== undefined && !(await stats(page)).gone[ID.nav], 'turning it on restarts nothing');
       await set('local', { [`modReplace:${ID.nav}`]: { nav: false } });
-      await until(async () => !(await page.evaluate(() => !!document.querySelector('.gz-mod-nav'))) && (barLive ? await glazeBar() !== 'none' : await native() !== 'none'), 'nav back');
+      await until(async () => !(await page.evaluate(() => !!document.querySelector('.gz-mod-nav'))) && (barLive ? await glazeBar() : await native() !== 'none'), 'nav back');
       ok(true, barLive ? 'turned off, Glaze\'s bar is back' : 'turned off, Ultra\'s nav is back exactly');
       // An opted-in built-in tile uses the mod's renderer, then restores the native renderer.
       await set('local', { [`modReplace:${ID.nav}`]: { 'tile:timer': true }, widgetLayout: { boards: { pages: [

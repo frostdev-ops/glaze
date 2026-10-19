@@ -15,6 +15,7 @@
   color: var(--gz-ink, #e8f2fa);
 }
 :host([hidden]) { display: none; }
+:host([data-replaced]) :is(.rail, .topbar, .tsub, .tabs, .menu, .tip, .sheet, .skip) { visibility: hidden !important; pointer-events: none; }
 * { box-sizing: border-box; }
 svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 button { font: inherit; color: inherit; background: transparent; border: 0; margin: 0; padding: 0; cursor: pointer; }

@@ -57,3 +57,27 @@ test('replacement go refuses off-site and unsafe destinations, while direct cust
   assert.equal(h.go('calendar'), true);
   assert.deepEqual(h.calls, [['native', 'calendar']]);
 });
+
+test('replacement go opens native panels and course pages through Glaze', () => {
+  const h = api([{ id: 'course', native: true, panel: true, href: origin + '/courses' }, { id: 'cm:0', course: true, href: origin + '/courses/1/modules' }]);
+  assert.equal(h.go('course'), true);
+  assert.equal(h.go('cm:0'), true);
+  assert.deepEqual(h.calls, [['panel', 'course'], ['open', origin + '/courses/1/modules']]);
+});
+
+test('a replacement hides bar surfaces while keeping the panel host and frame mounts in place', () => {
+  const host = new El('div', {}), calls = [];
+  let stands = true;
+  const c = vm.createContext({ host, globalThis: { GZ_MODS: { navStands: () => stands } },
+    menuTo: () => calls.push('menu'), sheetTo: () => calls.push('sheet'), dockTo: () => calls.push('dock'), tip: () => calls.push('tip'),
+  });
+  const replace = () => vm.runInContext(`(() => { ${part("    // A mod's nav stands in for the bar", "    host.setAttribute('dir'")} })();`, c);
+  replace();
+  assert.notEqual(host.style.display, 'none', 'panels must remain visible over the replacement');
+  assert.equal(host.hasAttribute('data-replaced'), true);
+  assert.deepEqual(calls.sort(), ['dock', 'menu', 'sheet', 'tip']);
+  replace();
+  assert.equal(calls.length, 4, 'no repeated work while replacement stays on');
+  stands = false; replace();
+  assert.equal(host.hasAttribute('data-replaced'), false);
+});
