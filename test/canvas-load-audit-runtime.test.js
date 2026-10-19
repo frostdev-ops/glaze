@@ -1,6 +1,5 @@
 // Canvas document-load audit: real manifest scripts in a VM, with storage, DOMContentLoaded,
 // mutation deliveries and time controlled separately. No browser, server or wall-clock perf claims.
-// BUG tests assert the desired budget and deliberately fail until the production defect is fixed.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -300,9 +299,8 @@ test('Canvas skips the initial full-page sweep when the document exceeds 20000 e
   assert.equal(p.events.filter(([kind]) => kind === 'style' || kind === 'layout').length, 0);
 });
 
-test('BUG: Canvas course-tab themes and render blockers are installed before DOMContentLoaded', async () => {
-  // content.js:77-79 waits for DOMContentLoaded even with the head marker and wrapper present.
-  // Real subframes can paint during parsing; by enable(), body exists and no blocker is added.
+test('Canvas course-tab themes and render blockers are installed before DOMContentLoaded', async () => {
+  // Real subframes can paint during parsing; the theme must arrive before the body.
   const p = page({ frame: 'gz-ctab:27' }); await settle();
   assert.equal(p.doc.body, null, 'started early enough to install render blockers');
   p.addBody(); await settle(); // A parser-created body may paint before DOMContentLoaded.
@@ -313,12 +311,12 @@ test('BUG: Canvas course-tab themes and render blockers are installed before DOM
   assert.ok(earlySurface, 'cached palette must be present while parsing');
 });
 
-test('BUG: Canvas course-tab navigation leaves course-list and color recording to the top page', async () => {
+test('Canvas course-tab navigation leaves course-list and color recording to the top page', async () => {
   const p = await boot({ frame: 'gz-ctab:27' });
   assert.equal(courseRequests(p).length, 0, `course-tab document made ${courseRequests(p).length} redundant account-wide requests`);
 });
 
-test('BUG: Canvas reuses a fresh course/color snapshot across same-tab document loads', async () => {
+test('Canvas reuses a fresh course/color snapshot across same-tab document loads', async () => {
   const session = new Map(), local = {};
   const first = await boot({ session, local, cached: null });
   const second = await boot({ session, local, cached: null, pathname: '/courses/27/pages/next' });
@@ -326,14 +324,14 @@ test('BUG: Canvas reuses a fresh course/color snapshot across same-tab document 
   assert.equal(courseRequests(second).length, 0, 'immediate next document should reuse that fresh account-wide snapshot');
 });
 
-test('BUG: an unrelated Canvas mutation does not rescan every dashboard card and planner group', async () => {
+test('an unrelated Canvas mutation does not rescan every dashboard card and planner group', async () => {
   const p = await boot(), widget = new p.El(); widget.id = 'gz-widget'; p.body.append(widget); p.queries.length = 0;
   p.sweep().deliver([{ type: 'attributes', target: widget, attributeName: 'style', oldValue: '' }]);
   const scans = p.queries.filter(([node, sel]) => node === p.doc && ['.ic-DashboardCard', '.planner-grouping'].includes(sel));
   assert.equal(scans.length, 0, `${scans.length} whole-document color scans for a Glaze widget style mutation`);
 });
 
-test('BUG: Canvas applies the 20000-element sweep cap to an added subtree', async () => {
+test('Canvas applies the 20000-element sweep cap to an added subtree', async () => {
   const p = await boot(), root = new p.El(); p.body.append(root);
   for (let i = 0; i < 20001; i++) root.append(new p.El());
   p.events.length = 0; p.sweep().deliver([added(p, [root])]); await p.advance(150);
@@ -342,13 +340,13 @@ test('BUG: Canvas applies the 20000-element sweep cap to an added subtree', asyn
   assert.ok(styles <= 20000 && geometry <= 20000, `added subtree bypassed MAX_FULL: ${styles} style reads and ${geometry} geometry reads`);
 });
 
-test('BUG: Canvas skips sticker storage when stickers, rotation and custom cursor are all off', async () => {
+test('Canvas skips sticker storage when stickers, rotation and custom cursor are all off', async () => {
   const p = await boot();
   const reads = p.storage.filter((r) => r.area === 'local' && typeof r.keys === 'string' && r.keys.startsWith('stk:'));
   assert.equal(reads.length, 0, `${reads.length} route-specific sticker storage reads with every Look extra off`);
 });
 
-test('BUG: Canvas startup without storage.getKeys does not transfer unrelated local artwork', async () => {
+test('Canvas startup without storage.getKeys does not transfer unrelated local artwork', async () => {
   const p = await boot({ getKeys: false, local: { unrelatedArtwork: 'x'.repeat(1024 * 1024) } });
   const bulk = p.storage.filter((r) => r.area === 'local' && r.keys === null);
   assert.equal(bulk.length, 0, `draft cleanup read all local storage (${bulk.reduce((n, r) => n + r.bytes, 0)} bytes) with drafts off`);

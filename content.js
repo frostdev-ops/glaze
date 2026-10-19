@@ -74,8 +74,8 @@
   // doesn't, and stays as it is.
   // Moodle's: its page id and layout on <body>.
   const isCanvas = () => !!document.querySelector(moodle ? 'body[id^="page-"][class*="pagelayout-"]' : '#application.ic-app');
-  // A same-host tool can carry Canvas's head marker too; confirm its wrapper before styling a frame.
-  if (!ultra && window.top !== window) {
+  // Other frames need a wrapper check; our named course tabs theme while the parser is still in the head.
+  if (!ultra && !solo) {
     await new Promise(onBody);
     if (!isCanvas()) return;
   }
@@ -85,7 +85,7 @@
   // next getBoundingClientRect would force a reflow, once per element.
   // A full pass is O(elements) getComputedStyle calls, so only the first pass looks at everything;
   // after that we only look at the subtrees the mutation observer reports.
-  // ponytail: 20k-element cap on the full pass; drop it if a real page ever needs one that big.
+  // ponytail: 20k-element cap per pass; drop it if a real page ever needs one that big.
   const MAX_FULL = 20000;
   // Thin, wide images in course content are decorative dividers drawn for a white page; on a dark
   // theme they glow. Their size is only known once loaded.
@@ -207,8 +207,11 @@
     const els = [];
     for (const r of roots) {
       els.push(r);
-      for (const d of r.querySelectorAll('*')) els.push(d);
-      if (els.length > MAX_FULL) break;
+      for (const d of r.querySelectorAll('*')) {
+        if (els.length >= MAX_FULL) break;
+        els.push(d);
+      }
+      if (els.length >= MAX_FULL) break;
     }
     sweepEls(els);
   };
@@ -270,14 +273,14 @@
   // Moodle's: <body>'s course (1 is the site) under its theme sheet's root.
   const canvasCourseKey = (id = moodle ? document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1] : canvasCourseId()) => id ? `${site}:${moodle ? document.querySelector('link[href*="/theme/styles"]')?.href.split('/theme/')[0] : location.origin}/${id}` : null;
   const recordCourses = () => {
+    if (window.top !== window) return; // account-wide work belongs to the page around the course tabs
     if (!ultra) {
-      if (canvasRecorded || !solo) return;
+      if (canvasRecorded) return;
       canvasRecorded = true;
       if (moodle) return moodleIn().then((m) => m.record()).catch(() => { canvasRecorded = false; });
       X.record().catch(() => { canvasRecorded = false; });
       return;
     }
-    if (!solo) return;
     X.record();
   };
   // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, or on Canvas from
@@ -456,7 +459,7 @@
     // Keep native-parent removals for remount/teardown; ignore owned UI internals.
     records = records.filter((r) => !globalThis.GZ_LIGHT?.owns(r) && !r.target.closest?.('.gz-game,.gz-game-dialog,.gz-game-world') && !(ultra && r.target.closest?.('[id^="gz-"]')));
     if (!records.length) return;
-    X.lift();
+    X.lift(records);
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {
         if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true' && Date.now() <= (reviewing.get(r.target) || 0)) { reviewing.delete(r.target); celebrate(r.target); }
@@ -843,8 +846,8 @@
   // Expired copies go; with backup off, all copies go. Top frame only.
   const tidyDrafts = () => {
     if (window.top !== window) return;
-    // Only drafts are read where keys can be listed.
-    local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => s.get(ks?.filter((k) => k.startsWith('draft:')) || null, (all) => {
+    // Without key listing, skip cleanup rather than transfer unrelated local artwork.
+    local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => ks && s.get(ks.filter((k) => k.startsWith('draft:')), (all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
       need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
     })).catch(() => {}));
@@ -1316,8 +1319,10 @@
   const armFlip = () => {
     if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
     // The pointer, Look rotation and this page's stickers (features/lookx.js) load once one is in use.
+    if (globalThis.GZ_LOOKX) return GZ_LOOKX.sync();
     const k = `stk:${location.origin}${location.pathname.replace(/(.)\/+$/, '$1')}`, x = settings.extras;
-    local((l) => l.get(k, (r) => { if (globalThis.GZ_LOOKX || links.length && (x.cursor !== 'off' || x.rotate !== 'off' || x.stickers && r?.[k]?.length)) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
+    if (!links.length || !x.stickers && x.cursor === 'off' && x.rotate === 'off') return;
+    local((l) => l.get(k, (r) => { if (x.cursor !== 'off' || x.rotate !== 'off' || x.stickers && r?.[k]?.length) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);

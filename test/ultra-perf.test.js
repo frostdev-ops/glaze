@@ -124,7 +124,7 @@ test('a queued flush stays paused while hidden and rediscovers native roots on r
   assert.equal(tags[0][0], body);
 });
 
-test('draft cleanup lists only drafts, falls back without getKeys, and handles a rejected listing', async () => {
+test('draft cleanup reads only listed drafts and skips an unavailable or rejected key listing', async () => {
   const core = fs.readFileSync(process.env.PERF_CORE_SOURCE || require.resolve('../content.js'), 'utf8');
   const start = core.indexOf('  const tidyDrafts = '), end = core.indexOf('  // ---- download all', start);
   for (const mode of ['keys', 'absent', 'rejected']) {
@@ -149,7 +149,7 @@ test('draft cleanup lists only drafts, falls back without getKeys, and handles a
     tidy();
     await new Promise(setImmediate);
     assert.equal(rejected.length, 0, mode + ': a failed key listing must not leak a rejected promise');
-    assert.deepEqual(JSON.parse(JSON.stringify(read)), [mode === 'keys' ? ['draft:old'] : null], mode);
-    assert.deepEqual(removed, ['draft:old'], mode);
+    assert.deepEqual(JSON.parse(JSON.stringify(read)), mode === 'keys' ? [['draft:old']] : [], mode);
+    assert.deepEqual(removed, mode === 'keys' ? ['draft:old'] : [], mode);
   }
 });

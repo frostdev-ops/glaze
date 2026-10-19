@@ -28,14 +28,22 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   }, true);
 
   // ---- the student's courses -------------------------------------------------------------------
-  let canvasList = null;
-  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
-    .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
+  const COURSE_CACHE = 'gz-canvas-courses';
+  let canvasList = null, canvasSnapshot = null, coursesRead = false;
+  // Same tab and origin, briefly: navigation needn't ask for the same courses and colors again.
+  try {
+    const kept = JSON.parse(sessionStorage.getItem(COURSE_CACHE)), age = Date.now() - kept?.at;
+    if (age >= 0 && age < 60000 && Array.isArray(kept.list) && kept.colors && typeof kept.colors === 'object') canvasSnapshot = kept;
+  } catch { /* blocked or empty */ }
+  const canvasCourses = () => (canvasList ||= canvasSnapshot ? Promise.resolve(canvasSnapshot.list) : capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
+    .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
   let mine = null;
   const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
-  const record = () => Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
+  const record = () => Promise.all([canvasCourses(), canvasSnapshot ? canvasSnapshot.colors : capi('/users/self/colors').catch(() => null)]).then(([list, colors]) => {
+    // Failed reads must not turn into a fresh, empty snapshot.
+    if (coursesRead && colors) try { sessionStorage.setItem(COURSE_CACHE, JSON.stringify({ at: Date.now(), list, colors })); } catch { /* blocked or full */ }
     const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
-      name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
+      name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors?.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
     }]));
     // Preserve Blackboard and other schools; Canvas ids alone are only unique within their own host.
     chrome.storage.local.get('seenCourses', (r) => {
@@ -106,9 +114,20 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // our own write is a mutation too. Not /users/self/colors: Canvas picks a default color in the browser for a course
   // with none and saves it only after painting, and a color changed on the page never reaches a list asked for once.
   const COURSE_BOXES = [['.ic-DashboardCard', '.ic-DashboardCard__header_hero', 'backgroundColor'], ['.planner-grouping', ':scope > ol', 'borderColor']];
-  const liftCourses = () => {
+  const liftCourses = (records) => {
     for (const [box, src, prop] of COURSE_BOXES) {
-      for (const el of document.querySelectorAll(box)) {
+      // Initial paint visits every box; mutations only revisit their box and newly inserted boxes.
+      const boxes = records ? new Set() : document.querySelectorAll(box);
+      if (records) for (const r of records) {
+        const near = r.target.closest?.(box);
+        if (near) boxes.add(near);
+        if (r.type === 'childList') for (const n of r.addedNodes) {
+          if (n.nodeType !== 1) continue;
+          if (n.matches(box)) boxes.add(n);
+          for (const el of n.querySelectorAll(box)) boxes.add(el);
+        }
+      }
+      for (const el of boxes) {
         const c = el.querySelector(src)?.style[prop];
         if (c && el.style.getPropertyValue('--gz-course-raw') !== c) el.style.setProperty('--gz-course-raw', c);
       }
