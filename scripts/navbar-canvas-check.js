@@ -12,13 +12,14 @@ const local = 'http://localhost:3000';
 const credentialsFile = process.env.CANVAS_CREDENTIALS || path.join(os.homedir(), 'Projects/canvas-lms/glaze/credentials.env');
 const extensionId = (dir) => [...crypto.createHash('sha256').update(dir).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const settings = (navbar = {}, extra = {}) => G.GZ_SANITIZE({ enabled: true, navbar: { on: true, ...navbar }, enhance: { ...Object.fromEntries(Object.keys(G.GZ_DEFAULTS.enhance).map((k) => [k, false])), tabs: true }, tabs: { at: 'nav' }, motion: { level: 'off' }, ...extra });
-let checks = 0, ctx, opts, page, tmp, ext, groupId = '', groupOwned = false, historySetting = null;
+let checks = 0, ctx, opts, page, tmp, ext, groupId = '', groupOwned = false, historySetting = null, feedbackSetting = null;
 const canvasRoot = path.join(os.homedir(), 'Projects/canvas-lms');
 const rails = (code) => require('node:child_process').execFileSync('docker', ['compose', 'exec', '-T', 'web', 'bundle', 'exec', 'rails', 'runner', code], { cwd: canvasRoot, encoding: 'utf8', timeout: 60000 });
 // Canvas's Setting cache is process-local; HUP clears it without restarting the app or its containers.
 const reloadCanvas = () => require('node:child_process').execFileSync('docker', ['compose', 'exec', '-T', 'web', 'ruby', '-e', `Dir.glob('/proc/[0-9]*/cmdline').each { |p| begin; Process.kill('HUP', p.split('/')[2].to_i) if File.read(p).start_with?('Passenger RubyApp:'); rescue Errno::ENOENT, Errno::ESRCH; end }`], { cwd: canvasRoot, timeout: 10000 });
-const errors = [], shots = [], apiResults = [];
+const errors = [], shots = [], apiResults = [], layoutFailures = [];
 const ok = (v, label) => { if (!v) throw Error(label); console.log(`ok   ${label}`); checks++; };
+const layoutProbe = (v, label) => { if (v) ok(v, label); else { layoutFailures.push(label); console.error(`FAIL ${label}`); } };
 const wait = async (read, accepts, label) => { let v; const end = Date.now() + 20000; do { v = await read(); if (accepts(v)) return v; await page.waitForTimeout(80); } while (Date.now() < end); throw Error(`${label} (last: ${JSON.stringify(v)})`); };
 const bar = (fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gz-navbar')?.shadowRoot, a), [String(fn), arg]);
 const ready = () => wait(() => bar((r) => !!r && !r.host.hidden), Boolean, 'navbar ready');
@@ -32,7 +33,7 @@ const openPanel = async (id, scope = '.rail') => {
   await wait(() => bar((r) => { const p = r?.querySelector('.panel'); return p && !p.hidden && !!p.querySelector('.body, [data-act="panel-retry"]'); }), Boolean, `${id} panel response`);
   const result = await bar((r) => ({ error: !!r.querySelector('.panel [data-act="panel-retry"]'), title: r.querySelector('.panel h2')?.textContent, rows: [...r.querySelectorAll('.panel a.row')].map((a) => ({ label: a.textContent.trim(), href: a.href })), empty: r.querySelector('.panel .body .note')?.textContent }));
   ok(page.url() === before, `${id} opens without jumping to a page`);
-  ok(!await page.locator('#global_nav_tray_container [role=dialog]').count(), `${id} leaves Canvas trays closed`);
+  ok(!await page.locator('#nav-tray-portal [role=dialog], #global_nav_tray_container [role=dialog]').count(), `${id} leaves Canvas trays closed`);
   ok(!result.error, `${id} opens a Glaze panel (${result.rows.length} links)`);
   return result;
 };
@@ -42,9 +43,12 @@ const navigateRow = async (id) => {
   await shot(`live-${id}-panel`);
   const dest = new URL(row.href);
   if (dest.origin !== local) {
+    // Exercise the popup destination without sending a request to an external help provider.
+    await ctx.route(row.href, (route) => route.fulfill({ contentType: 'text/html', body: '<title>Help destination check</title>' }));
+    const request = ctx.waitForEvent('request', { predicate: (r) => r.isNavigationRequest() && r.url() === row.href });
     const opened = page.waitForEvent('popup');
     await page.locator('#gz-navbar .panel a.row').first().click();
-    const p = await opened; ok(p.url() === row.href || p.url() === 'about:blank', `${id} row opens its external destination`); await p.close();
+    const p = await opened; await request; await p.waitForURL(row.href); ok(true, `${id} row opens its external destination (network intercepted)`); await p.close(); await ctx.unroute(row.href);
   } else {
     await page.locator('#gz-navbar .panel a.row').first().click();
     await wait(async () => {
@@ -59,13 +63,18 @@ const overlap = async (name) => {
   const r = await page.evaluate(() => {
     const root = document.getElementById('gz-navbar')?.shadowRoot, h = root?.host, place = h?.dataset.place;
     const box = document.getElementById('wrapper')?.getBoundingClientRect(), content = document.getElementById('content')?.getBoundingClientRect();
-    const rail = root?.querySelector('.rail').getBoundingClientRect(), top = root?.querySelector('.tsub:not([hidden])')?.getBoundingClientRect() || root?.querySelector('.topbar').getBoundingClientRect();
-    return { place, x: box?.x, y: box?.y, cx: content?.x, cy: content?.y, rail: rail?.right, bottom: top?.bottom, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+    const top = root?.querySelector('.tsub:not([hidden])')?.getBoundingClientRect() || root?.querySelector('.topbar').getBoundingClientRect();
+    // The icons rail is clipped from a wider element; its full bounding box includes the hidden peek area.
+    return { place, x: box?.x, y: box?.y, cx: content?.x, cy: content?.y, rail: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-left')), bottom: top?.bottom, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
   });
   ok(!r.overflow, `${name}: no horizontal overflow`);
   if (r.place === 'rail') ok(r.x >= r.rail - 1 && r.cx >= r.rail - 1, `${name}: content clears the rail`);
   if (r.place === 'top') ok(r.cy >= r.bottom - 1, `${name}: content clears both top rows`);
 };
+const nativeGeometry = () => page.evaluate(() => Object.fromEntries(['header', 'mobile-header', 'wrapper', 'main', 'left-side', 'sticky-container'].map((id) => {
+  const e = document.getElementById(id), s = e && getComputedStyle(e);
+  return [id, s && [s.display, s.position, s.top, s.marginInlineStart, s.marginInlineEnd, s.paddingTop]];
+})));
 async function login(who, credentials) {
   await ctx.clearCookies();
   console.log(`local login: ${who.toLowerCase()}`);
@@ -122,14 +131,48 @@ const api = async (route, method = 'GET', form) => {
     ok(native.filter((a) => L.canvas(a.id)).every((a) => model.some((b) => b.id === L.canvas(a.id) && b.badge === a.badge)), 'live items and badges match Canvas');
     ok(await bar((r) => !!r.querySelector('[data-id="dashboard"][aria-current="page"]')), 'live Dashboard is active');
     await overlap('live dashboard'); await shot('live-dashboard');
+    // A native-markup fixture covers school LTI links, which the local seed does not install.
+    await page.evaluate(() => {
+      const li = Object.assign(document.createElement('li'), { id: 'gz-check-tool', className: 'globalNavExternalTool' });
+      li.append(Object.assign(document.createElement('a'), { href: '/courses', target: '_blank', textContent: 'School library' })); document.getElementById('menu').append(li);
+    });
+    await wait(() => bar((r) => !!r.querySelector('.rail [data-id=tools]')), Boolean, 'school tool discovery');
+    await openPanel('tools');
+    const toolBefore = page.url();
+    const popup = page.waitForEvent('popup'); await page.locator('#gz-navbar .panel a.row').first().click();
+    const toolPage = await popup; await toolPage.waitForURL(local + '/courses'); await toolPage.close();
+    ok(page.url() === toolBefore, 'same-origin school tool preserves its new-tab launch');
+    await page.evaluate(() => document.getElementById('gz-check-tool').remove());
+    for (const [id, nativeId] of [['calendar', 'calendar'], ['messages', 'conversations']]) {
+      const href = await page.locator(`#global_nav_${nativeId}_link`).getAttribute('href'), dest = new URL(href, local);
+      await page.locator(`#gz-navbar .rail [data-id="${id}"]`).click();
+      await wait(() => new URL(page.url()).pathname, (p) => p === dest.pathname, `${id} native navigation`); await ready();
+      ok(await bar((r, id) => !!r.querySelector(`.rail [data-id="${id}"][aria-current=page]`), id), `${id} navigates through Canvas and becomes active`);
+      await page.goto(local + '/'); await ready();
+    }
     const courses = await openPanel('course'); ok(courses.rows.length >= 4, 'live Courses contains enrolled courses and All courses');
     await shot('live-courses-panel');
     const firstCourse = new URL(courses.rows[0].href).pathname;
     await page.goto(local + firstCourse); await ready();
+    await set({ on: false }); const nativeBefore = await nativeGeometry(); await set(); await ready();
     await wait(() => bar((r) => r.querySelectorAll('.cmenu .item').length), (n) => n > 0, 'live course menu');
     ok(await page.locator('#left-side').evaluate((e) => getComputedStyle(e).display) === 'none', 'live course menu replaces Canvas sidebar');
     ok(await page.locator('#courseMenuToggle').evaluate((e) => getComputedStyle(e).display) === 'none', 'live course toggle hidden');
     await overlap('live course rail'); await shot('live-course-rail');
+    await set({}, { declutter: { help: true, tabs: ['grades'] } });
+    ok(await bar((r) => !r.querySelector('.rail [data-id=help]') && ![...r.querySelectorAll('.cmenu a')].some((a) => /\/grades\/?$/.test(a.pathname))), 'integrated navigation honors Hide help and hidden course Grades');
+    await set({ style: 'embed', rail: 'icons' }); await overlap('live embedded icons');
+    await set();
+    // The local server serves LTR CSS; set the effective page direction as an RTL Canvas build does.
+    const direction = await page.evaluate(() => ({ html: document.documentElement.getAttribute('dir'), body: document.body.style.direction }));
+    await page.evaluate(() => { document.documentElement.dir = 'rtl'; document.body.style.direction = 'rtl'; });
+    await set({ rail: 'open' });
+    await wait(() => bar((r) => r.host.dir), (dir) => dir === 'rtl', 'RTL navbar');
+    ok(await bar((r) => document.getElementById('wrapper').getBoundingClientRect().right <= r.querySelector('.rail').getBoundingClientRect().left + 1), 'RTL course content clears the right rail');
+    await openPanel('course');
+    ok(await bar((r) => r.querySelector('.panel').getBoundingClientRect().right <= r.querySelector('.rail').getBoundingClientRect().left - 7), 'RTL panel opens beside the rail');
+    await shot('live-course-rtl'); await closePanel();
+    await page.evaluate((d) => { if (d.html === null) document.documentElement.removeAttribute('dir'); else document.documentElement.setAttribute('dir', d.html); document.body.style.direction = d.body; }, direction);
     await set({ place: 'top' });
     ok(await bar((r) => !r.querySelector('.tsub').hidden && r.querySelectorAll('.tsub .item').length > 0), 'live course menu is top-bar second row');
     await overlap('live course top'); await shot('live-course-top');
@@ -141,8 +184,10 @@ const api = async (route, method = 'GET', form) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await set({ place: 'top', cmenu: false });
     ok(await page.locator('#left-side').evaluate((e) => getComputedStyle(e).display) !== 'none', 'course-menu off restores native course menu');
+    layoutProbe(await page.locator('#sticky-container').evaluate((e) => parseFloat(getComputedStyle(e).top) >= parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-top'))), 'native sticky course menu clears the top bar with tabs hosted in navigation');
     await set({ on: false });
     ok(await page.locator('#header').evaluate((e) => getComputedStyle(e).display) !== 'none' && !await page.locator('#gz-navbar').count(), 'live navbar off restores native global nav');
+    ok(JSON.stringify(await nativeGeometry()) === JSON.stringify(nativeBefore), 'navbar off restores native header, wrapper, main, course menu and sticky styles exactly');
     await shot('live-off');
     await set({}, { enabled: false });
     ok(!await page.locator('#gz-navbar').count(), 'turning Glaze off removes its Canvas navbar');
@@ -159,6 +204,26 @@ const api = async (route, method = 'GET', form) => {
     if (!groups.length) { const g = await api('/api/v1/groups', 'POST', { name: 'Glaze navigation check', is_public: 'false' }); groupId = String(g.id); groupOwned = true; groups = [g]; await page.reload(); await ready(); }
     ok(groups.length > 0, 'local test account has a real group');
     await page.goto(local + '/'); await ready();
+    const helpLinks = await api('/help_links');
+    if (!helpLinks.some((l) => ['#teacher_feedback', '#create_ticket'].includes(l.url))) {
+      const result = rails("puts 'GLAZE_FEEDBACK=' + Setting.get('show_feedback_link', 'false'); Setting.set('show_feedback_link', 'true')");
+      feedbackSetting = /^GLAZE_FEEDBACK=(.*)$/m.exec(result)?.[1] || 'false'; reloadCanvas();
+      console.log('local fixture: temporarily enabled native Help forms (never submitted)');
+      await page.reload(); await ready();
+    }
+    await openPanel('help');
+    const support = await bar((r) => r.querySelector('.panel [data-run="help:teacher_feedback"]')?.dataset.run || r.querySelector('.panel [data-run="help:create_ticket"]')?.dataset.run);
+    ok(!!support, 'Help retains Canvas built-in support forms');
+    await bar((r, run) => r.querySelector(`.panel [data-run="${run}"]`).click(), support);
+    await page.locator('#help_tray').waitFor({ state: 'visible' });
+    await page.locator('#help_tray textarea, #help_tray input, #help_tray select').first().waitFor({ state: 'visible' });
+    ok(await page.locator('#help_tray textarea, #help_tray input, #help_tray select').count() > 0, 'native Canvas support form remains visible and usable');
+    // Wait for the tray's slide transition and verify a real control receives input above the rail.
+    const usable = await page.locator('#help_tray textarea, #help_tray input, #help_tray select').first().click({ trial: true, timeout: 3000 }).then(() => true, () => false);
+    layoutProbe(usable, 'Canvas native tray paints above Glaze navigation');
+    await shot('live-native-help-form');
+    await page.keyboard.press('Escape');
+    await page.locator('#help_tray').waitFor({ state: 'hidden' });
     for (const id of ['profile', 'course', 'groups', 'help', 'history']) {
       await navigateRow(id);
       if (id === 'course') {
@@ -170,6 +235,12 @@ const api = async (route, method = 'GET', form) => {
         const frame = await page.locator('#gz-ctabs-frames[data-on]').boundingBox();
         ok(frame.x >= 271, 'course frame is inset by the rail room');
         ok(await page.locator('#gz-ctabs-frames[data-on] iframe').evaluate((f) => getComputedStyle(f.contentDocument.getElementById('header')).display === 'none'), 'course frame has no duplicate Canvas nav');
+        const modulePath = await page.locator('#gz-ctabs-frames[data-on] iframe').evaluate((f) => f.contentDocument.querySelector('#section-tabs a.modules')?.pathname);
+        ok(!!modulePath, 'framed course has a Modules destination');
+        await page.locator('#gz-navbar .cmenu a').filter({ hasText: /^Modules$/ }).click();
+        await wait(() => page.locator('#gz-ctabs-frames[data-on] iframe').evaluate((f) => f.contentDocument?.location.pathname), (p) => p === modulePath, 'course menu navigates inside the frame');
+        await wait(() => bar((r) => r.querySelector('.cmenu [aria-current=page]')?.pathname), (p) => p === modulePath, 'course menu follows the frame after a full Canvas navigation');
+        ok(true, 'framed course menu updates its active page after navigation');
         await shot('live-course-frame');
         await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(250);
         ok(await bar((r) => document.getElementById('gz-ctabs-frames').getBoundingClientRect().bottom <= r.querySelector('.tabs').getBoundingClientRect().top), 'phone course frame clears the bottom bar and footer');
@@ -199,14 +270,16 @@ const api = async (route, method = 'GET', form) => {
     await page.waitForLoadState('domcontentloaded'); await page.waitForTimeout(300);
     ok(!await page.locator('#gz-navbar').count() && !await page.locator('html[data-gz-navbar]').count(), 'signed-out Canvas has no cached navigation or reserved room'); await shot('live-signed-out');
     ok(!errors.length, `no page errors (${errors.join(' | ')})`);
+    ok(!layoutFailures.length, `no layout regressions (${layoutFailures.join(' | ')})`);
   } catch (e) {
     console.error(`FAIL ${e.stack}`); process.exitCode = 1;
     if (opts && page.url().startsWith(local)) console.error('ISOLATED', JSON.stringify(await opts.evaluate(async () => { const t = (await chrome.tabs.query({})).find((t) => t.url?.startsWith('http://localhost:3000')); if (!t) return null; return chrome.scripting.executeScript({ target: { tabId: t.id }, func: async () => { const X = globalThis.GZ_CTX; return { site: X?.site, on: X?.on(), settings: X?.settings().navbar, adapter: typeof globalThis.GZ_NAVBAR_CANVAS, renderer: typeof globalThis.GZ_NAVBAR_UI, live: globalThis.GZ_NAVBAR_UI?.live(), load: X && await X.need('features/navbar-canvas.js', () => globalThis.GZ_NAVBAR_CANVAS).then(() => 'ok', (e) => String(e)) }; } }); }).catch((e) => String(e))));
     if (page && !page.isClosed()) { await shot('failure').catch(() => {}); console.error('PAGE', page.url()); console.error('NAV', JSON.stringify(await bar((r) => r && { words: document.documentElement.getAttribute('data-gz-navbar'), items: [...r.querySelectorAll('.rail [data-id]')].map((e) => e.dataset.id), panel: r.querySelector('.panel')?.textContent }).catch(() => null))); }
   } finally {
+    if (feedbackSetting !== null) { try { rails(`Setting.set('show_feedback_link', ${JSON.stringify(feedbackSetting)})`); reloadCanvas(); feedbackSetting = null; } catch (e) { console.error('Could not restore local Help setting:', e.message); process.exitCode = 1; } }
     if (historySetting !== null) { try { rails(`Setting.set('enable_page_views', ${JSON.stringify(historySetting)})`); reloadCanvas(); historySetting = null; } catch (e) { console.error('Could not restore local page-view setting:', e.message); process.exitCode = 1; } }
     if (groupOwned) await api(`/api/v1/groups/${groupId}`, 'DELETE').catch((e) => { console.error('Could not remove local test group:', e.message); process.exitCode = 1; });
-    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ checks, errors, screenshots: shots, apiResults }, null, 2) + '\n');
+    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ checks, errors, layoutFailures, screenshots: shots, apiResults }, null, 2) + '\n');
     try { await ctx?.close(); } finally { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); }
     console.log(`${checks} checks; screenshots: ${out}`);
   }

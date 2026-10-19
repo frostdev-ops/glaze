@@ -402,7 +402,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   };
   const syncNav = () => {
     if (window.top !== window || /^\/(?:login|logout)(?:\/|$)/.test(location.pathname)) return;
-    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings.navbar?.on)) need('features/navbar-canvas.js', () => globalThis.GZ_NAVBAR_CANVAS).then(() => need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), () => {});
+    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings.navbar?.on)) need('features/navbar-canvas.js', () => globalThis.GZ_NAVBAR_CANVAS).then(() => need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), () => setAttr('data-gz-navbar', false));
     if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons' || (I.links.length && globalThis.GZ_CTX?.parts()?.nav)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
     else globalThis.GZ_NAV_UI?.sync();
   };

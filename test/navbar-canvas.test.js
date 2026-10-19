@@ -13,16 +13,16 @@ const anchor = (key, href, label, badge = '', active = false) => ({
   querySelector: (s) => s === '.menu-item__badge' && badge ? { textContent: badge } : null,
   nodes: [{ data: label, parentElement: { closest: () => null } }, { data: badge, parentElement: { closest: () => true } }],
 });
-function setup({ links = [], cached = [], path = '/', answers = {} } = {}) {
+function setup({ links = [], tools = [], cached = [], path = '/', answers = {} } = {}) {
   const calls = [], writes = [], assigned = [], observations = [];
   const location = { origin, href: origin + path, pathname: path, protocol: 'https:', assign: (p) => assigned.push(p) };
   const document = {
     location, cookie: '_csrf_token=a%2Bb%3D', documentElement: { dataset: {} },
-    querySelector: (s) => s.startsWith('#menu') ? { querySelectorAll: () => links } : null,
+    querySelector: (s) => s.startsWith('#menu') ? { querySelectorAll: (q) => q.includes('globalNavExternalTool') ? tools : links } : null,
     querySelectorAll: () => [], getElementById: () => null,
     createTreeWalker: (a, type, filter) => { const nodes = (a.nodes || []).filter((n) => filter.acceptNode(n) === 1); let i = 0; return { nextNode: () => nodes[i++] }; },
   };
-  const ctx = { URL, URLSearchParams, AbortSignal, document, location, GZ_NAV_LAYOUT: L, GZ_NAVBAR: M,
+  const ctx = { URL, URLSearchParams, AbortSignal, setTimeout, clearTimeout, document, location, GZ_NAV_LAYOUT: L, GZ_NAVBAR: M,
     NodeFilter: { SHOW_TEXT: 4, FILTER_REJECT: 2, FILTER_ACCEPT: 1 },
     MutationObserver: class { observe(...args) { observations.push(args); } disconnect() {} },
     X: { t: (s) => s, courseColors: () => ({ [`canvas:${origin}/12`]: { color: '#abc' } }) },
@@ -52,6 +52,18 @@ test('cached items restore same-origin links without trusting foreign or executa
   assert.deepEqual(plain(s.adapter.read()).map((i) => i.id), ['course']);
 });
 
+test('school global-navigation tools remain reachable and preserve new-tab launches', async () => {
+  const tool = anchor('', '/accounts/1/external_tools/9', 'School library');
+  tool.id = ''; tool.target = '_blank';
+  const s = setup({ links: [anchor('dashboard', '/', 'Dashboard')], tools: [tool] });
+  const item = s.adapter.read().find((i) => i.id === 'tools');
+  assert.equal(item?.panel, true);
+  const rows = (await s.adapter.panel('tools')).sections[0].rows;
+  assert.equal(rows[0].label, 'School library');
+  assert.equal(rows[0].href, origin + '/accounts/1/external_tools/9');
+  assert.equal(rows[0].tab, true);
+});
+
 test('course menu reads a supplied frame document, class keys, current page, course name and Glaze color', () => {
   const s = setup(), a = anchor('modules', '/courses/12/modules', 'Modules');
   a.classList = ['modules']; a.classList.contains = (c) => c === 'active'; a.hidden = false;
@@ -59,6 +71,28 @@ test('course menu reads a supplied frame document, class keys, current page, cou
   const m = plain(s.adapter.menu(doc));
   assert.equal(m.name, 'Biology'); assert.equal(m.color, '#abc');
   assert.deepEqual(m.items, [{ key: 'modules', label: 'Modules', href: origin + '/courses/12/modules', active: true }]);
+  a.target = '_blank';
+  assert.equal(s.adapter.menu(doc).items[0].tab, true, 'course tools may require a new window');
+});
+
+test('the integrated course menu honors Canvas course-tab declutter choices', () => {
+  const s = setup();
+  const links = ['modules', 'announcements', 'discussions', 'grades'].map((key) => {
+    const a = anchor(key, `/courses/12/${key}`, key);
+    a.classList.contains = (c) => c === key;
+    return a;
+  });
+  const doc = { location: { pathname: '/courses/12' }, getElementById: () => ({ querySelectorAll: () => links }), querySelector: () => null };
+  s.ctx.X.settings = () => ({ declutter: { tabs: ['announcements', 'engagement', 'grades'] } });
+  assert.deepEqual(plain(s.adapter.menu(doc).items.map((i) => i.key)), ['modules']);
+});
+
+test('the replacement global menu honors Canvas Hide help for live and cached items', () => {
+  for (const options of [{ links: [anchor('help', '#', 'Help'), anchor('dashboard', '/', 'Dashboard')] }, { cached: [{ id: 'help', label: 'Help', path: '/' }, { id: 'dashboard', label: 'Dashboard', path: '/' }] }]) {
+    const s = setup(options);
+    s.ctx.X.settings = () => ({ declutter: { help: true } });
+    assert.deepEqual(plain(s.adapter.read().map((i) => i.id)), ['dashboard']);
+  }
 });
 
 test('panels parse Canvas JSON prefixes and next links, cap pagination, and preserve term names and colors', async () => {
@@ -72,12 +106,51 @@ test('panels parse Canvas JSON prefixes and next links, cap pagination, and pres
   assert.equal((await many.adapter.panel('groups')).sections[0].rows.length, 200);
 });
 
-test('empty favorites fall back to active courses; failed panels reject for the renderer retry', async () => {
+test('Canvas pagination stops at five pages, repeated links and same-origin non-API destinations', async () => {
+  const answers = {};
+  for (let n = 1; n <= 6; n++) answers[n === 1 ? '/api/v1/users/self/groups' : `/api/v1/page${n}`] = new Response(JSON.stringify([{ id: n, name: `Group ${n}` }]), { headers: { Link: `<${origin}/api/v1/page${n + 1}>; rel="next"` } });
+  const s = setup({ answers });
+  assert.equal((await s.adapter.panel('groups')).sections[0].rows.length, 5);
+  assert.equal(s.calls.length, 5);
+  for (const href of [`${origin}/api/v1/users/self/groups?per_page=100`, `${origin}/logout`, 'https://elsewhere.test/api/v1/groups']) {
+    const cycle = setup({ answers: { '/api/v1/users/self/groups': new Response('[{"id":1,"name":"One"}]', { headers: { Link: `<${href}>; rel="next"` } }) } });
+    assert.equal((await cycle.adapter.panel('groups')).sections[0].rows.length, 1);
+    assert.equal(cycle.calls.length, 1, href);
+  }
+});
+
+test('empty favorites fall back to active courses; failed panels return null for the renderer retry', async () => {
   const s = setup({ answers: { '/api/v1/courses': [{ id: 12, name: 'Active course' }], '/api/v1/accounts': new Response('{}', { status: 403 }) } });
   assert.equal((await s.adapter.panel('course')).sections[0].rows[0].label, 'Active course');
-  await assert.rejects(s.adapter.panel('admin'), /Canvas 403/);
+  assert.equal(await s.adapter.panel('admin'), null);
   const bad = setup({ answers: { '/api/v1/users/self/history': new Response('<html>login</html>') } });
-  await assert.rejects(bad.adapter.panel('history'));
+  assert.equal(await bad.adapter.panel('history'), null);
+});
+
+test('navigation discovery observes an empty document and can be read after teardown', () => {
+  const s = setup();
+  s.adapter.observe(() => {});
+  assert.ok(s.observations.some(([node, options]) => node === s.document.documentElement && options.subtree), 'late headers must be discovered');
+  s.adapter.unobserve();
+  s.document.getElementById = () => ({});
+  assert.doesNotThrow(() => s.adapter.read());
+});
+
+test('malformed cached items cannot stop Canvas navigation', () => {
+  const s = setup({ cached: [null, 12, { id: 'course', label: 'Courses', path: '/courses' }] });
+  assert.deepEqual(plain(s.adapter.read()).map((i) => i.id), ['course']);
+});
+
+test('Canvas image URLs are validated and a replaced avatar or school image is refreshed', () => {
+  const s = setup();
+  const img = { src: 'javascript:bad()', alt: 'School' };
+  const logo = { querySelector: () => img, getAttribute: () => '' };
+  s.document.querySelector = (selector) => selector.startsWith('#header') ? logo : selector === '#global_nav_profile_link img' ? img : null;
+  assert.equal(s.adapter.brand().src, '');
+  assert.equal(s.adapter.avatar(), '');
+  img.src = origin + '/school.png';
+  assert.equal(s.adapter.brand().src, img.src);
+  assert.equal(s.adapter.avatar(), img.src);
 });
 
 test('Account, Groups, History, Help and Admin use actual Canvas data and safe destinations', async () => {
@@ -125,6 +198,21 @@ test('Help falls back to tray DOM and account API without leaking role-restricte
   assert.equal((await s.adapter.panel('help')).sections[0].rows[0].href, origin + '/help-center');
 });
 
+test('Canvas Help retains built-in support forms and opens them through Canvas without submitting', async () => {
+  const trigger = anchor('help', '#', 'Help');
+  const s = setup({ links: [trigger], answers: { '/help_links': [{ text: 'Ask your instructor', url: '#teacher_feedback' }, { text: 'Report a problem', url: '#create_ticket' }, { text: 'Bad', url: '#arbitrary' }] } });
+  const rows = (await s.adapter.panel('help')).sections[0].rows;
+  assert.deepEqual(plain(rows.map((r) => r.run)), ['help:teacher_feedback', 'help:create_ticket']);
+  let opened = false;
+  trigger.click = () => { opened = true; };
+  const base = s.document.querySelector;
+  s.document.querySelector = (selector) => opened && selector.includes('#help_tray') ? { click: () => { opened = 'form'; } } : base(selector);
+  assert.equal(await s.adapter.run('help:teacher_feedback'), true);
+  assert.equal(opened, 'form');
+  assert.equal(s.calls.length, 1, 'only the Help list was fetched; no form was submitted');
+  assert.equal(await s.adapter.run('help:arbitrary'), false);
+});
+
 test('observers scope live changes to native navigation and disconnect when the bar stops', () => {
   const s = setup(); let disconnected = 0;
   s.ctx.MutationObserver = class { observe(...args) { s.observations.push(args); } disconnect() { disconnected++; } };
@@ -160,4 +248,17 @@ test('Canvas login and logout pages do not reserve authenticated navigation room
     vm.runInNewContext(code, { I: { settings: G.GZ_SANITIZE() }, location: { pathname }, globalThis: {}, document: {}, setAttr: (k, v) => { attrs[k] = v; } });
     assert.equal(attrs['data-gz-navbar'], false);
   }
+});
+
+test('a failed lazy navbar load restores native Canvas navigation', async () => {
+  const source = read('content-canvas.js'), start = source.indexOf('  const syncNav =');
+  const window = {}; window.top = window;
+  const attrs = {};
+  vm.runInNewContext(source.slice(start, source.indexOf('\n\n  return {', start)) + '\nsyncNav();', {
+    window, location: { pathname: '/' },
+    I: { links: [{}], settings: { navbar: { on: true } }, worn: { nav: {} } },
+    setAttr: (k, v) => { attrs[k] = v; }, need: async () => { throw Error('worker unavailable'); },
+  });
+  await new Promise(setImmediate);
+  assert.equal(attrs['data-gz-navbar'], false);
 });

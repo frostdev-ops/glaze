@@ -620,7 +620,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         f.stale = null;
         if (waiting === cid && showing !== cid) { show(cid); return; }
         if (waiting === cid) wait('');
-        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
+        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
         return;
       }
       if (now - t0 > 8000 && !f.slow) {
@@ -1128,16 +1128,17 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // An address of this site: in a course's frame when a frame is on screen and it is a course page (on Canvas any
     // course's, through its own frame; on Ultra the shown course's), else on this page, as a click on it here would go.
     open: (href) => {
-      let u; try { u = new URL(String(href), location.origin); } catch { return; }
-      if (!on || framed || u.origin !== location.origin) return;
+      let u; try { u = new URL(String(href), location.origin); } catch { return false; }
+      if (!on || framed || u.origin !== location.origin) return false;
       const url = L.safe(u.pathname, u.search), cid = url && (ctx.site === 'canvas' ? u.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] : showing);
       if (showing && cid && L.owns(u.pathname, cid)) {
-        if (ctx.site === 'canvas') return openAt(cid, url);
-        try { frames.get(showing).el.contentWindow.location.assign(location.origin + url); } catch { /* gone */ }
-        return;
+        if (ctx.site === 'canvas') { openAt(cid, url); return true; }
+        try { frames.get(showing).el.contentWindow.location.assign(location.origin + url); } catch { return false; }
+        return true;
       }
       if (showing) show('');
       route(u.pathname + u.search + u.hash);
+      return true;
     },
   };
   return { sync, held, petSurface, bar, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };

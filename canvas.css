@@ -1513,12 +1513,18 @@ html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialo
    The words reserve first-paint room; the renderer supplies the same dimensions inline once mounted. */
 html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
 html[data-gz-navbar] :is(#header, #mobile-header) { display: none !important; }
+/* Canvas's native support forms and other trays must stay above the replacement bar. */
+html[data-gz-navbar] #nav-tray-portal { z-index: 1261 !important; }
 html[data-gz-navbar~="menu"] :is(#left-side, #mobileContextNavContainer, .ic-app-nav-toggle-and-crumbs #courseMenuToggle) { display: none !important; }
-html[data-gz-navbar~="menu"] #main { margin-inline-start: 0 !important; }
+html[data-gz-navbar~="menu"] #main { margin-inline: 0 !important; }
 html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
 html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
-html[data-gz-navbar] #wrapper { margin-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top); }
+html[data-gz-navbar] #wrapper { margin-inline: 0 !important; margin-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top); }
+/* Canvas can give its wrapper a direction of its own. Reserve room on the same side as the bar. */
+html[dir="rtl"][data-gz-navbar] #wrapper { margin-left: 0 !important; margin-right: var(--gz-navbar-left) !important; }
 html[data-gz-navbar] .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) { top: var(--gz-navbar-top); }
+html[data-gz-navbar] #sticky-container { top: calc(var(--gz-navbar-top) + var(--gz-ctabs-row, 0px)); max-height: calc(100vh - var(--gz-navbar-top) - var(--gz-ctabs-row, 0px)); }
+html[data-gz-navbar][data-gz-ctabs~="nav"] #sticky-container { top: var(--gz-navbar-top); max-height: calc(100vh - var(--gz-navbar-top)); }
 html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
 @media (min-width: 900px) {
   html[data-gz-navbar~="rail"] { --gz-navbar-left: 96px; }
@@ -1541,6 +1547,6 @@ html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left
 }
 
 html[data-gz-navbar-frame] :is(#header, #mobile-header) { display: none !important; }
-html[data-gz-navbar-frame] #wrapper { margin-inline-start: 0 !important; }
+html[data-gz-navbar-frame] #wrapper { margin-inline: 0 !important; }
 html[data-gz-navbar-frame~="menu"] :is(#left-side, #mobileContextNavContainer, #courseMenuToggle) { display: none !important; }
-html[data-gz-navbar-frame~="menu"] #main { margin-inline-start: 0 !important; }
+html[data-gz-navbar-frame~="menu"] #main { margin-inline: 0 !important; }
