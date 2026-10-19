@@ -80,7 +80,15 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const perchable = (s) => s.y >= window.scrollY + b.h && s.y <= window.scrollY + window.innerHeight && Math.min(s.x + s.w, window.scrollX + window.innerWidth) - Math.max(s.x, window.scrollX) >= b.w;
     const perchX = (s) => Math.max(Math.max(s.x, window.scrollX), Math.min(Math.min(s.x + s.w, window.scrollX + window.innerWidth) - b.w, s.x + (s.w - b.w) / 2));
     const visible = (p, margin = 0) => p.x + p.w > window.scrollX - margin && p.x < window.scrollX + window.innerWidth + margin && p.y + p.h > window.scrollY - margin && p.y < window.scrollY + window.innerHeight + margin;
-    const worldHost = () => { if (!world.isConnected) document.documentElement.append(world); return world; };
+    // The overlay clips at the viewport so an offscreen toy cannot grow the page and toggle its scrollbar.
+    // Its children still use document coordinates, including when the document itself scrolls.
+    const scrollWorld = () => {
+      for (const [axis, value] of [['x', window.scrollX], ['y', window.scrollY]]) {
+        const key = `--gz-world-${axis}`, px = `${value}px`;
+        if (world.style.getPropertyValue(key) !== px) world.style.setProperty(key, px);
+      }
+    };
+    const worldHost = () => { if (!world.isConnected) document.documentElement.append(world); scrollWorld(); return world; };
     const homeVisible = () => { const r = stage?.getBoundingClientRect(); return r && r.width > 0 && r.bottom > 0 && r.top < window.innerHeight; };
     const allowed = () => alive && !globalThis.GZ_CTABS?.revoked?.() && !!chrome.runtime?.id && !document.hidden && !viewBlocked && (wandering ? !quiet() : homeVisible());
     const art = (id) => { const img = make('img', ''); img.src = chrome.runtime.getURL(`assets/art/stickers/${P.DECOR[id].art}.webp`); img.alt = ''; img.draggable = false; return img; };
@@ -524,6 +532,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const typed = (e) => { if (e.isTrusted && (e.target.matches?.('input,textarea,select,[contenteditable="true"],[role="textbox"]') || e.target.closest?.('[contenteditable="true"]'))) typedAt = performance.now(); };
     on(document, 'keydown', typed, { passive: true });
     const scrolled = (e) => {
+      if (world.isConnected) scrollWorld();
       const target = e.target.nodeType === 9 ? e.target.scrollingElement : e.target;
       const shift = (at) => {
         const p = at?.nodes.find((p) => p.el === target);

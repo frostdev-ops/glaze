@@ -902,5 +902,6 @@ html:not([data-gz-motion="off"]) .gz-game-actor[data-behavior="stretch"] .gz-gam
 
 .gz-game-item[data-outside="true"][hidden]{display:none!important}
 
-.gz-game-world{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;z-index:2147482999}
+.gz-game-world{position:fixed;inset:0;overflow:clip;pointer-events:none;z-index:2147482999}
+.gz-game-world>*{translate:calc(0px - var(--gz-world-x,0px)) calc(0px - var(--gz-world-y,0px))}
 .gz-game-world>.gz-game-actor,.gz-game-world>.gz-game-item{pointer-events:auto}
