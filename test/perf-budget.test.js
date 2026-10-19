@@ -211,7 +211,7 @@ test('the scans see the code they are meant to', () => {
 // the whole page (measured: 95 ms of style per press on a 9,400-element outline; 0.2 ms without those rules). Ultra's sheets:
 // no class tests or descendant `*` in a :has(), and a :has() before a combinator sits on a class, id or attribute, or a tag
 // that is not a page container.
-const ULTRA_SHEETS = ['theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css', 'features/rules.css', 'features/navlayout.css'];
+const ULTRA_SHEETS = ['features/coursetabs.css', 'theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css', 'features/rules.css', 'features/navlayout.css'];
 // The containers a page is built of: flagged, one may hold the whole page.
 const BROAD = new Set(['', '*', 'html', 'body', 'div', 'span', 'section', 'main']);
 const hasRules = (css) => {

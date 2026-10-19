@@ -120,7 +120,7 @@ GZ_UI.load().then((s) => {
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
-  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs'], canvas: ['courses', 'outline', 'dashboard', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
+  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs'], canvas: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
   let previewSite = 'ultra', previewPage = 'outline', previewCourse = '', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
   const sizePreview = () => {
     const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;

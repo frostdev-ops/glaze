@@ -100,11 +100,11 @@ test('the snapshot cache: the least recently kept go first past the total', () =
   assert.ok(L.SNAP_ONE < L.SNAP_ALL && L.SNAP_ALL <= 8e6, 'the pictures fit storage.session (10 MB) with room to spare');
 });
 
-test('wired up: loadable on demand, in the worker and the editor, and only Ultra\'s first script holds the hook', () => {
+test('wired up: loadable on demand, in the worker and the editor, and both sites load the shared manager on demand', () => {
   const bg = read('lib/background.js');
   assert.ok(bg.includes("'lib/coursetabs.js', 'features/coursetabs.js'") && bg.includes("'coursetabs.js');"));
   assert.ok(read('options.html').includes('<script src="lib/coursetabs.js"></script>'));
-  assert.ok(read('content-ultra.js').includes("need('lib/coursetabs.js'") && !read('content.js').includes('coursetabs') && !read('content-canvas.js').includes('coursetabs'));
+  assert.ok(read('content-ultra.js').includes("need('lib/coursetabs.js'") && !read('content.js').includes("need('features/coursetabs.js'") && read('content-canvas.js').includes("need('features/coursetabs.js'"));
   // The copies live in storage.session only, never storage.local: what a page stores there is its tab list.
   const page = read('features/coursetabs.js').replace(/(^|\s)\/\/.*$/gm, '');
   assert.ok(!/storage\.session|indexedDB|localStorage/.test(page));

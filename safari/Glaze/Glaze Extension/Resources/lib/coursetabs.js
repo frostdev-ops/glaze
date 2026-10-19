@@ -1,6 +1,6 @@
-// Course tabs on Blackboard Ultra (B8): what features/coursetabs.js decides without the page, so node can test it. Which
+// Course tabs on Canvas and Blackboard Ultra: what features/coursetabs.js decides without the page, so node can test it. Which
 // addresses a tab may go back to, the tab list's edits, the snapshot cache's limits and what a snapshot keeps of a page.
-// Classic script; module.exports for node. Loaded on demand (content-ultra.js asks for it before features/coursetabs.js);
+// Classic script; module.exports for node. Loaded on demand (each site asks for it before features/coursetabs.js);
 // the editor and the worker load it too. A second injection keeps the first.
 var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   // A frame-only injection may land after navigation, before this document's bootstrap.
@@ -17,7 +17,11 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   };
   (typeof GZ_SPEC !== 'undefined' ? GZ_SPEC : require('../defaults.js').GZ_SPEC).tabs = SPEC;
 
-  const ID = /^_\d+_\d+$/;
+  const ID = /^(?:_\d+_\d+|\d+)$/;
+  const validId = (id, site) => typeof id === 'string' && id.length <= 80 && (site === 'canvas' ? /^\d+$/ : site === 'ultra' ? /^_\d+_\d+$/ : ID).test(id);
+  const rootOf = (cid) => /^\d+$/.test(cid) ? `/courses/${cid}` : `/ultra/courses/${cid}`;
+  const homeOf = (cid) => rootOf(cid) + (/^\d+$/.test(cid) ? '' : '/outline');
+  const owns = (path, cid) => typeof path === 'string' && validId(cid) && (path === rootOf(cid) || path.startsWith(`${rootOf(cid)}/`));
   // Common term/section wrappers, without a school's particular subject list. A doubtful result keeps the full name.
   const shortName = (name) => {
     const full = String(name || '').trim();
@@ -38,15 +42,23 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   // discussion, a test's page, a tool. Only the address's shape is checked: the course's own path, plain path characters,
   // a bounded length. Going back opens what was open; it never presses anything there.
   const TOOLS = ['outline', 'calendar', 'announcements', 'engagement', 'grades', 'messages', 'groups/enrollments', 'achievements'];
-  const PAGE = /^\/ultra\/courses\/(_\d+_\d+)\/[\w\-./]*$/;
+  const PAGE = /^(?:\/ultra\/courses\/_\d+_\d+\/[\w\-./]*|\/courses\/\d+(?:\/(?:[\w\-./]|%[0-9a-fA-F]{2})*)?)$/;
   // The path (and its query) if a tab may go back there, else null.
   const safe = (path, search = '') => {
     if (typeof path !== 'string' || path.length > 600 || !PAGE.test(path) || /(^|\/)\.\.?(\/|$)|\/\//.test(path)) return null;
+    // Canvas page slugs may contain encoded spaces or Unicode. Keep the original URL, but never accept an
+    // encoded traversal, separator or control character (nor a second layer of percent escapes).
+    if (path.startsWith('/courses/') && path.includes('%')) {
+      try { if (path.split('/').some((s) => { const d = decodeURIComponent(s); return d === '.' || d === '..' || /[/\\%\x00-\x1f\x7f]/.test(d); })) return null; }
+      catch { return null; }
+    }
     const q = typeof search === 'string' ? search.replace(/^\?/, '') : '';
     return q && q.length <= 600 ? `${path}?${q}` : path;
   };
   // A course page's tool, or its outline: where a page that isn't safe goes back to.
   const back = (path) => {
+    const canvas = typeof path === 'string' && path.match(/^\/courses\/(\d+)(?:[/?#]|$)/);
+    if (canvas) return `/courses/${canvas[1]}`;
     const m = typeof path === 'string' && path.match(/^\/ultra\/courses\/(_\d+_\d+)\/([^/?#]+)(?:\/([^/?#]+))?/);
     if (!m) return null;
     const tool = TOOLS.find((x) => x === m[2] || x === `${m[2]}/${m[3]}`) || (m[2] === 'groups' ? 'groups/enrollments' : 'outline');
@@ -57,7 +69,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   // Where a click on tab `t` goes: its remembered place when that's still safe and in its own course, else its outline.
   const target = (t, remember = true) => {
     const s = String(remember && t.path || ''), i = s.indexOf('?'), p = i < 0 ? s : s.slice(0, i);
-    return (p.startsWith(`/ultra/courses/${t.cid}/`) && safe(p, i < 0 ? '' : s.slice(i + 1))) || `/ultra/courses/${t.cid}/outline`;
+    return (owns(p, t.cid) && safe(p, i < 0 ? '' : s.slice(i + 1))) || homeOf(t.cid);
   };
 
   // ---- the tab list -------------------------------------------------------------------------------------------
@@ -67,10 +79,10 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
   const num = (v, max) => (Number.isFinite(v) && v >= 0 ? Math.min(v, max) : 0);
   const order = (list) => [...list.filter((x) => x.pin), ...list.filter((x) => !x.pin)];
-  const clean = (raw) => {
+  const clean = (raw, site) => {
     const out = [];
     for (const x of Array.isArray(raw) ? raw : []) {
-      if (!x || !ID.test(x.cid) || out.length >= MAX || out.some((y) => y.cid === x.cid)) continue;
+      if (!x || !validId(x.cid, site) || out.length >= MAX || out.some((y) => y.cid === x.cid)) continue;
       const path = target({ cid: x.cid, path: str(x.path, 1300) });
       out.push({ cid: x.cid, name: str(x.name, 200), code: str(x.code, 80), pin: x.pin === true, at: num(x.at, 9e15), path, top: path === x.path ? num(x.top, 1e7) : 0 });
     }
@@ -118,7 +130,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     return list;
   };
   // Each site and account keeps its own list (storage.local).
-  const KEY = /^ctabs:https:\/\/[^/:]+(:\d+)?:_\d+_\d+$/;
+  const KEY = /^ctabs:(?:https:\/\/[^/:]+|http:\/\/localhost)(:\d+)?:(?:_\d+_\d+|\d+)$/;
   const storeKey = (origin, uid) => `ctabs:${origin}:${uid}`;
 
   // ---- snapshots ---------------------------------------------------------------------------------------------
@@ -132,7 +144,7 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     return [...items].reverse().sort((a, b) => b[2] - a[2]).filter(([, n]) => (sum += n) > all).map(([k]) => k);
   };
 
-  return { SPEC, shortName, TOOLS, safe, back, placeOf, target, clean, open, close, pin, move, order, MAX, KEY, storeKey, SNAP_ONE, SNAP_ALL, fit };
+  return { validId, rootOf, homeOf, owns, SPEC, shortName, TOOLS, safe, back, placeOf, target, clean, open, close, pin, move, order, MAX, KEY, storeKey, SNAP_ONE, SNAP_ALL, fit };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_CTABS_LIB; else GZ_CTABS_LIB;

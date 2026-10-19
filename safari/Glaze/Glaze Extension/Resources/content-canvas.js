@@ -69,7 +69,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // Syllabus import (features/syllabus.js): a course's home and Syllabus page, top frame.
   const sylHere = () => I.links.length && window.top === window && I.settings.enhance.syllabus && /^\/courses\/\d+(\/assignments\/syllabus)?\/?$/.test(location.pathname);
   const syncSyl = () => (sylHere() ? need('features/syllabus.js', () => globalThis.GZ_SYL_UI).then(() => GZ_SYL_UI.sync(sylHere()), () => {}) : globalThis.GZ_SYL_UI?.sync(false));
-  // Insights' Dashboard button (features/insights.js).
+  // Insights (Dashboard).
   const syncInsights = () => (globalThis.GZ_INSIGHTS_UI || (I.links.length && I.settings.enhance.insights && location.pathname === '/')) && need('features/insights.js', () => globalThis.GZ_INSIGHTS_UI).then(() => GZ_INSIGHTS_UI.sync(), () => {});
   // The what-if calculator (a course's Grades) and the GPA (Dashboard) are features/grades.js, asked for where on.
   const canvasGrades = () => {
@@ -424,7 +424,11 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   return {
     record, planner: () => todoHere() || cardsHere(), tagCards: tagCanvasCards, tagExtras: tagCanvasExtras, lift: liftCourses,
     renderProgress: canvasProgress, renderNew: renderCanvasNew, renderCalc: canvasGrades, paintCourses, paintNav, syncNav,
-    syncTodo, syncCardTasks, syncWidgets, syncRemind, syncSyl, syncInsights,
+    syncTodo, syncCardTasks, syncWidgets, syncRemind, syncSyl,
+    syncInsights: () => {
+      syncInsights();
+      if (I.solo && (I.settings.enhance.tabs || globalThis.GZ_CTABS)) need('features/coursetabs.js', () => globalThis.GZ_CTABS).then(() => GZ_CTABS.sync(!!I.links.length && I.settings.enhance.tabs), () => {});
+    },
     ctx: { canvasCourses, profile, canvasPeek, moduleItems },
   };
 });

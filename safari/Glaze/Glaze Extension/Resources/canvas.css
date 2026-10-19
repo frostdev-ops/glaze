@@ -1486,3 +1486,9 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 #gz-mk a { padding: 0.4rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); text-decoration: none; }
 #gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-accent); outline: none; }
 @media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
+
+/* Canvas has one breadcrumb row. A full-width strip wraps above or below that row. */
+.ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) { flex-wrap: wrap; height: auto; }
+.ic-app-nav-toggle-and-crumbs > #gz-ctabs { flex-basis: 100%; }
+html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point, #gz-scene) { visibility: hidden !important; }
+html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"]) { visibility: visible; }

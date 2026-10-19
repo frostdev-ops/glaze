@@ -10,8 +10,9 @@ const uid = '_42_1', cid = '_1_1';
 // A picture the page asks for: the worker takes it (captureVisibleTab, faked here: `shots.size` characters).
 const shot = (c = cid, extra = {}) => ({ op: 'shot', cid: c, path: `/ultra/courses/${c}/outline`, strip: null, size: [1400, 900], ...extra });
 const flush = () => new Promise(setImmediate);
-function worker({ keys = false } = {}) {
-  const data = {}, notices = [], pages = new Map([[1, site + '/ultra/course'], [2, site + '/ultra/course'], [3, site + '/ultra/course']]);
+function worker({ keys = false, canvas = false } = {}) {
+  const host = canvas ? 'http://localhost:3000' : site, page = canvas ? '/courses' : '/ultra/course';
+  const data = {}, notices = [], pages = new Map([[1, host + page], [2, host + page], [3, host + page]]);
   const active = new Set([1, 2, 3]), shots = { size: 1000, calls: 0, failStore: false, during() {} };
   const born = Date.now() - 10000, epochs = new Map();
   let message, changed;
@@ -31,7 +32,8 @@ function worker({ keys = false } = {}) {
   let on = true;
   const context = vm.createContext({
     GZ_CTABS_LIB: L, GZ_CARDS: require('../lib/cards.js'), Map, Date, URL,
-    fromUltra: async (s) => s.id === 'extension' && s.tab && s.url.startsWith(site + '/ultra/') ? site : null,
+    fromCanvas: async (s) => canvas && s.id === 'extension' && s.url.startsWith(host + '/') ? host : null,
+    fromUltra: async (s) => !canvas && s.id === 'extension' && s.tab && s.url.startsWith(site + '/ultra/') ? site : null,
     switchOn: async () => on,
     chrome: { tabs: {
       async get(id) { return { url: pages.get(id), active: active.has(id), windowId: 1 }; },
@@ -41,9 +43,9 @@ function worker({ keys = false } = {}) {
   });
   vm.runInContext(section, context);
   const send = async (m, sender = {}) => {
-    const s = { id: 'extension', url: site + '/ultra/course', frameId: 0, tab: { id: 1 }, documentId: 'document-1', ...sender };
+    const s = { id: 'extension', url: host + page, frameId: 0, tab: { id: 1 }, documentId: 'document-1', ...sender };
     const epoch = epochs.get(s.documentId) || 0;
-    const reply = await new Promise((resolve) => message({ type: 'glaze:snap', uid, born, epoch, ...m }, s, resolve));
+    const reply = await new Promise((resolve) => message({ type: 'glaze:snap', uid: canvas ? '42' : uid, born, epoch, ...m }, s, resolve));
     if (reply?.ok && reply.epoch) epochs.set(s.documentId, reply.epoch);
     return reply;
   };
@@ -224,4 +226,27 @@ test('a queued screenshot never calls capture on a tab that has already left Ult
   w.pages.set(1, 'https://other.test/private');
   assert.equal(await w.send(shot()), null);
   assert.equal(w.shots.calls, 0);
+});
+
+test('Canvas numeric accounts keep and clear snapshots of their own course pages', async () => {
+  const w = worker({ canvas: true });
+  const canvasShot = { op: 'shot', cid: '12', path: '/courses/12/pages/notes?module_item_id=9', strip: null, size: [1400, 900] };
+  assert.ok(await w.send({ op: 'hello' }));
+  const result = await w.send(canvasShot);
+  assert.equal(result.snap.path, canvasShot.path);
+  assert.equal((await w.send({ op: 'get', cid: '12' })).snap.cid, '12');
+  assert.equal(await w.send({ ...canvasShot, path: '/courses/123/grades' }), null);
+  assert.equal(await w.send({ ...canvasShot, cid: '_12_1', path: '/ultra/courses/_12_1/outline' }), null);
+  assert.equal(await w.send(canvasShot, { frameId: 7 }), null, 'only the surrounding page can capture');
+  await w.send({ op: 'drop', signout: true });
+  assert.equal(await w.send({ op: 'get', cid: '12' }), null);
+  assert.equal(Object.keys(w.data).filter((k) => k.startsWith('snap:')).length, 0);
+});
+
+test('Canvas snapshots revoke old documents on account change and notify non-course pages', async () => {
+  const w = worker({ canvas: true });
+  await w.send({ op: 'hello' });
+  await w.send({ op: 'hello', uid: '43', born: w.born + 1000 }, { tab: { id: 2 }, documentId: 'canvas-account-2' });
+  assert.equal((await w.send({ op: 'hello' }))?.stale, true);
+  assert.ok(w.notices.some((n) => n.tab === 1 && n.value.uid === '43'));
 });

@@ -163,6 +163,7 @@
         "features/navbar.css",
         "features/apps.css",
         "features/surfaces.css",
+        "features/coursetabs.css",
         "assets/logo.svg",
         "assets/logo-dark.svg",
         "icons/icon.svg"

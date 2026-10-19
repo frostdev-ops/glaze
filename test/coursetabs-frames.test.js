@@ -14,7 +14,7 @@ const loadingFrame = () => {
   const timers = [], navigations = [], notices = [];
   const f = { url: '/ultra/courses/_2_1/grades', ready: false, dirty: false, el: { style: {}, get contentDocument() { return doc; }, set src(v) { navigations.push(v); } } };
   const frames = new Map([['_2_1', f]]);
-  const c = vm.createContext({ frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
+  const c = vm.createContext({ L, ctx: { site: 'ultra' }, frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
     MutationObserver: class { observe() {} disconnect() {} }, loading: () => false, shown: (el) => !!el,
     unpicture() {}, later() {}, clearSlow() {}, slowFrame: () => notices.push('slow'), t: (s) => s,
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
@@ -86,7 +86,7 @@ test('the bridge takes picks only from this page\'s own frames, on this origin, 
   let listen;
   const mine = {}, theirs = {}, did = [];
   vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // Ultra routes without reloading'), {
-    framed: '', preview: false, on: true, location: { origin }, addEventListener: (t, f) => { listen = f; },
+    L, ctx: { site: 'ultra' }, framed: '', preview: false, on: true, location: { origin }, addEventListener: (t, f) => { listen = f; },
     frames: new Map([['_2_1', { el: { contentWindow: mine } }]]), showing: '_2_1',
     visit: (c) => did.push(['visit', c]), shut: (c, k) => did.push(['shut', c, k]), later: () => did.push(['later']),
     drop: (c) => did.push(['drop', c]), show: (c) => did.push(['show', c]), route: (u) => did.push(['route', u]),
@@ -336,7 +336,7 @@ test('a hidden frame pauses its scene only for messages from its owner on the sa
 test('a new account discovered in a live frame revokes the owner and clears its cached pictures', () => {
   let listener, revoked = 0; const sent = [], mine = {};
   vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // Ultra routes without reloading'), {
-    framed: '', preview: false, on: true, location: { origin }, who: '_42_1',
+    L, ctx: { site: 'ultra' }, framed: '', preview: false, on: true, location: { origin }, who: '_42_1',
     addEventListener: (t, fn) => { listener = fn; }, frames: new Map([['_2_1', { el: { contentWindow: mine } }]]),
     send: (m) => sent.push(m), revoke: () => revoked++,
   });
