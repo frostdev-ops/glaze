@@ -298,7 +298,7 @@ const page = ({ local = {}, motion = 'subtle', packs, replies = FILES_REPLY, def
   });
   context.window = context; context.top = context; context.globalThis = context;
   vm.runInContext(fs.readFileSync(path.join(root, 'lib/lookx.js'), 'utf8'), context);
-  vm.runInContext(fs.readFileSync(path.join(root, 'features/lookx.js'), 'utf8').replace("import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js')", "importLottie(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js')"), context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'features/lookx.js'), 'utf8').replace(/import\(chrome\.runtime\.getURL\((['`])lib\/lottie\/lottie_light_canvas\.min\.js/, "importLottie(chrome.runtime.getURL($1lib/lottie/lottie_light_canvas.min.js"), context);
   const layer = () => body.find('gz-stickers');
   const settle = () => new Promise((r) => setTimeout(r, 25));
   return { lx: context.GZ_LOOKX, html, body, log, layer, settle, settings,
