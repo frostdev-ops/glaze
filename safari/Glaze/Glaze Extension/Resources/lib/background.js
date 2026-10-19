@@ -740,13 +740,14 @@ const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/
 chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && (changes.enhance || changes.enabled)) serial(ensure); });
 // An update keeps the widgets a device showed while it had no layout stored (lib/widgets.js kept): new layouts start empty.
 // In the broker's queue, so a page's layout change ('glaze:widgetLayout') is never written over.
-const keepWidgets = async () => {
+const keepWidgets = async (fresh) => {
   if ((await chrome.storage.local.get('widgetLayout')).widgetLayout) return;
   const { enhance } = await chrome.storage.sync.get('enhance');
-  await chrome.storage.local.set({ widgetLayout: GZ_WIDGETS.kept(enhance?.widgets) });
+  await chrome.storage.local.set({ widgetLayout: fresh ? GZ_WIDGETS.layout() : GZ_WIDGETS.kept(enhance?.widgets) });
 };
 chrome.runtime.onInstalled.addListener((d) => {
-  if (d?.reason === 'update') (brokerTurn ||= GZ_CARDS.queue())(keepWidgets).catch(() => {});
+  // Mark fresh installs too: a later update must not mistake their untouched empty layout for a pre-change device.
+  if (['install', 'update'].includes(d?.reason)) (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {});
   serial(async () => { await chrome.scripting.unregisterContentScripts(); await ensure(); });
 });
 chrome.runtime.onStartup.addListener(() => serial(ensure));
