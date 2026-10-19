@@ -618,7 +618,7 @@ GZ_UI.load().then((s) => {
   const navAverages = new Map();
   const renderNav = () => {
     const n = { ...(offer || s).nav };
-    const signature = JSON.stringify([n, n.k === 'default' ? activeColors(offer || s) : null]);
+    const signature = JSON.stringify([n, n.k === 'default' ? activeColors(offer || s) : null, s.navbar]);
     if (signature === navRendered) return;
     navRendered = signature;
     const rev = ++navReview;

@@ -26,12 +26,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const wide = () => matchMedia('(min-width: 900px)').matches;
   const rtl = () => host?.getAttribute('dir') === 'rtl';
 
-  let host = null, root, el = {}, model = null, rows = [], sig = '', prefs = M.clean(), legacy = null, read = false, lay = null, words = '';
-  let rail = null, applied = null, peek = false, shown = false, sheetOpen = false, menu = '', enter = 0, leave = 0, queued = false, placed = false, frame = 0;
+  let host = null, root, el = {}, sizes = null, model = null, rows = [], sig = '', prefs = M.clean(), legacy = null, read = false, lay = null, words = '';
+  let rail = null, applied = null, peek = false, shown = false, sheetOpen = false, menu = '', enter = 0, leave = 0, queued = 0, placed = false, frame = 0, sleeping = false, measured = '';
   const listeners = new Map(), mods = new Map(); // event -> Set(fn); owner -> Map(id -> item)
   const emit = (event, data) => { for (const fn of listeners.get(event) || []) { try { fn(data); } catch { /* one listener's error isn't the bar's */ } } };
   const settings = () => X.settings().navbar || {};
-  const on = () => !!site && !!chrome.runtime?.id && X.on() && X.settings().enabled && !!settings().on && (isPreview || window.top === window);
+  const on = () => !sleeping && !!site && !!chrome.runtime?.id && X.on() && X.settings().enabled && !!settings().on && (isPreview || window.top === window);
   const tabsApi = () => (X.settings().enhance?.tabs && globalThis.GZ_CTABS?.bar) || null;
   // Inside a course: its own page, or one of Glaze's course tabs showing over the page.
   const inCourse = () => /^\/ultra\/courses\//.test(location.pathname) || !!globalThis.GZ_CTABS?.showing?.();
@@ -98,6 +98,10 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       if (e.target === el.sheet && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) sheetTo(false);
     });
     (document.body || html).append(host);
+    if (typeof ResizeObserver === 'function') {
+      sizes = new ResizeObserver(() => { if (host === mounted) { measured = ''; queue(); } });
+      for (const box of [el.tbrand, el.titems, el.ttabs]) sizes.observe(box);
+    }
     site.observe(queue);
   };
 
@@ -158,7 +162,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (mode !== 'school' || !brand.src) a.append(make('span', { className: 'label' }, make('b', { textContent: 'Glaze' }), brand.name ? make('small', { textContent: brand.name }) : null));
   };
   const render = () => {
-    const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tabs, .sheet'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
+    const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tabs, .sheet, .menu'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
+    const tabAt = focusedTab ? [...pane.querySelectorAll('.ctab-go')].findIndex((e) => e.dataset.cid === active.dataset.cid) : -1, wasMenu = menu;
     brandInto(el.brand); brandInto(el.tbrand);
     // The rail: groups, a divider between, the course tabs, the active marker that glides from item to item.
     let i = 1;
@@ -223,13 +228,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     custom.dataset.act = 'customize';
     sheetRows.push(custom);
     el.sheet.replaceChildren(...sheetRows);
-    if (menu) menuTo('');
-    const restore = active === el.brand || active === el.tbrand ? active
-      : focusedTab ? pane?.querySelector(`[data-act="${focusedTab.split('|')[0]}"][data-cid="${CSS.escape(focusedTab.split('|')[1])}"]`)
-        : focused ? pane?.querySelector(`[data-id="${CSS.escape(focused)}"]:not(.brand)`) : active?.classList.contains('more') ? el.more : active?.dataset.act === 'customize' ? custom : null;
-    (restore || (sheetOpen ? el.sheet.querySelector('a, button') : null))?.focus({ preventScroll: true });
+    if (menu) menuTo('', false);
     placed = false;
     layout();
+    if (wasMenu && lay.place === 'top' && wide() && !(wasMenu === 'more' ? el.tmore : el.tacc).hidden) menuTo(wasMenu, false);
+    const restore = active === el.brand || active === el.tbrand ? active
+      : focusedTab ? pane?.querySelector(`[data-act="${focusedTab.split('|')[0]}"][data-cid="${CSS.escape(focusedTab.split('|')[1])}"]`)
+        : focused ? pane?.querySelector(`[data-id="${CSS.escape(focused)}"]:not(.brand)`) : active?.classList.contains('more') ? el.more : active?.dataset.act === 'customize' ? pane?.querySelector('[data-act="customize"]') : null;
+    const nearby = tabAt >= 0 ? [...pane.querySelectorAll('.ctab-go')].at(Math.min(tabAt, pane.querySelectorAll('.ctab-go').length - 1)) || pane.querySelector('a, button') : null;
+    const target = restore || nearby || (sheetOpen ? el.sheet.querySelector('a, button') : wasMenu ? el.menu.querySelector('a, button') || (wasMenu === 'more' ? el.tmore : el.tacc) : active?.isConnected ? active : null);
+    if (target?.getClientRects().length) target.focus({ preventScroll: true });
   };
   let logos = 0;
   const glazeLogo = () => {
@@ -251,6 +259,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     html.setAttribute('data-gz-navbar', words);
     if (hadTabs !== lay.tabs) tabsApi()?.place();
   };
+  const geometry = () => JSON.stringify([innerWidth, innerHeight, host?.dir, host?.hasAttribute('data-footer'), X.settings().look]);
   const layout = () => {
     if (!host) return;
     host.dataset.place = lay.place;
@@ -269,6 +278,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     room();
     if (open !== shown) { shown = open; emit(open ? 'expand' : 'collapse', {}); if (open) tip(null); }
     if (host.hidden) return;
+    measured = geometry();
     if (lay.place === 'top' && wide()) fit();
     // The markers glide; the first placement after a redraw doesn't (it would slide in from the top).
     const still = !placed;
@@ -296,13 +306,19 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   // The top bar's row: labels go first (icons with a tip), then the last items, under More, until it fits.
   const fit = () => {
     const box = el.titems, items = [...box.querySelectorAll('.item')];
+    el.tmore.hidden = true;
     el.topbar.removeAttribute('data-compact');
     for (const e of items) e.removeAttribute('data-over');
+    const separators = [...box.querySelectorAll('.tsep')];
+    for (const s of separators) s.hidden = false;
     const over = () => box.scrollWidth > box.clientWidth + 1;
     if (over()) el.topbar.setAttribute('data-compact', '');
-    for (let n = items.length - 1; n > 0 && over(); n--) items[n].setAttribute('data-over', '');
-    for (const s of box.querySelectorAll('.tsep')) s.hidden = !s.nextElementSibling || s.nextElementSibling.hasAttribute('data-over');
-    el.tmore.hidden = !items.some((e) => e.hasAttribute('data-over'));
+    if (!over()) return;
+    el.tmore.hidden = false;
+    for (let n = items.length - 1; n >= 0 && over(); n--) {
+      items[n].setAttribute('data-over', '');
+      for (const s of separators) s.hidden = !s.nextElementSibling || s.nextElementSibling.hasAttribute('data-over');
+    }
   };
   const tip = (target) => {
     if (!el.tip) return;
@@ -432,6 +448,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (!lay.open) peekTo(false);
   };
   const key = (e) => {
+    if (menu && e.key === 'Tab') { menuTo(''); return; }
+    if ([el.tmore, el.tacc].includes(root.activeElement) && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
+      e.preventDefault(); menuTo(root.activeElement === el.tmore ? 'more' : 'account');
+      if (e.key === 'ArrowUp') [...el.menu.querySelectorAll('a, button')].at(-1)?.focus();
+      return;
+    }
     if (sheetOpen && e.key === 'Tab') {
       const items = [...el.sheet.querySelectorAll('a, button')], first = items[0], last = items.at(-1);
       if (e.shiftKey && root.activeElement === first) { e.preventDefault(); last?.focus(); }
@@ -464,11 +486,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const stop = () => {
     clearTimeout(enter); clearTimeout(leave); enter = leave = 0;
     cancelAnimationFrame(frame); frame = 0;
+    cancelAnimationFrame(queued); queued = 0;
     if (!host) return;
     if (sheetOpen) sheetTo(false);
     menuTo('', false);
     site?.unobserve();
-    host.remove(); host = null; root = null; el = {}; sig = ''; model = null; rows = []; lay = null; peek = false; shown = false; sheetOpen = false; rail = null;
+    sizes?.disconnect(); sizes = null;
+    // Closing a dialog or removing a focused bar can schedule focusout's delayed peek close.
+    host.remove();
+    clearTimeout(enter); clearTimeout(leave); enter = leave = 0;
+    host = null; root = null; el = {}; sig = ''; measured = ''; model = null; rows = []; lay = null; peek = false; shown = false; sheetOpen = false; rail = null;
     const hadTabs = words.split(' ').includes('tabs');
     words = '';
     html.removeAttribute('data-gz-navbar');
@@ -494,22 +521,22 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const native = site.read().map((n) => (framed ? { ...n, active: n.id === 'course' } : n));
     const look = X.parts()?.nav ? L.clean(X.parts().nav) : null;
     model = M.build({ native, prefs, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
-      names: { notes: t('Notes'), todo: 'To Do', search: t('Search'), settings: t('Glaze settings') } });
+      names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') } });
     const next = JSON.stringify([model, rows, lay, settings(), site.brand(), site.avatar?.(), X.locale()]);
-    if (next !== sig) { sig = next; render(); emit('change', view()); } else layout();
+    if (next !== sig) { sig = next; render(); emit('change', view()); } else if (measured !== geometry()) layout();
   };
-  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; sync(); }); } };
+  const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
   chrome.storage.onChanged.addListener((c, area) => {
     if (area !== 'sync' || !chrome.runtime?.id) return;
     if (c.navbarItems) prefs = M.clean(c.navbarItems.newValue);
     if (c.navItems) legacy = c.navItems.newValue ? N.clean(c.navItems.newValue) : null;
     if (c.navbarItems || c.navItems) { sig = ''; if (host) sync(); }
   });
-  addEventListener('resize', () => { if (!host) return; tip(null); menuTo('', false); if (!wide()) peekTo(false); else sheetTo(false); sync(); });
+  addEventListener('resize', () => { if (!host) return; measured = ''; tip(null); menuTo('', false); if (!wide()) peekTo(false); else sheetTo(false); sync(); });
   addEventListener('popstate', () => { if (host) queue(); });
   document.addEventListener('visibilitychange', () => { if (host && document.visibilityState === 'visible') queue(); });
-  addEventListener('pagehide', stop);
-  addEventListener('pageshow', (e) => { if (e.persisted) queue(); });
+  addEventListener('pagehide', () => { sleeping = true; stop(); });
+  addEventListener('pageshow', (e) => { sleeping = false; if (e.persisted) queue(); });
   // The editor's preview has this file as a <script> after content.js, whose first ask came before it was in: it starts
   // itself, and follows the editor's edits there.
   if (isPreview) { addEventListener('message', (e) => { if (e.origin === location.origin && e.data?.gzPreview) setTimeout(sync); }); setTimeout(sync); }
@@ -542,7 +569,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const api = {
     sync,
     // Whether the bar is drawn: it then says <html data-gz-navbar> itself (content-ultra.js only at first paint).
-    live: () => !!host,
+    live: () => !!host?.isConnected,
     model: view,
     on: (event, fn) => { if (typeof fn === 'function') { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event).add(fn); } },
     off: (event, fn) => { listeners.get(event)?.delete(fn); },

@@ -949,7 +949,7 @@ html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-c
 /* The banner's height sets the card's least height (Ultra's 156px of details below it), never a fixed one. */
 html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card { height: auto !important; min-height: calc(var(--gz-card-h) + 156px); }
 /* A term's cards that happened to be one window high when swept are tagged data-gz-vh; they still grow. */
-html[data-gz-footer] #site-wrap .course-org-list [data-gz-vh] { max-height: none !important; }
+html[data-gz-footer] #site-wrap .course-org-list [data-gz-vh], html[data-gz-navbar] #site-wrap .course-org-list [data-gz-vh] { max-height: none !important; }
 #site-wrap .multi-column-view article.course-element-card .course-banner { border-radius: calc(var(--gz-card-r, var(--gz-radius)) - calc(var(--gz-radius, 12px) * 1 / 12)) calc(var(--gz-card-r, var(--gz-radius)) - calc(var(--gz-radius, 12px) * 1 / 12)) 0 0 !important; }
 html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title { position: absolute; top: auto; bottom: calc(100% - var(--gz-card-banner-h, var(--gz-card-h, 146px))); inset-inline: 12px; margin: 0 !important; padding: 0 0 8px !important; max-height: calc(var(--gz-card-banner-h, var(--gz-card-h, 146px)) - 8px); line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; color: white !important; z-index: 1; text-shadow: 0 1px 3px #000; }
 html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title :is(a, span) { color: white !important; }
@@ -1190,4 +1190,5 @@ html[data-gz-navbar~="tabs"] #gz-ctabs { display: none !important; }
 }
 @media (max-width: 899.98px) {
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > section.course) { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { margin-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }
