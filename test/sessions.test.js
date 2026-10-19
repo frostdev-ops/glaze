@@ -144,6 +144,54 @@ test('scoped activation keeps existing account consent and already-enabled backg
   } finally { d.worker.stop(); }
 });
 
+test('a scoped panel attaches only sessions joined by that panel without taking a foreign detached copy', async (t) => {
+  for (const owner of ['unbound', 'other-panel', 'foreign-copy', 'missing-ticket', 'empty-ticket']) await t.test(owner, async () => {
+    const d = device('http://127.0.0.1:1'), scope = { key: NK, note: '', id: 'panel-a' };
+    try {
+      const record = { st: G.create('collection', { server: 'http://127.0.0.1:1' }), kind: 'notes', title: 'Private shared note' };
+      await G.session(record.st).edit({ _: { kind: 'notes', title: record.title }, shared: { title: 'Private', html: '<p>Other account content</p>' } });
+      if (owner === 'other-panel') record.joinedScope = 'panel-b';
+      if (owner === 'missing-ticket') { record.joinedScope = scope.id; delete scope.id; }
+      if (owner === 'empty-ticket') record.joinedScope = scope.id = '';
+      if (owner === 'foreign-copy') {
+        record.joinedScope = scope.id;
+        record.copy = { key: 'notesIdx:https://school.instructure.com/6', notes: [crypto.randomUUID()] };
+        delete record.st.seed;
+      }
+      await d.db.put('sessions', record.st.sid, record);
+      const stored = clone(d.local.data), noteBodies = [...d.notes.stores.bodies];
+      await assert.rejects(d.send('attach', { sid: record.st.sid, key: NK, scope }), /bad/);
+      assert.deepEqual(d.local.data, stored, 'no foreign note copied into this account');
+      assert.deepEqual([...d.notes.stores.bodies], noteBodies);
+      assert.deepEqual(await session(d, record.st.sid), record, 'the original account and provenance remain intact');
+      assert.equal((await d.send('attach', { sid: record.st.sid, key: NK })).ok, true, 'Settings retains explicit attach authority');
+      const attached = await session(d, record.st.sid), copied = Object.values(attached.bind?.map || {})[0] || attached.copy?.notes[0];
+      assert.match((await N.run({ key: NK, op: 'load', id: copied }, { local: d.local }, d.notes)).html, /Other account content/);
+    } finally { d.worker.stop(); }
+  });
+});
+
+test('a scoped Join records its panel provenance and permits its own Notes attachment', async () => {
+  const d = device('http://127.0.0.1:1'), scope = { key: NK, note: '', id: 'panel-a' };
+  try {
+    const st = G.create('collection', { server: 'http://127.0.0.1:1' });
+    await G.session(st).edit({ _: { kind: 'notes', title: 'Joined' }, shared: { title: 'Joined', html: '<p>Joined by this panel</p>' } });
+    const joined = await d.send('join', { link: G.link(st.server, { sid: st.sid, seed: G.unb64(st.seed) }, true), scope });
+    const record = await session(d, joined.sid);
+    assert.equal(record.joinedScope, scope.id);
+    assert.deepEqual((await d.send('list', { scope })).scope, { key: NK, note: '' }, 'the private provenance stays in the worker');
+    await d.send('pause');
+    await assert.rejects(d.send('resume', { scope: { ...scope, id: 'another-panel' } }), /confirmation/);
+    assert.equal((await d.send('resume', { scope })).ok, true, 'the same panel can retry its own unbound Join');
+    // Supply the actual decrypted client state that a later successful relay sync would retain.
+    Object.assign(record, { st, kind: 'notes', title: 'Joined' });
+    await d.db.put('sessions', st.sid, record);
+    assert.equal((await d.send('attach', { sid: st.sid, key: NK, scope })).ok, true);
+    const copy = Object.values((await session(d, st.sid)).bind.map)[0];
+    assert.match((await N.run({ key: NK, op: 'load', id: copy }, { local: d.local }, d.notes)).html, /Joined by this panel/);
+  } finally { d.worker.stop(); }
+});
+
 test('disk relay: create, read/edit join, local files, offline restart catch-up and explicit file re-upload', async (t) => {
   const { url } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
