@@ -20,7 +20,7 @@
   .makeStylesnavigation-preview svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; }
   html[data-gz-nav-collapsed] #site-wrap { grid-template-columns: 80px minmax(0, 1fr); }
   html[data-gz-nav-place] #site-wrap { grid-template-columns: 0 minmax(0, 1fr); } /* a Look's nav as a bar or dock (features/navlayout.css) */
-  @media (min-width: 900px) { html[data-gz-navbar] #site-wrap { grid-template-columns: var(--gz-navbar-space) minmax(0, 1fr); } } /* Glaze's own bar (features/navbar.js) */
+  @media (min-width: 900px) { html[data-gz-navbar] #site-wrap { grid-template-columns: var(--gz-navbar-left) minmax(0, 1fr); padding-top: var(--gz-navbar-top); box-sizing: border-box; } } /* Glaze's own bar (features/navbar.js) */
   html[data-gz-nav-collapsed] .MuiDrawer-root { position: relative; }
   html[data-gz-nav-collapsed] .MuiDrawer-paper { width: 80px; }
   /* Desktop mock scaffold only: keep the collapsed column while the real rail overlays at full width. */

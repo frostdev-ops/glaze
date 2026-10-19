@@ -2,7 +2,7 @@
    tokens (--gz-*) arrive inherited from <html>. Looks and mods style it by part (::part(bar), ::part(item), ...).
    Motion is transform, opacity and clip-path only, never width; data-motion mirrors <html data-gz-motion>. */
 :host {
-  all: initial; position: fixed; z-index: 1250; inset: 0 auto auto 0; width: 0; height: 0;
+  all: initial; position: fixed; z-index: 1260; inset: 0 auto auto 0; width: 0; height: 0;
   --ease: cubic-bezier(.22, .9, .24, 1); --spring: cubic-bezier(.34, 1.32, .5, 1);
   --open: 248px; --shut: 72px; --gutter: 12px; --item: 44px;
   --nb-bg: color-mix(in srgb, var(--gz-surface, #0d1b2e) 84%, transparent);
@@ -82,12 +82,12 @@ a { color: inherit; text-decoration: none; }
 .slot:empty { display: none; }
 .slot { display: flex; flex-direction: column; gap: 4px; }
 .foot { display: flex; flex-direction: column; gap: 4px; }
-.account .avatar {
+.avatar {
   flex: none; width: 26px; height: 26px; margin-inline-start: -2px; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
   background: linear-gradient(135deg, color-mix(in srgb, var(--gz-accent, #17c8f4) 45%, var(--gz-surface, #0d1b2e)), var(--gz-surface, #0d1b2e));
   color: var(--gz-ink, #dff4ff); font-size: 11px; font-weight: 700; box-shadow: 0 0 0 2px var(--nb-active-edge);
 }
-.account .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .account .label { display: flex; flex-direction: column; line-height: 1.15; }
 .account b { font-size: 13px; font-weight: 600; color: var(--gz-ink, #e8eef8); overflow: hidden; text-overflow: ellipsis; }
 .controls { display: flex; gap: 4px; }
@@ -109,10 +109,98 @@ a { color: inherit; text-decoration: none; }
 .tip[data-on] { opacity: 1; transform: translate(0, -50%); }
 :host([dir="rtl"]) .tip[data-on] { transform: translate(-100%, -50%); }
 
+/* ---- embedded: set into the page's edge, no gutter, no float ---- */
+:host([data-style="embed"]) { --gutter: 0px; }
+:host([data-style="embed"]) .rail { border-radius: 0; border-width: 0; border-inline-end-width: 1px; clip-path: inset(0 calc(var(--open) - var(--shut)) 0 0); }
+:host([data-style="embed"][dir="rtl"]) .rail { clip-path: inset(0 0 0 calc(var(--open) - var(--shut))); }
+:host([data-style="embed"]) .rail[data-open] { clip-path: inset(0 -60px 0 0); }
+:host([data-style="embed"][dir="rtl"]) .rail[data-open] { clip-path: inset(0 0 0 -60px); }
+
+/* ---- the top bar: its items in a row (what doesn't fit under More), the course tabs, the account ---- */
+.topbar, .menu { display: none; }
+:host([data-place="top"]) .rail, :host([data-place="none"]) :is(.rail, .topbar, .tabs) { display: none; }
+:host([data-place="top"]) .topbar { display: flex; }
+:host([data-place="top"]) .menu:not([hidden]) { display: flex; }
+.topbar {
+  position: fixed; z-index: 1; inset-inline: var(--gutter); top: var(--gutter); height: 56px; align-items: center; gap: 8px; padding: 0 8px;
+  background: var(--nb-bg); border: 1px solid var(--nb-line); border-radius: 18px;
+  backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+:host([data-style="embed"]) .topbar { border-radius: 0; border-width: 0 0 1px; }
+.topbar .brand { flex: none; margin: 0; padding: 0 8px; }
+.topbar .label, .chip .label, .row .label { opacity: 1; transform: none; }
+.tlist { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; }
+.titems { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.topbar .item { flex: none; width: auto; height: 40px; gap: 8px; padding: 0 12px; }
+.topbar .item svg { width: 20px; height: 20px; }
+.topbar .item .badge { inset-inline-start: 24px; top: 3px; }
+.topbar[data-compact] .titems .label { display: none; }
+.topbar .item[data-over], .tsep[hidden], .tmore[hidden] { display: none; }
+.tsep { flex: none; width: 1px; height: 22px; margin: 0 4px; background: var(--nb-line); }
+.tind {
+  position: absolute; top: 50%; left: 0; width: var(--w, 0); height: 40px; border-radius: 12px; pointer-events: none;
+  background: var(--nb-active); box-shadow: inset 0 0 0 1px var(--nb-active-edge);
+  transform: translate(var(--x, 0), -50%); transition: transform 460ms var(--spring), width 460ms var(--spring), opacity 160ms ease;
+}
+.tind::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: -7px; height: 3px; border-radius: 3px 3px 0 0; background: var(--gz-accent-hi, #6fdcff); }
+.tind[hidden] { display: block; opacity: 0; }
+.ttabs { display: flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; max-width: 38%; overflow-x: auto; scrollbar-width: none; padding-inline-start: 10px; border-inline-start: 1px solid var(--nb-line); }
+.ttabs[hidden] { display: none; }
+.tacc { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; }
+.tacc:hover { background: var(--nb-hover); }
+.tacc .avatar { width: 32px; height: 32px; margin: 0; font-size: 12px; }
+.tacc svg { width: 24px; height: 24px; }
+.tacc[hidden] { display: none; }
+.tip[data-below] { transform: translate(-50%, -4px); }
+.tip[data-below][data-on] { transform: translate(-50%, 0); }
+
+/* ---- course tabs: in the rail, along the top bar, in the phone's sheet ---- */
+.ctab { position: relative; display: flex; align-items: center; min-width: 0; flex: none; }
+.ctab .ctab-go { min-width: 0; }
+.dot {
+  flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px;
+  background: var(--c, var(--gz-accent, #17c8f4)); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: 0.02em; text-shadow: 0 1px 1px rgb(0 0 0 / 0.35);
+}
+.pinned { width: 14px; height: 14px; margin-inline-start: auto; opacity: 0.6; }
+.ctab-tools { position: absolute; inset-inline-end: 6px; display: flex; gap: 2px; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
+.ctab:hover .ctab-tools, .ctab:focus-within .ctab-tools { opacity: 1; pointer-events: auto; }
+.ctab-do { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; color: var(--gz-ink-muted, #a9b8cf); background: var(--gz-surface, #0d1b2e); }
+.ctab-do:hover { color: var(--gz-ink, #e8eef8); background: color-mix(in srgb, var(--gz-ink-muted, #8fa8c0) 22%, var(--gz-surface, #0d1b2e)); }
+.ctab-do svg { width: 15px; height: 15px; }
+.rail .ctab { width: 100%; }
+.rail .ctab .ctab-go { width: 100%; }
+.rail:not([data-open]) .ctab-tools { display: none; }
+.rail:not([data-open]) .pinned { display: none; }
+.chip {
+  display: flex; align-items: center; gap: 8px; height: 36px; max-width: 168px; padding: 0 10px 0 6px; border-radius: 11px;
+  color: var(--gz-ink-muted, #a9b8cf); font-size: 13px; font-weight: 600; white-space: nowrap; transition: color 160ms ease, background-color 160ms ease;
+}
+.chip .dot { width: 22px; height: 22px; border-radius: 6px; font-size: 9px; }
+.chip:hover { color: var(--gz-ink, #e8eef8); background: var(--nb-hover); }
+.chip[aria-current="page"] { color: var(--gz-ink, #e8eef8); background: var(--nb-active); box-shadow: inset 0 0 0 1px var(--nb-active-edge); }
+.ttabs .ctab-tools { inset-inline-end: 4px; }
+
+/* ---- rows: the top bar's menus and the phone's sheet ---- */
+.row { display: flex; align-items: center; gap: 14px; width: 100%; height: 52px; flex: none; padding: 0 16px; border-radius: 14px; color: var(--gz-ink, #e8eef8); font-size: 15px; font-weight: 600; text-align: start; }
+.row:hover { background: var(--nb-hover); }
+.row svg { color: var(--gz-ink-muted, #a9b8cf); }
+.row[aria-current="page"] { background: var(--nb-active); }
+.row[aria-current="page"] svg { color: var(--gz-accent-hi, #6fdcff); }
+.row .badge { position: static; margin-inline-start: auto; }
+.row.customize, .row.customize svg { color: var(--gz-accent-hi, #6fdcff); }
+.menu {
+  position: fixed; z-index: 3; flex-direction: column; gap: 2px; min-width: 220px; max-width: 320px; padding: 6px; border-radius: 16px;
+  background: var(--gz-surface, #121d2f); border: 1px solid var(--nb-line); box-shadow: 0 18px 50px rgb(0 0 0 / 0.4);
+}
+.menu .row { height: 42px; padding: 0 12px; font-size: 14px; gap: 12px; border-radius: 10px; }
+.menu .divider { margin: 4px 10px; }
+
 /* ---- mobile: the bottom bar, the More sheet ---- */
 .tabs, .sheet { display: none; }
 @media (max-width: 899.98px) {
-  .rail, .tip { display: none; }
+  .rail, .tip, .topbar, .menu, :host([data-place="top"]) :is(.topbar, .menu:not([hidden])) { display: none; }
+  :host([data-place="top"]) .tabs { display: flex; }
+  :host([data-style="embed"]) .tabs { inset-inline: 0; bottom: 0; border-radius: 0; border-width: 1px 0 0; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); box-shadow: none; }
   .tabs {
     position: fixed; z-index: 1; inset-inline: 12px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); display: flex; padding: 6px;
     border-radius: 22px; background: var(--nb-bg); border: 1px solid var(--nb-line); box-shadow: 0 12px 40px rgb(0 0 0 / 0.35);
@@ -145,14 +233,11 @@ a { color: inherit; text-decoration: none; }
   .sheet[data-open] { transform: none; visibility: visible; transition: transform 420ms var(--ease); }
   .sheet::backdrop { background: rgb(4 8 15 / 0.55); }
   .handle { width: 40px; height: 5px; flex: none; border-radius: 3px; margin: 0 auto 10px; background: color-mix(in srgb, var(--gz-ink-muted, #8fa8c0) 45%, transparent); }
-  .row { display: flex; align-items: center; gap: 14px; width: 100%; height: 52px; flex: none; padding: 0 16px; border-radius: 14px; color: var(--gz-ink, #e8eef8); font-size: 15px; font-weight: 600; text-align: start; }
-  .row:hover { background: var(--nb-hover); }
-  .row svg { color: var(--gz-ink-muted, #a9b8cf); }
-  .row[aria-current="page"] { background: var(--nb-active); }
-  .row[aria-current="page"] svg { color: var(--gz-accent-hi, #6fdcff); }
-  .row .badge { position: static; margin-inline-start: auto; }
-  .row.customize, .row.customize svg { color: var(--gz-accent-hi, #6fdcff); }
   .sheet .divider { margin: 8px 16px; }
+  .sheet .group-label { padding: 4px 16px 2px; }
+  .sheet .ctab { width: 100%; }
+  .sheet .ctab .ctab-go { width: 100%; }
+  .sheet .ctab-tools { opacity: 1; pointer-events: auto; inset-inline-end: 10px; }
 }
 
 /* ---- motion: off, and the student's reduced motion ---- */

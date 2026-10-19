@@ -141,8 +141,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     hadClear = !!header?.hasAttribute('data-gz-keep-clear');
     if (header && !hadClear) header.setAttribute('data-gz-keep-clear', '');
   };
+  // Glaze's own navigation bar can hold the tabs instead of the strip (features/navbar.js, data-gz-navbar's word `tabs`).
+  const hosted = () => !framed && !preview && (html.getAttribute('data-gz-navbar') || '').split(' ').includes('tabs');
   const place = () => {
     if (!on || !strip) return;
+    if (hosted()) { keepClear(null); strip.remove(); return; }
     const w = home();
     keepClear(w?.clear || null);
     if (!w) { strip.remove(); return; }
@@ -222,21 +225,26 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     return e;
   };
   const labelFor = (cid, name, code) => ctx.nickOf(cid) || (P().label === 'code' && code) || (P().label === 'short' ? L.shortName(name) : name);
-  const draw = () => {
-    if (!strip) return;
-    const p = P();
+  const rowsOf = () => {
     const cur = showing || here();
-    const known = ctx.courseList();
-    const rows = (loaded ? tabs : []).map((x) => {
+    const known = ctx.courseList(), colors = ctx.courseColors?.() || {};
+    return (loaded ? tabs : []).map((x) => {
       const c = known[x.cid] || {};
       const nick = ctx.nickOf(x.cid);
       const name = c.name || x.name || c.code || x.code || t('Course');
       const code = c.code || x.code || '';
-      return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: labelFor(x.cid, name, code), full: [...new Set([nick, name, code].filter(Boolean))].join(' · '), slot: c.slot || x.slot || '' };
+      return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: labelFor(x.cid, name, code), full: [...new Set([nick, name, code].filter(Boolean))].join(' · '), slot: c.slot || x.slot || '', color: colors[x.cid]?.color || '' };
     });
+  };
+  const draw = () => {
+    if (!strip) return;
+    const p = P();
+    const cur = showing || here();
+    const rows = rowsOf();
     const k = JSON.stringify([rows, p, ctx.locale(), drag?.on && drag.cid]);
     if (k === drawn) return;
     drawn = k;
+    if (!framed) globalThis.GZ_NAVBAR_UI?.sync();
     for (const a of ['shape', 'size', 'mark', 'color']) set(strip, `data-${a}`, p[a]);
     if (strip.style.getPropertyValue('--gz-ctab-w') !== `${p.width}px`) strip.style.setProperty('--gz-ctab-w', `${p.width}px`);
     set(list, 'aria-label', t('Course tabs'));
@@ -914,7 +922,18 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     addEventListener('message', (e) => { if (e.data?.gzPreview) follow(); });
     follow();
   }
-  return { sync, held, petSurface, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
+  // For Glaze's own navigation bar, which can hold the tabs (hosted): the rows it draws and what its tabs do.
+  const bar = {
+    rows: () => (on && !framed && !signedOut ? rowsOf() : []),
+    visit: (cid) => { if (on && tabs.some((x) => x.cid === cid)) visit(cid); },
+    shut: (cid) => { if (on && tabs.some((x) => x.cid === cid)) shut(cid); },
+    pin: (cid) => { if (on && tabs.some((x) => x.cid === cid)) pinTab(cid); },
+    move: (cid, to) => { if (on && tabs.some((x) => x.cid === cid) && Number.isInteger(to)) moveTab(cid, to); },
+    // Back to the page under the tabs (a frame was showing), as picking the page's own item would.
+    leave: () => { if (on && showing) show(''); },
+    place,
+  };
+  return { sync, held, petSurface, bar, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
 
 GZ_CTABS;

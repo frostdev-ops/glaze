@@ -54,7 +54,7 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
   return out.filter(Boolean);
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['sharing/quick.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+const JS = ['sharing/quick.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/editor-navbar.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 // Tables and generated labels reach t() through variables, not literal arguments.
 const tableWords = [
   ...Object.values(PET.DECOR).map((item) => item.name), ...Object.values(PET.HABITATS),

@@ -111,21 +111,75 @@ test('mobile keeps mod slot items reachable', () => {
   for (const key of ['mod:a.top', 'mod:a.bottom']) assert.equal(mobile.filter((i) => i.id === key).length, 1, key);
 });
 
-test('the rail is open on wide windows by default, and the page keeps its room', () => {
+test('on by default: a floating rail, open on wide windows; Look codes carry how it looks, not whether it is on', async () => {
   assert.equal(M.railOpen('auto', 1280), true); assert.equal(M.railOpen('auto', 1279), false);
   assert.equal(M.railOpen('open', 900), true); assert.equal(M.railOpen('icons', 2000), false);
-  assert.deepEqual(G.GZ_SANITIZE({}).navbar, { on: false, rail: 'auto', peek: true, badges: true, brand: 'glaze' });
-  assert.deepEqual(G.GZ_SANITIZE({ navbar: { on: 1, rail: 'wide', brand: 'school' } }).navbar, { on: false, rail: 'auto', peek: true, badges: true, brand: 'school' });
-  const css = read('theme.css');
-  for (const [px, rule] of [[M.SPACE.icons, 'html[data-gz-navbar] {'], [M.SPACE.open, 'html[data-gz-navbar="open"] {'], [M.SPACE.open, 'html[data-gz-navbar="auto"] {']]) {
-    assert.ok(css.includes(`${rule} --gz-navbar-space: ${px}px; }`), rule);
-  }
+  const DEF = { on: true, place: 'rail', style: 'float', rail: 'auto', course: 'same', tabs: true, peek: true, badges: true, brand: 'glaze' };
+  assert.deepEqual(G.GZ_SANITIZE({}).navbar, DEF);
+  assert.deepEqual(G.GZ_SANITIZE({ navbar: { on: 1, place: 'side', style: 'glass', rail: 'wide', course: 'gone', brand: 'school' } }).navbar, { ...DEF, brand: 'school' });
   for (const icon of M.PICKS) assert.match(M.ICONS[icon], /^[Mm][\d.\s,a-zA-Z-]+$/, icon);
   assert.ok(NI.ICONS.every((i) => M.PICKS.includes(i)), "every link icon a Look may give is one of the bar's");
+  const S = require('../lib/share.js');
+  const s = G.GZ_SANITIZE({ navbar: { on: false, place: 'top', style: 'embed', course: 'icons', tabs: false } });
+  const got = await S.decode(await S.encode(s, {}, null));
+  assert.deepEqual(got.navbar, { place: 'top', style: 'embed', course: 'icons', tabs: false }, 'only what differs from the default, never on');
+  assert.deepEqual((await S.decode(await S.encode(G.GZ_SANITIZE({}), {}, null))).navbar, {});
+  const raw = (o) => S.PREFIX + Buffer.from(require('node:zlib').deflateRawSync(Buffer.from(JSON.stringify({ c: G.GZ_COLORS.map(([v]) => G.GZ_DEFAULTS.colors[v].slice(1)).join(''), ...o })))).toString('base64url');
+  for (const v of [{ on: false }, { place: 'left' }, { style: 1 }, []]) await assert.rejects(S.decode(raw({ v })), JSON.stringify(v));
+  assert.deepEqual((await S.decode(raw({ v: { place: 'top' } }))).navbar, { place: 'top' });
+});
+
+test('where the bar is: the placement, the course state, the style and the room it keeps', () => {
+  const n = G.GZ_SANITIZE({}).navbar;
+  const L1 = (o, ctx) => M.layout({ ...n, ...o }, ctx);
+  assert.deepEqual(L1({}, { width: 1440 }), { place: 'rail', open: true, style: 'float', tabs: true, left: 272, top: 0, words: 'rail auto float tabs' });
+  assert.deepEqual(L1({}, { width: 1100 }), { place: 'rail', open: false, style: 'float', tabs: true, left: 96, top: 0, words: 'rail auto float tabs' });
+  assert.equal(L1({ style: 'embed' }, { width: 1440 }).left, 248);
+  assert.equal(L1({ style: 'embed', rail: 'icons' }, { width: 1440 }).left, 72);
+  assert.deepEqual(L1({ place: 'top' }, { width: 1440 }), { place: 'top', open: false, style: 'float', tabs: true, left: 0, top: 80, words: 'top float tabs' });
+  assert.equal(L1({ place: 'top', style: 'embed' }).top, 56);
+  assert.equal(L1({}, { width: 1440, rail: 'icons' }).left, 96, 'a pin just picked wins until storage says so');
+  assert.deepEqual(L1({ course: 'icons' }, { width: 1440, course: true }), { place: 'rail', open: false, style: 'float', tabs: true, left: 96, top: 0, words: 'rail icons float tabs' });
+  assert.equal(L1({ course: 'icons' }, { width: 1440, course: true, rail: 'open' }).open, false, 'icons inside a course whatever the pin');
+  assert.equal(L1({ course: 'top' }, { course: true }).place, 'top');
+  assert.deepEqual(L1({ course: 'hide' }, { course: true }), { place: 'none', open: false, style: 'float', tabs: true, left: 0, top: 0, words: 'none float tabs' });
+  assert.equal(L1({ course: 'hide' }, { course: false }).place, 'rail', 'only inside a course');
+  assert.equal(L1({ tabs: true }, { tabs: false }).words, 'rail auto float', 'no course tabs to hold');
+  assert.deepEqual([L1({}, { width: 800 }).left, L1({ place: 'top' }, { width: 800 }).top], [0, 0], 'a phone keeps no side or top room');
+  // theme.css reserves the same room at first paint, from the same words.
+  const css = read('theme.css');
+  for (const [rule, px] of [['html[data-gz-navbar~="rail"] { --gz-navbar-left', 96], ['html[data-gz-navbar~="rail"][data-gz-navbar~="embed"] { --gz-navbar-left', 72], ['html[data-gz-navbar~="rail"][data-gz-navbar~="open"] { --gz-navbar-left', 272],
+    ['html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left', 248], ['html[data-gz-navbar~="top"] { --gz-navbar-top', 80], ['html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top', 56],
+    ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left', 272], ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left', 248]]) assert.ok(css.includes(`${rule}: ${px}px; }`), rule);
+  for (const rule of ['#main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }', '#main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }',
+    '.inner-wrap > section.course { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
+    '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-navbar~="tabs"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
+});
+
+test("Ultra's first paint words the bar as the model does, for each setting, in and out of a course", () => {
+  const src = read('content-ultra.js');
+  const line = src.match(/ {4}const b = I\.settings\.navbar, c = [^\n]+\n[^\n]+/)[0];
+  const first = (navbar, path, tabs = true) => {
+    const attrs = {};
+    vm.runInNewContext(line, { I: { settings: { navbar, enhance: { tabs } }, setAttr: (k, v) => { attrs[k] = v; } }, location: { pathname: path }, globalThis: {} });
+    return attrs['data-gz-navbar'];
+  };
+  const n = G.GZ_SANITIZE({}).navbar;
+  for (const o of [{}, { style: 'embed' }, { rail: 'icons' }, { place: 'top' }, { course: 'icons' }, { course: 'top' }, { course: 'hide' }, { tabs: false }]) {
+    for (const path of ['/ultra/course', '/ultra/courses/_1_1/outline']) {
+      const s = { ...n, ...o }, want = M.layout(s, { course: path.startsWith('/ultra/courses/'), width: 1440 }).words.split(' ');
+      const got = first(s, path).split(' ');
+      // The first paint may name the rail state of a top bar; theme.css only reads it beside `rail`.
+      assert.deepEqual(got.filter((w) => !(want[0] === 'top' && ['auto', 'open', 'icons'].includes(w))), want, JSON.stringify([o, path]));
+    }
+  }
+  assert.equal(first({ ...n, on: false }, '/ultra/course'), false);
+  assert.equal(first(n, '/ultra/course', false), 'rail auto float', 'without course tabs, nothing to hold');
 });
 
 test('the editor may change navbar fields; an Ultra top frame may only pin its rail', async () => {
   const source = read('lib/background.js');
+  const DEF = G.GZ_SANITIZE({}).navbar;
   const store = { navbar: { on: true, rail: 'auto', brand: 'school' } };
   const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromUltra: async (s) => s.ultra === true });
   const h = vm.runInContext(`({${source.match(/\n {2}navbar: \{([\s\S]*?)\n {2}\},/)[1]}})`, ctx);
@@ -137,16 +191,16 @@ test('the editor may change navbar fields; an Ultra top frame may only pin its r
   assert.equal(await h.allow({ patch: { rail: 'auto', badges: false } }, { editor: true }), true);
   const sync = { get: async () => structuredClone(store), set: async (p) => { Object.assign(store, p); return true; } };
   assert.equal((await h.run({ patch: { rail: 'icons' } }, { sync })).ok, true);
-  assert.deepEqual(store.navbar, { on: true, rail: 'icons', peek: true, badges: true, brand: 'school' });
+  assert.deepEqual(store.navbar, { ...DEF, rail: 'icons', brand: 'school' });
   await h.run({ patch: { badges: false } }, { sync });
-  assert.deepEqual(store.navbar, { on: true, rail: 'icons', peek: true, badges: false, brand: 'school' });
+  assert.deepEqual(store.navbar, { ...DEF, rail: 'icons', badges: false, brand: 'school' });
   assert.match(source, /'features\/navbar\.js'\) \? \['lib\/nav\.js', 'lib\/nav-items\.js', 'lib\/navlayout\.js', 'lib\/navbar\.js'\]/, 'the model loads with the bar');
   assert.ok(require('../manifest.json').web_accessible_resources.some((w) => w.resources.includes('features/navbar.css')), 'the shadow root can load its sheet');
 });
 
 test("Ultra's part marks first paint from the setting and loads the bar only when it is on; the old rail steps aside", () => {
   const ultra = read('content-ultra.js');
-  assert.match(ultra, /I\.setAttr\('data-gz-navbar', !!I\.settings\.navbar\?\.on && I\.settings\.navbar\.rail\);/);
+  assert.match(ultra, /if \(!globalThis\.GZ_NAVBAR_UI\?\.live\(\)\) I\.setAttr\('data-gz-navbar', !!b\?\.on && /);
   assert.match(ultra, /if \(globalThis\.GZ_NAVBAR_UI \|\| \(I\.links\.length && I\.settings\?\.navbar\?\.on\)\) need\('features\/navbar\.js'/);
   assert.match(read('features/nav.js'), /const on = X\.on\(\) && X\.settings\(\)\.enabled && !\(X\.site === 'ultra' && X\.settings\(\)\.navbar\?\.on\);/);
 });
@@ -195,4 +249,30 @@ test('a navbar edit batched with Look parts merges in the worker queue too', asy
   assert.equal((await h.run({ patch: { navbar: { badges: false } } }, { sync: { get: async () => structuredClone(stored) } })).ok, true);
   assert.equal(stored.navbar.rail, 'icons');
   assert.equal(stored.navbar.badges, false);
+});
+
+test("the editor lists every item where the bar puts it, hidden ones too, with the phone's tabs", () => {
+  const E = require('../lib/editor-navbar.js');
+  const ids = (gs) => gs.map((g) => g.items.map((i) => i.id));
+  assert.deepEqual(ids(E.rows({})), [['institution-page', 'stream', 'course', 'organization', 'calendar', 'messages', 'grades'], ['tools']]);
+  assert.deepEqual(E.rows({}).flatMap((g) => g.items).filter((i) => i.tab).map((i) => i.id), ['institution-page', 'course', 'calendar', 'messages']);
+  const prefs = { items: { stream: { hidden: true, label: 'Feed' }, tools: { icon: 'star' } }, groups: [{ label: 'Daily', items: ['calendar', 'stream'] }, { items: [] }, { items: ['tools'] }], tabs: ['calendar'], glaze: ['notes'], links: [{ id: 'aaaaaaaaaaaa', n: 'Wiki', u: 'https://wiki.test/' }] };
+  const gs = E.rows(prefs);
+  assert.deepEqual(gs.map((g) => g.label), ['Daily', '', '']);
+  assert.deepEqual(ids(gs), [['calendar', 'stream', 'institution-page', 'course', 'organization', 'messages', 'grades'], [], ['tools', 'link:aaaaaaaaaaaa', 'glaze:notes']], 'an empty group stays to drop into');
+  const stream = gs[0].items[1];
+  assert.deepEqual([stream.hidden, stream.name], [true, 'Feed'], 'hidden, still listed in its place');
+  assert.equal(gs[2].items[0].icon, 'star');
+  assert.equal(gs[2].items[1].own, true, "the student's own link can be removed here");
+  assert.equal(gs.flatMap((g) => g.items).filter((i) => i.tab)[0].id, 'calendar');
+  assert.match(read('options.html'), /<script src="lib\/navbar\.js"><\/script>\s*<script src="lib\/editor-navbar\.js"><\/script>/);
+});
+
+test('course tabs move into the bar when it holds them, and their strip steps aside', () => {
+  const src = read('features/coursetabs.js');
+  assert.match(src, /const hosted = \(\) => !framed && !preview && \(html\.getAttribute\('data-gz-navbar'\) \|\| ''\)\.split\(' '\)\.includes\('tabs'\);/);
+  assert.match(src, /if \(hosted\(\)\) \{ keepClear\(null\); strip\.remove\(\); return; \}/);
+  assert.match(src, /if \(!framed\) globalThis\.GZ_NAVBAR_UI\?\.sync\(\);/, 'the bar redraws when the tabs change');
+  for (const k of ['rows', 'visit', 'shut', 'pin', 'move', 'leave', 'place']) assert.match(src, new RegExp(`\\n    ${k}[:,]`), k);
+  assert.match(read('theme.css'), /html\[data-gz-navbar~="tabs"\] \{ --gz-ctabs-h: 0px !important; \}/, "and the strip's room with it");
 });

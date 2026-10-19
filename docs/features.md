@@ -101,17 +101,24 @@ Notes **Back up or restore** opens **Settings → Backup and privacy → Notes b
 
 ## Glaze navigation
 
-**Look → Navigation appearance → Use Glaze navigation** (off by default; Blackboard Ultra for now, Canvas and Moodle
-next) draws Glaze's own navigation in place of the site's. On wide windows it is a floating rail: open with labels, or
-icons only with a tooltip on each and a peek when you point at it or move focus into it. The chevron collapses or
-expands it and the pin keeps it open; both are saved for every tab. On a phone it is a bottom bar of four tabs and More,
-whose sheet holds the rest, your account, signing out and **Customize navigation**. It lists the site's own items with
-Glaze's icons, groups and order, the site's unread counts (optional), and marks where you are with a gliding highlight.
-A worn Look's navigation layout and your older navigation links, hidden items and order apply to it. Notes, To Do,
-search and Glaze settings can join it; none are there by default. Every item opens through the site's own link, so
-its pages and menus work as before, and the site's own navigation stays in the page, out of sight, coming back when the
-switch is off. Motion follows Glaze's motion setting and your system's reduced motion; right-to-left pages put it on
-the right.
+On by default on Blackboard Ultra (Canvas and Moodle next), Glaze draws its own navigation in place of the site's, set
+up in Settings → **Navigation**. **Placement**: a side rail, open with labels or icons only (with a tooltip on each and
+a peek when you point at it or move focus into it), or a top bar whose items move under **More** when they don't fit.
+**Style**: floating glass with a little room around it, or embedded at the page's edge. **Inside a course** it can stay
+the same, become icons only, become a top bar, or hide (the course's own Home button remains). **Course tabs** can live
+in it instead of their strip: click one to switch, the middle button or Delete closes it, and P pins it. On a phone it is
+a bottom bar of four tabs and More, whose sheet holds the rest, the course tabs, your account, signing out and
+**Customize navigation**. The page keeps the bar's room from first paint, and the chevron and pin are saved for every
+tab.
+
+**Navigation items** renames, re-icons, reorders and groups every item, hides any of them, picks the four phone tabs,
+adds up to eight links of your own, and turns on Notes, To Do, search and Glaze settings (off by default). A worn Look's
+navigation layout and your older navigation links, hidden items and order still apply under these choices. Look codes
+carry how the bar looks and sits (never whether it is on); Export all carries your items. Every item opens through the
+site's own link, so its pages and menus work as before, and the site's own navigation stays in the page, out of sight,
+coming back when the switch is off. Where Blackboard opens a course at its own address without its drawer, the items
+last seen on this device stand in. Motion follows Glaze's motion setting and your system's reduced motion;
+right-to-left pages mirror it.
 
 ## Blackboard navigation
 

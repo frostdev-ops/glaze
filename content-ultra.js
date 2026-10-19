@@ -679,7 +679,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
     I.setAttr('data-gz-nav-brand', n.brand);
-    I.setAttr('data-gz-navbar', !!I.settings.navbar?.on && I.settings.navbar.rail);
+    // Glaze's own bar's room at first paint (theme.css), worded as GZ_NAVBAR.layout does once it is drawn.
+    const b = I.settings.navbar, c = /^\/ultra\/courses\//.test(location.pathname) ? b?.course : 'same';
+    if (!globalThis.GZ_NAVBAR_UI?.live()) I.setAttr('data-gz-navbar', !!b?.on && `${c === 'same' ? `${b.place} ${b.rail}` : c === 'icons' ? 'rail icons' : c === 'hide' ? 'none' : 'top'} ${b.style}${b.tabs && I.settings.enhance.tabs ? ' tabs' : ''}`);
     I.setAttr('data-gz-nav-detailed', n.detailed);
     for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;

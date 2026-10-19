@@ -631,7 +631,10 @@ GZ_UI.load().then((s) => {
     };
     paint(n.u);
     for (const el of $$('#sidebar [data-nav-kinds]')) el.hidden = !el.dataset.navKinds.split(' ').includes(n.k);
-    $('#sidebar [data-navbar]').hidden = !s.navbar.on;
+    // Glaze navigation (the Navigation tab): its controls while it is on, the rail's while it is a rail somewhere.
+    $('#navbar [data-navbar]').hidden = !s.navbar.on;
+    $('#navbar [data-navbar-rail]').hidden = s.navbar.place !== 'rail' && s.navbar.course !== 'icons';
+    $('#sidebar [data-navbar-note]').hidden = !s.navbar.on;
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
     $('#nav-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
@@ -1016,14 +1019,14 @@ GZ_UI.load().then((s) => {
     let got;
     try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
     from = gallery;
-    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav) });
+    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav), navbar: { ...s.navbar, ...got.navbar || {} } });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
     offer.auto = { ...s.auto, on: false };
     offer.card = GZ_CARDS.settings({ ...s.card, ...got.card });
     offer.cardSet = got.cards;
     offer.code = code;
     // Every code brings its own parts or clears the previous Look's parts.
-    const paletteOnly = !Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !got.cards.length && !got.parts;
+    const paletteOnly = !Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !Object.keys(got.navbar || {}).length && !got.cards.length && !got.parts;
     offer.parts = got.parts;
     const palette = offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette');
     const what = $('#share-what');
@@ -1228,14 +1231,14 @@ GZ_UI.load().then((s) => {
     try {
       const keys = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'exportKeys' });
       if (!keys?.ok || !Array.isArray(keys.keys)) throw new Error('keys');
-      const r = await chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks', 'navItems']);
+      const r = await chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks', 'navItems', 'navbarItems']);
       const all = await chrome.storage.local.get(null);
       const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
       const pets = GZ_PET.backup(Object.fromEntries(Object.entries(all).filter(([k]) => GZ_PET.KEY.test(k))));
       if (!pets) throw new Error('pet history');
       const folders = GZ_FOLDERS.backup(all);
       const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
-      const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
@@ -1262,7 +1265,7 @@ GZ_UI.load().then((s) => {
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
     flush(); // an edit still waiting goes out first, so it can't land on top of the import
-    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, pets: raw.pets, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null, settings: { version: 2, ...next, navItems: N.clean(raw.navItems) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
+    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, pets: raw.pets, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null, settings: { version: 2, ...next, navItems: N.clean(raw.navItems), ...(raw.navbarItems !== undefined && { navbarItems: GZ_NAVBAR.clean(raw.navbarItems) }) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
     if (!r.ok) {
       // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
       if (r.undone === false) {
@@ -1333,6 +1336,7 @@ GZ_UI.load().then((s) => {
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
   // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
   const widgets = GZ_WIDGETEDIT.mount({ t, show: (route) => editor.show(route, { scroll: true }) }); // widgets made of blocks (lib/editor-widget.js)
+  GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
   followSection(editor.route());

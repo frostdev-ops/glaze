@@ -36,16 +36,16 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     const send = (navbar, extra = {}) => page.evaluate((s) => window.postMessage({ gzPreview: s }, location.origin), G.GZ_SANITIZE({ navbar, enhance: { dashboard: true }, motion: { level: 'subtle' }, ...extra }));
     const bar = (fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gz-navbar')?.shadowRoot, a), [String(fn), arg]);
     const until = async (read, check, label, arg) => { const end = Date.now() + 5000; let v; while (Date.now() < end) { v = await bar(read, arg); if (check(v)) { ok(true, label); return v; } await page.waitForTimeout(50); } ok(false, `${label} (last: ${JSON.stringify(v)})`); return v; };
-    const space = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-space').trim());
+    const space = (v = '--gz-navbar-left') => page.evaluate((v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim(), v);
     const shot = (name) => page.screenshot({ path: path.join(out, `${name}.png`) });
 
     // ---- off: Ultra's own drawer ----
-    ok(await page.evaluate(() => !document.getElementById('gz-navbar')), 'off by default: no bar');
-    // ---- on, wide window: the open rail ----
+    // ---- on by default, wide window: the open rail ----
     await send({ on: true });
-    await until((r) => r && !r.host.hidden && [...r.querySelectorAll('.list .item')].map((a) => a.dataset.id).join(' '), (v) => v === 'institution-page stream course organization calendar messages grades tools', 'the rail lists Ultra\'s items in the default groups');
+    await until((r) => r && !r.host.hidden && [...r.querySelectorAll('.list .group:not(.courses) .item')].map((a) => a.dataset.id).join(' '), (v) => v === 'institution-page stream course organization calendar messages grades tools', 'the rail lists Ultra\'s items in the default groups');
     ok(await space() === '272px', 'the page keeps the open rail\'s room');
-    ok(await page.evaluate(() => Math.round(document.querySelector('.MuiDrawer-root').getBoundingClientRect().width)) === 272, "Ultra's drawer holds that room");
+    ok(await page.evaluate(() => getComputedStyle(document.getElementById('site-wrap')).gridTemplateColumns.startsWith('272px')), 'the page starts beside the rail');
+    ok(await page.evaluate(() => document.documentElement.getAttribute('data-gz-navbar')) === 'rail auto float tabs', 'the page is told where the bar is');
     ok(await page.evaluate(() => getComputedStyle(document.querySelector('.MuiDrawer-paper nav')).visibility) === 'hidden', "Ultra's own nav is out of sight, still in the page");
     ok(await bar((r) => r.querySelector('.item[aria-current="page"]')?.dataset.id) === 'course', 'the current page is marked');
     ok(await bar((r) => r.querySelector('.rail').hasAttribute('data-open') && getComputedStyle(r.querySelector('.label')).opacity === '1'), 'labels show while open');
@@ -113,7 +113,8 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await shot('phone');
     await bar((r) => r.querySelector('.more').click());
     await until((r) => r.querySelector('.sheet').hasAttribute('data-open') && r.activeElement?.closest('.sheet') !== null, (v) => v === true, 'More opens the sheet and moves focus into it');
-    ok((await bar((r) => [...r.querySelectorAll('.sheet .row')].map((e) => e.dataset.id || e.dataset.act))).join(' ') === 'stream organization grades tools profile logout customize', 'the sheet has the rest, the account, signing out and Customize');
+    ok((await bar((r) => [...r.querySelectorAll('.sheet .row:not(.ctab-go)')].map((e) => e.dataset.id || e.dataset.act))).join(' ') === 'stream organization grades tools profile logout customize', 'the sheet has the rest, the account, signing out and Customize');
+    ok((await bar((r) => r.querySelectorAll('.sheet .ctab-go').length)) === 3, 'and the course tabs');
     await page.waitForTimeout(500);
     await shot('phone-more');
     await page.keyboard.press('Escape');
@@ -176,10 +177,72 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await page.evaluate(() => { document.querySelector('.MuiDrawer-paper footer a[href="#"]').remove(); });
     await until((r) => getComputedStyle(r.querySelector('.out')).display, (v) => v === 'none', 'a removed sign-out link hides its control');
 
+    // ---- course tabs: in the rail instead of their strip ----
+    await send({ on: true, rail: 'open', brand: 'glaze' });
+    await until((r) => [...r.querySelectorAll('.courses .ctab-go')].map((e) => e.dataset.cid).join(' '), (v) => v === '_3_1 _1_1 _2_1', 'the course tabs sit in the rail, pinned first');
+    ok(await page.evaluate(() => { const s = document.getElementById('gz-ctabs'); return !s || getComputedStyle(s).display === 'none'; }), 'their strip steps aside');
+    ok(await bar((r) => r.querySelector('.courses .ctab-go[aria-current="page"]')?.dataset.cid) === '_1_1', 'the open course is marked');
+    ok(await bar((r) => !!r.querySelector('.courses [data-cid="_3_1"] .pinned')), 'a pinned tab shows its pin');
+    await bar((r) => r.querySelector('.courses .ctab-go[data-cid="_2_1"]').click());
+    await until((r) => r.querySelector('.courses .ctab-go[aria-current="page"]')?.dataset.cid, (v) => v === '_2_1', 'a tab opens its course');
+    await shot('course-tabs');
+    await send({ on: true, rail: 'open', tabs: false });
+    await until((r) => r.querySelectorAll('.courses').length, (v) => v === 0, 'turned off, the tabs leave the bar');
+    ok(await page.evaluate(() => !!document.getElementById('gz-ctabs')?.isConnected), 'and their strip comes back');
+
+    // ---- the top bar ----
+    await send({ on: true, place: 'top' });
+    await until((r) => getComputedStyle(r.querySelector('.topbar')).display, (v) => v === 'flex', 'the top bar replaces the rail');
+    ok(await bar((r) => getComputedStyle(r.querySelector('.rail')).display) === 'none', 'no rail with a top bar');
+    ok(await space('--gz-navbar-top') === '80px' && await space() === '0px', 'the page keeps the top bar\'s room');
+    ok((await bar((r) => [...r.querySelectorAll('.titems .item:not([data-over])')].map((e) => e.dataset.id).join(' '))) === 'institution-page stream course organization calendar messages grades tools', 'the items run along it');
+    ok(await bar((r) => r.querySelectorAll('.ttabs .chip').length) === 3, 'the course tabs beside them');
+    ok(await bar((r) => !r.querySelector('.tind').hidden && Math.abs(r.querySelector('.tind').getBoundingClientRect().left - r.querySelector('.titems [data-id="course"]').getBoundingClientRect().left) < 2), 'the marker under the current item');
+    await shot('top');
+    await bar((r) => r.querySelector('.tacc').click());
+    await until((r) => [...r.querySelectorAll('.menu .row')].map((e) => e.dataset.id || e.dataset.act).join(' '), (v) => v === 'profile customize', 'the account opens its menu (its sign-out link was taken away above)');
+    await page.keyboard.press('Escape');
+    ok(await bar((r) => r.querySelector('.menu').hidden && r.activeElement === r.querySelector('.tacc')), 'Escape closes it and focus goes back');
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await until((r) => r.querySelector('.topbar').hasAttribute('data-compact') || !r.querySelector('.tmore').hidden, Boolean, 'a narrower window: icons first, then More');
+    const over = await bar((r) => [...r.querySelectorAll('.titems .item[data-over]')].map((e) => e.dataset.id));
+    if (over.length) {
+      await bar((r) => r.querySelector('.tmore').click());
+      ok((await bar((r) => [...r.querySelectorAll('.menu .row[data-id]')].map((e) => e.dataset.id))).join(' ') === over.join(' '), 'More holds what doesn\'t fit');
+      await page.keyboard.press('Escape');
+    }
+    await shot('top-narrow');
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    // ---- embedded ----
+    await send({ on: true, style: 'embed', rail: 'open' });
+    await until((r) => Math.round(r.querySelector('.rail').getBoundingClientRect().left), (v) => v === 0, 'embedded, the rail sits at the page\'s edge');
+    ok(await space() === '248px', 'and the page keeps just its width');
+    await shot('embed');
+    await send({ on: true, style: 'embed', place: 'top' });
+    await until((r) => [Math.round(r.querySelector('.topbar').getBoundingClientRect().top), Math.round(r.querySelector('.topbar').getBoundingClientRect().left)].join(','), (v) => v === '0,0', 'an embedded top bar spans the top');
+    ok(await space('--gz-navbar-top') === '56px', 'and keeps 56px');
+
+    // ---- inside a course ----
+    const inCourse = async (course, label) => {
+      await send({ on: true, rail: 'open', course });
+      await page.evaluate(() => { history.pushState(null, '', '/ultra/courses/_1_1/outline'); dispatchEvent(new PopStateEvent('popstate')); });
+      await page.waitForTimeout(150);
+      const v = await page.evaluate(() => [document.getElementById('gz-navbar')?.dataset.place, document.documentElement.getAttribute('data-gz-navbar'), getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-left').trim()]);
+      await page.evaluate(() => { history.back(); });
+      await page.waitForTimeout(150);
+      return v;
+    };
+    ok((await inCourse('same')).join('|') === 'rail|rail open float tabs|272px', 'inside a course: the same bar');
+    ok((await inCourse('icons')).join('|') === 'rail|rail icons float tabs|96px', 'inside a course: icons only');
+    ok((await inCourse('top')).join('|') === 'top|top float tabs|0px', 'inside a course: a top bar');
+    ok((await inCourse('hide')).join('|') === 'none|none float tabs|0px', 'inside a course: hidden');
+    await until((r) => r.host.dataset.place, (v) => v === 'rail', 'back outside, the bar as it was');
+
     // ---- off again: Ultra's drawer comes back ----
     await send({ on: false });
     await page.waitForTimeout(300);
-    ok(await page.evaluate(() => !document.getElementById('gz-navbar') && !document.documentElement.style.getPropertyValue('--gz-navbar-space')), 'turning it off takes the bar away');
+    ok(await page.evaluate(() => !document.getElementById('gz-navbar') && !document.documentElement.style.getPropertyValue('--gz-navbar-left') && !document.documentElement.hasAttribute('data-gz-navbar')), 'turning it off takes the bar away');
     ok(await page.evaluate(() => getComputedStyle(document.querySelector('.MuiDrawer-paper nav')).visibility) === 'visible', "Ultra's own nav is back");
 
     await send({ on: true });

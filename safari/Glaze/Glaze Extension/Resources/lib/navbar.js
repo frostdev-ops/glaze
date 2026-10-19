@@ -30,6 +30,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     more: 'M6.6 12a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0zM13.6 12a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0zM20.6 12a1.6 1.6 0 1 1-3.2 0 1.6 1.6 0 0 1 3.2 0z',
     chevron: 'm9 6 6 6-6 6',
     pin: 'M9 4h6l-1 6 4 3H6l4-3zM12 13v7',
+    close: 'M7 7l10 10M17 7 7 17',
     link: 'M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1',
     video: 'M3 6h12v12H3zM15 10l6-3v10l-6-3',
     chat: 'M4 5h16v11H9l-5 4z',
@@ -40,7 +41,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     globe: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
   };
   // The icons a student, a Look or a mod may give an item: every drawing but the bar's own controls.
-  const PICKS = Object.keys(ICONS).filter((k) => !['chevron', 'pin', 'more'].includes(k));
+  const PICKS = Object.keys(ICONS).filter((k) => !['chevron', 'pin', 'more', 'close'].includes(k));
   // A native item's icon, by its id in the shared vocabulary.
   const ICON_OF = { 'institution-page': 'home', dashboard: 'home', home: 'home', stream: 'activity', course: 'book', organization: 'organization', groups: 'groups', calendar: 'calendar', messages: 'inbox', grades: 'grades', tools: 'tools', help: 'help', history: 'history', admin: 'admin', profile: 'account', logout: 'signout' };
   // Glaze's own items, opt-in (owner decision 2026-10-19): the page asks Glaze to open them (features/navbar.js).
@@ -169,9 +170,26 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
 
   // The rail's state, from the student's setting and the window: open (labels), or icons with a peek on hover.
   const railOpen = (rail, width) => rail === 'open' || (rail === 'auto' && width >= 1280);
-  // The page's room for the bar, in px: the rail and its gutters on wide windows (theme.css reserves it at first paint).
-  const SPACE = { open: 248 + 24, icons: 72 + 24 };
+  // The page's room for the bar, in px, on wide windows: a floating bar keeps a 12px gutter around it, an embedded one none.
+  const BAR = { open: 248, icons: 72, top: 56, gutter: 12 };
+  // Where the bar is and how, from the student's settings (defaults.js navbar), the window's width and whether a course is
+  // open (inside a course: the same, icons only, a top bar, or none). rail overrides the saved rail state (a pin just
+  // picked). -> { place: 'rail' | 'top' | 'none', open, style, tabs, left, top, words }; words is what <html
+  // data-gz-navbar> says (content-ultra.js says the same at first paint, theme.css reads it).
+  const layout = (n, { width = 1440, course = false, rail = null, tabs = true } = {}) => {
+    const c = course ? n.course : 'same';
+    const place = c === 'same' ? n.place : c === 'icons' ? 'rail' : c === 'hide' ? 'none' : 'top';
+    const state = c === 'icons' ? 'icons' : rail || n.rail;
+    const open = place === 'rail' && railOpen(state, width);
+    const gutter = n.style === 'embed' ? 0 : BAR.gutter;
+    const wide = width >= 900;
+    const left = wide && place === 'rail' ? (open ? BAR.open : BAR.icons) + 2 * gutter : 0;
+    const top = wide && place === 'top' ? BAR.top + 2 * gutter : 0;
+    const hosted = !!n.tabs && tabs;
+    const words = [place, ...(place === 'rail' ? [c === 'icons' ? 'icons' : state] : []), n.style, ...(hosted ? ['tabs'] : [])].join(' ');
+    return { place, open, style: n.style, tabs: hosted, left, top, words };
+  };
 
-  return { ICONS, PICKS, ICON_OF, GLAZE, DEFAULT, TABS, clean, build, named, railOpen, SPACE };
+  return { ICONS, PICKS, ICON_OF, GLAZE, DEFAULT, TABS, clean, build, named, railOpen, layout, BAR };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_NAVBAR; else GZ_NAVBAR;
