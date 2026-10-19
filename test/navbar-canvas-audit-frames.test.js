@@ -121,11 +121,11 @@ test('a replaced course-frame document schedules readiness before the navbar men
   h.send('account'); assert.deepEqual(h.counts(), { synced: 0, watched: 1, kept: 0 }); assert.equal(h.f.ready, false);
   let now = 0, next, synced = 0;
   const doc = h.f.el.contentDocument;
-  Object.assign(doc, { body: {}, querySelector: () => ({}), documentElement: { matches: () => false }, addEventListener() {} });
-  const watch = vm.runInNewContext(part('  const watch = (cid, f)', '  const open = (cid, url)') + '\nwatch;', {
+  Object.assign(doc, { body: {}, querySelector: () => ({ childElementCount: 1 }), documentElement: { matches: () => false }, addEventListener() {}, removeEventListener() {} });
+  const watch = vm.runInNewContext(part('  const canvasContent = ', '  let showing = ') + part('  const watch = (cid, f)', '  const open = (cid, url)') + '\nwatch;', {
     L, PAGE: 'page', frames: new Map([['12', h.f]]), location: { origin }, ctx: { site: 'canvas' },
     showing: '12', waiting: '', performance: { now: () => now }, MutationObserver: class { observe() {} disconnect() {} },
-    shown: () => true, loading: () => false, setTimeout: (fn) => { next = fn; },
+    shown: () => true, loading: () => false, clearTimeout() {}, setTimeout: (fn) => { next = fn; },
     clearSlow() {}, unpicture() {}, later() {}, GZ_NAVBAR_UI: { sync: () => synced++ },
   });
   watch('12', h.f); assert.equal(synced, 0); now = 301; next();

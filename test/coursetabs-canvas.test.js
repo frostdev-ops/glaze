@@ -137,7 +137,7 @@ test('Canvas links open in a frame instead of reloading the page; in a frame, it
   assert.deepEqual(page.click('/calendar?view=month'), [true, true]);
   assert.deepEqual(page.pages, ['/calendar?view=month'], 'a page outside a course goes to the page frame: the course frames keep running');
   for (const [href, more] of [['/courses/12/modules', { ctrl: true }], ['/courses/12/modules', { button: 1 }], ['/courses/12/modules', { target: '_blank' }],
-    ['/courses/12/files/5/download?download_frd=1', {}], ['/courses/12/modules', { download: true }], ['/courses/12/modules#unit', {}], ['/logout', {}], ['/login/canvas', {}], ['/api/v1/courses', {}], ['https://other.test/courses/12', {}]]) {
+    ['/courses/12/files/5/download?download_frd=1', {}], ['/courses/12/modules', { download: true }], ['/courses/5#unit', {}], ['/logout', {}], ['/login/canvas', {}], ['/api/v1/courses', {}], ['https://other.test/courses/12', {}]]) {
     assert.deepEqual(page.click(href, more), [false, false], `${href} ${JSON.stringify(more)} goes as the browser takes it`);
   }
   const course = run('', 0, '5');
@@ -166,7 +166,7 @@ test('Canvas links open in a frame instead of reloading the page; in a frame, it
 test('the navigation bar reads the shown course frame and opens addresses in it, else on the page', () => {
   const run = (site, showing, frames, here = '5') => {
     const calls = [];
-    const bar = vm.runInNewContext(part('  const pageable = ', '  // A course page in its course') + part('  const bar = {', '  return { sync') + '\nbar;', {
+    const bar = vm.runInNewContext(part('  const pathOf = ', '  let showing = ') + part('  const pageable = ', '  // A course page in its course') + part('  const bar = {', '  return { sync') + '\nbar;', {
       L, on: true, framed: '', signedOut: false, showing, frames, location: { origin }, URL, ctx: { site }, tabs: [], here: () => here,
       openAt: (cid, url) => calls.push(['frame', cid, url]), openPage: (url) => calls.push(['pageframe', url]), show: (c) => calls.push(['show', c]), route: (u) => calls.push(['page', u]),
       rowsOf: () => [], visit() {}, shut() {}, pinTab() {}, moveTab() {}, flag() {}, place() {},
@@ -178,7 +178,7 @@ test('the navigation bar reads the shown course frame and opens addresses in it,
   let { bar, calls } = run('canvas', '12', new Map([['12', frame]]));
   assert.equal(bar.doc(), doc);
   bar.open('/courses/13/modules?x=1'); bar.open(`${origin}/courses/12/grades`); bar.open('/calendar'); bar.open('/calendar#today'); bar.open('https://evil.test/courses/12');
-  assert.deepEqual(calls, [['frame', '13', '/courses/13/modules?x=1'], ['frame', '12', '/courses/12/grades'], ['pageframe', '/calendar'], ['show', ''], ['page', '/calendar#today']]);
+  assert.deepEqual(calls, [['frame', '13', '/courses/13/modules?x=1'], ['frame', '12', '/courses/12/grades'], ['pageframe', '/calendar'], ['pageframe', '/calendar#today']]);
   ({ bar, calls } = run('canvas', '', new Map([['12', frame]])));
   bar.open('/courses/13/modules'); bar.open('/conversations');
   assert.deepEqual(calls, [['frame', '13', '/courses/13/modules'], ['pageframe', '/conversations']], 'a frame running, though not on screen: still no reload');

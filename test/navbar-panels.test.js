@@ -136,12 +136,12 @@ test('a delayed panel response preserves focus after the user tabs into page con
 test('a settled Canvas frame refreshes the shared course menu after navigation', () => {
   const src = fs.readFileSync(require.resolve('../features/coursetabs.js'), 'utf8');
   let now = 0, next, synced = 0;
-  const doc = { body: {}, location: { origin: location.origin, pathname: '/courses/12/modules' }, querySelector: () => ({}), documentElement: { matches: () => false }, addEventListener() {} };
+  const doc = { body: {}, location: { origin: location.origin, pathname: '/courses/12/modules' }, querySelector: () => ({ childElementCount: 1 }), documentElement: { matches: () => false }, addEventListener() {}, removeEventListener() {} };
   const f = { el: { contentDocument: doc, style: {} } };
-  const watch = vm.runInNewContext(src.slice(src.indexOf('  const watch = (cid, f)'), src.indexOf('  const open = (cid, url)')) + '\nwatch;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
+  const watch = vm.runInNewContext(src.slice(src.indexOf('  const canvasContent = '), src.indexOf('  let showing = ')) + src.slice(src.indexOf('  const watch = (cid, f)'), src.indexOf('  const open = (cid, url)')) + '\nwatch;', { PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
     performance: { now: () => now }, frames: new Map([['12', f]]), ctx: { site: 'canvas' }, location,
     L: { owns: () => true }, shown: () => true, loading: () => false,
-    MutationObserver: class { observe() {} disconnect() {} }, setTimeout: (fn) => { next = fn; },
+    MutationObserver: class { observe() {} disconnect() {} }, clearTimeout() {}, setTimeout: (fn) => { next = fn; },
     waiting: '', showing: '12', clearSlow() {}, unpicture() {}, later() {},
     GZ_NAVBAR_UI: { sync: () => synced++ },
   });

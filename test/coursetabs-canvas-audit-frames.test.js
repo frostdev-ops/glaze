@@ -44,7 +44,8 @@ function canvasDocument(path, { busy = false, placing = false, empty = false } =
   const body = Object.assign(node('body'), { childElementCount: 1, busy });
   const html = Object.assign(node('html'), { matches: () => placing });
   return events({ location: new URL(path, origin), body, documentElement: html, content,
-    scrollingElement: { scrollTop: 0 }, activeElement: null,
+    readyState: 'complete', scrollingElement: { scrollTop: 0, scrollLeft: 0 }, activeElement: null,
+    querySelectorAll: () => [],
     querySelector: (selector) => selector === '#content, #main' ? content : null,
   });
 }
@@ -54,6 +55,9 @@ function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = f
   const timers = new Map(), observers = [], decodes = [], navigations = [], focused = [], notices = [], sent = [];
   const frames = new Map(), html = node('html'), host = node('div');
   const location = new URL(nativePath, origin);
+  let entryKey = 0;
+  const navigation = { get currentEntry() { return { key: `entry-${entryKey}` }; } };
+  const history = { state: null, pushState(s) { this.state = s; entryKey++; }, replaceState(s) { this.state = s; } };
   const document = { activeElement: { localName: 'button' }, body: node('body'), createElement(tag) {
     const el = node(tag);
     if (tag !== 'iframe') return el;
@@ -73,9 +77,9 @@ function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = f
     disconnect() { this.target = null; }
   }
   const tabs = L.clean(['12', '13', '14', '15', '16'].map((cid) => ({ cid, name: `Course ${cid}`, path: `/courses/${cid}` })), 'canvas');
-  const c = vm.createContext({ L, URL, PAGE: 'page', LIVE: 4, frames, host, html, document, location,
+  const c = vm.createContext({ L, URL, PAGE: 'page', LIVE: 4, frames, host, html, document, location, history, navigation,
     on: true, signedOut: false, framed: '', preview: false, showing: '', shownFrom: '', shooting: null, pic: null, showTurn: 0,
-    closedCourse: '', tabs, snaps: new Map(), strip: null, list: null, who: '42', loaded: true, last: undefined,
+    closedCourse: '', navWatch: null, tabs, snaps: new Map(), strip: null, list: null, who: '42', loaded: true, last: undefined,
     ctx: { site: 'canvas', courseId: () => location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] || '', me: async () => '42', scene() {} },
     here: () => location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] || '',
     innerWidth: 1200, innerHeight: 800, performance: { now: () => now }, Date: { now: () => now }, MutationObserver,
@@ -92,25 +96,27 @@ function fixture({ nativePath = '/', saved = new Map(), stored, manualDecode = f
     local: (fn) => fn({ get: (k, cb) => cb({ key: { tabs: stored || tabs } }) }),
     save() {}, draw() {}, lay() {}, clearSlow() {}, slowFrame() {}, later() {},
   });
-  const api = vm.runInContext(part('  const split = ', '  // What is on screen')
+  const api = vm.runInContext(part('  const KEEP = ', '  let showing = ')
+    + part('  const pageable = ', '  // A press on a link')
+    + part('  const split = ', '  // What is on screen')
     + part('  const keep = ', '  let capTimer = ')
     + part('  const drop = ', '  // Canvas loads a whole page')
     + part('  const openAt = ', '  // A tab: its frame')
     + part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'")
     + part('  const onStore = ', '  const onResize = ')
     + part('  const start = ', "  let awayFrom = '';")
-    + '\n({openAt,openPage,reveal,show,visit,watch,drop,room,start,onStore,onHide,waiting: () => waiting});', c);
+    + '\n({openAt,openPage,reveal,show,visit,watch,drop,room,start,onStore,onHide,next,spare,onPop,turns,waiting: () => waiting});', c);
   const tick = (ms) => {
     now += ms;
     for (const [id, timer] of [...timers]) if (timer.at <= now) { timers.delete(id); timer.fn(); }
   };
-  const load = (cid, path, options) => {
+  const load = (cid, path, options, frame = frames.get(cid)) => {
     const doc = canvasDocument(path, options);
-    frames.get(cid).el.contentDocument = doc;
+    frame.el.contentDocument = doc;
     tick(50);
     return doc;
   };
-  const ready = (cid, path = `/courses/${cid}`) => { const doc = load(cid, path); tick(351); return doc; };
+  const ready = (cid, path = `/courses/${cid}`, frame) => { const doc = load(cid, path, undefined, frame); tick(351); return doc; };
   const snap = (cid, path = `/courses/${cid}`) => ({ cid, path, size: [1200, 800], shot: `data:image/jpeg;base64,${cid}`, n: 40, at: now });
   return { api, c, frames, saved, focused, navigations, observers, notices, sent, decodes, document, tick, load, ready, snap };
 }
@@ -237,13 +243,17 @@ test('a decoded Canvas picture is removed when its loading document becomes read
   assert.equal(p.frames.get('12').el.style.visibility, '');
 });
 
-test('Canvas refuses to certify the outgoing stale document after openAt starts a new navigation', () => {
-  const p = fixture(); p.api.reveal('12'); const old = p.ready('12');
+// Ready Canvas documents are never loaded in place: the equivalent stale-document guarantee is a separate next frame.
+test('Canvas keeps the outgoing ready document separate from a hidden pending replacement', () => {
+  const p = fixture(); p.api.reveal('12'); const old = p.ready('12'), first = p.frames.get('12');
   p.api.openAt('12', '/courses/12/grades'); p.tick(500);
-  assert.equal(p.frames.get('12').ready, false);
-  assert.equal(p.frames.get('12').stale, old);
-  p.ready('12', '/courses/12/grades');
-  assert.equal(p.frames.get('12').ready, true); assert.equal(p.frames.get('12').stale, null);
+  const pending = p.api.next.get('12');
+  assert.equal(p.frames.get('12'), first); assert.equal(first.ready, true);
+  assert.equal(first.el.contentDocument, old); assert.equal(pending.ready, false);
+  assert.equal(pending.el.style.visibility, 'hidden'); assert.equal(pending.el.inert, true);
+  p.ready('12', '/courses/12/grades', pending);
+  assert.equal(p.frames.get('12'), pending); assert.equal(pending.ready, true);
+  assert.ok(p.api.spare.get('12').includes(first));
 });
 
 test('dropping a pending Canvas course cancels its selection and disconnects its mutation observer', async () => {
@@ -255,21 +265,27 @@ test('dropping a pending Canvas course cancels its selection and disconnects its
   assert.deepEqual(p.focused, []);
 });
 
-test('Canvas dirty course and page frames keep their document and remembered scroll on requested navigation', () => {
+// Unsaved work can now be left live in a kept page instead of refusing all navigation.
+test('Canvas dirty course and page documents stay live with their scroll when another page opens', () => {
   for (const cid of ['12', 'page']) {
     const p = fixture();
     if (cid === 'page') p.api.openPage('/calendar'); else p.api.reveal(cid);
-    const doc = p.ready(cid, cid === 'page' ? '/calendar' : '/courses/12');
-    p.frames.get(cid).dirty = true; doc.scrollingElement.scrollTop = 430;
-    const before = p.navigations.length;
-    if (cid === 'page') p.api.openPage('/conversations'); else p.api.openAt(cid, '/courses/12/grades');
-    assert.equal(p.navigations.length, before);
-    assert.equal(p.frames.get(cid).el.contentDocument, doc);
-    assert.equal(doc.scrollingElement.scrollTop, 430); assert.equal(p.notices.length, 1);
+    const doc = p.ready(cid, cid === 'page' ? '/calendar' : '/courses/12'), first = p.frames.get(cid);
+    first.dirty = true; doc.scrollingElement.scrollTop = 430;
+    const url = cid === 'page' ? '/conversations' : '/courses/12/grades';
+    if (cid === 'page') p.api.openPage(url); else p.api.openAt(cid, url);
+    const pending = p.api.next.get(cid);
+    assert.equal(p.frames.get(cid), first); assert.equal(doc.scrollingElement.scrollTop, 430);
+    p.ready(cid, url, pending);
+    assert.equal(p.frames.get(cid), pending); assert.ok(p.api.spare.get(cid).includes(first));
+    assert.equal(first.el.contentDocument, doc); assert.equal(doc.scrollingElement.scrollTop, 430);
+    assert.equal(first.el.style.visibility, 'hidden'); assert.equal(first.el.inert, true);
+    p.tick(3001); assert.equal(first.el.style.display, 'none');
+    assert.equal(p.notices.length, 0);
   }
 });
 
-test('BUG: restoring a Canvas course without a cached picture must wait before covering the top page', async () => {
+test('restoring a Canvas course without a cached picture must wait before covering the top page', async () => {
   const p = fixture({ saved: new Map([['gz-ctabs-shown', '12']]) });
   p.api.start(); await flush();
   assert.ok(p.frames.has('12'), 'restore creates the saved course frame');
@@ -280,7 +296,7 @@ test('BUG: restoring a Canvas course without a cached picture must wait before c
   assert.deepEqual(p.focused, []);
 });
 
-test('BUG: reload must restore a course frame even when the underlying top page has the same course ID', async () => {
+test('reload must restore a course frame even when the underlying top page has the same course ID', async () => {
   const stored = [{ cid: '12', path: '/courses/12/pages/reading', top: 730 }];
   const p = fixture({ nativePath: '/courses/12', stored, saved: new Map([['gz-ctabs-shown', '12']]) });
   p.api.start(); await flush();
@@ -288,7 +304,7 @@ test('BUG: reload must restore a course frame even when the underlying top page 
   assert.equal(p.frames.get('12').url, '/courses/12/pages/reading');
 });
 
-for (const cid of ['12', 'page']) test(`BUG: repeated ${cid === 'page' ? 'page' : 'course'} opens must not reload an identical Canvas destination`, () => {
+for (const cid of ['12', 'page']) test(`repeated ${cid === 'page' ? 'page' : 'course'} opens must not reload an identical Canvas destination`, () => {
   const outcomes = [];
   for (const ready of [false, true]) {
     const p = fixture(), url = cid === 'page' ? '/calendar?view=month' : '/courses/12/pages/reading?module_item_id=7';
@@ -307,31 +323,51 @@ for (const cid of ['12', 'page']) test(`BUG: repeated ${cid === 'page' ? 'page' 
   ], 'identical pending destinations must not restart loading; ready destinations must retain readiness and scroll');
 });
 
-test('BUG: navigating inside the shown Canvas frame must cover the replacement until it is ready', async () => {
-  const p = fixture(); p.api.reveal('12'); p.ready('12');
-  p.c.snaps.set('12', p.snap('12', '/courses/12/grades'));
-  p.api.openAt('12', '/courses/12/grades'); await flush();
-  p.load('12', '/courses/12/grades', { busy: true });
-  const f = p.frames.get('12');
-  assert.equal(f.ready, false);
-  assert.ok(p.c.pic?.isConnected || f.el.style.visibility === 'hidden', 'the new loading document is visible with no picture over it');
+// No replacement is loaded in the shown iframe now: keep it visible and the next frame hidden until drawn.
+test('navigating inside the shown Canvas frame keeps the old page visible until its replacement is drawn', () => {
+  const p = fixture(); p.api.reveal('12'); const old = p.ready('12'), first = p.frames.get('12');
+  p.api.openAt('12', '/courses/12/grades');
+  const pending = p.api.next.get('12');
+  p.load('12', '/courses/12/grades', { busy: true }, pending);
+  assert.equal(p.frames.get('12'), first); assert.equal(first.el.contentDocument, old);
+  assert.equal(first.el.style.visibility, ''); assert.equal(first.el.inert, false);
+  assert.equal(pending.el.style.visibility, 'hidden'); assert.equal(pending.el.inert, true);
+  p.tick(351); assert.equal(p.frames.get('12'), first, 'a loading indicator still prevents the swap');
+  pending.el.contentDocument.body.busy = false; p.tick(50);
+  assert.equal(p.frames.get('12'), pending);
+  assert.equal(first.el.style.visibility, 'hidden'); assert.equal(first.el.inert, true);
 });
 
-test('BUG: an empty Canvas content shell must not become a ready course frame', () => {
-  const p = fixture(); p.api.reveal('12'); p.load('12', '/courses/12', { empty: true }); p.tick(351);
+test('an empty Canvas content shell must not become a ready course frame', () => {
+  const p = fixture(); p.api.reveal('12'); const doc = p.load('12', '/courses/12', { empty: true }); p.tick(351);
   assert.equal(p.frames.get('12').ready, false, 'a visible but empty #content/#main is not rendered course content');
   assert.equal(p.c.showing, '');
+  doc.content.textContent = 'Course reading'; p.tick(50);
+  assert.equal(p.frames.get('12').ready, true, 'direct text also counts as rendered content');
+  const first = p.frames.get('12');
+  p.api.openAt('12', '/courses/12/grades'); const pending = p.api.next.get('12');
+  const replacement = p.load('12', '/courses/12/grades', { empty: true }, pending); p.tick(351);
+  assert.equal(p.frames.get('12'), first); assert.equal(pending.ready, false);
+  assert.equal(pending.el.style.visibility, 'hidden'); assert.equal(pending.el.inert, true);
+  replacement.content.childElementCount = 1; p.tick(50);
+  assert.equal(p.frames.get('12'), pending); assert.equal(pending.ready, true);
 });
 
-test('BUG: restarting a Canvas readiness watch must remove the old document scroll listener', () => {
+test('restarting a Canvas readiness watch must remove the old document scroll listener', () => {
   const p = fixture(); p.api.reveal('12'); const doc = p.load('12', '/courses/12', { busy: true });
   assert.equal(doc.listeners.get('scroll').size, 1);
   p.api.watch('12', p.frames.get('12')); p.tick(50);
   assert.equal(p.observers.filter((o) => o.target === doc.body).length, 1, 'the old mutation observer is disconnected');
   assert.equal(doc.listeners.get('scroll').size, 1, 'superseding a watch must also detach its scroll callback');
+  const replacement = p.load('12', '/courses/12', { busy: true });
+  assert.equal(doc.listeners.get('scroll').size, 0, 'document replacement detaches the outgoing scroll callback');
+  assert.equal(replacement.listeners.get('scroll').size, 1);
+  replacement.body.busy = false; p.tick(351);
+  assert.equal(replacement.listeners.get('scroll').size, 0, 'readiness also releases its listeners');
+  assert.equal(p.observers.filter((o) => o.target).length, 0);
 });
 
-test('BUG: a storage metadata update must preserve the shown Canvas frame place and scroll', () => {
+test('a storage metadata update must preserve the shown Canvas frame place and scroll', () => {
   const p = fixture(); p.api.reveal('12'); p.ready('12', '/courses/12/pages/reading');
   const live = p.frames.get('12');
   Object.assign(p.c.tabs.find((x) => x.cid === '12'), { path: '/courses/12/pages/reading', top: 730 });
@@ -343,9 +379,36 @@ test('BUG: a storage metadata update must preserve the shown Canvas frame place 
   assert.equal(tab.top, 730);
 });
 
-test('BUG: Canvas frame pagehide must detach its observer from the surviving parent document', () => {
+test('Canvas keeps course-root queries and fragments through landing and Navigation API Back and Forward', () => {
+  const p = fixture(); p.api.openAt('12', '/courses/12'); p.ready('12');
+  const first = p.frames.get('12'), url = '/courses/12?view=all#unit';
+  p.api.openAt('12', url); const pending = p.api.next.get('12');
+  p.ready('12', url, pending);
+  assert.equal(p.frames.get('12'), pending, 'a course-root anchor still belongs to its course');
+  assert.equal(p.api.turns.get('entry-2').url, url);
+  assert.equal(p.c.tabs.find((x) => x.cid === '12').path, '/courses/12?view=all');
+  p.c.navigation = { currentEntry: { key: 'entry-1' } }; p.api.onPop();
+  assert.equal(p.frames.get('12'), first);
+  p.c.navigation.currentEntry.key = 'entry-2'; p.api.onPop();
+  assert.equal(p.frames.get('12'), pending, 'Forward reuses the live page with its anchor');
+  assert.equal(pending.el.contentDocument.location.hash, '#unit');
+  assert.equal(p.api.turns.size, 3, 'Back and Forward do not create entries');
+});
+
+test('a pending Canvas page redirected to another course retains its anchor and every outgoing live document', () => {
+  const p = fixture(); p.api.openAt('12', '/courses/12'); const doc = p.ready('12'), first = p.frames.get('12');
+  p.api.openAt('12', '/courses/12/modules/items/7'); const pending = p.api.next.get('12');
+  const url = '/courses/13#unit'; p.ready('12', url, pending);
+  assert.equal(p.frames.get('12'), first); assert.equal(first.el.contentDocument, doc);
+  assert.equal(p.frames.get('13').url, url);
+  assert.equal(p.api.turns.get('entry-2').url, url); assert.equal(p.api.turns.get('entry-2').cid, '13');
+  p.ready('13', url); assert.equal(p.c.showing, '13');
+  assert.equal(first.el.style.visibility, 'hidden'); assert.equal(first.el.inert, true);
+});
+
+test('Canvas frame pagehide must detach its observer from the surviving parent document', () => {
   const observers = [], parentRoot = {}, handlers = events(), document = events();
-  const c = vm.createContext({ framed: '12', ctx: { site: 'canvas' }, on: true, showing: '', PAGE: 'page', frames: new Map(),
+  const c = vm.createContext({ framed: '12', preview: false, onPress() {}, onPop() {}, onStore() {}, ctx: { site: 'canvas' }, on: true, showing: '', PAGE: 'page', frames: new Map(),
     parent: { document: { documentElement: parentRoot } }, navRoom() {}, bar: { place() {} },
     chrome: { runtime: { id: 'glaze' }, storage: { onChanged: { addListener() {}, removeListener() {} } } },
     document, location: { origin }, sessionStorage: { setItem() {} }, saveNow() {},
@@ -361,6 +424,10 @@ test('BUG: Canvas frame pagehide must detach its observer from the surviving par
     + part('  let navWatch = ', '  // In a Canvas tab\'s frame')
     + part('  const listen = ', '  const start = ') + '\nlisten(true);', c);
   assert.equal(observers.length, 1); assert.equal(observers[0].target, parentRoot);
-  handlers.dispatch('pagehide', { persisted: false });
+  handlers.dispatch('pagehide', { persisted: true });
   assert.equal(observers[0].target, null, 'the parent survives frame navigation and must not retain the outgoing frame closure');
+  handlers.dispatch('pageshow', { persisted: true });
+  assert.equal(observers.length, 2); assert.equal(observers[1].target, parentRoot);
+  handlers.dispatch('pagehide', { persisted: false });
+  assert.equal(observers[1].target, null);
 });

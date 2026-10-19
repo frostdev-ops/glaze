@@ -483,7 +483,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const spare = new Map(); // cid (or PAGE) → [frame], its earlier pages, oldest first
   const next = new Map(); // cid (or PAGE) → the frame loading to take its place: { go (shown when drawn), refresh (of a spare) }
   let popping = false; // Back or Forward is taking this page there: no new history entry
-  const pathOf = (f) => { try { const d = f?.el.contentDocument; return d && d.location.origin === location.origin && d.location.href !== 'about:blank' ? d.location.pathname + d.location.search : ''; } catch { return ''; } };
+  const pathOf = (f) => { try { const d = f?.el.contentDocument; return d && d.location.origin === location.origin && d.location.href !== 'about:blank' ? d.location.pathname + d.location.search + (ctx.site === 'canvas' ? d.location.hash || '' : '') : ''; } catch { return ''; } };
+  const canvasContent = (d) => {
+    const el = d.querySelector('#content, #main');
+    return shown(el) && (el.childElementCount > 0 || !!el.textContent?.trim());
+  };
   let showing = ''; // the course whose frame is on screen; '' for this page
   let shownFrom = ''; // this page's address when a frame covered it: if it changes, the student went somewhere here
   let host = null, pic = null, showTurn = 0, retryNote = null;
@@ -518,6 +522,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     dropNext(cid);
     const f = frames.get(cid);
     if (!f) return;
+    if (ctx.site === 'canvas') f.unwatch?.();
     f.el.remove();
     frames.delete(cid);
     if (waiting === cid) { ++showTurn; wait(''); }
@@ -542,9 +547,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     || (e.target instanceof Element && e.target.closest('a[href]'));
   const toFrame = (e, a) => {
     if (a.localName !== 'a' || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.defaultPrevented || a.hasAttribute('download')
-      || (a.target && a.target !== '_self') || a.origin !== location.origin || a.hash) return false;
-    const url = L.safe(a.pathname, a.search) || L.outside(a.pathname, a.search);
-    if (!url || /\/files\/\d+\/download/.test(a.pathname)) return false;
+      || (a.target && a.target !== '_self') || a.origin !== location.origin) return false;
+    const page = L.safe(a.pathname, a.search) || L.outside(a.pathname, a.search), url = page && page + a.hash;
+    if (!url || /\/files\/\d+\/download/.test(a.pathname) || (a.hash && page === location.pathname + location.search)) return false;
     const cid = a.pathname.match(/^\/courses\/(\d+)/)?.[1] || '';
     // In a frame: its own pages (a course's, or the page frame's outside one) are turned to by the page around, which
     // keeps this one live; another course's or the page frame's go there; the same page again reloads, as it would.
@@ -557,7 +562,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     return true;
   };
   // A page outside a course that can take the page frame: not signing in or out, nor Canvas's own API.
-  const pageable = (path) => !/^\/(?:login|logout|api)(?:\/|$)/.test(path);
+  const pageable = (path) => !/^\/(?:login|logout|api)(?:[/?#]|$)/.test(path);
+  // Validate the page and query separately from its anchor, preserving both through a frame handoff or history entry.
+  const canvasURL = (path) => {
+    if (typeof path !== 'string' || path.length >= 1300) return null;
+    const i = path.indexOf('#'), page = i < 0 ? path : path.slice(0, i);
+    const url = L.safe(...split(page)) || L.outside(...split(page));
+    return url ? url + (i < 0 ? '' : path.slice(i)) : null;
+  };
   // On the page itself, where a link goes: a course's page to that course's frame, a page outside a course to the page
   // frame. This page never reloads: it stays, live, under them (Back shows it again).
   const goes = (cid, path) => (cid ? true : pageable(path));
@@ -571,9 +583,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const warm = (href) => {
     let u; try { u = new URL(String(href), location.href); } catch { return; }
-    if (u.origin !== location.origin || u.hash || /\/files\/\d+\/download/.test(u.pathname) || !pageable(u.pathname) || acts(u.pathname)) return;
-    const url = L.safe(u.pathname, u.search) || L.outside(u.pathname, u.search), cid = u.pathname.match(/^\/courses\/(\d+)/)?.[1] || PAGE;
-    if (!url || url === (framed ? location.pathname + location.search : pathOf(frames.get(cid)))) return;
+    if (u.origin !== location.origin || /\/files\/\d+\/download/.test(u.pathname) || !pageable(u.pathname) || acts(u.pathname)) return;
+    const page = L.safe(u.pathname, u.search) || L.outside(u.pathname, u.search), url = page && page + u.hash, cid = u.pathname.match(/^\/courses\/(\d+)/)?.[1] || PAGE;
+    if (!url || page === (framed ? location.pathname + location.search : pathOf(frames.get(cid)).split('#')[0])) return;
     if (framed) { if (cid === framed) toTop('warm', { url }); }
     else if (frames.get(cid)?.ready) turnTo(cid, url, true);
   };
@@ -585,6 +597,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!x) return;
     x.at = Date.now();
     let f = frames.get(cid);
+    if (ctx.site === 'canvas' && f && !f.away && url === (f.ready ? pathOf(f) : f.url)) {
+      if (f.ready) turnTo(cid, url);
+      save();
+      return reveal(cid);
+    }
     // Canvas, a frame that runs: turned to that page, this one kept (with any unsaved work in it).
     const turn = ctx.site === 'canvas' && !!f?.ready && !f.away;
     if (turn) { if (turnTo(cid, url) === false) return; }
@@ -605,6 +622,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const openPage = (url) => {
     if (url === location.pathname + location.search) { if (showing) stamp('', url); return reveal(''); }
     let f = frames.get(PAGE);
+    if (ctx.site === 'canvas' && f && !f.away && url === (f.ready ? pathOf(f) : f.url)) {
+      if (f.ready) turnTo(PAGE, url);
+      return reveal(PAGE);
+    }
     if (ctx.site === 'canvas' && f?.ready && !f.away) { if (turnTo(PAGE, url) === false) return; }
     else if (f?.dirty) say(t('This page has unsaved work, so it stays where it was.'));
     else if (f) { stamp(PAGE, url); if (!load(PAGE, f, url)) return; }
@@ -657,7 +678,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const onPop = () => {
     const s = turnHere();
     if (!on || !s || typeof s.cid !== 'string' || typeof s.url !== 'string' || (s.cid && s.cid !== PAGE && !L.validId(s.cid, ctx.site))) return;
-    const url = L.safe(...split(s.url)) || L.outside(...split(s.url));
+    const url = canvasURL(s.url);
     for (const [c, g] of [...next]) if (g.go) dropNext(c); // a page still on its way is no longer where the student goes
     popping = true;
     try {
@@ -712,8 +733,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         if (go) { if (g.key ? entry() === g.key : turnHere() === g.turn) restamp(cid, pathOf(frames.get(cid))); say(t("That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab.")); }
         return;
       }
-      if (pathOf(g) && d.readyState !== 'loading' && shown(d.querySelector('#content, #main')) && !d.documentElement.matches('[data-gz-placing]')
-        && (!g.refresh || (d.readyState === 'complete' && !loading(d.body)))) {
+      if (pathOf(g) && d.readyState !== 'loading' && canvasContent(d) && !d.documentElement.matches('[data-gz-placing]')
+        && !loading(d.body) && (!g.refresh || d.readyState === 'complete')) {
         g.drawn = true;
         if (g.go || g.refresh) landed(cid, g);
         return;
@@ -736,10 +757,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const f = frames.get(cid), path = pathOf(g);
     if (!f) return g.el.remove();
     // Taken out of its frame's pages (a redirect to another course, or out of one): there, as a link to it goes.
-    if (path && !(cid === PAGE ? !/^\/courses\/\d+/.test(path) : L.owns(path, cid))) {
+    if (path && !(cid === PAGE ? !/^\/courses\/\d+/.test(path) : L.owns(split(path.split('#')[0])[0], cid))) {
       g.el.remove();
       if (!g.go) return;
-      const u = L.safe(...split(path)) || L.outside(...split(path)), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
+      const u = canvasURL(path), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
       // The redirect belongs to the entry made by the click, even if another course has since been picked.
       const current = g.key ? entry() === g.key : turnHere() === g.turn;
       if (u && pageable(split(u)[0])) {
@@ -780,7 +801,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (keepOld) { spare.get(cid).push(f); rest(f); } else f.el.remove();
     }
     trim();
-    const x = cid !== PAGE && tabs.find((y) => y.cid === cid), p = x && L.placeOf(...split(pathOf(g)));
+    const x = cid !== PAGE && tabs.find((y) => y.cid === cid), p = x && L.placeOf(...split(pathOf(g).split('#')[0]));
     if (p?.path && x.path !== p.path) { x.path = p.path; x.top = 0; save(); }
     g.el.style.visibility = showing === cid ? '' : 'hidden';
     g.el.inert = showing !== cid;
@@ -807,7 +828,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   // Pages that do something as they load (a quiz attempt, a tool launched, a submission): never loaded ahead or again
   // unasked.
-  const acts = (path) => /\/(?:quizzes\/\d+\/take|external_tools|lti|sessionless_launch|submissions)(?:[/?]|$)/.test(path);
+  const acts = (path) => /\/(?:quizzes\/\d+\/take|external_tools|lti|sessionless_launch|submissions)(?:[/?#]|$)/.test(path);
   // A kept page is quiet as a page left behind: its media paused and other sites' players in it (a video, a tool)
   // stopped at once, put back as it shows again; after a moment it isn't drawn at all (no style, layout, paint or
   // animation frames, about half of what a hidden Canvas page costs while idle), its scroll noted to put back.
@@ -910,26 +931,34 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A frame is shown once rendered course content has settled. A stalled initial about:blank can be retried once;
   // slow native pages keep loading, with their form state intact, rather than becoming falsely ready.
   const watch = (cid, f) => {
+    if (ctx.site === 'canvas') f.unwatch?.();
     const turn = f.watch = {};
     let t0 = performance.now();
-    let changed = t0, mo = null, doc = null;
+    let changed = t0, mo = null, doc = null, timer = 0;
+    const scrolled = () => { changed = performance.now(); };
+    const clean = () => {
+      mo?.disconnect();
+      if (ctx.site === 'canvas') { clearTimeout(timer); doc?.removeEventListener('scroll', scrolled, true); }
+      mo = null; doc = null;
+    };
+    if (ctx.site === 'canvas') f.unwatch = clean;
     f.slow = false;
     const step = () => {
-      if (frames.get(cid) !== f || f.watch !== turn) return mo?.disconnect();
+      if (frames.get(cid) !== f || f.watch !== turn) return clean();
       let d = null; try { d = f.el.contentDocument; } catch { /* gone */ }
       const now = performance.now();
       if (d && d !== doc && d.body && (ctx.site === 'canvas' ? d.location.origin === location.origin : d.location.pathname.startsWith('/ultra/'))) {
-        mo?.disconnect();
+        clean();
         doc = d;
         changed = now;
         mo = new MutationObserver(() => { changed = performance.now(); });
         mo.observe(d.body, { subtree: true, childList: true });
-        d.addEventListener('scroll', () => { changed = performance.now(); }, { capture: true, passive: true });
+        d.addEventListener('scroll', scrolled, { capture: true, passive: true });
       }
-      const built = doc && (ctx.site !== 'canvas' || doc === d && doc !== f.stale) && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? shown(doc.querySelector('#content, #main')) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
+      const built = doc && (ctx.site !== 'canvas' || doc === d && doc !== f.stale) && (cid === PAGE ? !/^\/courses\/\d+/.test(doc.location.pathname) : L.owns(doc.location.pathname, cid)) && (ctx.site === 'canvas' ? canvasContent(doc) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
         && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
       if (built && now - changed > 300) {
-        mo?.disconnect();
+        clean();
         f.slow = false;
         f.ready = true;
         f.stale = null;
@@ -949,7 +978,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
           else if (showing === cid) { if (waiting === cid) wait(''); slowFrame(cid, f); }
         }
       }
-      setTimeout(step, f.slow ? 1000 : 50);
+      timer = setTimeout(step, f.slow ? 1000 : 50);
     };
     step();
   };
@@ -1135,11 +1164,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); later(700); keepPage(); if (ctx.site === 'canvas' || from === PAGE) globalThis.GZ_NAVBAR_UI?.sync(); }
     // A link to a page of its own (go), or pressed (warm): turned to by this page (turnTo), the one it leaves kept.
     else if ((op === 'go' || op === 'warm') && ctx.site === 'canvas' && typeof url === 'string' && url.length < 1300) {
-      const u = L.safe(...split(url)) || L.outside(...split(url)), c = u && (u.match(/^\/courses\/(\d+)/)?.[1] || PAGE);
+      const u = canvasURL(url), c = u && (u.match(/^\/courses\/(\d+)/)?.[1] || PAGE);
       if (c === from && pageable(split(u)[0])) { if (op === 'warm') turnTo(from, u, true); else if (from === showing) { if (from === PAGE) openPage(u); else openAt(from, u); } }
     }
     else if (op === 'open' && ctx.site === 'canvas' && from === showing && typeof url === 'string' && url.length < 1300) {
-      const u = L.safe(...split(url)) || L.outside(...split(url)), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
+      const u = canvasURL(url), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
       if (c && c !== from) openAt(c, u);
       else if (u && !c && from !== PAGE && pageable(split(u)[0])) openPage(u);
     }
@@ -1147,7 +1176,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     else if (op === 'away' && from === showing && typeof url === 'string' && url.length < 1300 && /^\/(?!\/)/.test(url)) {
       // Canvas: another course's page goes to that course's frame, a page outside a course to the page frame; the frame
       // that left stays on screen until the next one shows.
-      const u = ctx.site === 'canvas' && (L.safe(...split(url)) || L.outside(...split(url))), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
+      const u = ctx.site === 'canvas' && canvasURL(url), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
       if (c && c !== from) { frames.get(from).away = true; openAt(c, u); }
       else if (u && !c && from !== PAGE && pageable(split(u)[0])) { frames.get(from).away = true; openPage(u); }
       else { drop(from); show(''); route(url); }
@@ -1333,8 +1362,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (area === 'local' && who && c[key()] && !preview) {
       const got = L.clean(c[key()].newValue?.tabs, ctx.site);
       if (JSON.stringify(got) === JSON.stringify(tabs)) return;
-      const mine = tabs.find((x) => x.cid === ctx.courseId());
-      tabs = got.map((x) => (mine && x.cid === mine.cid ? { ...x, path: mine.path, top: mine.top } : x));
+      const mine = tabs.filter((x) => x.cid === ctx.courseId() || (ctx.site === 'canvas' && frames.has(x.cid)));
+      tabs = got.map((x) => { const live = mine.find((y) => y.cid === x.cid); return live ? { ...x, path: live.path, top: live.top } : x; });
       for (const cid of [...frames.keys()]) if (cid !== PAGE && !tabs.some((x) => x.cid === cid)) drop(cid); // (the page frame has no tab)
       if (ctx.site === 'canvas' && closedCourse && !showing && !waiting && !tabs.length) { route('/courses'); return; }
       pass();
@@ -1410,7 +1439,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
           last = undefined;
           pass();
           if (showTurn !== turn) return; // a selection made while storage loaded takes precedence over the restore
-          if (was && was !== ctx.courseId() && tabs.some((x) => x.cid === was)) show(was);
+          if (was && (ctx.site === 'canvas' || was !== ctx.courseId()) && tabs.some((x) => x.cid === was)) reveal(was);
           else if (wasPage) openPage(wasPage);
         }));
       });
@@ -1423,7 +1452,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const cid = here();
     // In a tab's frame, its page leaving its course (another course, a page outside one): the page around goes there.
     if (framed && !preview && (framed === PAGE ? !!cid : cid !== framed)) {
-      const url = location.pathname + location.search;
+      const url = location.pathname + location.search + (ctx.site === 'canvas' ? location.hash || '' : '');
       if (awayFrom !== url) { awayFrom = url; toTop('away', { url }); }
       return;
     }
@@ -1551,15 +1580,24 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     open: (href) => {
       let u; try { u = new URL(String(href), location.origin); } catch { return false; }
       if (!on || u.origin !== location.origin) return false;
-      const url = L.safe(u.pathname, u.search) || (ctx.site === 'canvas' ? L.outside(u.pathname, u.search) : null), cid = url && (ctx.site === 'canvas' ? u.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] : showing);
+      const page = L.safe(u.pathname, u.search) || (ctx.site === 'canvas' ? L.outside(u.pathname, u.search) : null), url = page && page + (ctx.site === 'canvas' ? u.hash : ''), cid = url && (ctx.site === 'canvas' ? u.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] : showing);
       if (framed) {
         const mine = cid ? cid === framed : framed === PAGE;
-        if (ctx.site !== 'canvas' || !url || u.hash || /\/files\/\d+\/download/.test(u.pathname)
-          || (!cid && !pageable(u.pathname)) || (mine && url === location.pathname + location.search)) return false;
+        if (ctx.site !== 'canvas' || !url || /\/files\/\d+\/download/.test(u.pathname)
+          || (!cid && !pageable(u.pathname)) || (mine && page === location.pathname + location.search)) return false;
         toTop(mine ? 'go' : 'open', { url });
         return true;
       }
-      if (ctx.site === 'canvas' && url && !u.hash && !/\/files\/\d+\/download/.test(u.pathname) && goes(cid || '', u.pathname)) { if (cid) openAt(cid, url); else openPage(url); return true; }
+      if (ctx.site === 'canvas' && url && !/\/files\/\d+\/download/.test(u.pathname) && goes(cid || '', u.pathname)) {
+        if (u.hash) {
+          if (showing && page === pathOf(frames.get(showing)).split('#')[0]) {
+            try { frames.get(showing).el.contentWindow.location.hash = u.hash; return true; } catch { return false; }
+          }
+          if (!showing && page === location.pathname + location.search) return false;
+        }
+        if (cid) openAt(cid, url); else openPage(url);
+        return true;
+      }
       if (ctx.site !== 'canvas' && showing && cid && L.owns(u.pathname, cid)) {
         try { frames.get(showing).el.contentWindow.location.assign(location.origin + url); } catch { return false; }
         return true;

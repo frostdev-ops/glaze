@@ -9,10 +9,9 @@ const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.
 const origin = 'https://school.instructure.com';
 
 const docAt = (path, o = {}) => {
-  const [pathname, q] = path.split('?');
   return {
-    location: { origin, href: origin + path, pathname, search: q ? `?${q}` : '' }, readyState: o.ready || 'complete', body: {},
-    documentElement: { matches: () => false }, querySelector: () => ({}), scrollingElement: { scrollTop: o.top || 0 },
+    location: new URL(path, origin), readyState: o.ready || 'complete', body: {},
+    documentElement: { matches: () => false }, querySelector: () => ({ childElementCount: 1 }), scrollingElement: { scrollTop: o.top || 0 },
     on: {}, addEventListener(ev, fn) { this.on[ev] = fn; }, removeEventListener(ev, fn) { if (this.on[ev] === fn) delete this.on[ev]; },
     media: o.media || [], frames: o.frames || [],
     querySelectorAll(sel) { return sel.startsWith('iframe') ? this.frames.filter((e) => !sel.includes('data-gz-rest') || e.hasAttribute('data-gz-rest')) : sel.startsWith('video') ? this.media : []; },
@@ -47,7 +46,7 @@ function world({ at = '/courses/12/modules', showing = '12' } = {}) {
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
     load: (cid, f, url) => { calls.push(['load', cid, url]); return true; }, guardFrame() {}, watch: () => calls.push(['watch']),
   });
-  vm.runInContext(part('  const KEEP = ', '  let showing = ') + part("  // ---- a frame's pages (Canvas)", '  // Canvas: a frame still loading')
+  vm.runInContext(part('  const canvasURL = ', '  // On the page itself') + part('  const KEEP = ', '  let showing = ') + part("  // ---- a frame's pages (Canvas)", '  // Canvas: a frame still loading')
     + part('  const dropNext = ', '  // Canvas loads a whole page'), c);
   // Time passes: due timers run, as many rounds as they reschedule.
   const wait = (ms) => {

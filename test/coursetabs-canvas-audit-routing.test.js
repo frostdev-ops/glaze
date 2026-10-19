@@ -29,11 +29,12 @@ function routing({ framed = '', here = '5', count = 1, showing = '12', base = fa
   }
   const c = vm.createContext({ L, URL, Element, PAGE: 'page', on: true, preview: false, signedOut: false,
     framed, showing, here: () => here, frames: new Map(Array.from({ length: count }, (_, i) => [String(i + 12), {}])),
-    location: { origin }, ctx: { site: 'canvas' }, document: { querySelector: () => base ? {} : null },
+    location: new URL(framed === 'page' ? '/calendar' : framed ? '/courses/12/pages/reading' : '/courses/5', origin), ctx: { site: 'canvas' }, document: { querySelector: () => base ? {} : null },
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
     toTop: (op, m) => calls.push([op, m.url]), show: (cid) => calls.push(['show', cid]), route: (url) => calls.push(['route', url]),
   });
-  const api = vm.runInContext(part('  const onCourseLink = ', '  // A course page in its course')
+  const api = vm.runInContext(part('  const pathOf = ', '  let showing = ')
+    + part('  const onCourseLink = ', '  // A course page in its course')
     + part('  const bar = {', '  return { sync') + '\n({onCourseLink,toFrame,goes,pageable,bar});', c);
   const click = (href, options = {}, event = {}) => {
     const e = { target: new Element(href, options), button: 0, isTrusted: true, defaultPrevented: false,
@@ -117,13 +118,14 @@ function bridge(from = '12') {
   const frame = { el: { contentWindow: mine } };
   const c = vm.createContext({ L, PAGE: 'page', ctx: { site: 'canvas' }, location: { origin },
     framed: '', preview: false, on: true, showing: from, waiting: '14', who: '42',
-    frames: new Map([[from, frame]]), tabs: [{ cid: '12', path: '/courses/12/pages/reading', top: 430, pin: true }],
+    spare: new Map(), next: new Map(), frames: new Map([[from, frame]]), tabs: [{ cid: '12', path: '/courses/12/pages/reading', top: 430, pin: true }],
     addEventListener: (event, fn) => { listener = fn; },
+    openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
     later: (delay) => calls.push(['later', delay]), keepPage: () => calls.push(['keepPage']), save: () => calls.push(['save']),
     GZ_PET_WORLD: { refresh: () => calls.push(['pet']) }, GZ_NAVBAR_UI: { sync: () => calls.push(['navbar']) },
   });
   mine.postMessage = (message, site) => replies.push({ ...message, site });
-  vm.runInContext(part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), c);
+  vm.runInContext(part('  const split = ', '  // What is on screen') + part('  const pageable = ', '  // A press on a link') + part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), c);
   return { c, frame, calls, replies, post: (data) => listener({ origin, source: mine, data }) };
 }
 
@@ -140,7 +142,7 @@ test('Canvas moved messages refresh only the visible surface and synchronize the
     const p = bridge(from); p.c.showing = '13';
     p.post({ gzCtab: 'moved' }); assert.deepEqual(p.calls, []);
     p.c.showing = from; p.post({ gzCtab: 'moved' });
-    assert.deepEqual(p.calls, [['pet'], ['later', 700], ['keepPage'], ...(from === 'page' ? [['navbar']] : [])]);
+    assert.deepEqual(p.calls, [['pet'], ['later', 700], ['keepPage'], ['navbar']]);
   }
 });
 
@@ -155,31 +157,54 @@ test('Canvas place messages require the current account and bound scroll without
   assert.deepEqual(p.calls, [['save']], 'unchanged messages do not schedule another storage write');
 });
 
-test('BUG: a cross-course fragment link must preserve live frames instead of reloading the top page', () => {
+test('a cross-course fragment link must preserve live frames instead of reloading the top page', () => {
   const p = routing();
   const href = '/courses/13/pages/reading#part-2';
   const e = p.click(href);
   assert.equal(e.defaultPrevented, true, 'the browser default would replace the top document and destroy every live frame');
   assert.deepEqual(p.calls, [['course', '13', href]], 'retain the destination fragment in the course frame');
+  for (const framed of ['', '12', 'page']) {
+    const course = routing({ framed }), page = routing({ framed });
+    assert.equal(course.click(href).defaultPrevented, true);
+    assert.deepEqual(course.calls, [framed ? ['open', href] : ['course', '13', href]]);
+    assert.equal(page.click('/conversations#unread').defaultPrevented, true);
+    assert.deepEqual(page.calls, [framed ? [framed === 'page' ? 'go' : 'open', '/conversations#unread'] : ['page', '/conversations#unread']]);
+  }
 });
 
-test('BUG: the navbar must keep a shown course fragment inside its live frame', () => {
+test('the navbar must keep a shown course fragment inside its live frame', () => {
   const p = routing();
   const href = '/courses/12/pages/reading#part-2';
-  p.c.frames.set('12', { el: { contentDocument: { location: new URL('/courses/12/pages/reading', origin) } } });
+  const location = new URL('/courses/12/pages/reading', origin);
+  p.c.frames.set('12', { el: { contentDocument: { location }, contentWindow: { location } } });
   assert.equal(p.api.bar.open(href), true);
-  assert.equal(p.calls.some(([op]) => op === 'route'), false, 'a fragment in the shown course must not reload the surrounding Canvas page');
+  assert.deepEqual(p.calls, [], 'a fragment in the shown page uses its native anchor');
+  assert.equal(location.hash, '#part-2');
+  assert.equal(p.api.bar.open('/courses/12/pages/next#part-3'), true);
+  assert.deepEqual(p.calls, [['course', '12', '/courses/12/pages/next#part-3']]);
+  const native = routing({ showing: '' });
+  assert.equal(native.click('/courses/5#part-2').defaultPrevented, false);
+  assert.equal(native.api.bar.open('/courses/5#part-2'), false);
+  assert.deepEqual(native.calls, []);
 });
 
-test('BUG: Canvas frame handoff must retain the fragment after scripted cross-course navigation', () => {
+test('Canvas frame handoff must retain the fragment after scripted cross-course navigation', () => {
   const sent = [];
   const location = new URL('/courses/13/pages/reading?module_item_id=7#part-2', origin);
   const pass = vm.runInNewContext(part('  const pass = ', '  const sync = ') + '\npass;', {
-    on: true, framed: '12', PAGE: 'page', preview: false, location,
+    on: true, ctx: { site: 'canvas' }, framed: '12', PAGE: 'page', preview: false, location,
     observeView() {}, here: () => '13', awayFrom: '', toTop: (op, m) => sent.push([op, m.url]),
   });
   pass(); pass();
   assert.deepEqual(sent, [['away', '/courses/13/pages/reading?module_item_id=7#part-2']], 'the owning frame needs the native navigation fragment to restore its anchor');
+  const p = bridge(); p.post({ gzCtab: sent[0][0], url: sent[0][1] });
+  assert.deepEqual(p.calls, [['course', '13', sent[0][1]]], 'the parent must preserve the anchor when accepting the handoff');
+  for (const op of ['go', 'open', 'warm']) {
+    const parent = bridge(), url = op === 'open' ? '/courses/13#unit' : '/courses/12/grades#grade';
+    parent.c.turnTo = (...args) => parent.calls.push(['turn', ...args]);
+    parent.post({ gzCtab: op, url });
+    assert.deepEqual(parent.calls, [op === 'warm' ? ['turn', '12', url, true] : ['course', op === 'open' ? '13' : '12', url]]);
+  }
 });
 
 test('Canvas library cleaning is idempotent and preserves valid encoded slugs and scroll bounds', () => {

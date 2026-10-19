@@ -8,7 +8,7 @@ const origin = 'https://school.instructure.com';
 
 function navigation({ site = 'canvas', framed = '', showing = '12' } = {}) {
   const calls = [];
-  const bar = vm.runInNewContext(part('  const pageable = ', '  // A course page in its course')
+  const bar = vm.runInNewContext(part('  const pathOf = ', '  let showing = ') + part('  const pageable = ', '  // A course page in its course')
     + part('  const bar = {', '  return { sync') + '\nbar;', {
     L, URL, PAGE: 'page', on: true, framed, showing, ctx: { site }, location: { origin },
     frames: new Map([['12', {}]]), here: () => '5',
@@ -20,7 +20,7 @@ function navigation({ site = 'canvas', framed = '', showing = '12' } = {}) {
 }
 
 test('scripted Canvas navigation leaves the page frame intact and asks its owner to open the course', () => {
-  for (const [framed, href] of [['page', '/courses/12/grades'], ['12', '/courses/13/modules'], ['12', '/conversations']]) {
+  for (const [framed, href] of [['page', '/courses/12/grades'], ['page', '/courses/12#unit'], ['12', '/courses/13/modules'], ['12', '/conversations']]) {
     const p = navigation({ framed });
     assert.equal(p.bar.open(href), true, `${framed}: the caller must not replace its own document`);
     assert.deepEqual(p.calls, [['open', href]]);
@@ -31,7 +31,7 @@ test('scripted Canvas navigation leaves the page frame intact and asks its owner
     assert.equal(p.bar.open(href), true);
     assert.deepEqual(p.calls, [['go', href]]);
   }
-  for (const [framed, href] of [['page', '/courses/12#unit'], ['12', '/logout'], ['12', '/api/v1/courses'], ['page', '/courses/12/files/8/download']]) {
+  for (const [framed, href] of [['12', '/logout'], ['12', '/api/v1/courses'], ['page', '/courses/12/files/8/download']]) {
     const p = navigation({ framed });
     assert.equal(p.bar.open(href), false, `${href} keeps native navigation in the frame`);
     assert.deepEqual(p.calls, []);
@@ -40,12 +40,14 @@ test('scripted Canvas navigation leaves the page frame intact and asks its owner
   assert.equal(ultra.bar.open('/ultra/courses/_13_1/outline'), false, 'Ultra retains its existing frame navigation');
 });
 
-test('scripted course links preserve fragments and downloads instead of opening a loading course frame', () => {
-  for (const href of ['/courses/12/pages/reading#part-2', '/courses/13/files/8/download?download_frd=1']) {
-    const p = navigation();
-    assert.equal(p.bar.open(href), true);
-    assert.deepEqual(p.calls, [['show', ''], ['route', href]], href);
-  }
+test('scripted course links keep cross-page fragments in frames and retain native downloads', () => {
+  const p = navigation();
+  assert.equal(p.bar.open('/courses/12/pages/reading#part-2'), true);
+  assert.deepEqual(p.calls, [['course', '12', '/courses/12/pages/reading#part-2']]);
+  const download = navigation();
+  const href = '/courses/13/files/8/download?download_frd=1';
+  assert.equal(download.bar.open(href), true);
+  assert.deepEqual(download.calls, [['show', ''], ['route', href]]);
 });
 
 test('the parent pet remains available over a ready Canvas page frame with the same account', () => {
@@ -103,6 +105,7 @@ function pages({ saved = new Map(), shooting = null } = {}) {
     on: true, signedOut: false, framed: '', preview: false, closedCourse: '', tabs: [{ cid: '12' }], who: '42', loaded: true, last: undefined,
     ctx: { site: 'canvas', courseId: () => '5', me: async () => '42', scene() {} }, location: { origin, pathname: '/courses/5', search: '' },
     performance: { now: () => now }, MutationObserver: class { observe() {} disconnect() {} },
+    clearTimeout: (id) => timers.delete(id),
     setTimeout: (fn, ms) => { const id = ++nextTimer; timers.set(id, { fn, at: now + ms }); return id; },
     shown: () => true, loading: () => false, list: null, strip: null, snaps: new Map(),
     html: { toggleAttribute() {} }, sessionStorage: { getItem: (k) => saved.get(k), setItem: (k, v) => saved.set(k, v), removeItem: (k) => saved.delete(k) },
@@ -111,7 +114,7 @@ function pages({ saved = new Map(), shooting = null } = {}) {
     t: (s) => s, P: () => ({ place: true }), save() {}, draw() {}, lay() {}, unpicture() {}, picture() {}, clearSlow() {}, later() {},
     send: async () => null, say: (s) => notices.push(s),
   });
-  const api = vm.runInContext(part('  const drop = ', '  // Canvas loads a whole page')
+  const api = vm.runInContext(part('  const pathOf = ', '  let showing = ') + part('  const drop = ', '  // Canvas loads a whole page')
     + part('  const openPage = ', '  // Canvas: a frame still loading')
     + part("  let waiting = '', primed = '';", '  // A frame is shown once')
     + part('  const watch = ', '  // The picture over a frame')
@@ -124,7 +127,7 @@ function pages({ saved = new Map(), shooting = null } = {}) {
     for (const [id, timer] of [...timers]) if (timer.at <= now) { timers.delete(id); timer.fn(); }
   };
   const load = (cid, path) => {
-    frames.get(cid).el.contentDocument = { location: new URL(path, origin), body: {}, documentElement: { matches: () => false }, querySelector: () => ({}), addEventListener() {} };
+    frames.get(cid).el.contentDocument = { location: new URL(path, origin), body: {}, documentElement: { matches: () => false }, querySelector: () => ({ childElementCount: 1 }), addEventListener() {}, removeEventListener() {} };
     advance(50); advance(351);
   };
   return { api, c, frames, focused, saved, notices, advance, load };
@@ -230,7 +233,7 @@ test('Canvas navigation messages require the visible owned frame and validate no
       pageable: (path) => !/^\/(?:login|logout|api)(?:\/|$)/.test(path),
       openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
     });
-    vm.runInContext(part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), c);
+    vm.runInContext(part('  const canvasURL = ', '  // On the page itself') + part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), c);
     const post = (op, url, source = own, site = origin) => listener({ source, origin: site, data: { gzCtab: op, url } });
     for (const op of ['open', 'away']) {
       post(op, '/courses/13', {}, origin); post(op, '/courses/13', own, 'https://other.test');
@@ -253,7 +256,7 @@ test('a page URL that redirects off-site cannot repeatedly reload its own redire
     set src(url) { srcs.push(url); }, remove() { this.removed = true; },
   };
   const frames = new Map([['12', {}]]);
-  const c = vm.createContext({ PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, frames, tabs: [], location: { origin }, document: { createElement: () => el },
+  const c = vm.createContext({ ctx: { site: 'canvas' }, PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, frames, tabs: [], location: { origin }, document: { createElement: () => el },
     showing: 'page', waiting: '', showTurn: 0, host: { prepend() {} }, watch() {}, t: (s) => s,
     show: (cid) => shown.push(cid), wait() {}, say: (s) => notices.push(s),
   });
