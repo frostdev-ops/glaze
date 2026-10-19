@@ -320,6 +320,7 @@ test('a hidden frame pauses its scene only for messages from its owner on the sa
   const top = {}, stranger = {}, states = []; let listen, scenes = 0;
   if (source.includes('  if (framed && !preview) {')) vm.runInNewContext(part('  if (framed && !preview) {', '  // Ultra routes without reloading'), {
     framed: '_2_1', preview: false, location: { origin }, window: { top },
+    awayFrom: '', pass() {},
     addEventListener: (event, fn) => { listen = fn; }, toTop() {},
     document: { addEventListener() {} }, html: { toggleAttribute: (k, v) => states.push([k, v]) }, ctx: { scene: () => scenes++ }, say() {},
   });

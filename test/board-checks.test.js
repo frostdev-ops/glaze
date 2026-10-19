@@ -38,6 +38,7 @@ test('Ultra check removes its temporary profile even when Chrome cannot launch',
     __dirname: path.dirname(script), console: { log() {} },
     process: { env: {}, argv: ['node', script, '/tmp/board-check-output'] },
     require: (id) => id === 'playwright' ? { chromium: { launchPersistentContext: async () => { throw blocked; } } }
+      : id === './wait-for-browser.js' ? async () => {}
       : id === 'fs' ? { ...fs, mkdirSync() {}, mkdtempSync: () => '/tmp/board-check-profile', rmSync: (p) => removed.push(p) } : req(id),
   });
   await assert.rejects(result, (e) => e === blocked);

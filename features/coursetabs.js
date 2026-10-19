@@ -74,7 +74,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // .js-course-navigation). A panel opened over the course is the last visible layer that doesn't hold the bar.
   const LAYER = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
   const bars = document.getElementsByClassName('bb-course-navigation');
-  const courseBar = () => { if (ctx.site === 'canvas') return document.querySelector('.ic-app-nav-toggle-and-crumbs') || document.getElementById('breadcrumbs'); for (let i = bars.length - 1; i >= 0; i--) if (bars[i].localName === 'div') return bars[i]; return null; };
+  const courseBar = () => { if (ctx.site === 'canvas') return [document.querySelector('.ic-app-nav-toggle-and-crumbs'), document.getElementById('mobile-header'), document.getElementById('breadcrumbs')].find(shown) || null; for (let i = bars.length - 1; i >= 0; i--) if (bars[i].localName === 'div') return bars[i]; return null; };
   const topLayer = () => [...document.querySelectorAll(LAYER)].filter(shown).pop() || null;
   // Full routed documents/overviews have neither the course bar nor the old panel wrappers. Peek stays excluded.
   const routed = () => [...document.querySelectorAll('.routed-page.bb-offcanvas-container:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)')]
@@ -162,6 +162,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   let clearHeader = null, hadClear = false;
   const keepClear = (header) => {
+    if (!header) measureRow(null);
     if (header === clearHeader) return;
     if (clearHeader && !hadClear) clearHeader.removeAttribute('data-gz-keep-clear');
     clearHeader = header;
@@ -660,7 +661,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
     else if (op === 'loaded') { frames.get(from).el.contentWindow.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin); globalThis.GZ_PET_WORLD?.refresh(); }
     else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); later(700); }
-    else if (op === 'away' && typeof url === 'string' && url.length < 1300 && (ctx.site === 'canvas' ? /^\/(?!\/)/.test(url) : /^\/ultra(\/|$)/.test(url))) { drop(from); show(''); route(url); }
+    else if (op === 'away' && from === showing && typeof url === 'string' && url.length < 1300 && (ctx.site === 'canvas' ? /^\/(?!\/)/.test(url) : /^\/ultra(\/|$)/.test(url))) { drop(from); show(''); route(url); }
   });
   if (framed && !preview) {
     // Track before load: slow native resources must not leave usable editors unprotected.
@@ -668,7 +669,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     for (const event of ['input', 'change', 'submit']) document.addEventListener(event, (e) => { if (on && e.isTrusted) toTop('edited'); }, true);
     addEventListener('message', (e) => {
       if (e.origin !== location.origin || e.source !== window.top) return;
-      if (e.data?.gzCtab === 'visible' && typeof e.data.on === 'boolean') { html.toggleAttribute('data-gz-ctab-framed', !e.data.on); ctx.scene(); }
+      if (e.data?.gzCtab === 'visible' && typeof e.data.on === 'boolean') {
+        html.toggleAttribute('data-gz-ctab-framed', !e.data.on); ctx.scene();
+        // A hidden page may have left its course while its navigation request was ignored.
+        if (e.data.on) { awayFrom = ''; pass(); }
+      }
       else if (e.data?.gzCtab === 'note' && typeof e.data.text === 'string' && e.data.text.length <= 500) say(e.data.text);
     });
     toTop('loaded');
@@ -826,13 +831,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
   };
   const onHide = () => { if (on) saveNow(); };
+  const onResize = () => { lay(); if (ctx.site === 'canvas') place(); };
   const listen = (yes) => {
     const f = yes ? 'addEventListener' : 'removeEventListener';
     document[f]('scroll', onScroll, { capture: true, passive: true });
     document[f]('click', onLeave, true);
     document[f]('pointerdown', onLeave, true);
     globalThis[f]('pagehide', onHide);
-    globalThis[f]('resize', lay);
+    globalThis[f]('resize', onResize);
     try { if (chrome.runtime?.id) chrome.storage.onChanged[yes ? 'addListener' : 'removeListener'](onStore); } catch { /* reloaded */ }
   };
   const start = () => {
