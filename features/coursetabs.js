@@ -502,7 +502,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const onCourseLink = (e) => {
     if (!on || !e.isTrusted || preview || e.defaultPrevented) return;
     const a = e.target instanceof Element && e.target.closest('a[href]');
-    if (!a || a.closest('form, [id^="gz-"], [class^="gz-"], [class*=" gz-"]')
+    if (!a || a.closest('form, #gz-ctabs')
       || a.matches('[data-method], [data-remote], [data-confirm], [onclick], [role="button"]')
       || (!a.target && document.querySelector('base[target]'))) return;
     toFrame(e, a);
@@ -614,7 +614,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         f.slow = false;
         f.ready = true;
         f.stale = null;
-        if (waiting === cid) { show(cid); return; }
+        if (waiting === cid && showing !== cid) { show(cid); return; }
+        if (waiting === cid) wait('');
         if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
         return;
       }
@@ -625,7 +626,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
           f.el.src = location.origin + f.url;
         } else {
           f.slow = true;
-          if (waiting === cid) show(cid); else if (showing === cid) slowFrame(cid, f);
+          if (waiting === cid && showing !== cid) show(cid);
+          else if (showing === cid) { if (waiting === cid) wait(''); slowFrame(cid, f); }
         }
       }
       setTimeout(step, f.slow ? 1000 : 50);
