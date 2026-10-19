@@ -28,11 +28,18 @@ const worker = () => {
     const incoming = [], disconnected = [], replies = [];
     const p = { name: 'glaze:quick', sender, closed: false, onMessage: { addListener: (f) => incoming.push(f) },
       onDisconnect: { addListener: (f) => disconnected.push(f) }, postMessage: (m) => replies.push(structuredClone(m)),
-      disconnect: () => { if (!p.closed) { p.closed = true; for (const f of disconnected) f(); } } };
+      // A local disconnect need not fire this endpoint's onDisconnect. Model remote document teardown separately.
+      disconnect: () => { p.closed = true; } };
     for (const f of connects) f(p);
-    return { p, replies, post: async (m) => { assert.ok(incoming.length, 'worker handles the quick port'); for (const f of incoming) f(m); await tick(); return replies.at(-1); } };
+    return { p, replies, remote: () => { p.closed = true; for (const f of disconnected) f(); },
+      post: async (m) => { assert.ok(incoming.length, 'worker handles the quick port'); for (const f of incoming) f(m); await tick(); return replies.at(-1); } };
   };
-  return { send, mint, port, panel, handled, removed, advance: (ms) => { clock += ms; }, clients: () => clients };
+  const holdQueue = () => {
+    let release; ctx.block = new Promise((r) => { release = r; });
+    vm.runInContext('(brokerTurn ||= GZ_CARDS.queue())(() => block)', ctx);
+    return release;
+  };
+  return { send, mint, port, panel, handled, removed, holdQueue, advance: (ms) => { clock += ms; }, clients: () => clients };
 };
 
 test('a URL ticket cannot authorize repeatable frame-id-only session messages', async () => {
@@ -49,7 +56,7 @@ test('quick tickets are consumed by one live port, independent of documentId or 
   assert.equal((await a.post({ id: 1, op: 'list', scope: { key: 'forged' } })).scope.key, KEY);
   const b = w.port(); // Same tab and frame id, but a new document/port.
   assert.equal((await b.post({ id: 0, ticket })).ok, false);
-  a.p.disconnect();
+  a.remote();
   const before = w.handled.length;
   await a.post({ id: 2, op: 'list' });
   assert.equal(w.handled.length, before, 'disconnected authority cannot be used');
@@ -70,7 +77,7 @@ test('quick ports reject expired tickets and wrong sender/tab, and enforce the o
   await p.post({ id: 0, ticket: fresh.ticket });
   assert.equal((await p.post({ id: 1, op: 'exportKeys' })).error, 'sender');
   assert.equal((await p.post({ id: 2, op: 'list' })).ok, true);
-  p.p.disconnect();
+  p.remote();
 });
 
 test('a new opening and tab removal revoke the previous quick port', async () => {
@@ -82,5 +89,20 @@ test('a new opening and tab removal revoke the previous quick port', async () =>
   const fresh = await w.mint(), b = w.port(); await b.post({ id: 0, ticket: fresh.ticket });
   for (const f of w.removed) f(9);
   assert.equal(b.p.closed, true);
+  assert.equal(w.clients(), 0);
+});
+
+test('local revocation cancels queued panel operations without a local disconnect event', async () => {
+  const w = worker(), { ticket } = await w.mint(), a = w.port();
+  await a.post({ id: 0, ticket });
+  const release = w.holdQueue();
+  try {
+    await a.post({ id: 1, op: 'list' });
+    await w.mint();
+  } finally { release(); }
+  await tick();
+  assert.equal(w.handled.length, 0, 'revoked queued operations never reach sessions');
+  assert.equal(w.clients(), 0);
+  a.remote(); // a later remote event must not release a connection twice
   assert.equal(w.clients(), 0);
 });
