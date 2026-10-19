@@ -88,7 +88,7 @@ test('closing the surrounding Canvas course preserves another course’s edited 
 test('Canvas frame commands require an owned same-origin frame and numeric IDs', () => {
   let listen; const mine = {}, actions = [];
   vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  if (framed && !preview) {'), {
-    L, ctx: { site: 'canvas' }, framed: '', preview: false, on: true, location: { origin }, spare: new Map(), next: new Map(),
+    L, ctx: { site: 'canvas' }, framed: '', preview: false, on: true, showing: '12', location: { origin }, spare: new Map(), next: new Map(),
     addEventListener: (event, fn) => { listen = fn; }, frames: new Map([['12', { el: { contentWindow: mine } }]]),
     visit: (cid) => actions.push(cid),
   });

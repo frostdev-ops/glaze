@@ -226,7 +226,7 @@ test('same-course frame navigation reports a move without needing a scroll', () 
   let moves = 0;
   const location = { pathname: '/ultra/courses/_2_1/outline', search: '' };
   const context = vm.createContext({ PAGE: 'page', keepPage() {}, spare: new Map(), next: new Map(), popping: false,
-    on: true, framed: '_2_1', preview: false, showing: '', loaded: true, restored: true,
+    on: true, framed: '_2_1', preview: false, showing: '', loaded: true, restored: true, ctx: { site: 'ultra' },
     last: '_2_1', lastPath: location.pathname, location, frames: new Map(), tabs: [{ cid: '_2_1' }],
     here: () => '_2_1', observeView() {}, notePlace() {}, flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved: () => moves++,
   });

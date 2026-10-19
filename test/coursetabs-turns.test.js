@@ -13,7 +13,7 @@ const docAt = (path, o = {}) => {
   return {
     location: { origin, href: origin + path, pathname, search: q ? `?${q}` : '' }, readyState: o.ready || 'complete', body: {},
     documentElement: { matches: () => false }, querySelector: () => ({}), scrollingElement: { scrollTop: o.top || 0 },
-    on: {}, addEventListener(ev, fn) { this.on[ev] = fn; },
+    on: {}, addEventListener(ev, fn) { this.on[ev] = fn; }, removeEventListener(ev, fn) { if (this.on[ev] === fn) delete this.on[ev]; },
   };
 };
 const blank = () => ({ location: { origin, href: 'about:blank', pathname: 'blank', search: '' }, readyState: 'complete', body: {}, documentElement: { matches: () => false }, querySelector: () => null });
@@ -25,7 +25,7 @@ function world({ at = '/courses/12/modules', showing = '12' } = {}) {
   const els = [];
   const mkEl = (doc) => {
     const el = { style: { visibility: 'hidden' }, inert: true, contentDocument: doc, msgs: [], removed: false,
-      contentWindow: { postMessage: (m) => el.msgs.push(m) }, remove() { el.removed = true; }, focus() { c.document.activeElement = el; } };
+      contentWindow: { postMessage: (m) => el.msgs.push(m) }, remove() { el.removed = true; if (c.document.activeElement === el) c.document.activeElement = null; }, focus() { c.document.activeElement = el; } };
     els.push(el);
     return el;
   };
@@ -40,10 +40,10 @@ function world({ at = '/courses/12/modules', showing = '12' } = {}) {
     split: (url) => { const i = url.indexOf('?'); return i < 0 ? [url, ''] : [url.slice(0, i), url.slice(i + 1)]; },
     shown: (e) => !!e, loading: () => false, pageable: (path) => !/^\/(?:login|logout|api)(?:\/|$)/.test(path),
     frameEl: (cid, url) => Object.assign(mkEl(blank()), { name: `gz-ctab:${cid}`, src: origin + url }),
-    save: () => calls.push(['save']), keepPage() {}, later() {}, globalThis: {},
+    save: () => calls.push(['save']), keepPage() {}, later() {}, globalThis: {}, say: (s) => calls.push(['say', s]), t: (s) => s,
     show: (cid) => calls.push(['show', cid]), reveal: (cid) => calls.push(['reveal', cid]),
     openAt: (cid, url) => calls.push(['course', cid, url]), openPage: (url) => calls.push(['page', url]),
-    load: (cid, f, url) => { calls.push(['load', cid, url]); return true; },
+    load: (cid, f, url) => { calls.push(['load', cid, url]); return true; }, guardFrame() {}, watch: () => calls.push(['watch']),
   });
   vm.runInContext(part('  const KEEP = ', '  let showing = ') + part("  // ---- a frame's pages (Canvas)", '  // Canvas: a frame still loading')
     + part('  const dropNext = ', '  // Canvas loads a whole page'), c);
@@ -62,7 +62,7 @@ function world({ at = '/courses/12/modules', showing = '12' } = {}) {
   const fn = (name) => vm.runInContext(name, c);
   // Back or Forward to an entry whose state is `s`.
   const pop = (s) => { history.state = s; fn('onPop')(); };
-  return { c, first, els, host, entries, calls, wait, fn, pop, latest: () => els.at(-1) };
+  return { c, first, els, host, entries, calls, timers, wait, fn, pop, latest: () => els.at(-1) };
 }
 
 test('a link in a frame: the next page loads hidden, the one on screen stays until it is drawn, then is kept', () => {
@@ -186,7 +186,7 @@ test('kept pages: at most three a frame and eight in all, the least recently sho
   assert.deepEqual(many.slice(0, 4).map(([, [f]]) => f.el.removed), [true, true, true, true], 'the oldest go');
 });
 
-test('a page loading that lands outside its frame\'s course goes where a link to it goes; another site loads in place', () => {
+test('a page loading that lands outside its frame\'s course goes where a link to it goes; another site preserves the old document', () => {
   const w = world();
   w.fn('turnTo')('12', '/courses/12/modules/items/5');
   const g = w.fn('next').get('12');
@@ -196,10 +196,13 @@ test('a page loading that lands outside its frame\'s course goes where a link to
   assert.equal(w.c.frames.get('12'), w.first);
   assert.deepEqual(w.calls.filter(([k]) => k === 'course'), [['course', '13', '/courses/13/assignments/2']]);
   const w2 = world();
+  w2.first.dirty = true;
   w2.fn('turnTo')('12', '/courses/12/external_tools/4');
   w2.fn('next').get('12').el.contentDocument = null;
+  w2.fn('next').get('12').loaded = true;
   w2.wait(40);
-  assert.deepEqual(w2.calls.filter(([k]) => k === 'load'), [['load', '12', '/courses/12/external_tools/4']]);
+  assert.deepEqual(w2.calls.filter(([k]) => k === 'load'), [], 'an external redirect cannot reload the outgoing page');
+  assert.equal(w2.c.frames.get('12'), w2.first);
 });
 
 test('a slow page shows as it loads, as the browser would show it', () => {
@@ -211,6 +214,8 @@ test('a slow page shows as it loads, as the browser would show it', () => {
   assert.equal(w.c.frames.get('12'), w.first);
   w.wait(200);
   assert.equal(w.c.frames.get('12'), g);
+  assert.equal(g.ready, false, 'the timeout cannot certify a still-loading document');
+  assert.ok(w.calls.some(([kind]) => kind === 'watch'), 'the slow page keeps its readiness watcher');
 });
 
 test('Back and Forward turn the frames from their entries, adding none, and come back to this page', () => {
@@ -267,4 +272,234 @@ test('with the Navigation API, entries are known by key: the page’s own state 
   const before = w.calls.length;
   w.fn('onPop')();
   assert.equal(w.calls.length, before, 'an entry not Glaze\'s: nothing, whatever the stale state says');
+});
+
+test('rapid clicks preserve the pending history destination with and without Navigation entry keys', () => {
+  for (const keyed of [false, true]) {
+    const w = world();
+    let key = 'k0', n = 0;
+    if (keyed) {
+      w.c.globalThis.navigation = { get currentEntry() { return { key }; } };
+      w.c.history.pushState = function (s) { this.state = s; w.entries.push(['push', s.gzTurn]); key = `k${++n}`; };
+    }
+    w.fn('turnTo')('12', '/courses/12/assignments');
+    w.fn('turnTo')('12', '/courses/12/grades');
+    if (keyed) { key = 'k1'; assert.equal(w.fn('turnHere')().url, '/courses/12/assignments'); }
+    else assert.equal(w.entries.filter(([kind]) => kind === 'replace').length, 1, 'only the original entry needs initializing; the pending entry keeps its destination');
+  }
+});
+
+test('clicking the outgoing page while another loads records the actual destination', () => {
+  const w = world();
+  w.fn('turnTo')('12', '/courses/12/assignments');
+  w.fn('turnTo')('12', '/courses/12/modules');
+  assert.equal(w.fn('next').size, 0);
+  assert.equal(w.c.history.state.gzTurn.url, '/courses/12/modules');
+});
+
+test('dirty earlier pages cannot exceed either retention cap', () => {
+  const w = world();
+  for (let i = 0; i < 6; i++) {
+    w.c.frames.get('12').dirty = true;
+    w.fn('turnTo')('12', `/courses/12/pages/${i}`);
+    const g = w.fn('next').get('12');
+    if (g) { g.el.contentDocument = docAt(g.url); w.wait(40); }
+    assert.ok((w.fn('spare').get('12') || []).length <= 3, 'refuse to leave a dirty page when its course cache is full');
+  }
+  const all = world();
+  for (let i = 0; i < 8; i++) all.fn('spare').set(String(20 + i), [{ el: all.first.el, dirty: true, at: i }]);
+  all.first.dirty = true;
+  all.fn('turnTo')('12', '/courses/12/grades');
+  assert.equal(all.fn('next').size, 0, 'the overall dirty-page cap is checked before loading or stamping');
+  assert.equal(all.entries.length, 0);
+});
+
+test('canceling a pending page clears its poll timer and refresh interaction listeners', () => {
+  const w = world();
+  w.fn('turnTo')('12', '/courses/12/grades', true);
+  w.fn('dropNext')('12');
+  assert.equal(w.timers.size, 0, 'removing an iframe also removes its polling and expiration timers');
+  w.fn('fresh')('12', w.first);
+  assert.ok(w.first.el.contentDocument.on.pointerdown);
+  w.fn('dropNext')('12');
+  assert.deepEqual(Object.keys(w.first.el.contentDocument.on), [], 'canceling refresh removes every listener on the retained page');
+});
+
+test('refresh preserves iframe focus and horizontal scroll including negative RTL positions', () => {
+  const w = world();
+  w.first.el.contentDocument.scrollingElement.scrollLeft = -320;
+  w.fn('fresh')('12', w.first);
+  const g = w.fn('next').get('12');
+  g.el.contentDocument = docAt('/courses/12/modules');
+  w.wait(40);
+  assert.equal(w.c.document.activeElement, g.el, 'focus is captured before removing the old iframe');
+  assert.equal(g.el.contentDocument.scrollingElement.scrollLeft, -320);
+  assert.deepEqual(Object.keys(w.first.el.contentDocument.on), []);
+});
+
+test('focus entering a restored page cancels background refresh', () => {
+  const w = world();
+  w.fn('fresh')('12', w.first);
+  const g = w.fn('next').get('12');
+  w.first.el.contentDocument.on.focusin?.();
+  g.el.contentDocument = docAt('/courses/12/modules');
+  w.wait(40);
+  assert.equal(w.c.frames.get('12'), w.first, 'screen reader or programmatic focus must not be discarded by refresh');
+});
+
+test('a hidden course frame cannot preload or issue user navigation commands', () => {
+  let listener;
+  const w = world({ showing: '13' });
+  Object.assign(w.c, { addEventListener: (ev, fn) => { listener = fn; }, visit: () => w.calls.push(['visit']), shut: () => w.calls.push(['shut']), pinTab: () => w.calls.push(['pin']), moveTab: () => w.calls.push(['move']) });
+  vm.runInContext(part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), w.c);
+  for (const op of ['warm', 'go', 'open', 'visit', 'shut', 'pin', 'move']) listener({ origin, source: w.first.el.contentWindow, data: { gzCtab: op, cid: '12', to: 1, url: '/courses/12/grades' } });
+  assert.equal(w.fn('next').size, 0);
+  assert.deepEqual(w.calls, []);
+});
+
+test('automatic course eviction protects unsaved work in earlier pages and pending pages', () => {
+  for (const where of ['spare', 'next']) {
+    const w = world({ showing: '14' });
+    for (const cid of ['13', '14', '15']) w.c.frames.set(cid, { at: 10, dirty: true });
+    w.fn(where).set('12', where === 'spare' ? [{ dirty: true }] : { dirty: true });
+    let dropped = false;
+    Object.assign(w.c, { LIVE: 4, drop: () => { dropped = true; } });
+    const room = vm.runInContext(part('  const room = ', '  // A frame is shown once') + '\nroom;', w.c);
+    assert.equal(room(), false);
+    assert.equal(dropped, false);
+  }
+});
+
+test('Back to the underlying Canvas course retains its live pages; Ultra still drops its duplicate', () => {
+  for (const site of ['canvas', 'ultra']) {
+    const w = world({ showing: '' });
+    Object.assign(w.c, { ctx: { site }, loaded: false, waiting: '', last: '', lastPath: '', here: () => '12', observeView() {}, flag() {}, place() {}, draw() {}, lay() {}, drop: () => w.calls.push(['drop']) });
+    vm.runInContext(part('  const pass = ', '  const sync = ') + '\npass();', w.c);
+    assert.equal(w.calls.some(([kind]) => kind === 'drop'), site === 'ultra');
+  }
+});
+
+test('redirects replace the clicked entry and cannot take over a newer course selection', () => {
+  for (const later of [false, true]) {
+    const w = world();
+    let key = 'k0', n = 0;
+    w.c.globalThis.navigation = { get currentEntry() { return { key }; } };
+    w.c.history.pushState = function (s) { this.state = s; w.entries.push(['push', s.gzTurn]); key = `k${++n}`; };
+    w.fn('turnTo')('12', '/courses/12/modules/items/5');
+    const g = w.fn('next').get('12');
+    if (later) { w.fn('stamp')('14', '/courses/14'); w.c.showing = '14'; }
+    w.c.openAt = (cid, url) => { w.fn('stamp')(cid, url); w.calls.push(['course', cid, url]); };
+    g.el.contentDocument = docAt('/courses/13/assignments/2');
+    w.wait(40);
+    assert.equal(w.fn('turns').get('k1').cid, '13');
+    assert.equal(w.entries.filter(([kind]) => kind === 'push').length, later ? 2 : 1, 'a redirect is not another click');
+    assert.equal(w.calls.some(([kind]) => kind === 'course'), !later, 'an older redirect stays in its history entry');
+  }
+});
+
+test('selecting a retained course keeps the history entry for a page still loading', () => {
+  const w = world();
+  Object.assign(w.c, { ctx: { site: 'canvas', courseId: () => '5' }, P: () => ({ place: true }), closedCourse: '', drop() {} });
+  vm.runInContext(part('  const visit = ', "  if (!framed && !preview) addEventListener('message'"), w.c);
+  w.c.frames.set('13', { el: { contentDocument: docAt('/courses/13/grades') }, ready: true });
+  w.c.tabs.push({ cid: '13' });
+  w.fn('turnTo')('12', '/courses/12/assignments');
+  w.fn('visit')('13');
+  assert.equal(w.c.history.state.gzTurn.cid, '13');
+  assert.equal(w.entries.filter(([kind]) => kind === 'replace').length, 1, 'the pending assignment entry stays intact');
+});
+
+test('the tab-list cap also preserves courses with dirty earlier pages', () => {
+  const w = world();
+  w.fn('spare').set('12', [{ dirty: true }]);
+  Object.assign(w.c, { ctx: { site: 'canvas', courseList: () => ({}), courseId: () => '5' }, P: () => ({ cap: 2 }),
+    labelFor: () => 'Course', snaps: new Map(), send() {}, drop: (cid) => w.calls.push(['drop', cid]) });
+  w.c.tabs.push({ cid: '13', at: 10 });
+  vm.runInContext(part('  const visitTab = ', '  const notePlace = ') + "\nvisitTab('14');", w.c);
+  assert.deepEqual(w.c.tabs.map((tab) => tab.cid), ['12', '14']);
+  assert.deepEqual(w.calls.filter(([kind]) => kind === 'drop'), [['drop', '13']]);
+});
+
+test('a late dirty edit cannot overflow the cache as a pending page lands', () => {
+  const w = world();
+  for (let i = 0; i < 3; i++) w.fn('spare').set(String(20 + i), [{ dirty: true, el: w.first.el }]);
+  // The course already has three dirty earlier pages, but its current page is initially clean.
+  w.fn('spare').set('12', Array.from({ length: 3 }, () => ({ dirty: true, el: w.first.el })));
+  w.fn('turnTo')('12', '/courses/12/grades');
+  const g = w.fn('next').get('12');
+  w.first.dirty = true;
+  g.el.contentDocument = docAt('/courses/12/grades');
+  w.wait(40);
+  assert.equal(w.c.frames.get('12'), w.first);
+  assert.equal(g.el.removed, true);
+  assert.equal(w.fn('spare').get('12').length, 3);
+  assert.equal(w.c.history.state.gzTurn.url, '/courses/12/modules');
+});
+
+test('a committed pending frame receives the same external-navigation recovery as an initial frame', () => {
+  const w = world();
+  const loads = new Map();
+  w.c.frameEl = (cid, url) => ({ style: { visibility: 'hidden' }, inert: true, contentDocument: blank(),
+    contentWindow: { location: { origin }, postMessage() {} }, addEventListener: (ev, fn) => loads.set(ev, fn), focus() {}, remove() {} });
+  vm.runInContext(part('  const guardFrame = ', '  const frameEl = '), w.c);
+  w.fn('turnTo')('12', '/courses/12/grades');
+  const g = w.fn('next').get('12');
+  g.el.contentDocument = docAt('/courses/12/grades'); w.wait(40);
+  assert.equal(typeof loads.get('load'), 'function');
+  g.el.contentWindow.location.origin = 'https://tool.test';
+  loads.get('load')();
+  assert.equal(g.el.src, origin + '/courses/12');
+});
+
+test('a transient missing document waits for load rather than losing the click', () => {
+  const w = world();
+  w.fn('turnTo')('12', '/courses/12/grades');
+  const g = w.fn('next').get('12');
+  g.el.contentDocument = null; w.wait(60);
+  assert.equal(w.fn('next').get('12'), g);
+  g.el.contentDocument = docAt('/courses/12/grades'); w.wait(40);
+  assert.equal(w.c.frames.get('12'), g);
+});
+
+test('a press on a download, another target, a base target, or a canceled event never preloads', () => {
+  const calls = [];
+  const a = { target: '', href: origin + '/courses/12/files/5', closest: () => null, matches: () => false, hasAttribute: () => false };
+  const c = vm.createContext({ on: true, preview: false, anchorOf: () => a, document: { querySelector: () => null }, warm: (href) => calls.push(href) });
+  const press = vm.runInContext(part('  const onPress = ', '  const warm = ') + '\nonPress;', c);
+  const e = { isTrusted: true, button: 0 };
+  a.hasAttribute = () => true; press(e);
+  a.hasAttribute = () => false; a.target = '_blank'; press(e);
+  a.target = ''; c.document.querySelector = () => ({}); press(e);
+  c.document.querySelector = () => null; press({ ...e, defaultPrevented: true });
+  assert.deepEqual(calls, []);
+  press(e); assert.deepEqual(calls, [a.href]);
+});
+
+test('a turn landing in a hidden course keeps every document hidden and inert', () => {
+  const w = world();
+  w.fn('turnTo')('12', '/courses/12/grades');
+  const g = w.fn('next').get('12');
+  w.c.showing = '13'; w.first.el.style.visibility = 'hidden'; w.first.el.inert = true;
+  g.el.contentDocument = docAt('/courses/12/grades'); w.wait(40);
+  for (const f of [w.first, g]) { assert.equal(f.el.style.visibility, 'hidden'); assert.equal(f.el.inert, true); }
+});
+
+test('retrying a slow current page cannot drop unsaved work in an earlier page', () => {
+  const w = world();
+  w.first.ready = false; w.first.slow = true;
+  w.fn('spare').set('12', [{ dirty: true }]);
+  Object.assign(w.c, { ctx: { site: 'canvas', courseId: () => '5' }, closedCourse: '', drop: () => w.calls.push(['drop']) });
+  vm.runInContext(part('  const visit = ', "  if (!framed && !preview) addEventListener('message'") + "\nvisit('12');", w.c);
+  assert.equal(w.calls.some(([kind]) => kind === 'drop'), false);
+});
+
+test('course-frame move messages refresh the Canvas navbar without changing Ultra behavior', () => {
+  for (const site of ['canvas', 'ultra']) {
+    const w = world(); let listen, synced = 0;
+    Object.assign(w.c, { ctx: { site }, addEventListener: (ev, fn) => { listen = fn; } });
+    w.c.globalThis.GZ_NAVBAR_UI = { sync: () => synced++ };
+    vm.runInContext(part("  if (!framed && !preview) addEventListener('message'", '  // In a tab\'s frame on Ultra'), w.c);
+    listen({ origin, source: w.first.el.contentWindow, data: { gzCtab: 'moved' } });
+    assert.equal(synced, site === 'canvas' ? 1 : 0);
+  }
 });

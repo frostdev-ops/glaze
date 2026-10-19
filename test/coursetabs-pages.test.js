@@ -211,7 +211,7 @@ test('the page frame copies and clears navbar room without adding a polling loop
 test('page-frame passes retain outside pages and report a course navigation once', () => {
   const sent = [], moves = [];
   const c = vm.createContext({ on: true, framed: 'page', PAGE: 'page', spare: new Map(), next: new Map(), popping: false, history: { state: null, replaceState() {}, pushState() {} }, preview: false, showing: '', loaded: true,
-    last: '', lastPath: '/', awayFrom: '', location: { pathname: '/', search: '' }, here: () => '',
+    last: '', lastPath: '/', awayFrom: '', location: { pathname: '/', search: '' }, here: () => '', ctx: { site: 'canvas' },
     observeView() {}, flag() {}, place() {}, draw() {}, lay() {}, moved: () => moves.push('moved'), toTop: (op, m) => sent.push([op, m.url]),
   });
   const pass = vm.runInContext(part('  const pass = ', '  const sync = ') + '\npass;', c);
