@@ -1781,7 +1781,7 @@
 
   "This share is hosted on {host}, not your selected relay ({selected}). Connect to this server?": "Este contenido se aloja en {host}, no en el servidor seleccionado ({selected}). ¿Conectar a este servidor?",
 
-  "Hide them again ({n})": "Volver a ocultarlas ({n})",
+  "Hide them again ({n})": "Volver a ocultar ({n})",
   "Hidden": "Oculto",
   "Folder hidden.": "Carpeta oculta.",
   "Hide modules": "Ocultar módulos",
