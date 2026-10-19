@@ -264,7 +264,10 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const id = `gz-nb-drop-${++logos}`;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 128 128'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('class', 'logo');
-    svg.innerHTML = `<defs><linearGradient id="${id}" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#6fdcff"/><stop offset="1" stop-color="#17c8f4"/></linearGradient></defs><rect width="128" height="128" rx="30" fill="#0d1b2e"/><path d="M64 18C64 18 28 59 28 80a36 36 0 0 0 72 0C100 59 64 18 64 18Z" fill="url(#${id})"/><ellipse cx="79" cy="76" rx="10" ry="15" transform="rotate(20 79 76)" fill="#fff" opacity=".55"/>`;
+    const el = (tag, attrs, ...kids) => { const n = document.createElementNS(svg.namespaceURI, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); n.append(...kids); return n; };
+    svg.append(el('defs', {}, el('linearGradient', { id, x1: '0.1', y1: '0', x2: '0.9', y2: '1' }, el('stop', { offset: '0', 'stop-color': '#6fdcff' }), el('stop', { offset: '1', 'stop-color': '#17c8f4' }))),
+      el('rect', { width: '128', height: '128', rx: '30', fill: '#0d1b2e' }), el('path', { d: 'M64 18C64 18 28 59 28 80a36 36 0 0 0 72 0C100 59 64 18 64 18Z', fill: `url(#${id})` }),
+      el('ellipse', { cx: '79', cy: '76', rx: '10', ry: '15', transform: 'rotate(20 79 76)', fill: '#fff', opacity: '.55' }));
     return svg;
   };
 

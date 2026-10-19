@@ -1039,7 +1039,7 @@
     if (scene && sceneFile !== file) stopScene();
     const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL;
     if (scene && !wait) { try { scene.update(sceneOpts()); } catch (error) { retryScene(key, error); } return; }
-    sceneLoad[file] ||= import(chrome.runtime.getURL(file) + `?r=${docId}-${++sceneLoadId}`).catch((error) => { delete sceneLoad[file]; throw error; });
+    sceneLoad[file] ||= import(chrome.runtime.getURL(`${file}?r=${docId}-${++sceneLoadId}`)).catch((error) => { delete sceneLoad[file]; throw error; });
     const pending = scenePending = { key };
     Promise.all([sceneLoad[file], wait && need('lib/glsl.js', () => globalThis.GZ_GLSL).catch(() => {})]).then(([mod]) => {
       if (scenePending !== pending) return;
