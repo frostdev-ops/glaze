@@ -205,7 +205,7 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   shows only on the Canvas or Blackboard site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
-- **Dashboard notes and widgets** (Canvas and Blackboard Ultra, off by default), in `chrome.storage.local`, on this device only: your notes
+- **Dashboard notes and widgets** (Canvas and Blackboard Ultra; widgets on by default with none added, notes off by default), in `chrome.storage.local`, on this device only: your notes
   (at most 20,000 characters) per site and signed-in user id, with when you last typed them, so a note typed later
   in another tab wins; an emptied note keeps only the time it was emptied, so an older copy can't bring it back. The widgets' layout (which are on, their order and size, where a
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
@@ -552,7 +552,7 @@ you import) are bundled. It makes requests in these cases:
   that already exists) with the item's type and id, your user id and done or not done, and the page's own CSRF token.
   Nothing is written at any other time, and nothing else is written. If Canvas refuses, the tick goes back and the
   list says so. Off, ticks stay on this device.
-- **Dashboard notes and widgets** (Canvas, off by default). They ask your own Canvas site for your profile (user id
+- **Dashboard notes and widgets** (Canvas; widgets on by default with none added, notes off by default). An empty panel asks for nothing; the notes and the widgets you add ask your own Canvas site for your profile (user id
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
   day's planner items, a read-only GET, at most every two minutes per day you look at. Nothing is written to Canvas.

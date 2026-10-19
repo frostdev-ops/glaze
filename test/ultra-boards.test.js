@@ -549,13 +549,13 @@ test('a narrow window stacks the tiles in the panel, without touching the layout
 });
 
 test("Dashboard: its own board before Ultra's page, headed Dashboard, with tabs in the header that are a real tablist, the last one kept", async () => {
-  const p = page({ at: 'dash' });
+  const p = page({ at: 'dash', local: { widgetLayout: W.kept(true) } }); // the widgets a layout used to start with
   p.ui.sync(true);
   await settle();
   const board = p.doc.getElementById('gz-dash');
   assert.ok(board.nextElementSibling === p.ip, "right before Ultra's own page");
   assert.equal(board.dataset.board, 'dash');
-  // Canvas's Dashboard defaults with Better To Do's tile (Codex B7b 5), none over another.
+  // Those widgets with Better To Do's tile (Codex B7b 5), none over another.
   assert.deepEqual(board.querySelectorAll('section.gz-w').map((x) => x.dataset.tile).sort(), ['agenda', 'notes', 'quotes', 'timer', 'todo']);
   assert.ok(p.tile('todo').querySelector('.gz-w-todo-spot'), "the place features/todo.js puts Better To Do's list");
   const boxes = board.querySelectorAll('section.gz-w').map((x) => ({ left: px(x.style.left), top: px(x.style.top), w: W.WIDTH[x.dataset.size], h: 200 }));
@@ -638,7 +638,7 @@ test('a stale Dashboard load never hides the Courses page that came after it', a
 });
 
 test('the boards are separate: moving a tile on the Dashboard leaves the Courses page as it was', async () => {
-  const p = page({ at: 'dash' });
+  const p = page({ at: 'dash', local: { widgetLayout: W.kept(true) } });
   p.ui.sync(true);
   await settle();
   p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
@@ -754,10 +754,15 @@ test('landing: opt-in, once in a tab (the worker remembers it, not the page), ne
 test('the Dashboard is on by default with its own switch: its widgets and To Do with the others off, empty but for Add widget, or Ultra\'s page when off', async () => {
   const off = { notes: false, widgets: false, pet: false };
   assert.equal(D.GZ_DEFAULTS.enhance.dashboard, true, 'on by default');
-  const p = page({ at: 'dash', enhance: off });
+  const fresh = page({ at: 'dash' });
+  fresh.ui.sync(true);
+  await settle();
+  assert.deepEqual(fresh.doc.querySelectorAll('#gz-dash section.gz-w').map((x) => x.dataset.tile), ['todo'], 'a first Dashboard: Better To Do, no widget added');
+  // A device updated from a version whose layouts started with four widgets keeps them (lib/widgets.js kept).
+  const p = page({ at: 'dash', enhance: off, local: { widgetLayout: W.kept(false) } });
   p.ui.sync(true);
   await settle();
-  assert.deepEqual(p.doc.querySelectorAll('#gz-dash section.gz-w').map((x) => x.dataset.tile).sort(), ['agenda', 'quotes', 'timer', 'todo'], "Canvas's defaults but the notes (their own switch, off)");
+  assert.deepEqual(p.doc.querySelectorAll('#gz-dash section.gz-w').map((x) => x.dataset.tile).sort(), ['agenda', 'quotes', 'timer', 'todo'], 'those widgets but the notes (their own switch, off)');
   // Every widget off: an empty board that says how to fill it, and Edit layout offers them.
   const none = { widgetLayout: { boards: { dash: W.TILES.map((id) => ({ id, on: false })) } } };
   const q = page({ at: 'dash', enhance: off, local: none });
@@ -779,7 +784,7 @@ test('the Dashboard is on by default with its own switch: its widgets and To Do 
 
 
 test('layout callbacks arriving backwards cannot redraw an older fold or overwrite a newer storage event', async () => {
-  const p = page({ holdReplies: true });
+  const p = page({ holdReplies: true, local: { widgetLayout: W.kept(true) } });
   p.ui.sync(true);
   await settle();
   p.doc.fire(p.tile('notes').querySelector('.gz-w-fold'), 'click');
@@ -856,7 +861,7 @@ test('global floats keep clear of an RTL right nav and B8 top strip without chan
 
 
 test('Dashboard widgets floated explicitly remain available with legacy Widgets off, including the native tab', async () => {
-  const p = page({ at: 'dash', enhance: { notes: false, widgets: false, pet: false } });
+  const p = page({ at: 'dash', enhance: { notes: false, widgets: false, pet: false }, local: { widgetLayout: W.kept(false) } });
   p.ui.sync(true);
   await settle();
   p.doc.fire(p.doc.querySelector('.gz-dash-edit'), 'click');
