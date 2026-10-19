@@ -83,6 +83,40 @@ const fixture = `<!doctype html><html><head><style>
         check(aboveGutter[2] < 70 && gutter[2] > 100, `${label}: the scene must stay below the header in the gutter (${aboveGutter} vs ${gutter})`);
       }
     }
+    // Announcement panels pad the scroller, then pull their header back with a negative margin.
+    // Inserting the strip before that header must reserve its whole row, including at large tab sizes.
+    for (const width of [1280, 375]) for (const dir of ['ltr', 'rtl']) for (const at of ['above', 'between', 'below']) for (const size of ['small', 'medium', 'large']) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.setContent(`<!doctype html><html dir="${dir}" data-gz-bg="scene" data-gz-ctabs="${at} ${size}"><head><style>
+        * { box-sizing: border-box; } body { margin: 0; }
+        #site-wrap { position: relative; height: 100vh; overflow: clip; }
+        .bb-offcanvas-panel { position: absolute; inset: 0; inset-inline-start: 36px; }
+        .panel-wrap { position: absolute; inset: 0; overflow: auto; padding: ${width < 700 ? 20 : 30}px; }
+        .panel-header { display: flex; align-items: center; height: 107px; margin: -${width < 700 ? 20 : 30}px -${width < 700 ? 20 : 30}px 0; padding: 0 ${width < 700 ? 20 : 30}px; }
+        .panel-titles-container { flex: 1; min-width: 0; } .panel-sub-title { display: block; font: 14px/21px sans-serif; }
+        h1 { margin: 0; font: 32px/45px sans-serif; } .panel-content { position: relative; min-height: 140px; }
+        .bb-close { position: absolute; top: 30px; inset-inline-start: -24px; width: 40px; height: 40px; }
+      </style></head><body><div id="site-wrap"><div class="bb-offcanvas-panel"><div class="panel-wrap">
+        <header class="panel-header simple-header"><div class="panel-titles-container"><span class="panel-sub-title">Course Announcements</span><h1>Week 7</h1></div></header>
+        <div class="panel-content">Announcement content</div>
+      </div><button class="bb-close" aria-label="Close">×</button></div></div></body></html>`);
+      for (const sheet of ['theme.css', 'motion.css', 'extras.css']) await page.addStyleTag({ path: path.join(root, sheet) });
+      await page.evaluate(({ at, size }) => {
+        const strip = document.createElement('div'); strip.id = 'gz-ctabs'; strip.dataset.at = 'nested'; strip.dataset.size = size; strip.dataset.shape = 'pill';
+        strip.innerHTML = '<div class="gz-ctabs-list" role="tablist" aria-label="Course tabs"><div class="gz-ctab" role="tab" aria-selected="true"><span class="gz-ctab-name">Spanish 110</span></div><div class="gz-ctab" role="tab" aria-selected="false"><span class="gz-ctab-name">Computer Science</span></div></div>';
+        const header = document.querySelector('header'); if (at === 'above') header.before(strip); else header.after(strip);
+      }, { at, size });
+      const geometry = await page.evaluate(() => {
+        const rect = (s) => { const r = document.querySelector(s).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+        const label = document.querySelector('.panel-sub-title'), r = label.getBoundingClientRect();
+        return { strip: rect('#gz-ctabs'), header: rect('header'), content: rect('.panel-content'), subtitleVisible: [r.top + 1, r.top + r.height / 2, r.bottom - 1].every((y) => document.elementFromPoint(r.left + r.width / 2, y) === label) };
+      });
+      const label = `${width} ${dir} ${at} ${size}`;
+      check(at === 'above' ? geometry.header.top >= geometry.strip.bottom : geometry.strip.top >= geometry.header.bottom, `${label}: course tabs must not overlap the native panel header (${JSON.stringify(geometry)})`);
+      check(geometry.subtitleVisible, `${label}: the full announcement subtitle must remain exposed`);
+      check(geometry.content.top >= Math.max(geometry.header.bottom, geometry.strip.bottom), `${label}: announcement content must follow both header and tabs`);
+      if (out && width === 1280 && dir === 'ltr' && at === 'above' && size === 'large') await page.screenshot({ path: path.join(out, 'announcement-course-tabs.png') });
+    }
     // Peek/Fabric side sheets and their descendants never acquire full-page backgrounds or clipping.
     for (const selector of ['bb-offcanvas-panel peek', 'peek-panel__content-wrapper', 'ms-Panel-main']) {
       await page.setContent(`<!doctype html><html data-gz-bg="gradient"><body><div class="${selector}"><div class="bb-offcanvas-panel"><div class="panel-wrap"></div></div></div></body></html>`);
