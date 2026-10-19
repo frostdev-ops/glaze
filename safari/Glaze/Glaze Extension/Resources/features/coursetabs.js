@@ -520,12 +520,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A course page in its course's frame: kept and sent there if it runs (unless it holds unsaved work, then shown as it is),
   // else made, with a tab if the course has none.
   const openAt = (cid, url) => {
-    if (ctx.site === 'canvas' && cid === closedCourse) closedCourse = '';
     if (!tabs.some((x) => x.cid === cid)) { visitTab(cid); draw(); }
     const x = tabs.find((y) => y.cid === cid);
     if (!x) return;
-    x.at = Date.now(); x.path = url; x.top = 0;
-    save();
+    x.at = Date.now();
     let f = frames.get(cid);
     if (f?.dirty) say(t('{name} has unsaved work, so it stays where it was.', { name: labelFor(cid, x.name || t('Course'), x.code) }));
     else if (f) {
@@ -539,6 +537,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (!room()) return;
       f = open(cid, url);
     }
+    if (!f?.dirty) { x.path = url; x.top = 0; }
+    if (ctx.site === 'canvas' && cid === closedCourse) closedCourse = '';
+    save();
     reveal(cid);
   };
   // Canvas: a frame still loading with no picture of its page stays off screen and the page on screen stays put, its tab
