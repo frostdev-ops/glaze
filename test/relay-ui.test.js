@@ -11,7 +11,7 @@ const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const settle = async () => { for (let n = 0; n < 8; n++) await new Promise(setImmediate); };
 const page = async ({ accepted = false, granted = true, selected = G.SERVER, hosts = [] } = {}) => {
   class Element {
-    constructor() { this.children = []; this.events = {}; this.value = ''; this.classList = { toggle() {} }; }
+    constructor() { this.children = []; this.events = {}; this.value = ''; this.hidden = false; this.classList = { toggle() {} }; }
     addEventListener(name, fn) { this.events[name] = fn; }
     append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; }
@@ -21,6 +21,7 @@ const page = async ({ accepted = false, granted = true, selected = G.SERVER, hos
   const node = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   const state = { ok: true, on: false, sessions: [], sources: [], accounts: [], hosts, defaultRelay: G.SERVER, relay: selected };
   const context = vm.createContext({ ...D, GZ_SURFACES: S, matchMedia: () => ({ matches: false, addEventListener() {} }), URL, URLSearchParams, setTimeout, clearTimeout, console, GZ_RELAY: R,
+    GZ_NOTES: { KEY: /^notesIdx:/ }, MutationObserver: class { observe() {} },
     GZ_I18N: { page() {}, ui: () => 'en', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, key) => v?.[key] ?? '') },
     navigator: { userActivation: { isActive: true } }, location: { search: '' }, addEventListener() {},
     confirm: (text) => { calls.push('confirm'); confirmations.push(text); return accepted; },
@@ -34,45 +35,32 @@ const page = async ({ accepted = false, granted = true, selected = G.SERVER, hos
       },
     },
   });
-  vm.runInContext(read('sharing/sessions.js'), context); await settle(); calls.length = 0;
+  vm.runInContext(read('lib/sessions-ui.js'), context); await settle(); calls.length = 0;
   return { node, state, calls, confirmations, click: async (id, trusted = true) => { node(id).events.click({ isTrusted: trusted }); await settle(); } };
 };
 const link = (server) => G.link(server, { sid: G.b64(new Uint8Array(16)), seed: new Uint8Array(32) }, true);
 
 test('E1 UI refuses scripted Join and cancelled custom-host confirmation before permissions or worker messages', async () => {
   const p = await page();
-  p.node('#invite').value = link('https://relay.example.edu:8443');
-  await p.click('#join', false); assert.deepEqual(p.calls, []);
-  await p.click('#join');
+  p.node('#ss-invite').value = link('https://relay.example.edu:8443');
+  await p.click('#ss-join', false); assert.deepEqual(p.calls, []);
+  await p.click('#ss-join');
   assert.deepEqual(p.calls, ['confirm']);
   assert.match(p.confirmations[0], /relay\.example\.edu:8443, not frostdev\.io/);
-  assert.equal(p.node('#invite').value, '');
+  assert.equal(p.node('#ss-invite').value, '');
 });
 
 test('E1 UI confirms selected and previously approved custom hosts even with required HTTPS permission', async () => {
   const server = 'https://relay.example.edu';
   const p = await page({ accepted: true, selected: server, hosts: [server] });
-  p.node('#invite').value = link(server); await p.click('#join');
+  p.node('#ss-invite').value = link(server); await p.click('#ss-join');
   assert.equal(p.calls[0], 'confirm');
   assert.equal(p.calls[1][0], 'contains'); assert.equal(p.calls[2], 'join');
   assert.ok(!p.calls.some((c) => Array.isArray(c) && c[0] === 'request'), 'the required HTTPS grant needs no repeated request');
   const other = await page({ selected: server });
-  other.node('#invite').value = link(G.SERVER); await other.click('#join');
+  other.node('#ss-invite').value = link(G.SERVER); await other.click('#ss-join');
   assert.deepEqual(other.calls, ['confirm']);
   assert.match(other.confirmations[0], /share\.frostdev\.io, not your selected relay \(relay\.example\.edu\)/);
-});
-
-test('E1 UI typing and Save stay offline; only a trusted Test checks and requests a missing local permission', async () => {
-  const p = await page({ granted: false });
-  p.node('#relay-kind').value = 'custom'; p.node('#relay-kind').events.change({ isTrusted: true });
-  p.node('#relay-url').value = 'http://127.0.0.1:8787'; p.node('#relay-url').events.input({ isTrusted: true });
-  assert.deepEqual(p.calls, []);
-  await p.click('#relay-save', false); assert.deepEqual(p.calls, []);
-  await p.click('#relay-save'); assert.deepEqual(p.calls, ['relaySave', 'list']);
-  p.calls.length = 0; await p.click('#relay-test');
-  assert.equal(p.calls[0][0], 'contains'); assert.equal(p.calls[1][0], 'request'); assert.equal(p.calls[2], 'relayTest');
-  assert.deepEqual(Array.from(p.calls[1][1]), ['http://127.0.0.1:8787/*']);
-  assert.match(p.node('#relay-status').textContent, /Connected to http:\/\/127\.0\.0\.1:8787/);
 });
 
 test('E1 helper stays out of LMS startup, is cached for a worker restart and is packaged for both Safari targets', () => {
@@ -80,21 +68,8 @@ test('E1 helper stays out of LMS startup, is cached for a worker restart and is 
   assert.ok(!manifest.content_scripts.flatMap((s) => s.js).includes('lib/relay.js'));
   assert.ok(!manifest.web_accessible_resources.some((r) => r.resources.includes('lib/relay.js')));
   assert.match(read('lib/background.js'), /addEventListener\?\.\('install', \(\) => importScripts\('relay\.js', 'sharing\.js', 'sessions\.js'\)\)/);
-  assert.match(read('sharing/sessions.html'), /<script src="\.\.\/lib\/relay\.js"><\/script>/);
+  assert.match(read('options.html'), /<script src="lib\/relay\.js"><\/script>/);
   const safari = require('../scripts/safari-resources.js');
   assert.deepEqual(safari.missing(['lib/relay.js']), []);
   assert.match(read('package.sh'), /defaults\.js lib i18n/);
-});
-
-test('E1 standalone Relay URL keeps local role fallbacks and keyboard-focus colors with shared surfaces', () => {
-  const css = read('sharing/sessions.css');
-  // ID specificity must beat ui.css's input[type=url] and :is(...):focus-visible rules.
-  const field = css.match(/#relay-url\s*\{([^}]+)\}/)?.[1] || '';
-  const focus = css.match(/#relay-url:focus-visible\s*\{([^}]+)\}/)?.[1] || '';
-  assert.match(field, /background:[^;]*var\(--gz-session-input-fill\)/);
-  assert.match(css, /--gz-session-input:light-dark\(#fff,#101722\)/);
-  assert.match(field, /border:\s*1px solid var\(--gz-border-strong,var\(--gz-line-strong\)\)/);
-  assert.match(css, /--gz-line-strong:light-dark\(#768599,#8092ab\)/);
-  assert.match(field, /color:\s*inherit/);
-  assert.match(focus, /outline:\s*3px solid light-dark\(/);
 });

@@ -167,6 +167,10 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 #gz-nt .gz-nt-say { padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-muted); border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
 #gz-nt .gz-nt-say:empty { display: none; }
 #gz-nt .gz-nt-ask { padding: 0.75rem 1.1rem; background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+#gz-nt .gz-nt-share { display: grid; gap: 0.4rem; padding: 0.6rem 1.1rem 0.75rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); }
+#gz-nt .gz-nt-share[hidden] { display: none; }
+#gz-nt .gz-nt-share-head { justify-content: space-between; }
+#gz-nt .gz-nt-share iframe { display: block; width: 100%; height: min(22rem, 45vh); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); color-scheme: normal; }
 #gz-nt .gz-nt-form { display: grid; gap: 0.5rem; }
 #gz-nt .gz-nt-form input { min-width: min(28rem, 100%); }
 #gz-nt .gz-nt-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(15rem, 21rem) minmax(0, 1fr); }

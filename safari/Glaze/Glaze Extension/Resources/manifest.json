@@ -167,6 +167,14 @@
       "matches": [
         "https://*/*"
       ]
+    },
+    {
+      "resources": [
+        "sharing/quick.html"
+      ],
+      "matches": [
+        "https://*/*"
+      ]
     }
   ]
 }

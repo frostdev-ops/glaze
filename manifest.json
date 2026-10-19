@@ -186,6 +186,14 @@
     },
     {
       "resources": [
+        "sharing/quick.html"
+      ],
+      "matches": [
+        "https://*/*"
+      ]
+    },
+    {
+      "resources": [
         "mods/host.html",
         "mods/boot.js"
       ],

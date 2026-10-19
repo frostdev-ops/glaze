@@ -191,11 +191,10 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
         make('div', { className: 'gz-nt-row' },
           button(t('New note'), () => newNote(view.course !== '-' ? view.course : '')),
           button(t('New folder'), newFolder),
-          button(t('Share sessions'), () => chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => {})),
-          button(t('Export all'), exportAll),
-          button(t('Import'), exportAll),
+          button(t('Shared notes'), () => share('')),
+          button(t('Back up or restore'), exportAll),
           button(t('Close'), close))),
-      el.say, el.ask, make('div', { className: 'gz-nt-main' }, lib, el.ed), el.file);
+      el.say, el.ask, el.share = make('div', { className: 'gz-nt-share', hidden: true }), make('div', { className: 'gz-nt-main' }, lib, el.ed), el.file);
     attr(box, { role: 'dialog', 'aria-labelledby': 'gz-nt-title' });
     box.addEventListener('click', (e) => { if (e.target === box) close(); });
     // Keys typed here are the view's: Canvas's own page shortcuts (n, e, d, r… on the document) would swallow letters
@@ -440,7 +439,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const meta = make('div', { className: 'gz-nt-meta' });
     const actions = ro ? [button(t('Restore'), () => send({ op: 'restore', ids: [cur.id] }).then((r) => { say(r?.ok ? t('Restored.') : fail(r)); if (r?.ok) { view.trash = false; drawLib(); openNote(cur.id); } })),
       button(t('Delete forever'), () => purge([cur.id], cur.title))]
-      : [button(t('Duplicate'), duplicate), button(t('Export as Markdown'), () => exportOne('md')), button(t('Export as HTML'), () => exportOne('html')), button(t('Move to trash'), trashNote)];
+      : [button(t('Share'), () => share(cur.id)), button(t('Duplicate'), duplicate), button(t('Export as Markdown'), () => exportOne('md')), button(t('Export as HTML'), () => exportOne('html')), button(t('Move to trash'), trashNote)];
     el.ed.replaceChildren(...[title, meta, !ro && bar, !ro && el.linkbar, body, make('div', { className: 'gz-nt-row gz-nt-actions' }, ...actions)].filter(Boolean));
     Object.assign(el, { title, body, meta });
     syncMeta(n);
@@ -828,6 +827,21 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     load();
   };
 
+  // ---- sharing -------------------------------------------------------------------------------------------------------
+  // Glaze's share panel (sharing/quick.html) is an extension frame: its invite links and keys never enter this page, and
+  // it posts nothing back. note: the note to share ('' for the account's shared notes and joining); the same again closes it.
+  const share = async (note) => {
+    if (!el.share.hidden && el.share.note === note) { el.share.hidden = true; el.share.replaceChildren(); return; }
+    // A note is shared as stored, so a new or edited one is saved first.
+    if (note && (!(await settle()) || !cur?.rev)) return say(t("Couldn't save the open note, so it can't be shared yet. Try again in a moment."));
+    if (!el.share) return;
+    const frame = make('iframe', { src: `${chrome.runtime.getURL('sharing/quick.html')}?key=${encodeURIComponent(me.key)}${note ? `&note=${note}` : ''}`, title: t('Share') });
+    frame.setAttribute('allow', 'clipboard-write');
+    el.share.note = note;
+    el.share.replaceChildren(make('div', { className: 'gz-nt-row gz-nt-share-head' }, make('strong', { textContent: t(note ? 'Share' : 'Shared notes') }), button(t('Close'), () => share(note))), frame);
+    el.share.hidden = false;
+  };
+
   // ---- export and import ---------------------------------------------------------------------------------------------
   const dataUrl = (f) => `data:${f.type};base64,${f.data}`;
   const exportOne = async (as) => {
@@ -843,7 +857,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       download(new Blob([page], { type: 'text/html' }), `${name}.html`);
     }
   };
-  // Keys must never enter an LMS world's blob URL. Export all is confirmed and built on Glaze's own page.
+  // Keys must never enter an LMS world's blob URL. A full backup is confirmed and built in Settings (Notes backup).
   const exportAll = async () => {
     if (!(await settle())) return say(t("Couldn't save the open note, so nothing was exported. Try again in a moment."));
     try { await chrome.runtime.sendMessage({ type: 'glaze:sessions-open', key: me.key }); }

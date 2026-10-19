@@ -54,7 +54,7 @@ const fromJs = (js, calls = /\b(?:t|tr)\s*\(/g) => {
   return out.filter(Boolean);
 };
 // And every feature loaded on demand (features/*.js), which writes through GZ_CTX.t.
-const JS = ['sharing/sessions.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
+const JS = ['sharing/quick.js', 'lib/sessions-ui.js', 'content.js', 'content-ultra.js', 'content-canvas.js', 'options.js', 'popup.js', 'ui.js', 'lib/page.js', 'lib/petlibrary.js', 'lib/petsprites.js', 'lib/todo.js', 'lib/ultra.js', 'lib/editor-x.js', 'lib/editor-xbg.js', 'lib/editor-xmotion.js', 'lib/editor-xparts.js', 'lib/editor-mods.js', 'lib/editor-widget.js', 'lib/parts.js', 'lib/lookparts.js', ...fs.readdirSync(path.join(root, 'features')).filter((f) => f.endsWith('.js')).map((f) => `features/${f}`)];
 // Tables and generated labels reach t() through variables, not literal arguments.
 const tableWords = [
   ...Object.values(PET.DECOR).map((item) => item.name), ...Object.values(PET.HABITATS),
@@ -73,7 +73,7 @@ const used = new Set([
   // Shader diagnostics are translated when the editor groups them by line.
   ...fromJs(read('lib/glsl.js'), /\b(?:e\([^,]+,|bad\(|message:)\s*/g),
   ...fromJs(read('lib/scene.js'), /\bmessage:\s*/g),
-  ...['sharing/sessions.html', 'options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
+  ...['sharing/quick.html', 'options.html', 'popup.html'].flatMap((f) => fromHtml(read(f))),
   ...JS.flatMap((f) => fromJs(read(f))),
   // A mod bundle's refusals are translated by the editor's t(error.why, error.vars) (lib/editor-mods.js).
   ...fromJs(read('lib/modbundle.js'), /\bfail\(/g),
@@ -100,7 +100,7 @@ test('every language has every key, and nothing else', () => {
 });
 
 test('every key is still used', () => {
-  const src = squash([...JS, 'lib/modbundle.js', 'lib/lookx.js', 'lib/grades.js', 'lib/gradecalc.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html', 'sharing/sessions.html'].map(read).join(' '));
+  const src = squash([...JS, 'lib/modbundle.js', 'lib/lookx.js', 'lib/grades.js', 'lib/gradecalc.js', 'lib/share.js', 'lib/i18n.js', 'lib/news.js', 'lib/fonts.js', 'defaults.js', 'options.html', 'popup.html', 'sharing/quick.html'].map(read).join(' '));
   for (const k of keys) assert.ok(used.has(k) || src.includes(k), `"${k}" is in no source file`);
 });
 
@@ -127,7 +127,7 @@ test('every catalogue is loaded wherever Glaze speaks', () => {
   for (const f of files) {
     assert.ok(!content.includes(`i18n/${f}`), `manifest: i18n/${f} loads on demand, not with every page`);
     assert.ok(read('lib/background.js').includes(`'i18n/${f}'`), `lib/background.js LOADABLE: i18n/${f}`);
-    for (const page of ['options.html', 'popup.html', 'sharing/sessions.html']) assert.ok(read(page).includes(`<script src="${page.startsWith('sharing/') ? '../' : ''}i18n/${f}"></script>`), `${page}: i18n/${f}`);
+    for (const page of ['options.html', 'popup.html', 'sharing/quick.html']) assert.ok(read(page).includes(`<script src="${page.startsWith('sharing/') ? '../' : ''}i18n/${f}"></script>`), `${page}: i18n/${f}`);
   }
   assert.equal(I.file('de-AT'), 'i18n/de.js');
   assert.equal(I.file('pt-PT'), 'i18n/pt-BR.js');
