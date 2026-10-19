@@ -944,7 +944,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Opens an item as a click on it would: the site's own through its own link.
     go: (id) => {
       const item = byId(id);
-      if (!item || item.hidden && !item.native) return false;
+      if (!item || item.hidden && !item.native || item.href && !sameSite(item.href)) return false;
       emit('navigate', { id });
       if (item.owner) { mods.get(item.owner)?.get(item.id)?.select?.(); if (item.href) location.assign(item.href); }
       else if (item.action) glaze(item.action);

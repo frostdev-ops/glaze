@@ -33,3 +33,27 @@ test('student links and worn Look links keep off-site HTTPS addresses', () => {
     assert.equal(item.owner, undefined);
   }
 });
+
+const api = (items) => {
+  const calls = [];
+  const c = vm.createContext({ M, URL, location: { origin, href: origin + '/', assign: (href) => calls.push(['assign', href]) }, isPreview: false,
+    byId: (id) => items.find((i) => i.id === id), emit() {}, mods: new Map(), listeners: new Map(), host: { isConnected: true },
+    sync() {}, view() {}, queue() {}, glaze: (action) => calls.push(['action', action]), goNative: (id) => calls.push(['native', id]),
+    site: { panel() {} }, panel: '', panelTo: (id) => calls.push(['panel', id]), openHere: (href) => calls.push(['open', href]),
+  });
+  const result = vm.runInContext(part('  const safeHref =', '  // The open course') + part('  const OWNER =', '  return api;') + '\napi;', c);
+  return { ...result, calls };
+};
+
+test('replacement go refuses off-site and unsafe destinations, while direct custom links stay valid', () => {
+  const hrefs = ['https://library.test/', '//else.test/', 'javascript:alert(1)', 'data:text/html,login', 'https://u:p@school.test/', 'https://schооl.test/'];
+  for (const href of hrefs) {
+    const h = api([{ id: 'link:library0000a', href }]);
+    assert.equal(h.go('link:library0000a'), false, href);
+    assert.deepEqual(h.calls, []);
+  }
+  const h = api([{ id: 'calendar', native: true, href: origin + '/calendar' }]);
+  assert.equal(h.go('https://else.test/'), false, 'an arbitrary URL is not an item ID');
+  assert.equal(h.go('calendar'), true);
+  assert.deepEqual(h.calls, [['native', 'calendar']]);
+});
