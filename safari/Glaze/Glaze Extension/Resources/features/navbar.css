@@ -170,7 +170,7 @@ a.widget[aria-disabled="true"] { cursor: default; }
 :host([data-place="top"]) .topbar { display: flex; }
 :host([data-place="top"]) .menu:not([hidden]) { display: flex; }
 /* With a top bar or on a phone, the dock opens over the page from its button: the rail stands invisible around it. */
-:host([data-dock]) .rail { display: flex; visibility: hidden; pointer-events: none; clip-path: none; backdrop-filter: none; -webkit-backdrop-filter: none; transition: none; }
+:host([data-dock]) .rail { display: flex; visibility: hidden; pointer-events: none; clip-path: none !important; backdrop-filter: none; -webkit-backdrop-filter: none; transition: none; }
 :host([data-dock]) .dock {
   visibility: visible; pointer-events: auto; position: fixed; z-index: 3; width: 320px; max-height: min(70vh, 560px); margin: 0; padding: 10px;
   overflow: auto; overscroll-behavior: contain; border-radius: 18px; background: var(--gz-surface, #121d2f); border: 1px solid var(--nb-line);

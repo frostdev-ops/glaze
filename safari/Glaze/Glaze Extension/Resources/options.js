@@ -148,7 +148,7 @@ $('#news-close').addEventListener('click', () => { $('#news').hidden = true; fin
 
 GZ_UI.load().then((s) => {
   const frame = $('#preview');
-  let navItems = GZ_NAV.clean();
+  let navItems = GZ_NAV.clean(), navbarEditor = null;
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
@@ -367,6 +367,7 @@ GZ_UI.load().then((s) => {
     renderBg();
     GZ_EDITOR_X.render();
     renderNav();
+    navbarEditor?.render();
     presetOptions();
     GZ_XEDIT.render();
     outputs();
@@ -1378,7 +1379,7 @@ GZ_UI.load().then((s) => {
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
   // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
   const widgets = GZ_WIDGETEDIT.mount({ t, show: (route) => editor.show(route, { scroll: true }) }); // widgets made of blocks (lib/editor-widget.js)
-  GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
+  navbarEditor = GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
   followSection(editor.route());

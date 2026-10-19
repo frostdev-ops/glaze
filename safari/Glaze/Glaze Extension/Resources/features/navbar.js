@@ -86,7 +86,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.brand = part(make('a', { className: 'brand' }), 'brand');
     el.top = make('div', { className: 'slot' }); el.top.dataset.slot = 'top';
     el.wtop = make('div', { className: 'widgets wtop' }); el.wbottom = make('div', { className: 'widgets wbottom' });
-    el.dock = part(make('div', { className: 'dock', role: 'group' }), 'dock');
+    el.dock = part(make('div', { className: 'dock', role: 'group', id: 'gz-navbar-widgets' }), 'dock');
     el.dock.setAttribute('aria-label', t('Widgets')); el.dock.tabIndex = -1;
     el.ind = part(make('span', { className: 'ind', hidden: true }), 'indicator');
     el.list = make('div', { className: 'list' });
@@ -115,7 +115,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     }, { passive: false });
     el.ttabs.addEventListener('scroll', () => tabsScroll(), { passive: true });
     el.tdock = part(make('button', { type: 'button', className: 'tdock', hidden: true }, icon('layers')), 'item widgets');
-    el.tdock.dataset.act = 'widgets'; el.tdock.setAttribute('aria-label', t('Widgets')); el.tdock.dataset.tip = t('Widgets');
+    el.tdock.dataset.act = 'widgets'; el.tdock.setAttribute('aria-haspopup', 'dialog'); el.tdock.setAttribute('aria-controls', el.dock.id); el.tdock.setAttribute('aria-label', t('Widgets')); el.tdock.dataset.tip = t('Widgets');
     el.twidgets = make('div', { className: 'twidgets' }, el.tdock);
     el.swidgets = make('div', { className: 'swidgets' });
     el.tacc = part(make('button', { type: 'button', className: 'tacc' }), 'account');
@@ -333,7 +333,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (lay.tabs && rows.length) { sheetRows.push(sep(), make('div', { className: 'group-label', textContent: t('Course tabs') }), ...rows.map((r) => courseTab(r, 'row'))); }
     if (el.dock.childElementCount) {
       const dock = part(make('button', { type: 'button', className: 'row' }, icon('layers'), make('span', { textContent: t('Widgets') })), 'row widgets');
-      dock.dataset.act = 'widgets'; dock.setAttribute('aria-haspopup', 'dialog');
+      dock.dataset.act = 'widgets'; dock.setAttribute('aria-haspopup', 'dialog'); dock.setAttribute('aria-controls', el.dock.id); dock.setAttribute('aria-expanded', String(docked));
       sheetRows.push(sep(), dock);
     }
     sheetRows.push(sep());
@@ -352,7 +352,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       : focusedTab ? pane?.querySelector(`[data-act="${focusedTab.split('|')[0]}"][data-cid="${CSS.escape(focusedTab.split('|')[1])}"]`)
         : focused ? pane?.querySelector(`[data-id="${CSS.escape(focused)}"]:not(.brand)`) : active?.classList.contains('more') ? el.more : active?.dataset.act === 'customize' ? pane?.querySelector('[data-act="customize"]') : null;
     const nearby = tabAt >= 0 ? [...pane.querySelectorAll('.ctab-go')].at(Math.min(tabAt, pane.querySelectorAll('.ctab-go').length - 1)) || pane.querySelector('a, button') : null;
-    const target = restore || nearby || (sheetOpen ? el.sheet.querySelector('a, button') : wasMenu ? el.menu.querySelector('a, button') || (wasMenu === 'more' ? el.tmore : el.tacc) : active?.isConnected ? active : null);
+    const target = restore || nearby || (active?.isConnected ? active : sheetOpen ? el.sheet.querySelector('a[href], button:not([disabled])') : wasMenu ? el.menu.querySelector('a, button') || (wasMenu === 'more' ? el.tmore : el.tacc) : null);
     if (target?.getClientRects().length) target.focus({ preventScroll: true });
   };
   let logos = 0;
@@ -497,12 +497,13 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   };
   const sheetTo = (open) => {
     if (sheetOpen === open || !host || open && wide()) return;
+    if (open) dockTo(false, false);
     sheetOpen = open;
     el.sheet.toggleAttribute('data-open', open);
     if (open) el.sheet.showModal(); else el.sheet.close();
     el.more?.setAttribute('aria-expanded', String(open));
     emit('sheet', { open });
-    if (open) el.sheet.querySelector('a, button')?.focus({ preventScroll: true }); else (wide() ? el.toggle : el.more)?.focus({ preventScroll: true });
+    if (open) el.sheet.querySelector('a[href], button:not([disabled])')?.focus({ preventScroll: true }); else (wide() ? el.toggle : el.more)?.focus({ preventScroll: true });
   };
   // The top bar's menus: More (the items that don't fit) and the account's.
   const menuTo = (which, focus = true) => {
@@ -539,7 +540,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (!host || docked === open || open && (!el.dock.childElementCount || lay.place === 'rail' && wide())) return;
     docked = open;
     host.toggleAttribute('data-dock', open);
-    el.tdock.setAttribute('aria-expanded', String(open));
+    for (const e of root.querySelectorAll('[data-act="widgets"]')) e.setAttribute('aria-expanded', String(open));
+    el.dock.setAttribute('role', open ? 'dialog' : 'group');
     if (open) { placeDock(); document.addEventListener('pointerdown', outsideDock, true); if (focus) el.dock.focus({ preventScroll: true }); return; }
     document.removeEventListener('pointerdown', outsideDock, true);
     el.dock.style.left = el.dock.style.top = '';
@@ -745,7 +747,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       return;
     }
     if (sheetOpen && e.key === 'Tab') {
-      const items = [...el.sheet.querySelectorAll('a, button')], first = items[0], last = items.at(-1);
+      const items = [...el.sheet.querySelectorAll('a, button')].filter((e) => !e.disabled && (e.tagName !== 'A' || e.hasAttribute('href')) && e.getClientRects().length), first = items[0], last = items.at(-1);
       if (e.shiftKey && root.activeElement === first) { e.preventDefault(); last?.focus(); }
       else if (!e.shiftKey && root.activeElement === last) { e.preventDefault(); first?.focus(); }
       return;

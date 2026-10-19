@@ -11,7 +11,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
   const part = (e, name) => { e.setAttribute('part', name); return e; };
   const nodes = new Map(); // id -> { box, time, detail, ... }
   let ids = [], rev = 0, reads = 0, clock = 0, W = null, local = {};
-  let nextItems = [], nextAt = 0, nextBusy = false, nextError = false, nextRetry = { key: '', at: 0 };
+  let nextItems = [], nextAt = 0, nextBusy = null, nextError = false, nextRetry = { key: '', at: 0 };
   let timerPending = false, advanced = '', timerFailed = '';
   const live = () => !!chrome.runtime?.id && ids.length > 0;
 
@@ -32,7 +32,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
     const key = `${local.todoCache?.key || location.origin} ${+start}`;
     const current = () => live() && X.on() && X.settings().enabled && token === rev && read === reads && url === location.href && document.visibilityState !== 'hidden' && ids.includes('next');
     if (isPreview || nextBusy || Date.now() - nextAt < 120000 || nextRetry.key === key && Date.now() < nextRetry.at || !current()) return;
-    nextBusy = true; nextAt = Date.now();
+    const pending = nextBusy = {}; nextAt = Date.now();
     try {
       if (['canvas', 'moodle'].includes(X.site)) {
         const week = await X.dueWeek();
@@ -48,18 +48,19 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
       if (!current()) return;
       const data = GZ_TODO.clean(raw[plan.key]), mode = GZ_SANITIZE(options).todo.done;
       nextItems = plan.items.filter((i) => i && !i.ov?.dismissed && !GZ_TODO.isDone(i, mode, data.items[`${i.type}:${i.id}`]?.done)); nextError = false;
-    } catch { nextRetry = { key, at: Date.now() + 60000 }; if (current()) { nextItems = []; nextAt = 0; nextError = true; } }
+    } catch { if (current()) { nextRetry = { key, at: Date.now() + 60000 }; nextItems = []; nextAt = 0; nextError = true; } }
     finally {
+      if (nextBusy !== pending) return;
       const fresh = current();
       if (!fresh) nextAt = 0;
-      nextBusy = false;
+      nextBusy = null;
       if (live()) draw();
     }
   };
   // The timer is the worker's (glaze:widgetTimer), shared with the dashboard's; the editor's preview keeps its own.
   const timerAction = async (op, node) => {
     if (!W || timerPending || !node.options) return;
-    timerPending = true;
+    const pending = timerPending = {};
     const token = rev, read = reads;
     let r;
     if (isPreview) {
@@ -69,6 +70,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
       if (op === 'toggle') timer = timer.end ? W.pause(timer, now) : W.start(timer, now, node.options);
       r = { ok: true, timer };
     } else r = await send({ type: 'glaze:widgetTimer', op });
+    if (timerPending !== pending) return;
     timerPending = false;
     if (!live() || token !== rev || read !== reads) return;
     node.status.textContent = r?.ok ? '' : t('Not saved. Try again in a moment.');
@@ -77,7 +79,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
     draw();
   };
   // A Canvas or Moodle item's address is a path on this site: anything that resolves elsewhere is dropped.
-  const here = (u) => { try { const url = new URL(u, location.origin); return url.origin === location.origin ? url.href : ''; } catch { return ''; } };
+  const here = (u) => { try { const url = new URL(u, location.origin); return /^https?:$/.test(url.protocol) && !url.username && !url.password && url.origin === location.origin ? url.href : ''; } catch { return ''; } };
   const draw = () => {
     clearTimeout(clock); clock = 0;
     if (!live() || document.visibilityState === 'hidden') return;
@@ -118,7 +120,7 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
     clock = setTimeout(draw, step - now % step + 5);
   };
 
-  const build = (id, token) => {
+  const build = (id) => {
     const box = part(make(id === 'next' ? 'a' : 'div', { className: 'widget' }), `widget ${id}`);
     box.dataset.w = id;
     if (id !== 'next') box.setAttribute('role', 'group');
@@ -137,8 +139,8 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
       box.append(icon('timer', 'w-icon'), time, go, reset, node.status); node.go = go;
       X.need('lib/widgets.js', () => globalThis.GZ_WIDGETS).then(async () => {
         const settings = await get('sync', 'widgets');
-        if (!live() || token !== rev || nodes.get(id) !== node) return;
-        W = GZ_WIDGETS; node.options = GZ_SANITIZE(settings).widgets; draw();
+        if (!live() || nodes.get(id) !== node) return;
+        W = GZ_WIDGETS; node.options ||= GZ_SANITIZE(settings).widgets; draw();
       }).catch(() => {});
     }
     if (id === 'pet') {
@@ -158,10 +160,14 @@ function GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview }) {
   const set = (list) => {
     const want = list.filter((id) => NAMES[id]);
     if (JSON.stringify(want) === JSON.stringify(ids)) return nodes;
-    const token = ++rev;
-    for (const [id, node] of nodes) if (!want.includes(id)) { node.pet?.stop(); node.box.remove(); nodes.delete(id); }
+    ++rev;
+    for (const [id, node] of nodes) if (!want.includes(id)) {
+      node.pet?.stop(); node.box.remove(); nodes.delete(id);
+      if (id === 'next') { nextBusy = null; nextItems = []; nextAt = 0; nextError = false; nextRetry = { key: '', at: 0 }; }
+      if (id === 'timer') { timerPending = false; advanced = timerFailed = ''; }
+    }
     ids = want;
-    for (const id of ids) if (!nodes.has(id)) nodes.set(id, build(id, token));
+    for (const id of ids) if (!nodes.has(id)) nodes.set(id, build(id));
     if (ids.length) { readLocal(); draw(); } else { clearTimeout(clock); clock = 0; }
     return nodes;
   };

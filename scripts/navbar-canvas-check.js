@@ -126,6 +126,9 @@ const api = async (route, method = 'GET', form) => {
     await login('STUDENT', credentials);
     ok(await page.locator('#header').evaluate((e) => getComputedStyle(e).display) === 'none', 'live replaces global nav by default');
     const native = await page.locator('#menu a[id]').evaluateAll((es) => es.map((e) => ({ id: e.id, badge: e.querySelector('.menu-item__badge')?.textContent.trim() || '' })));
+    await opts.evaluate(() => chrome.storage.sync.set({ navbarItems: { widgets: [{ id: 'clock', at: 'top' }, { id: 'timer', at: 'bottom' }] } }));
+    await wait(() => bar((r) => !!r.querySelector('.wtop [data-w="clock"] .w-time')?.textContent && !!r.querySelector('.wbottom [data-w="timer"] .w-time')?.textContent), Boolean, 'Canvas rail widgets ready');
+    ok(true, 'local Canvas renders the clock and timer in the rail');
     const model = await bar((r) => [...r.querySelectorAll('.rail .item[data-id]')].map((e) => ({ id: e.dataset.id, badge: e.querySelector('.badge')?.textContent || '' })));
     const L = require('../lib/navlayout.js');
     ok(native.filter((a) => L.canvas(a.id)).every((a) => model.some((b) => b.id === L.canvas(a.id) && b.badge === a.badge)), 'live items and badges match Canvas');
@@ -174,6 +177,8 @@ const api = async (route, method = 'GET', form) => {
     await shot('live-course-rtl'); await closePanel();
     await page.evaluate((d) => { if (d.html === null) document.documentElement.removeAttribute('dir'); else document.documentElement.setAttribute('dir', d.html); document.body.style.direction = d.body; }, direction);
     await set({ place: 'top' });
+    await wait(() => bar((r) => r.querySelectorAll('.twidgets .widget').length === 2 && !!r.querySelector('.twidgets [data-w="timer"] .w-time').textContent), Boolean, 'Canvas top widgets ready');
+    ok(true, 'local Canvas renders the clock and timer in the top bar');
     ok(await bar((r) => !r.querySelector('.tsub').hidden && r.querySelectorAll('.tsub .item').length > 0), 'live course menu is top-bar second row');
     await overlap('live course top'); await shot('live-course-top');
     await page.setViewportSize({ width: 1100, height: 1000 });
