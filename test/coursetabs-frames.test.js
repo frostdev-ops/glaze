@@ -297,7 +297,7 @@ test('four edited live frames refuse a fifth without opening or destroying a doc
   const shown = [], closed = [], notes = [];
   const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, LIVE: 4,
-    host: {}, strip: null, list: null, document: { activeElement: null }, location: {},
+    host: {}, strip: null, list: null, document: { activeElement: null }, location: {}, ctx: { site: 'ultra' },
     say: (m) => notes.push(m), t: (s) => s,
     open: (c) => { shown.push(c); return null; }, drop: (c) => closed.push(c),
   });

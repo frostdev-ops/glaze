@@ -491,7 +491,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!f) return;
     f.el.remove();
     frames.delete(cid);
-    if (waiting === cid) wait('');
+    if (waiting === cid) { ++showTurn; wait(''); }
     if (showing === cid && !replacing) show('');
   };
   // Canvas loads a whole page for each link, which here would end every tab's frame; Ultra routes in place, so its frames
@@ -551,21 +551,27 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (showing) frames.get(showing)?.el.contentWindow?.postMessage({ gzCtab: 'loading', cid }, location.origin);
   };
   const reveal = (cid) => {
-    if (ctx.site === 'canvas' && cid && !frames.has(cid) && on) {
+    if (ctx.site !== 'canvas') return show(cid);
+    const turn = ++showTurn;
+    wait(cid);
+    if (cid && !frames.has(cid) && on) {
       hostIn();
-      if (!room()) return;
+      if (!room()) { wait(''); return; }
       open(cid);
     }
     const f = cid && frames.get(cid);
-    if (ctx.site !== 'canvas' || !f || f.ready || f.slow) { wait(''); return show(cid); }
-    wait(cid);
+    if (!f || f.ready || f.slow) return show(cid);
     // The picture decoded first, so the switch goes straight from this page to it, with no bare ground between.
     const go = (s) => {
-      if (waiting !== cid || frames.get(cid) !== f || !fits(s, f.url)) return;
+      if (turn !== showTurn || waiting !== cid || frames.get(cid) !== f || !fits(s, f.url)) return;
       keep(s);
       const img = new Image();
       img.src = s.shot;
-      img.decode().catch(() => {}).then(() => { primed = s.shot; if (waiting === cid && frames.get(cid) === f && !f.ready) { wait(''); show(cid); } });
+      img.decode().catch(() => {}).then(() => {
+        if (turn !== showTurn || waiting !== cid || frames.get(cid) !== f || f.ready || f.slow || !fits(s, f.url)) return;
+        primed = s.shot;
+        show(cid);
+      });
     };
     const s = snaps.get(cid);
     if (s) go(s); else send({ op: 'get', cid }).then((r) => { if (r?.snap?.cid === cid) go(r.snap); });
@@ -604,7 +610,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         f.slow = false;
         f.ready = true;
         f.stale = null;
-        if (waiting === cid) { wait(''); show(cid); return; }
+        if (waiting === cid) { show(cid); return; }
         if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
         return;
       }
@@ -615,7 +621,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
           f.el.src = location.origin + f.url;
         } else {
           f.slow = true;
-          if (waiting === cid) { wait(''); show(cid); } else if (showing === cid) slowFrame(cid, f);
+          if (waiting === cid) show(cid); else if (showing === cid) slowFrame(cid, f);
         }
       }
       setTimeout(step, f.slow ? 1000 : 50);
@@ -674,16 +680,18 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const show = async (cid) => {
     const me = ++showTurn;
-    if (cid === showing) return;
+    if (ctx.site === 'canvas') wait(cid);
+    if (cid === showing) { if (ctx.site === 'canvas') { wait(''); primed = ''; } return; }
     // A picture of what goes under, if one is being taken (the press on a tab starts one), finishes first: taken after the
     // switch, it would be of the wrong page.
     if (shooting) await Promise.race([shooting, new Promise((r) => setTimeout(r, 200))]);
     if (me !== showTurn || (cid && !on)) return;
     const back = !!showing && !cid && (document.activeElement?.localName === 'iframe' || strip?.contains(document.activeElement));
     if (cid) hostIn();
-    if (cid && !frames.has(cid) && !room()) return;
+    if (cid && !frames.has(cid) && !room()) { if (ctx.site === 'canvas') wait(''); return; }
     const f = cid && (frames.get(cid) || open(cid));
-    if (cid && !f) return;
+    if (cid && !f) { if (ctx.site === 'canvas') wait(''); return; }
+    if (ctx.site === 'canvas') wait('');
     showing = cid;
     shownFrom = location.pathname + location.search;
     for (const [k, g] of [...frames]) if (g.away && k !== cid) drop(k, true);
@@ -697,6 +705,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     clearSlow();
     unpicture(true);
     if (f && !f.ready) { if (f.slow) slowFrame(cid, f); else picture(cid, f); }
+    primed = '';
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     ctx.scene();
     globalThis.GZ_PET_WORLD?.refresh();
@@ -1015,6 +1024,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       clearSlow();
       showing = '';
       waiting = '';
+      primed = '';
       host?.remove();
       host = null;
       html.removeAttribute('data-gz-ctab-framed');
@@ -1048,6 +1058,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (next <= epoch) return;
     epoch = next;
     snaps.clear();
+    primed = '';
     unpicture(true);
   };
   const hello = async () => {
