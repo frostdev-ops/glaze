@@ -150,6 +150,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const outside = !here() && loaded && tabs.length && (document.getElementById('main-content-inner') || document.getElementById('main-content'));
     return outside ? spot('page', outside.firstElementChild === strip, () => outside.prepend(strip)) : null;
   };
+  // Canvas's course menu sticks to the top of the page too: below the row holding the strip (canvas.css), at its height.
+  let sizedRow = null;
+  const rowSize = ctx.site === 'canvas' && typeof ResizeObserver === 'function'
+    ? new ResizeObserver(([e]) => html.style.setProperty('--gz-ctabs-row', `${Math.round(e.borderBoxSize?.[0]?.blockSize ?? e.target.offsetHeight)}px`)) : null;
+  const measureRow = (row) => {
+    if (!rowSize || row === sizedRow) return;
+    rowSize.disconnect();
+    sizedRow = row;
+    if (row) rowSize.observe(row); else html.style.removeProperty('--gz-ctabs-row');
+  };
   let clearHeader = null, hadClear = false;
   const keepClear = (header) => {
     if (header === clearHeader) return;
@@ -165,6 +175,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (hosted()) { keepClear(null); strip.remove(); return; }
     const w = home();
     keepClear(w?.clear || null);
+    measureRow(w?.at.startsWith('canvas-') ? w.clear : null);
     if (!w) { strip.remove(); return; }
     if (!w.ok) {
       // A node moved loses focus: given back to the tab that had it.
@@ -350,7 +361,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // finished building, without a tip of Glaze's. Taken as the student is about to leave it (a press on a tab or on a link
   // out of the course), and after it changes, scrolls or stays, at most each 15 s per page; at most one each 0.6 s (the browser
   // allows two a second). Shown only while a tab's frame first loads, at the window size it was taken at.
-  const loading = (el) => !!el && [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root' + (ctx.site === 'canvas' ? ', .loading, [aria-busy="true"]' : ''))].some(shown);
+  // The page's own markers only: Glaze's panels in it (its To Do, widgets) load on their own time.
+  const loading = (el) => !!el && [...el.querySelectorAll('.spinner, path[class*="makeStylesindeterminateSvg-"], .MuiSkeleton-root' + (ctx.site === 'canvas' ? ', .loading, [aria-busy="true"]' : ''))]
+    .some((e) => shown(e) && !e.closest('[id^="gz-"], [class^="gz-"], [class*=" gz-"]'));
   const split = (path) => { const i = path.indexOf('?'); return i < 0 ? [path, ''] : [path.slice(0, i), path.slice(i + 1)]; };
   // What is on screen: a tab's frame, or this page.
   const surface = () => {
@@ -883,6 +896,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!want) {
       html.removeAttribute('data-gz-ctabs');
       keepClear(null);
+      measureRow(null);
       if (!on) return;
       on = false;
       listen(false);

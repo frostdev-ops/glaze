@@ -1490,5 +1490,18 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 /* Canvas has one breadcrumb row. A full-width strip wraps above or below that row. */
 .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) { flex-wrap: wrap; height: auto; }
 .ic-app-nav-toggle-and-crumbs > #gz-ctabs { flex-basis: 100%; }
+/* As Ultra's course bar does, the row holding the strip stays at the top of the page as it scrolls (the page's scroller is
+   Canvas's drawer layout or the document), on a surface the page scrolls under, as Ultra's routed headers are. */
+.ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) {
+  position: sticky; top: 0; z-index: 11; /* over #main (relative, 10), which follows it */
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas));
+}
+/* The course menu sticks below it (--gz-ctabs-row: its height, features/coursetabs.js; unset without a strip there). */
+html[data-gz-ctabs] #sticky-container { top: var(--gz-ctabs-row, 0px); }
+/* Until it's in (it loads on demand), its place is held in a course's row while the tabs are on, so the row doesn't drop
+   when it comes: the default place and size on a page's first paint, the strip's own (data-gz-ctabs) after. */
+:is(html[data-gz-enhance-tabs]:not([data-gz-ctabs]), html[data-gz-ctabs]) .ic-app-nav-toggle-and-crumbs:has(#breadcrumbs a[href^="/courses/"]):not(:has(> #gz-ctabs)) { flex-wrap: wrap; height: auto; }
+:is(html[data-gz-enhance-tabs]:not([data-gz-ctabs]), html[data-gz-ctabs]) .ic-app-nav-toggle-and-crumbs:has(#breadcrumbs a[href^="/courses/"]):not(:has(> #gz-ctabs))::before { content: ""; order: -1; flex: 0 0 100%; height: var(--gz-ctabs-h, 40px); }
+html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs))::before { order: 99; }
 html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point, #gz-scene) { visibility: hidden !important; }
 html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"]) { visibility: visible; }
