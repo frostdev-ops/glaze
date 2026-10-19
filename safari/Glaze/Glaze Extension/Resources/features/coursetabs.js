@@ -1012,7 +1012,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (JSON.stringify(got) === JSON.stringify(tabs)) return;
       const mine = tabs.find((x) => x.cid === ctx.courseId());
       tabs = got.map((x) => (mine && x.cid === mine.cid ? { ...x, path: mine.path, top: mine.top } : x));
-      for (const cid of [...frames.keys()]) if (!tabs.some((x) => x.cid === cid)) drop(cid);
+      for (const cid of [...frames.keys()]) if (cid !== PAGE && !tabs.some((x) => x.cid === cid)) drop(cid); // (the page frame has no tab)
       if (ctx.site === 'canvas' && closedCourse && !showing && !waiting && !tabs.length) { route('/courses'); return; }
       pass();
     }
