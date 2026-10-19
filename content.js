@@ -1432,6 +1432,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     syncRules();
     clearSettings();
     globalThis.GZ_NAV_UI?.sync();
+    if (moodle) { globalThis.GZ_NAVBAR_UI?.sync(); html.removeAttribute('data-gz-navbar'); }
     syncDocTools();
     syncFooter();
   };
@@ -1451,8 +1452,21 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
   const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
   if (!partIn) takePart();
-  // Moodle has no part: a worn Look's nav layout (x.nav, features/nav.js) is all Glaze does to its nav.
-  if (moodle) X.syncNav = () => { if (window.top === window && ((links.length && GZ_CTX.parts()?.nav) || globalThis.GZ_NAV_UI)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), no); };
+  // Moodle: first paint and lazy navigation.
+  if (moodle) {
+    X.paintNav = () => {
+      if (window.top !== window) return;
+      const b = settings.navbar, course = /\bcourse-(?!1\b)\d+\b/.test(document.body?.className || '') || /\/course\/(view|section)\.php$/.test(location.pathname), c = course ? b.course : 'same';
+      const place = c === 'same' ? b.place : c === 'icons' ? 'rail' : c === 'hide' ? 'none' : 'top';
+      if (!globalThis.GZ_NAVBAR_UI?.live()) setAttr('data-gz-navbar', b.on && `${place}${place === 'rail' ? ` ${c === 'icons' ? 'icons' : b.rail}` : ''} ${b.style}${place !== 'none' && course && b.cmenu && document.querySelector('.secondary-navigation a[href]:not([href^="#"])') ? ' menu' : ''}`);
+    };
+    X.syncNav = () => {
+      if (window.top !== window) return;
+      if (globalThis.GZ_NAVBAR_UI || (links.length && settings.navbar.on)) need('features/navbar-moodle.js', () => globalThis.GZ_NAVBAR_MOODLE).then(() => need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), no);
+      if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
+      else if (links.length && !settings.navbar.on && GZ_CTX.parts()?.nav) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), no);
+    };
+  }
   // Wearing or taking off a Look can change the nav's layout (GZ_CTX.parts).
   document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 

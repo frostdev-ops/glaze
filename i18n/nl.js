@@ -2833,4 +2833,8 @@
   "Nothing here yet.": "Hier staat nog niets.",
   "The course's menu in the navigation": "Het menu van de cursus in de navigatie",
   "On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.": "Op Canvas en Moodle staan de eigen pagina’s van een cursus (Start, Modules, Cijfers…) in de navigatie, onder de naam van de cursus, in plaats van in een menu naast de pagina. Met een bovenbalk vormen ze een tweede rij eronder.",
+  "All notifications": "Alle meldingen",
+  "No notifications": "Geen meldingen",
+  "All messages": "Alle berichten",
+  "No conversations": "Geen gesprekken"
 };

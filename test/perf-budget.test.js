@@ -60,7 +60,9 @@ const MEDIA_BG = { ultra: 479 + 59, canvas: 479 + 59, moodle: 479 + 59 };
 // rail or top bar, floating or embedded, its own state inside a course and the course tabs in it): defaults.js's navbar
 // settings on every site (414 bytes), and on Ultra the words theme.css reserves the bar's room from and the hook that loads
 // features/navbar.js (677). The bar itself, its model and its sheet load on demand. Measured against 21a5d51c.
-const NAVBAR = { ultra: 414 + 677, canvas: 414, moodle: 414 };
+// Moodle navigation: the shared content.js first-paint words and lazy adapter/renderer hooks add 1026 bytes on
+// every site against 8f3085b0. Moodle has no initial site part; all data, panels and observation remain on demand.
+const NAVBAR = { ultra: 414 + 677 + 1026, canvas: 414 + 1026, moodle: 414 + 1026 };
 // Canvas course tabs' first paint (the owner approved raising first-script budgets, 2026-10-19): content-canvas.js writes
 // data-gz-ctabs from this browser tab's last strip before the first paint, as content-ultra.js does, so canvas.css holds the
 // strip's exact room (570 bytes on Canvas), with content.js's hook for it (34 on every site). Measured against 54c0fdba.

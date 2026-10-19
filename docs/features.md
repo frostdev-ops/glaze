@@ -102,7 +102,7 @@ Notes **Back up or restore** opens **Settings → Backup and privacy → Notes b
 
 ## Glaze navigation
 
-On by default on Blackboard Ultra (Canvas and Moodle next), Glaze draws its own navigation in place of the site's, set
+On by default on Blackboard Ultra and Moodle (Canvas next), Glaze draws its own navigation in place of the site's, set
 up in Settings → **Navigation**. **Placement**: a side rail, open with labels or icons only (with a tooltip on each and
 a peek when you point at it or move focus into it), or a top bar whose items move under **More** when they don't fit.
 **Style**: floating glass with a little room around it, or embedded at the page's edge. **Inside a course** it can stay
@@ -114,6 +114,8 @@ place) or none. On a phone it is
 a bottom bar of four tabs and More, whose sheet holds the rest, the course tabs, your account, signing out and
 **Customize navigation**. The page keeps the bar's room from first paint, and the chevron and pin are saved for every
 tab.
+
+On Moodle, the bar replaces the top navigation and phone hamburger. Profile, notifications and conversations open in Glaze panels; messages link to Moodle's full messaging page. A course's secondary navigation, including More links, appears in the rail or the top bar's second row when **Course menu** is on. The course index and block drawers remain available. Turning navigation off restores Moodle's own navigation.
 
 **Navigation items** renames, re-icons, reorders and groups every item, hides any of them, picks the four phone tabs,
 adds up to eight links of your own, and turns on Notes, To Do, search and Glaze settings (off by default). A worn Look's

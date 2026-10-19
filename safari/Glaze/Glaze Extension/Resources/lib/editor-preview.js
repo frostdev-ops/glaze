@@ -30,6 +30,7 @@
     if (next.site !== site) return;
     context = { site, page: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'].includes(next.page) ? next.page : 'courses', viewport: next.viewport === 'phone' ? 'phone' : 'desktop' };
     applyContext();
+    if (site === 'moodle') { document.body.className = ['outline', 'tabs'].includes(context.page) ? 'pagelayout-course course-5' : 'pagelayout-mydashboard'; globalThis.GZ_NAVBAR_UI?.sync(); }
     if (site === 'canvas') globalThis.GZ_CTABS?.sync(settings.enabled && settings.enhance.tabs && context.page === 'tabs');
   });
   // The editor's Play and Try it (lib/editor-x.js): 'enter' replays the entrances, an event name fires that moment as the
@@ -68,6 +69,7 @@
     const picture = async (id, url = '') => id ? (await chrome.storage.local.get(`cardImg:${id}`))[`cardImg:${id}`] || '' : url;
     const paint = async () => {
       globalThis.GZ_RULES?.sync();
+      if (site === 'moodle') globalThis.GZ_NAVBAR_UI?.sync();
       if (site === 'canvas') globalThis.GZ_CTABS?.sync(settings.enabled && settings.enhance.tabs && context.page === 'tabs');
       const mine = ++revision, s = settings, colors = GZ_ACTIVE_COLORS(s, matchMedia('(prefers-color-scheme: dark)').matches);
       for (const link of sheets) link.disabled = !s.enabled;
@@ -122,6 +124,7 @@
       locale: () => settings.lang === 'auto' ? navigator.language : settings.lang, nickOf: () => '',
       courseList: () => Object.fromEntries(['#3b82f6', '#db2777', '#16a34a'].map((color, i) => [`canvas:${location.origin}/${i + 1}`, { color }])),
       scene: () => {},
+      ...(site === 'moodle' ? { setVar: (key, value) => variable(key, value), nav: () => settings.nav } : {}),
       on: () => settings.enabled,
       parts: () => (settings.enabled && context.page !== 'quiz' && globalThis.GZ_XPARTS_PAGE?.now()) || null,
       need: (file, ready) => ready() ? Promise.resolve() : load(file),
@@ -130,6 +133,7 @@
     // The Look's page tweaks and motion on the mock, through the page's own code (each reads GZ_CTX as it loads).
     for (const file of ['lib/lookx.js', 'features/rules.js', 'features/motionx.js']) await load(file);
     if (site === 'canvas') await load('features/coursetabs.js');
+    if (site === 'moodle') for (const file of ['lib/navbar.js', 'features/navbar-moodle.js', 'features/navbar.js']) await load(file);
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', paint);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paint);
     document.addEventListener('glaze:parts', paint);
