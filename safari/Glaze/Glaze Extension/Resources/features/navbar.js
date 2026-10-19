@@ -75,6 +75,17 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     return items.length ? { name: String(m.name || '').replace(/\s+/g, ' ').trim().slice(0, 80), color: /^#[0-9a-f]{3,8}$/i.test(m.color || '') ? m.color : '', items } : null;
   };
 
+  // A mod's layout the bar wears (features/mods.js): said quietly beside Customize navigation, with the way back.
+  const arranged = () => globalThis.GZ_MODS?.arranger?.() || null;
+  const arrangedRow = (role) => {
+    const a = arranged();
+    if (!a) return [];
+    const b = part(make('button', { type: 'button', className: 'row customize' }, icon('layers'), make('span', { textContent: `${t('Arranged by {name}', { name: a.name })} · ${t('Use my own')}` })), 'row arranged');
+    b.dataset.act = 'nav-own'; b.dataset.mod = a.id;
+    if (role) b.setAttribute('role', role);
+    return [b];
+  };
+
   // ---- drawing --------------------------------------------------------------------------------------------------------
   const sep = () => part(make('div', { className: 'divider', role: 'separator' }), 'divider');
   const mount = () => {
@@ -179,7 +190,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const e = node(item, 'item', 'item');
     const b = badgeOf(item);
     put(e, icon(item.icon), label(item.label, i), b ? badge(b) : null);
-    e.dataset.tip = b ? `${item.label} · ${b}` : item.label;
+    e.dataset.tip = [item.label, b, item.by].filter(Boolean).join(' · ');
+    if (item.by) e.setAttribute('aria-description', t('From {name}', { name: item.by }));
     return e;
   };
   const initials = (name) => [...(name.match(/\p{L}[\p{L}'’-]*/gu) || [])].filter((w, i, a) => i === 0 || i === a.length - 1).map((w) => [...w][0].toUpperCase()).join('') || [...name.trim()][0] || '?';
@@ -345,7 +357,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (model.signout) sheetRows.push(row(model.signout));
     const custom = part(make('button', { type: 'button', className: 'row customize' }, icon('settings'), make('span', { textContent: t('Customize navigation') })), 'row customize');
     custom.dataset.act = 'customize';
-    sheetRows.push(custom);
+    sheetRows.push(custom, ...arrangedRow());
     el.sheet.replaceChildren(...sheetRows);
     if (menu) menuTo('', false);
     for (const e of root.querySelectorAll('[data-id]')) if (byId(e.dataset.id)?.panel) { e.setAttribute('aria-haspopup', 'dialog'); e.setAttribute('aria-expanded', String(panel === e.dataset.id)); }
@@ -528,7 +540,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       : [model.account && entry({ ...model.account, label: t('Account') }), model.signout && entry(model.signout)].filter(Boolean);
     const custom = make('button', { type: 'button', className: 'row customize' }, icon('settings'), make('span', { textContent: t('Customize navigation') }));
     custom.dataset.act = 'customize'; custom.setAttribute('role', 'menuitem');
-    el.menu.replaceChildren(...items, sep(), custom);
+    el.menu.replaceChildren(...items, sep(), custom, ...arrangedRow('menuitem'));
     el.menu.setAttribute('aria-label', which === 'more' ? t('More') : t('Your account'));
     el.menu.hidden = false;
     const r = from.getBoundingClientRect(), w = el.menu.offsetWidth;
@@ -657,6 +669,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 
   // ---- acting ---------------------------------------------------------------------------------------------------------
   const glaze = (what, e) => {
+    // "Use my own": this mod's layouts stay off until the student lets it arrange again (Settings → Navigation).
+    if (what === 'nav-own') { const id = e?.target?.closest?.('[data-mod]')?.dataset.mod || arranged()?.id; if (id && /^[a-z2-7]{16}$/.test(id)) try { chrome.storage.local.set({ [`modNavLayout:${id}`]: false }); } catch { /* reloaded */ } return; }
     // Settings opens as a page of the site, beside the bar (features/settingspage.js); the editor's preview keeps a tab.
     if (what === 'settings' || what === 'customize') {
       const tab = () => send(what === 'customize' ? { type: 'glaze:sessions-open', section: 'navigation/bar' } : 'options');
@@ -739,7 +753,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     emit('navigate', { id: item.id });
     // The course's own pages: through the course tabs where they run, so a course tab's frame follows.
     if (item.course) { if (plain(e) && !item.tab) { e.preventDefault(); openHere(item.href); } sheetTo(false); if (!lay.open) peekTo(false); return; }
-    if (item.owner) { if (!item.href) e.preventDefault(); mods.get(item.owner)?.get(item.id)?.select?.(); }
+    if (item.owner) { if (!item.href) e.preventDefault(); if (e.isTrusted) mods.get(item.owner)?.get(item.id)?.select?.(); }
     else if (item.action) { e.preventDefault(); glaze(item.action, e); }
     // The site's own items go through its own links, so its router (and its trays) handle them as it would.
     else if (item.native && plain(e)) { e.preventDefault(); goNative(item.id); }
@@ -820,6 +834,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (rail && rail === settings().rail) rail = null;
     if (host && !host.isConnected) stop();
     if (!host) mount();
+    // A mod's nav stands in for the bar (features/mods.js): the bar hides, and still keeps the page's room.
+    host.style.display = globalThis.GZ_MODS?.navStands?.() ? 'none' : '';
     host.setAttribute('dir', (html.dir || document.body?.dir) === 'rtl' ? 'rtl' : 'ltr');
     host.dataset.motion = html.getAttribute('data-gz-motion') || '';
     host.toggleAttribute('data-footer', html.hasAttribute('data-gz-footer'));
@@ -833,7 +849,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       if (current) e.setAttribute('aria-current', 'page'); else e.removeAttribute('aria-current');
     }
     cmenu = readMenu();
-    lay = M.layout(settings(), { width: innerWidth, course: inCourse(), rail, tabs: !!api, menu: !!cmenu });
+    const by = arranged(), place = { left: 'rail', top: 'top' }[by?.place];
+    lay = M.layout(place ? { ...settings(), place } : settings(), { width: innerWidth, course: inCourse(), rail, tabs: !!api, menu: !!cmenu });
     rows = lay.tabs && api ? api.rows() : [];
     // A course tab shown over the page is in Courses, whatever the page under it is.
     const framed = !!globalThis.GZ_CTABS?.showing?.() && globalThis.GZ_CTABS.showing() !== 'page'; // (not Canvas's page frame: the page in it says)
@@ -853,7 +870,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     wx?.set(wants);
     const docks = [...(globalThis.GZ_MODS?.rail() || []), ...(globalThis.GZ_MODWIDGETS?.rail() || [])];
     for (const d of docks) if (d.el.parentNode !== el.dock) el.dock.append(d.el);
-    const next = JSON.stringify([model, rows, lay, cmenu, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url, !!wx, docks.map((d) => d.key), wide()]);
+    const next = JSON.stringify([model, rows, lay, cmenu, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url, by, !!wx, docks.map((d) => d.key), wide()]);
     if (next !== sig) { sig = next; render(); emit('change', view()); } else if (measured !== geometry()) layout();
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
@@ -881,7 +898,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     place: lay?.place || 'none', style: lay?.style || 'float', course: inCourse(), menu: cmenu ? { name: cmenu.name, items: cmenu.items.map(strip) } : null, panel } : null);
   const OWNER = /^[a-z0-9][a-z0-9_-]{0,47}$/, ID = /^[a-z][a-z0-9-]{0,31}$/;
   const SLOTS = ['top', 'bottom'];
-  // A mod's item, checked: a name, one of the bar's icons, an https address or the page's own, a short badge, and a
+  // A mod's item, checked: a name, one of the bar's icons, an address of this site only, a short badge, and a
   // group of the bar or a slot. Anything else refuses (null).
   const check = (owner, raw) => {
     if (!OWNER.test(owner) || !raw || typeof raw !== 'object' || !ID.test(raw.id) || typeof raw.label !== 'string') return null;
@@ -890,13 +907,14 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     let href = '';
     if (raw.href !== undefined && raw.href !== '') {
       if (typeof raw.href !== 'string' || raw.href.length > 512) return null;
-      try { const u = new URL(raw.href, location.href); if (!['http:', 'https:'].includes(u.protocol) || u.protocol !== 'https:' && u.origin !== location.origin || u.username || u.password || u.href.length > 512) return null; href = u.href; } catch { return null; }
+      try { const u = new URL(raw.href, location.href); if (!['http:', 'https:'].includes(u.protocol) || u.origin !== location.origin || u.username || u.password || u.href.length > 512) return null; href = u.href; } catch { return null; }
     }
     if (raw.icon !== undefined && !M.PICKS.includes(raw.icon)) return null;
     if (raw.badge !== undefined && !(typeof raw.badge === 'number' || (typeof raw.badge === 'string' && [...raw.badge].length <= 4))) return null;
     if (raw.slot !== undefined && !SLOTS.includes(raw.slot)) return null;
-    if (raw.group !== undefined && typeof raw.group !== 'string') return null;
-    return { id: `mod:${owner}.${raw.id}`, owner, label, icon: raw.icon || 'link', href, badge: raw.badge ?? '', group: raw.group, slot: raw.slot, select: typeof raw.select === 'function' ? raw.select : null };
+    if (raw.group !== undefined && typeof raw.group !== 'string' && !Number.isInteger(raw.group)) return null;
+    const by = typeof raw.by === 'string' ? raw.by.replace(/[\p{Cc}\p{Bidi_Control}]/gu, ' ').trim().slice(0, 80) : '';
+    return { id: `mod:${owner}.${raw.id}`, owner, label, icon: raw.icon || 'link', href, badge: raw.badge ?? '', group: raw.group, slot: raw.slot, by, select: typeof raw.select === 'function' ? raw.select : null };
   };
   const api = {
     sync,

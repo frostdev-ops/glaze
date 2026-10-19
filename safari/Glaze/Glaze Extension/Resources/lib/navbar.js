@@ -129,7 +129,8 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
   //   native: [{ id, label, href, active, badge, panel }] the page's own items, in its order (the site's adapter reads them);
   //     panel: the site opens it as a menu of its own (Canvas's trays), which Glaze draws as a panel instead
   //   prefs: clean()'s navbarItems; look: a worn Look's x.nav (GZ_NAV_LAYOUT.clean); legacy: navItems (lib/nav-items.js)
-  //   mods: [{ owner, id, label, icon, href, badge, group, slot }] items mods added (features/navbar.js checks them)
+  //   mods: [{ owner, id, label, icon, href, badge, group, slot, by }] items mods added (features/navbar.js checks them); group: a
+//     group's id, label or place; by: the mod's name
   //   names: { notes, todo, search, settings }: Glaze's own items' names, in the page's language
   // -> { groups: [{ id, label, items }], slots: { top, bottom }, account, signout, tabs, sheet, items, widgets }
   // widgets: [{ id, at }] the student's (prefs.widgets), else a worn Look's (its w: items, at the top), else the older rail's.
@@ -147,7 +148,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     const links = [...(look?.links || legacy?.links || []), ...p.links];
     for (const l of links) add({ id: `link:${l.id}`, label: l.n, icon: PICKS.includes(l.i) ? l.i : 'link', href: l.u, tab: l.tab === true, active: false, badge: '' });
     for (const g of p.glaze) add({ id: `glaze:${g}`, label: names[g] || { notes: 'Notes', todo: 'To Do', search: 'Search', settings: 'Glaze settings' }[g], icon: g === 'settings' ? 'glaze' : g, action: g, active: false, badge: '' });
-    for (const m of mods) if (m && MOD.test(m.id)) add({ id: m.id, label: text(m.label, 40) || m.id, icon: PICKS.includes(m.icon) ? m.icon : 'link', href: m.href || '', action: m.href ? '' : 'mod', active: false, badge: badge(m.badge), owner: m.owner, group: m.group, slot: m.slot });
+    for (const m of mods) if (m && MOD.test(m.id)) add({ id: m.id, label: text(m.label, 40) || m.id, icon: PICKS.includes(m.icon) ? m.icon : 'link', href: m.href || '', action: m.href ? '' : 'mod', active: false, badge: badge(m.badge), owner: m.owner, group: m.group, slot: m.slot, by: text(m.by, 80) });
     // Names, icons and hiding: the student's own where they set one, else the worn Look's, else the older rail's.
     const legacyHidden = new Set(look ? [] : legacy?.hidden || []);
     for (const item of pool.values()) {
@@ -171,7 +172,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
       if (placed.has(item.id)) continue;
       placed.add(item.id);
       if (item.owner && slots[item.slot]) { slots[item.slot].push(item); continue; }
-      const own = item.owner && groups.find((g) => g.id === item.group);
+      const own = item.owner && (Number.isInteger(item.group) ? groups[item.group] : groups.find((g) => g.id === item.group || (g.label && g.label === item.group)));
       const fallback = groups.find((g) => g.id === DEFAULT.find((d) => d.items.includes(item.id))?.id) || groups[0];
       (own || (item.native ? fallback : groups.at(-1))).items.push(item);
     }

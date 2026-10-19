@@ -227,9 +227,9 @@ test("a mod's items are checked: name, icon, address, badge, place; one owner ca
     chrome: { runtime: { id: 'x' }, storage: { onChanged: { addListener: noop } } },
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => false, settings: () => ({ enabled: true, navbar: { on: false } }), parts: () => null, setVar: noop } });
   const ui = vm.runInContext(read('features/navbar.js'), ctx);
-  assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'star', href: 'https://due.test/', badge: 3, group: 'main' }), true);
+  assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'star', href: 'https://school.test/ultra/calendar', badge: 3, group: 'main' }), true);
   for (const bad of [{ id: 'Next', label: 'x' }, { id: 'a', label: '' }, { id: 'a', label: 'x'.repeat(41) }, { id: 'a', label: 'x', href: 'javascript:alert(1)' }, { id: 'a', label: 'x', href: 'http://plain.test/' },
-    ...['blob:https://school.test/id', 'https://user:pass@due.test/', null, 1, {}].map((href) => ({ id: 'a', label: 'x', href })),
+    ...['blob:https://school.test/id', 'https://user:pass@due.test/', 'https://due.test/', 'https://school.test.evil.test/', null, 1, {}].map((href) => ({ id: 'a', label: 'x', href })),
     { id: 'a', label: 'x', icon: 'skull' }, { id: 'a', label: 'x', badge: 'toolong' }, { id: 'a', label: 'x', slot: 'side' }, null]) assert.equal(ui.add('countdown', bad), false, JSON.stringify(bad));
   assert.equal(ui.add('Bad Owner', { id: 'a', label: 'x' }), false);
   assert.equal(ui.update('other', 'next', { label: 'Hijack' }), false);

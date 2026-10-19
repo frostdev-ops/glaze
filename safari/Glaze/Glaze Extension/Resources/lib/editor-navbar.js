@@ -195,6 +195,21 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
       if (c.navbarItems && !writing && JSON.stringify(M().clean(c.navbarItems.newValue)) !== written) { load(); return; }
       if (c.navItems || c.navbarItems) render();
     });
+    // Mods that may arrange the bar (nav.layout granted, or told "Use my own" in the bar): each one's switch, storage.local
+    // modNavLayout:<id> (false: its layouts stay off).
+    const mods = () => !chrome.storage.local ? Promise.resolve() : chrome.storage.local.get('mods').then((r) => { const ids = (Array.isArray(r.mods) ? r.mods : []).filter((id) => typeof id === 'string' && /^[a-z2-7]{16}$/.test(id)); return chrome.storage.local.get(['mods', ...ids.flatMap((id) => [`mod:${id}`, `modNavLayout:${id}`])]); }).then((all) => {
+      const box = $('#nbar-mods');
+      if (!box) return;
+      const ids = (Array.isArray(all.mods) ? all.mods : []).filter((id) => typeof id === 'string' && all[`mod:${id}`]?.manifest && (all[`modNavLayout:${id}`] === false || all[`mod:${id}`].grants?.['nav.layout'] === true));
+      box.replaceChildren(...ids.map((id) => {
+        const c = node('input', { type: 'checkbox', checked: all[`modNavLayout:${id}`] !== false });
+        c.addEventListener('change', () => chrome.storage.local.set({ [`modNavLayout:${id}`]: c.checked }));
+        return node('li', {}, node('label', {}, c, t('Let {name} arrange it', { name: String(all[`mod:${id}`].manifest.name || '').slice(0, 40) })));
+      }));
+      if (!ids.length) box.replaceChildren(node('li', { className: 'desc', textContent: t('No mod arranges it.') }));
+    }, () => {});
+    chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c && Object.keys(c).some((k) => k === 'mods' || k.startsWith('mod:') || k.startsWith('modNavLayout:'))) mods(); });
+    mods();
     load();
     return { render, load };
   };
