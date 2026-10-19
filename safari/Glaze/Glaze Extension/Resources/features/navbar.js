@@ -14,7 +14,7 @@
 // A site's adapter (GZ_NAVBAR_<SITE>(X), below for Ultra, features/navbar-<site>.js for the others):
 //   read() -> [{ id, label, href, active, badge, panel }]   the site's own items (lib/navlayout.js's vocabulary)
 //   go(id) -> bool             open one through the site's own link     brand() -> { src, name }    avatar() -> url
-//   home() -> id               the logo's item                          main() -> the page's main element
+//   home() -> id               the logo's item                          main(doc) -> the main element of doc (the page, or the course tab's frame on screen)
 //   observe(fn), unobserve()   call fn when the site's nav changes
 //   inCourse() -> bool         (optional) a course is open
 //   menu(doc) -> { name, color, items: [{ key, label, href, active, badge, tab }] } | null   (optional) the open course's own
@@ -256,7 +256,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.tdock.setAttribute('aria-expanded', String(docked));
   };
   const render = () => {
-    const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tabs, .sheet, .menu'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
+    const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tsub, .tabs, .sheet, .menu'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
     const tabAt = focusedTab ? [...pane.querySelectorAll('.ctab-go')].findIndex((e) => e.dataset.cid === active.dataset.cid) : -1, wasMenu = menu;
     brandInto(el.brand); brandInto(el.tbrand);
     // The rail: groups, a divider between, the course tabs, the active marker that glides from item to item.
@@ -719,7 +719,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       else if (path.includes(el.more)) { e.preventDefault(); sheetTo(!sheetOpen); }
       else if (path.includes(el.tmore)) { e.preventDefault(); menuTo(menu === 'more' ? '' : 'more'); }
       else if (path.includes(el.tacc)) { e.preventDefault(); if (model.account?.panel && site.panel) panelTo(panel === 'profile' ? '' : 'profile', el.tacc); else menuTo(menu === 'account' ? '' : 'account'); }
-      else if (path.includes(el.skip)) { e.preventDefault(); const main = site.main(); if (main) { if (!main.hasAttribute('tabindex')) { skipMain.add(main); main.tabIndex = -1; } main.focus(); } }
+      else if (path.includes(el.skip)) { e.preventDefault(); const main = site.main(tabsApi()?.doc?.()); if (main) { if (!main.hasAttribute('tabindex')) { skipMain.add(main); main.tabIndex = -1; } main.focus(); } }
       return;
     }
     const act = target.dataset.act;
