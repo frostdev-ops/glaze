@@ -1000,7 +1000,7 @@ GZ_UI.load().then((s) => {
       try { await navigator.clipboard.writeText($('#gcal-id').value); hint(t('Copied.')); } catch { $('#gcal-id').select(); hint(t('Copy the code from the box.')); }
     });
     // Escape keeps the last returnValue, so each question starts from none.
-    $('#gcal-disconnect').addEventListener('click', () => { $('#gcal-drop').checked = false; $('#gcal-bye').returnValue = ''; $('#gcal-bye').showModal(); });
+    $('#gcal-disconnect').addEventListener('click', () => { $('#gcal-drop').checked = false; $('#gcal-bye').returnValue = ''; $('#gcal-bye').showModal(); $('#gcal-bye-cancel').focus(); }); // focused here, not by autofocus: Settings can be a frame of a school page, where browsers refuse autofocus
     $('#gcal-bye').addEventListener('close', async () => {
       if ($('#gcal-bye').returnValue !== 'ok') return $('#gcal-disconnect').focus();
       const r = await gcalOp({ op: 'disconnect', drop: $('#gcal-drop').checked });
