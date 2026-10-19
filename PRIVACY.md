@@ -61,7 +61,7 @@ session deletion or expiry. Recipients and operator backups may keep copies.
 
 ## Optional encrypted share sessions
 
-Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's settings or in the Notes share panel. That panel is an extension page framed inside the Notes view: the school page cannot read it, and it posts nothing to the page. Each opening gets a one-use ticket from the worker, bound to that tab, Notes account and note, and claimed by the first panel frame. The frame sits in a closed shadow root, so page scripts cannot copy its address. The panel sees and acts on only that account's sessions. It can only list, create (that note), join, copy, leave or stop sessions; keys, backups and the relay setting stay in settings. Its buttons ignore clicks until they have been on screen for a moment, and, where the browser can tell, while the page covers, fades or moves them. Glaze checks the selected origin's browser permission and requests it only if missing. Glaze's required `<all_urls>` access already covers the default relay, custom HTTPS relays and `http://localhost` or `http://127.0.0.1` relays for local testing, so none is declared separately. A browser prompt is only needed when the selected origin's access is missing or withheld. Device-local consent gates session traffic independently. Pause aborts requests and closes the live connections. Backup/key restore never enables sharing. No session connection runs without an open Notes, To Do or settings Sharing tab. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
+Sharing is off on each device until a trusted Create, Join or Resume action in Glaze's settings or in the Notes share panel. That panel is an extension page framed inside the Notes view: the school page cannot read it, and it posts nothing to the page. Each opening gets a one-use ticket from the worker, bound to that tab, Notes account and note. It is delivered directly to the extension frame, never in a URL, and consumed by a runtime port. Closing, reloading or replacing the panel revokes that port; after a worker restart, close the panel and open Share again. The frame sits in a closed shadow root. The panel sees and acts on only that account's sessions. It can only list, create (that note), join, copy, leave or stop sessions; keys, backups and the relay setting stay in settings. Its action buttons require verified IntersectionObserver v2 visibility, full intersection and a stable button rectangle for at least half a second. Browsers without that protection keep the embedded actions disabled; use Glaze Settings for sharing there. Browser visibility observations are asynchronous, so native browser testing remains necessary for rapid parent-page layout changes. Glaze checks the selected origin's browser permission and requests it only if missing. Glaze's required `<all_urls>` access already covers the default relay, custom HTTPS relays and `http://localhost` or `http://127.0.0.1` relays for local testing, so none is declared separately. A browser prompt is only needed when the selected origin's access is missing or withheld. Device-local consent gates session traffic independently. Pause aborts requests and closes the live connections. Backup/key restore never enables sharing. No session connection runs without an open Notes, To Do or settings Sharing tab. Pause, Leave, Delete and key restore interrupt active sync before waiting for the local storage queue; older queued syncs and callbacks are discarded. A closed or replaced Notes/To Do surface cannot leave a hidden live port.
 
 The Relay preference (`shareRelay`) is stored in browser sync, without credentials, and applies only to new sessions. Each existing session and backup key retains its own server. Entering or saving a relay URL makes no request and grants no host consent. **Test connection** explicitly sends a credential-free HTTP `GET /health` to the entered server, bounded to five seconds and 1 KiB of response, refusing redirects and suppressing the referrer; it does not save the URL or enable sharing. HTTP session requests also omit browser credentials and refuse redirects; live updates keep the existing native WebSocket transport. A custom-server invite names its host and requires confirmation in the extension before permission checks or joining. Device-local approved hosts (`shareHosts`) do not sync. Imported keys stay paused; Resume confirms previously unapproved hosts.
 
@@ -295,19 +295,19 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   record, keeping only when it was deleted (so a late save from another tab can't bring it back); the GPA scale and
   tasks stay until you change them there. Only the first 200,000 characters of a syllabus are read, and the review says
   so when there were more.
-- **Course tabs** (Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
+- **Course tabs** (Canvas and Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
   pinned, when it was last used, its own-course URL including query parameters, and scroll position. Any previously
   opened course page can reopen, including a test, attempt, discussion or message. Glaze does not press controls there.
   Closing a tab removes its entry and live frame. The surrounding page owns list writes; live frames report only their
   own place so a late frame save cannot overwrite another tab's pin, order or closure.
-  **Live pages** run as ordinary same-origin Blackboard frames, up to four frames alongside the surrounding page, with their scripts, form values and native
+  **Live pages** run as ordinary same-origin Canvas or Blackboard frames, up to four frames alongside the surrounding page, with their scripts, form values and native
   requests still active while hidden. Edited pages are excluded from automatic eviction after trusted input, change
   or submit events; if all four are protected, another page waits until you explicitly close one. Protection is
   conservative until closure and does not identify every native operation. Closing, reloading, signing out or disabling
   tabs can discard unsaved native work. A clean older frame can stop to make room; reopening restores its URL and saved
-  scroll, not arbitrary native state. These frames are not isolated from the surrounding Blackboard page.
-  **Pictures for first load** are JPEG captures of the visible Blackboard browser tab, kept only in page memory and
+  scroll, not arbitrary native state. These frames are not isolated from the surrounding school page.
+  **Pictures for first load** are JPEG captures of the visible Canvas or Blackboard browser tab, kept only in page memory and
   `chrome.storage.session` (the browser's in-memory extension storage), or worker memory where that API is unavailable.
   Captures can include visible form text, media, Glaze tools and other content on that tab; they are blurred while shown.
   Each picture is at most 3,000,000 data-URL characters and all pictures together at most 8,000,000, oldest first.
@@ -337,15 +337,15 @@ you import) are bundled. It makes requests in these cases:
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
   site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
   session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
-- **Course tabs.** To keep each account's tabs apart, Glaze asks your own Blackboard site who is signed in (Ultra's
-  `/learn/api/v1/users/me`, which Ultra itself asks on every page), once a page, shared with the grade and course-list
+- **Course tabs.** To keep each account's tabs apart, Glaze asks your own school site who is signed in (Canvas's
+  `/api/v1/users/self/profile` or Ultra's `/learn/api/v1/users/me`), once a page, shared with the existing profile and course-list
   reads above. A tab you pick from the strip opens that course's own-site address in a frame over the page, only
   when you pick it, and keeps it running while you're on another tab (four at most), as a browser keeps its tabs; it
   stops when you close the tab, sign out, or turn the tabs or Glaze off. While a tab's page first loads, a blurred
-  picture of how it last looked covers it: Glaze's worker takes pictures of the Blackboard tab on screen (checking
+  picture of how it last looked covers it: Glaze's worker takes pictures of the Canvas or Blackboard tab on screen (checking
   before and after that it still is), keeps them in memory (storage.session, never on disk) and they go when the
   browser closes, on sign-out, or when the tabs or Glaze are turned off. Showing one makes no requests. Glaze never
-  prefetches a course.
+  prefetches a course. Frames load your school’s own pages with your existing session; nothing new leaves the device.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette

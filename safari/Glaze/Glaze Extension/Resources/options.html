@@ -95,6 +95,53 @@
   .nav-editor-list li[data-drop] { outline: 2px solid var(--gz-accent); }
   #nav-link-icon-preview { width: 24px; height: 24px; flex: none; }
   .nav-section-heading { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
+  /* Glaze navigation (the Navigation tab; lib/editor-navbar.js draws the items). Choice cards with a picture of each layout. */
+  .nb-master { padding: .85rem 1rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 5 / 6); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
+  .nb-body { display: grid; gap: 1.4rem; margin-top: 1.1rem; }
+  .nb-body[hidden], .nb-group[hidden] { display: none; }
+  .nb-group { display: grid; gap: .6rem; }
+  .nb-group > h3, #navbar-items > h3 { margin: 0; font-size: 13px; letter-spacing: .02em; color: var(--gz-ink-muted); }
+  .seg.nb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 220px)); gap: .75rem; padding: 0; border: 0; border-radius: 0; background: none; }
+  .seg.nb-cards label { position: relative; display: grid; gap: .35rem; align-content: start; padding: .75rem; border-radius: calc(var(--gz-radius, 12px) * 5 / 6); border: 1px solid var(--gz-border-line, var(--gz-line)); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); font-size: 13px; cursor: pointer; transition: border-color .2s var(--gz-ease), box-shadow .2s var(--gz-ease), transform .2s var(--gz-ease); }
+  .seg.nb-cards label:hover { border-color: var(--gz-border-strong, var(--gz-line-strong)); transform: translateY(-1px); }
+  .seg.nb-cards label:has(input:checked) { border-color: var(--gz-accent); box-shadow: 0 0 0 1px var(--gz-accent), 0 8px 24px color-mix(in srgb, var(--gz-accent) 18%, transparent); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-accent-soft) 45%, var(--gz-surface-fill, var(--gz-surface))); color: var(--gz-ink); font-weight: 400; }
+  .seg.nb-cards label:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
+  .seg.nb-cards b { font-size: 14px; }
+  .seg.nb-cards .desc { margin: 0; }
+  .nb-thumb { width: 100%; height: auto; display: block; }
+  .nb-thumb .pg { fill: var(--gz-surface-2); stroke: var(--gz-border-line, var(--gz-line)); }
+  .nb-thumb .bar { fill: color-mix(in srgb, var(--gz-accent) 32%, var(--gz-surface)); }
+  .nb-thumb .ln { fill: color-mix(in srgb, var(--gz-ink-muted) 22%, transparent); }
+  .nb-thumb .it { fill: var(--gz-accent-hi); }
+  .nb-note p { margin: 0 0 .35rem; }
+  .nb-note { margin: .25rem 0 1rem; padding: .7rem .85rem; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); border: 1px solid color-mix(in srgb, var(--gz-accent) 40%, transparent); background: color-mix(in srgb, var(--gz-accent-soft) 35%, transparent); font-size: 13px; }
+  .nb-note[hidden] { display: none; }
+  .nb-groups { display: grid; gap: 1rem; }
+  .nb-groups h4 { display: flex; align-items: center; gap: .5rem; margin: 0 0 .4rem; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--gz-ink-muted); }
+  .nb-groups h4 input { flex: 1; max-width: 16rem; text-transform: none; letter-spacing: 0; }
+  .nb-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .nb-list li { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: .5rem; padding: .45rem .55rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
+  .nb-list li[data-hidden] > :is(.nb-name, .nb-icon) { opacity: .45; }
+  .nb-list li[data-drop] { outline: 2px solid var(--gz-accent); }
+  .nb-list .nb-grip { cursor: grab; width: 28px; padding: 0; }
+  .nb-list .nb-name { min-width: 0; }
+  .nb-list .nb-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .35rem; }
+  .nb-list .nb-tools label { display: inline-flex; align-items: center; gap: .3rem; font-size: 12px; color: var(--gz-ink-muted); white-space: nowrap; }
+  .nb-icon { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; }
+  .nb-icon svg, .nb-picker svg, .nb-glaze svg, #nbar-links svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .nb-picker { display: grid; grid-template-columns: repeat(auto-fill, 36px); gap: 4px; grid-column: 1 / -1; padding: .35rem 0 .15rem; }
+  .nb-picker button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; }
+  .nb-picker button[aria-pressed="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
+  .nb-glaze { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem; }
+  .nb-glaze input { flex: none; }
+  .nb-glaze label { display: flex; align-items: center; gap: .55rem; padding: .55rem .7rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); font-size: 13px; cursor: pointer; }
+  .nb-glaze label:has(input:checked) { border-color: var(--gz-accent); background: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent); }
+  .nb-link-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .5rem .75rem; align-items: end; padding: .75rem; border: 1px dashed var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
+  .nb-link-form .field { display: grid; grid-template-columns: minmax(0, 1fr); gap: .3rem; margin: 0; }
+  .nb-link-form .field input { width: 100%; box-sizing: border-box; }
+  .nb-list .nb-name { width: 100%; box-sizing: border-box; }
+  .nb-groups h4 input { padding: .3rem .55rem; font-size: 12px; }
+  @media (max-width: 640px) { .nb-list li { grid-template-columns: auto auto minmax(0, 1fr); } .nb-list .nb-tools { grid-column: 1 / -1; justify-content: flex-start; } }
   .swatch.bg-set::after { display: none; }
   .seg.wrap { flex-wrap: wrap; border-radius: calc(var(--gz-radius, 12px) * 7 / 6); }
   /* Fonts: one picker for three slots; each card is drawn in its own face. */
@@ -176,8 +223,9 @@
   #ss-status:empty, #nb-status:empty { display: none; }
   .ss-status { position: sticky; top: 0; z-index: 1; padding: 0.4rem 0; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); font-size: 13px; color: var(--gz-ink); }
   .ss-sources { display: grid; gap: 0.35rem; max-height: 16rem; overflow: auto; padding: 0.2rem; }
-  .ss-session { display: grid; gap: 0.35rem; padding: 0.75rem 0; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
-  .ss-session:first-child { border-top: 0; padding-top: 0; }
+  .ss-session { display: grid; gap: 0.5rem; margin-top: 0.6rem; padding: 0.75rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); overflow-wrap: anywhere; }
+  .ss-session:first-child { margin-top: 0; }
+  .ss-sources .check > .desc { grid-column: 2; }
   .ss-session h4, .ss-session ul, .ss-session h5, .ss-read p { margin: 0; }
   .ss-session ul { padding-inline-start: 1.2rem; font-size: 13px; }
   .ss-read { display: grid; gap: 0.3rem; padding: 0.6rem; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
@@ -242,7 +290,7 @@
       <input type="search" id="find" placeholder="Search settings  /" aria-label="Search settings" aria-keyshortcuts="/" aria-describedby="find-status" autocomplete="off" spellcheck="false">
       <p class="hint" id="find-status" role="status"></p>
     </div>
-    <nav class="editor-tabs" role="tablist" aria-label="Settings tabs"><button type="button" role="tab" id="tab-look" data-editor-tab="look" aria-controls="panel-look" aria-selected="true" tabindex="0">Look</button><button type="button" role="tab" id="tab-blackboard" data-editor-tab="blackboard" aria-controls="panel-blackboard" aria-selected="false" tabindex="-1">Blackboard</button><button type="button" role="tab" id="tab-canvas" data-editor-tab="canvas" aria-controls="panel-canvas" aria-selected="false" tabindex="-1">Canvas</button><button type="button" role="tab" id="tab-moodle" data-editor-tab="moodle" aria-controls="panel-moodle" aria-selected="false" tabindex="-1">Moodle</button><button type="button" role="tab" id="tab-study" data-editor-tab="study" aria-controls="panel-study" aria-selected="false" tabindex="-1">Study tools</button><button type="button" role="tab" id="tab-sharing" data-editor-tab="sharing" aria-controls="panel-sharing" aria-selected="false" tabindex="-1">Sharing and sync</button><button type="button" role="tab" id="tab-mods" data-editor-tab="mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button><button type="button" role="tab" id="tab-backup" data-editor-tab="backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1">Backup and privacy</button><button type="button" role="tab" id="tab-about" data-editor-tab="about" aria-controls="panel-about" aria-selected="false" tabindex="-1">About</button></nav>
+    <nav class="editor-tabs" role="tablist" aria-label="Settings tabs"><button type="button" role="tab" id="tab-look" data-editor-tab="look" aria-controls="panel-look" aria-selected="true" tabindex="0">Look</button><button type="button" role="tab" id="tab-navigation" data-editor-tab="navigation" aria-controls="panel-navigation" aria-selected="false" tabindex="-1">Navigation</button><button type="button" role="tab" id="tab-blackboard" data-editor-tab="blackboard" aria-controls="panel-blackboard" aria-selected="false" tabindex="-1">Blackboard</button><button type="button" role="tab" id="tab-canvas" data-editor-tab="canvas" aria-controls="panel-canvas" aria-selected="false" tabindex="-1">Canvas</button><button type="button" role="tab" id="tab-moodle" data-editor-tab="moodle" aria-controls="panel-moodle" aria-selected="false" tabindex="-1">Moodle</button><button type="button" role="tab" id="tab-study" data-editor-tab="study" aria-controls="panel-study" aria-selected="false" tabindex="-1">Study tools</button><button type="button" role="tab" id="tab-sharing" data-editor-tab="sharing" aria-controls="panel-sharing" aria-selected="false" tabindex="-1">Sharing and sync</button><button type="button" role="tab" id="tab-mods" data-editor-tab="mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button><button type="button" role="tab" id="tab-backup" data-editor-tab="backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1">Backup and privacy</button><button type="button" role="tab" id="tab-about" data-editor-tab="about" aria-controls="panel-about" aria-selected="false" tabindex="-1">About</button></nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
   </header>
@@ -482,6 +530,7 @@
 <section id="sidebar" data-editor-section="look/navigation" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-look-navigation">
 <p class="section-path" data-editor-breadcrumb><a href="#look/navigation" data-editor-alias>Navigation appearance</a></p><div class="section-heading"><h2 id="heading-look-navigation">Navigation appearance</h2><button type="button" class="section-reset" data-reset-section="look/navigation">Reset section</button></div>
 <p class="desc section-note">Style the shared Canvas and Blackboard navigation.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
+<div class="nb-note" data-navbar-note><p>Blackboard uses Glaze navigation, set up in the Navigation tab. The styles here are for Canvas, and for Blackboard's own navigation while Glaze navigation is off.</p><a href="#navigation/bar" data-editor-alias>Glaze navigation settings</a></div>
 <label class="field"><span>Sidebar background</span><select data-key="nav.k"><option value="default">Palette default</option><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image">Picture</option></select></label>
 <div class="row" data-nav-kinds="solid gradient image">
           <label><span>First color</span> <input type="color" data-key="nav.c"></label>
@@ -567,7 +616,126 @@
             <span class="desc">Put stickers on any course page from the command palette (Ctrl+K): Place stickers on this page. They are kept on this computer, and never shown on a quiz you are taking.</span></label>
         </div>
 </section></div>
-<div id="panel-blackboard" role="tabpanel" aria-labelledby="tab-blackboard" data-editor-panel="blackboard" hidden><nav class="section-links" aria-label="Sections"><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a><a href="#blackboard/dashboard" data-editor-alias>Dashboard</a><a href="#blackboard/tabs" data-editor-alias>Course tabs</a><a href="#blackboard/folders" data-editor-alias>Hidden folders</a><a href="#blackboard/declutter" data-editor-alias>Declutter</a></nav>
+<div id="panel-navigation" role="tabpanel" aria-labelledby="tab-navigation" data-editor-panel="navigation" hidden><nav class="section-links" aria-label="Sections"><a href="#navigation/bar" data-editor-alias>Glaze navigation</a><a href="#navigation/items" data-editor-alias>Navigation items</a><a href="#navigation/tabs" data-editor-alias>Course tabs</a></nav>
+<section id="navbar" data-editor-section="navigation/bar" data-sites="Blackboard Ultra" aria-labelledby="heading-navigation-bar">
+<p class="section-path" data-editor-breadcrumb><a href="#navigation/bar" data-editor-alias>Glaze navigation</a></p><div class="section-heading"><h2 id="heading-navigation-bar">Glaze navigation</h2><button type="button" class="section-reset" data-reset-section="navigation/bar">Reset section</button></div>
+<p class="desc section-note">Glaze's own navigation, the same in every Look, in place of the site's.</p><p class="site-scope" translate="no">Blackboard Ultra</p>
+<label class="check nb-master"><input type="checkbox" data-key="navbar.on"><span>Use Glaze navigation</span>
+          <span class="desc">Glaze draws its own navigation in place of Blackboard's: a floating rail on wide windows and a bottom bar on phones. Turn it off to get Blackboard's back.</span></label>
+<div class="nb-body" data-navbar>
+<div class="nb-group"><h3 id="nbar-place-head">Placement</h3>
+<div class="seg nb-cards" role="radiogroup" aria-labelledby="nbar-place-head">
+<label><input type="radio" name="navbar.place" value="rail"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="bar" x="6" y="6" width="26" height="64" rx="6"/><rect class="ln" x="40" y="12" width="56" height="6" rx="3"/><rect class="ln" x="40" y="24" width="72" height="18" rx="4"/><rect class="ln" x="40" y="48" width="72" height="18" rx="4"/><circle class="it" cx="19" cy="18" r="3"/><circle class="it" cx="19" cy="30" r="3"/><circle class="it" cx="19" cy="42" r="3"/></svg><b>Side rail</b><span class="desc">Down the side of the page, open or as icons.</span></label>
+<label><input type="radio" name="navbar.place" value="top"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="bar" x="6" y="6" width="108" height="14" rx="5"/><circle class="it" cx="16" cy="13" r="3"/><rect class="it" x="26" y="11" width="14" height="4" rx="2"/><rect class="it" x="44" y="11" width="14" height="4" rx="2"/><rect class="it" x="62" y="11" width="14" height="4" rx="2"/><rect class="ln" x="8" y="28" width="56" height="6" rx="3"/><rect class="ln" x="8" y="40" width="104" height="14" rx="4"/><rect class="ln" x="8" y="58" width="104" height="12" rx="4"/></svg><b>Top bar</b><span class="desc">Across the top, with your course tabs beside it.</span></label>
+</div></div>
+<div class="nb-group"><h3 id="nbar-style-head">Style</h3>
+<div class="seg nb-cards" role="radiogroup" aria-labelledby="nbar-style-head">
+<label><input type="radio" name="navbar.style" value="float"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="bar" x="6" y="6" width="26" height="64" rx="6"/><rect class="ln" x="40" y="12" width="72" height="56" rx="5"/></svg><b>Floating</b><span class="desc">A glass panel over the page, with a little room around it.</span></label>
+<label><input type="radio" name="navbar.style" value="embed"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><path class="bar" d="M1 9a8 8 0 0 1 8-8h22v74H9a8 8 0 0 1-8-8z"/><rect class="ln" x="38" y="8" width="76" height="60" rx="5"/></svg><b>Embedded</b><span class="desc">Set into the edge of the page, like the site's own.</span></label>
+</div></div>
+<div class="nb-group" data-navbar-rail><h3 id="nbar-rail-head">Rail</h3>
+<div class="seg wrap" role="radiogroup" aria-labelledby="nbar-rail-head">
+<label><input type="radio" name="navbar.rail" value="auto">Open on wide windows</label>
+<label><input type="radio" name="navbar.rail" value="open">Always open</label>
+<label><input type="radio" name="navbar.rail" value="icons">Icons only</label>
+</div>
+<label class="check"><input type="checkbox" data-key="navbar.peek"><span>Open the rail while you point at it</span>
+          <span class="desc">Icons only, the rail opens over the page while you point at it or move into it with the keyboard.</span></label></div>
+<div class="nb-group"><h3 id="nbar-course-head">Inside a course</h3>
+<div class="seg wrap" role="radiogroup" aria-labelledby="nbar-course-head">
+<label><input type="radio" name="navbar.course" value="same">Same as elsewhere</label>
+<label><input type="radio" name="navbar.course" value="icons">Icons only</label>
+<label><input type="radio" name="navbar.course" value="top">Top bar</label>
+<label><input type="radio" name="navbar.course" value="hide">Hidden</label>
+</div>
+<p class="desc">The navigation stays with you in a course, its tabs and anything opened over it. Give the course more room there with icons or a top bar, or hide it and use the course's own Home button.</p></div>
+<div class="nb-group"><h3>Course tabs</h3>
+<label class="check"><input type="checkbox" data-key="navbar.tabs"><span>Show course tabs in the navigation</span>
+          <span class="desc">The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.</span></label>
+<a href="#navigation/tabs" data-editor-alias>Course tab settings</a></div>
+<div class="nb-group"><h3 id="nbar-logo-head">Details</h3>
+<label class="check"><input type="checkbox" data-key="navbar.badges"><span>Show unread counts</span></label>
+<div class="field wide"><span id="nbar-logo-label">Logo</span>
+<div class="seg" role="radiogroup" aria-labelledby="nbar-logo-label">
+<label><input type="radio" name="navbar.brand" value="glaze"><span translate="no">Glaze</span></label>
+<label><input type="radio" name="navbar.brand" value="school">School logo</label>
+<label><input type="radio" name="navbar.brand" value="custom">Your logo</label>
+<label><input type="radio" name="navbar.brand" value="none">No logo</label>
+</div></div>
+<div class="row"><button type="button" id="nbar-logo-pick">Choose a logo</button><input id="nbar-logo-file" data-setting-owner="nav.li" type="file" accept="image/*" hidden><span id="nbar-logo-note" class="desc"></span></div>
+<p class="desc">Your logo stays on this device. A Look shared from here carries the Glaze logo in its place.</p></div>
+</div>
+</section>
+<section id="navbar-items" data-editor-section="navigation/items" data-sites="Blackboard Ultra" aria-labelledby="heading-navigation-items">
+<p class="section-path" data-editor-breadcrumb><a href="#navigation/items" data-editor-alias>Navigation items</a></p><div class="section-heading"><h2 id="heading-navigation-items">Navigation items</h2><button type="button" class="section-reset" id="nbar-reset">Reset items</button></div>
+<p class="desc section-note">Name, icon, order and grouping of every item, which ones show, and the four on a phone's bar.</p><p class="site-scope" translate="no">Blackboard Ultra</p>
+<div id="nbar-items" data-setting-owner="navbarItems"></div>
+<h3>Glaze's own</h3>
+<p class="desc">Off by default. Each one opens where you are.</p>
+<div id="nbar-glaze" class="nb-glaze"></div>
+<h3>Your links</h3>
+<ul id="nbar-links" class="nb-list"></ul>
+<form id="nbar-link-form" class="nb-link-form">
+<label class="field"><span>Name</span><input id="nbar-link-name" type="text" maxlength="40" required></label>
+<label class="field"><span>URL</span><input id="nbar-link-url" type="url" placeholder="https://…" translate="no" spellcheck="false" maxlength="512" required></label>
+<label class="check"><input type="checkbox" id="nbar-link-tab"><span>Open in a new tab</span></label>
+<div class="row"><button type="submit" class="primary">Add link</button></div>
+</form>
+<p id="nbar-status" class="desc" role="status" aria-live="polite"></p>
+</section>
+<section id="tabs" data-editor-section="navigation/tabs" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-navigation-tabs">
+<p class="section-path" data-editor-breadcrumb><a href="#navigation/tabs" data-editor-alias>Course tabs</a></p><div class="section-heading"><h2 id="heading-navigation-tabs">Course tabs</h2><button type="button" class="section-reset" data-reset-section="navigation/tabs">Reset section</button></div>
+<p class="desc section-note">Keep your open Canvas and Blackboard courses in a tab strip.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
+<p class="desc">On Canvas and Blackboard Ultra, each course you open gets a tab. Pick a tab to return to its live page, including an open test or assignment. Up to four extra course pages stay live; edited pages stay until you close them.</p>
+<label class="check"><input type="checkbox" data-key="enhance.tabs"><span>Course tabs</span>
+          <span class="desc">Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.</span></label>
+<div class="field wide"><span>Where</span>
+          <div class="seg wrap" role="radiogroup" aria-label="Where the tabs go">
+            <label><input type="radio" name="tabs.at" value="above">Above the course's bar</label>
+            <label><input type="radio" name="tabs.at" value="between">Between its rows</label>
+            <label><input type="radio" name="tabs.at" value="below">Below it</label>
+            <label><input type="radio" name="tabs.at" value="nav">Only in the navigation</label>
+          </div></div>
+<p class="desc" data-tabs-nav-note>Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.</p>
+<label class="field"><span>Most tabs</span><input type="range" data-key="tabs.cap" min="2" max="20" step="1" aria-describedby="tabs-cap-note"><output data-for="tabs.cap"></output></label>
+<p class="desc" id="tabs-cap-note">With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.</p>
+<label class="check"><input type="checkbox" data-key="tabs.place"><span>Go back to where you were</span>
+          <span class="desc">A tab opens its course at the page and scroll you left it at. Off: the Canvas course home or Blackboard course content. Canvas has one header row, so Between its rows places tabs below the breadcrumbs.</span></label>
+<div class="group">
+          <h3>Tab buttons</h3>
+          <div class="field wide"><span>Shape</span>
+            <div class="seg wrap" role="radiogroup" aria-label="Tab shape">
+              <label><input type="radio" name="tabs.shape" value="tab">Tab</label>
+              <label><input type="radio" name="tabs.shape" value="rounded">Rounded</label>
+              <label><input type="radio" name="tabs.shape" value="pill">Pill</label>
+              <label><input type="radio" name="tabs.shape" value="square">Square</label>
+            </div></div>
+          <div class="field wide"><span>Size</span>
+            <div class="seg" role="radiogroup" aria-label="Tab size">
+              <label><input type="radio" name="tabs.size" value="small">Small</label>
+              <label><input type="radio" name="tabs.size" value="medium">Medium</label>
+              <label><input type="radio" name="tabs.size" value="large">Large</label>
+            </div></div>
+          <label class="field"><span>Widest tab</span><input type="range" data-key="tabs.width" min="96" max="320" step="4"><output data-for="tabs.width" data-format="px"></output></label>
+          <label class="field"><span>Name</span><select data-key="tabs.label"><option value="short">Auto short name</option><option value="name">Course name</option><option value="code">Course code</option></select></label>
+          <div class="field wide"><span>Marker</span>
+            <div class="seg" role="radiogroup" aria-label="Tab marker">
+              <label><input type="radio" name="tabs.mark" value="dot">Colour dot</label>
+              <label><input type="radio" name="tabs.mark" value="icon">Icon</label>
+              <label><input type="radio" name="tabs.mark" value="none">None</label>
+            </div></div>
+          <div class="field wide"><span>Course colour</span>
+            <div class="seg" role="radiogroup" aria-label="Course colour on tabs">
+              <label><input type="radio" name="tabs.color" value="off">Plain</label>
+              <label><input type="radio" name="tabs.color" value="tint">Tint</label>
+              <label><input type="radio" name="tabs.color" value="theme">Strong</label>
+            </div></div>
+          <p class="desc">Each course's colour and nickname are the ones under Courses and in a course card's menu.</p>
+        </div>
+<p class="desc">Switching tabs shows a still copy of the course as you last saw it at once, then Blackboard's live page fades in. The copies stay in memory and are never written to disk; they go when the browser closes, when you turn the tabs or Glaze off, or when someone else signs in. Glaze never opens or loads a course in the background.</p>
+</section>
+</div>
+<div id="panel-blackboard" role="tabpanel" aria-labelledby="tab-blackboard" data-editor-panel="blackboard" hidden><nav class="section-links" aria-label="Sections"><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a><a href="#blackboard/dashboard" data-editor-alias>Dashboard</a><a href="#blackboard/folders" data-editor-alias>Hidden folders</a><a href="#blackboard/declutter" data-editor-alias>Declutter</a></nav>
 <section id="bb-navigation" data-editor-section="blackboard/nav" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-nav">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a></p><div class="section-heading"><h2 id="heading-blackboard-nav">Blackboard navigation</h2></div>
 <p class="desc section-note">Arrange the rail, its labels, branding, links and widgets.</p><p class="site-scope" translate="no">Blackboard Ultra</p>
@@ -620,55 +788,6 @@
 <label class="check"><input type="checkbox" data-key="widgets.land"><span>Open Blackboard on the dashboard</span>
             <span class="desc">Off by default. When Blackboard Ultra opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></label>
 <a href="#study/widgets" data-editor-alias>Notes and widgets</a>
-</section>
-<section id="tabs" data-editor-section="blackboard/tabs" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-tabs">
-<p class="section-path" data-editor-breadcrumb><a href="#blackboard/tabs" data-editor-alias>Course tabs</a></p><div class="section-heading"><h2 id="heading-blackboard-tabs">Course tabs</h2><button type="button" class="section-reset" data-reset-section="blackboard/tabs">Reset section</button></div>
-<p class="desc section-note">Keep your open Blackboard courses in a tab strip.</p><p class="site-scope" translate="no">Blackboard Ultra</p>
-<p class="desc">On Blackboard Ultra, each course you open gets a tab. Pick a tab to return to its live page, including an open test or assignment. Up to four extra course pages stay live; edited pages stay until you close them.</p>
-<label class="check"><input type="checkbox" data-key="enhance.tabs"><span>Course tabs</span>
-          <span class="desc">Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.</span></label>
-<div class="field wide"><span>Where</span>
-          <div class="seg wrap" role="radiogroup" aria-label="Where the tabs go">
-            <label><input type="radio" name="tabs.at" value="above">Above the course's bar</label>
-            <label><input type="radio" name="tabs.at" value="between">Between its rows</label>
-            <label><input type="radio" name="tabs.at" value="below">Below it</label>
-          </div></div>
-<label class="field"><span>Most tabs</span><input type="range" data-key="tabs.cap" min="2" max="20" step="1" aria-describedby="tabs-cap-note"><output data-for="tabs.cap"></output></label>
-<p class="desc" id="tabs-cap-note">With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.</p>
-<label class="check"><input type="checkbox" data-key="tabs.place"><span>Go back to where you were</span>
-          <span class="desc">A tab opens its course at the page and scroll you left it at. Off: always at the course's content.</span></label>
-<div class="group">
-          <h3>Tab buttons</h3>
-          <div class="field wide"><span>Shape</span>
-            <div class="seg wrap" role="radiogroup" aria-label="Tab shape">
-              <label><input type="radio" name="tabs.shape" value="tab">Tab</label>
-              <label><input type="radio" name="tabs.shape" value="rounded">Rounded</label>
-              <label><input type="radio" name="tabs.shape" value="pill">Pill</label>
-              <label><input type="radio" name="tabs.shape" value="square">Square</label>
-            </div></div>
-          <div class="field wide"><span>Size</span>
-            <div class="seg" role="radiogroup" aria-label="Tab size">
-              <label><input type="radio" name="tabs.size" value="small">Small</label>
-              <label><input type="radio" name="tabs.size" value="medium">Medium</label>
-              <label><input type="radio" name="tabs.size" value="large">Large</label>
-            </div></div>
-          <label class="field"><span>Widest tab</span><input type="range" data-key="tabs.width" min="96" max="320" step="4"><output data-for="tabs.width" data-format="px"></output></label>
-          <label class="field"><span>Name</span><select data-key="tabs.label"><option value="short">Auto short name</option><option value="name">Course name</option><option value="code">Course code</option></select></label>
-          <div class="field wide"><span>Marker</span>
-            <div class="seg" role="radiogroup" aria-label="Tab marker">
-              <label><input type="radio" name="tabs.mark" value="dot">Colour dot</label>
-              <label><input type="radio" name="tabs.mark" value="icon">Icon</label>
-              <label><input type="radio" name="tabs.mark" value="none">None</label>
-            </div></div>
-          <div class="field wide"><span>Course colour</span>
-            <div class="seg" role="radiogroup" aria-label="Course colour on tabs">
-              <label><input type="radio" name="tabs.color" value="off">Plain</label>
-              <label><input type="radio" name="tabs.color" value="tint">Tint</label>
-              <label><input type="radio" name="tabs.color" value="theme">Strong</label>
-            </div></div>
-          <p class="desc">Each course's colour and nickname are the ones under Courses and in a course card's menu.</p>
-        </div>
-<p class="desc">Switching tabs shows a still copy of the course as you last saw it at once, then Blackboard's live page fades in. The copies stay in memory and are never written to disk; they go when the browser closes, when you turn the tabs or Glaze off, or when someone else signs in. Glaze never opens or loads a course in the background.</p>
 </section>
 <section id="bb-folders" data-editor-section="blackboard/folders" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-folders">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/folders" data-editor-alias>Hidden folders</a></p><div class="section-heading"><h2 id="heading-blackboard-folders">Hidden folders</h2><button type="button" class="section-reset" data-reset-section="blackboard/folders">Reset section</button></div>
@@ -1212,6 +1331,8 @@
   <script src="features/modui.js"></script>
   <script src="lib/editor-mods.js"></script>
   <script src="lib/editor-widget.js"></script>
+  <script src="lib/navbar.js"></script>
+  <script src="lib/editor-navbar.js"></script>
   <script src="i18n/de.js"></script>
   <script src="i18n/es.js"></script>
   <script src="i18n/fr.js"></script>

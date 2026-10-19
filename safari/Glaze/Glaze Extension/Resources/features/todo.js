@@ -136,6 +136,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (fetching && fetchGen === g) return fetching;
     const done = (p) => { fetching = p; fetchGen = g; p.finally(() => { if (fetching === p) fetching = null; }); return p; };
     if (!force && covers(cache, Date.now())) {
+      setBusy(false); // a list drawn from the kept answer is not loading
       if (!cache.partial || !o().progress) return null;
       return done(summaries(cache).then(() => keep(cache)).finally(() => { if (g !== gen) return; if (typing()) drawn = ''; else render(true); }));
     }

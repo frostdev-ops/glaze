@@ -14,8 +14,8 @@ const loadingFrame = () => {
   const timers = [], navigations = [], notices = [];
   const f = { url: '/ultra/courses/_2_1/grades', ready: false, dirty: false, el: { style: {}, get contentDocument() { return doc; }, set src(v) { navigations.push(v); } } };
   const frames = new Map([['_2_1', f]]);
-  const c = vm.createContext({ frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
-    MutationObserver: class { observe() {} disconnect() {} }, loading: () => false, shown: (el) => !!el,
+  const c = vm.createContext({ L, ctx: { site: 'ultra' }, frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
+    MutationObserver: class { observe() {} disconnect() {} }, loading: () => false, shown: (el) => !!el, waiting: '', wait() {},
     unpicture() {}, later() {}, clearSlow() {}, slowFrame: () => notices.push('slow'), t: (s) => s,
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
   });
@@ -56,7 +56,7 @@ test('selecting a timed-out course again retries only an untouched frame', () =>
     const dropped = [], shown = [];
     const c = vm.createContext({ framed: '', preview: false, tabs: [{ cid: '_2_1' }], save() {}, Date,
       frames: new Map([['_2_1', { slow: true, ready: false, dirty }]]), showing: '_2_1',
-      drop: (...args) => dropped.push(args), show: (cid) => shown.push(cid), ctx: { courseId: () => '_1_1' },
+      drop: (...args) => dropped.push(args), show: (cid) => shown.push(cid), reveal: (cid) => shown.push(cid), ctx: { courseId: () => '_1_1' },
     });
     vm.runInContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + "\nvisit('_2_1');", c);
     assert.equal(dropped.length, dirty ? 0 : 1);
@@ -86,7 +86,7 @@ test('the bridge takes picks only from this page\'s own frames, on this origin, 
   let listen;
   const mine = {}, theirs = {}, did = [];
   vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // Ultra routes without reloading'), {
-    framed: '', preview: false, on: true, location: { origin }, addEventListener: (t, f) => { listen = f; },
+    L, ctx: { site: 'ultra' }, framed: '', preview: false, on: true, location: { origin }, addEventListener: (t, f) => { listen = f; },
     frames: new Map([['_2_1', { el: { contentWindow: mine } }]]), showing: '_2_1',
     visit: (c) => did.push(['visit', c]), shut: (c, k) => did.push(['shut', c, k]), later: () => did.push(['later']),
     drop: (c) => did.push(['drop', c]), show: (c) => did.push(['show', c]), route: (u) => did.push(['route', u]),
@@ -108,7 +108,7 @@ test('a pick in a tab\'s frame goes to the page around it; on the page, its own 
   const sent = [], shown = [];
   const run = (framed, courseId) => vm.runInNewContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + '\nvisit;', {
     framed, preview: false, tabs: [{ cid: '_1_1' }, { cid: '_2_1' }], save() {}, Date, frames: new Map(), showing: '',
-    toTop: (op, m) => sent.push([op, m.cid]), show: (c) => shown.push(c), ctx: { courseId: () => courseId },
+    toTop: (op, m) => sent.push([op, m.cid]), show: (c) => shown.push(c), reveal: (c) => shown.push(c), ctx: { courseId: () => courseId },
   });
   run('_2_1', '_2_1')('_1_1');
   assert.deepEqual(sent, [['visit', '_1_1']]);
@@ -122,7 +122,7 @@ test('at most four frames stay running: the least recently shown go, never the o
   const frame = (at) => ({ at, ready: true, el: { style: {}, inert: false, focus() {} } });
   const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(5)], ['_4_1', frame(4)], ['_5_1', frame(2)]]);
   const dropped = [];
-  const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
+  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
     LIVE: 4, Date, Promise, setTimeout() {}, clearTimeout() {}, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
@@ -140,7 +140,7 @@ test('a hidden frame stays live however long it is hidden: no timer closes it', 
   const frame = (at) => ({ at, ready: true, el: { style: {}, inert: false, focus() {} } });
   const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(2)], ['_3_1', frame(3)]]);
   const timers = [];
-  const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
+  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
     showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
     LIVE: 4, Date, Promise, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     setTimeout: (fn, ms) => timers.push(ms), clearTimeout() {},
@@ -295,9 +295,9 @@ test('a saved-list close destroys its live frame and a metadata change preserves
 test('four edited live frames refuse a fifth without opening or destroying a document', async () => {
   const frames = new Map(Array.from({ length: 4 }, (_, i) => [`_${i + 1}_1`, { at: i, dirty: true, ready: true }]));
   const shown = [], closed = [], notes = [];
-  const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
+  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, LIVE: 4,
-    host: {}, strip: null, list: null, document: { activeElement: null }, location: {},
+    host: {}, strip: null, list: null, document: { activeElement: null }, location: {}, ctx: { site: 'ultra' },
     say: (m) => notes.push(m), t: (s) => s,
     open: (c) => { shown.push(c); return null; }, drop: (c) => closed.push(c),
   });
@@ -320,6 +320,7 @@ test('a hidden frame pauses its scene only for messages from its owner on the sa
   const top = {}, stranger = {}, states = []; let listen, scenes = 0;
   if (source.includes('  if (framed && !preview) {')) vm.runInNewContext(part('  if (framed && !preview) {', '  // Ultra routes without reloading'), {
     framed: '_2_1', preview: false, location: { origin }, window: { top },
+    awayFrom: '', pass() {},
     addEventListener: (event, fn) => { listen = fn; }, toTop() {},
     document: { addEventListener() {} }, html: { toggleAttribute: (k, v) => states.push([k, v]) }, ctx: { scene: () => scenes++ }, say() {},
   });
@@ -336,7 +337,7 @@ test('a hidden frame pauses its scene only for messages from its owner on the sa
 test('a new account discovered in a live frame revokes the owner and clears its cached pictures', () => {
   let listener, revoked = 0; const sent = [], mine = {};
   vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // Ultra routes without reloading'), {
-    framed: '', preview: false, on: true, location: { origin }, who: '_42_1',
+    L, ctx: { site: 'ultra' }, framed: '', preview: false, on: true, location: { origin }, who: '_42_1',
     addEventListener: (t, fn) => { listener = fn; }, frames: new Map([['_2_1', { el: { contentWindow: mine } }]]),
     send: (m) => sent.push(m), revoke: () => revoked++,
   });

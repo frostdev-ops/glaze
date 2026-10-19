@@ -110,7 +110,11 @@ const ULTRA = 'https://school.blackboard.test';
 const U = require('../lib/ultra.js');
 const page = ({ on = true, stored = on, live = true, enabled = true, ultra = false, items = [] } = {}) => {
   const doc = { activeElement: null, root: null };
-  const make = (t) => new El(t, doc);
+  const make = (t) => {
+    const e = new El(t, doc);
+    if (t === 'iframe') e.contentWindow = { postMessage: (data, origin) => { (e.posted ||= []).push({ data, origin }); } };
+    return e;
+  };
   doc.root = make('html');
   doc.body = make('body');
   doc.root.append(doc.body);
@@ -180,7 +184,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     // The real reader over a stand-in fetch that records what it was asked and how (env.fetched).
     ...(ultra && { GZ_ULTRA: { ...U, read: (o) => U.read({ ...o, f: ultraFetch }) } }),
     chrome: {
-      runtime: { getURL: (f = '') => `chrome-extension://x/${f}`, sendMessage: (m, cb) => { sent.push(m); if (m.type === 'glaze:sessions-open') return Promise.resolve({ ok: true }); if (m.type === 'glaze:quick-ticket') { const r = env.ticket?.(m) ?? { ok: true, ticket: 'ab'.repeat(16) }; if (cb) cb(r); return Promise.resolve(r); } const p = Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => JSON.parse(JSON.stringify(r))); if (cb) p.then(cb); else return p; } },
+      runtime: { getURL: (f = '') => `chrome-extension://x/${f}`, sendMessage: (m, cb) => { sent.push(m); if (m.type === 'glaze:sessions-open') return Promise.resolve({ ok: true }); if (m.type === 'glaze:quick-ticket') { const p = Promise.resolve(env.ticket?.(m) ?? { ok: true, ticket: 'ab'.repeat(16) }); if (cb) p.then(cb); return p; } const p = Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => JSON.parse(JSON.stringify(r))); if (cb) p.then(cb); else return p; } },
       storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { if (env.syncFail) throw new Error('Extension context invalidated.'); const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
     },
   });
@@ -410,7 +414,11 @@ test('Share on a note saves it, then frames the extension share panel with a one
   assert.equal(holder.shadowRoot, undefined, 'the shadow root is closed: page scripts cannot reach the frame');
   assert.equal(P.box().querySelector('iframe'), null, 'nothing in the light DOM carries the ticket');
   const frame = frameOf();
-  assert.equal(frame.src, `chrome-extension://x/sharing/quick.html?t=${'ab'.repeat(16)}`, 'the address names only the ticket');
+  assert.equal(frame.src, 'chrome-extension://x/sharing/quick.html', 'no capability in a URL, even if a browser exposes frame resource timing');
+  P.fire(frame, 'load');
+  assert.deepEqual(JSON.parse(JSON.stringify(frame.posted)), [{ data: { type: 'glaze:quick-start', ticket: 'ab'.repeat(16) }, origin: 'chrome-extension://x' }], 'ticket goes directly to the extension frame, never to the parent');
+  P.fire(frame, 'load');
+  assert.equal(frame.posted.length, 1, 'navigation/reload cannot receive the bootstrap again');
   assert.equal(frame.getAttribute('allow'), 'clipboard-write');
   assert.ok(!P.sent.some((m) => m.type === 'glaze:sessions'), 'the LMS world never asks the worker for sessions or links');
   P.fire(P.button('Shared notes'), 'click'); await settle();
@@ -420,6 +428,22 @@ test('Share on a note saves it, then frames the extension share panel with a one
   P.ticket = () => ({ ok: false });
   P.fire(P.button('Shared notes'), 'click'); await settle();
   assert.equal(frameOf(), null, 'a refused ticket frames nothing');
+});
+
+test('a delayed Share ticket cannot replace a newer opening or reopen a closed panel', async () => {
+  const P = page(); await P.openView();
+  const pending = [];
+  P.ticket = () => { const p = later(); pending.push(p); return p; };
+  P.fire(P.button('Shared notes'), 'click'); await settle();
+  P.fire(P.button('Shared notes'), 'click'); await settle();
+  assert.equal(pending.length, 2);
+  pending[1].resolve({ ok: true, ticket: 'cd'.repeat(16) }); await settle();
+  const frameOf = () => P.box().querySelector('.gz-nt-share-frame')?.shadowForTest.querySelector('iframe');
+  const fresh = frameOf();
+  pending[0].resolve({ ok: true, ticket: 'ab'.repeat(16) }); await settle();
+  assert.ok(frameOf() === fresh, 'out-of-order ticket reply cannot replace the current panel');
+  P.fire(P.button('Shared notes'), 'click'); await settle();
+  assert.equal(frameOf(), undefined);
 });
 
 test('a sharing module loaded for an old Notes opening cannot leak a live port into the next opening', async () => {

@@ -28,7 +28,7 @@ const canvasSite = (u) => chrome.storage.local.get('canvas').then(({ canvas = []
 const fromCanvas = async (s) => {
   if (s.id !== chrome.runtime.id || !s.tab) return null;
   let u;
-  try { u = new URL(s.url); } catch { return null; }
+  try { u = new URL(addressOf(s)); } catch { return null; }
   return /^https?:$/.test(u.protocol) && await canvasSite(u) ? u.origin : null;
 };
 // An Ultra page: a content script in a tab on an https address under /ultra (the manifest's Ultra match), on a site Glaze
@@ -36,7 +36,7 @@ const fromCanvas = async (s) => {
 // there), by its origin. The address alone isn't proof, as a school's own Canvas host isn't (fromCanvas).
 // A sender's address. A course tab's frame (features/coursetabs.js) reports about:blank, the address of its first, empty
 // document: its own origin, with its tab's page on that origin, stands in.
-const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^https:\/\/[^/]+$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
+const addressOf = (s) => (s.frameId > 0 && s.url === 'about:blank' && /^(?:https:\/\/[^/]+|http:\/\/localhost(?::\d+)?)$/.test(s.origin || '') && s.tab?.url?.startsWith(`${s.origin}/`) ? s.tab.url : s.url);
 const ultraAt = (s) => {
   if (s.id !== chrome.runtime.id || !s.tab) return null;
   try { const u = new URL(addressOf(s)); return u.protocol === 'https:' && /^\/ultra(\/|$)/.test(u.pathname) ? u.origin : null; } catch { return null; }
@@ -85,6 +85,7 @@ const BROKER = {
         parts = { ...(Object.keys(x).length && { x }), ...(current?.m && { m: current.m }) };
         if (!Object.keys(parts).length) parts = null;
       }
+      if (Object.hasOwn(patch, 'navbar')) patch.navbar = GZ_SANITIZE({ navbar: { ...(await area.sync.get('navbar')).navbar, ...patch.navbar } }).navbar;
       if (Object.hasOwn(patch, 'nav')) {
         const nav = patch.nav;
         if (!nav || typeof nav !== 'object' || Array.isArray(nav)) return { ok: false, error: 'bad' };
@@ -138,6 +139,18 @@ const BROKER = {
     allow: async (m, s) => !!m.nav && typeof m.nav === 'object' && !Array.isArray(m.nav)
       && (fromEditor(s) || (!m.image && !m.logoImage && !m.items && !m.nav.i && !m.nav.li && !!await fromCanvas(s))),
     run: (m, area) => GZ_NAV_STORE.change({ nav: m.nav, image: m.image, logoImage: m.logoImage, items: m.items }, area),
+  },
+  // Glaze's own navigation bar (lib/navbar.js): an Ultra page pins its rail; the editor changes only its edited fields.
+  navbar: {
+    allow: async (m, s) => {
+      if (!m.patch || typeof m.patch !== 'object' || Array.isArray(m.patch) || !Object.keys(m.patch).length) return false;
+      if (fromEditor(s)) { const n = GZ_SANITIZE({ navbar: m.patch }).navbar; return Object.keys(m.patch).every((k) => Object.hasOwn(n, k) && n[k] === m.patch[k]); }
+      return Object.keys(m.patch).length === 1 && ['open', 'icons'].includes(m.patch.rail) && s.frameId === 0 && !!await fromUltra(s);
+    },
+    run: async (m, { sync }) => {
+      const navbar = GZ_SANITIZE({ navbar: { ...(await sync.get('navbar')).navbar, ...m.patch } }).navbar;
+      return { ok: await sync.set({ navbar }) };
+    },
   },
   // Better To Do's own data (lib/todo.js change). A Canvas or Ultra page edits its own site's accounts' lists; only the
   // editor restores a backup.
@@ -425,18 +438,14 @@ const extensionOrigin = (s) => s.origin === undefined || s.origin === chrome.run
 const sessionFrame = (s) => s.frameId === 0 && extensionOrigin(s);
 // Settings (options.html, top frame) owns every operation. The Notes share panel (sharing/quick.html) is an extension
 // frame inside a Notes view: the LMS page around it cannot read its keys, and it gets only the ops a quick share needs,
-// for one Notes account and note. Each Share click gets a one-use ticket bound to the asking tab; the first panel frame
-// in that tab to present it claims it, so a page that frames the panel itself, or copies the address, gets nothing.
+// for one Notes account and note. Tickets never travel in URLs. A panel consumes one on a runtime port; that port,
+// rather than a reusable frameId (documentId is absent in some browsers), owns the opening's authority.
 const fromSessions = (s) => fromEditor(s) && sessionFrame(s);
-const quickTickets = new Map(); // ticket -> { tab, key, note, at, frame }
-const quickTicket = (s) => {
-  if (s.id !== chrome.runtime.id || s.frameId === 0 || !extensionOrigin(s) || typeof s.url !== 'string' || s.url.split(/[?#]/)[0] !== chrome.runtime.getURL('sharing/quick.html')) return null;
-  const t = quickTickets.get(s.url.match(/^[^#]*\?t=([0-9a-f]{32})(?:#|$)/)?.[1] || ''), frame = `${s.frameId}:${s.documentId || ''}`;
-  if (!t || t.tab !== s.tab?.id || (t.frame && t.frame !== frame) || (!t.frame && Date.now() - t.at > 120000)) return null;
-  t.frame = frame;
-  return t;
-};
-const fromQuick = (s) => !!quickTicket(s);
+const quickTickets = new Map(); // unclaimed ticket -> { tab, key, note, at }
+const quickPanels = new Set(); // live, authenticated ports; a new opening revokes the old one
+let quickTicketTurn = null;
+const quickFrame = (s) => s?.id === chrome.runtime.id && Number.isInteger(s.frameId) && s.frameId > 0
+  && extensionOrigin(s) && s.url === chrome.runtime.getURL('sharing/quick.html') && typeof s.tab?.id === 'number';
 const QUICK_OPS = new Set(['list', 'create', 'join', 'link', 'attach', 'leave', 'delete', 'sync', 'resume']);
 const SESSION_OPS = new Set(['list', 'read', 'create', 'join', 'link', 'attach', 'useLook', 'pause', 'resume', 'sync', 'leave', 'delete', 'expiry', 'reupload', 'exportKeys', 'importKeys', 'backupNotes', 'notesRead', 'notesGetFile', 'notesFile', 'notesImport', 'relaySave', 'relayTest']);
 const SESSION_NETWORK = new Set(['create', 'join', 'resume', 'sync', 'reupload', 'expiry', 'delete', 'relayTest']);
@@ -455,10 +464,7 @@ BROKER.sessions = {
   allow: (m, s) => {
     delete m.scope; // only the worker scopes a call, from the panel's ticket
     if (!SESSION_OPS.has(m.op) || JSON.stringify(m).length > (32 << 20)) return false;
-    if (fromSessions(s)) return true;
-    const t = QUICK_OPS.has(m.op) && quickTicket(s);
-    if (t) m.scope = { key: t.key, note: t.note };
-    return !!t;
+    return fromSessions(s);
   },
   interrupt: (m) => { if (['pause', 'leave', 'delete', 'importKeys'].includes(m.op)) { sessionGeneration++; sessionsWorker?.stop(); } },
   run: async (m) => {
@@ -467,13 +473,48 @@ BROKER.sessions = {
   },
 };
 chrome.runtime.onConnect.addListener((p) => {
+  if (p.name !== 'glaze:quick') return;
+  if (!quickFrame(p.sender)) return p.disconnect();
+  let closed = false, scope = null, disconnect;
+  const cleanup = () => {
+    if (closed) return;
+    closed = true; quickPanels.delete(panel); sessionPorts.delete(p);
+    const release = disconnect; disconnect = null; release?.();
+  };
+  // Local disconnect may notify only the other endpoint. Release our state explicitly, in either browser behavior.
+  const close = () => { cleanup(); try { p.disconnect(); } catch {} };
+  const panel = { tab: p.sender.tab.id, revoke: close };
+  p.onDisconnect.addListener(cleanup);
+  p.onMessage.addListener((m) => {
+    if (closed) return;
+    const reply = (r) => { if (!closed) { try { p.postMessage({ id: m?.id, ...r }); } catch { close(); } } };
+    if (!scope) {
+      const t = typeof m?.ticket === 'string' && quickTickets.get(m.ticket);
+      if (!t || t.tab !== panel.tab || Date.now() - t.at > 120000) { reply({ ok: false, error: 'sender' }); close(); return; }
+      quickTickets.delete(m.ticket); // consumed, including on browsers without documentId
+      scope = { id: m.ticket, key: t.key, note: t.note };
+      quickPanels.add(panel); sessionPorts.add(p);
+      disconnect = sessions().connect();
+      reply({ ok: true });
+      return;
+    }
+    if (m?.online === true) { sessionsWorker?.changed(); return; }
+    if (!m || !Number.isSafeInteger(m.id) || !QUICK_OPS.has(m.op) || JSON.stringify(m).length > (32 << 20)) { reply({ ok: false, error: 'sender' }); return; }
+    const request = { ...m, scope }; // ignore every client-supplied scope
+    BROKER.sessions.interrupt(request);
+    const generation = sessionGeneration;
+    (brokerTurn ||= GZ_CARDS.queue())(() => closed || (generation !== sessionGeneration && SESSION_NETWORK.has(request.op))
+      ? { ok: false, error: 'off' } : sessions().handle(request)).then(reply, (e) => reply({ ok: false, error: ['confirmation', 'unsupported', 'many'].includes(e?.message) ? e.message : 'write' }));
+  });
+});
+chrome.runtime.onConnect.addListener((p) => {
   if (p.name !== 'glaze:sessions') return;
   let closed = false, ready = false, disconnect;
   p.onMessage.addListener((m) => { if (ready && m?.online === true) sessionsWorker?.changed(); });
   p.onDisconnect.addListener(() => { closed = true; sessionPorts.delete(p); disconnect?.(); });
   Promise.resolve().then(async () => {
     const s = p.sender;
-    const page = fromSessions(s) || fromQuick(s);
+    const page = fromSessions(s);
     if (!page && !(s.id === chrome.runtime.id && ((s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s)))))) return p.disconnect();
     if (closed) return;
     if (page) sessionPorts.add(p); // LMS ports receive no session information or keys.
@@ -490,26 +531,29 @@ chrome.storage.onChanged.addListener((ch, area) => {
 // A Notes share panel's ticket: only for a known top-frame LMS caller, and only for a Notes account on its own site.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:quick-ticket') return;
-  (async () => {
+  (quickTicketTurn ||= GZ_CARDS.queue())(async () => {
     if (!((s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s)))) || typeof s.tab?.id !== 'number') return { ok: false };
     if (typeof m.key !== 'string' || !GZ_NOTES.KEY.test(m.key) || !m.key.startsWith(`notesIdx:${new URL(addressOf(s)).origin}/`)) return { ok: false };
     if (typeof m.note !== 'string' || (m.note && !GZ_NOTES.ID.test(m.note))) return { ok: false };
-    for (const [k, t] of quickTickets) if ((!t.frame && Date.now() - t.at > 120000) || t.tab === s.tab.id) quickTickets.delete(k);
+    for (const [k, t] of quickTickets) if (Date.now() - t.at > 120000 || t.tab === s.tab.id) quickTickets.delete(k);
+    for (const p of quickPanels) if (p.tab === s.tab.id) p.revoke();
     while (quickTickets.size >= 20) quickTickets.delete(quickTickets.keys().next().value);
     const ticket = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
-    quickTickets.set(ticket, { tab: s.tab.id, key: m.key, note: m.note, at: Date.now(), frame: '' });
+    quickTickets.set(ticket, { tab: s.tab.id, key: m.key, note: m.note, at: Date.now() });
     return { ok: true, ticket };
-  })().then(reply, () => reply({ ok: false }));
+  }).then(reply, () => reply({ ok: false }));
   return true;
 });
-// Opening Settings conveys no keys. A source account is a selection hint for its Notes backup; Export still needs a
+// Opening Settings (Sharing, a Notes account's backup, or the navigation bar's own section) conveys no keys. A source account is a selection hint for its Notes backup; Export still needs a
 // trusted click there after its key warning. Only known top-frame LMS callers and the editor may ask.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:sessions-open') return;
   (async () => {
     if (!fromEditor(s) && !((s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s))))) return { ok: false };
     const key = typeof m.key === 'string' && GZ_NOTES.KEY.test(m.key) && (fromEditor(s) || m.key.startsWith(`notesIdx:${new URL(addressOf(s)).origin}/`)) ? m.key : '';
-    await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + (key ? `?notes=${encodeURIComponent(key)}#backup/notes` : '#sharing/sessions') });
+    // The navigation bar's "Customize navigation" opens its own section instead.
+    const at = m.section === 'navigation/bar' ? '#navigation/bar' : '#sharing/sessions';
+    await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + (key ? `?notes=${encodeURIComponent(key)}#backup/notes` : at) });
     return { ok: true };
   })().then(reply, () => reply({ ok: false }));
   return true;
@@ -534,6 +578,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 chrome.tabs?.onRemoved?.addListener((id) => {
   chrome.storage.session?.remove(`landed:${id}`).catch(() => {});
   for (const [k, t] of quickTickets) if (t.tab === id) quickTickets.delete(k); // a closed tab's Notes share panel tickets
+  for (const p of quickPanels) if (p.tab === id) p.revoke();
 });
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   const name = typeof m?.type === 'string' && m.type.startsWith('glaze:') ? m.type.slice(6) : '';
@@ -809,7 +854,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // it asks (a site's part too, where its host was registered for the other LMS). Only these files, and only into a
 // frame of a tab Glaze already runs in (Chrome reports which).
 const SAFARI = new URL(chrome.runtime.getURL('')).protocol === 'safari-web-extension:';
-const LOADABLE = new Set(['lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js']);
+const LOADABLE = new Set(['lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];
@@ -819,7 +864,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
   }
   if (files.includes('features/mods.js')) blocklistCheck(); // a page is about to run mods: the daily blocklist check, if due
   if (files.includes('features/mods.js')) channelCheck().catch(() => {}); // and the daily check of followed mod channels
-  const injected = [...new Set([...(files.includes('content-ultra.js') ? ['lib/nav.js'] : []), ...(files.includes('features/nav.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js'] : []), ...(files.includes('lib/navlayout.js') ? ['lib/nav.js', 'lib/nav-items.js'] : []), ...(files.includes('features/coursetabs.js') ? ['lib/coursetabs.js'] : []), ...(files.includes('features/lookparts.js') ? ['lib/lookx.js', 'lib/lookparts.js'] : []), ...files])];
+  const injected = [...new Set([...(files.includes('content-ultra.js') ? ['lib/nav.js'] : []), ...(files.includes('features/nav.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js'] : []), ...(files.includes('features/navbar.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js', 'lib/navbar.js'] : []), ...(files.includes('lib/navlayout.js') ? ['lib/nav.js', 'lib/nav-items.js'] : []), ...(files.includes('features/coursetabs.js') ? ['lib/coursetabs.js'] : []), ...(files.includes('features/lookparts.js') ? ['lib/lookx.js', 'lib/lookparts.js'] : []), ...files])];
   // The document that asked, where the browser names it (Chrome): one that has since navigated away gets nothing.
   // Without a documentId, the frame, after asking it whether it still holds the document that asked (content.js's
   // docId, in Glaze's own world there). Pin the probe's document id too where available; otherwise modules must
@@ -914,7 +959,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // here at the page's ask, only while that tab is the one on screen), kept for a tab switch after a reload. In storage.session, which the browser holds in memory and never writes to disk, and which pages'
 // content scripts can't read (only this worker); where a browser has none, in this worker's memory. Gone when the browser
 // closes, when Glaze or the tabs are switched off (below), when another account turns up on the site, or on sign-out.
-// Only an Ultra page's top frame asks, for its own origin (never one the message names). Sizes: lib/coursetabs.js.
+// Only a Canvas or Ultra page's top frame asks, for its own origin (never one the message names). Sizes: lib/coursetabs.js.
 const SNAP_MEM = new Map();
 let snapTurn;
 const snapQueue = (fn) => (snapTurn ||= GZ_CARDS.queue())(fn);
@@ -931,7 +976,7 @@ const snapNotify = async (site, state) => {
   await Promise.allSettled(state.docs.map(async (d) => {
     const tab = await chrome.tabs.get(d.tab);
     const u = new URL(tab.url);
-    if (u.origin !== site || !/^\/ultra(\/|$)/.test(u.pathname)) return;
+    if (u.origin !== site) return;
     await chrome.tabs.sendMessage(d.tab, { type: 'glaze:tabs-state', site, uid: state.uid, epoch: state.epoch }, d.id ? { documentId: d.id } : { frameId: 0 });
   }));
 };
@@ -940,7 +985,7 @@ const snapEpoch = (previous) => Math.max(Date.now(), (previous || 0) + 1);
 // (a switch of browser tab in between throws it away), still on `site`.
 const snapShot = async (tabId, site) => {
   const before = await chrome.tabs.get(tabId).catch(() => null);
-  if (!before?.active || !before.url?.startsWith(`${site}/ultra/`)) return null;
+  if (!before?.active || !before.url?.startsWith(`${site}/`)) return null;
   // Shown blurred (features/coursetabs.js picture): a lower quality is not seen, and is a smaller picture to keep.
   const shot = await chrome.tabs.captureVisibleTab(before.windowId, { format: 'jpeg', quality: 60 }).catch(() => null);
   const after = await chrome.tabs.get(tabId).catch(() => null);
@@ -949,8 +994,10 @@ const snapShot = async (tabId, site) => {
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:snap') return;
   snapQueue(async () => {
-    const site = s.frameId === 0 && await fromUltra(s);
-    if (!site || !await switchOn('tabs') || typeof m.uid !== 'string' || m.uid.length > 80 || !/^_\d+_\d+$/.test(m.uid)) return null;
+    const ultra = s.frameId === 0 && await fromUltra(s);
+    const site = ultra || (s.frameId === 0 && await fromCanvas(s));
+    const kind = ultra ? 'ultra' : 'canvas';
+    if (!site || !await switchOn('tabs') || !GZ_CTABS_LIB.validId(m.uid, kind)) return null;
     // Birth time orders documents across account changes; the extension sender authorizes every request.
     if (!Number.isSafeInteger(s.tab?.id) || s.tab.id < 0 || !Number.isFinite(m.born) || m.born <= 0 || m.born > Date.now() + 1000
       || (s.documentId !== undefined && (typeof s.documentId !== 'string' || !s.documentId || s.documentId.length > 128))) return null;
@@ -983,13 +1030,13 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
       await snapNotify(site, state);
       return { ok: true };
     }
-    if (typeof m.cid !== 'string' || m.cid.length > 80 || !/^_\d+_\d+$/.test(m.cid)) return null;
+    if (!GZ_CTABS_LIB.validId(m.cid, kind)) return null;
     const k = `snap:${site}|${m.uid}|${m.cid}`;
     if (m.op === 'forget') return snapArea.remove(k).then(() => true);
     if (m.op === 'get') return (await snapArea.get(k))[k] || null;
     if (m.op !== 'shot') return null;
     const path = String(m.path), q = path.indexOf('?'), p = q < 0 ? path : path.slice(0, q);
-    if (GZ_CTABS_LIB.safe(p, q < 0 ? '' : path.slice(q + 1)) !== path || !p.startsWith(`/ultra/courses/${m.cid}/`)) return null;
+    if (GZ_CTABS_LIB.safe(p, q < 0 ? '' : path.slice(q + 1)) !== path || !GZ_CTABS_LIB.owns(p, m.cid)) return null;
     const nums = (a, n) => Array.isArray(a) && a.length === n && a.every((v) => Number.isFinite(v) && Math.abs(v) <= 1e5) ? a.map(Math.round) : null;
     const size = nums(m.size, 2), strip = m.strip === null ? null : nums(m.strip, 3);
     if (!size || (m.strip !== null && !strip)) return null;

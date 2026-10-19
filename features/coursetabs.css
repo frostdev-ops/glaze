@@ -1,0 +1,78 @@
+/* Shared course strip and live frames on Canvas and Blackboard Ultra. */
+html[data-gz-ctabs] { --gz-ctabs-h: 40px; }
+html[data-gz-ctabs~="small"] { --gz-ctabs-h: 34px; }
+html[data-gz-ctabs~="large"] { --gz-ctabs-h: 48px; }
+#gz-ctabs {
+  position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 8px; box-sizing: border-box; flex: none; width: 100%;
+  height: var(--gz-ctabs-h, 40px); padding: 6px 12px 0; margin: 0; font: 500 13px/1.2 var(--gz-font, inherit); color: var(--gz-ink-muted);
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.4);
+  border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
+}
+/* Over a solid background the strip and the document buttons would blur a flat colour: a GPU layer for nothing. Same fill. */
+html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter: none; }
+#gz-ctabs[data-size="small"] { font-size: 12px; }
+#gz-ctabs[data-size="large"] { font-size: 14px; }
+#gz-ctabs:not([data-shape="tab"]) { align-items: center; padding-top: 0; }
+#gz-ctabs .gz-ctabs-list { display: flex; align-items: inherit; align-self: stretch; gap: 4px; flex: 1; min-width: 0; overflow: auto hidden; scrollbar-width: none; }
+#gz-ctabs .gz-ctabs-list::-webkit-scrollbar { display: none; }
+#gz-ctabs .gz-ctab {
+  position: relative; display: flex; align-items: center; gap: 7px; box-sizing: border-box; flex: 0 1 var(--gz-ctab-w, 180px); min-width: min(104px, var(--gz-ctab-w, 180px));
+  max-width: var(--gz-ctab-w, 180px); height: calc(var(--gz-ctabs-h, 40px) - 10px); padding: 0 6px 0 11px; border: 1px solid transparent;
+  border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-surface-opacity, 55%), transparent); color: var(--gz-ink-muted);
+  cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: pan-x; outline: none;
+  transition: background-color var(--gz-t, 0.2s) var(--gz-ease, ease), color var(--gz-t, 0.2s) var(--gz-ease, ease);
+}
+#gz-ctabs[data-shape="tab"] .gz-ctab { height: calc(var(--gz-ctabs-h, 40px) - 6px); border-bottom: 0; border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)) var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)) 0 0; margin-bottom: -1px; }
+#gz-ctabs[data-shape="pill"] .gz-ctab { border-radius: 999px; }
+#gz-ctabs[data-shape="square"] .gz-ctab { border-radius: calc(var(--gz-radius, 12px) * 1 / 6); }
+#gz-ctabs .gz-ctab:hover { background: var(--gz-surface-grain, none), var(--gz-row-hover, color-mix(in srgb, var(--gz-ink) 8%, var(--gz-surface-paint, var(--gz-surface)))); color: var(--gz-ink); }
+#gz-ctabs .gz-ctab[aria-selected="true"] { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border-color: var(--gz-border-strong, var(--gz-line-strong)); }
+#gz-ctabs .gz-ctab[aria-selected="true"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: calc(var(--gz-radius, 12px) * 1 / 6); background: var(--gz-accent); }
+#gz-ctabs[data-shape="tab"] .gz-ctab[aria-selected="true"]::after { top: -1px; bottom: auto; left: 8px; right: 8px; }
+#gz-ctabs .gz-ctab:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
+#gz-ctabs .gz-ctab[data-drag] { z-index: 2; cursor: grabbing; box-shadow: var(--gz-shadow); }
+/* Each course's own colour (--gz-course, as Course colors resolves it): the dot or icon, a tint, or more of it. */
+#gz-ctabs .gz-ctab-mark { flex: none; display: grid; place-items: center; }
+#gz-ctabs[data-mark="none"] .gz-ctab-mark { display: none; }
+#gz-ctabs[data-mark="dot"] .gz-ctab-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--gz-course, var(--gz-accent)); }
+#gz-ctabs[data-mark="icon"] .gz-ctab-mark svg { display: block; width: 16px; height: 16px; fill: none; stroke: var(--gz-course, var(--gz-accent)); stroke-width: 1.8; stroke-linejoin: round; }
+#gz-ctabs[data-color="tint"] .gz-ctab[class*="course-color-"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 14%, var(--gz-surface-paint, var(--gz-surface))); }
+#gz-ctabs[data-color="tint"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 24%, var(--gz-surface-paint, var(--gz-surface))); border-color: color-mix(in oklab, var(--gz-course) 55%, transparent); }
+#gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 30%, var(--gz-surface-paint, var(--gz-surface))); color: var(--gz-ink); }
+#gz-ctabs[data-color="theme"] .gz-ctab[class*="course-color-"][aria-selected="true"] { background: var(--gz-surface-grain, none), color-mix(in oklab, var(--gz-course) 42%, var(--gz-surface-paint, var(--gz-surface))); border-color: var(--gz-course); }
+#gz-ctabs:is([data-color="tint"], [data-color="theme"]) .gz-ctab[class*="course-color-"][aria-selected="true"]::after { background: var(--gz-course); }
+#gz-ctabs .gz-ctab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--gz-ink-faint); }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x) svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#gz-ctabs :is(.gz-ctab-pin, .gz-ctab-x):hover { background: color-mix(in srgb, var(--gz-ink) 14%, transparent); color: var(--gz-ink); }
+#gz-ctabs .gz-ctab:not(:hover, :focus-visible, [data-pin]) .gz-ctab-pin { display: none; }
+#gz-ctabs .gz-ctab:not(:hover, :focus-visible, [aria-selected="true"]) .gz-ctab-x { visibility: hidden; }
+#gz-ctabs .gz-ctab[data-pin] .gz-ctab-pin { color: var(--gz-accent); }
+#gz-ctabs .gz-ctab[data-pin] .gz-ctab-x { display: none; }
+#gz-ctabs .gz-ctabs-note { flex: 0 1 auto; align-self: center; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-muted); }
+#gz-ctabs .gz-ctabs-note:empty { display: none; }
+/* Narrow: the word lies over the strip's own end for its few seconds (a click lets it go), not over the tabs' room. */
+@media (max-width: 700px) {
+  #gz-ctabs .gz-ctabs-note {
+    position: absolute; z-index: 3; top: 3px; bottom: 3px; right: 6px; max-width: calc(100% - 12px); display: flex; align-items: center; padding: 0 10px;
+    white-space: normal; line-height: 1.2; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
+    border-radius: var(--gz-radius-sm, calc(var(--gz-radius, 12px) * 2 / 3)); box-shadow: var(--gz-shadow); cursor: pointer;
+  }
+}
+/* Course tabs' live frames (features/coursetabs.js): over the whole window, above Glaze's footer; shown only while a tab's
+   frame is picked. Floating widgets stay over them. */
+#gz-ctabs-frames { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1250; visibility: hidden; background: var(--gz-ground, Canvas); }
+#gz-ctabs-frames[data-on] { visibility: visible; }
+#gz-ctabs-frames > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+#gz-ctabs-frames > .gz-ctabs-pic { position: absolute; inset: 0; z-index: 1; overflow: hidden; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
+.gz-ctabs-retry { position: absolute; z-index: 2; top: 80px; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: min(420px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--gz-line); border-radius: var(--gz-radius, 12px); background: var(--gz-surface-grain, none), var(--gz-surface-paint, var(--gz-surface, Canvas)); color: var(--gz-ink, CanvasText); box-shadow: var(--gz-shadow); }
+.gz-ctabs-retry p { margin: 0 0 12px; }
+.gz-ctabs-retry button { font: inherit; margin-inline-end: 8px; padding: 6px 12px; cursor: pointer; }
+html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
+/* A Canvas course loading behind the page on screen (features/coursetabs.js reveal): a light sweeping along its tab. */
+#gz-ctabs .gz-ctab[data-loading]::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, transparent, var(--gz-course, var(--gz-accent)), transparent) 0 0 / 40% 100% no-repeat; animation: gz-ctab-load 0.9s linear infinite; }
+@keyframes gz-ctab-load { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+html[data-gz-motion="off"] #gz-ctabs .gz-ctab[data-loading]::before { animation: none; background: var(--gz-course, var(--gz-accent)); opacity: 0.5; }
+html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
+/* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
+html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }

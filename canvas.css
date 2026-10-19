@@ -1512,3 +1512,25 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 #gz-mk a { padding: 0.4rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); text-decoration: none; }
 #gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-accent); outline: none; }
 @media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
+
+/* Canvas has one breadcrumb row. A full-width strip wraps above or below that row. */
+:is(.ic-app-nav-toggle-and-crumbs, #mobile-header):has(> #gz-ctabs) { flex-wrap: wrap; height: auto; }
+:is(.ic-app-nav-toggle-and-crumbs, #mobile-header) > #gz-ctabs { flex-basis: 100%; }
+/* As Ultra's course bar does, the row holding the strip stays at the top of the page as it scrolls (the page's scroller is
+   Canvas's drawer layout or the document), on a surface the page scrolls under, as Ultra's routed headers are. */
+:is(.ic-app-nav-toggle-and-crumbs, #mobile-header):has(> #gz-ctabs) {
+  position: sticky; top: 0; z-index: 11; /* above ordinary page content */
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas));
+}
+/* Let native dialogs and popovers in the main content rise above the sticky row. */
+.ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) ~ #main,
+#mobile-header:has(> #gz-ctabs) ~ #wrapper #main { z-index: auto; }
+/* The course menu sticks below it (--gz-ctabs-row: its height, features/coursetabs.js; unset without a strip there). */
+html[data-gz-ctabs]:not([data-gz-ctabs~="nav"]) #sticky-container { top: var(--gz-ctabs-row, 0px); max-height: calc(100vh - var(--gz-ctabs-row, 0px)); }
+/* Until it's in (it loads on demand), its place is held in a course's row while the tabs are on, so the row doesn't drop
+   when it comes: the default place and size on a page's first paint, the strip's own (data-gz-ctabs) after. */
+:is(html[data-gz-enhance-tabs]:not([data-gz-ctabs]), html[data-gz-ctabs]:not([data-gz-ctabs~="nav"])) .ic-app-nav-toggle-and-crumbs:has(#breadcrumbs a[href*="/courses/"]):not(:has(> #gz-ctabs)) { flex-wrap: wrap; height: auto; }
+:is(html[data-gz-enhance-tabs]:not([data-gz-ctabs]), html[data-gz-ctabs]:not([data-gz-ctabs~="nav"])) .ic-app-nav-toggle-and-crumbs:has(#breadcrumbs a[href*="/courses/"]):not(:has(> #gz-ctabs))::before { content: ""; order: -1; flex: 0 0 100%; height: var(--gz-ctabs-h, 40px); }
+html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs))::before { order: 99; }
+html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point, #gz-scene) { visibility: hidden !important; }
+html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"]) { visibility: visible; }

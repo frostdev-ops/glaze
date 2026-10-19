@@ -15,7 +15,7 @@
   // addresses and body classes can belong to another app or a same-host tool.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
   // A course tab's live frame (gz-ctab:<course>) works as a page of its own (solo), without the footer.
-  const tabFrame = window.top !== window && /^gz-ctab:_\d+_\d+$/.test(window.name) ? window.name.slice(8) : '';
+  const tabFrame = window.top !== window && /^gz-ctab:(?:_\d+_\d+|\d+)$/.test(window.name) ? window.name.slice(8) : '';
   const solo = window.top === window || !!tabFrame;
   const ULTRA = 'base[href*="/ultra/"]';
   const MOODLE = 'meta[name="keywords"][content^="moodle,"]'; // core writes it on every page
@@ -55,9 +55,8 @@
   let darkTheme = true;
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
-  // Canvas wears canvas.css, not theme.css and extras.css (Ultra's markup). motion.css holds the motion knobs any
-  // sheet's animations read. features/apps.css: Glaze's own apps (notes, widgets) on Ultra and Canvas, not Moodle.
-  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css'], 'features/surfaces.css'];
+  // Each site's theme, shared motion and surfaces; Canvas and Ultra also share tabs and apps.
+  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css', 'features/coursetabs.css'], 'features/surfaces.css'];
   // What only one site does: its part puts its own over these (the site's part, below). Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,
@@ -375,7 +374,7 @@
     .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
   // The Canvas course this page is in (/courses/:id/...), or undefined.
-  const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1];
+  const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1];
 
   // ---- grades on course cards (Extras) ---------------------------------------------------------
   // A course card's overall grade, drawn by CSS from attributes: Ultra's Courses page and Canvas's Dashboard (X.tagCards),
@@ -1187,10 +1186,10 @@
   // crossfade (canvas.css, Page transitions). An at-rule can't sit under an attribute selector, so the opt-in is
   // a style element that exists only while motion and entrances are on. A page that is revealed inside a
   // transition is marked, so its own entrances (a second movement) stay off; sticky, because letting go would
-  // restart them.
+  // restart them. Not in a tab's frame: its next page opts in too late.
   let fade = null;
   const syncPageFade = () => {
-    const want = !ultra && links.length && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-enter');
+    const want = !ultra && !tabFrame && links.length && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-enter');
     if (want && !fade) {
       fade = document.createElement('style');
       fade.textContent = '@view-transition { navigation: auto; }';

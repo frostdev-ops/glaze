@@ -115,7 +115,7 @@ const noUnhandled = async (run) => {
   assert.deepEqual(unhandled, [], 'no unhandled rejection');
 };
 
-const SHEETS = { canvas: ['canvas.css', 'motion.css', 'apps.css', 'surfaces.css'], ultra: ['theme.css', 'motion.css', 'extras.css', 'apps.css', 'surfaces.css'] };
+const SHEETS = { canvas: ['canvas.css', 'motion.css', 'apps.css', 'coursetabs.css', 'surfaces.css'], ultra: ['theme.css', 'motion.css', 'extras.css', 'apps.css', 'coursetabs.css', 'surfaces.css'] };
 // Canvas's part draws its sidebar's attributes (paintNav); Ultra's has nothing on <html> of its own, so its
 // gradebook helper, asked through GZ_CTX, is what shows it is in.
 const partOn = (p, site) => (site === 'canvas' ? p.html.hasAttribute('data-gz-nav-labels') : typeof p.c.GZ_CTX.bookFor('_1_1') === 'object');

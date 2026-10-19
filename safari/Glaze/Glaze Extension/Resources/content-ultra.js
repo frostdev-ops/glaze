@@ -679,6 +679,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
     I.setAttr('data-gz-nav-brand', n.brand);
+    // Glaze's own bar's room at first paint (theme.css), worded as GZ_NAVBAR.layout does once it is drawn.
+    const b = I.settings.navbar, c = /^\/ultra\/courses\//.test(location.pathname) ? b?.course : 'same';
+    if (!globalThis.GZ_NAVBAR_UI?.live()) I.setAttr('data-gz-navbar', !!b?.on && `${c === 'same' ? `${b.place} ${b.rail}` : c === 'icons' ? 'rail icons' : c === 'hide' ? 'none' : 'top'} ${b.style}${c !== 'hide' && b.tabs && I.settings.enhance.tabs ? ' tabs' : ''}`);
     I.setAttr('data-gz-nav-detailed', n.detailed);
     for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;
@@ -702,6 +705,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (!isPreview && window.top !== window) return;
     syncDashboard();
     glazeItem(I.links.length && I.settings?.enabled);
+    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings?.navbar?.on)) need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI).then(() => GZ_NAVBAR_UI.sync(), () => {});
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
     else if (I.links.length && navItems) {
       const n = I.worn.nav;
@@ -728,7 +732,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   }
 
   return {
-    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { syncDashboard(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
+    paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { syncDashboard(); globalThis.GZ_NAVBAR_UI?.sync(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
     renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
     syncTodo, syncCardTasks, syncRemind, syncWidgets,
