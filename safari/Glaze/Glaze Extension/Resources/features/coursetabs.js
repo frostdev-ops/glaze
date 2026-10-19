@@ -1055,6 +1055,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
     if (!on) {
       on = true;
+      // Its sheet comes in with content.js's (SHEETS). A page whose content script predates the sheet (an unpacked
+      // extension changed on disk but not reloaded) would show the frames unstyled, in the page's flow: link it here.
+      if (!preview && !document.querySelector('link[href$="/features/coursetabs.css"]')) (document.head || html).append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('features/coursetabs.css') }));
       if (!strip) make();
       listen(true);
       if (!prefs && !loaded) start();
