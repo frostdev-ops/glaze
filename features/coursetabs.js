@@ -444,7 +444,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       revoke();
       return;
     }
-    if (e.type === 'click' && ctx.site === 'canvas' && !preview && toFrame(e, el)) return;
     const cid = ctx.courseId();
     if (framed || showing || !cid || e.type !== 'pointerdown') return;
     if (el.closest('course-page-header, .MuiDrawer-paper, #base_tools') || (href.startsWith('/') && !href.includes(`/courses/${cid}/`))) shoot();
@@ -499,6 +498,15 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // live on. With a frame running, a plain click on a link to a course page opens it in that course's frame instead (made
   // if new), and in a tab's frame a link to another course goes to that course's frame: the page around never reloads.
   // A download, a link to a part of the same page or one opened elsewhere goes as the browser would take it.
+  // Run after the page's handlers: Canvas action links may submit a form or cancel navigation themselves.
+  const onCourseLink = (e) => {
+    if (!on || !e.isTrusted || preview || e.defaultPrevented) return;
+    const a = e.target instanceof Element && e.target.closest('a[href]');
+    if (!a || a.closest('form, [id^="gz-"], [class^="gz-"], [class*=" gz-"]')
+      || a.matches('[data-method], [data-remote], [data-confirm], [onclick], [role="button"]')
+      || (!a.target && document.querySelector('base[target]'))) return;
+    toFrame(e, a);
+  };
   const toFrame = (e, a) => {
     if (a.localName !== 'a' || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.defaultPrevented || a.hasAttribute('download')
       || (a.target && a.target !== '_self') || a.origin !== location.origin || a.hash) return false;
@@ -925,6 +933,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     document[f]('scroll', onScroll, { capture: true, passive: true });
     document[f]('click', onLeave, true);
     document[f]('pointerdown', onLeave, true);
+    if (ctx.site === 'canvas') globalThis[f]('click', onCourseLink);
     globalThis[f]('pagehide', onHide);
     globalThis[f]('resize', onResize);
     try { if (chrome.runtime?.id) chrome.storage.onChanged[yes ? 'addListener' : 'removeListener'](onStore); } catch { /* reloaded */ }
