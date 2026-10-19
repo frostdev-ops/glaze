@@ -20,6 +20,15 @@
     backdrop-filter: blur(calc(var(--gz-glass, 12px) * 5 / 6)); border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
   }
   .brand { display: flex; align-items: center; gap: 0.6rem; }
+  /* Opened as a page of the school's site (features/settingspage.js): its own tools, and what holds keys and grants sent
+     to a tab of its own. */
+  .embed-tools { display: flex; gap: .4rem; margin-inline-start: auto; }
+  .embed-tools[hidden] { display: none; }
+  html[data-embedded] .embed-gate { display: grid; gap: .75rem; justify-items: start; max-width: 40rem; margin: 2rem auto; padding: 1.25rem 1.5rem; border-radius: calc(var(--gz-radius, 12px) * 7 / 6);
+    background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-line, var(--gz-line)); }
+  html[data-embedded] .embed-gate h2 { margin: 0; font-size: 1.1rem; }
+  html[data-embedded] .embed-gate p { margin: 0; }
+  html[data-embedded] [data-editor-panel][data-gated] > :not(.embed-gate) { display: none !important; }
   .brand img { width: 24px; height: 24px; }
   .editor-tabs { display: flex; gap: .35rem; flex: 1 0 100%; overflow-x: auto; padding-block: .2rem; }
   .editor-tabs button { flex: none; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); font-size: 13px; }
@@ -293,6 +302,7 @@
     <nav class="editor-tabs" role="tablist" aria-label="Settings tabs"><button type="button" role="tab" id="tab-look" data-editor-tab="look" aria-controls="panel-look" aria-selected="true" tabindex="0">Look</button><button type="button" role="tab" id="tab-navigation" data-editor-tab="navigation" aria-controls="panel-navigation" aria-selected="false" tabindex="-1">Navigation</button><button type="button" role="tab" id="tab-blackboard" data-editor-tab="blackboard" aria-controls="panel-blackboard" aria-selected="false" tabindex="-1">Blackboard</button><button type="button" role="tab" id="tab-canvas" data-editor-tab="canvas" aria-controls="panel-canvas" aria-selected="false" tabindex="-1">Canvas</button><button type="button" role="tab" id="tab-moodle" data-editor-tab="moodle" aria-controls="panel-moodle" aria-selected="false" tabindex="-1">Moodle</button><button type="button" role="tab" id="tab-study" data-editor-tab="study" aria-controls="panel-study" aria-selected="false" tabindex="-1">Study tools</button><button type="button" role="tab" id="tab-sharing" data-editor-tab="sharing" aria-controls="panel-sharing" aria-selected="false" tabindex="-1">Sharing and sync</button><button type="button" role="tab" id="tab-mods" data-editor-tab="mods" aria-controls="panel-mods" aria-selected="false" tabindex="-1">Mods</button><button type="button" role="tab" id="tab-backup" data-editor-tab="backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1">Backup and privacy</button><button type="button" role="tab" id="tab-about" data-editor-tab="about" aria-controls="panel-about" aria-selected="false" tabindex="-1">About</button></nav>
     <p class="hint" id="hint" aria-live="polite"></p>
     <label class="switch" title="Theme on / off"><input type="checkbox" id="enabled" aria-label="Theme on / off"><span></span></label>
+    <div class="embed-tools" hidden><button type="button" id="embed-tab">Open in a new tab</button><button type="button" id="embed-close" class="primary">Close</button></div>
   </header>
 
   <div class="layout">

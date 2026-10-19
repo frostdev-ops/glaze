@@ -133,7 +133,7 @@ a { color: inherit; text-decoration: none; }
 :host([data-style="embed"]) .topbar { border-radius: 0; border-width: 0 0 1px; }
 .topbar .brand { flex: 0 1 auto; min-width: 0; max-width: 20%; margin: 0; padding: 0 8px; }
 .topbar .label, .chip .label, .row .label { opacity: 1; transform: none; }
-.tlist { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; }
+.tlist { position: relative; flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; }
 .titems { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
 .topbar .item { flex: none; width: auto; height: 40px; gap: 8px; padding: 0 12px; }
 .topbar .item svg { width: 20px; height: 20px; }
@@ -148,7 +148,16 @@ a { color: inherit; text-decoration: none; }
 }
 .tind::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: -7px; height: 3px; border-radius: 3px 3px 0 0; background: var(--gz-accent-hi, #6fdcff); }
 .tind[hidden] { display: block; opacity: 0; }
-.ttabs { display: flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; max-width: 38%; overflow-x: auto; scrollbar-width: none; padding-inline-start: 10px; border-inline-start: 1px solid var(--nb-line); }
+/* The course tabs take the rest of the bar, from the items' end: each shrinks like a browser tab (to 92px) before they scroll,
+   and the bar's own items lose their labels first (fit()). A scrolling row fades at the edge it continues past. */
+.ttabs { display: flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; margin-inline-start: auto; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-inline-start: 10px; border-inline-start: 1px solid var(--nb-line); }
+.ttabs::-webkit-scrollbar { display: none; }
+.ttabs[data-scroll~="end"] { -webkit-mask-image: linear-gradient(to var(--gz-nb-end, right), #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to var(--gz-nb-end, right), #000 calc(100% - 28px), transparent); }
+.ttabs[data-scroll~="start"] { -webkit-mask-image: linear-gradient(to var(--gz-nb-start, left), #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to var(--gz-nb-start, left), #000 calc(100% - 28px), transparent); }
+.ttabs[data-scroll~="start"][data-scroll~="end"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+:host([dir="rtl"]) .ttabs { --gz-nb-end: left; --gz-nb-start: right; }
+.ttabs .ctab { flex: 0 1 auto; min-width: 92px; max-width: 220px; }
+.ttabs .chip { flex: 1 1 auto; min-width: 0; max-width: none; }
 .ttabs[hidden] { display: none; }
 .tacc { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; }
 .tacc:hover { background: var(--nb-hover); }
@@ -176,7 +185,7 @@ a { color: inherit; text-decoration: none; }
 .rail:not([data-open]) .ctab-tools { display: none; }
 .rail:not([data-open]) .pinned { display: none; }
 .chip {
-  display: flex; align-items: center; gap: 8px; height: 36px; max-width: 168px; padding: 0 10px 0 6px; border-radius: 11px;
+  display: flex; align-items: center; gap: 8px; height: 36px; max-width: 220px; padding: 0 10px 0 6px; border-radius: 11px;
   color: var(--gz-ink-muted, #a9b8cf); font-size: 13px; font-weight: 600; white-space: nowrap; transition: color 160ms ease, background-color 160ms ease;
 }
 .chip .dot { width: 22px; height: 22px; border-radius: 6px; font-size: 9px; }

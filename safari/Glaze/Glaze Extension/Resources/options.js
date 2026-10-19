@@ -34,6 +34,33 @@ const hint = (msg, err = false) => {
 const finder = $('#find');
 let followSection = () => {}, searchPreview = () => {};
 const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
+
+// Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
+// The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
+// mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway.
+const embedded = window.top !== window;
+if (embedded) {
+  document.documentElement.setAttribute('data-embedded', '');
+  $('.embed-tools').hidden = false;
+  const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
+  const ownTab = () => { chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + location.hash }).then(leave, () => {}); };
+  $('#embed-close').addEventListener('click', leave);
+  $('#embed-tab').addEventListener('click', ownTab);
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, select, textarea, dialog, [role="dialog"], [role="menu"]')) return;
+    e.preventDefault(); leave();
+  });
+  const make = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  for (const [panel, name] of [['sharing', 'Sharing and sync'], ['mods', 'Mods'], ['backup', 'Backup and privacy']]) {
+    const box = document.querySelector(`[data-editor-panel="${panel}"]`);
+    if (!box) continue;
+    const go = make('button', { type: 'button', className: 'primary', textContent: t('Open in a new tab') });
+    go.addEventListener('click', ownTab);
+    box.setAttribute('data-gated', '');
+    box.prepend(make('div', { className: 'embed-gate' }, make('h2', { textContent: t(name) }),
+      make('p', { textContent: t('This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.') }), go));
+  }
+}
 const filter = () => {
   const words = GZ_FIND.parse(finder.value);
   const on = words.length > 0;
@@ -1245,7 +1272,8 @@ GZ_UI.load().then((s) => {
       if (!pets) throw new Error('pet history');
       const folders = GZ_FOLDERS.backup(all);
       const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
-      const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
+      const navbar = { ...s.navbar, ...(s.navbar.brand === 'custom' && { brand: 'glaze' }) };
+      const blob = new Blob([JSON.stringify({ ...s, nav, navbar, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
@@ -1266,6 +1294,7 @@ GZ_UI.load().then((s) => {
     // To Do edits take turns, and success is said only once both stores have it.
     const next = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
     next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
+    if (next.navbar.brand === 'custom') next.navbar.brand = 'glaze';
     const mediaSrc = raw.parts?.x?.bg?.media?.src;
     const mediaMissing = next.bg.kind === 'media' && typeof mediaSrc === 'string' && mediaSrc.startsWith('file:');
     if (mediaMissing) next.bg.kind = 'gradient';

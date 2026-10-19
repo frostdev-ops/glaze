@@ -2827,4 +2827,6 @@
   "The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.": "Los cursos que abres también aparecen en la navegación. Haz clic en uno para cambiar; el botón central o Supr lo cierra, y P lo fija. Para tenerlos solo ahí, elige Solo en la navegación en los ajustes de pestañas de curso.",
   "Only in the navigation": "Solo en la navegación",
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Solo en la navegación necesita la navegación de Glaze con sus pestañas de curso activadas. Sin ellas, las pestañas van sobre la barra del curso.",
+  "That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab.": "Esa página no se puede abrir dentro de una pestaña de curso, así que el curso ha vuelto. Abre su enlace con Ctrl o Cmd para verla en una pestaña nueva.",
+  "This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.": "Esta parte de Glaze guarda tus claves, copias de seguridad y los permisos de los mods, así que se abre en una pestaña propia, donde ningún sitio web puede alcanzarla.",
 };

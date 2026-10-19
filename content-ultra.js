@@ -388,9 +388,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.widgetLayout) { floatEpoch++; floatsIn(ch.widgetLayout.newValue); } });
   } catch { /* extension reloaded */ }
 
-  // ---- course tabs: features/coursetabs.js (after lib/coursetabs.js), in the top frame and the preview -------------
-  // Until it's in, extras.css holds the strip's place from data-gz-ctabs (paintCourses): the place and size it last had in
-  // this browser tab, else the defaults; gate hands it Ultra's new top bar before that is painted.
+  // Course tabs load on demand; extras.css first reserves their cached place and size.
   const tabsOn = () => !!I.links.length && (isPreview || solo) && I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.();
   const syncTabs = () => (tabsOn() ? need('lib/coursetabs.js', () => globalThis.GZ_CTABS_LIB).then(() => need('features/coursetabs.js', () => globalThis.GZ_CTABS))
     .then(() => GZ_CTABS.sync(tabsOn()), () => {}) : globalThis.GZ_CTABS?.sync(false));
@@ -463,6 +461,13 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const paintCourses = () => {
     let at = null;
     try { at = sessionStorage.getItem('gz-ctabs'); } catch { /* blocked */ }
+    if (at === 'nav') {
+      const b = I.settings.navbar;
+      let holds = b?.on && b.tabs && (!/^\/ultra\/courses\//.test(location.pathname) || b.course !== 'hide');
+      if (tabFrame) try { holds = (parent.document.documentElement.getAttribute('data-gz-navbar') || '').split(' ').includes('tabs'); } catch { holds = false; }
+      // A cached nav placement still needs a host.
+      if (!holds) at = 'above medium';
+    }
     I.setAttr('data-gz-ctabs', tabsOn() && (at ?? 'above medium'));
     if (isPreview) return;
     const colors = courseColors();
@@ -679,7 +684,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
     I.setAttr('data-gz-nav-brand', n.brand);
-    // Glaze's own bar's room at first paint (theme.css), worded as GZ_NAVBAR.layout does once it is drawn.
+    // First-paint room, as GZ_NAVBAR.layout words it.
     const b = I.settings.navbar, c = /^\/ultra\/courses\//.test(location.pathname) ? b?.course : 'same';
     if (!globalThis.GZ_NAVBAR_UI?.live()) I.setAttr('data-gz-navbar', !!b?.on && `${c === 'same' ? `${b.place} ${b.rail}` : c === 'icons' ? 'rail icons' : c === 'hide' ? 'none' : 'top'} ${b.style}${c !== 'hide' && b.tabs && I.settings.enhance.tabs ? ' tabs' : ''}`);
     I.setAttr('data-gz-nav-detailed', n.detailed);
