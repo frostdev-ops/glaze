@@ -183,6 +183,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     e.dataset.id = item.id;
     part(e, item.active ? `${partName} active` : partName);
     if (item.active) e.setAttribute('aria-current', 'page');
+    if (item.by) { const from = t('From {name}', { name: item.by }); e.setAttribute('aria-description', from); e.setAttribute('title', from); }
     return e;
   };
   const badgeOf = (item) => (settings().badges !== false && item.badge ? item.badge : '');
@@ -191,7 +192,6 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const b = badgeOf(item);
     put(e, icon(item.icon), label(item.label, i), b ? badge(b) : null);
     e.dataset.tip = [item.label, b, item.by].filter(Boolean).join(' · ');
-    if (item.by) e.setAttribute('aria-description', t('From {name}', { name: item.by }));
     return e;
   };
   const initials = (name) => [...(name.match(/\p{L}[\p{L}'’-]*/gu) || [])].filter((w, i, a) => i === 0 || i === a.length - 1).map((w) => [...w][0].toUpperCase()).join('') || [...name.trim()][0] || '?';
