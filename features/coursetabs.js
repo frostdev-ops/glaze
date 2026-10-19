@@ -1026,6 +1026,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const onHide = () => { if (on) { saveNow(); keepPage(); } };
   const onResize = () => {
     lay();
+    navRoom();
     if (ctx.site === 'canvas') {
       // A picture made at the old viewport no longer fits; keep the live frame through the resize.
       if (pic) { const f = frames.get(showing); if (f) f.el.style.visibility = ''; unpicture(true); }
@@ -1033,6 +1034,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
   };
   let navWatch = null;
+  // In a Canvas tab's frame: the room Glaze's bar takes on the page around (its words there, and the window's width),
+  // which this frame, filling the window under the bar, keeps too (canvas.css).
+  const navRoom = () => {
+    if (!framed || ctx.site !== 'canvas') return;
+    let s = null; try { s = parent.getComputedStyle(parent.document.documentElement); } catch { return; }
+    for (const k of ['--gz-navbar-left', '--gz-navbar-top']) {
+      const v = s.getPropertyValue(k).trim();
+      if (html.style.getPropertyValue(k) !== v) { if (v) html.style.setProperty(k, v); else html.style.removeProperty(k); }
+    }
+  };
   const listen = (yes) => {
     const f = yes ? 'addEventListener' : 'removeEventListener';
     document[f]('scroll', onScroll, { capture: true, passive: true });
@@ -1044,8 +1055,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // A parent bar can change without any mutation in this course's document.
     navWatch?.disconnect(); navWatch = null;
     if (yes && framed) try {
-      navWatch = new MutationObserver(() => bar.place());
-      navWatch.observe(parent.document.documentElement, { attributes: true, attributeFilter: ['data-gz-navbar'] });
+      navWatch = new MutationObserver(() => { bar.place(); navRoom(); });
+      navWatch.observe(parent.document.documentElement, { attributes: true, attributeFilter: ['data-gz-navbar', 'style'] });
+      navRoom();
     } catch { /* inaccessible parent: the strip stays above */ }
     try { if (chrome.runtime?.id) chrome.storage.onChanged[yes ? 'addListener' : 'removeListener'](onStore); } catch { /* reloaded */ }
   };
