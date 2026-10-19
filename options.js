@@ -208,7 +208,7 @@ GZ_UI.load().then((s) => {
   const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); };
   const group = (path) => path.split('.')[0];
 
-  // Relay preference and explicit health action only; session keys and joins stay on the Sessions page.
+  // Relay preference and explicit health action; sessions themselves are lib/sessions-ui.js's.
   const defaultRelay = 'https://share.frostdev.io';
   let relayBusy = false;
   const relayStatus = (text, error = false) => { $('#relay-status').textContent = text; $('#relay-status').classList.toggle('error', error); };
@@ -1221,7 +1221,6 @@ GZ_UI.load().then((s) => {
   // ---- backup ----
   // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
   // card styles and bookmarks go too; a picture kept on this computer stays here.
-  $('#share-sessions').addEventListener('click', (e) => { if (e.isTrusted) chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => hint(t('Could not finish. Your local copies are kept. Try again.'), true)); });
   $('#export').addEventListener('click', async (e) => {
     if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true)) return;
     try {

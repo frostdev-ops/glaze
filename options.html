@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Glaze settings</title>
 <link rel="stylesheet" href="ui.css">
@@ -171,6 +172,15 @@
   body.finding .section-links { display: none; }
   #relay-status { min-height: 1.5em; overflow-wrap: anywhere; }
   #relay-status.error { color: var(--gz-err); }
+  #ss-status.error, #nb-status.error { color: var(--gz-err); }
+  #ss-status:empty, #nb-status:empty { display: none; }
+  .ss-status { position: sticky; top: 0; z-index: 1; padding: 0.4rem 0; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); font-size: 13px; color: var(--gz-ink); }
+  .ss-sources { display: grid; gap: 0.35rem; max-height: 16rem; overflow: auto; padding: 0.2rem; }
+  .ss-session { display: grid; gap: 0.35rem; padding: 0.75rem 0; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
+  .ss-session:first-child { border-top: 0; padding-top: 0; }
+  .ss-session h4, .ss-session ul, .ss-session h5, .ss-read p { margin: 0; }
+  .ss-session ul { padding-inline-start: 1.2rem; font-size: 13px; }
+  .ss-read { display: grid; gap: 0.3rem; padding: 0.6rem; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
   /* Look parts builders (lib/editor-x*.js): the shader box with its line numbers, the layer stack, motion moments. */
   .x-builder, .x-motion, .x-body { display: grid; gap: .6rem; min-width: 0; }
   .x-body > button { justify-self: start; }
@@ -942,7 +952,21 @@
 <section id="sharing-sessions" data-editor-section="sharing/sessions" data-sites="Extension only" aria-labelledby="heading-sharing-sessions">
 <p class="section-path" data-editor-breadcrumb><a href="#sharing/sessions" data-editor-alias>Share sessions</a></p><div class="section-heading"><h2 id="heading-sharing-sessions">Share sessions</h2></div>
 <p class="desc section-note">Share selected notes, Looks or tasks with an explicit invite.</p><p class="site-scope">On this device</p>
-<div class="group"><h3>Share sessions</h3><p class="desc">Invite only, end-to-end encrypted through your selected relay. Your local copies keep working without the server.</p><p class="desc">Off until you create or join. Pause or resume from Share sessions.</p><button type="button" id="share-sessions">Open Share sessions</button></div>
+<p class="desc">Invite only, end-to-end encrypted through your selected relay. Your local copies keep working without the server. In Notes, Share on a note does the same in one step.</p>
+<p class="desc ss-status" id="ss-status" role="status" aria-live="polite"></p>
+<div class="group"><h3>Connection</h3><p class="desc" id="ss-connection"></p><div class="row"><button type="button" id="ss-resume" hidden>Resume sessions</button><button type="button" id="ss-pause" hidden>Pause sharing</button><button type="button" id="ss-refresh" hidden>Sync now</button></div></div>
+<div class="group"><h3>Your sessions</h3><div id="ss-sessions"></div></div>
+<div class="group"><h3>Create a session</h3><p class="desc">Only the selected notes, Look or custom tasks and their plans are shared. Course account identifiers and LMS assignments are not carried.</p><p class="desc" id="ss-create-relay"></p>
+<label class="field wide"><span>Your name on this device</span><input id="ss-name" type="text" maxlength="60" autocomplete="off" data-local></label>
+<label class="field wide"><span>Session name</span><input id="ss-title" type="text" maxlength="80" autocomplete="off" data-local></label>
+<label class="field wide"><span>What to share</span><select id="ss-kind" data-local><option value="notes">Notes</option><option value="look">Current Look</option><option value="todo">Custom tasks and plans</option></select></label>
+<div id="ss-sources" class="ss-sources"></div>
+<label class="check"><input id="ss-expire" type="checkbox" data-local><span>Delete after a year unused</span></label>
+<div class="row"><button type="button" id="ss-create" class="primary">Create encrypted session</button></div></div>
+<div class="group"><h3>Join from an invite link</h3><p class="desc">Paste the full link here. Anyone holding an edit link can change the session; anyone holding a view link can read it. Keep links private.</p>
+<label class="field wide"><span>Invite link</span><input id="ss-invite" type="password" maxlength="1024" autocomplete="off" spellcheck="false" data-local></label>
+<div class="row"><button type="button" id="ss-join">Join encrypted session</button></div>
+<p class="desc">Joining keeps a separate local copy. Copy it into Notes or To Do to add new local items without replacing existing work.</p></div>
 </section>
 <section id="relay" data-editor-section="sharing/relay" data-sites="Extension only" aria-labelledby="heading-sharing-relay">
 <p class="section-path" data-editor-breadcrumb><a href="#sharing/relay" data-editor-alias>Relay</a></p><div class="section-heading"><h2 id="heading-sharing-relay">Relay</h2><button type="button" class="section-reset" data-reset-section="sharing/relay">Reset section</button></div>
@@ -1066,7 +1090,7 @@
           <p class="desc" id="mod-key-said" role="status" aria-live="polite"></p>
         </div>
 </section></div>
-<div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" hidden><nav class="section-links" aria-label="Sections"><a href="#backup/privacy" data-editor-alias>Backup and privacy</a></nav>
+<div id="panel-backup" role="tabpanel" aria-labelledby="tab-backup" data-editor-panel="backup" hidden><nav class="section-links" aria-label="Sections"><a href="#backup/privacy" data-editor-alias>Backup and privacy</a><a href="#backup/notes" data-editor-alias>Notes backup</a></nav>
 <section id="data" data-editor-section="backup/privacy" data-sites="Extension only" aria-labelledby="heading-backup-privacy">
 <p class="section-path" data-editor-breadcrumb><a href="#backup/privacy" data-editor-alias>Backup and privacy</a></p><div class="section-heading"><h2 id="heading-backup-privacy">Backup and privacy</h2></div>
 <p class="desc section-note">Export or import your settings, tasks and share keys.</p><p class="site-scope">On this device</p>
@@ -1082,6 +1106,15 @@
 <label class="check"><input type="checkbox" data-key="mods.blocklist"><span>Check the mod blocklist</span>
           <span class="desc">On Chrome, while you have code mods installed, Glaze asks frostdev.io about once a day for a list, signed by Glaze's owner, of mods that must stop. Nothing about you is sent. Turn this off and Glaze never asks; mods it already stopped stay stopped.</span></label>
 <a href="PRIVACY.md" target="_blank" rel="noopener">Privacy</a>
+</section>
+<section id="notes-backup" data-editor-section="backup/notes" data-sites="Extension only" aria-labelledby="heading-backup-notes">
+<p class="section-path" data-editor-breadcrumb><a href="#backup/notes" data-editor-alias>Notes backup</a></p><div class="section-heading"><h2 id="heading-backup-notes">Notes backup</h2></div>
+<p class="desc section-note">Export or import one account's notes with every share key.</p><p class="site-scope">On this device</p>
+<label class="field wide"><span>Notes account</span><select id="nb-account" data-local></select></label>
+<div class="row"><button type="button" id="nb-export">Export notes and share keys</button><button type="button" id="nb-import">Import notes and share keys</button><input type="file" id="nb-file" accept=".zip,application/zip" hidden data-local></div>
+<p class="desc">Includes all share keys and creator delete tokens, even while sharing is paused. Anyone with this backup can open those sessions and may change or delete them. Keep it private.</p>
+<p class="desc">Import restores keys locally. It connects only after you create, join or resume a session.</p>
+<p class="desc" id="nb-status" role="status" aria-live="polite"></p>
 </section></div>
 <div id="panel-about" role="tabpanel" aria-labelledby="tab-about" data-editor-panel="about" hidden><nav class="section-links" aria-label="Sections"><a href="#about/glaze" data-editor-alias>About Glaze</a></nav>
 <section id="about-glaze" data-editor-section="about/glaze" data-sites="Extension only" aria-labelledby="heading-about-glaze">
@@ -1193,5 +1226,7 @@
   <script src="lib/petplayer.js"></script>
   <script src="lib/petlibrary.js"></script>
   <script src="options.js"></script>
+  <script src="lib/notes.js"></script>
+  <script src="lib/sessions-ui.js"></script>
 </body>
 </html>

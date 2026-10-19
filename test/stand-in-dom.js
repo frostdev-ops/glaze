@@ -75,5 +75,7 @@ class El {
   get offsetHeight() { return this.layoutBox?.height ?? 0; }
   get scrollHeight() { return this.layoutBox?.height ?? 0; }
   setPointerCapture() {}
+  // A shadow root as a child list; tests reach a closed one through shadowForTest, as a page script cannot.
+  attachShadow({ mode }) { const r = new El('#shadow-root', this.doc); r.host = this; this.shadowForTest = r; if (mode === 'open') this.shadowRoot = r; return r; }
 }
 module.exports = { El, matches };

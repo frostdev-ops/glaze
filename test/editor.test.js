@@ -43,9 +43,9 @@ const ACTIONS = {
   'look/navigation': ['nav-pick', 'nav-file', 'nav-url'],
   'look/cards': ['card-set', 'card-set-clear'], 'look/courses': ['course-list', 'org-list'],
   'blackboard/nav': ['nav-items', 'nav-widgets', 'nav-logo-pick', 'nav-logo-file', 'nav-link-name', 'nav-link-url', 'nav-link-icon', 'nav-link-tab', 'nav-link-save', 'nav-link-cancel', 'nav-reset'],
-  'sharing/sessions': ['share-sessions'],
+  'sharing/sessions': ['ss-status', 'ss-resume', 'ss-pause', 'ss-refresh', 'ss-sessions', 'ss-name', 'ss-title', 'ss-kind', 'ss-sources', 'ss-expire', 'ss-create', 'ss-invite', 'ss-join'],
   'sharing/calendar': ['gcal', 'gcal-connect', 'gcal-code', 'gcal-link', 'gcal-reconnect', 'gcal-share', 'gcal-disconnect', 'gcal-pair', 'gcal-id', 'gcal-copy'],
-  'backup/privacy': ['export', 'import-btn', 'import', 'reset-all'], 'about/glaze': ['report-link', 'news', 'news-close'],
+  'backup/privacy': ['export', 'import-btn', 'import', 'reset-all'], 'backup/notes': ['nb-account', 'nb-export', 'nb-import', 'nb-file', 'nb-status'], 'about/glaze': ['report-link', 'news', 'news-close'],
 };
 
 // A static markup reader for this checked-in page, not a browser/HTML implementation. Scripts/styles/comments are

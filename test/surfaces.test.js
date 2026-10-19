@@ -27,7 +27,7 @@ test('theme codes round-trip custom surfaces and restore surface defaults from o
   assert.equal(plain.look.surfaceCustom, false); assert.equal(plain.look.surfaceOpacity, -1);
 });
 test('catalogued content fills and radii use shared variables; no new row blur is introduced', () => {
-  const files = ['sharing/sessions.css', 'options.html', 'popup.html', 'theme.css', 'canvas.css', 'moodle.css', 'extras.css', 'features/apps.css', 'features/lookx.css', 'ui.css'];
+  const files = ['sharing/quick.css', 'options.html', 'popup.html', 'theme.css', 'canvas.css', 'moodle.css', 'extras.css', 'features/apps.css', 'features/lookx.css', 'ui.css'];
   for (const file of files) {
     const source = fs.readFileSync(require.resolve(`../${file}`), 'utf8');
     const css = file.endsWith('.html') ? [...source.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n') : source;
@@ -38,7 +38,7 @@ test('catalogued content fills and radii use shared variables; no new row blur i
 });
 
 test('every extension HTML entry loads the shared surface schema before defaults', () => {
-  for (const file of ['options.html', 'popup.html', 'preview.html', 'sharing/sessions.html']) {
+  for (const file of ['options.html', 'popup.html', 'preview.html', 'sharing/quick.html']) {
     const html = fs.readFileSync(require.resolve(`../${file}`), 'utf8');
     const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
     const defaults = scripts.findIndex((s) => s.endsWith('defaults.js'));
@@ -61,8 +61,8 @@ test('the editor and popup keep a solid readable ground and apply global depth',
   assert.equal(attrs['data-gz-motion'], 'subtle');
 });
 
-test('Sessions surface reads preserve role defaults, reject stale answers, and fail closed', async () => {
-  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../sharing/sessions.js'), 'utf8');
+test('the Notes share panel reads preserve role defaults, reject stale answers, and fail closed', async () => {
+  const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../sharing/quick.js'), 'utf8');
   const code = source.slice(source.indexOf('  const LOOK_KEYS'), source.indexOf('  const say'));
   const style = {}, attrs = {}, reads = [], sync = { get: () => new Promise((resolve) => reads.push(resolve)) };
   const api = vm.runInNewContext(`let dead = false; ${code}; ({paintLook, stop: () => { dead = true; }})`, {
@@ -79,8 +79,8 @@ test('Sessions surface reads preserve role defaults, reject stale answers, and f
   sync.get = async () => ({ look: { radius: 0 } }); api.stop(); await api.paintLook(); assert.equal(style['--gz-radius'], '4px');
 });
 
-test('Sessions permits the local frost texture without allowing network connections', () => {
-  const html = fs.readFileSync(require.resolve('../sharing/sessions.html'), 'utf8');
+test('the Notes share panel permits the local frost texture without allowing network connections', () => {
+  const html = fs.readFileSync(require.resolve('../sharing/quick.html'), 'utf8');
   const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
   assert.match(csp, /(?:^|; )img-src 'self' data:(?:;|$)/);
   assert.match(csp, /(?:^|; )connect-src 'none'(?:;|$)/);

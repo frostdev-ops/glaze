@@ -594,7 +594,7 @@ test('broker: only the editor\'s own top frame may use glaze:mods', async () => 
     'the editor\'s preview frame': { ...EDITOR, frameId: 3 },
     'another extension': { ...EDITOR, id: 'evil' },
     'an editor address from another origin': { ...EDITOR, origin: 'https://evil.example' },
-    'the sessions page': { id: 'glaze', url: 'chrome-extension://x/sharing/sessions.html', frameId: 0, origin: 'chrome-extension://x' },
+    'the Notes share panel': { id: 'glaze', url: 'chrome-extension://x/sharing/quick.html', frameId: 3, origin: 'chrome-extension://x', tab: { id: 4 } },
     'a sandboxed mod host (opaque origin)': { id: 'glaze', url: 'chrome-extension://x/mods/host.html', frameId: 2, origin: 'null', tab: { id: 4 } },
   };
   for (const [who, s] of Object.entries(senders)) {

@@ -180,7 +180,7 @@ const page = ({ on = true, stored = on, live = true, enabled = true, ultra = fal
     // The real reader over a stand-in fetch that records what it was asked and how (env.fetched).
     ...(ultra && { GZ_ULTRA: { ...U, read: (o) => U.read({ ...o, f: ultraFetch }) } }),
     chrome: {
-      runtime: { sendMessage: (m, cb) => { sent.push(m); if (m.type === 'glaze:sessions-open') return Promise.resolve({ ok: true }); const p = Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => JSON.parse(JSON.stringify(r))); if (cb) p.then(cb); else return p; } },
+      runtime: { getURL: (f = '') => `chrome-extension://x/${f}`, sendMessage: (m, cb) => { sent.push(m); if (m.type === 'glaze:sessions-open') return Promise.resolve({ ok: true }); if (m.type === 'glaze:quick-ticket') { const r = env.ticket?.(m) ?? { ok: true, ticket: 'ab'.repeat(16) }; if (cb) cb(r); return Promise.resolve(r); } const p = Promise.resolve(env.hold(m)).then(() => N.run(m, { local }, idb)).then((r) => JSON.parse(JSON.stringify(r))); if (cb) p.then(cb); else return p; } },
       storage: { local: { get: (k, cb) => local.get(k).then(cb) }, sync: { get: (k, cb) => { if (env.syncFail) throw new Error('Extension context invalidated.'); const r = structuredClone(env.sync); Promise.resolve(env.syncHold).then(() => cb(r)); } }, onChanged: { addListener: (f) => changed.push(f) } },
     },
   });
@@ -367,7 +367,7 @@ test("the hook in a page whose own settings haven't caught up reads the switch f
   assert.equal(Q.doc.getElementById('gz-nt-course'), null, 'and not when storage says it is off');
 });
 
-test('Export all settles the open note, then opens extension-only backup with no keys or archive in the LMS', async () => {
+test('Back up or restore settles the open note, then opens extension-only backup with no keys or archive in the LMS', async () => {
   const P = page();
   await P.openView();
   P.fire(P.button('New note'), 'click');
@@ -377,7 +377,7 @@ test('Export all settles the open note, then opens extension-only backup with no
   P.fire(body, 'input');
   let release = null;
   P.hold = (m) => (m.op === 'save' && !release ? (release = later()) : null);
-  P.fire(P.button('Export all'), 'click');
+  P.fire(P.button('Back up or restore'), 'click');
   await settle();
   assert.equal(P.blobs.length, 0);
   assert.ok(!P.sent.some((m) => m.type === 'glaze:sessions-open'));
@@ -385,10 +385,41 @@ test('Export all settles the open note, then opens extension-only backup with no
   assert.equal(P.blobs.length, 0, 'no key-bearing blob in the LMS world');
   assert.deepEqual(JSON.parse(JSON.stringify(P.sent.find((m) => m.type === 'glaze:sessions-open'))), { type: 'glaze:sessions-open', key: 'notesIdx:https://school.instructure.com/5' });
   const before = P.sent.length;
-  P.fire(P.button('Import'), 'click', { trusted: false }); await settle();
-  assert.equal(P.sent.length, before, 'a synthetic import does not open the extension surface');
-  P.fire(P.button('Import'), 'click'); await settle();
-  assert.equal(P.sent.at(-1).type, 'glaze:sessions-open');
+  P.fire(P.button('Back up or restore'), 'click', { trusted: false }); await settle();
+  assert.equal(P.sent.length, before, 'a synthetic click does not open the extension surface');
+});
+
+test('Share on a note saves it, then frames the extension share panel with a one-use ticket, out of the page\'s reach', async () => {
+  const P = page();
+  await P.openView();
+  P.fire(P.button('New note'), 'click');
+  await settle();
+  const body = P.box().querySelector('.gz-nt-body');
+  body.innerHTML = '<p>Share me</p>';
+  P.fire(body, 'input');
+  const frameOf = () => P.box().querySelector('.gz-nt-share-frame')?.shadowForTest.querySelector('iframe') || null;
+  P.fire(P.button('Share'), 'click', { trusted: false }); await settle(60);
+  assert.equal(frameOf(), null, 'a synthetic click frames nothing');
+  assert.ok(!P.sent.some((m) => m.type === 'glaze:quick-ticket'));
+  P.fire(P.button('Share'), 'click'); await settle(60);
+  const saved = P.sent.filter((m) => m.op === 'save');
+  assert.ok(saved.length, 'the note is stored before it is shared');
+  const asked = P.sent.find((m) => m.type === 'glaze:quick-ticket');
+  assert.deepEqual(JSON.parse(JSON.stringify(asked)), { type: 'glaze:quick-ticket', key: 'notesIdx:https://school.instructure.com/5', note: saved.at(-1).id });
+  const holder = P.box().querySelector('.gz-nt-share-frame');
+  assert.equal(holder.shadowRoot, undefined, 'the shadow root is closed: page scripts cannot reach the frame');
+  assert.equal(P.box().querySelector('iframe'), null, 'nothing in the light DOM carries the ticket');
+  const frame = frameOf();
+  assert.equal(frame.src, `chrome-extension://x/sharing/quick.html?t=${'ab'.repeat(16)}`, 'the address names only the ticket');
+  assert.equal(frame.getAttribute('allow'), 'clipboard-write');
+  assert.ok(!P.sent.some((m) => m.type === 'glaze:sessions'), 'the LMS world never asks the worker for sessions or links');
+  P.fire(P.button('Shared notes'), 'click'); await settle();
+  assert.equal(P.sent.filter((m) => m.type === 'glaze:quick-ticket').at(-1).note, '', 'Shared notes asks for the account view');
+  P.fire(P.button('Shared notes'), 'click'); await settle();
+  assert.equal(frameOf(), null, 'the same button closes it');
+  P.ticket = () => ({ ok: false });
+  P.fire(P.button('Shared notes'), 'click'); await settle();
+  assert.equal(frameOf(), null, 'a refused ticket frames nothing');
 });
 
 test('a sharing module loaded for an old Notes opening cannot leak a live port into the next opening', async () => {

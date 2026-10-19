@@ -409,14 +409,30 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   })().then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
 });
-// Share keys and relay traffic are confined to the worker and the extension's Sessions page. Loading this broker
+// Share keys and relay traffic are confined to the worker, Settings and the Notes share panel. Loading this broker
 // for a backup never connects: the device-local consent switch and a live surface are checked separately.
 // MV3 caches imports during install; later worker starts still load these modules only when needed.
 globalThis.addEventListener?.('install', () => importScripts('relay.js', 'sharing.js', 'sessions.js'));
 let sessionsWorker = null;
 let sessionGeneration = 0;
-const sessionFrame = (s) => s.frameId === 0 && s.origin === chrome.runtime.getURL('').replace(/\/$/, '');
-const fromSessions = (s) => s.id === chrome.runtime.id && sessionFrame(s) && s.url?.split(/[?#]/)[0] === chrome.runtime.getURL('sharing/sessions.html');
+// origin is optional in MessageSender: when the browser gives it, it must be the extension's own.
+const extensionOrigin = (s) => s.origin === undefined || s.origin === chrome.runtime.getURL('').replace(/\/$/, '');
+const sessionFrame = (s) => s.frameId === 0 && extensionOrigin(s);
+// Settings (options.html, top frame) owns every operation. The Notes share panel (sharing/quick.html) is an extension
+// frame inside a Notes view: the LMS page around it cannot read its keys, and it gets only the ops a quick share needs,
+// for one Notes account and note. Each Share click gets a one-use ticket bound to the asking tab; the first panel frame
+// in that tab to present it claims it, so a page that frames the panel itself, or copies the address, gets nothing.
+const fromSessions = (s) => fromEditor(s) && sessionFrame(s);
+const quickTickets = new Map(); // ticket -> { tab, key, note, at, frame }
+const quickTicket = (s) => {
+  if (s.id !== chrome.runtime.id || s.frameId === 0 || !extensionOrigin(s) || typeof s.url !== 'string' || s.url.split(/[?#]/)[0] !== chrome.runtime.getURL('sharing/quick.html')) return null;
+  const t = quickTickets.get(s.url.match(/^[^#]*\?t=([0-9a-f]{32})(?:#|$)/)?.[1] || ''), frame = `${s.frameId}:${s.documentId || ''}`;
+  if (!t || t.tab !== s.tab?.id || (t.frame && t.frame !== frame) || (!t.frame && Date.now() - t.at > 120000)) return null;
+  t.frame = frame;
+  return t;
+};
+const fromQuick = (s) => !!quickTicket(s);
+const QUICK_OPS = new Set(['list', 'create', 'join', 'link', 'attach', 'leave', 'delete', 'sync', 'resume']);
 const SESSION_OPS = new Set(['list', 'read', 'create', 'join', 'link', 'attach', 'useLook', 'pause', 'resume', 'sync', 'leave', 'delete', 'expiry', 'reupload', 'exportKeys', 'importKeys', 'backupNotes', 'notesRead', 'notesGetFile', 'notesFile', 'notesImport', 'relaySave', 'relayTest']);
 const SESSION_NETWORK = new Set(['create', 'join', 'resume', 'sync', 'reupload', 'expiry', 'delete', 'relayTest']);
 const sessions = () => {
@@ -431,8 +447,14 @@ const sessions = () => {
 };
 const sessionPorts = new Set();
 BROKER.sessions = {
-  allow: (m, s) => SESSION_OPS.has(m.op) && JSON.stringify(m).length <= (32 << 20)
-    && (fromSessions(s) || (fromEditor(s) && sessionFrame(s) && ['exportKeys', 'importKeys', 'relaySave', 'relayTest'].includes(m.op))),
+  allow: (m, s) => {
+    delete m.scope; // only the worker scopes a call, from the panel's ticket
+    if (!SESSION_OPS.has(m.op) || JSON.stringify(m).length > (32 << 20)) return false;
+    if (fromSessions(s)) return true;
+    const t = QUICK_OPS.has(m.op) && quickTicket(s);
+    if (t) m.scope = { key: t.key, note: t.note };
+    return !!t;
+  },
   interrupt: (m) => { if (['pause', 'leave', 'delete', 'importKeys'].includes(m.op)) { sessionGeneration++; sessionsWorker?.stop(); } },
   run: async (m) => {
     if (m.op === 'backupNotes') return { ok: true, data: await sessions().backupNotes(m.key) };
@@ -446,9 +468,10 @@ chrome.runtime.onConnect.addListener((p) => {
   p.onDisconnect.addListener(() => { closed = true; sessionPorts.delete(p); disconnect?.(); });
   Promise.resolve().then(async () => {
     const s = p.sender;
-    if (!fromSessions(s) && !(s.id === chrome.runtime.id && ((s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s)))))) return p.disconnect();
+    const page = fromSessions(s) || fromQuick(s);
+    if (!page && !(s.id === chrome.runtime.id && ((s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s)))))) return p.disconnect();
     if (closed) return;
-    if (fromSessions(s)) sessionPorts.add(p); // LMS ports receive no session information or keys.
+    if (page) sessionPorts.add(p); // LMS ports receive no session information or keys.
     disconnect = sessions().connect(); ready = true;
   }).catch(() => p.disconnect());
 });
@@ -459,14 +482,29 @@ chrome.storage.onChanged.addListener((ch, area) => {
   if ((area === 'local' && Object.keys(ch).some((k) => GZ_NOTES.KEY.test(k) || GZ_TODO.STORE_KEY.test(k)))
     || (area === 'sync' && ['colors', 'look', 'bg', 'nav', 'card', 'cards', 'lookX'].some((k) => k in ch))) sessionsWorker.changed();
 });
-// Opening this extension page conveys no keys. A source account is a selection hint; Export still needs a trusted
-// click on the extension page after its key warning. Only known top-frame LMS callers and the editor may ask.
+// A Notes share panel's ticket: only for a known top-frame LMS caller, and only for a Notes account on its own site.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:quick-ticket') return;
+  (async () => {
+    if (!((s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s)))) || typeof s.tab?.id !== 'number') return { ok: false };
+    if (typeof m.key !== 'string' || !GZ_NOTES.KEY.test(m.key) || !m.key.startsWith(`notesIdx:${new URL(addressOf(s)).origin}/`)) return { ok: false };
+    if (typeof m.note !== 'string' || (m.note && !GZ_NOTES.ID.test(m.note))) return { ok: false };
+    for (const [k, t] of quickTickets) if ((!t.frame && Date.now() - t.at > 120000) || t.tab === s.tab.id) quickTickets.delete(k);
+    while (quickTickets.size >= 20) quickTickets.delete(quickTickets.keys().next().value);
+    const ticket = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    quickTickets.set(ticket, { tab: s.tab.id, key: m.key, note: m.note, at: Date.now(), frame: '' });
+    return { ok: true, ticket };
+  })().then(reply, () => reply({ ok: false }));
+  return true;
+});
+// Opening Settings conveys no keys. A source account is a selection hint for its Notes backup; Export still needs a
+// trusted click there after its key warning. Only known top-frame LMS callers and the editor may ask.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:sessions-open') return;
   (async () => {
     if (!fromEditor(s) && !((s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s))))) return { ok: false };
     const key = typeof m.key === 'string' && GZ_NOTES.KEY.test(m.key) && (fromEditor(s) || m.key.startsWith(`notesIdx:${new URL(addressOf(s)).origin}/`)) ? m.key : '';
-    await chrome.tabs.create({ url: chrome.runtime.getURL('sharing/sessions.html') + (key ? `?notes=${encodeURIComponent(key)}` : '') });
+    await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + (key ? `?notes=${encodeURIComponent(key)}#backup/notes` : '#sharing/sessions') });
     return { ok: true };
   })().then(reply, () => reply({ ok: false }));
   return true;
@@ -488,7 +526,10 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     .then(reply, () => reply({ first: false }));
   return true;
 });
-chrome.tabs?.onRemoved?.addListener((id) => { chrome.storage.session?.remove(`landed:${id}`).catch(() => {}); });
+chrome.tabs?.onRemoved?.addListener((id) => {
+  chrome.storage.session?.remove(`landed:${id}`).catch(() => {});
+  for (const [k, t] of quickTickets) if (t.tab === id) quickTickets.delete(k); // a closed tab's Notes share panel tickets
+});
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   const name = typeof m?.type === 'string' && m.type.startsWith('glaze:') ? m.type.slice(6) : '';
   if (!Object.hasOwn(BROKER, name)) return;

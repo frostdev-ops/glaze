@@ -60,7 +60,7 @@ test('a page gets a Lottie file only for the address the worn Look names; the ed
   assert.equal((await ask(OTHER, editor)).ok, true, 'the editor may try an address');
   assert.equal((await ask(OTHER, preview)).ok, true, 'and so may its preview frame');
   assert.equal(r.fetched.length, 3);
-  for (const bad of [{ ...page, frameId: 2 }, { ...page, tab: undefined }, { ...page, id: 'other' }, { ...page, url: 'https://elsewhere.example/ultra' }, { ...preview, id: 'x' }, { id: 'glaze', frameId: 0, url: 'chrome-extension://glaze/sharing/sessions.html' }]) {
+  for (const bad of [{ ...page, frameId: 2 }, { ...page, tab: undefined }, { ...page, id: 'other' }, { ...page, url: 'https://elsewhere.example/ultra' }, { ...preview, id: 'x' }, { id: 'glaze', frameId: 0, url: 'chrome-extension://glaze/sharing/quick.html' }]) {
     assert.deepEqual(await ask(URL1, bad), { ok: false, error: 'sender' }, JSON.stringify(bad));
   }
   assert.equal(r.fetched.length, 3, 'a refused sender fetches nothing');
