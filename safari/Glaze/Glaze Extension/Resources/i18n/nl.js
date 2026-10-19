@@ -2745,4 +2745,8 @@
   "Close this panel and open Share again.": "Sluit dit paneel en open Delen opnieuw.",
   "Sharing controls need visibility protection. Open Settings from Glaze to share.": "De deelknoppen hebben zichtbaarheidsbescherming nodig. Open Instellingen vanuit Glaze om te delen.",
   "Resume sharing from Settings before using this panel.": "Hervat delen vanuit Instellingen voordat je dit paneel gebruikt.",
+  "Click this button directly to continue.": "Klik rechtstreeks op deze knop om door te gaan.",
+  "This button must be fully visible and uncovered. Try again, or open All sharing settings.": "Deze knop moet volledig zichtbaar en onbedekt zijn. Probeer het opnieuw of open Alle deelinstellingen.",
+  "The sharing panel moved. Wait a moment, then click again.": "Het deelvenster is verplaatst. Wacht even en klik opnieuw.",
+  "Wait a moment with this button fully visible, then click again.": "Laat deze knop even volledig zichtbaar en klik dan opnieuw.",
 };

@@ -176,8 +176,9 @@
   #ss-status:empty, #nb-status:empty { display: none; }
   .ss-status { position: sticky; top: 0; z-index: 1; padding: 0.4rem 0; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); font-size: 13px; color: var(--gz-ink); }
   .ss-sources { display: grid; gap: 0.35rem; max-height: 16rem; overflow: auto; padding: 0.2rem; }
-  .ss-session { display: grid; gap: 0.35rem; padding: 0.75rem 0; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
-  .ss-session:first-child { border-top: 0; padding-top: 0; }
+  .ss-session { display: grid; gap: 0.5rem; margin-top: 0.6rem; padding: 0.75rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); overflow-wrap: anywhere; }
+  .ss-session:first-child { margin-top: 0; }
+  .ss-sources .check > .desc { grid-column: 2; }
   .ss-session h4, .ss-session ul, .ss-session h5, .ss-read p { margin: 0; }
   .ss-session ul { padding-inline-start: 1.2rem; font-size: 13px; }
   .ss-read { display: grid; gap: 0.3rem; padding: 0.6rem; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }

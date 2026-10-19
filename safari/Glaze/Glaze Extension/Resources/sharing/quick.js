@@ -26,11 +26,17 @@
   } catch { watcher?.disconnect(); watcher = null; }
   const watch = (el) => { shown.delete(el); observedAt.set(el, performance.now()); watcher?.unobserve(el); watcher?.observe(el); return el; };
   const human = (e) => {
-    if (dead || !e.isTrusted || !(navigator.userActivation?.isActive ?? false) || !watcher) return false;
+    if (dead || !e.isTrusted) return false;
+    const refuse = (message) => { say(message, undefined, true); return false; };
+    if (!(navigator.userActivation?.isActive ?? false)) return refuse('Click this button directly to continue.');
+    if (!watcher) return refuse('Sharing controls need visibility protection. Open Settings from Glaze to share.');
     const seen = shown.get(e.currentTarget);
-    if (!seen) return false;
-    if (seen.rect !== box(e.currentTarget.getBoundingClientRect())) { watch(e.currentTarget); return false; }
-    return performance.now() - seen.since >= 500;
+    if (!seen) return refuse('This button must be fully visible and uncovered. Try again, or open All sharing settings.');
+    if (seen.rect !== box(e.currentTarget.getBoundingClientRect())) {
+      watch(e.currentTarget);
+      return refuse('The sharing panel moved. Wait a moment, then click again.');
+    }
+    return performance.now() - seen.since >= 500 || refuse('Wait a moment with this button fully visible, then click again.');
   };
   const make = (tag, text, props = {}) => Object.assign(document.createElement(tag), { ...(text === undefined ? {} : { textContent: text }), ...props });
   let state, busy = false, dead = false, key = '', note = '';
@@ -44,12 +50,14 @@
     try {
       const settings = GZ_SANITIZE(await chrome.storage.sync.get(LOOK_KEYS));
       if (dead || turn !== lookRevision || !chrome.runtime?.id) return;
-      const html = document.documentElement, vars = GZ_SURFACES.vars({ look: settings.look, bg: { kind: 'solid' } });
-      // Keep this standalone page's original role colors until the user overrides its surfaces.
-      vars['--gz-surface-tint'] = GZ_ACTIVE_COLORS(settings, darkMQ.matches)['--gz-accent'];
+      const html = document.documentElement, colors = GZ_ACTIVE_COLORS(settings, darkMQ.matches);
+      const vars = { ...colors, ...GZ_SURFACE_VARS({ ...settings, bg: { kind: 'solid' } }) };
       vars['--gz-radius'] = `${settings.look.radius}px`;
+      vars['--gz-font'] = GZ_FONTS.stack(settings.look.font);
+      vars['--gz-font-head'] = settings.look.head === 'auto' ? 'inherit' : GZ_FONTS.stack(settings.look.head);
       for (const [key, value] of Object.entries(vars)) { if (value) html.style.setProperty(key, value); else html.style.removeProperty(key); }
       html.setAttribute('data-gz-depth', String(settings.look.depth));
+      html.style.colorScheme = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < 0.5 ? 'dark' : 'light';
       if (settings.auto.on && settings.auto.mode === 'schedule') {
         const at = GZ_SCHEDULE_NEXT(settings.auto.from, settings.auto.to, new Date());
         if (at) lookTimer = setTimeout(paintLook, Math.max(0, at - Date.now()) + 20);
@@ -63,7 +71,7 @@
   const say = (k, vars, err = false) => { $('#status').textContent = k ? t(k, vars) : ''; $('#status').classList.toggle('error', err); };
   let port, serial = 0, started = false;
   const pending = new Map();
-  const lock = () => { for (const b of document.querySelectorAll('button')) b.disabled = dead || busy || !started || !watcher; };
+  const lock = () => { for (const b of document.querySelectorAll('button')) b.disabled = dead || (b.id !== 'settings' && (busy || !started || !watcher)); };
   const expire = () => {
     if (dead) return;
     dead = true; state = null; key = ''; note = ''; lookRevision++; clearTimeout(lookTimer); clearTimeout(startTimer);
@@ -160,7 +168,10 @@
     if (!human(e) || busy || !state) return;
     const servers = [...new Set(state.sessions.filter((s) => s.status !== 'gone').map((s) => s.server))];
     if (servers.some((s) => s !== state.defaultRelay && !state.hosts.includes(s))) { say('Resume from Settings to confirm the other servers these sessions use.', undefined, true); return; }
-    const p = permission(servers); act(async () => { if (await p) await send('resume', { confirmServers: [] }); });
+    const p = permission(servers); act(async () => {
+      if (!await p) return say('Host permission was not granted. No connection was made.', undefined, true);
+      await send('resume', { confirmServers: [] });
+    });
   });
   $('#share').addEventListener('click', (e) => {
     if (!human(e) || busy || !state || !key || !note) return;
@@ -192,7 +203,8 @@
       else say('Joined, but the relay could not be reached yet. Add it to Notes from All sharing settings once it connects.', undefined, true);
     });
   });
-  $('#settings').addEventListener('click', (e) => { if (human(e)) chrome.tabs.create({ url: chrome.runtime.getURL('options.html#sharing/sessions') }).catch(() => {}); });
+  // Navigation grants no session authority. Keep recovery available even when this embedded surface cannot be trusted.
+  $('#settings').addEventListener('click', (e) => { if (!dead && e.isTrusted && navigator.userActivation?.isActive) chrome.tabs.create({ url: chrome.runtime.getURL('options.html#sharing/sessions') }).catch(() => {}); });
 
   const startTimer = setTimeout(expire, 10000);
   say('Open this from Notes.', undefined, true);

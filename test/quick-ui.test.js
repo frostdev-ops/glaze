@@ -10,6 +10,7 @@ const S = require('../lib/sessions.js');
 const N = require('../lib/notes.js');
 const T = require('../lib/todo.js');
 const R = require('../lib/relay.js');
+const G = require('../defaults.js');
 const { relay, diskStore } = require('../server/relay.js');
 const { El } = require('./stand-in-dom.js');
 const SOURCE = fs.readFileSync(path.join(__dirname, '../sharing/quick.js'), 'utf8');
@@ -50,8 +51,9 @@ const sharedNote = async (d) => {
   const { sid } = await d.send('create', { kind: 'notes', title: 'Biology', key: NK, ids: [id] });
   return { id, sid };
 };
-const page = async (d, { note = '', relay: selected, observer = 'v2' } = {}) => {
-  const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], disconnects = [], copied = [];
+const page = async (d, { note = '', relay: selected, observer = 'v2', prefs = G.GZ_DEFAULTS } = {}) => {
+  const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], disconnects = [], copied = [], opened = [], changes = [];
+  const sync = area(prefs);
   let clock = 1000, watcher;
   const observed = new Set();
   const entry = (target, props = {}) => ({ target, time: clock, boundingClientRect: { ...target.getBoundingClientRect() }, isIntersecting: true, intersectionRatio: 1, ...(observer === 'v2' && { isVisible: true }), ...props });
@@ -68,6 +70,7 @@ const page = async (d, { note = '', relay: selected, observer = 'v2' } = {}) => 
     return e;
   };
   doc.root = make('html'); doc.body = make('body'); doc.root.append(doc.body); doc.activeElement = doc.body;
+  doc.documentElement = doc.root;
   for (const [id, tag] of [['status', 'p'], ['ask', 'div'], ['ask-text', 'p'], ['ask-yes', 'button'], ['ask-no', 'button'], ['paused', 'p'], ['resume', 'button'], ['who', 'label'], ['name', 'input'], ['note', 'section'], ['note-title', 'h2'], ['note-state', 'p'], ['note-new', 'div'], ['share', 'button'], ['note-shared', 'div'], ['others', 'section'], ['list', 'ul'], ['invite', 'input'], ['join', 'button'], ['settings', 'button']]) {
     const e = make(tag); e.id = id; ids.set(id, e); doc.body.append(e);
   }
@@ -88,9 +91,9 @@ const page = async (d, { note = '', relay: selected, observer = 'v2' } = {}) => 
     location: { search: '?t=ticket' },
     navigator: { userActivation: { isActive: true }, clipboard: { writeText: async (v) => { copied.push(v); } } },
     GZ_I18N: { page() {}, ui() {}, t: (k, vars) => k.replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? '') }, GZ_RELAY: R,
-    GZ_SANITIZE: () => ({ look: { radius: 12 }, auto: { on: false } }), GZ_SURFACES: { vars: () => ({}) }, GZ_ACTIVE_COLORS: () => ({ '--gz-accent': '#abc' }),
+    ...G, GZ_COLOR: require('../lib/color.js'), GZ_FONTS: require('../lib/fonts.js'),
     matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener: (name, f) => events.set(name, f),
-    chrome: { storage: { sync: area(), onChanged: { addListener() {} } }, permissions: { contains: async () => true, request: async () => true }, tabs: { create: async () => {} },
+    chrome: { storage: { sync, onChanged: { addListener(f) { changes.push(f); } } }, permissions: { contains: async () => true, request: async () => true }, tabs: { create: async (tab) => { opened.push(tab); } },
       runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, connect: () => ({ onMessage: { addListener: (f) => messages.push(f) }, onDisconnect: { addListener: (f) => disconnects.push(f) }, disconnect() {},
         postMessage: (m) => { if (m.ticket) queueMicrotask(() => messages.forEach((f) => f({ id: m.id, ok: true })));
           else if (m.op) handle(m).then((r) => messages.forEach((f) => f({ id: m.id, ...r }))); } }), sendMessage: handle },
@@ -100,7 +103,7 @@ const page = async (d, { note = '', relay: selected, observer = 'v2' } = {}) => 
   events.get('message')?.({ data: { type: 'glaze:quick-start', ticket: 'ab'.repeat(16) } });
   await until(() => calls.some((m) => m.op === 'list') && !ids.get('who').hidden);
   const click = (el, age = 600) => { clock += age; assert.ok(el, 'button exists'); if (el.disabled) return; for (const { type, f } of el.listeners) if (type === 'click') f({ isTrusted: true, target: el, currentTarget: el }); };
-  const p = { doc, calls, copied, observed, advance: (ms) => { clock += ms; }, visible: (el, props) => watcher.f([entry(typeof el === 'string' ? ids.get(el) : el, props)]),
+  const p = { doc, calls, copied, opened, observed, changePrefs: async (patch) => { await sync.set(patch); changes.forEach((f) => f(Object.fromEntries(Object.keys(patch).map((k) => [k, {}])), 'sync')); await settle(); }, advance: (ms) => { clock += ms; }, visible: (el, props) => watcher.f([entry(typeof el === 'string' ? ids.get(el) : el, props)]),
     record: (el, props) => entry(el, props), deliver: (record) => watcher.f([record]),
     disconnect: () => disconnects.forEach((f) => f()), click: (id, age) => click(typeof id === 'string' ? ids.get(id) : id, age), get: (id) => ids.get(id), message: async () => { for (const f of messages) f({ changed: true }); await settle(); }, button: (text) => doc.root.querySelectorAll('button').find((e) => e.textContent === text) };
   return p;
@@ -123,6 +126,9 @@ test('quick sensitive clicks fail closed without verified IntersectionObserver v
     const p = await page(d, { note: id, observer }), before = p.calls.length;
     p.click('share'); await settle();
     assert.equal(p.calls.length, before, 'no consent/create/link from an unverified embedded click');
+    assert.match(p.get('status').textContent, /visibility protection/);
+    p.click('settings'); await settle();
+    assert.equal(p.opened.length, 1, 'safe Settings navigation remains available without IOv2');
     p.disconnect();
   });
 });
@@ -132,10 +138,13 @@ test('quick visibility requires the whole button and resets the dwell for every 
   const stop = p.button('Stop sharing');
   p.visible(stop, { intersectionRatio: 0.1 }); p.click(stop); await settle();
   assert.equal(p.get('ask').hidden, true, 'a partly clipped button is not fully visible');
+  assert.match(p.get('status').textContent, /fully visible and uncovered/);
   p.visible(stop, { intersectionRatio: 1, isVisible: false }); p.click(stop); await settle();
   assert.equal(p.get('ask').hidden, true, 'a covered/faded button cannot open a question');
+  assert.match(p.get('status').textContent, /All sharing settings/);
   p.visible(stop, { isVisible: true }); p.click(stop, 499);
   assert.equal(p.get('ask').hidden, true, '500 ms must elapse after visibility returns');
+  assert.match(p.get('status').textContent, /Wait a moment/);
   p.click(stop, 1); assert.equal(p.get('ask').hidden, false);
   p.click('ask-yes', 0); await settle();
   assert.ok(!p.calls.some((m) => m.op === 'delete'), 'a reused confirmation needs a fresh dwell for this question');
@@ -165,8 +174,26 @@ test('quick ignores a click after its button moves since the visibility observat
   stop.box = { left: 5, top: 5, width: 100, height: 20 };
   p.click(stop); await settle();
   assert.equal(p.get('ask').hidden, true);
+  assert.match(p.get('status').textContent, /panel moved/);
   p.click(stop); await settle();
   assert.equal(p.get('ask').hidden, false, 'a new observation permits recovery after a fresh dwell');
+  p.disconnect();
+});
+
+test('quick follows the Look palette, surfaces and shape, including a live dark-to-light change', async (t) => {
+  const server = await start(t), d = device(t, server), id = await seed(d);
+  const dark = { ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, G.GZ_LOOKS.find((l) => l.name === 'Aurora Night')) };
+  const p = await page(d, { note: id, prefs: dark });
+  assert.equal(p.doc.root.style['--gz-ink'], dark.colors['--gz-ink']);
+  assert.equal(p.doc.root.style['--gz-surface'], dark.colors['--gz-surface']);
+  assert.equal(p.doc.root.style['--gz-radius'], '16px');
+  assert.equal(p.doc.root.style.colorScheme, 'dark');
+  const light = G.GZ_LOOK_APPLY(dark, G.GZ_LOOKS.find((l) => l.name === 'Library'));
+  await p.changePrefs(light);
+  assert.equal(p.doc.root.style['--gz-ink'], light.colors['--gz-ink']);
+  assert.equal(p.doc.root.style['--gz-radius'], '6px');
+  assert.match(p.doc.root.style['--gz-font'], /Literata/);
+  assert.equal(p.doc.root.style.colorScheme, 'light');
   p.disconnect();
 });
 

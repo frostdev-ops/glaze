@@ -850,7 +850,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       frame.contentWindow.postMessage({ type: 'glaze:quick-start', ticket: r.ticket }, chrome.runtime.getURL('').replace(/\/$/, ''));
     });
     frame.setAttribute('allow', 'clipboard-write');
-    frame.setAttribute('style', 'display: block; width: 100%; height: min(22rem, 45vh); border: 0; color-scheme: normal;');
+    frame.setAttribute('style', 'display: block; width: 100%; height: 100%; border: 0; color-scheme: normal;');
     const holder = make('div', { className: 'gz-nt-share-frame' });
     holder.attachShadow({ mode: 'closed' }).append(frame);
     el.share.note = note;

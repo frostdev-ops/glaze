@@ -2745,4 +2745,8 @@
   "Close this panel and open Share again.": "Ferme ce panneau et ouvre à nouveau Partager.",
   "Sharing controls need visibility protection. Open Settings from Glaze to share.": "Les commandes de partage nécessitent une protection de visibilité. Ouvre les réglages de Glaze pour partager.",
   "Resume sharing from Settings before using this panel.": "Reprends le partage depuis les réglages avant d’utiliser ce panneau.",
+  "Click this button directly to continue.": "Clique directement sur ce bouton pour continuer.",
+  "This button must be fully visible and uncovered. Try again, or open All sharing settings.": "Ce bouton doit être entièrement visible et dégagé. Réessaie ou ouvre Tous les paramètres de partage.",
+  "The sharing panel moved. Wait a moment, then click again.": "Le panneau de partage a bougé. Attends un instant, puis clique à nouveau.",
+  "Wait a moment with this button fully visible, then click again.": "Garde ce bouton entièrement visible un instant, puis clique à nouveau.",
 };
