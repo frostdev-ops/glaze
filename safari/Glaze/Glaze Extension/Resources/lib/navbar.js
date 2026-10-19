@@ -145,7 +145,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
       add({ id: n.id, label: text(n.label, 80) || n.id, icon: ICON_OF[n.id] || 'link', href: typeof n.href === 'string' ? n.href : '', active: !!n.active, badge: badge(n.badge), native: true, ...(n.panel && { panel: true }) });
     }
     // A worn Look's links stand in for the student's older rail links (as features/nav.js did); their own new ones add.
-    const links = [...(look?.links || legacy?.links || []), ...p.links];
+    const links = [...(look?.links || legacy?.links || []), ...p.links].map((l) => p.links.find((own) => own.id === l.id) || l);
     for (const l of links) add({ id: `link:${l.id}`, label: l.n, icon: PICKS.includes(l.i) ? l.i : 'link', href: l.u, tab: l.tab === true, active: false, badge: '' });
     for (const g of p.glaze) add({ id: `glaze:${g}`, label: names[g] || { notes: 'Notes', todo: 'To Do', search: 'Search', settings: 'Glaze settings' }[g], icon: g === 'settings' ? 'glaze' : g, action: g, active: false, badge: '' });
     for (const m of mods) if (m && MOD.test(m.id)) add({ id: m.id, label: text(m.label, 40) || m.id, icon: PICKS.includes(m.icon) ? m.icon : 'link', href: m.href || '', action: m.href ? '' : 'mod', active: false, badge: badge(m.badge), owner: m.owner, group: m.group, slot: m.slot, by: text(m.by, 80) });

@@ -34,6 +34,15 @@ test('student links and worn Look links keep off-site HTTPS addresses', () => {
   }
 });
 
+test('a layout cannot replace the destination of a saved student link with the same ID', () => {
+  const id = 'library0000a', u = 'https://library.test/';
+  const prefs = M.clean({ links: [{ id, n: 'My Library', u }], items: { [`link:${id}`]: { label: 'My saved name' } } });
+  const look = L.clean({ links: [{ id, n: 'Library', u: 'https://other.test/login' }] });
+  const item = M.build({ prefs, look }).items.find((i) => i.id === `link:${id}`);
+  assert.equal(item.label, 'My saved name');
+  assert.equal(item.href, u, 'explicit student destinations win over worn and mod layouts');
+});
+
 const api = (items) => {
   const calls = [];
   const c = vm.createContext({ M, URL, location: { origin, href: origin + '/', assign: (href) => calls.push(['assign', href]) }, isPreview: false,
