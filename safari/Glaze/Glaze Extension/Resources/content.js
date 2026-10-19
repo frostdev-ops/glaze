@@ -14,8 +14,8 @@
   // The options preview is Ultra. On a site, decide once from its head while the parser is still there;
   // addresses and body classes can belong to another app or a same-host tool.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
-  // A course tab's live frame (gz-ctab:<course>) works as a page of its own (solo), without the footer.
-  const tabFrame = window.top !== window && /^gz-ctab:(?:_\d+_\d+|\d+)$/.test(window.name) ? window.name.slice(8) : '';
+  // A course tab's live frame (gz-ctab:<course>|page) works as a page of its own (solo), without the footer.
+  const tabFrame = window.top !== window && /^gz-ctab:(?:_\d+_\d+|\d+|page)$/.test(window.name) ? window.name.slice(8) : '';
   const solo = window.top === window || !!tabFrame;
   const ULTRA = 'base[href*="/ultra/"]';
   const MOODLE = 'meta[name="keywords"][content^="moodle,"]'; // core writes it on every page

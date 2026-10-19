@@ -116,11 +116,11 @@ test('Ultra’s provisional sheets keep their order in the shared core’s compl
   assert.deepEqual(Array.from(sheets.slice(0, early.length)), Array.from(early), 'connected early sheets are reused by index and must not displace the course-tab stylesheet');
 });
 
-test('with a course frame running, Canvas course links open in their course\'s frame instead of reloading the page', () => {
-  const run = (framed, frameCount) => {
-    const opened = [], sent = [];
+test('with a course frame running, Canvas links open in a frame instead of reloading the page; course links do from a page outside a course', () => {
+  const run = (framed, frameCount, here = '') => {
+    const opened = [], pages = [], sent = [];
     const toFrame = vm.runInNewContext(part('  const toFrame = ', '  // A course page in its course') + '\ntoFrame;', {
-      L, framed, frames: { size: frameCount }, location: { origin }, openAt: (cid, url) => opened.push([cid, url]), toTop: (op, m) => sent.push([op, m.url]),
+      L, framed, PAGE: 'page', here: () => here, frames: { size: frameCount }, location: { origin }, openAt: (cid, url) => opened.push([cid, url]), openPage: (url) => pages.push(url), toTop: (op, m) => sent.push([op, m.url]),
     });
     const click = (href, more = {}) => {
       const u = new URL(href, origin);
@@ -129,28 +129,42 @@ test('with a course frame running, Canvas course links open in their course\'s f
       const e = { button: more.button || 0, ctrlKey: !!more.ctrl, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault() { stopped = true; }, stopPropagation() {} };
       return [toFrame(e, a), stopped];
     };
-    return { click, opened, sent };
+    return { click, opened, pages, sent };
   };
-  const page = run('', 1);
+  const page = run('', 1, '5');
   assert.deepEqual(page.click('/courses/12/assignments?x=1'), [true, true]);
   assert.deepEqual(page.opened, [['12', '/courses/12/assignments?x=1']]);
+  assert.deepEqual(page.click('/calendar?view=month'), [true, true]);
+  assert.deepEqual(page.pages, ['/calendar?view=month'], 'a page outside a course goes to the page frame: the course frames keep running');
   for (const [href, more] of [['/courses/12/modules', { ctrl: true }], ['/courses/12/modules', { button: 1 }], ['/courses/12/modules', { target: '_blank' }],
-    ['/courses/12/files/5/download?download_frd=1', {}], ['/courses/12/modules', { download: true }], ['/courses/12/modules#unit', {}], ['/calendar', {}], ['https://other.test/courses/12', {}]]) {
+    ['/courses/12/files/5/download?download_frd=1', {}], ['/courses/12/modules', { download: true }], ['/courses/12/modules#unit', {}], ['/logout', {}], ['/login/canvas', {}], ['/api/v1/courses', {}], ['https://other.test/courses/12', {}]]) {
     assert.deepEqual(page.click(href, more), [false, false], `${href} ${JSON.stringify(more)} goes as the browser takes it`);
   }
-  assert.deepEqual(run('', 0).click('/courses/12/modules'), [false, false], 'no frame to keep: the page loads as usual');
+  const course = run('', 0, '5');
+  assert.deepEqual(course.click('/courses/12/modules'), [false, false], 'no frame to keep on a course page: the page loads as usual');
+  assert.deepEqual(course.click('/calendar'), [false, false]);
+  const dash = run('', 0, '');
+  assert.deepEqual(dash.click('/courses/12'), [true, true], 'from the Dashboard a course opens in its frame: the Dashboard stays');
+  assert.deepEqual(dash.opened, [['12', '/courses/12']]);
+  assert.deepEqual(dash.click('/calendar'), [false, false], 'with no frame yet, another page outside a course loads as usual');
   const frame = run('12', 0);
   assert.deepEqual(frame.click('/courses/12/modules'), [false, false], 'its own course stays in its frame');
   assert.deepEqual(frame.click('/courses/13/pages/notes'), [true, true]);
-  assert.deepEqual(frame.sent, [['open', '/courses/13/pages/notes']], 'another course goes to the page around it');
+  assert.deepEqual(frame.click('/conversations'), [true, true]);
+  assert.deepEqual(frame.click('/logout'), [false, false]);
+  assert.deepEqual(frame.sent, [['open', '/courses/13/pages/notes'], ['open', '/conversations']], 'another course and a page outside one go to the page around it');
+  const pageFrame = run('page', 0);
+  assert.deepEqual(pageFrame.click('/calendar'), [false, false], 'the page frame keeps its own pages');
+  assert.deepEqual(pageFrame.click('/courses/12'), [true, true]);
+  assert.deepEqual(pageFrame.sent, [['open', '/courses/12']], 'a course from the page frame goes to its own frame');
 });
 
 test('the navigation bar reads the shown course frame and opens addresses in it, else on the page', () => {
-  const run = (site, showing, frames) => {
+  const run = (site, showing, frames, here = '5') => {
     const calls = [];
-    const bar = vm.runInNewContext(part('  const bar = {', '  return { sync') + '\nbar;', {
-      L, on: true, framed: '', signedOut: false, showing, frames, location: { origin }, URL, ctx: { site }, tabs: [],
-      openAt: (cid, url) => calls.push(['frame', cid, url]), show: (c) => calls.push(['show', c]), route: (u) => calls.push(['page', u]),
+    const bar = vm.runInNewContext(part('  const pageable = ', '  // A course page in its course') + part('  const bar = {', '  return { sync') + '\nbar;', {
+      L, on: true, framed: '', signedOut: false, showing, frames, location: { origin }, URL, ctx: { site }, tabs: [], here: () => here,
+      openAt: (cid, url) => calls.push(['frame', cid, url]), openPage: (url) => calls.push(['pageframe', url]), show: (c) => calls.push(['show', c]), route: (u) => calls.push(['page', u]),
       rowsOf: () => [], visit() {}, shut() {}, pinTab() {}, moveTab() {}, flag() {}, place() {},
     });
     return { bar, calls };
@@ -159,12 +173,18 @@ test('the navigation bar reads the shown course frame and opens addresses in it,
   const frame = { el: { contentDocument: doc, contentWindow: { location: { assign: (u) => assigned.push(u) } } } };
   let { bar, calls } = run('canvas', '12', new Map([['12', frame]]));
   assert.equal(bar.doc(), doc);
-  bar.open('/courses/13/modules?x=1'); bar.open(`${origin}/courses/12/grades`); bar.open('/calendar#today'); bar.open('https://evil.test/courses/12');
-  assert.deepEqual(calls, [['frame', '13', '/courses/13/modules?x=1'], ['frame', '12', '/courses/12/grades'], ['show', ''], ['page', '/calendar#today']]);
+  bar.open('/courses/13/modules?x=1'); bar.open(`${origin}/courses/12/grades`); bar.open('/calendar'); bar.open('/calendar#today'); bar.open('https://evil.test/courses/12');
+  assert.deepEqual(calls, [['frame', '13', '/courses/13/modules?x=1'], ['frame', '12', '/courses/12/grades'], ['pageframe', '/calendar'], ['show', ''], ['page', '/calendar#today']]);
+  ({ bar, calls } = run('canvas', '', new Map([['12', frame]])));
+  bar.open('/courses/13/modules'); bar.open('/conversations');
+  assert.deepEqual(calls, [['frame', '13', '/courses/13/modules'], ['pageframe', '/conversations']], 'a frame running, though not on screen: still no reload');
   ({ bar, calls } = run('canvas', '', new Map()));
   assert.equal(bar.doc(), null, 'no frame on screen: no document');
   bar.open('/courses/13/modules');
-  assert.deepEqual(calls, [['page', '/courses/13/modules']], 'no frame on screen: the page goes there');
+  assert.deepEqual(calls, [['page', '/courses/13/modules']], 'no frame on a course page: the page goes there');
+  ({ bar, calls } = run('canvas', '', new Map(), ''));
+  bar.open('/courses/13/modules');
+  assert.deepEqual(calls, [['frame', '13', '/courses/13/modules']], 'from a page outside a course, a course opens in its frame');
   ({ bar, calls } = run('ultra', '_2_1', new Map([['_2_1', frame]])));
   bar.open('/ultra/courses/_2_1/grades');
   assert.deepEqual(assigned, [`${origin}/ultra/courses/_2_1/grades`], "Ultra: the shown course's own page in its frame");

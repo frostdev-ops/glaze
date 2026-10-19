@@ -1565,6 +1565,7 @@
   "Course tabs": "Pestañas de cursos",
   "Close a course tab before opening another to keep your unsaved work.": "Cierra una pestaña de curso antes de abrir otra para conservar tu trabajo sin guardar.",
   "{name} has unsaved work, so it stays where it was.": "{name} tiene trabajo sin guardar, así que se queda donde estaba.",
+  "This page has unsaved work, so it stays where it was.": "Esta página tiene trabajo sin guardar, así que se queda donde estaba.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Fija una pestaña para conservarla, arrastra las pestañas para ordenarlas y cierra una con su × o con el botón central del ratón. Con el teclado: las flechas pasan de una pestaña a otra, Suprimir cierra una, P la fija y Mayús con una flecha la mueve.",
   "Above the course's bar": "Sobre la barra del curso",
   "Between its rows": "Entre sus filas",

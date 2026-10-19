@@ -19,8 +19,10 @@ function GZ_NAVBAR_CANVAS(X) {
     return text(s) || text(a.getAttribute('aria-label'));
   };
   const courseId = (doc = document) => /\/courses\/(\d+)(?:\/|$)/.exec(doc.location?.pathname || '')?.[1] || '';
+  // Where you are: the page in the frame Canvas's pages outside a course open in, when it shows (features/coursetabs.js).
+  const framedAt = () => { const c = globalThis.GZ_CTABS; try { return (c?.showing?.() === 'page' && c.bar?.doc?.()?.location.pathname) || ''; } catch { return ''; } };
   const here = (href, id) => {
-    const path = location.pathname.replace(/\/$/, '') || '/', own = new URL(href).pathname.replace(/\/$/, '') || '/';
+    const path = (framedAt() || location.pathname).replace(/\/$/, '') || '/', own = new URL(href).pathname.replace(/\/$/, '') || '/';
     if (id === 'history' || id === 'help' || id === 'tools') return false;
     if (id === 'course') return /^\/courses(?:\/|$)/.test(path);
     if (id === 'profile') return /^\/(?:profile|users\/\d+)(?:\/|$)/.test(path);
@@ -139,7 +141,7 @@ function GZ_NAVBAR_CANVAS(X) {
         const id = idOf(a), href = url(a.getAttribute('href')) || (PANELS.has(id) ? `${location.origin}/` : '');
         if (!id || !href || ids.has(id) || !shown(id)) return null;
         ids.add(id);
-        return { id, label: labelOf(a), href, active: a.matches('.active, [aria-current="page"]') || !!a.closest('li.active, li.ic-app-header__menu-list-item--active') || here(href, id), badge: text(a.querySelector('.menu-item__badge')?.textContent), panel: PANELS.has(id) };
+        return { id, label: labelOf(a), href, active: (!framedAt() && (a.matches('.active, [aria-current="page"]') || !!a.closest('li.active, li.ic-app-header__menu-list-item--active'))) || here(href, id), badge: text(a.querySelector('.menu-item__badge')?.textContent), panel: PANELS.has(id) };
       }).filter(Boolean);
       const apps = tools().filter((a) => url(a.getAttribute('href')));
       if (apps.length) live.push({ id: 'tools', label: t('Tools'), href: `${location.origin}/`, active: apps.some((a) => a.matches('.active, [aria-current="page"]') || !!a.closest('li.ic-app-header__menu-list-item--active')), badge: '', panel: true });

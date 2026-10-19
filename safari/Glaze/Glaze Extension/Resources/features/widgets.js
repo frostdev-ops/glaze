@@ -68,6 +68,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // bar: a board's buttons (Edit layout, Reminders, Insights, What Glaze can do; on the Courses page, Hide widgets too),
   // in the Courses page's header (#gz-toolbar) or atop the Dashboard's grid. hidden: Hide widgets, on this device.
   let grid = null, floats = null, panel = null, bar = null, hidden = false;
+  const atTop = (globalThis.top ?? globalThis.window) === globalThis.window; // not in Canvas's frame for its pages outside a course (features/coursetabs.js)
   // The boards: which one this page is ('courses', 'dash', 'cdash' or null), the one drawn, and the Courses page's layer the
   // tiles float in (the Dashboard's tiles are in its own room, the grid).
   let board = null, drawn = null, room = null;
@@ -1198,10 +1199,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     }
   };
 
-  // This board's allowed tiles and this site's floats, each once. Declared tiles wait for their file to register.
+  // This board's allowed tiles and this site's floats, each once. Declared tiles wait for their file to register. In the
+  // frame Canvas's pages outside a course open in (the Dashboard over a course page), the page around has the floats.
   const wanted = (hasGrid) => [
     ...(board && hasGrid ? lay.boards[board].filter((x) => !fl(x.id)) : []),
-    ...pageTiles().filter((x) => x.on).map((x) => ({ ...x, float: true })),
+    ...(atTop ? pageTiles().filter((x) => x.on).map((x) => ({ ...x, float: true })) : []),
   ].filter((x) => {
     if (!x.on || !allowed(x.id)) return false;
     if (W.course(x.id)) { loadCourses(); return !!globalThis.GZ_COURSE_CARDS; }
@@ -1353,7 +1355,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const sync = (want) => {
     on = !!want;
     board = boardOf();
-    if (globalThis.GZ_PET_UI?.resume) GZ_PET_UI.resume();
+    // The wandering buddy is the page's: not again in the frame Canvas's pages outside a course open in.
+    if (!atTop) { /* the page around has it */ }
+    else if (globalThis.GZ_PET_UI?.resume) GZ_PET_UI.resume();
     else if (ctx.settings().enhance.pet && on && !petResumeReady && !(loadingMore.get('pet') > Date.now())) {
       loadingMore.set('pet', Infinity);
       ctx.need('features/pet.js', () => globalThis.GZ_PET_UI).then(() => { petResumeReady = true; loadingMore.delete('pet'); globalThis.GZ_PET_UI?.resume?.(); }, () => loadingMore.set('pet', Date.now() + 60000));
