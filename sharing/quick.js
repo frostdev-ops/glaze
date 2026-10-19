@@ -1,7 +1,7 @@
 // The Notes share panel: an extension frame that features/notes.js puts inside its Notes view. Invite links and keys
 // stay in this frame and the worker; the school page around it cannot read them, and nothing here is posted to it.
-// Cross-origin frames get no confirm dialogs, so questions are asked inline. ?t= is the one-use ticket notes.js got for
-// this panel; the worker answers it with the one Notes account and note it may show (state.scope), and nothing else.
+// Cross-origin frames get no confirm dialogs, so questions are asked inline. notes.js delivers a one-use ticket
+// directly to this extension window, never through a URL. Only the authenticated runtime port can use its scope.
 (() => {
   GZ_I18N.page();
   const t = (k, v) => GZ_I18N.t(k, v, GZ_I18N.ui());
@@ -47,8 +47,26 @@
   paintLook();
 
   const say = (k, vars, err = false) => { $('#status').textContent = k ? t(k, vars) : ''; $('#status').classList.toggle('error', err); };
+  let port, serial = 0, started = false;
+  const pending = new Map();
+  const lock = () => { for (const b of document.querySelectorAll('button')) b.disabled = dead || busy || !started; };
+  const expire = () => {
+    if (dead) return;
+    dead = true; state = null; key = ''; note = ''; lookRevision++; clearTimeout(lookTimer); clearTimeout(startTimer);
+    $('#invite').value = ''; answer?.(false);
+    for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('sender')); }
+    pending.clear(); watcher?.disconnect();
+    try { port?.disconnect(); } catch {}
+    lock(); say('Close this panel and open Share again.', undefined, true);
+  };
+  const request = (m) => new Promise((resolve, reject) => {
+    if (dead || !port) return reject(new Error('sender'));
+    const id = ++serial, timer = setTimeout(expire, 15000);
+    pending.set(id, { resolve, reject, timer });
+    try { port.postMessage({ ...m, id }); } catch { expire(); }
+  });
   const send = async (op, rest = {}) => {
-    const r = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op, ...rest });
+    const r = await request({ op, ...rest });
     if (!r?.ok) throw new Error(r?.error || 'storage');
     return r;
   };
@@ -58,7 +76,7 @@
     for (const b of document.querySelectorAll('button')) b.disabled = true;
     try { await f(); if (!dead) await load(); }
     catch (e) { if (!dead) say(e.message === 'unsupported' ? 'This browser cannot open encrypted sessions.' : e.message === 'many' ? 'This device already holds 20 sessions. Leave one in Settings first.' : 'Could not finish. Your local copies are kept. Try again.', undefined, true); }
-    finally { busy = false; for (const b of document.querySelectorAll('button')) b.disabled = false; }
+    finally { busy = false; lock(); }
   };
   const button = (label, f, cls = '') => {
     const b = make('button', t(label), { type: 'button', className: cls });
@@ -158,10 +176,27 @@
   });
   $('#settings').addEventListener('click', (e) => { if (human(e)) chrome.tabs.create({ url: chrome.runtime.getURL('options.html#sharing/sessions') }).catch(() => {}); });
 
-  let port;
-  try { port = chrome.runtime.connect({ name: 'glaze:sessions' }); port.onMessage.addListener(() => { if (!busy) load().catch(() => {}); }); }
-  catch { say('Could not finish. Your local copies are kept. Try again.', undefined, true); }
-  addEventListener('pagehide', () => { dead = true; lookRevision++; clearTimeout(lookTimer); $('#invite').value = ''; port?.disconnect(); });
-  addEventListener('online', () => { if (!dead) { port?.postMessage({ online: true }); load().catch(() => {}); } });
-  load().then(() => { if (!key) say('Open this from Notes.', undefined, true); }, () => say('Open this from Notes.', undefined, true));
+  const startTimer = setTimeout(expire, 10000);
+  say('Open this from Notes.', undefined, true);
+  lock();
+  addEventListener('message', (e) => {
+    if (started || dead || e.data?.type !== 'glaze:quick-start' || !/^[0-9a-f]{32}$/.test(e.data.ticket || '')) return;
+    started = true;
+    try {
+      port = chrome.runtime.connect({ name: 'glaze:quick' });
+      port.onDisconnect.addListener(expire);
+      port.onMessage.addListener((r) => {
+        if (dead) return;
+        if (r?.changed) { if (!busy) load().catch(expire); return; }
+        const p = pending.get(r?.id);
+        if (p) { pending.delete(r.id); clearTimeout(p.timer); p.resolve(r); }
+      });
+      request({ ticket: e.data.ticket }).then((r) => {
+        if (!r?.ok) throw new Error('sender');
+        return load();
+      }).then(() => { if (!key) return expire(); clearTimeout(startTimer); say(''); lock(); }, expire);
+    } catch { expire(); }
+  });
+  addEventListener('pagehide', expire); // BFCache restoration never revives a consumed ticket
+  addEventListener('online', () => { if (!dead && started) { try { port.postMessage({ online: true }); } catch { return expire(); } load().catch(expire); } });
 })();

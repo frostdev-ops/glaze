@@ -354,7 +354,7 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.match(ui, /if \(!e\.isTrusted\) return;/);
   const quick = read('sharing/quick.js');
   assert.match(quick, /const human = \(e\) => e\.isTrusted/);
-  assert.doesNotMatch(quick, /\bconfirm\(|postMessage\(\{ (?!online)|parent\.|top\./, 'a framed panel asks inline and posts nothing to the page');
+  assert.doesNotMatch(quick, /\bconfirm\(|parent\.|top\./, 'a framed panel asks inline and posts nothing to the page');
   assert.doesNotMatch(notes, /type: 'glaze:sessions'|op: 'link'/, 'the LMS world only frames the panel; it never asks the worker for a link');
   // <all_urls> covers the default relay and a local one alike; an optional entry for either would be redundant.
   assert.equal(require('../manifest.json').optional_host_permissions, undefined);
@@ -408,8 +408,7 @@ test('E1 Settings is the session caller in its exact top frame; the Notes panel 
   // Settings owns every session operation now that Share sessions is a Settings tab.
   for (const op of ['relaySave', 'relayTest', 'list', 'create']) assert.equal((await send(op)).ok, true);
   assert.deepEqual(handled, ['relaySave', 'relayTest', 'list', 'create']);
-  // The Notes panel: a one-use ticket that a known LMS top frame asks for, for a Notes account on its own site, claimed by
-  // the first panel frame in that tab; the worker scopes every call to that account and note.
+  // Issuance stays origin-bound. Panel RPC now uses a consumed-ticket port (quick-broker.test.js), never URL claims.
   const lms = { id: 'glaze', url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com', frameId: 0, tab: { id: 9, url: 'https://school.instructure.com/courses/1' } };
   const ask = (m, sender) => new Promise((resolve) => { for (const f of listeners) if (f(m, sender, resolve) === true) return; resolve({ ok: false, error: 'unhandled' }); });
   const NKEY = 'notesIdx:https://school.instructure.com/5', NOTE = '11111111-1111-4111-8111-111111111111';
@@ -422,8 +421,7 @@ test('E1 Settings is the session caller in its exact top frame; the Notes panel 
   assert.equal((await send('list', { ...quick, url: 'chrome-extension://glaze/sharing/quick.html?key=' + NKEY })).error, 'sender', 'no ticket');
   assert.equal((await send('list', { ...quick, tab: { id: 10 } })).error, 'sender', 'another tab');
   assert.equal((await send('list', { ...quick, frameId: 0 })).error, 'sender', 'the panel is never a top frame');
-  assert.equal((await send('list', quick, { scope: { key: 'forged' } })).ok, true, 'claimed by the first frame');
-  assert.deepEqual(JSON.parse(JSON.stringify(scopes.at(-1))), { key: NKEY, note: NOTE }, 'the worker sets the scope; a sent one is dropped');
+  assert.equal((await send('list', quick, { scope: { key: 'forged' } })).error, 'sender', 'URL ticket conveys no message authority');
   assert.equal((await send('list', { ...quick, documentId: 'doc2' })).error, 'sender', 'a second frame with the same ticket');
   assert.equal((await send('relaySave', quick)).error, 'sender');
   assert.equal((await send('list', editor, { scope: { key: NKEY } })).ok, true);

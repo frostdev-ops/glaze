@@ -51,7 +51,7 @@ const sharedNote = async (d) => {
   return { id, sid };
 };
 const page = async (d, { note = '', relay: selected } = {}) => {
-  const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], copied = [];
+  const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], disconnects = [], copied = [];
   const make = (tag) => {
     const e = new El(tag, doc);
     e.classList = { toggle: (name, on) => { const classes = new Set(e.className.split(/\s+/).filter(Boolean)); if (on) classes.add(name); else classes.delete(name); e.className = [...classes].join(' '); } };
@@ -65,6 +65,13 @@ const page = async (d, { note = '', relay: selected } = {}) => {
   ids.get('who').hidden = true;
   ids.get('ask').append(ids.get('ask-text'), ids.get('ask-yes'), ids.get('ask-no'));
   Object.assign(doc, { createElement: make, querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s) });
+  const handle = async (m) => {
+    calls.push(clone(m));
+    if (['leave', 'delete'].includes(m.op)) d.worker.stop();
+    await d.hold?.(m);
+    try { const value = await d.worker.handle({ ...m, scope: { id: 'panel-ui', key: NK, note } }); if (m.op === 'list' && selected) value.relay = selected; return value; }
+    catch (e) { return { ok: false, error: e.message }; }
+  };
   const context = vm.createContext({ document: doc, URL, URLSearchParams, console, setTimeout, clearTimeout, Date,
     location: { search: '?t=ticket' },
     navigator: { userActivation: { isActive: true }, clipboard: { writeText: async (v) => { copied.push(v); } } },
@@ -72,20 +79,16 @@ const page = async (d, { note = '', relay: selected } = {}) => {
     GZ_SANITIZE: () => ({ look: { radius: 12 }, auto: { on: false } }), GZ_SURFACES: { vars: () => ({}) }, GZ_ACTIVE_COLORS: () => ({ '--gz-accent': '#abc' }),
     matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener: (name, f) => events.set(name, f),
     chrome: { storage: { sync: area(), onChanged: { addListener() {} } }, permissions: { contains: async () => true, request: async () => true }, tabs: { create: async () => {} },
-      runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, connect: () => ({ onMessage: { addListener: (f) => messages.push(f) }, disconnect() {}, postMessage() {} }),
-        sendMessage: async (m) => {
-          calls.push(clone(m));
-          if (['leave', 'delete'].includes(m.op)) d.worker.stop();
-          await d.hold?.(m);
-          try { const value = await d.worker.handle({ ...m, scope: { key: NK, note } }); /* scoped, as the worker scopes a ticketed panel */ if (m.op === 'list' && selected) value.relay = selected; return value; }
-          catch (e) { return { ok: false, error: e.message }; }
-        } },
+      runtime: { id: 'glaze', getURL: (f) => `chrome-extension://glaze/${f}`, connect: () => ({ onMessage: { addListener: (f) => messages.push(f) }, onDisconnect: { addListener: (f) => disconnects.push(f) }, disconnect() {},
+        postMessage: (m) => { if (m.ticket) queueMicrotask(() => messages.forEach((f) => f({ id: m.id, ok: true })));
+          else if (m.op) handle(m).then((r) => messages.forEach((f) => f({ id: m.id, ...r }))); } }), sendMessage: handle },
     },
   });
   vm.runInContext(SOURCE, context);
+  events.get('message')?.({ data: { type: 'glaze:quick-start', ticket: 'ab'.repeat(16) } });
   await until(() => calls.some((m) => m.op === 'list') && !ids.get('who').hidden);
   const click = (el) => { assert.ok(el, 'button exists'); if (el.disabled) return; for (const { type, f } of el.listeners) if (type === 'click') f({ isTrusted: true, target: el }); };
-  const p = { doc, calls, copied, click: (id) => click(typeof id === 'string' ? ids.get(id) : id), get: (id) => ids.get(id), message: async () => { for (const f of messages) f({ changed: true }); await settle(); }, button: (text) => doc.root.querySelectorAll('button').find((e) => e.textContent === text) };
+  const p = { doc, calls, copied, disconnect: () => disconnects.forEach((f) => f()), click: (id) => click(typeof id === 'string' ? ids.get(id) : id), get: (id) => ids.get(id), message: async () => { for (const f of messages) f({ changed: true }); await settle(); }, button: (text) => doc.root.querySelectorAll('button').find((e) => e.textContent === text) };
   return p;
 };
 
@@ -98,6 +101,17 @@ test('quick Stop sharing deletes then leaves across broker interruptions and pre
   assert.deepEqual(p.calls.filter((m) => ['delete', 'leave'].includes(m.op)).map((m) => m.op), ['delete', 'leave']);
   assert.match((await N.run({ key: NK, op: 'load', id }, { local: d.local }, d.notes)).html, /Kept note/);
   assert.match(p.get('status').textContent, /Sharing stopped/);
+});
+
+test('quick worker restart disables stale controls and tells the user how to reopen', async (t) => {
+  const server = await start(t), d = device(t, server), { id } = await sharedNote(d), p = await page(d, { note: id });
+  const before = p.calls.length;
+  p.disconnect(); await settle();
+  assert.match(p.get('status').textContent, /Close this panel and open Share again/);
+  assert.ok(p.doc.root.querySelectorAll('button').every((b) => b.disabled));
+  p.click(p.button('Copy edit invite')); await settle();
+  assert.equal(p.calls.length, before, 'stale state cannot dispatch any operation');
+  assert.equal(p.copied.length, 0);
 });
 
 test('quick Stop sharing can forget an already deleted session while offline', async (t) => {

@@ -2742,4 +2742,5 @@
   "Share a folder on its own, or choose notes instead.": "Partage un dossier seul, ou choisis plutôt des notes.",
   "Session created. Copy an invite below to share it.": "Session créée. Copie une invitation ci-dessous pour la partager.",
   "Joined. Copy it into Notes or To Do below to keep working on it there.": "Rejoint. Copie-la ci-dessous dans Notes ou To Do pour continuer à y travailler.",
+  "Close this panel and open Share again.": "Ferme ce panneau et ouvre à nouveau Partager.",
 };
