@@ -40,6 +40,7 @@ const GZ_SHARE = (() => {
     if (nav.k !== 'default') raw.n = n;
     const bar = G.GZ_SANITIZE(s).navbar;
     const v = Object.fromEntries(NAVBAR.filter((k) => bar[k] !== G.GZ_SPEC.navbar[k][0]).map((k) => [k, bar[k]]));
+    if (bar.brand === 'custom') v.brand = 'glaze'; // Explicit, so the recipient's own logo does not stand in.
     if (Object.keys(v).length) raw.v = v;
     // A shader goes into a code without its comments and indentation; the editor keeps the author's text.
     let extra = parts?.x || parts?.m ? { ...(parts.x && { x: X.compact(parts.x) }), ...(parts.m && { m: parts.m }) } : null;
@@ -117,6 +118,7 @@ const GZ_SHARE = (() => {
 
       }
     }
+    if (clean.navbar.brand === 'custom') clean.navbar.brand = 'glaze';
     return { colors: clean.colors, look: pick(clean.look, [...new Set([...Object.keys(look), ...SURFACES])]), bg: pick(clean.bg, Object.keys(bg)), nav: pick(clean.nav, Object.keys(nav)), navbar: pick(clean.navbar, Object.keys(navbar)), card: pick(cardClean, Object.keys(card)), cards: set, parts };
   };
 

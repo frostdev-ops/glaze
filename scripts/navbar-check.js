@@ -2,7 +2,8 @@
 // content scripts on a mock page). Settings reach it as the editor sends them (gzPreview); nothing is saved.
 // It checks that the bar stands in for Ultra's drawer (hidden, keeping the page's room), its items, order, current item
 // and badges; that an item opens through Ultra's own link; the rail's icons state, tooltips, hover peek, keyboard and
-// Escape; right-to-left; the phone bar and its More sheet; and that turning it off puts Ultra's drawer back.
+// Escape; right-to-left; the phone bar and its More sheet; Glaze's widgets and mods' dock in each place; and that turning
+// it off puts Ultra's drawer back.
 //   NODE_PATH=/path/to/node_modules nice node scripts/navbar-check.js [screenshots directory]   (needs playwright)
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -363,6 +364,104 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await page.evaluate(() => { document.getElementById('gz-navbar').remove(); GZ_NAVBAR_UI.sync(); });
     await until((r) => !!r && !r.host.hidden, Boolean, 'a removed navbar host is replaced');
 
+    // ---- Glaze's widgets: cards in the open rail, squares in the icons rail, compact in the top bar, a grid on a phone ----
+    const widgets = (list) => page.evaluate((w) => chrome.storage.sync.set({ navbarItems: { widgets: w } }), list);
+    await send({ on: true, rail: 'open' });
+    await widgets([{ id: 'clock', at: 'top' }, { id: 'next', at: 'bottom' }, { id: 'timer', at: 'bottom' }, { id: 'pet', at: 'bottom' }]);
+    await until((r) => r?.querySelector('.wtop [data-w="clock"] .w-time')?.textContent, (v) => /\d:\d\d/.test(v || ''), 'the clock shows the time at the top of the rail');
+    ok((await bar((r) => [...r.querySelectorAll('.wbottom .widget')].map((w) => w.dataset.w).join(' '))) === 'next timer pet', 'what is due, the timer and the pet sit at the bottom, in order');
+    await until((r) => r.querySelector('[data-w="timer"] .w-time')?.textContent, (v) => /^\d+:\d\d$/.test(v || ''), 'the focus timer shows its minutes');
+    ok(await bar((r) => r.querySelector('[data-w="next"]').getAttribute('aria-disabled') === 'true' && /No upcoming work/.test(r.querySelector('[data-w="next"]').dataset.tip)), 'with nothing due, Next due says so and links nowhere');
+    ok(await bar((r) => { const w = r.querySelector('.wtop .widget').getBoundingClientRect(), rail = r.querySelector('.rail').getBoundingClientRect(); return w.left >= rail.left && w.right <= rail.right; }), 'the widgets stay inside the open rail');
+    await bar((r) => r.querySelector('[data-w="timer"] .w-go').click());
+    await until((r) => r.querySelector('[data-w="timer"]').hasAttribute('data-running') && r.querySelector('[data-w="timer"] .w-label').textContent, (v) => v === 'Pause', 'Start runs the timer and offers Pause');
+    await shot('widgets-rail');
+    const pet = await bar((r) => { const p = r.querySelector('[data-w="pet"]'); p.__kept = 1; return !!p; });
+    await send({ on: true, rail: 'icons' });
+    await until((r) => r.querySelector('.rail:not([data-open]) [data-w="clock"]')?.getBoundingClientRect().width, (v) => v > 0 && v <= 54, 'the icons rail keeps each widget in a square');
+    ok(await bar((r) => getComputedStyle(r.querySelector('[data-w="clock"] .w-detail')).display === 'none' && /\d/.test(r.querySelector('[data-w="clock"]').dataset.tip)), 'the date goes to its tip');
+    ok(pet && await bar((r) => r.querySelector('[data-w="pet"]').__kept === 1), 'a widget is the same element wherever it moves');
+    await send({ on: true, rail: 'icons', peek: false });
+    await page.mouse.move(900, 400);
+    const clockPoint = await bar((r) => { const b = r.querySelector('[data-w="clock"]').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; });
+    await page.mouse.move(...clockPoint);
+    await until((r) => r.querySelector('.tip').hasAttribute('data-on') && r.querySelector('.tip').textContent, (v) => / · /.test(v || ''), 'the icons rail shows the clock details in a tooltip');
+    await page.mouse.move(900, 400);
+    // Mods' navigation widgets: in the rail's dock, which never moves, even when it opens over the page.
+    await page.evaluate(() => {
+      window.__loads = 0;
+      const box = Object.assign(document.createElement('div'), { className: 'gz-nav-widget gz-mod-rail' });
+      const frame = Object.assign(document.createElement('iframe'), { srcdoc: '<p style="margin:0;font:14px sans-serif;color:#9cf">Mod widget</p>', style: 'width:100%;height:60px;border:0' });
+      frame.addEventListener('load', () => { window.__loads++; });
+      box.append(frame); window.__modBox = box;
+      globalThis.GZ_MODWIDGETS = { rail: () => [{ key: 'demo|rail:a', el: box }] };
+      GZ_NAVBAR_UI.sync();
+    });
+    await send({ on: true, rail: 'open' });
+    await until((r) => r.querySelector('.rail[data-open] .dock .gz-mod-rail') && getComputedStyle(r.querySelector('.dock')).visibility, (v) => v === 'visible', "a mod's widget shows in the open rail's dock");
+    await page.waitForFunction(() => window.__loads >= 1);
+    await send({ on: true, place: 'top' });
+    await until((r) => [...r.querySelectorAll('.twidgets .widget')].map((w) => w.dataset.w).join(' '), (v) => v === 'clock next timer pet', 'the top bar has the widgets, compact');
+    ok(await bar((r) => getComputedStyle(r.querySelector('.twidgets [data-w="next"] .w-text')).display === 'none' && !r.querySelector('.tdock').hidden), "what's due is an icon there, and a Widgets button opens mods' widgets");
+    await bar((r) => r.querySelector('.tdock').click());
+    await until((r) => r.host.hasAttribute('data-dock') && (() => { const d = r.querySelector('.dock').getBoundingClientRect(), t = r.querySelector('.topbar').getBoundingClientRect(); return d.top >= t.bottom && d.height > 0 && getComputedStyle(r.querySelector('.dock')).visibility === 'visible'; })(), Boolean, 'the dock opens under the top bar');
+    ok(await bar((r) => getComputedStyle(r.querySelector('.rail')).visibility === 'hidden' && r.querySelector('.tdock').getAttribute('aria-expanded') === 'true'), 'the rail stands invisible around it');
+    await shot('widgets-top-dock');
+    await send({ on: true, place: 'top', style: 'embed' });
+    await until((r) => r.host.dataset.style, (v) => v === 'embed', 'the dock follows embed style');
+    ok(await bar((r) => getComputedStyle(r.querySelector('.rail')).clipPath === 'none'), 'an embedded rail cannot clip the open dock');
+    await page.evaluate(() => { document.documentElement.dir = 'rtl'; GZ_NAVBAR_UI.sync(); });
+    ok(await bar((r) => getComputedStyle(r.querySelector('.rail')).clipPath === 'none'), 'an embedded RTL rail cannot clip the open dock');
+    await page.evaluate(() => { document.documentElement.dir = ''; GZ_NAVBAR_UI.sync(); });
+    await send({ on: true, place: 'top' });
+    ok(await page.evaluate(() => window.__loads) === 1, "the mod's frame never loaded again");
+    await page.keyboard.press('Escape');
+    await until((r) => !r.host.hasAttribute('data-dock') && r.activeElement === r.querySelector('.tdock'), Boolean, 'Escape closes the dock and focus goes back to its button');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await until((r) => [...r.querySelectorAll('.swidgets .widget')].map((w) => w.dataset.w).join(' '), (v) => v === 'clock next timer pet', 'on a phone the widgets are in the More sheet');
+    await bar((r) => r.querySelector('.tab.more').click());
+    await bar((r) => r.querySelector('.sheet [data-act="widgets"]').click());
+    await until((r) => r.host.hasAttribute('data-dock') && !r.querySelector('.sheet').open && r.querySelector('.dock').getBoundingClientRect().bottom <= innerHeight - 80, Boolean, "the sheet's Widgets row opens the dock over the phone's bar");
+    await shot('widgets-phone-dock');
+    await page.evaluate(() => { window.__footer = document.documentElement.hasAttribute('data-gz-footer'); document.documentElement.setAttribute('data-gz-footer', ''); GZ_NAVBAR_UI.sync(); });
+    ok(await bar((r) => r.querySelector('.dock').getBoundingClientRect().bottom <= r.querySelector('.tabs').getBoundingClientRect().top), 'the phone dock clears the footer and the bottom bar');
+    await page.evaluate(() => { document.documentElement.toggleAttribute('data-gz-footer', window.__footer); GZ_NAVBAR_UI.sync(); });
+    await page.setViewportSize({ width: 900, height: 844 });
+    await until((r) => r.host.hasAttribute('data-dock') && r.querySelector('.dock').getBoundingClientRect().top >= r.querySelector('.topbar').getBoundingClientRect().bottom, Boolean, 'an open dock follows the top bar across 900px');
+    await page.setViewportSize({ width: 899, height: 844 });
+    await until((r) => r.host.hasAttribute('data-dock') && r.querySelector('.dock').getBoundingClientRect().bottom <= r.querySelector('.tabs').getBoundingClientRect().top, Boolean, 'an open dock returns over the phone bar below 900px');
+    await page.setViewportSize({ width: 390, height: 844 });
+    ok(await bar((r) => r.querySelector('.dock').getAttribute('role') === 'dialog' && r.querySelector('.tdock').getAttribute('aria-controls') === r.querySelector('.dock').id), 'the Widgets control names its dialog');
+    await bar((r) => r.querySelector('.tab.more').click());
+    ok(await bar((r) => r.querySelector('.sheet').open && !r.host.hasAttribute('data-dock')), 'opening the modal sheet dismisses the dock');
+    await bar((r) => { const go = r.querySelector('.swidgets .w-go'); go.__focusKept = true; go.focus(); });
+    await page.evaluate(() => { document.querySelector('.MuiBadge-badge').textContent = '12'; GZ_NAVBAR_UI.sync(); });
+    ok(await bar((r) => r.activeElement?.__focusKept === true), 'a sheet redraw keeps focus on a widget control');
+    await widgets([{ id: 'next', at: 'top' }, { id: 'timer', at: 'bottom' }]);
+    await until((r) => r.querySelectorAll('.swidgets .widget').length, (v) => v === 2, 'the sheet shows a disabled next link before the timer');
+    await bar((r) => r.querySelector('.sheet .customize').focus());
+    await page.keyboard.press('Tab');
+    ok(await bar((r) => r.activeElement === r.querySelector('.swidgets .w-go')), 'Tab wraps to the first focusable widget past a disabled next link');
+    await bar((r) => r.querySelector('.sheet [data-act="widgets"]').click());
+
+    ok(await page.evaluate(() => window.__loads) === 1, "and the mod's frame still never loaded again");
+    await page.mouse.click(200, 100);
+    await until((r) => !r.host.hasAttribute('data-dock'), Boolean, 'a tap outside closes it');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await send({ on: true, place: 'rail', course: 'top' });
+    await page.evaluate(() => { window.__widgetPage = location.href; history.replaceState(null, '', '/ultra/courses/_1_1/outline'); GZ_NAVBAR_UI.sync(); });
+    await until((r) => r.host.dataset.place === 'top' && r.querySelectorAll('.twidgets .widget').length === 2, Boolean, 'widgets follow the course top-bar override');
+    await bar((r) => r.querySelector('.tdock').click());
+    await send({ on: true, place: 'rail', course: 'hide' });
+    await until((r) => r.host.dataset.place === 'none' && !r.host.hasAttribute('data-dock'), Boolean, 'hiding the course bar closes an open dock');
+    ok(await page.evaluate(() => window.__loads) === 1, 'course overrides leave the mod frame in its dock');
+    await page.evaluate(() => { history.replaceState(null, '', window.__widgetPage); GZ_NAVBAR_UI.sync(); });
+    await page.evaluate(() => { delete globalThis.GZ_MODWIDGETS; window.__modBox.remove(); GZ_NAVBAR_UI.sync(); });
+    await send({ on: true });
+    await widgets([]);
+    await until((r) => r.querySelectorAll('.widget').length, (v) => v === 0, 'turning the widgets off takes them away');
+    await page.evaluate(() => chrome.storage.sync.remove('navbarItems'));
+
     const editor = await ctx.newPage();
     editor.on('pageerror', (e) => errors.push(String(e)));
     await editor.goto(`chrome-extension://${extensionId(src)}/options.html#navigation/bar`);
@@ -370,6 +469,14 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await editor.locator('#navbar input[name="navbar.place"][value="top"]').evaluate((e) => e.click());
     const controls = await editor.locator('#navbar [data-navbar-rail]').evaluate((e) => [e.hidden, getComputedStyle(e).display]);
     ok(controls[0] && controls[1] === 'none', `top-only navigation hides the editor's rail controls (${controls.join(', ')})`);
+    await editor.evaluate(() => GZ_XPARTS.write(GZ_XPARTS.areas(), { x: { nav: { groups: [{ items: ['w:clock', 'w:next'] }] } } }));
+    await editor.waitForFunction(() => { const cs = document.querySelectorAll('#nbar-widgets input'); return cs.length === 4 && cs[0].checked && cs[1].checked && !cs[2].checked; }, null, { timeout: 5000 });
+    ok(true, 'widget settings follow a Look changed while the editor stays open');
+    await editor.locator('#nbar-widgets [data-w="pet"] input').check();
+    await editor.waitForFunction(async () => (await chrome.storage.sync.get('navbarItems')).navbarItems?.widgets?.some((w) => w.id === 'pet'), null, { timeout: 5000 });
+    ok(await editor.evaluate(() => document.activeElement?.matches('#nbar-widgets [data-w="pet"] input')), 'saving a widget choice keeps focus on its checkbox');
+    ok(await editor.evaluate(async () => (await chrome.storage.sync.get('navbarItems')).navbarItems.widgets.map((w) => w.id).join(' ') === 'clock next pet'), 'the first personal edit preserves the worn Look widgets');
+
     await editor.close();
     ok(!errors.length, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
   } catch (e) {

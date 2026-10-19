@@ -14,8 +14,8 @@
   // The options preview is Ultra. On a site, decide once from its head while the parser is still there;
   // addresses and body classes can belong to another app or a same-host tool.
   const isPreview = /-extension:$/.test(location.protocol); // chrome-, moz-, safari-web-extension:
-  // A course tab's live frame (gz-ctab:<course>) works as a page of its own (solo), without the footer.
-  const tabFrame = window.top !== window && /^gz-ctab:_\d+_\d+$/.test(window.name) ? window.name.slice(8) : '';
+  // A course tab's live frame (gz-ctab:<course>|page) works as a page of its own (solo), without the footer.
+  const tabFrame = window.top !== window && /^gz-ctab:(?:_\d+_\d+|\d+|page)$/.test(window.name) ? window.name.slice(8) : '';
   const solo = window.top === window || !!tabFrame;
   const ULTRA = 'base[href*="/ultra/"]';
   const MOODLE = 'meta[name="keywords"][content^="moodle,"]'; // core writes it on every page
@@ -55,13 +55,12 @@
   let darkTheme = true;
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
-  // Canvas wears canvas.css, not theme.css and extras.css (Ultra's markup). motion.css holds the motion knobs any
-  // sheet's animations read. features/apps.css: Glaze's own apps (notes, widgets) on Ultra and Canvas, not Moodle.
-  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css'], 'features/surfaces.css'];
+  // Each site's theme, shared motion and surfaces; Canvas and Ultra also share tabs and apps.
+  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css', 'features/coursetabs.css'], 'features/surfaces.css'];
   // What only one site does: its part puts its own over these (the site's part, below). Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,
-    renderNew: no, renderCalc: no, openNew: no, paintCourses: no, tintOf: no, courseColor: no, paintNav: no, syncNav: no, nickOf: () => '', syncNames: no,
+    renderNew: no, renderCalc: no, openNew: no, paintCourses: no, tintOf: no, courseColor: no, paintNav: no, paintTabs: no, syncNav: no, nickOf: () => '', syncNames: no,
     unname: no, holding: () => false, syncTodo: no, syncCardTasks: no, syncWidgets: no, syncRemind: no, syncSyl: no, syncInsights: no, ctx: {} };
 
   const hasText = (e) => { for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) return true; return false; };
@@ -375,7 +374,7 @@
     .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
   const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
   // The Canvas course this page is in (/courses/:id/...), or undefined.
-  const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)/)?.[1];
+  const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1];
 
   // ---- grades on course cards (Extras) ---------------------------------------------------------
   // A course card's overall grade, drawn by CSS from attributes: Ultra's Courses page and Canvas's Dashboard (X.tagCards),
@@ -1115,7 +1114,7 @@
       let b = card.querySelector(':scope > .gz-cm-btn');
       if (b && (!on || b.dataset.cid !== cid || !courseList[cid])) { b.remove(); b = null; }
       if (!on || !courseList[cid]) continue;
-      const label = t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name: X.nickOf(cid) || courseList[cid].name });
+      const label = t(moodle ? 'Tint and look for {name}' : 'Colour and look for {name}', { name: X.nickOf(cid) || courseList[cid].name });
       if (!b) {
         // Inside Ultra's card, positioned over its corner (extras.css); document-level capture listeners take
         // its events, below.
@@ -1187,10 +1186,10 @@
   // crossfade (canvas.css, Page transitions). An at-rule can't sit under an attribute selector, so the opt-in is
   // a style element that exists only while motion and entrances are on. A page that is revealed inside a
   // transition is marked, so its own entrances (a second movement) stay off; sticky, because letting go would
-  // restart them.
+  // restart them. Not in a tab's frame: its next page opts in too late.
   let fade = null;
   const syncPageFade = () => {
-    const want = !ultra && links.length && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-enter');
+    const want = !ultra && !tabFrame && links.length && html.getAttribute('data-gz-motion') !== 'off' && !html.hasAttribute('data-gz-no-enter');
     if (want && !fade) {
       fade = document.createElement('style');
       fade.textContent = '@view-transition { navigation: auto; }';
@@ -1258,6 +1257,7 @@
     setAttr('data-gz-density', s.look.density);
     setAttr('data-gz-depth', String(s.look.depth));
     X.paintNav(s.nav);
+    X.paintTabs();
     // Background: the kind is an attribute, the picture and its dim/blur are vars. An image that
     // fails to load (bad URL, a host's CSP) falls back to the gradient instead of a bare ground.
     const kind = bgKind() === 'image' && !s.bg.image ? 'gradient' : bgKind();
@@ -1432,6 +1432,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
     syncRules();
     clearSettings();
     globalThis.GZ_NAV_UI?.sync();
+    if (moodle) { globalThis.GZ_NAVBAR_UI?.sync(); html.removeAttribute('data-gz-navbar'); }
     syncDocTools();
     syncFooter();
   };
@@ -1451,8 +1452,21 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   const takePart = () => { if (part && globalThis[part]) Object.assign(X, globalThis[part](I)); };
   const partIn = part && !globalThis[part] && need(`content-${site}.js`, () => globalThis[part]).then(() => { takePart(); reapply(); }, () => {});
   if (!partIn) takePart();
-  // Moodle has no part: a worn Look's nav layout (x.nav, features/nav.js) is all Glaze does to its nav.
-  if (moodle) X.syncNav = () => { if (window.top === window && ((links.length && GZ_CTX.parts()?.nav) || globalThis.GZ_NAV_UI)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), no); };
+  // Moodle: first paint and lazy navigation.
+  if (moodle) {
+    X.paintNav = () => {
+      if (window.top !== window) return;
+      const b = settings.navbar, course = /\bcourse-(?!1\b)\d+\b/.test(document.body?.className || '') || /\/course\/(view|section)\.php$/.test(location.pathname), c = course ? b.course : 'same';
+      const place = c === 'same' ? b.place : c === 'icons' ? 'rail' : c === 'hide' ? 'none' : 'top';
+      if (!globalThis.GZ_NAVBAR_UI?.live()) setAttr('data-gz-navbar', b.on && `${place}${place === 'rail' ? ` ${c === 'icons' ? 'icons' : b.rail}` : ''} ${b.style}${place !== 'none' && course && b.cmenu && document.querySelector('.secondary-navigation a[href]:not([href^="#"])') ? ' menu' : ''}`);
+    };
+    X.syncNav = () => {
+      if (window.top !== window) return;
+      if (globalThis.GZ_NAVBAR_UI || (links.length && settings.navbar.on)) need('features/navbar-moodle.js', () => globalThis.GZ_NAVBAR_MOODLE).then(() => need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI)).then(() => GZ_NAVBAR_UI.sync(), no);
+      if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
+      else if (links.length && !settings.navbar.on && GZ_CTX.parts()?.nav) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), no);
+    };
+  }
   // Wearing or taking off a Look can change the nav's layout (GZ_CTX.parts).
   document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 

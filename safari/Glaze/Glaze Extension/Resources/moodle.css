@@ -825,3 +825,39 @@ html [data-region="course-content"][data-gz-course-look] {
   color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-panel); border-color: var(--gz-border-line, var(--gz-line)) !important;
 }
 html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft: var(--gz-accent-hi); }
+
+/* Glaze navigation: keep Moodle's links alive, replace its 60px header room, and leave content drawers usable.
+   First paint words come from content.js; the renderer then supplies the measured room inline. */
+html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; --gz-navbar-bottom: 0px; }
+html[data-gz-navbar] :is(nav.navbar.fixed-top, #theme_boost-drawers-primary, [data-target="theme_boost-drawers-primary"]) { display: none !important; }
+html[data-gz-navbar~="menu"] .secondary-navigation { display: none !important; }
+html[data-gz-navbar] #page-wrapper { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; padding-inline-start: var(--gz-navbar-left) !important; }
+html[data-gz-navbar] #page { margin-top: 0 !important; }
+html[data-gz-navbar] #page.drawers { height: calc(100dvh - var(--gz-navbar-top) - var(--gz-navbar-bottom)) !important; }
+html[data-gz-navbar] :is(#theme_boost-drawers-courseindex, #theme_boost-drawers-blocks) { top: calc(var(--gz-navbar-top) + 12px) !important; bottom: var(--gz-navbar-bottom) !important; height: auto !important; max-height: calc(100dvh - var(--gz-navbar-top) - var(--gz-navbar-bottom) - 24px - var(--sticky-footer-total-height, 0px)) !important; }
+html[data-gz-navbar] #theme_boost-drawers-courseindex.show { left: auto !important; right: auto !important; inset-inline-start: var(--gz-navbar-left) !important; }
+html[data-gz-navbar] #theme_boost-drawers-blocks.show { left: auto !important; right: auto !important; inset-inline-end: 0 !important; }
+html[data-gz-navbar] .drawer-toggles .drawer-toggler { top: calc(var(--gz-navbar-top) + 16px) !important; }
+html[data-gz-navbar] .drawer-toggles .drawer-left-toggle { left: auto !important; right: auto !important; inset-inline-start: var(--gz-navbar-left) !important; }
+html[data-gz-navbar] #sticky-footer { left: auto !important; right: auto !important; inset-inline-start: var(--gz-navbar-left) !important; width: calc(100% - var(--gz-navbar-left)) !important; bottom: var(--gz-navbar-bottom) !important; }
+@media (min-width: 900px) {
+  html[data-gz-navbar~="rail"] { --gz-navbar-left: 96px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="embed"] { --gz-navbar-left: 72px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="open"] { --gz-navbar-left: 272px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
+  html[data-gz-navbar~="top"] { --gz-navbar-top: 80px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top: 56px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="menu"] { --gz-navbar-top: 124px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="menu"][data-gz-navbar~="embed"] { --gz-navbar-top: 100px; }
+}
+@media (min-width: 1280px) {
+  html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left: 272px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
+}
+@media (max-width: 899.98px) {
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) { --gz-navbar-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) { --gz-navbar-bottom: calc(96px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)); }
+  html[data-gz-navbar] #page-wrapper { padding-bottom: var(--gz-navbar-bottom) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) .btn-footer-popover { bottom: calc(var(--gz-navbar-bottom) + 2rem + var(--sticky-footer-total-height, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) .btn-footer-communication { bottom: calc(var(--gz-navbar-bottom) + 5rem + var(--sticky-footer-total-height, 0px)) !important; }
+}

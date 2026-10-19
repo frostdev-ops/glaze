@@ -205,7 +205,7 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   shows only on the Canvas or Blackboard site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
-- **Dashboard notes and widgets** (Canvas and Blackboard Ultra, off by default), in `chrome.storage.local`, on this device only: your notes
+- **Dashboard notes and widgets** (Canvas and Blackboard Ultra; widgets on by default with none added, notes off by default), in `chrome.storage.local`, on this device only: your notes
   (at most 20,000 characters) per site and signed-in user id, with when you last typed them, so a note typed later
   in another tab wins; an emptied note keeps only the time it was emptied, so an older copy can't bring it back. The widgets' layout (which are on, their order and size, where a
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
@@ -295,19 +295,19 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   record, keeping only when it was deleted (so a late save from another tab can't bring it back); the GPA scale and
   tasks stay until you change them there. Only the first 200,000 characters of a syllabus are read, and the review says
   so when there were more.
-- **Course tabs** (Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
+- **Course tabs** (Canvas and Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
   pinned, when it was last used, its own-course URL including query parameters, and scroll position. Any previously
   opened course page can reopen, including a test, attempt, discussion or message. Glaze does not press controls there.
   Closing a tab removes its entry and live frame. The surrounding page owns list writes; live frames report only their
   own place so a late frame save cannot overwrite another tab's pin, order or closure.
-  **Live pages** run as ordinary same-origin Blackboard frames, up to four frames alongside the surrounding page, with their scripts, form values and native
+  **Live pages** run as ordinary same-origin Canvas or Blackboard frames, up to four frames alongside the surrounding page, with their scripts, form values and native
   requests still active while hidden. Edited pages are excluded from automatic eviction after trusted input, change
   or submit events; if all four are protected, another page waits until you explicitly close one. Protection is
   conservative until closure and does not identify every native operation. Closing, reloading, signing out or disabling
   tabs can discard unsaved native work. A clean older frame can stop to make room; reopening restores its URL and saved
-  scroll, not arbitrary native state. These frames are not isolated from the surrounding Blackboard page.
-  **Pictures for first load** are JPEG captures of the visible Blackboard browser tab, kept only in page memory and
+  scroll, not arbitrary native state. These frames are not isolated from the surrounding school page.
+  **Pictures for first load** are JPEG captures of the visible Canvas or Blackboard browser tab, kept only in page memory and
   `chrome.storage.session` (the browser's in-memory extension storage), or worker memory where that API is unavailable.
   Captures can include visible form text, media, Glaze tools and other content on that tab; they are blurred while shown.
   Each picture is at most 3,000,000 data-URL characters and all pictures together at most 8,000,000, oldest first.
@@ -337,15 +337,15 @@ you import) are bundled. It makes requests in these cases:
 - **Your course list.** On a Blackboard page, at most every ten minutes, Glaze asks your own Blackboard
   site for your list of courses, the same one Blackboard's Courses page asks for, with your existing
   session, and keeps each course's name and colour slot as above. Nothing is sent anywhere else.
-- **Course tabs.** To keep each account's tabs apart, Glaze asks your own Blackboard site who is signed in (Ultra's
-  `/learn/api/v1/users/me`, which Ultra itself asks on every page), once a page, shared with the grade and course-list
+- **Course tabs.** To keep each account's tabs apart, Glaze asks your own school site who is signed in (Canvas's
+  `/api/v1/users/self/profile` or Ultra's `/learn/api/v1/users/me`), once a page, shared with the existing profile and course-list
   reads above. A tab you pick from the strip opens that course's own-site address in a frame over the page, only
   when you pick it, and keeps it running while you're on another tab (four at most), as a browser keeps its tabs; it
   stops when you close the tab, sign out, or turn the tabs or Glaze off. While a tab's page first loads, a blurred
-  picture of how it last looked covers it: Glaze's worker takes pictures of the Blackboard tab on screen (checking
+  picture of how it last looked covers it: Glaze's worker takes pictures of the Canvas or Blackboard tab on screen (checking
   before and after that it still is), keeps them in memory (storage.session, never on disk) and they go when the
   browser closes, on sign-out, or when the tabs or Glaze are turned off. Showing one makes no requests. Glaze never
-  prefetches a course.
+  prefetches a course. Frames load your school’s own pages with your existing session; nothing new leaves the device.
 - **What's due this week.** On a Blackboard page, at most every ten minutes, Glaze asks your own
   Blackboard site for your To Do list for the next seven days, the same one Blackboard's own To Do panel
   asks for, with your existing session, and keeps it as above. Picking an item in the command palette
@@ -546,13 +546,17 @@ you import) are bundled. It makes requests in these cases:
   page and kept on this device as above. Nothing read on Gradescope is sent to Canvas or anywhere else, and Glaze never
   writes to Gradescope. To suggest a Canvas course on Gradescope, Glaze uses the course names it already keeps on this
   device (above); the bar on Gradescope sits in a closed shadow root, so Gradescope's own scripts can't read that list.
-- **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). This is the only change Glaze
-  makes to any site. When you tick or untick an item, Glaze writes Canvas's own planner mark for it, as Canvas's List
-  View checkbox does: one request to your own Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark
-  that already exists) with the item's type and id, your user id and done or not done, and the page's own CSRF token.
-  Nothing is written at any other time, and nothing else is written. If Canvas refuses, the tick goes back and the
-  list says so. Off, ticks stay on this device.
-- **Dashboard notes and widgets** (Canvas, off by default). They ask your own Canvas site for your profile (user id
+- **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). When you tick or untick an
+  item, Glaze writes Canvas's own planner mark for it, as Canvas's List View checkbox does: one request to your own
+  Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark that already exists) with the item's type and id,
+  your user id and done or not done, and the page's own CSRF token. Nothing is written at any other time, and nothing
+  else is written. If Canvas refuses, the tick goes back and the list says so. Off, ticks stay on this device.
+- **A course's nickname and color on Canvas** (the course card's menu). Only when you change one there, Glaze saves it
+  in Canvas as Canvas's own card menu does: one request to your own Canvas site (`PUT` or, to clear a nickname, `DELETE`
+  `/api/v1/users/self/course_nicknames/<course>`; `PUT /api/v1/users/self/colors/course_<course>` with the color) and
+  the page's own CSRF token. These and the ticks above are the only changes Glaze makes to any site. To show the
+  nickname, the menu reads the course list Canvas's Dashboard already asks for.
+- **Dashboard notes and widgets** (Canvas; widgets on by default with none added, notes off by default). An empty panel asks for nothing; the notes and the widgets you add ask your own Canvas site for your profile (user id
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
   day's planner items, a read-only GET, at most every two minutes per day you look at. Nothing is written to Canvas.

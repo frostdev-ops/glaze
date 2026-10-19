@@ -93,7 +93,7 @@ test('routed header keep-clear moves and tears down without erasing a pre-existi
   const make = (initial) => ({ value: initial, writes: 0, hasAttribute() { return this.value !== undefined; },
     setAttribute(k, v) { this.writes++; this.value = v; }, removeAttribute() { this.writes++; this.value = undefined; } });
   const first = make(), next = make('existing');
-  const keepClear = vm.runInNewContext(part('  let clearHeader = ', '  const place = ') + '\nkeepClear;');
+  const keepClear = vm.runInNewContext(part('  let clearHeader = ', '  const place = ') + '\nkeepClear;', { measureRow() {} });
   keepClear(first); assert.equal(first.value, '');
   keepClear(first); assert.equal(first.writes, 1, 'stable placement does not rewrite the native header');
   keepClear(next); assert.equal(first.value, undefined); assert.equal(next.value, 'existing');

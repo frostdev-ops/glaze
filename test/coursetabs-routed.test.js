@@ -33,7 +33,7 @@ test('the strip goes before/after the full routed header without moving native c
     hd.before = (s) => { assert.equal(s, strip); put = 'before'; };
     hd.after = (s) => { assert.equal(s, strip); put = 'after'; };
     const home = vm.runInNewContext(part('  const home = ', '  const place = ') + '\nhome;', {
-      go: null, strip, P: () => ({ at }), courseBar: () => null, topLayer: () => null, shown: () => false,
+      ctx: { site: 'ultra' }, go: null, strip, P: () => ({ at }), courseBar: () => null, topLayer: () => null, shown: () => false,
       here: () => '_71_1', routed: () => page, routedHeader: () => hd, loaded: true, tabs: [{}],
       spot: (at, ok, put) => ({ at, ok, put }),
     });

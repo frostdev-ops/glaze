@@ -69,7 +69,7 @@ test('backup import enforces the cap against other accounts already stored', asy
   assert.deepEqual(a.store, before);
   assert.equal((await F.restore({ folders, settings: null }, { local: a.local }, T)).error, 'bad');
 });
-test('B9 is default-on, Ultra-only, on-demand and has no request or page-storage path', () => {
+test('B9 is default-on, on-demand and has no request or page-storage path', () => {
   assert.equal(D.GZ_SANITIZE({}).enhance.hideFolders, true);
   assert.equal(D.GZ_SANITIZE({ enhance: { hideFolders: false } }).enhance.hideFolders, false);
   const source = fs.readFileSync(require.resolve('../features/folders.js'), 'utf8');

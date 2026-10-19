@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
@@ -163,6 +163,7 @@
         "features/navbar.css",
         "features/apps.css",
         "features/surfaces.css",
+        "features/coursetabs.css",
         "assets/logo.svg",
         "assets/logo-dark.svg",
         "icons/icon.svg"
@@ -187,7 +188,9 @@
     },
     {
       "resources": [
-        "sharing/quick.html"
+        "sharing/quick.html",
+        "options.html",
+        "preview.html"
       ],
       "matches": [
         "https://*/*"

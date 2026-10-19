@@ -34,6 +34,39 @@ const hint = (msg, err = false) => {
 const finder = $('#find');
 let followSection = () => {}, searchPreview = () => {};
 const editor = GZ_EDITOR.mount({ onRoute: (route) => followSection(route) });
+
+// Opened as a page of the school's site (features/settingspage.js): the same Settings, with Close and a way to its own tab.
+// The page around can't read this frame, but it could cover it and borrow a click, so what holds keys and grants (sharing,
+// mods, backups) asks for a tab of its own. The worker refuses those operations from a frame anyway.
+const embedded = window.top !== window;
+if (embedded) {
+  document.documentElement.setAttribute('data-embedded', '');
+  // Shown only once the worker confirms this frame was opened by Glaze's navigation in this tab (a one-use ticket): a
+  // site framing Settings on its own gets an empty page.
+  const ticket = new URLSearchParams(location.search).get('t') || '';
+  history.replaceState(null, '', location.pathname + location.hash);
+  chrome.runtime.sendMessage({ type: 'glaze:settings-claim', ticket }).then((r) => { if (r?.ok) document.documentElement.setAttribute('data-embed-ok', ''); }, () => {});
+  addEventListener('message', (e) => { if (e.source === window.parent && e.data?.gzSettings === 'go' && /^#[a-z]+(\/[a-z-]+)?$/.test(e.data.hash || '')) location.hash = e.data.hash; });
+  $('.embed-tools').hidden = false;
+  const leave = () => window.parent.postMessage({ gzSettings: 'close' }, '*');
+  const ownTab = () => { chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + location.hash }).then(leave, () => {}); };
+  $('#embed-close').addEventListener('click', leave);
+  $('#embed-tab').addEventListener('click', ownTab);
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.target.closest?.('input, select, textarea, dialog, [role="dialog"], [role="menu"]')) return;
+    e.preventDefault(); leave();
+  });
+  const make = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  for (const [panel, name] of [['sharing', 'Sharing and sync'], ['mods', 'Mods'], ['backup', 'Backup and privacy']]) {
+    const box = document.querySelector(`[data-editor-panel="${panel}"]`);
+    if (!box) continue;
+    const go = make('button', { type: 'button', className: 'primary', textContent: t('Open in a new tab') });
+    go.addEventListener('click', ownTab);
+    box.setAttribute('data-gated', '');
+    box.prepend(make('div', { className: 'embed-gate' }, make('h2', { textContent: t(name) }),
+      make('p', { textContent: t('This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.') }), go));
+  }
+}
 const filter = () => {
   const words = GZ_FIND.parse(finder.value);
   const on = words.length > 0;
@@ -115,12 +148,12 @@ $('#news-close').addEventListener('click', () => { $('#news').hidden = true; fin
 
 GZ_UI.load().then((s) => {
   const frame = $('#preview');
-  let navItems = GZ_NAV.clean();
+  let navItems = GZ_NAV.clean(), navbarEditor = null;
   // A pasted theme code shows in the preview until it is used or cancelled.
   let offer = null;
   let courses = {}; // course id -> { name, slot, org }, from the content script
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
-  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs'], canvas: ['courses', 'outline', 'dashboard', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
+  const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs'], canvas: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
   let previewSite = 'ultra', previewPage = 'outline', previewCourse = '', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
   const sizePreview = () => {
     const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;
@@ -334,6 +367,7 @@ GZ_UI.load().then((s) => {
     renderBg();
     GZ_EDITOR_X.render();
     renderNav();
+    navbarEditor?.render();
     presetOptions();
     GZ_XEDIT.render();
     outputs();
@@ -785,7 +819,7 @@ GZ_UI.load().then((s) => {
       const li = document.createElement('li');
       li.addEventListener('focusin', () => { previewCourse = id; contextPreview(c.canvas ? 'canvas' : c.moodle ? 'moodle' : 'ultra', 'outline'); });
       // Ultra nicknames share the card menu's sanitizer; Canvas and Moodle keep their native names and colors.
-      const own = c.canvas ? t('Change the colour and nickname in Canvas’s own card menu.') : c.moodle ? t('The colour is Moodle’s own for this course.') : '';
+      const own = c.canvas ? t('Change the colour and nickname in its card’s menu on Canvas’s Dashboard. Canvas keeps them.') : c.moodle ? t('The colour is Moodle’s own for this course.') : '';
       const nick = (!own && s.enhance.coursemenu && cc.names[id]) || '';
       c = { ...c, real: c.name, name: nick || c.name };
       const input = Object.assign(document.createElement('input'), { type: 'color', value: own ? c.color || '#808080' : colors[id].color });
@@ -967,7 +1001,7 @@ GZ_UI.load().then((s) => {
       try { await navigator.clipboard.writeText($('#gcal-id').value); hint(t('Copied.')); } catch { $('#gcal-id').select(); hint(t('Copy the code from the box.')); }
     });
     // Escape keeps the last returnValue, so each question starts from none.
-    $('#gcal-disconnect').addEventListener('click', () => { $('#gcal-drop').checked = false; $('#gcal-bye').returnValue = ''; $('#gcal-bye').showModal(); });
+    $('#gcal-disconnect').addEventListener('click', () => { $('#gcal-drop').checked = false; $('#gcal-bye').returnValue = ''; $('#gcal-bye').showModal(); $('#gcal-bye-cancel').focus(); }); // focused here, not by autofocus: Settings can be a frame of a school page, where browsers refuse autofocus
     $('#gcal-bye').addEventListener('close', async () => {
       if ($('#gcal-bye').returnValue !== 'ok') return $('#gcal-disconnect').focus();
       const r = await gcalOp({ op: 'disconnect', drop: $('#gcal-drop').checked });
@@ -1245,7 +1279,8 @@ GZ_UI.load().then((s) => {
       if (!pets) throw new Error('pet history');
       const folders = GZ_FOLDERS.backup(all);
       const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
-      const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
+      const navbar = { ...s.navbar, ...(s.navbar.brand === 'custom' && { brand: 'glaze' }) };
+      const blob = new Blob([JSON.stringify({ ...s, nav, navbar, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
@@ -1266,6 +1301,7 @@ GZ_UI.load().then((s) => {
     // To Do edits take turns, and success is said only once both stores have it.
     const next = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
     next.nav.i = ''; next.nav.li = ''; if (next.nav.brand === 'custom') next.nav.brand = 'glaze'; // A backup never names a picture on another device.
+    if (next.navbar.brand === 'custom') next.navbar.brand = 'glaze';
     const mediaSrc = raw.parts?.x?.bg?.media?.src;
     const mediaMissing = next.bg.kind === 'media' && typeof mediaSrc === 'string' && mediaSrc.startsWith('file:');
     if (mediaMissing) next.bg.kind = 'gradient';
@@ -1343,7 +1379,7 @@ GZ_UI.load().then((s) => {
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
   // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
   const widgets = GZ_WIDGETEDIT.mount({ t, show: (route) => editor.show(route, { scroll: true }) }); // widgets made of blocks (lib/editor-widget.js)
-  GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
+  navbarEditor = GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
   followSection(editor.route());

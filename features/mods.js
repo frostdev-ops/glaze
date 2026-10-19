@@ -437,7 +437,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   // The first running mod, in the student's order, that has `key` turned on (and the slot to fill it, for nav and bg).
   const claimant = (key) => (run && runtime === true ? running().find((m) => m.on?.includes(key) && (key === 'bg' ? slotOf(m.id, 'background') : key === 'nav' || key.startsWith('tile:') ? slotOf(m.id, key) : true)) : null);
   const railBoxes = new Map(); // `${mod}|${slot}` → the rail's element for it
-  // Rail widgets of the running mods, for features/nav.js to put among its own.
+  // Rail widgets of the running mods, for features/nav.js to put among its own, or for Glaze navigation's dock (features/navbar.js).
   const rail = () => {
     const want = run && runtime === true ? running().flatMap((m) => (m.slots || []).filter((s) => s.key.startsWith('rail:')).map((s) => [m, s])) : [];
     for (const k of [...railBoxes.keys()]) if (!want.some(([m, s]) => `${m.id}|${s.key}` === k)) { detach(k); railBoxes.get(k).remove(); railBoxes.delete(k); }
@@ -514,7 +514,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     const railWant = on && running().some((m) => m.slots?.some((s) => s.key.startsWith('rail:')));
     if (railWant || railBoxes.size) {
       if (!railWant) rail();
-      ctx().need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), () => {});
+      ctx().need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), () => {}).then(() => globalThis.GZ_NAVBAR_UI?.sync());
     }
     syncNavSlot();
     syncBg();

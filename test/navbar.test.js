@@ -114,7 +114,7 @@ test('mobile keeps mod slot items reachable', () => {
 test('on by default: a floating rail, open on wide windows; Look codes carry how it looks, not whether it is on', async () => {
   assert.equal(M.railOpen('auto', 1280), true); assert.equal(M.railOpen('auto', 1279), false);
   assert.equal(M.railOpen('open', 900), true); assert.equal(M.railOpen('icons', 2000), false);
-  const DEF = { on: true, place: 'rail', style: 'float', rail: 'auto', course: 'same', tabs: true, peek: true, badges: true, brand: 'glaze' };
+  const DEF = { on: true, place: 'rail', style: 'float', rail: 'auto', course: 'same', cmenu: true, tabs: true, peek: true, badges: true, brand: 'glaze' };
   assert.deepEqual(G.GZ_SANITIZE({}).navbar, DEF);
   assert.deepEqual(G.GZ_SANITIZE({ navbar: { on: 1, place: 'side', style: 'glass', rail: 'wide', course: 'gone', brand: 'school' } }).navbar, { ...DEF, brand: 'school' });
   for (const icon of M.PICKS) assert.match(M.ICONS[icon], /^[Mm][\d.\s,a-zA-Z-]+$/, icon);
@@ -132,27 +132,36 @@ test('on by default: a floating rail, open on wide windows; Look codes carry how
 test('where the bar is: the placement, the course state, the style and the room it keeps', () => {
   const n = G.GZ_SANITIZE({}).navbar;
   const L1 = (o, ctx) => M.layout({ ...n, ...o }, ctx);
-  assert.deepEqual(L1({}, { width: 1440 }), { place: 'rail', open: true, style: 'float', tabs: true, left: 272, top: 0, words: 'rail auto float tabs' });
-  assert.deepEqual(L1({}, { width: 1100 }), { place: 'rail', open: false, style: 'float', tabs: true, left: 96, top: 0, words: 'rail auto float tabs' });
+  assert.deepEqual(L1({}, { width: 1440 }), { place: 'rail', open: true, style: 'float', tabs: true, menu: false, left: 272, top: 0, words: 'rail auto float tabs' });
+  assert.deepEqual(L1({}, { width: 1100 }), { place: 'rail', open: false, style: 'float', tabs: true, menu: false, left: 96, top: 0, words: 'rail auto float tabs' });
   assert.equal(L1({ style: 'embed' }, { width: 1440 }).left, 248);
   assert.equal(L1({ style: 'embed', rail: 'icons' }, { width: 1440 }).left, 72);
-  assert.deepEqual(L1({ place: 'top' }, { width: 1440 }), { place: 'top', open: false, style: 'float', tabs: true, left: 0, top: 80, words: 'top float tabs' });
+  assert.deepEqual(L1({ place: 'top' }, { width: 1440 }), { place: 'top', open: false, style: 'float', tabs: true, menu: false, left: 0, top: 80, words: 'top float tabs' });
   assert.equal(L1({ place: 'top', style: 'embed' }).top, 56);
   assert.equal(L1({}, { width: 1440, rail: 'icons' }).left, 96, 'a pin just picked wins until storage says so');
-  assert.deepEqual(L1({ course: 'icons' }, { width: 1440, course: true }), { place: 'rail', open: false, style: 'float', tabs: true, left: 96, top: 0, words: 'rail icons float tabs' });
+  assert.deepEqual(L1({ course: 'icons' }, { width: 1440, course: true }), { place: 'rail', open: false, style: 'float', tabs: true, menu: false, left: 96, top: 0, words: 'rail icons float tabs' });
   assert.equal(L1({ course: 'icons' }, { width: 1440, course: true, rail: 'open' }).open, false, 'icons inside a course whatever the pin');
   assert.equal(L1({ course: 'top' }, { course: true }).place, 'top');
-  assert.deepEqual(L1({ course: 'hide' }, { course: true }), { place: 'none', open: false, style: 'float', tabs: false, left: 0, top: 0, words: 'none float' });
+  assert.deepEqual(L1({ course: 'hide' }, { course: true }), { place: 'none', open: false, style: 'float', tabs: false, menu: false, left: 0, top: 0, words: 'none float' });
   assert.equal(L1({ course: 'hide' }, { course: false }).place, 'rail', 'only inside a course');
   assert.equal(L1({ tabs: true }, { tabs: false }).words, 'rail auto float', 'no course tabs to hold');
   assert.deepEqual([L1({}, { width: 800 }).left, L1({ place: 'top' }, { width: 800 }).top], [0, 0], 'a phone keeps no side or top room');
+  // A course's own menu (Canvas, Moodle): a top bar takes a second row for it; the rail holds it as a group.
+  assert.deepEqual([L1({ place: 'top' }, { width: 1440, course: true, menu: true }).top, L1({ place: 'top' }, { width: 1440, course: true, menu: true }).words], [124, 'top float tabs menu']);
+  assert.equal(L1({}, { width: 1440, course: true, menu: true }).words, 'rail auto float tabs menu');
+  assert.equal(L1({ place: 'top', cmenu: false }, { width: 1440, course: true, menu: true }).top, 80, 'turned off, no second row');
+  assert.equal(L1({ place: 'top' }, { width: 1440, course: false, menu: true }).menu, false, 'only inside a course');
+  assert.equal(L1({ course: 'hide' }, { course: true, menu: true }).menu, false, 'nor with the bar hidden there');
+  assert.deepEqual(['home', 'modules', 'assignments', 'quizzes', 'discussions', 'grades', 'people', 'files', 'syllabus', 'announcements', 'zoom', 'outcomes', 'settings', 'mystery'].map((k) => M.courseIcon(k)),
+    ['home', 'layers', 'pencil', 'quiz', 'chat', 'grades', 'people', 'folder', 'book', 'megaphone', 'video', 'star', 'gear', 'doc']);
+  assert.equal(M.courseIcon('', 'Participants'), 'people', 'by its name where the key says nothing');
   // theme.css reserves the same room at first paint, from the same words.
   const css = read('theme.css');
   for (const [rule, px] of [['html[data-gz-navbar~="rail"] { --gz-navbar-left', 96], ['html[data-gz-navbar~="rail"][data-gz-navbar~="embed"] { --gz-navbar-left', 72], ['html[data-gz-navbar~="rail"][data-gz-navbar~="open"] { --gz-navbar-left', 272],
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left', 248], ['html[data-gz-navbar~="top"] { --gz-navbar-top', 80], ['html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top', 56],
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left', 272], ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left', 248]]) assert.ok(css.includes(`${rule}: ${px}px; }`), rule);
   for (const rule of ['#main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }', '#main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }',
-    '.inner-wrap > section.course { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
+    '.inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
     '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
 });
 
@@ -177,14 +186,19 @@ test("Ultra's first paint words the bar as the model does, for each setting, in 
   assert.equal(first(n, '/ultra/course', false), 'rail auto float', 'without course tabs, nothing to hold');
 });
 
-test('the editor may change navbar fields; an Ultra top frame may only pin its rail', async () => {
+test('the editor may change navbar fields; Ultra and Moodle top frames may only pin their rail', async () => {
   const source = read('lib/background.js');
   const DEF = G.GZ_SANITIZE({}).navbar;
   const store = { navbar: { on: true, rail: 'auto', brand: 'school' } };
-  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromUltra: async (s) => s.ultra === true });
+  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromUltra: async (s) => s.ultra === true, fromMoodle: async (s) => s.moodle === true, fromCanvas: async (s) => s.canvas === true });
   const h = vm.runInContext(`({${source.match(/\n {2}navbar: \{([\s\S]*?)\n {2}\},/)[1]}})`, ctx);
   assert.equal(await h.allow({ patch: { rail: 'open' } }, { ultra: true, frameId: 0 }), true);
   assert.equal(await h.allow({ patch: { rail: 'icons' } }, { editor: true }), true);
+  assert.equal(await h.allow({ patch: { rail: 'icons' } }, { moodle: true, frameId: 0 }), true);
+  assert.equal(await h.allow({ patch: { on: false } }, { moodle: true, frameId: 0 }), false);
+  assert.equal(await h.allow({ patch: { rail: 'icons' } }, { moodle: true, frameId: 1 }), false);
+  assert.equal(await h.allow({ patch: { rail: 'open' } }, { canvas: true, frameId: 0 }), true);
+  assert.equal(await h.allow({ patch: { rail: 'open' } }, { canvas: true, frameId: 1 }), false);
   for (const [m, s] of [[{ patch: { rail: 'open' } }, { ultra: true, frameId: 2 }], [{ patch: { rail: 'open' } }, { frameId: 0 }], [{ patch: { on: false } }, { ultra: true, frameId: 0 }],
     [{ patch: { rail: 'open', on: false } }, { ultra: true, frameId: 0 }], [{ patch: { rail: 'auto' } }, { ultra: true, frameId: 0 }], [{ patch: ['open'] }, { editor: true }], [{}, { editor: true }],
     [{ patch: {} }, { editor: true }], [{ patch: { badges: 'false' } }, { editor: true }], [{ patch: { unknown: true } }, { editor: true }]]) assert.equal(await h.allow(m, s), false, JSON.stringify([m, s]));
@@ -202,7 +216,7 @@ test("Ultra's part marks first paint from the setting and loads the bar only whe
   const ultra = read('content-ultra.js');
   assert.match(ultra, /if \(!globalThis\.GZ_NAVBAR_UI\?\.live\(\)\) I\.setAttr\('data-gz-navbar', !!b\?\.on && /);
   assert.match(ultra, /if \(globalThis\.GZ_NAVBAR_UI \|\| \(I\.links\.length && I\.settings\?\.navbar\?\.on\)\) need\('features\/navbar\.js'/);
-  assert.match(read('features/nav.js'), /const on = X\.on\(\) && X\.settings\(\)\.enabled && !\(X\.site === 'ultra' && X\.settings\(\)\.navbar\?\.on\);/);
+  assert.match(read('features/nav.js'), /let on = X\.on\(\) && X\.settings\(\)\.enabled && !\(X\.site === 'ultra' && X\.settings\(\)\.navbar\?\.on\) && !\(X\.site === 'moodle' && X\.settings\(\)\.navbar\?\.on\);/);
 });
 
 // The renderer's API: mods add, change and remove only their own items, and nothing unsafe gets through.

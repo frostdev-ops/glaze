@@ -39,17 +39,35 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     code: 'M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16',
     star: 'M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z',
     globe: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
+    bell: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0',
+    layers: 'm12 3 9 5-9 5-9-5zM3 13l9 5 9-5',
+    pencil: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
+    megaphone: 'M4 10v4h3l7 4V6L7 10zM17.5 9a4 4 0 0 1 0 6',
+    quiz: 'M8 4h8v3H8zM6 5.5H4.5V21h15V5.5H18M8 12l1.5 1.5L12.5 10M14 12h3M8 17l1.5 1.5 3-3.5M14 17h3',
+    people: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16.5 4.5a3.5 3.5 0 0 1 0 6.5M18.5 14a5.5 5.5 0 0 1 3 6',
+    timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 1.5M9.5 2.5h5',
+    play: 'M8 5.5v13l10.5-6.5z',
+    pause: 'M8.5 5.5v13M15.5 5.5v13',
+    reset: 'M4 12a8 8 0 1 0 2.4-5.7M4 4.5V8h3.5',
+    gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3.1 15H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.6V4.5a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
   };
   // The icons a student, a Look or a mod may give an item: every drawing but the bar's own controls.
-  const PICKS = Object.keys(ICONS).filter((k) => !['chevron', 'pin', 'more', 'close'].includes(k));
+  const PICKS = Object.keys(ICONS).filter((k) => !['chevron', 'pin', 'more', 'close', 'play', 'pause', 'reset'].includes(k));
   // A native item's icon, by its id in the shared vocabulary.
-  const ICON_OF = { 'institution-page': 'home', dashboard: 'home', home: 'home', stream: 'activity', course: 'book', organization: 'organization', groups: 'groups', calendar: 'calendar', messages: 'inbox', grades: 'grades', tools: 'tools', help: 'help', history: 'history', admin: 'admin', profile: 'account', logout: 'signout' };
+  const ICON_OF = { 'institution-page': 'home', dashboard: 'home', home: 'home', stream: 'activity', course: 'book', organization: 'organization', groups: 'groups', calendar: 'calendar', messages: 'inbox', grades: 'grades', tools: 'tools', help: 'help', history: 'history', admin: 'admin', profile: 'account', logout: 'signout', notifications: 'bell' };
+  // A course's own pages (the course menu a site's adapter reads, features/navbar.js draws): an icon by what the page is,
+  // from its key or its name, in any of the sites' words; anything else is a page.
+  const COURSE_ICONS = [['home', /^(home|course(home)?|overview)$/], ['megaphone', /announce|news|forum_news/], ['layers', /modules?|content|units?|outline|weeks|topics|sections/],
+    ['pencil', /assign|tasks?|homework/], ['quiz', /quiz|assess|tests?|exams?/], ['chat', /discuss|forums?|chat/], ['grades', /grade|marks|gradebook/],
+    ['people', /people|participants?|roster|members|groups?/], ['folder', /files?|resources?|documents?/], ['book', /syllabus|course_?info|about/],
+    ['calendar', /calendar|schedule|events?/], ['video', /conferenc|zoom|meet|video|lecture/], ['star', /outcome|competenc|badges?|rubric/], ['gear', /settings|admin|more|reports?/]];
+  const courseIcon = (key, name = '') => COURSE_ICONS.find(([, re]) => re.test(String(key).toLowerCase()) || re.test(String(name).toLowerCase()))?.[0] || 'doc';
   // Glaze's own items, opt-in (owner decision 2026-10-19): the page asks Glaze to open them (features/navbar.js).
   const GLAZE = ['notes', 'todo', 'search', 'settings'];
   // The default bar (the design canvas's): the places first, then the rest, separated. The account and signing out sit at
   // the foot, not in a group; Glaze's settings item in Ultra's own nav (content-ultra.js) is the opt-in settings here.
   const DEFAULT = [
-    { id: 'main', items: ['institution-page', 'dashboard', 'home', 'stream', 'course', 'organization', 'groups', 'calendar', 'messages', 'grades'] },
+    { id: 'main', items: ['institution-page', 'dashboard', 'home', 'stream', 'course', 'organization', 'groups', 'calendar', 'messages', 'notifications', 'grades'] },
     { id: 'more', items: ['tools', 'history', 'help', 'admin'] },
   ];
   const FOOT = ['profile', 'logout', 'glaze'];
@@ -70,6 +88,8 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
   //   tabs: [id]                                mobile's tabs before More (up to 4)
   //   glaze: ['notes' | 'todo' | 'search' | 'settings']   Glaze's own items, opt-in
   //   links: [{ id, n, u, i, tab }]             their own links (lib/nav-items.js link)
+  //   widgets: [{ id, at }]                     the widgets shown, in order, at the rail's 'top' or 'bottom'; left out until
+  //                                             they choose, when a worn Look's or the older rail's (navItems.widgets) show
   const clean = (raw) => {
     const out = { items: {}, groups: [], tabs: [], glaze: [], links: [] };
     if (!obj(raw)) return out;
@@ -98,16 +118,22 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     }
     out.tabs = [...new Set((Array.isArray(raw.tabs) ? raw.tabs : []).filter((id) => named(id) && !FOOT.includes(id)))].slice(0, 4);
     out.glaze = GLAZE.filter((g) => Array.isArray(raw.glaze) && raw.glaze.includes(g));
+    if (Array.isArray(raw.widgets)) {
+      out.widgets = [];
+      for (const w of raw.widgets.slice(0, 20)) if (obj(w) && N.WIDGETS.includes(w.id) && !out.widgets.some((x) => x.id === w.id)) out.widgets.push({ id: w.id, at: w.at === 'top' ? 'top' : 'bottom' });
+    }
     return out;
   };
 
   // build(input) -> the bar. input:
-  //   native: [{ id, label, href, active, badge }] the page's own items, in its order (the site's adapter reads them)
+  //   native: [{ id, label, href, active, badge, panel }] the page's own items, in its order (the site's adapter reads them);
+  //     panel: the site opens it as a menu of its own (Canvas's trays), which Glaze draws as a panel instead
   //   prefs: clean()'s navbarItems; look: a worn Look's x.nav (GZ_NAV_LAYOUT.clean); legacy: navItems (lib/nav-items.js)
   //   mods: [{ owner, id, label, icon, href, badge, group, slot }] items mods added (features/navbar.js checks them)
   //   names: { notes, todo, search, settings }: Glaze's own items' names, in the page's language
-  // -> { groups: [{ id, label, items }], slots: { top, bottom }, account, signout, tabs, sheet, items }
-  // An item: { id, label, icon, href, action, active, badge, owner, tab }. Hidden items are left out everywhere but
+  // -> { groups: [{ id, label, items }], slots: { top, bottom }, account, signout, tabs, sheet, items, widgets }
+  // widgets: [{ id, at }] the student's (prefs.widgets), else a worn Look's (its w: items, at the top), else the older rail's.
+  // An item: { id, label, icon, href, action, active, badge, owner, tab, panel }. Hidden items are left out everywhere but
   // `items`, which has every item with `hidden` set, for the editor and nav.model().
   const build = ({ native = [], prefs, look = null, legacy = null, mods = [], names = {} } = {}) => {
     const p = prefs || clean();
@@ -115,7 +141,7 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     const add = (item) => { if (!pool.has(item.id)) pool.set(item.id, item); };
     for (const n of native) {
       if (!n || !L.NATIVE.includes(n.id) || n.id === 'glaze') continue;
-      add({ id: n.id, label: text(n.label, 80) || n.id, icon: ICON_OF[n.id] || 'link', href: typeof n.href === 'string' ? n.href : '', active: !!n.active, badge: badge(n.badge), native: true });
+      add({ id: n.id, label: text(n.label, 80) || n.id, icon: ICON_OF[n.id] || 'link', href: typeof n.href === 'string' ? n.href : '', active: !!n.active, badge: badge(n.badge), native: true, ...(n.panel && { panel: true }) });
     }
     // A worn Look's links stand in for the student's older rail links (as features/nav.js did); their own new ones add.
     const links = [...(look?.links || legacy?.links || []), ...p.links];
@@ -165,18 +191,21 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     for (const i of all) { if (tabs.length >= 4) break; if (!tabs.includes(i)) tabs.push(i); }
     const sheet = mobile.map((g) => ({ ...g, items: g.items.filter((i) => !tabs.includes(i)) })).filter((g) => g.items.length);
     const foot = (id) => { const i = pool.get(id); return i && !i.hidden ? i : null; };
-    return { groups: visible, slots: { top: shown(slots.top), bottom: shown(slots.bottom) }, account: foot('profile'), signout: foot('logout'), tabs, sheet, items: [...pool.values()] };
+    const worn = (look?.groups || []).flatMap((g) => g.items).filter((id) => /^w:/.test(id) && N.WIDGETS.includes(id.slice(2))).map((id) => ({ id: id.slice(2), at: 'top' }));
+    const widgets = p.widgets || (worn.length ? worn : (legacy?.widgets || []).filter((w) => w.on).map(({ id, at }) => ({ id, at })));
+    return { groups: visible, slots: { top: shown(slots.top), bottom: shown(slots.bottom) }, account: foot('profile'), signout: foot('logout'), tabs, sheet, items: [...pool.values()], widgets };
   };
 
   // The rail's state, from the student's setting and the window: open (labels), or icons with a peek on hover.
   const railOpen = (rail, width) => rail === 'open' || (rail === 'auto' && width >= 1280);
   // The page's room for the bar, in px, on wide windows: a floating bar keeps a 12px gutter around it, an embedded one none.
-  const BAR = { open: 248, icons: 72, top: 56, gutter: 12 };
+  const BAR = { open: 248, icons: 72, top: 56, sub: 44, gutter: 12 };
   // Where the bar is and how, from the student's settings (defaults.js navbar), the window's width and whether a course is
   // open (inside a course: the same, icons only, a top bar, or none). rail overrides the saved rail state (a pin just
-  // picked). -> { place: 'rail' | 'top' | 'none', open, style, tabs, left, top, words }; words is what <html
-  // data-gz-navbar> says (content-ultra.js says the same at first paint, theme.css reads it).
-  const layout = (n, { width = 1440, course = false, rail = null, tabs = true } = {}) => {
+  // picked). menu: the course has a menu of its own that the bar shows (navbar.cmenu): a top bar takes a second row for it.
+  // -> { place: 'rail' | 'top' | 'none', open, style, tabs, menu, left, top, words }; words is what <html data-gz-navbar>
+  // says (each site's content script says the same at first paint, its CSS reads it).
+  const layout = (n, { width = 1440, course = false, rail = null, tabs = true, menu = false } = {}) => {
     const c = course ? n.course : 'same';
     const place = c === 'same' ? n.place : c === 'icons' ? 'rail' : c === 'hide' ? 'none' : 'top';
     const state = c === 'icons' ? 'icons' : rail || n.rail;
@@ -184,12 +213,13 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     const gutter = n.style === 'embed' ? 0 : BAR.gutter;
     const wide = width >= 900;
     const left = wide && place === 'rail' ? (open ? BAR.open : BAR.icons) + 2 * gutter : 0;
-    const top = wide && place === 'top' ? BAR.top + 2 * gutter : 0;
+    const sub = place !== 'none' && course && !!menu && n.cmenu !== false;
+    const top = wide && place === 'top' ? BAR.top + 2 * gutter + (sub ? BAR.sub : 0) : 0;
     const hosted = place !== 'none' && !!n.tabs && tabs;
-    const words = [place, ...(place === 'rail' ? [c === 'icons' ? 'icons' : state] : []), n.style, ...(hosted ? ['tabs'] : [])].join(' ');
-    return { place, open, style: n.style, tabs: hosted, left, top, words };
+    const words = [place, ...(place === 'rail' ? [c === 'icons' ? 'icons' : state] : []), n.style, ...(hosted ? ['tabs'] : []), ...(sub ? ['menu'] : [])].join(' ');
+    return { place, open, style: n.style, tabs: hosted, menu: sub, left, top, words };
   };
 
-  return { ICONS, PICKS, ICON_OF, GLAZE, DEFAULT, TABS, clean, build, named, railOpen, layout, BAR };
+  return { ICONS, PICKS, ICON_OF, GLAZE, DEFAULT, TABS, clean, build, named, railOpen, layout, BAR, courseIcon };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_NAVBAR; else GZ_NAVBAR;

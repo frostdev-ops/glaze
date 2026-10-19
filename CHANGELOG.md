@@ -6,6 +6,26 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-10-19
+
+### Added
+- Glaze navigation on Canvas and Moodle, on by default, as on Blackboard Ultra. Canvas's Courses, Groups, Account, History, Help and Admin trays, and Moodle's profile, notifications and conversations, open as Glaze panels; a course's own menu sits in the rail, or as a second row under a top bar.
+- Widgets in the navigation: the clock, what's due next, the focus timer and your pet, at the top or bottom of the rail, as squares in the icons rail, compact in a top bar and in a phone's More sheet (Settings → Navigation → Navigation items → Widgets). Mods' navigation widgets sit under the rail's items and open over the page from a Widgets button with a top bar or on a phone.
+- Live course tabs on Canvas: each course keeps its own page, and Dashboard, Calendar, Inbox and other pages outside a course open in a frame of their own, so course tabs never reload.
+- Hide modules on Canvas's Modules page, as folders are hidden on Blackboard.
+- Canvas course cards on the Dashboard's board as widgets, with Glaze's card menu merged into Canvas's.
+- Glaze settings open as a page of the school site from the navigation, with the live preview; sharing keys, backups and mod permissions keep a tab of their own.
+
+### Changed
+- Course tabs fill the top bar and shrink before scrolling; a course tab's frame never shows a page outside its course, which opens in the page around it (another site in a new tab).
+- On Canvas, a course tab's frame fills the window under the navigation, so the Look's background runs behind the bar.
+- Widgets are on by default with none added.
+
+### Fixed
+- The navigation keeps working as plain links after Glaze is reloaded or updated under an open page.
+- Unread counts follow their label instead of covering it; Ultra's routed pages, assignment back buttons and Canvas's sticky headers keep clear of the bar.
+- Settings' Google Calendar dialog no longer trips the browser's autofocus block inside a school page.
+
 ## [3.1.0] — 2026-10-19
 
 ### Added

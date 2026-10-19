@@ -1,7 +1,8 @@
-// Device-only outline visibility. The worker serializes single-folder edits across tabs.
+// Device-only outline visibility: Ultra's folders (ids _1_1) and Canvas's modules (plain numbers, also on a local http Canvas).
+// The worker serializes single-folder edits across tabs.
 var GZ_FOLDERS = (() => {
-  const ID = /^_\d{1,18}_\d{1,18}$/;
-  const KEY = /^hiddenFolders:https:\/\/[a-z\d.-]+(?::\d{1,5})?\/_\d{1,18}_\d{1,18}\/_\d{1,18}_\d{1,18}$/i;
+  const ID = /^(?:_\d{1,18}_\d{1,18}|\d{1,18})$/;
+  const KEY = /^hiddenFolders:(?:https:\/\/[a-z\d.-]+(?::\d{1,5})?\/_\d{1,18}_\d{1,18}\/_\d{1,18}_\d{1,18}|https?:\/\/[a-z\d.-]+(?::\d{1,5})?\/\d{1,18}\/\d{1,18})$/i;
   const MAX_IDS = 500, MAX_KEYS = 200, MAX_BYTES = 262144;
   const obj = (v) => v && typeof v === 'object' && !Array.isArray(v);
   const key = (origin, user, course) => {

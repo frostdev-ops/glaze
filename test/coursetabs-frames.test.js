@@ -14,8 +14,8 @@ const loadingFrame = () => {
   const timers = [], navigations = [], notices = [];
   const f = { url: '/ultra/courses/_2_1/grades', ready: false, dirty: false, el: { style: {}, get contentDocument() { return doc; }, set src(v) { navigations.push(v); } } };
   const frames = new Map([['_2_1', f]]);
-  const c = vm.createContext({ frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
-    MutationObserver: class { observe() {} disconnect() {} }, loading: () => false, shown: (el) => !!el,
+  const c = vm.createContext({ PAGE: 'page', keepPage() {}, L, ctx: { site: 'ultra' }, frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
+    MutationObserver: class { observe() {} disconnect() {} }, loading: () => false, shown: (el) => !!el, waiting: '', wait() {},
     unpicture() {}, later() {}, clearSlow() {}, slowFrame: () => notices.push('slow'), t: (s) => s,
     setTimeout: (fn, ms) => timers.push({ fn, ms }),
   });
@@ -54,9 +54,9 @@ test('slow rendered course documents and edited frames are never automatically r
 test('selecting a timed-out course again retries only an untouched frame', () => {
   for (const dirty of [false, true]) {
     const dropped = [], shown = [];
-    const c = vm.createContext({ framed: '', preview: false, tabs: [{ cid: '_2_1' }], save() {}, Date,
+    const c = vm.createContext({ PAGE: 'page', keepPage() {}, framed: '', preview: false, tabs: [{ cid: '_2_1' }], save() {}, Date,
       frames: new Map([['_2_1', { slow: true, ready: false, dirty }]]), showing: '_2_1',
-      drop: (...args) => dropped.push(args), show: (cid) => shown.push(cid), ctx: { courseId: () => '_1_1' },
+      drop: (...args) => dropped.push(args), show: (cid) => shown.push(cid), reveal: (cid) => shown.push(cid), ctx: { courseId: () => '_1_1' },
     });
     vm.runInContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + "\nvisit('_2_1');", c);
     assert.equal(dropped.length, dirty ? 0 : 1);
@@ -70,7 +70,7 @@ test('a delayed snapshot cannot cover a stalled or replaced frame', async () => 
     let resolve, created = 0;
     const f = { url: '/ultra/courses/_2_1/outline', ready: false, el: { style: {} } };
     const frames = new Map([['_2_1', f]]);
-    const c = vm.createContext({ showing: '_2_1', frames, pic: null, snaps: new Map(), unpicture() {}, keep() {},
+    const c = vm.createContext({ PAGE: 'page', keepPage() {}, showing: '_2_1', frames, pic: null, snaps: new Map(), unpicture() {}, keep() {},
       fits: () => true, send: () => new Promise((r) => { resolve = r; }),
       document: { createElement() { created++; throw new Error('stale snapshot'); } },
     });
@@ -85,8 +85,8 @@ test('a delayed snapshot cannot cover a stalled or replaced frame', async () => 
 test('the bridge takes picks only from this page\'s own frames, on this origin, and only Ultra addresses to go to', () => {
   let listen;
   const mine = {}, theirs = {}, did = [];
-  vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // Ultra routes without reloading'), {
-    framed: '', preview: false, on: true, location: { origin }, addEventListener: (t, f) => { listen = f; },
+  vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // Ultra routes without reloading'), { PAGE: 'page', keepPage() {},
+    L, ctx: { site: 'ultra' }, framed: '', preview: false, on: true, location: { origin }, addEventListener: (t, f) => { listen = f; },
     frames: new Map([['_2_1', { el: { contentWindow: mine } }]]), showing: '_2_1',
     visit: (c) => did.push(['visit', c]), shut: (c, k) => did.push(['shut', c, k]), later: () => did.push(['later']),
     drop: (c) => did.push(['drop', c]), show: (c) => did.push(['show', c]), route: (u) => did.push(['route', u]),
@@ -106,9 +106,9 @@ test('the bridge takes picks only from this page\'s own frames, on this origin, 
 
 test('a pick in a tab\'s frame goes to the page around it; on the page, its own course shows the page itself', () => {
   const sent = [], shown = [];
-  const run = (framed, courseId) => vm.runInNewContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + '\nvisit;', {
+  const run = (framed, courseId) => vm.runInNewContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + '\nvisit;', { PAGE: 'page', keepPage() {},
     framed, preview: false, tabs: [{ cid: '_1_1' }, { cid: '_2_1' }], save() {}, Date, frames: new Map(), showing: '',
-    toTop: (op, m) => sent.push([op, m.cid]), show: (c) => shown.push(c), ctx: { courseId: () => courseId },
+    toTop: (op, m) => sent.push([op, m.cid]), show: (c) => shown.push(c), reveal: (c) => shown.push(c), ctx: { courseId: () => courseId },
   });
   run('_2_1', '_2_1')('_1_1');
   assert.deepEqual(sent, [['visit', '_1_1']]);
@@ -122,7 +122,7 @@ test('at most four frames stay running: the least recently shown go, never the o
   const frame = (at) => ({ at, ready: true, el: { style: {}, inert: false, focus() {} } });
   const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(5)], ['_4_1', frame(4)], ['_5_1', frame(2)]]);
   const dropped = [];
-  const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
+  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {},
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
     LIVE: 4, Date, Promise, setTimeout() {}, clearTimeout() {}, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
@@ -140,7 +140,7 @@ test('a hidden frame stays live however long it is hidden: no timer closes it', 
   const frame = (at) => ({ at, ready: true, el: { style: {}, inert: false, focus() {} } });
   const frames = new Map([['_1_1', frame(1)], ['_2_1', frame(2)], ['_3_1', frame(3)]]);
   const timers = [];
-  const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
+  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {},
     showTurn: 0, showing: '', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
     LIVE: 4, Date, Promise, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     setTimeout: (fn, ms) => timers.push(ms), clearTimeout() {},
@@ -158,7 +158,7 @@ const switching = () => {
   const frame = (dirty = false) => ({ at: 1, dirty, ready: true, el: { style: {}, focus() {}, remove() {} } });
   const frames = new Map([['_1_1', frame()], ['_2_1', frame(true)]]), timers = new Map();
   let n = 0;
-  const context = vm.createContext({
+  const context = vm.createContext({ PAGE: 'page', keepPage() {},
     showTurn: 0, showing: '_1_1', shownFrom: '', shooting: null, on: true, frames,
     host: { toggleAttribute() {} }, strip: null, list: null, LIVE: 2, Date, Promise,
     location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
@@ -188,7 +188,7 @@ test('evicting the current clean frame during a slow snapshot cannot later hide 
 test('the 15-second guard counts successful pictures and follows the frame address', async () => {
   let current = '/ultra/courses/_2_1/outline', success = false, pictures = 0, n = 0;
   const timers = new Map();
-  const later = vm.runInNewContext(part('  let capTimer = ', '  // Leaving through Ultra') + '\nlater;', {
+  const later = vm.runInNewContext(part('  let capTimer = ', '  // Leaving through Ultra') + '\nlater;', { PAGE: 'page', keepPage() {},
     showing: '_2_1', framed: '', surface: () => ({ path: current }), location: { href: origin + '/ultra/course' },
     Date: { now: () => 100000 }, requestIdleCallback: (fn) => fn(),
     setTimeout: (fn) => { timers.set(++n, fn); return n; },
@@ -210,7 +210,7 @@ test('the 15-second guard counts successful pictures and follows the frame addre
 test('an already queued idle capture rechecks the 15-second guard before taking another picture', async () => {
   const timers = [], idle = [];
   let pictures = 0;
-  const later = vm.runInNewContext(part('  let capTimer = ', '  // Leaving through Ultra') + '\nlater;', {
+  const later = vm.runInNewContext(part('  let capTimer = ', '  // Leaving through Ultra') + '\nlater;', { PAGE: 'page', keepPage() {},
     showing: '_2_1', framed: '', surface: () => ({ path: '/ultra/courses/_2_1/outline' }), location: {},
     Date: { now: () => 100000 }, requestIdleCallback: (fn) => idle.push(fn),
     setTimeout: (fn) => { timers.push(fn); return 1; }, shoot: async () => { pictures++; return {}; },
@@ -225,7 +225,7 @@ test('an already queued idle capture rechecks the 15-second guard before taking 
 test('same-course frame navigation reports a move without needing a scroll', () => {
   let moves = 0;
   const location = { pathname: '/ultra/courses/_2_1/outline', search: '' };
-  const context = vm.createContext({
+  const context = vm.createContext({ PAGE: 'page', keepPage() {},
     on: true, framed: '_2_1', preview: false, showing: '', loaded: true, restored: true,
     last: '_2_1', lastPath: location.pathname, location, frames: new Map(), tabs: [{ cid: '_2_1' }],
     here: () => '_2_1', observeView() {}, notePlace() {}, flag() {}, place() {}, draw() {}, lay() {}, later() {}, moved: () => moves++,
@@ -252,7 +252,7 @@ test('covered-page CSS restores visibility for its strip, footer, native dialogs
 test('the worker takes a course tab\'s frame as its Ultra page: its origin stands in for the about:blank it reports', () => {
   const bg = fs.readFileSync(path.join(root, 'lib/background.js'), 'utf8');
   const block = bg.slice(bg.indexOf('const addressOf = '), bg.indexOf('const fromUltra = '));
-  const { ultraAt, ultraPage } = vm.runInNewContext(`${block}\n({ ultraAt, ultraPage });`, { chrome: { runtime: { id: 'glaze' } }, URL });
+  const { ultraAt, ultraPage } = vm.runInNewContext(`${block}\n({ ultraAt, ultraPage });`, { PAGE: 'page', keepPage() {}, chrome: { runtime: { id: 'glaze' } }, URL });
   const tab = { id: 1, url: `${origin}/ultra/courses/_1_1/outline` };
   const frame = { id: 'glaze', tab, frameId: 7, url: 'about:blank', origin };
   assert.equal(ultraAt(frame), origin);
@@ -268,7 +268,7 @@ test('the worker takes a course tab\'s frame as its Ultra page: its origin stand
 
 test('a live frame saves only its own place through the owner, never a stale whole tab list', () => {
   const sent = [], writes = [];
-  const saveNow = vm.runInNewContext(part('  let saveTimer = ', '  const framed = ') + '\nsaveNow;', {
+  const saveNow = vm.runInNewContext(part('  let saveTimer = ', '  const framed = ') + '\nsaveNow;', { PAGE: 'page', keepPage() {},
     clearTimeout() {}, setTimeout() {}, who: '_42_1', loaded: true, preview: false, framed: '_2_1',
     tabs: [{ cid: '_1_1', pin: false }, { cid: '_2_1', path: '/ultra/courses/_2_1/grades', top: 200 }],
     toTop: (op, value) => sent.push({ op, ...value }), local: (f) => f({ set: (v) => writes.push(v) }), key: () => 'key',
@@ -280,7 +280,7 @@ test('a live frame saves only its own place through the owner, never a stale who
 
 test('a saved-list close destroys its live frame and a metadata change preserves only local place', () => {
   const dropped = [];
-  const context = vm.createContext({
+  const context = vm.createContext({ PAGE: 'page', keepPage() {},
     L, readPrefs() {}, pass() {}, who: '_42_1', preview: false, key: () => 'key',
     tabs: [{ cid: '_1_1', path: '/ultra/courses/_1_1/grades', top: 220, pin: false }],
     ctx: { courseId: () => '_1_1' }, frames: new Map([['_2_1', {}]]), drop: (cid) => dropped.push(cid),
@@ -295,9 +295,9 @@ test('a saved-list close destroys its live frame and a metadata change preserves
 test('four edited live frames refuse a fifth without opening or destroying a document', async () => {
   const frames = new Map(Array.from({ length: 4 }, (_, i) => [`_${i + 1}_1`, { at: i, dirty: true, ready: true }]));
   const shown = [], closed = [], notes = [];
-  const show = vm.runInNewContext(part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', {
+  const show = vm.runInNewContext(part('  const hostIn = ', '  // A frame is shown once') + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', { PAGE: 'page', keepPage() {},
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, LIVE: 4,
-    host: {}, strip: null, list: null, document: { activeElement: null }, location: {},
+    host: {}, strip: null, list: null, document: { activeElement: null }, location: {}, ctx: { site: 'ultra' },
     say: (m) => notes.push(m), t: (s) => s,
     open: (c) => { shown.push(c); return null; }, drop: (c) => closed.push(c),
   });
@@ -318,8 +318,9 @@ test('automatic list eviction preserves edited live courses and still enforces t
 
 test('a hidden frame pauses its scene only for messages from its owner on the same origin', () => {
   const top = {}, stranger = {}, states = []; let listen, scenes = 0;
-  if (source.includes('  if (framed && !preview) {')) vm.runInNewContext(part('  if (framed && !preview) {', '  // Ultra routes without reloading'), {
+  if (source.includes('  if (framed && !preview) {')) vm.runInNewContext(part('  if (framed && !preview) {', '  // Ultra routes without reloading'), { PAGE: 'page', keepPage() {},
     framed: '_2_1', preview: false, location: { origin }, window: { top },
+    awayFrom: '', pass() {},
     addEventListener: (event, fn) => { listen = fn; }, toTop() {},
     document: { addEventListener() {} }, html: { toggleAttribute: (k, v) => states.push([k, v]) }, ctx: { scene: () => scenes++ }, say() {},
   });
@@ -335,8 +336,8 @@ test('a hidden frame pauses its scene only for messages from its owner on the sa
 
 test('a new account discovered in a live frame revokes the owner and clears its cached pictures', () => {
   let listener, revoked = 0; const sent = [], mine = {};
-  vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // Ultra routes without reloading'), {
-    framed: '', preview: false, on: true, location: { origin }, who: '_42_1',
+  vm.runInNewContext(part("  if (!framed && !preview) addEventListener('message'", '  // Ultra routes without reloading'), { PAGE: 'page', keepPage() {},
+    L, ctx: { site: 'ultra' }, framed: '', preview: false, on: true, location: { origin }, who: '_42_1',
     addEventListener: (t, fn) => { listener = fn; }, frames: new Map([['_2_1', { el: { contentWindow: mine } }]]),
     send: (m) => sent.push(m), revoke: () => revoked++,
   });
@@ -348,7 +349,7 @@ test('a new account discovered in a live frame revokes the owner and clears its 
 test('a screenshot delayed across an in-page course switch is forgotten instead of cached under the old course', async () => {
   const doc = { body: {}, querySelectorAll: () => [] }; const sent = [], kept = [];
   let current = { cid: '_2_1', path: '/ultra/courses/_2_1/outline', doc, frame: {} }, resolve;
-  const shoot = vm.runInNewContext(part('  let shooting = ', '  const keep = ') + '\nshoot;', {
+  const shoot = vm.runInNewContext(part('  let shooting = ', '  const keep = ') + '\nshoot;', { PAGE: 'page', keepPage() {},
     surface: () => current, on: true, signedOut: false, framed: '', preview: false,
     ctx: { holding: () => false }, document: { visibilityState: 'visible', querySelectorAll: () => [] },
     performance: { now: () => 1000 }, safePath: (p) => p, split: (s) => [s, ''], loading: () => false, pic: null,
@@ -366,7 +367,7 @@ test('a screenshot delayed across an in-page course switch is forgotten instead 
 
 test('closing the surrounding course keeps the next course’s existing edited frame', () => {
   const drops = [], routes = [], visits = [];
-  const shut = vm.runInNewContext(part('  const shut = ', '  const pinTab = ') + '\nshut;', {
+  const shut = vm.runInNewContext(part('  const shut = ', '  const pinTab = ') + '\nshut;', { PAGE: 'page', keepPage() {},
     framed: '', showing: '', here: () => '_1_1', tabs: [{ cid: '_1_1' }, { cid: '_2_1' }], L,
     snaps: new Map(), frames: new Map([['_2_1', { dirty: true }]]), ctx: { courseId: () => '_1_1' },
     preview: false, save() {}, send() {}, draw() {}, flag() {}, P: () => ({ place: true }),
@@ -382,7 +383,7 @@ test('closing the surrounding course keeps the next course’s existing edited f
 test('native edits protect a live frame before window load and after a new document starts', () => {
   const handlers = {}, sent = [];
   const block = source.includes('  if (framed && !preview) {') ? part('  if (framed && !preview) {', '  // Ultra routes without reloading') : '';
-  vm.runInNewContext(block, {
+  vm.runInNewContext(block, { PAGE: 'page', keepPage() {},
     framed: '_2_1', preview: false, on: true, document: { addEventListener: (event, fn) => { handlers[event] = fn; } },
     addEventListener() {}, toTop: (op) => sent.push(op),
   });
@@ -399,7 +400,7 @@ test('the strip check in the mutation callback reads no layout until the bar, th
   const box = (name) => ({ name, getClientRects: () => { reads++; return visible ? [{}] : []; }, contains: () => true });
   let bar = box('bar');
   const strip = { isConnected: true, parentElement: bar };
-  const held = vm.runInNewContext(part('  const shown = (e)', '  const safePath') + part('  let seenBar = null', "  // The first paint's reservation") + '\nheld;', {
+  const held = vm.runInNewContext(part('  const shown = (e)', '  const safePath') + part('  let seenBar = null', "  // The first paint's reservation") + '\nheld;', { PAGE: 'page', keepPage() {},
     on: true, strip, courseBar: () => bar, routed: () => null, place: () => { placed++; strip.parentElement = bar; },
     ResizeObserver: class { constructor(cb) { ro = this; this.cb = cb; this.seen = []; } observe(e) { this.seen.push(e); } disconnect() { this.seen = []; } },
   });

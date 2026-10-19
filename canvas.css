@@ -850,7 +850,7 @@ html:not([data-gz-card-icons]) .gz-bm { display: none; }
 .gz-bm svg, .gz-mk svg, #gz-ce svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* Create: a + beside the course menu's button, opening a short list of what can be started for the course. */
 html .gz-mk {
-  position: absolute; z-index: 2; right: 78px; top: 8px; display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer;
+  position: absolute; z-index: 2; right: 44px; top: 8px; display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer;
   color: var(--gz-ink-muted); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent); backdrop-filter: blur(var(--gz-glass));
   border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; box-shadow: var(--gz-rest-shadow);
 }
@@ -1288,7 +1288,7 @@ html[data-gz-enhance-reading] #application :is(#wiki_page_show .show-content, #a
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
 #gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
 
-/* ---- course tint and Look menu; Canvas keeps its own color/nickname controls ---- */
+/* ---- the course menu: nickname, color, tint and Look (Canvas's saved in Canvas) ---- */
 html .gz-cm-btn {
   position: absolute; top: var(--gz-cm-top, 8px); right: var(--gz-cm-right, 8px); z-index: 2;
   display: grid; place-items: center; width: 28px; height: 28px; margin: 0; padding: 0; cursor: pointer; opacity: 0;
@@ -1319,6 +1319,26 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 
 #gz-cm .gz-cm-note { margin: 0; font-size: 12px; color: var(--gz-ink-muted); }
 #gz-cm .gz-cm-note[hidden] { display: none; }
+/* Canvas's nickname (its name the placeholder) and color, saved in Canvas; as Ultra's in extras.css. */
+#gz-cm input.gz-cm-nick {
+  width: 100%; margin: 0; padding: 0.4rem 0.6rem; font: inherit; color: var(--gz-ink) !important;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; border-radius: var(--gz-radius-sm) !important;
+}
+#gz-cm input.gz-cm-nick::placeholder { color: var(--gz-ink-faint); }
+#gz-cm input.gz-cm-nick:focus { border-color: var(--gz-accent) !important; outline: none; }
+#gz-cm input.gz-cm-nick:disabled { opacity: 0.6; }
+#gz-cm .gz-cm-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.5rem 0.25rem; justify-items: center; padding: 0.15rem 0; }
+#gz-cm .gz-cm-sw { width: 28px; height: 28px; padding: 0; cursor: pointer; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--gz-ink) 25%, transparent); }
+#gz-cm .gz-cm-sw:hover { transform: var(--gz-pop); }
+#gz-cm .gz-cm-sw[aria-pressed="true"], #gz-cm input.gz-cm-custom[data-on] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
+#gz-cm input.gz-cm-custom {
+  appearance: none; -webkit-appearance: none; width: 28px; height: 28px; margin: 0; padding: 3px; cursor: pointer;
+  background: conic-gradient(hsl(0 80% 65%), hsl(60 80% 62%), hsl(120 65% 58%), hsl(180 70% 58%), hsl(240 80% 70%), hsl(300 70% 65%), hsl(360 80% 65%)) !important;
+  border: 0 !important; border-radius: 50% !important;
+}
+#gz-cm input.gz-cm-custom::-webkit-color-swatch-wrapper { padding: 0; }
+#gz-cm input.gz-cm-custom::-webkit-color-swatch { border: 2px solid var(--gz-surface); border-radius: 50%; }
+#gz-cm input.gz-cm-custom::-moz-color-swatch { border: 2px solid var(--gz-surface); border-radius: 50%; }
 
 
 #gz-cm .gz-cm-tint { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; cursor: pointer; color: var(--gz-ink); }
@@ -1343,7 +1363,16 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
 #gz-cm .gz-cm-look:hover { transform: var(--gz-lift); }
 #gz-cm .gz-cm-look[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--gz-surface), 0 0 0 4px var(--gz-accent); }
 
-.ic-DashboardCard:has(> .gz-cm-btn) { position: relative; --gz-cm-top: 8px; --gz-cm-right: 44px; }
+/* One menu on a card: Glaze's (nickname, color, tint, look; features/coursemenu.js) in the place of Canvas's ⋮, as three dots.
+   Canvas's own button stays in the card, out of sight, for the menu's "Move or hide" (its popover is placed by it). */
+.ic-DashboardCard:has(> .gz-cm-btn) { position: relative; --gz-cm-top: 8px; --gz-cm-right: 8px; }
+.ic-DashboardCard:has(> .gz-cm-btn) :is(.ic-DashboardCard__header-button, .ic-DashboardCard__header-button-bg) { visibility: hidden; }
+/* Canvas restores focus to its own trigger after the proxied menu closes. Keep that trigger available until focus leaves. */
+.ic-DashboardCard:has(> .gz-cm-btn) .ic-DashboardCard__header-button:is([aria-expanded="true"], :focus) { visibility: visible; }
+.ic-DashboardCard:has(.ic-DashboardCard__header-button:is([aria-expanded="true"], :focus)) > .gz-cm-btn { visibility: hidden; }
+html .ic-DashboardCard > .gz-cm-btn { width: 32px; height: 32px; }
+.ic-DashboardCard > .gz-cm-btn svg { display: none; }
+.ic-DashboardCard > .gz-cm-btn::before { content: ""; width: 4px; height: 18px; background: radial-gradient(circle closest-side, currentColor 85%, transparent) 0 0 / 4px 6px repeat-y; }
 html .ic-DashboardCard > .gz-cm-btn { color: var(--gz-ink-muted); opacity: 0.85; }
 [data-gz-course-color] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
 html[data-gz-raw-courses] [data-gz-course-color] { --gz-course: var(--gz-course-raw); }
@@ -1486,3 +1515,75 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
 #gz-mk a { padding: 0.4rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); text-decoration: none; }
 #gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-accent); outline: none; }
 @media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
+
+/* Canvas has one breadcrumb row. A full-width strip wraps above or below that row. */
+:is(.ic-app-nav-toggle-and-crumbs, #mobile-header):has(> #gz-ctabs) { flex-wrap: wrap; height: auto; }
+:is(.ic-app-nav-toggle-and-crumbs, #mobile-header) > #gz-ctabs { flex-basis: 100%; }
+/* As Ultra's course bar does, the row holding the strip stays at the top of the page as it scrolls (the page's scroller is
+   Canvas's drawer layout or the document), on a surface the page scrolls under, as Ultra's routed headers are. */
+:is(.ic-app-nav-toggle-and-crumbs, #mobile-header):has(> #gz-ctabs) {
+  position: sticky; top: 0; z-index: 11; /* above ordinary page content */
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas));
+}
+/* Let native dialogs and popovers in the main content rise above the sticky row. */
+.ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) ~ #main,
+#mobile-header:has(> #gz-ctabs) ~ #wrapper #main { z-index: auto; }
+/* The course menu sticks below it (--gz-ctabs-row: its height, features/coursetabs.js; unset without a strip there). */
+html[data-gz-ctabs]:not([data-gz-ctabs~="nav"]) #sticky-container { top: var(--gz-ctabs-row, 0px); max-height: calc(100vh - var(--gz-ctabs-row, 0px)); }
+/* Until it's in (it loads on demand), its place is held in a course's row, or in any page's once there is a tab to go back
+   to, so the row doesn't move when it comes: data-gz-ctabs (content-canvas.js paintTabs, from the first paint) gives the
+   strip's place and size as this browser tab last had them. */
+:is(html[data-gz-enhance-tabs]:not([data-gz-ctabs]), html[data-gz-ctabs]:not([data-gz-ctabs~="nav"])) .ic-app-nav-toggle-and-crumbs:is(:has(#breadcrumbs a[href*="/courses/"]), html[data-gz-ctabs~="page"] *):not(:has(> #gz-ctabs)) { flex-wrap: wrap; height: auto; }
+:is(html[data-gz-enhance-tabs]:not([data-gz-ctabs]), html[data-gz-ctabs]:not([data-gz-ctabs~="nav"])) .ic-app-nav-toggle-and-crumbs:is(:has(#breadcrumbs a[href*="/courses/"]), html[data-gz-ctabs~="page"] *):not(:has(> #gz-ctabs))::before { content: ""; order: -1; flex: 0 0 100%; height: var(--gz-ctabs-h, 40px); }
+html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs))::before { order: 99; }
+html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point, #gz-scene) { visibility: hidden !important; }
+html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"]) { visibility: visible; }
+
+/* Glaze navigation replaces only Canvas's navigation chrome. Portal trays, dialogs and alerts stay outside these rules.
+   The words reserve first-paint room; the renderer supplies the same dimensions inline once mounted. */
+html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
+html[data-gz-navbar] :is(#header, #mobile-header) { display: none !important; }
+/* Canvas's native support forms and other trays must stay above the replacement bar. */
+html[data-gz-navbar] #nav-tray-portal { z-index: 1261 !important; }
+html[data-gz-navbar~="menu"] :is(#left-side, #mobileContextNavContainer, .ic-app-nav-toggle-and-crumbs #courseMenuToggle) { display: none !important; }
+html[data-gz-navbar~="menu"] #main { margin-inline: 0 !important; }
+html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
+html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
+html[data-gz-navbar] #wrapper { margin-inline: 0 !important; margin-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top); }
+/* Canvas can give its wrapper a direction of its own. Reserve room on the same side as the bar. */
+html[dir="rtl"][data-gz-navbar] #wrapper { margin-left: 0 !important; margin-right: var(--gz-navbar-left) !important; }
+html[data-gz-navbar] .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) { top: var(--gz-navbar-top); }
+html[data-gz-navbar] #sticky-container { top: calc(var(--gz-navbar-top) + var(--gz-ctabs-row, 0px)); max-height: calc(100vh - var(--gz-navbar-top) - var(--gz-ctabs-row, 0px)); }
+html[data-gz-navbar][data-gz-ctabs~="nav"] #sticky-container { top: var(--gz-navbar-top); max-height: calc(100vh - var(--gz-navbar-top)); }
+@media (min-width: 900px) {
+  html[data-gz-navbar~="rail"] { --gz-navbar-left: 96px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="embed"] { --gz-navbar-left: 72px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="open"] { --gz-navbar-left: 272px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
+  html[data-gz-navbar~="top"] { --gz-navbar-top: 80px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top: 56px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="menu"] { --gz-navbar-top: 124px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="embed"][data-gz-navbar~="menu"] { --gz-navbar-top: 100px; }
+}
+@media (min-width: 1280px) {
+  html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left: 272px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
+}
+@media (max-width: 899.98px) {
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) body { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { bottom: calc(96px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)) !important; }
+}
+
+html[data-gz-navbar-frame] :is(#header, #mobile-header) { display: none !important; }
+html[data-gz-navbar-frame] #wrapper { margin-inline: 0 !important; }
+/* A tab's frame fills the window under the bar, as the page itself does, and keeps the bar's room in it the same way
+   (--gz-navbar-left and -top, the page around's, copied by features/coursetabs.js): the page's own background runs under
+   the bar's glass rather than the covered page's. */
+html[data-gz-navbar-frame] #wrapper { margin-inline-start: var(--gz-navbar-left, 0px) !important; padding-top: var(--gz-navbar-top, 0px); }
+html[dir="rtl"][data-gz-navbar-frame] #wrapper { margin-left: 0 !important; margin-right: var(--gz-navbar-left, 0px) !important; }
+html[data-gz-navbar-frame] .ic-app-nav-toggle-and-crumbs:has(> #gz-ctabs) { top: var(--gz-navbar-top, 0px); }
+html[data-gz-navbar-frame] #sticky-container { top: calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px)); max-height: calc(100vh - var(--gz-navbar-top, 0px) - var(--gz-ctabs-row, 0px)); }
+html[data-gz-navbar-frame][data-gz-ctabs~="nav"] #sticky-container { top: var(--gz-navbar-top, 0px); max-height: calc(100vh - var(--gz-navbar-top, 0px)); }
+html[data-gz-navbar-frame~="menu"] :is(#left-side, #mobileContextNavContainer, #courseMenuToggle) { display: none !important; }
+html[data-gz-navbar-frame~="menu"] #main { margin-inline: 0 !important; }
