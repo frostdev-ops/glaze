@@ -33,6 +33,8 @@ node --test
 
 Runs the tests for the colour, settings and page-text logic. Use Node 26, matching CI and the browser's strict compression-stream behavior. No dependencies to install.
 
+For Ultra background clipping, run `NODE_PATH=/path/to/node_modules nice -n 15 node scripts/ultra-panel-background-check.js` with Playwright available. It checks native off-canvas gutters, close-button clicks, scene continuity and scrolled headers at desktop/mobile widths in both text directions, plus partial-width sheet exclusions. An optional output directory saves a screenshot; `CHROME` selects a different Chromium executable.
+
 ### Publishing to the Chrome Web Store
 
 ```sh
