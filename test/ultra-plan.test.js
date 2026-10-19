@@ -137,14 +137,14 @@ const worker = ({ sessionFail = null } = {}) => {
     set: async (v) => { Object.assign(s, structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
   });
-  const listeners = [];
+  const listeners = [], installed = [];
   const context = vm.createContext({
     URL, console, TextEncoder, structuredClone, Promise, Date, Intl, setTimeout, clearTimeout, crypto: globalThis.crypto,
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), context); },
     chrome: {
       runtime: {
         id: 'glaze', getURL: (f = '') => `chrome-extension://x/${f}`, getManifest: () => m,
-        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
+        onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener: (f) => installed.push(f) }, onStartup: { addListener() {} }, onConnect: { addListener() {} },
       },
       tabs: { onRemoved: { addListener: (f) => removed.push(f) } },
       storage: { session: Object.fromEntries(Object.entries(area(store.session)).map(([k, f]) => [k, (...a) => { if (sessionFail === k) throw Error('storage unavailable'); return f(...a); }])), local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } },
@@ -157,8 +157,20 @@ const worker = ({ sessionFail = null } = {}) => {
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { store, send, removed };
+  return { store, send, removed, installed };
 };
+
+test('a fresh install stays empty on later updates, while an older install keeps its defaults', async () => {
+  const W = require('../lib/widgets.js');
+  const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
+  const fresh = worker();
+  fresh.installed[0]({ reason: 'install' }); await settle();
+  fresh.installed[0]({ reason: 'update' }); await settle();
+  assert.deepEqual(W.layout(fresh.store.local.widgetLayout), W.layout(), 'an untouched fresh layout must not gain old widgets');
+  const old = worker(); old.store.sync.enhance.widgets = true;
+  old.installed[0]({ reason: 'update' }); await settle();
+  assert.deepEqual(W.layout(old.store.local.widgetLayout), W.kept(true));
+});
 
 test("the worker takes an Ultra page's planning writes for its own site's accounts only, on a host Glaze found Ultra on", async () => {
   const w = worker();
