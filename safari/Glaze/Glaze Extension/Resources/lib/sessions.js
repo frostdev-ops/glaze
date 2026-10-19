@@ -290,7 +290,7 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
     const brief = (r) => ({ sid: r.st.sid, server: r.st.server, title: r.title, kind: r.kind, edit: !!r.st.seed, creator: !!r.st.del, expire: !!r.st.expire,
       status: r.st.gone ? 'gone' : r.st.pending.length ? 'pending' : r.status || 'offline', error: r.error, at: r.at || 0, bound: !!r.bind,
       // Where a shared copy lives here: the Notes share panel finds a note's session by its account and note id.
-      account: r.bind?.key || '', notes: r.kind === 'notes' && r.bind ? Object.values(r.bind.map) : [], folder: r.kind === 'notes' && r.bind?.wholeFolder ? r.bind.folder : '',
+      account: r.bind?.key || r.copy?.key || '', notes: r.kind === 'notes' ? (r.bind ? Object.values(r.bind.map) : r.copy?.notes || []) : [], folder: r.kind === 'notes' && r.bind?.wholeFolder ? r.bind.folder : '',
       members: Object.values(C.view(r.st)).filter((x) => x.member).map((x) => x.member).slice(0, LIMIT.items),
       items: Object.entries(C.view(r.st)).filter(([, v]) => v.html !== undefined || v.task || v.code).map(([id, v]) => ({ id, title: v.title || v.task?.title || r.title })) });
     const handle = async (m) => {
@@ -396,7 +396,10 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
         check(!r.bind && ['notes', 'todo'].includes(r.kind) && (r.kind === 'notes' ? N.KEY : T.STORE_KEY).test(m.key), 'bad');
         check(Object.hasOwn(await local.get(m.key), m.key), 'bad');
         r.bind = { key: m.key, map: {}, files: {} }; await save(r); await apply(r, client(r));
-        if (!r.st.seed) r.bind = null; // View access makes a detached editable copy; the session itself stays read-only.
+        if (!r.st.seed) {
+          // Keep the detached copy discoverable in Notes without binding its edits back to the read-only session.
+          r.copy = { key: m.key, notes: Object.values(r.bind.map) }; r.bind = null;
+        }
         await save(r); return { ok: true };
       }
       if (m.op === 'useLook') {

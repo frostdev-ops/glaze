@@ -109,3 +109,81 @@ test('quick Stop sharing can forget an already deleted session while offline', a
   assert.equal(d.requests.length, before, 'leaving a known-deleted session does not need its relay');
   assert.match((await N.run({ key: NK, op: 'load', id }, { local: d.local }, d.notes)).html, /Kept note/);
 });
+
+test('quick view-only Join keeps a visible session for its detached Notes copy', async (t) => {
+  const server = await start(t), creator = device(t, server), joined = device(t, server), { sid } = await sharedNote(creator);
+  const link = (await creator.send('link', { sid })).link, p = await page(joined);
+  p.get('invite').value = link; p.click('join');
+  assert.equal(p.get('ask').hidden, false, 'a non-default relay requires an inline confirmation');
+  p.click('ask-yes');
+  await until(() => p.get('status').textContent.startsWith('Joined.'));
+  const session = (await joined.send('list')).sessions[0];
+  assert.equal(session.bound, false, 'a view invite keeps its editable Notes copy detached');
+  assert.equal(session.account, NK, 'the detached copy still belongs to its selected Notes account');
+  assert.equal(session.notes.length, 1);
+  assert.equal(p.get('others').hidden, false);
+  assert.ok(p.button('Leave'), 'the joined view session remains manageable from Notes');
+  const copy = session.notes[0], localNote = joined.local.data[NK].notes[copy];
+  await N.run({ key: NK, op: 'save', id: copy, base: localNote.rev, sid: crypto.randomUUID(), copy: crypto.randomUUID(), title: 'My copy', html: '<p>Local edit</p>' }, { local: joined.local }, joined.notes);
+  await joined.send('sync', { sid });
+  assert.match(Object.values((await joined.send('read', { sid })).view).map((x) => x.html || '').join(' '), /Kept note/);
+  assert.doesNotMatch(Object.values((await joined.send('read', { sid })).view).map((x) => x.html || '').join(' '), /Local edit/);
+  p.click(p.button('Leave')); await settle(); p.click('ask-yes');
+  await until(async () => !await joined.db.get('sessions', sid));
+  assert.match((await N.run({ key: NK, op: 'load', id: copy }, { local: joined.local }, joined.notes)).html, /Local edit/);
+});
+
+test('quick custom-relay confirmation cancels before joining and disables controls during the confirmed join', async (t) => {
+  const server = await start(t), creator = device(t, server), joined = device(t, server), { sid } = await sharedNote(creator);
+  const link = (await creator.send('link', { sid, edit: true })).link, p = await page(joined);
+  p.get('invite').value = link; p.click('join');
+  assert.equal(p.get('ask').hidden, false);
+  assert.equal(!!p.get('ask-yes').disabled, false, 'the confirmation can be answered');
+  p.click('ask-no'); await settle();
+  assert.equal(p.get('ask').hidden, true);
+  assert.equal(p.calls.filter((m) => m.op === 'join').length, 0);
+  assert.equal(joined.requests.length, 0);
+
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  joined.hold = (m) => m.op === 'join' ? gate : undefined;
+  t.after(release);
+  p.get('invite').value = link; p.click('join'); p.click('ask-yes');
+  await until(() => p.calls.some((m) => m.op === 'join'));
+  assert.ok(p.doc.root.querySelectorAll('button').every((b) => b.disabled), 'no second action starts while the join is pending');
+  p.click('join'); assert.equal(p.calls.filter((m) => m.op === 'join').length, 1);
+  release();
+  await until(() => p.get('status').textContent.startsWith('Joined.'));
+  assert.ok(p.doc.root.querySelectorAll('button').every((b) => !b.disabled));
+});
+
+test('quick non-Notes invites are retained for Settings without attaching them to Notes', async (t) => {
+  const server = await start(t), creator = device(t, server), joined = device(t, server), key = 'todo:https://school.instructure.com/5';
+  await creator.local.set({ [key]: T.clean({ tasks: [{ id: 'task-1', title: 'Read chapter' }] }) });
+  const { sid } = await creator.send('create', { kind: 'todo', title: 'Tasks', key, ids: ['task-1'] });
+  const link = (await creator.send('link', { sid })).link, p = await page(joined);
+  p.get('invite').value = link; p.click('join'); p.click('ask-yes');
+  await until(() => p.get('status').textContent.includes('not for notes'));
+  assert.equal(p.calls.filter((m) => m.op === 'attach').length, 0);
+  assert.equal((await joined.send('list')).sessions[0].kind, 'todo');
+  assert.equal(N.list(joined.local.data[NK]).length, 0);
+});
+
+test('quick offline Join retains its keys and appears after the promised Settings recovery', async (t) => {
+  const server = await start(t), creator = device(t, server), joined = device(t, server), { sid } = await sharedNote(creator);
+  const link = (await creator.send('link', { sid, edit: true })).link, p = await page(joined);
+  joined.online = false;
+  p.get('invite').value = link; p.click('join'); p.click('ask-yes');
+  await until(() => p.get('status').textContent.startsWith('Joined, but'));
+  assert.match(p.get('status').textContent, /All sharing settings once it connects/);
+  assert.ok(await joined.db.get('sessions', sid), 'the offline join is retained');
+  assert.equal(p.calls.filter((m) => m.op === 'attach').length, 0);
+  joined.online = true;
+  await joined.send('sync', { sid });
+  await joined.send('attach', { sid, key: NK });
+  await p.message();
+  assert.equal(p.get('others').hidden, false);
+  assert.ok(p.button('Leave'));
+  const session = (await joined.send('list')).sessions[0];
+  assert.match((await N.run({ key: NK, op: 'load', id: session.notes[0] }, { local: joined.local }, joined.notes)).html, /Kept note/);
+});
