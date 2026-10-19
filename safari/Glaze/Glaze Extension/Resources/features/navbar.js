@@ -68,6 +68,14 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.tmore = part(make('button', { type: 'button', className: 'item tmore' }, icon('more'), make('span', { className: 'label', textContent: t('More') })), 'item more');
     el.tmore.setAttribute('aria-haspopup', 'menu');
     el.ttabs = make('div', { className: 'ttabs' });
+    // A wheel turned over the course tabs moves them along (a mouse has no sideways wheel), smoothly, never the page.
+    el.ttabs.addEventListener('wheel', (e) => {
+      const box = el.ttabs;
+      if (e.ctrlKey || box.scrollWidth <= box.clientWidth + 1 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      box.scrollBy({ left: (rtl() ? -1 : 1) * e.deltaY * (e.deltaMode === 1 ? 32 : 1), behavior: e.deltaMode === 0 && Math.abs(e.deltaY) < 40 ? 'auto' : 'smooth' });
+    }, { passive: false });
+    el.ttabs.addEventListener('scroll', () => tabsScroll(), { passive: true });
     el.tacc = part(make('button', { type: 'button', className: 'tacc' }), 'account');
     el.tacc.setAttribute('aria-haspopup', 'menu');
     el.topbar = part(make('nav', { className: 'topbar' }, el.tbrand, make('div', { className: 'tlist' }, el.tind, el.titems, el.tmore), el.ttabs, el.tacc), 'bar top');
@@ -308,7 +316,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (open !== shown) { shown = open; emit(open ? 'expand' : 'collapse', {}); if (open) tip(null); }
     if (host.hidden) return;
     measured = geometry();
-    if (lay.place === 'top' && wide()) fit();
+    if (lay.place === 'top' && wide()) { fit(); if (!placed) tabsReveal(); }
     // The markers glide; the first placement after a redraw doesn't (it would slide in from the top).
     const still = !placed;
     const glide = (ind, target, horizontal) => {
@@ -333,6 +341,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (still) { placed = true; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { frame = 0; if (!host) return; for (const ind of [el.ind, el.tind, el.pill]) ind.style.transition = ''; }); }
   };
   // The top bar's row: labels go first (icons with a tip), then the last items, under More, until it fits.
+  // The course tabs share the row: when they'd be squeezed below their shrunk size (92px each), labels go first too.
   const fit = () => {
     const box = el.titems, items = [...box.querySelectorAll('.item')];
     el.tmore.hidden = true;
@@ -341,13 +350,28 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const separators = [...box.querySelectorAll('.tsep')];
     for (const s of separators) s.hidden = false;
     const over = () => box.scrollWidth > box.clientWidth + 1;
-    if (over()) el.topbar.setAttribute('data-compact', '');
+    const squeezed = () => !el.ttabs.hidden && el.ttabs.scrollWidth > el.ttabs.clientWidth + 1;
+    if (over() || squeezed()) el.topbar.setAttribute('data-compact', '');
+    tabsScroll();
     if (!over()) return;
     el.tmore.hidden = false;
     for (let n = items.length - 1; n >= 0 && over(); n--) {
       items[n].setAttribute('data-over', '');
       for (const s of separators) s.hidden = !s.nextElementSibling || s.nextElementSibling.hasAttribute('data-over');
     }
+  };
+  // The course tabs' row, when it scrolls: which edges fade, and the open course's tab kept in view.
+  const tabsScroll = () => {
+    const box = el.ttabs, max = box.scrollWidth - box.clientWidth;
+    if (max <= 1) { box.removeAttribute('data-scroll'); return; }
+    const at = Math.abs(box.scrollLeft);
+    box.setAttribute('data-scroll', [at > 1 ? 'start' : '', at < max - 1 ? 'end' : ''].join(' ').trim());
+  };
+  const tabsReveal = () => {
+    const box = el.ttabs, cur = box.querySelector('.ctab-go[aria-current="page"]')?.closest('.ctab');
+    if (!cur || box.scrollWidth <= box.clientWidth + 1) return;
+    const b = box.getBoundingClientRect(), r = cur.getBoundingClientRect();
+    if (r.left < b.left + 28) box.scrollLeft -= b.left + 28 - r.left; else if (r.right > b.right - 28) box.scrollLeft += r.right - (b.right - 28);
   };
   const tip = (target) => {
     if (!el.tip) return;

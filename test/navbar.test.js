@@ -152,7 +152,7 @@ test('where the bar is: the placement, the course state, the style and the room 
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left', 248], ['html[data-gz-navbar~="top"] { --gz-navbar-top', 80], ['html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top', 56],
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left', 272], ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left', 248]]) assert.ok(css.includes(`${rule}: ${px}px; }`), rule);
   for (const rule of ['#main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }', '#main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }',
-    '.inner-wrap > section.course { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
+    '.inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
     '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
 });
 

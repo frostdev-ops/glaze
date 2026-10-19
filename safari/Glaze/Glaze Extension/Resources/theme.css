@@ -1183,7 +1183,8 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) > * { visibility: hidden !important; }
   html[data-gz-navbar] #main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }
   html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
-  html[data-gz-navbar] .inner-wrap > section.course { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
+  /* A course, and a page Ultra routes in its place (an assignment's details and attempts, a document opened on its own). */
+  html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
   html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
   html[data-gz-navbar]:not([data-gz-footer]) :is(.route-view-container, .routed-page, [data-gz-vh]) { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
 }
@@ -1192,6 +1193,6 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
 }
 @media (max-width: 899.98px) {
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > section.course) { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { margin-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }
