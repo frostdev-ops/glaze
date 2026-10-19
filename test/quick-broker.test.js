@@ -45,8 +45,10 @@ const worker = () => {
 test('a URL ticket cannot authorize repeatable frame-id-only session messages', async () => {
   const w = worker(), { ticket } = await w.mint();
   const sender = { ...w.panel, url: `${w.panel.url}?t=${ticket}` };
-  // At 97efb38e this succeeds, and keeps succeeding after a reload with the same frame id and no documentId.
-  assert.equal((await w.send({ type: 'glaze:sessions', op: 'list' }, sender)).error, 'sender');
+  await w.send({ type: 'glaze:sessions', op: 'list' }, sender); // the original document claims it at 97efb38e
+  // A replacement document supplies exactly the same browser metadata when documentId is absent.
+  const replay = await w.send({ type: 'glaze:sessions', op: 'list' }, { ...sender });
+  assert.equal(replay.error, 'sender', 'a replacement document cannot inherit the first document\'s claim');
   assert.equal(w.handled.length, 0);
 });
 
