@@ -137,7 +137,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // The Lottie player, imported once (lib/lottie/): the first Lottie sticker asks for it.
   let lottieLoad = null, lottieAttempt = 0;
   // A redraw can retry the player without reusing a failed browser module URL.
-  const lottieIn = () => (lottieLoad ||= import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js') + `?gzStickerRetry=${lottieAttempt++}`).then(() => {
+  const lottieIn = () => (lottieLoad ||= import(chrome.runtime.getURL(`lib/lottie/lottie_light_canvas.min.js?gzStickerRetry=${lottieAttempt++}`)).then(() => {
     if (typeof globalThis.lottie?.loadAnimation !== 'function') throw new Error('lottie');
     return globalThis.lottie;
   }).catch((error) => {

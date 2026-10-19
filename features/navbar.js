@@ -187,17 +187,23 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   // The student's own logo: a picture kept on this device (storage.local navLogo:<nav.li>, which Settings writes), drawn from
   // a blob: address made here. Until it is read, and on a device without it, the Glaze logo stands in.
   let logo = { id: '', url: '' };
-  const ownLogo = () => {
-    const id = X.settings().nav?.li || '';
-    if (id === logo.id) return logo.url;
+  const clearLogo = () => {
     if (logo.url) URL.revokeObjectURL(logo.url);
-    logo = { id, url: '' };
+    logo = { id: '', url: '' };
+  };
+  const ownLogo = () => {
+    const id = settings().brand === 'custom' ? X.settings().nav?.li || '' : '';
+    if (id === logo.id) return logo.url;
+    clearLogo();
+    const request = logo = { id, url: '' };
     if (id) try {
       chrome.storage.local.get(`navLogo:${id}`, (r) => {
         const src = r?.[`navLogo:${id}`];
-        if (chrome.runtime.lastError || logo.id !== id || typeof src !== 'string' || src.length > 400000 || !/^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/.test(src)) return;
-        const [type, bytes] = src.split(',');
-        logo.url = URL.createObjectURL(new Blob([Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0))], { type: type.slice(5, type.indexOf(';')) }));
+        if (chrome.runtime.lastError || logo !== request || !on() || typeof src !== 'string' || src.length > 400000 || !/^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/.test(src)) return;
+        try {
+          const [type, bytes] = src.split(',');
+          logo.url = URL.createObjectURL(new Blob([Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0))], { type: type.slice(5, type.indexOf(';')) }));
+        } catch { return; } // malformed bytes leave the Glaze logo in place
         sig = ''; if (host) sync();
       });
     } catch { /* reloaded */ }
@@ -205,7 +211,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   };
   const brandInto = (a) => {
     const brand = site.brand(), mode = settings().brand || 'glaze', home = byId(site.home());
-    const own = mode === 'custom' && ownLogo(), src = own || (mode === 'school' && brand.src);
+    const own = ownLogo(), src = own || (mode === 'school' && brand.src);
     a.hidden = mode === 'none';
     a.href = home?.href || '/';
     a.dataset.id = home?.id || '';
@@ -313,7 +319,10 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const id = `gz-nb-drop-${++logos}`;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 128 128'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('class', 'logo');
-    svg.innerHTML = `<defs><linearGradient id="${id}" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#6fdcff"/><stop offset="1" stop-color="#17c8f4"/></linearGradient></defs><rect width="128" height="128" rx="30" fill="#0d1b2e"/><path d="M64 18C64 18 28 59 28 80a36 36 0 0 0 72 0C100 59 64 18 64 18Z" fill="url(#${id})"/><ellipse cx="79" cy="76" rx="10" ry="15" transform="rotate(20 79 76)" fill="#fff" opacity=".55"/>`;
+    const el = (tag, attrs, ...kids) => { const n = document.createElementNS(svg.namespaceURI, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); n.append(...kids); return n; };
+    svg.append(el('defs', {}, el('linearGradient', { id, x1: '0.1', y1: '0', x2: '0.9', y2: '1' }, el('stop', { offset: '0', 'stop-color': '#6fdcff' }), el('stop', { offset: '1', 'stop-color': '#17c8f4' }))),
+      el('rect', { width: '128', height: '128', rx: '30', fill: '#0d1b2e' }), el('path', { d: 'M64 18C64 18 28 59 28 80a36 36 0 0 0 72 0C100 59 64 18 64 18Z', fill: `url(#${id})` }),
+      el('ellipse', { cx: '79', cy: '76', rx: '10', ry: '15', transform: 'rotate(20 79 76)', fill: '#fff', opacity: '.55' }));
     return svg;
   };
 
@@ -663,6 +672,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     clearTimeout(enter); clearTimeout(leave); enter = leave = 0;
     cancelAnimationFrame(frame); frame = 0;
     cancelAnimationFrame(queued); queued = 0;
+    clearLogo();
     if (!host) return;
     if (sheetOpen) sheetTo(false);
     menuTo('', false);
@@ -705,7 +715,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
   chrome.storage.onChanged.addListener((c, area) => {
-    if (area === 'local' && logo.id && c[`navLogo:${logo.id}`]) { logo.id = '\u0000'; sig = ''; if (host) sync(); }
+    if (area === 'local' && logo.id && c[`navLogo:${logo.id}`]) { clearLogo(); sig = ''; if (host) sync(); }
     if (area !== 'sync' || !chrome.runtime?.id) return;
     if (c.navbarItems) prefs = M.clean(c.navbarItems.newValue);
     if (c.navItems) legacy = c.navItems.newValue ? N.clean(c.navItems.newValue) : null;

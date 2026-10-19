@@ -11,7 +11,7 @@ const a = source.indexOf('  // ---- animated background');
 const b = source.indexOf('  // ---- course colors and tint', a);
 assert.ok(a > 0 && b > a, 'markers');
 // The block imports lib/scene.js (or lib/scene-media.js) with import(), which a VM can't do without flags: the recorder stands in by name.
-const block = source.slice(a, b).replace(/import\((chrome\.runtime\.getURL\(file\)(?: \+ `[^`]*`)?)\)/, 'importScene($1, file)');
+const block = source.slice(a, b).replace(/import\((chrome\.runtime\.getURL\((?:file|`\$\{file\}[^`]*`)\)(?: \+ `[^`]*`)?)\)/, 'importScene($1, file)');
 assert.ok(block.includes('importScene('));
 
 const settle = () => new Promise(setImmediate);
