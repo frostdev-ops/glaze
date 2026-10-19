@@ -320,7 +320,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
       const showing = [...mounts].some(([k, x]) => {
         if (!k.startsWith(`${m.id}|`) || !x.canvas?.isConnected || !x.size) return false;
         const r = x.canvas.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
+        return r.width > 0 && r.height > 0 && globalThis.getComputedStyle?.(x.canvas)?.visibility !== 'hidden';
       });
       const p = document.hidden || motionOff() || !showing;
       if (pausedOf.get(m.id) !== p) { pausedOf.set(m.id, p); emit(m.id, 'canvas.pause', { paused: p }); }

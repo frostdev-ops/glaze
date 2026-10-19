@@ -34,6 +34,15 @@ test('progress components always have accessible names and preserve explicit lab
   }
 });
 
+test('tree buttons send clicks only for trusted DOM events', () => {
+  const U = renderer(), root = new Element('root'), sent = [];
+  U.render(root, { type: 'button', id: 'go', label: 'Open' }, { send: (...args) => sent.push(args) });
+  root.children[0].events.click({ isTrusted: false });
+  assert.deepEqual(sent, []);
+  root.children[0].events.click({ isTrusted: true });
+  assert.deepEqual(sent, [['click', 'go']]);
+});
+
 
 test('fallback styles survive rendering and decoration without constructable stylesheets', () => {
   const U = renderer(class { constructor() { throw new Error('unsupported'); } });

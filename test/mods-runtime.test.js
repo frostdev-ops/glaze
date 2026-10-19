@@ -1198,3 +1198,55 @@ test('a nav replacement stands in for Glaze\'s bar, hides it, comes off again, a
   assert.ok(bar.synced > syncs, 'Glaze\'s bar is drawn again');
   port.close();
 });
+
+test('replacement gestures cannot be forged by messages, another mod or another slot', async () => {
+  const p = page(), bar = p.ctx.GZ_NAVBAR_UI = fakeBar(BAR), sends = new Map();
+  p.ctx.GZ_MODUI = { render: (root, tree, o) => { sends.set(root, o.send); return { canvas: null }; } };
+  p.chrome.runtime.sendMessage = async () => ({ ok: true, value: { id: 'calendar' } });
+  const nav = { key: 'nav', name: 'Nav' }, tile = { key: 'tile:x', name: 'X' };
+  p.G.start([{ ...W('a'), on: ['nav'], slots: [nav, tile] }, { ...W('b'), on: ['nav'], slots: [nav] }]);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  p.G.pass();
+  const other = p.ctx.document.createElement('div'), otherSlot = p.ctx.document.createElement('div');
+  p.G.attach('b', 'nav', other); p.G.attach('a', 'tile:x', otherSlot);
+  await settle();
+  const go = async (id, mod = 'a') => { port.postMessage({ mod, via: 'worker', id, call: 'nav.go', args: [] }); await settle(); return got.find((x) => x.id === id); };
+  port.postMessage({ event: 'ui', mod: 'a', data: { slot: 'nav', id: 'go', kind: 'click' } });
+  assert.equal((await go(1)).error, 'permission');
+  sends.get(other)('click', 'go');
+  assert.equal((await go(2)).error, 'permission', 'another mod cannot lend a gesture');
+  assert.equal((await go(3, 'b')).error, 'permission', 'only the active replacement may go');
+  sends.get(otherSlot)('click', 'go');
+  assert.equal((await go(4)).error, 'permission', 'another slot of the same mod cannot lend a gesture');
+  const own = p.appended.find((e) => e.className === 'gz-mod-nav');
+  sends.get(own)('click', 'go');
+  assert.equal((await go(5)).ok, true);
+  eq(bar.went, ['calendar']);
+  port.close();
+});
+
+test('a canvas behind a replacement pauses even when its layout box stays nonzero', async () => {
+  const p = page();
+  p.G.start([{ ...W('a'), slots: [{ key: 'tile:x', file: null }] }]);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  let visibility = 'visible';
+  p.ctx.getComputedStyle = () => ({ visibility });
+  const canvas = { isConnected: true, getBoundingClientRect: () => ({ width: 100, height: 100 }), getContext: () => ({}), style: { setProperty() {} } };
+  p.ctx.ResizeObserver = class { observe() {} disconnect() {} };
+  p.ctx.GZ_MODUI = { render: () => ({ canvas }) };
+  const el = p.ctx.document.createElement('div');
+  p.G.attach('a', 'tile:x', el);
+  await settle();
+  p.G.pass();
+  await settle();
+  assert.equal(got.filter((m) => m.event === 'canvas.pause').at(-1).data.paused, false);
+  visibility = 'hidden'; p.G.pass(); await settle();
+  assert.equal(got.filter((m) => m.event === 'canvas.pause').at(-1).data.paused, true);
+  visibility = 'visible'; p.G.pass(); await settle();
+  assert.equal(got.filter((m) => m.event === 'canvas.pause').at(-1).data.paused, false);
+  port.close();
+});
