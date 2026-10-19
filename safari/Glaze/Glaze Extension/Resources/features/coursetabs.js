@@ -531,7 +531,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     else if (f) {
       try { f.stale = f.el.contentDocument; f.el.contentWindow.location.assign(location.origin + url); } catch { return; }
       f.url = url;
-      if (f.ready) { f.ready = false; watch(cid, f); }
+      f.ready = false;
+      f.retried = false;
+      watch(cid, f);
     } else {
       hostIn();
       if (!room()) return;
@@ -588,11 +590,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A frame is shown once rendered course content has settled. A stalled initial about:blank can be retried once;
   // slow native pages keep loading, with their form state intact, rather than becoming falsely ready.
   const watch = (cid, f) => {
+    const turn = f.watch = {};
     let t0 = performance.now();
     let changed = t0, mo = null, doc = null;
     f.slow = false;
     const step = () => {
-      if (frames.get(cid) !== f) return mo?.disconnect();
+      if (frames.get(cid) !== f || f.watch !== turn) return mo?.disconnect();
       let d = null; try { d = f.el.contentDocument; } catch { /* gone */ }
       const now = performance.now();
       if (d && d !== doc && d.body && (ctx.site === 'canvas' ? d.location.origin === location.origin : d.location.pathname.startsWith('/ultra/'))) {
@@ -603,7 +606,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         mo.observe(d.body, { subtree: true, childList: true });
         d.addEventListener('scroll', () => { changed = performance.now(); }, { capture: true, passive: true });
       }
-      const built = doc && doc !== f.stale && L.owns(doc.location.pathname, cid) && (ctx.site === 'canvas' ? shown(doc.querySelector('#content, #main')) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
+      const built = doc && (ctx.site !== 'canvas' || doc === d && doc !== f.stale) && L.owns(doc.location.pathname, cid) && (ctx.site === 'canvas' ? shown(doc.querySelector('#content, #main')) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
         && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
       if (built && now - changed > 300) {
         mo?.disconnect();
