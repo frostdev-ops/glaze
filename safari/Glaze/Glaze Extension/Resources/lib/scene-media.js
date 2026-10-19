@@ -20,10 +20,14 @@ const DEFAULTS = { fit: 'cover', dim: 40, loop: true };
 // { gzMediaState: { state: 'ready' | 'failed', why? } }.
 const tell = (m) => { if (/-extension:$/.test(location.protocol) && parent !== window) parent.postMessage(m, location.origin); };
 
-let lottieLoad = null;
-const loadLottie = () => (lottieLoad ||= import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js')).then(() => {
+let lottieLoad = null, lottieAttempt = 0;
+// A rejected module URL stays failed in the browser, even after its promise is forgotten.
+const loadLottie = () => (lottieLoad ||= import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js') + `?gzMediaRetry=${lottieAttempt++}`).then(() => {
   if (typeof globalThis.lottie?.loadAnimation !== 'function') throw new Error('lottie');
   return globalThis.lottie;
+}).catch((error) => {
+  lottieLoad = null;
+  throw Object.assign(new Error('lottie'), { why: 'module', cause: error });
 }));
 
 const layer = (tag) => {

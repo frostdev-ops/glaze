@@ -135,10 +135,14 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     for (const a of old) if (a?.url) URL.revokeObjectURL(a.url);
   };
   // The Lottie player, imported once (lib/lottie/): the first Lottie sticker asks for it.
-  let lottieLoad = null;
-  const lottieIn = () => (lottieLoad ||= import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js')).then(() => {
+  let lottieLoad = null, lottieAttempt = 0;
+  // A redraw can retry the player without reusing a failed browser module URL.
+  const lottieIn = () => (lottieLoad ||= import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js') + `?gzStickerRetry=${lottieAttempt++}`).then(() => {
     if (typeof globalThis.lottie?.loadAnimation !== 'function') throw new Error('lottie');
     return globalThis.lottie;
+  }).catch((error) => {
+    lottieLoad = null;
+    throw error;
   }));
   const mute = () => { for (const a of lotties) { if (document.hidden || stillNow()) a.pause(); else a.play(); } };
   // What a sticker shows. Bundled and own pictures are images. A mod's: its picture (an animated WebP or AVIF moves by itself,

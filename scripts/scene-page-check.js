@@ -24,7 +24,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-scene-page-')));
   const results = [], errors = [], blocked = [];
   const check = (name, ok, detail) => { results.push({ name, ok: !!ok, detail }); };
-  let context;
+  let context, failModule = true, failedModules = 0, failDependency = true, failedDependencies = 0;
   try {
     await require('./wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
@@ -34,7 +34,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     context.setDefaultTimeout(15000);
     await context.route('**/*', (r) => {
       const u = new URL(r.request().url());
-      if (u.protocol === 'chrome-extension:') return r.continue();
+      if (u.protocol === 'chrome-extension:') {
+        if (failModule && u.pathname === '/lib/scene.js') { failModule = false; failedModules++; return r.abort(); }
+        if (failDependency && u.pathname === '/lib/three.min.js') { failDependency = false; failedDependencies++; return r.abort(); }
+        return r.continue();
+      }
       if (u.origin !== origin) { blocked.push(u.href); return r.abort(); }
       if (u.pathname.startsWith('/ultra')) return r.fulfill({ contentType: 'text/html', body: fixture });
       if (u.pathname.startsWith('/learn/api/')) return r.fulfill({ json: u.pathname.endsWith('/users/me') ? { id: '_900_1' } : { results: [] } });
@@ -64,6 +68,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await store({ kind: 'scene', scene: 'pumpkins' }, '');
     let page = await open();
     check('a built-in scene still draws on the page, without the shader checker', await waitScene(page), 'no #gz-scene');
+    check('a transient scene-module request failure recovers without a page reload', failedModules === 1 && !!(await scene(page)), `failed requests: ${failedModules}`);
+    check('a cached dependency failure is retried under a fresh module URL', failedDependencies === 1 && !!(await scene(page)), `failed dependency requests: ${failedDependencies}`);
     const builtin = await scene(page);
     check('  at its own 0.6 scale, and the checker was never loaded for it', builtin?.w === Math.round(1280 * 0.6) && (await held(page))?.checker === 'undefined', JSON.stringify([builtin, await held(page)]));
     await page.close();

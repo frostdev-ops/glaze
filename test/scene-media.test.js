@@ -381,7 +381,7 @@ test('Lottie that the worker refuses, or whose player will not load, leaves the 
   r.e.lottieOk = false;
   r.scene.update(o({ type: 'lottie', src: 'https://cdn.example.com/a.json' }));
   await settle();
-  assert.deepEqual(r.fails, ['load']);
+  assert.deepEqual(r.fails, ['module']);
 });
 
 test('Lottie is never imported for a video or a picture', async () => {

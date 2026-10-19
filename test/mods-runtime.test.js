@@ -309,7 +309,9 @@ test('the scene kind follows the winning background after installed and running 
   port.postMessage({ ready: true });
   await settle();
   const source = read('content.js');
-  const scene = source.slice(source.indexOf('  const partsOf ='), source.indexOf('  // ponytail: the last visible layer'));
+  const start = source.indexOf('  const partsOf ='), end = source.indexOf('  const sceneModule =', start);
+  assert.ok(start >= 0 && end > start, 'scene kind helpers are bounded by their declarations');
+  const scene = source.slice(start, end);
   p.ctx.worn = { bg: { kind: 'gradient' } };
   vm.runInContext(`let modBg = false; (() => { ${read('features/lookparts.js').split('\n').find((l) => l.startsWith('  const bgKind ='))}\nglobalThis.GZ_XPARTS_PAGE = { bgKind }; })();`, p.ctx);
   vm.runInContext(`${scene}\nglobalThis.kind = bgKind; globalThis.draws = sceneKind;`, p.ctx);

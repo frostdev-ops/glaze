@@ -9,8 +9,8 @@ const crypto = require('node:crypto');
 
 const source = fs.readFileSync(path.join(__dirname, '../../lib/scene-media.js'), 'utf8')
   .replace(/^export const /gm, 'const ')
-  .replace("import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js'))", 'importLottie()');
-if (!source.includes('importLottie()')) throw new Error('scene-media.js no longer imports Lottie the way this stand-in expects');
+  .replace("import(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js')", "importLottie(chrome.runtime.getURL('lib/lottie/lottie_light_canvas.min.js')");
+if (!source.includes('importLottie(')) throw new Error('scene-media.js no longer imports Lottie the way this stand-in expects');
 
 class El {
   constructor(tag, env) {

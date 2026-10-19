@@ -9,8 +9,8 @@ version="${1:-0.186.1}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-# The names between `import {` and `} from './three.min.js'` in lib/scene.js.
-names="$(sed -n "/^import {/,/three.min.js/p" lib/scene.js | tr -d '\n' | sed -E 's/^import \{(.*)\} from.*/\1/')"
+# The destructured exports in lib/scene.js's lazy renderer import.
+names="$(sed -n "/^const {/,/three.min.js/p" lib/scene.js | tr -d '\n' | sed -E 's/^const \{(.*)\} = await.*/\1/')"
 echo "export {$names} from 'three';" > "$tmp/entry.js"
 npm install --prefix "$tmp" --silent --no-save --no-package-lock "three@$version" esbuild@0.28.2
 "$tmp/node_modules/.bin/esbuild" "$tmp/entry.js" --bundle --minify --format=esm --legal-comments=eof \
