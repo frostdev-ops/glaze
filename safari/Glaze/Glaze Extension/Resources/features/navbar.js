@@ -55,7 +55,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const on = () => !(X.site === 'canvas' && /^\/(?:login|logout)(?:\/|$)/.test(location.pathname)) && !sleeping && !!site && !!chrome.runtime?.id && X.on() && X.settings().enabled && !!settings().on && (isPreview || window.top === window);
   const tabsApi = () => (X.settings().enhance?.tabs && globalThis.GZ_CTABS?.bar) || null;
   // Inside a course: its own page, or one of Glaze's course tabs showing over the page.
-  const inCourse = () => !!site?.inCourse?.() || !!globalThis.GZ_CTABS?.showing?.();
+  // A course tab's frame on screen is in a course; Canvas's frame for its pages outside one ('page') is not, whatever page it covers.
+  const inCourse = () => { const shown = globalThis.GZ_CTABS?.showing?.(); return shown ? shown !== 'page' : !!site?.inCourse?.(); };
   const byId = (id) => model?.items.find((i) => i.id === id) || cmenu?.items.find((i) => i.id === id) || null;
   // A page of this site: through the course tabs where they run (into the course's frame, or leaving it), else a load.
   const openHere = (href) => { const api = tabsApi(); if (!api?.open || api.open(href) === false) location.assign(href); };
