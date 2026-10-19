@@ -265,6 +265,9 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
   border-color: var(--gz-border-strong, var(--gz-line-strong)) !important;
 }
 .course-banner, .status-bar { border-radius: var(--gz-radius) 0 0 var(--gz-radius) !important; }
+/* Activity Stream: Ultra's full-width white hover overlay sits behind the themed card.
+   Keep the card's own hover treatment; the colour sweep cannot reach pseudo-elements. */
+#site-wrap .activity-stream .stream-item::before { background: none !important; }
 /* Courses grid: the banner is the card's top, not its left. */
 .multi-column-view .course-banner { border-radius: calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)) calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)) 0 0 !important; }
 /* Ultra's 4px frame around each top-level outline card drew a second, squarer outline outside it. */
