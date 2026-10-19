@@ -2742,4 +2742,7 @@
   "Share a folder on its own, or choose notes instead.": "Deel een map op zichzelf, of kies in plaats daarvan notities.",
   "Session created. Copy an invite below to share it.": "Sessie gemaakt. Kopieer hieronder een uitnodiging om hem te delen.",
   "Joined. Copy it into Notes or To Do below to keep working on it there.": "Deelgenomen. Kopieer hem hieronder naar Notities of To Do om daar verder te werken.",
+  "Close this panel and open Share again.": "Sluit dit paneel en open Delen opnieuw.",
+  "Sharing controls need visibility protection. Open Settings from Glaze to share.": "De deelknoppen hebben zichtbaarheidsbescherming nodig. Open Instellingen vanuit Glaze om te delen.",
+  "Resume sharing from Settings before using this panel.": "Hervat delen vanuit Instellingen voordat je dit paneel gebruikt.",
 };

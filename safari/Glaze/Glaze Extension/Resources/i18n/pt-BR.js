@@ -2742,4 +2742,7 @@
   "Share a folder on its own, or choose notes instead.": "Compartilhe uma pasta sozinha ou escolha notas.",
   "Session created. Copy an invite below to share it.": "Sessão criada. Copie um convite abaixo para compartilhá-la.",
   "Joined. Copy it into Notes or To Do below to keep working on it there.": "Você entrou. Copie abaixo para Notas ou To Do para continuar trabalhando lá.",
+  "Close this panel and open Share again.": "Feche este painel e abra Compartilhar novamente.",
+  "Sharing controls need visibility protection. Open Settings from Glaze to share.": "Os controles de compartilhamento precisam de proteção de visibilidade. Abra as Configurações do Glaze para compartilhar.",
+  "Resume sharing from Settings before using this panel.": "Retome o compartilhamento nas Configurações antes de usar este painel.",
 };

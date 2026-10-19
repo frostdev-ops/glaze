@@ -104,7 +104,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
 
   // ---- the view ----------------------------------------------------------------------------------------------------
   // gen: the view's current opening; anything that finishes for an older one draws nothing. noteGen: the note shown.
-  let box = null, opener = null, gen = 0, noteGen = 0, shareSurface = null;
+  let box = null, opener = null, gen = 0, noteGen = 0, shareGen = 0, shareSurface = null;
   let idx = null, courses = [];
   const view = { trash: false, course: '', folder: '*', sort: 'at', q: '', found: null };
   let cur = null; // the note in the editor: { id, rev, title, folder, course, cn, ro, saved, sid, copy, busy, tries, wait, urls }
@@ -829,18 +829,26 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
 
   // ---- sharing -------------------------------------------------------------------------------------------------------
   // Glaze's share panel (sharing/quick.html) is an extension frame: its invite links and keys never enter this page, and
-  // it posts nothing back. The worker gives each opening a one-use ticket for this tab, account and note; the frame sits in
-  // a closed shadow root so the page's scripts cannot read that address and frame a panel of their own with it.
+  // it posts nothing back. Deliver the one-use ticket directly to the extension frame, never in a URL (which browsers
+  // may expose through resource timing). A closed shadow root keeps the frame element out of the page's reach.
   // note: the note to share ('' for the account's shared notes and joining); the same again closes it.
   const share = async (note) => {
+    const turn = ++shareGen;
     if (!el.share.hidden && el.share.note === note) { el.share.hidden = true; el.share.replaceChildren(); return; }
     const my = gen, key = me.key;
     // A note is shared as stored, so a new or edited one is saved first.
     if (note && (!(await settle()) || !cur?.rev)) return say(t("Couldn't save the open note, so it can't be shared yet. Try again in a moment."));
+    if (turn !== shareGen || my !== gen) return;
     const r = await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:quick-ticket', key, note }, (x) => res(chrome.runtime.lastError ? null : x)); } catch { res(null); } });
-    if (my !== gen || !el.share || key !== me?.key || (note && note !== cur?.id)) return;
+    if (turn !== shareGen || my !== gen || !el.share || key !== me?.key || (note && note !== cur?.id)) return;
     if (!r?.ok || !/^[0-9a-f]{32}$/.test(r.ticket || '')) return say(t('Could not finish. Your local copies are kept. Try again.'));
-    const frame = make('iframe', { src: `${chrome.runtime.getURL('sharing/quick.html')}?t=${r.ticket}`, title: t('Share') });
+    const frame = make('iframe', { src: chrome.runtime.getURL('sharing/quick.html'), title: t('Share') });
+    let delivered = false;
+    frame.addEventListener('load', () => {
+      if (delivered || turn !== shareGen || my !== gen) return;
+      delivered = true; // never deliver again after navigation/reload, even with the same frameId
+      frame.contentWindow.postMessage({ type: 'glaze:quick-start', ticket: r.ticket }, chrome.runtime.getURL('').replace(/\/$/, ''));
+    });
     frame.setAttribute('allow', 'clipboard-write');
     frame.setAttribute('style', 'display: block; width: 100%; height: min(22rem, 45vh); border: 0; color-scheme: normal;');
     const holder = make('div', { className: 'gz-nt-share-frame' });
