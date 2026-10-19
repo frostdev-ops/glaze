@@ -14,6 +14,8 @@ const docAt = (path, o = {}) => {
     location: { origin, href: origin + path, pathname, search: q ? `?${q}` : '' }, readyState: o.ready || 'complete', body: {},
     documentElement: { matches: () => false }, querySelector: () => ({}), scrollingElement: { scrollTop: o.top || 0 },
     on: {}, addEventListener(ev, fn) { this.on[ev] = fn; }, removeEventListener(ev, fn) { if (this.on[ev] === fn) delete this.on[ev]; },
+    media: o.media || [], frames: o.frames || [],
+    querySelectorAll(sel) { return sel.startsWith('iframe') ? this.frames.filter((e) => !sel.includes('data-gz-rest') || e.hasAttribute('data-gz-rest')) : sel.startsWith('video') ? this.media : []; },
   };
 };
 const blank = () => ({ location: { origin, href: 'about:blank', pathname: 'blank', search: '' }, readyState: 'complete', body: {}, documentElement: { matches: () => false }, querySelector: () => null });
@@ -502,4 +504,62 @@ test('course-frame move messages refresh the Canvas navbar without changing Ultr
     listen({ origin, source: w.first.el.contentWindow, data: { gzCtab: 'moved' } });
     assert.equal(synced, site === 'canvas' ? 1 : 0);
   }
+});
+
+test('a kept page is quiet: its media paused and other sites\' players stopped at once, then not drawn at all; shown again, as it was', () => {
+  const w = world();
+  const video = { paused: false, pause() { this.paused = true; } };
+  const attrs = {};
+  const embed = { src: 'https://player.example/v/1', contentWindow: { get location() { throw new Error('cross-origin'); } },
+    hasAttribute: (k) => k in attrs, setAttribute: (k, v) => { attrs[k] = v; }, getAttribute: (k) => attrs[k], removeAttribute: (k) => { delete attrs[k]; } };
+  w.first.el.contentDocument = docAt('/courses/12/modules', { media: [video], frames: [embed], top: 640 });
+  w.fn('turnTo')('12', '/courses/12/assignments');
+  w.fn('next').get('12').el.contentDocument = docAt('/courses/12/assignments');
+  w.wait(40);
+  assert.equal(video.paused, true, 'its video paused');
+  assert.equal(embed.src, 'about:blank', 'another site\'s player stopped');
+  assert.notEqual(w.first.el.style.display, 'none', 'still drawn for a moment');
+  w.wait(3000);
+  assert.equal(w.first.el.style.display, 'none', 'then not drawn at all');
+  w.first.el.contentDocument.scrollingElement.scrollTop = 0; // (a page not drawn has no scroll)
+  w.pop({ gzTurn: { cid: '12', url: '/courses/12/modules' } });
+  assert.equal(w.c.frames.get('12'), w.first);
+  assert.equal(w.first.el.style.display, '', 'drawn again');
+  assert.equal(w.first.el.contentDocument.scrollingElement.scrollTop, 640, 'at its scroll');
+  assert.equal(embed.src, 'https://player.example/v/1', 'its player back');
+  assert.equal(embed.hasAttribute('data-gz-rest'), false);
+});
+
+test('a kept page that did something as it loaded is not loaded again under it', () => {
+  const w = world({ at: '/courses/12/quizzes/4/take' });
+  w.fn('turnTo')('12', '/courses/12/modules');
+  w.fn('next').get('12').el.contentDocument = docAt('/courses/12/modules');
+  w.wait(40);
+  w.fn('turnTo')('12', '/courses/12/quizzes/4/take');
+  assert.equal(w.c.frames.get('12'), w.first, 'the kept attempt shows');
+  assert.equal(w.fn('next').size, 0, 'and is not loaded again');
+});
+
+test('a press loads ahead only for a plain press with the main button, never a touch (a scroll may start there)', () => {
+  const pressed = [];
+  const c = vm.createContext({ L, PAGE: 'page', on: true, preview: false, framed: '', location: { origin, href: origin + '/courses/12', pathname: '/courses/12', search: '' },
+    URL, Element: class {}, document: { querySelector: () => null }, frames: new Map([['12', { ready: true }]]), pathOf: () => '/courses/12',
+    pageable: (path) => !/^\/(?:login|logout|api)(?:\/|$)/.test(path), turnTo: (cid, url, warm) => pressed.push([cid, url, warm]) });
+  vm.runInContext(part('  const anchorOf = ', '  const toFrame = ') + part('  const onPress = ', '  // A course page in its course') + part('  const acts = ', '  // A kept page is quiet'), c);
+  const a = Object.assign(new c.Element(), { localName: 'a', href: `${origin}/courses/12/grades`, target: '', hasAttribute: (k) => k === 'href', closest: () => null, matches: () => false });
+  const press = (more = {}) => vm.runInContext('onPress', c)({ isTrusted: true, button: 0, pointerType: 'mouse', defaultPrevented: false, composedPath: () => [a], ...more });
+  for (const more of [{ button: 2 }, { button: 1 }, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { pointerType: 'touch' }, { isTrusted: false }]) press(more);
+  assert.deepEqual(pressed, []);
+  press({ pointerType: 'pen' }); press();
+  assert.deepEqual(JSON.parse(JSON.stringify(pressed)), [['12', '/courses/12/grades', true], ['12', '/courses/12/grades', true]]);
+  // Pages that do something as they load: never loaded ahead.
+  for (const path of ['/courses/12/quizzes/4/take', '/courses/12/external_tools/9', '/courses/12/assignments/3/submissions/7', '/courses/12/lti/launch']) {
+    a.href = origin + path; press();
+  }
+  assert.equal(pressed.length, 2);
+});
+
+test('Glaze\'s bar keeps an open shadow root: a press or click in it is found through the event\'s path', () => {
+  const navbar = fs.readFileSync(require.resolve('../features/navbar.js'), 'utf8');
+  assert.match(navbar, /attachShadow\(\{ mode: 'open' \}\)/, 'a closed root would hide its links from course tabs (anchorOf)');
 });

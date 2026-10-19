@@ -21,7 +21,7 @@ function reservation(framed = '12', site = 'canvas') {
   const context = vm.createContext({ framed, ctx: { site }, html, parent, navWatch: null,
     MutationObserver: class { constructor(fn) { this.fn = fn; observers.push(this); } observe(node, options) { this.node = node; this.options = options; this.active = true; } disconnect() { this.active = false; } },
     document: { addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {},
-    onScroll() {}, onLeave() {}, onCourseLink() {}, onPress() {}, onPop() {}, onHide() {}, onResize() {}, onStore() {}, bar: { place() {} }, chrome: { runtime: {} },
+    onScroll() {}, onLeave() {}, onCourseLink() {}, onPress() {}, onPop() {}, onHide() {}, onShow() {}, onResize() {}, onStore() {}, bar: { place() {} }, chrome: { runtime: {} },
   });
   const api = vm.runInContext(part('  const navRoom =', '  const start =') + '\n({ navRoom, listen });', context);
   return { ...api, parentValues, ownValues, writes, observers, parentHtml };

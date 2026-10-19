@@ -563,14 +563,15 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const goes = (cid, path) => (cid ? true : pageable(path));
   // A press on a link to a page of a frame that runs: that page starts loading now, ahead of the click (turnTo).
   const onPress = (e) => {
-    if (!on || !e.isTrusted || preview || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    // Not a touch: it may only be the start of a scroll.
+    if (!on || !e.isTrusted || preview || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.pointerType === 'touch') return;
     const a = anchorOf(e);
     if (a && !a.hasAttribute('download') && (!a.target || a.target === '_self') && (a.target || !document.querySelector('base[target]'))
       && !a.closest('form, #gz-ctabs') && !a.matches('[data-method], [data-remote], [data-confirm], [onclick], [role="button"]')) warm(a.href);
   };
   const warm = (href) => {
     let u; try { u = new URL(String(href), location.href); } catch { return; }
-    if (u.origin !== location.origin || u.hash || /\/files\/\d+\/download/.test(u.pathname) || !pageable(u.pathname)) return;
+    if (u.origin !== location.origin || u.hash || /\/files\/\d+\/download/.test(u.pathname) || !pageable(u.pathname) || acts(u.pathname)) return;
     const url = L.safe(u.pathname, u.search) || L.outside(u.pathname, u.search), cid = u.pathname.match(/^\/courses\/(\d+)/)?.[1] || PAGE;
     if (!url || url === (framed ? location.pathname + location.search : pathOf(frames.get(cid)))) return;
     if (framed) { if (cid === framed) toTop('warm', { url }); }
@@ -752,6 +753,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
     if (g.refresh) {
       const s = g.refresh;
+      g.refresh = null; // (the copy replaced must not stay reachable from the one replacing it)
       if (f !== s || s.dirty || s.touched) return g.el.remove();
       try { const a = g.el.contentDocument.scrollingElement, b = s.el.contentDocument.scrollingElement; a.scrollTop = b.scrollTop; a.scrollLeft = b.scrollLeft; } catch { /* gone */ }
       return swap(cid, g, false, false);
@@ -765,6 +767,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const f = frames.get(cid);
     if (keepOld && !canKeep(cid, g)) { g.el.remove(); if (g.key ? entry() === g.key : turnHere() === g.turn) restamp(cid, pathOf(f)); return false; }
     const focused = !!f && document.activeElement === f.el;
+    wake(g);
     if (push) stamp(cid, pathOf(g));
     spare.set(cid, (spare.get(cid) || []).filter((s) => s !== g));
     g.ready = true;
@@ -774,7 +777,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     frames.set(cid, g);
     if (f && f !== g) {
       f.at = Date.now();
-      if (keepOld) spare.get(cid).push(f); else f.el.remove();
+      if (keepOld) { spare.get(cid).push(f); rest(f); } else f.el.remove();
     }
     trim();
     const x = cid !== PAGE && tabs.find((y) => y.cid === cid), p = x && L.placeOf(...split(pathOf(g)));
@@ -794,12 +797,45 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // An earlier page shown again: loaded afresh under it (a submission, a module item viewed since), taking its place at
   // the same scroll unless the student has begun using it.
   const fresh = (cid, s) => {
-    if (s.dirty) return;
+    if (s.dirty || acts(pathOf(s))) return;
     s.touched = false;
     try {
       const d = s.el.contentDocument, events = ['pointerdown', 'keydown', 'focusin', 'input', 'change', 'submit'], touch = () => { s.touched = true; };
       for (const ev of events) d.addEventListener(ev, touch, true);
       pend(cid, pathOf(s), { refresh: s, clean: () => { for (const ev of events) d.removeEventListener(ev, touch, true); } });
+    } catch { /* gone */ }
+  };
+  // Pages that do something as they load (a quiz attempt, a tool launched, a submission): never loaded ahead or again
+  // unasked.
+  const acts = (path) => /\/(?:quizzes\/\d+\/take|external_tools|lti|sessionless_launch|submissions)(?:[/?]|$)/.test(path);
+  // A kept page is quiet as a page left behind: its media paused and other sites' players in it (a video, a tool)
+  // stopped at once, put back as it shows again; after a moment it isn't drawn at all (no style, layout, paint or
+  // animation frames, about half of what a hidden Canvas page costs while idle), its scroll noted to put back.
+  const rest = (f) => {
+    clearTimeout(f.resting);
+    try {
+      const d = f.el.contentDocument;
+      for (const m of d.querySelectorAll('video, audio')) if (!m.paused) m.pause();
+      for (const e of d.querySelectorAll('iframe[src]')) {
+        let other = true; try { other = e.contentWindow.location.origin !== location.origin; } catch { /* another site */ }
+        if (other && !e.hasAttribute('data-gz-rest')) { e.setAttribute('data-gz-rest', e.src); e.src = 'about:blank'; }
+      }
+    } catch { /* gone */ }
+    f.resting = setTimeout(() => {
+      if (![...spare.values()].some((a) => a.includes(f))) return;
+      try { const sc = f.el.contentDocument.scrollingElement; f.scroll = [sc.scrollTop, sc.scrollLeft]; } catch { /* gone */ }
+      f.el.style.display = 'none';
+    }, 3000);
+  };
+  const wake = (f) => {
+    clearTimeout(f.resting);
+    try {
+      if (f.el.style.display === 'none') {
+        f.el.style.display = '';
+        const sc = f.el.contentDocument.scrollingElement;
+        if (f.scroll) [sc.scrollTop, sc.scrollLeft] = f.scroll;
+      }
+      for (const e of f.el.contentDocument.querySelectorAll('iframe[data-gz-rest]')) { e.src = e.getAttribute('data-gz-rest'); e.removeAttribute('data-gz-rest'); }
     } catch { /* gone */ }
   };
   // Dirty pages cannot be evicted to enforce the cache bounds. Keep the student on their current page when full.
@@ -1310,7 +1346,10 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     try { const d = showing === PAGE && frames.get(PAGE)?.el.contentDocument; u = d ? L.outside(d.location.pathname, d.location.search) : ''; } catch { /* gone */ }
     try { if (u) sessionStorage.setItem('gz-ctabs-page', u); } catch { /* blocked */ } // (gz-ctabs-shown says whether it shows)
   };
-  const onHide = () => { if (on) { saveNow(); keepPage(); } };
+  // A frame's page going (another page of the frame, or the frame let go of): its watch on the page around ends with it, or
+  // that page would keep this whole page alive. Restored from the back/forward cache, it watches again.
+  const onHide = () => { if (on) { saveNow(); keepPage(); } navWatch?.disconnect(); navWatch = null; };
+  const onShow = (e) => { if (e.persisted && on && framed) { listen(false); listen(true); } };
   const onResize = () => {
     lay();
     navRoom();
@@ -1338,6 +1377,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     document[f]('pointerdown', onLeave, true);
     if (ctx.site === 'canvas') { globalThis[f]('click', onCourseLink); document[f]('pointerdown', onPress, true); if (!framed && !preview) globalThis[f]('popstate', onPop); }
     globalThis[f]('pagehide', onHide);
+    globalThis[f]('pageshow', onShow);
     globalThis[f]('resize', onResize);
     // A parent bar can change without any mutation in this course's document.
     navWatch?.disconnect(); navWatch = null;
