@@ -773,7 +773,7 @@ GZ_UI.load().then((s) => {
       const li = document.createElement('li');
       li.addEventListener('focusin', () => { previewCourse = id; contextPreview(c.canvas ? 'canvas' : c.moodle ? 'moodle' : 'ultra', 'outline'); });
       // Ultra nicknames share the card menu's sanitizer; Canvas and Moodle keep their native names and colors.
-      const own = c.canvas ? t('Change the colour and nickname in Canvas’s own card menu.') : c.moodle ? t('The colour is Moodle’s own for this course.') : '';
+      const own = c.canvas ? t('Change the colour and nickname in its card’s menu on Canvas’s Dashboard. Canvas keeps them.') : c.moodle ? t('The colour is Moodle’s own for this course.') : '';
       const nick = (!own && s.enhance.coursemenu && cc.names[id]) || '';
       c = { ...c, real: c.name, name: nick || c.name };
       const input = Object.assign(document.createElement('input'), { type: 'color', value: own ? c.color || '#808080' : colors[id].color });

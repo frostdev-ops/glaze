@@ -1115,7 +1115,7 @@
       let b = card.querySelector(':scope > .gz-cm-btn');
       if (b && (!on || b.dataset.cid !== cid || !courseList[cid])) { b.remove(); b = null; }
       if (!on || !courseList[cid]) continue;
-      const label = t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name: X.nickOf(cid) || courseList[cid].name });
+      const label = t(moodle ? 'Tint and look for {name}' : 'Colour and look for {name}', { name: X.nickOf(cid) || courseList[cid].name });
       if (!b) {
         // Inside Ultra's card, positioned over its corner (extras.css); document-level capture listeners take
         // its events, below.

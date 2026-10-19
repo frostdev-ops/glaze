@@ -67,9 +67,76 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   const menuNote = (text) => { if (menu) { menu.note.textContent = text; menu.note.hidden = !text; } };
   addEventListener('pagehide', saveEdits);
 
+  // -- Canvas: its own nickname and color, in this one menu with the tint and look --
+  // Saved in Canvas (the course nickname and color its own card menu saves), so Canvas, its apps and every page show them;
+  // the cards on this page take them at once. Canvas's own menu stays for moving or hiding a card.
+  const canvas = !ultra && !moodle;
+  const numOf = (cid) => /\/(\d+)$/.exec(cid || '')?.[1] || '';
+  const csrf = () => { const m = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/); return m ? decodeURIComponent(m[1]) : ''; };
+  const canvasSave = (path, method, body) => fetch(`${location.origin}/api/v1/users/self/${path}`, {
+    method, credentials: 'same-origin', headers: { accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': csrf(), 'x-requested-with': 'XMLHttpRequest' }, ...(body && { body: JSON.stringify(body) }),
+  }).then((r) => (r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(String(r.status)))));
+  const cardsOf = (id) => [...document.querySelectorAll('.ic-DashboardCard')].filter((el) => el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1] === id);
+  // Its name and nickname: Canvas's course list has original_name only for a nickname. One saved here since stands.
+  const named = new Map();
+  const namesOf = (id) => (named.has(id) ? Promise.resolve(named.get(id)) : ctx.canvasCourses().then((rows) => {
+    const r = (Array.isArray(rows) ? rows : []).find((x) => String(x?.id) === id);
+    return r && typeof r.name === 'string' ? { real: r.original_name || r.name, nick: r.original_name ? r.name : '' } : null;
+  }, () => null));
+  const paintName = (id, name) => {
+    for (const card of cardsOf(id)) {
+      const h = card.querySelector('.ic-DashboardCard__header-title');
+      const text = h?.querySelector('span') || h;
+      if (text && text.textContent !== name) text.textContent = name;
+      if (h) h.title = name;
+      card.setAttribute('aria-label', name);
+    }
+  };
+  const colorOf = (id) => cardsOf(id).map((card) => card.querySelector('.ic-DashboardCard__header_hero')?.style.backgroundColor).find(Boolean) || ctx.courseList()[`canvas:${location.origin}/${id}`]?.color || '';
+  const paintColor = (id, color) => {
+    for (const card of cardsOf(id)) {
+      const hero = card.querySelector('.ic-DashboardCard__header_hero');
+      if (hero) hero.style.backgroundColor = color;
+      const name = card.querySelector('.ic-DashboardCard__header-title span');
+      if (name?.style.color) name.style.color = color;
+    }
+  };
+  const canvasNick = (m) => {
+    if (!m?.edited || !m.names) return;
+    m.edited = false;
+    const id = numOf(m.cid), v = m.nick.value.replace(/[\p{Cc}\s]+/gu, ' ').trim(), before = m.names;
+    m.nick.value = v;
+    if (v === before.nick) return;
+    m.names = { ...before, nick: v };
+    canvasSave(`course_nicknames/${id}`, v ? 'PUT' : 'DELETE', v ? { nickname: v } : null).then(() => {
+      named.set(id, m.names); paintName(id, v || before.real);
+      if (menu === m) menuNote('');
+    }, () => {
+      m.names = before;
+      if (menu === m) { m.nick.value = before.nick; menuNote(t('Not saved. Try again in a moment.')); }
+    });
+  };
+  // A color dragged in the picker is one save, when it rests.
+  const canvasColor = (m, hex, soon = false) => {
+    const id = numOf(m.cid);
+    m.color0 ??= colorOf(id);
+    paintColor(id, hex);
+    clearTimeout(m.colorTimer);
+    m.colorTimer = setTimeout(() => {
+      const back = m.color0;
+      m.color0 = undefined;
+      canvasSave(`colors/course_${id}`, 'PUT', { hexcode: hex }).then(() => { if (menu === m) { menuNote(''); paintMenu(m); } }, () => {
+        paintColor(id, back);
+        if (menu === m) { menuNote(t('Not saved. Try again in a moment.')); paintMenu(m); }
+      });
+    }, soon ? 500 : 0);
+    if (menu === m) paintMenu(m);
+  };
+
   // -- the popover --
   const swatches = () => [
-    ...TONES.map((name, i) => [name, courseColor(String(i + 1), '--gz-pick:initial') || GZ_SLOT_COLORS[i + 1]]),
+    // Canvas's cards show a color as it is: Ultra's ten as Blackboard has them.
+    ...TONES.map((name, i) => [name, (ultra && courseColor(String(i + 1), '--gz-pick:initial')) || GZ_SLOT_COLORS[i + 1]]),
     ['Accent', GZ_ACTIVE_COLORS(ctx.settings(), matchMedia('(prefers-color-scheme: dark)').matches)['--gz-accent']],
   ];
   // Everything that follows the settings: what is picked, ticked and worn.
@@ -78,6 +145,14 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const c = ctx.settings().courses;
     m.tint.checked = GZ_COURSE_TINTED(c, cid, ctx.courseList());
     for (const b of m.looks) b.setAttribute('aria-pressed', String((c.looks[cid] || '') === b.dataset.look));
+    if (canvas) {
+      // Canvas's color for it now, as its cards show it: a swatch of the same color is pressed, else the picker is.
+      const now = C.parse(colorOf(numOf(cid)));
+      for (const b of m.sw) b.setAttribute('aria-pressed', String(!!now && C.same(C.parse(b.dataset.hex), now)));
+      m.custom.toggleAttribute('data-on', !!now && !m.sw.some((b) => b.getAttribute('aria-pressed') === 'true'));
+      if (now && m.custom.value !== C.hex(now)) m.custom.value = C.hex(now);
+      return;
+    }
     if (!ultra) return;
     const cur = courseColors()[cid];
     if (!cur) return;
@@ -108,6 +183,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   // Only what the student typed: an untouched field may be behind a nickname saved elsewhere since. One that doesn't
   // fit stays in the field, still theirs to shorten, with the menu's note saying why.
   const commitNick = (m = menu) => {
+    if (canvas) { canvasNick(m); return true; }
     if (!m?.edited) return true;
     const v = m.nick.value;
     const was = ctx.settings().courses.names[m.cid] || '';
@@ -136,7 +212,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     if (!closeMenu(false)) return;
     const name = nickOf(cid) || real;
     const box = make('div', { id: 'gz-cm' });
-    for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t(ultra ? 'Colour and look for {name}' : 'Tint and look for {name}', { name })]]) box.setAttribute(k, v);
+    for (const [k, v] of [['role', 'dialog'], ['aria-modal', 'true'], ['aria-label', t(moodle ? 'Tint and look for {name}' : 'Colour and look for {name}', { name })]]) box.setAttribute(k, v);
     const cap = (text, id) => make('div', { className: 'gz-cm-cap', id, textContent: text });
     const group = (labelledby, ...kids) => {
       const g = make('div', {}, ...kids);
@@ -147,7 +223,8 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     };
 
     // The nickname: what the field shows empty is the real name. Saved on Enter, on leaving it, and on closing.
-    const nick = make('input', { type: 'text', id: 'gz-cm-nick', className: 'gz-cm-nick', maxLength: GZ_NICK_MAX, placeholder: real, title: real, value: ctx.settings().courses.names[cid] || '', autocomplete: 'off', spellcheck: false });
+    // Canvas's: as Canvas has it, once its course list says (until then the field waits).
+    const nick = make('input', { type: 'text', id: 'gz-cm-nick', className: 'gz-cm-nick', maxLength: GZ_NICK_MAX, placeholder: real, title: real, value: canvas ? '' : ctx.settings().courses.names[cid] || '', disabled: canvas, autocomplete: 'off', spellcheck: false });
     nick.addEventListener('input', () => { if (menu?.nick === nick) menu.edited = true; });
     nick.addEventListener('change', () => commitNick());
     const note = make('p', { className: 'gz-cm-note', hidden: true });
@@ -156,17 +233,17 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     // Colors: Ultra's ten as Glaze tones them (the very colors its cards show: a pick is used as is, so a swatch picked
     // is what its card then shows), and the theme's accent. Ultra's ten cover the hues except red and grey, which the
     // custom picker is for. Then Reset, back to Blackboard's own.
-    const sw = (ultra ? swatches() : []).map(([label, hex]) => {
+    const sw = (moodle ? [] : swatches()).map(([label, hex]) => {
       const b = make('button', { type: 'button', className: 'gz-cm-sw', title: t(label) });
       b.setAttribute('aria-label', t(label));
       b.dataset.hex = hex;
       b.style.backgroundColor = hex;
-      b.addEventListener('click', () => editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList())));
+      b.addEventListener('click', () => (canvas ? canvasColor(menu, hex) : editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList()))));
       return b;
     });
     const custom = make('input', { type: 'color', className: 'gz-cm-custom' });
     custom.setAttribute('aria-label', t('Colour for {name}', { name }));
-    custom.addEventListener('input', () => { const hex = custom.value; editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList()), true); });
+    custom.addEventListener('input', () => { const hex = custom.value; if (canvas) canvasColor(menu, hex, true); else editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList()), true); });
     custom.addEventListener('change', saveEdits);
     const grid = group('gz-cm-colors', ...sw, custom);
     grid.className = 'gz-cm-grid';
@@ -204,9 +281,15 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')),
       cap(t('Look'), 'gz-cm-look'), lookGrid);
     else if (moodle) box.append(note, make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid);
-    else box.append(note, make('p', { className: 'gz-cm-note', textContent: t('Change the colour and nickname in Canvas’s own card menu.') }),
-      make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
-      make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));
+    else {
+      // Canvas's own menu, for moving or hiding the card: its button stays in the card, out of sight (canvas.css).
+      const own = btn.closest('.ic-DashboardCard:not([data-gz-tile-card])')?.querySelector('.ic-DashboardCard__header-button');
+      box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
+        cap(t('Colors'), 'gz-cm-colors'), grid,
+        make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
+        make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }),
+        ...(own ? [make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Move or hide in Canvas’s menu'), onclick: () => closeMenu(false) && own.click() })] : []));
+    }
     if (ultra) box.append(make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));
     document.body.append(box);
     menu = { box, btn, cid, nick, edited: false, note, custom, reset, tint, grid, sw, looks };
@@ -215,7 +298,15 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     rove(grid, sw.find((b) => b.getAttribute('aria-pressed') === 'true') || sw[0]);
     rove(lookGrid, looks.find((b) => b.getAttribute('aria-pressed') === 'true') || looks[0]);
     placeMenu();
-    (ultra ? grid.querySelector('[tabindex="0"]') : tint).focus({ preventScroll: true });
+    (moodle ? tint : grid.querySelector('[tabindex="0"]')).focus({ preventScroll: true });
+    if (canvas) namesOf(numOf(cid)).then((n) => {
+      const m = menu;
+      if (m?.box !== box) return;
+      m.names = n || { real, nick: '' };
+      nick.placeholder = nick.title = m.names.real;
+      if (!m.edited) nick.value = m.names.nick;
+      nick.disabled = false;
+    });
   };
 
   // Esc closes; Tab stays inside; arrows walk a group; Enter in the nickname field saves it.
