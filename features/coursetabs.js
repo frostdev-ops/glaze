@@ -447,7 +447,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       revoke();
       return;
     }
-    if (e.type === 'click' && ctx.site === 'canvas' && !preview && toFrame(e, el)) return;
     const cid = ctx.courseId();
     if (framed || showing || !cid || e.type !== 'pointerdown') return;
     if (el.closest('course-page-header, .MuiDrawer-paper, #base_tools') || (href.startsWith('/') && !href.includes(`/courses/${cid}/`))) shoot();
@@ -495,13 +494,22 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!f) return;
     f.el.remove();
     frames.delete(cid);
-    if (waiting === cid) wait('');
+    if (waiting === cid) { ++showTurn; wait(''); }
     if (showing === cid && !replacing) show('');
   };
   // Canvas loads a whole page for each link, which here would end every tab's frame; Ultra routes in place, so its frames
   // live on. With a frame running, a plain click on a link to a course page opens it in that course's frame instead (made
   // if new), and in a tab's frame a link to another course goes to that course's frame: the page around never reloads.
   // A download, a link to a part of the same page or one opened elsewhere goes as the browser would take it.
+  // Run after the page's handlers: Canvas action links may submit a form or cancel navigation themselves.
+  const onCourseLink = (e) => {
+    if (!on || !e.isTrusted || preview || e.defaultPrevented) return;
+    const a = e.target instanceof Element && e.target.closest('a[href]');
+    if (!a || a.closest('form, #gz-ctabs')
+      || a.matches('[data-method], [data-remote], [data-confirm], [onclick], [role="button"]')
+      || (!a.target && document.querySelector('base[target]'))) return;
+    toFrame(e, a);
+  };
   const toFrame = (e, a) => {
     if (a.localName !== 'a' || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.defaultPrevented || a.hasAttribute('download')
       || (a.target && a.target !== '_self') || a.origin !== location.origin || a.hash) return false;
@@ -515,23 +523,27 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A course page in its course's frame: kept and sent there if it runs (unless it holds unsaved work, then shown as it is),
   // else made, with a tab if the course has none.
   const openAt = (cid, url) => {
-    if (ctx.site === 'canvas' && cid === closedCourse) closedCourse = '';
     if (!tabs.some((x) => x.cid === cid)) { visitTab(cid); draw(); }
     const x = tabs.find((y) => y.cid === cid);
     if (!x) return;
-    x.at = Date.now(); x.path = url; x.top = 0;
-    save();
+    x.at = Date.now();
     let f = frames.get(cid);
     if (f?.dirty) say(t('{name} has unsaved work, so it stays where it was.', { name: labelFor(cid, x.name || t('Course'), x.code) }));
     else if (f) {
       try { f.stale = f.el.contentDocument; f.el.contentWindow.location.assign(location.origin + url); } catch { return; }
       f.url = url;
-      if (f.ready) { f.ready = false; watch(cid, f); }
+      f.away = false;
+      f.ready = false;
+      f.retried = false;
+      watch(cid, f);
     } else {
       hostIn();
       if (!room()) return;
       f = open(cid, url);
     }
+    if (!f?.dirty) { x.path = url; x.top = 0; }
+    if (ctx.site === 'canvas' && cid === closedCourse) closedCourse = '';
+    save();
     reveal(cid);
   };
   // Canvas: a frame still loading with no picture of its page stays off screen and the page on screen stays put, its tab
@@ -546,21 +558,27 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (showing) frames.get(showing)?.el.contentWindow?.postMessage({ gzCtab: 'loading', cid }, location.origin);
   };
   const reveal = (cid) => {
-    if (ctx.site === 'canvas' && cid && !frames.has(cid) && on) {
+    if (ctx.site !== 'canvas') return show(cid);
+    const turn = ++showTurn;
+    wait(cid);
+    if (cid && !frames.has(cid) && on) {
       hostIn();
-      if (!room()) return;
+      if (!room()) { wait(''); return; }
       open(cid);
     }
     const f = cid && frames.get(cid);
-    if (ctx.site !== 'canvas' || !f || f.ready || f.slow) { wait(''); return show(cid); }
-    wait(cid);
+    if (!f || f.ready || f.slow) return show(cid);
     // The picture decoded first, so the switch goes straight from this page to it, with no bare ground between.
     const go = (s) => {
-      if (waiting !== cid || frames.get(cid) !== f || !fits(s, f.url)) return;
+      if (turn !== showTurn || waiting !== cid || frames.get(cid) !== f || !fits(s, f.url)) return;
       keep(s);
       const img = new Image();
       img.src = s.shot;
-      img.decode().catch(() => {}).then(() => { primed = s.shot; if (waiting === cid && frames.get(cid) === f && !f.ready) { wait(''); show(cid); } });
+      img.decode().catch(() => {}).then(() => {
+        if (turn !== showTurn || waiting !== cid || frames.get(cid) !== f || f.ready || f.slow || !fits(s, f.url)) return;
+        primed = s.shot;
+        show(cid);
+      });
     };
     const s = snaps.get(cid);
     if (s) go(s); else send({ op: 'get', cid }).then((r) => { if (r?.snap?.cid === cid) go(r.snap); });
@@ -577,11 +595,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // A frame is shown once rendered course content has settled. A stalled initial about:blank can be retried once;
   // slow native pages keep loading, with their form state intact, rather than becoming falsely ready.
   const watch = (cid, f) => {
+    const turn = f.watch = {};
     let t0 = performance.now();
     let changed = t0, mo = null, doc = null;
     f.slow = false;
     const step = () => {
-      if (frames.get(cid) !== f) return mo?.disconnect();
+      if (frames.get(cid) !== f || f.watch !== turn) return mo?.disconnect();
       let d = null; try { d = f.el.contentDocument; } catch { /* gone */ }
       const now = performance.now();
       if (d && d !== doc && d.body && (ctx.site === 'canvas' ? d.location.origin === location.origin : d.location.pathname.startsWith('/ultra/'))) {
@@ -592,14 +611,15 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         mo.observe(d.body, { subtree: true, childList: true });
         d.addEventListener('scroll', () => { changed = performance.now(); }, { capture: true, passive: true });
       }
-      const built = doc && doc !== f.stale && L.owns(doc.location.pathname, cid) && (ctx.site === 'canvas' ? shown(doc.querySelector('#content, #main')) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
+      const built = doc && (ctx.site !== 'canvas' || doc === d && doc !== f.stale) && L.owns(doc.location.pathname, cid) && (ctx.site === 'canvas' ? shown(doc.querySelector('#content, #main')) : [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown))
         && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
       if (built && now - changed > 300) {
         mo?.disconnect();
         f.slow = false;
         f.ready = true;
         f.stale = null;
-        if (waiting === cid) { wait(''); show(cid); return; }
+        if (waiting === cid && showing !== cid) { show(cid); return; }
+        if (waiting === cid) wait('');
         if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
         return;
       }
@@ -610,7 +630,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
           f.el.src = location.origin + f.url;
         } else {
           f.slow = true;
-          if (waiting === cid) { wait(''); show(cid); } else if (showing === cid) slowFrame(cid, f);
+          if (waiting === cid && showing !== cid) show(cid);
+          else if (showing === cid) { if (waiting === cid) wait(''); slowFrame(cid, f); }
         }
       }
       setTimeout(step, f.slow ? 1000 : 50);
@@ -669,16 +690,18 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   };
   const show = async (cid) => {
     const me = ++showTurn;
-    if (cid === showing) return;
+    if (ctx.site === 'canvas') wait(cid);
+    if (cid === showing) { if (ctx.site === 'canvas') { wait(''); primed = ''; } return; }
     // A picture of what goes under, if one is being taken (the press on a tab starts one), finishes first: taken after the
     // switch, it would be of the wrong page.
     if (shooting) await Promise.race([shooting, new Promise((r) => setTimeout(r, 200))]);
     if (me !== showTurn || (cid && !on)) return;
     const back = !!showing && !cid && (document.activeElement?.localName === 'iframe' || strip?.contains(document.activeElement));
     if (cid) hostIn();
-    if (cid && !frames.has(cid) && !room()) return;
+    if (cid && !frames.has(cid) && !room()) { if (ctx.site === 'canvas') wait(''); return; }
     const f = cid && (frames.get(cid) || open(cid));
-    if (cid && !f) return;
+    if (cid && !f) { if (ctx.site === 'canvas') wait(''); return; }
+    if (ctx.site === 'canvas') wait('');
     showing = cid;
     shownFrom = location.pathname + location.search;
     for (const [k, g] of [...frames]) if (g.away && k !== cid) drop(k, true);
@@ -692,6 +715,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     clearSlow();
     unpicture(true);
     if (f && !f.ready) { if (f.slow) slowFrame(cid, f); else picture(cid, f); }
+    primed = '';
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     ctx.scene();
     globalThis.GZ_PET_WORLD?.refresh();
@@ -712,6 +736,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     x.at = Date.now();
     save();
     const f = frames.get(cid);
+    if (ctx.site === 'canvas' && f?.away) return openAt(cid, L.target(x, P().place));
     if (cid === showing && f?.slow && !f.ready && !f.dirty) { drop(cid, true); showing = ''; }
     reveal(cid === ctx.courseId() && !(ctx.site === 'canvas' && frames.has(cid)) ? '' : cid);
   };
@@ -739,7 +764,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const x = tabs.find((x) => x.cid === from), kept = L.clean([{ cid: from, path: e.data.path, top: e.data.top }], ctx.site)[0];
       if (x && kept && (x.path !== kept.path || x.top !== kept.top)) { x.path = kept.path; x.top = kept.top; save(); }
     }
-    else if (op === 'loaded') { frames.get(from).el.contentWindow.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin); globalThis.GZ_PET_WORLD?.refresh(); }
+    else if (op === 'loaded') {
+      const w = frames.get(from).el.contentWindow;
+      w.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin);
+      if (ctx.site === 'canvas' && from === showing) w.postMessage({ gzCtab: 'loading', cid: waiting }, location.origin);
+      globalThis.GZ_PET_WORLD?.refresh();
+    }
     else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); later(700); }
     else if (op === 'open' && ctx.site === 'canvas' && from === showing && typeof url === 'string' && url.length < 1300) {
       const u = L.safe(...split(url)), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
@@ -806,7 +836,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // ---- closing, pinning, moving ---------------------------------------------------------------------------------
   const shut = (cid, keys) => {
     if (framed) return toTop('shut', { cid, keys: !!keys });
-    const cur = showing || here();
+    const cur = showing || here() || (closedCourse && waiting);
     const r = L.close(tabs, cid);
     tabs = r.tabs;
     snaps.delete(cid);
@@ -918,6 +948,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const mine = tabs.find((x) => x.cid === ctx.courseId());
       tabs = got.map((x) => (mine && x.cid === mine.cid ? { ...x, path: mine.path, top: mine.top } : x));
       for (const cid of [...frames.keys()]) if (!tabs.some((x) => x.cid === cid)) drop(cid);
+      if (ctx.site === 'canvas' && closedCourse && !showing && !waiting && !tabs.length) { route('/courses'); return; }
       pass();
     }
   };
@@ -928,6 +959,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     document[f]('scroll', onScroll, { capture: true, passive: true });
     document[f]('click', onLeave, true);
     document[f]('pointerdown', onLeave, true);
+    if (ctx.site === 'canvas') globalThis[f]('click', onCourseLink);
     globalThis[f]('pagehide', onHide);
     globalThis[f]('resize', onResize);
     try { if (chrome.runtime?.id) chrome.storage.onChanged[yes ? 'addListener' : 'removeListener'](onStore); } catch { /* reloaded */ }
@@ -1009,6 +1041,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       clearSlow();
       showing = '';
       waiting = '';
+      primed = '';
       host?.remove();
       host = null;
       html.removeAttribute('data-gz-ctab-framed');
@@ -1042,6 +1075,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (next <= epoch) return;
     epoch = next;
     snaps.clear();
+    primed = '';
     unpicture(true);
   };
   const hello = async () => {
