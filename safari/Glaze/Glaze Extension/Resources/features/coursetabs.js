@@ -787,6 +787,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
   };
   const onHide = () => { if (on) saveNow(); };
+  let navWatch = null;
   const listen = (yes) => {
     const f = yes ? 'addEventListener' : 'removeEventListener';
     document[f]('scroll', onScroll, { capture: true, passive: true });
@@ -794,6 +795,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     document[f]('pointerdown', onLeave, true);
     globalThis[f]('pagehide', onHide);
     globalThis[f]('resize', lay);
+    // A parent bar can change without any mutation in this course's document.
+    navWatch?.disconnect(); navWatch = null;
+    if (yes && framed) try {
+      navWatch = new MutationObserver(() => bar.place());
+      navWatch.observe(parent.document.documentElement, { attributes: true, attributeFilter: ['data-gz-navbar'] });
+    } catch { /* inaccessible parent: the strip stays above */ }
     try { if (chrome.runtime?.id) chrome.storage.onChanged[yes ? 'addListener' : 'removeListener'](onStore); } catch { /* reloaded */ }
   };
   const start = () => {
