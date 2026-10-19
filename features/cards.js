@@ -95,6 +95,11 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
       if (el.hasAttribute('data-gz-card-preview')) continue;
       if (ultra) prop(el, '--gz-card-banner-h', on && card.condensed ? `${el.querySelector('.course-banner')?.offsetHeight || card.height}px` : '');
       if (!ultra && !el.classList.contains('ic-DashboardCard')) continue;
+      // Canvas retains the native card behind its board copy. Each menu needs its own id for remounting and focus.
+      if (!ultra && el.hasAttribute('data-gz-tile-card')) {
+        const btn = el.querySelector('.gz-cm-btn');
+        if (btn) attr(btn, 'id', `gz-w-cm-${btn.dataset.cid}`);
+      }
       bookmarks(el, key && d.card.icons ? (own?.links ? own.links.map(K.link).filter(Boolean) : d.links[key]) : null);
       pet(el, key && order.get(key) === 0 && card.pet !== 'none' && card.pet);
       if (!ultra) create(el, key && d.card.create && key);
@@ -276,7 +281,9 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     if (dlg.open) dlg.close();
     dlg.remove();
     paint();
-    (e.back?.isConnected ? e.back : document.getElementById(`gz-cm-${ultra ? key.split('/').pop() : key}`))?.focus({ preventScroll: true });
+    const cid = ultra ? key.split('/').pop() : key;
+    const back = e.back?.isConnected ? e.back : [...document.querySelectorAll('.gz-cm-btn')].find((b) => b.dataset.cid === cid && b.getClientRects().length);
+    back?.focus({ preventScroll: true });
     return true;
   };
 

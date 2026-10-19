@@ -372,6 +372,7 @@ BROKER.widgetLayout = {
     const canvas = s.frameId === 0 && (await fromCanvas(s));
     const site = canvas || (ultraPage(s) && (await fromUltra(s)));
     if (!site || (await chrome.storage.sync.get('enabled')).enabled === false) return false;
+    if (m.fill !== undefined && (!canvas || m.fill !== 'cdash')) return false;
     // Course cards: only the page's own site's, Canvas's on its Dashboard, Ultra's on its two boards.
     const courses = m.ops.filter((o) => typeof o?.id === 'string' && o.id.startsWith('course:'));
     return !courses.length || (s.frameId === 0 && (canvas || site === await fromUltra(s)) && courses.every((o) => {

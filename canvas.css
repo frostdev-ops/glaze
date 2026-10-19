@@ -1367,6 +1367,9 @@ html:not([data-gz-enhance-coursemenu]) .gz-cm-btn { display: none; }
    Canvas's own button stays in the card, out of sight, for the menu's "Move or hide" (its popover is placed by it). */
 .ic-DashboardCard:has(> .gz-cm-btn) { position: relative; --gz-cm-top: 8px; --gz-cm-right: 8px; }
 .ic-DashboardCard:has(> .gz-cm-btn) :is(.ic-DashboardCard__header-button, .ic-DashboardCard__header-button-bg) { visibility: hidden; }
+/* Canvas restores focus to its own trigger after the proxied menu closes. Keep that trigger available until focus leaves. */
+.ic-DashboardCard:has(> .gz-cm-btn) .ic-DashboardCard__header-button:is([aria-expanded="true"], :focus) { visibility: visible; }
+.ic-DashboardCard:has(.ic-DashboardCard__header-button:is([aria-expanded="true"], :focus)) > .gz-cm-btn { visibility: hidden; }
 html .ic-DashboardCard > .gz-cm-btn { width: 32px; height: 32px; }
 .ic-DashboardCard > .gz-cm-btn svg { display: none; }
 .ic-DashboardCard > .gz-cm-btn::before { content: ""; width: 4px; height: 18px; background: radial-gradient(circle closest-side, currentColor 85%, transparent) 0 0 / 4px 6px repeat-y; }

@@ -6,7 +6,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const ctx = GZ_CTX, W = GZ_WIDGETS;
   const ultra = ctx.site === 'ultra';
   const ID = ultra ? /^_\d+_\d+$/ : /^\d{1,20}$/;
-  const cards = new Map(), nativeCards = new Map(), mounted = new Set(), watched = new WeakSet();
+  const cards = new Map(), nativeCards = new Map(), canvasEdits = new Map(), mounted = new Set(), watched = new WeakSet();
   let identity = null, notify = () => {}, uid = '', data = {}, prefs = {}, cache = null, L = null, gs = null, gen = 0;
   const get = (area, keys) => new Promise((resolve) => { try { chrome.storage[area].get(keys, (r) => resolve(chrome.runtime.lastError ? null : r)); } catch { resolve(null); } });
   const live = () => { try { return !!chrome.runtime.id && ctx.on(); } catch { return false; } };
@@ -67,11 +67,19 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
         color: COLOR.test(hero?.style.backgroundColor || '') ? hero.style.backgroundColor : '', image: picture(el.querySelector('.ic-DashboardCard__header_image')?.style.backgroundImage) };
     }
     for (const id of new Set([...Object.keys(shown), ...Object.keys(api), ...Object.keys(list)])) {
-      const n = shown[id] || {}, a = api[id] || {}, l = list[id] || {};
-      cards.set(id, { id, name: n.name || a.name || l.name || id, code: n.code || a.course_code || l.code || '', term: n.term || a.term?.name || '',
-        color: n.color || (COLOR.test(l.color || '') ? l.color : ''), image: n.image || '' });
+      const n = shown[id] || {}, a = api[id] || {}, l = list[id] || {}, edited = canvasEdits.get(id) || {};
+      cards.set(id, { id, name: n.name || edited.name || a.name || l.name || id, code: n.code || a.course_code || l.code || '', term: n.term || a.term?.name || '',
+        color: n.color || edited.color || (COLOR.test(l.color || '') ? l.color : ''), image: n.image || '' });
     }
     if (!canvasRows) watch(ctx.canvasCourses(), (rows) => { canvasRows = Array.isArray(rows) ? rows : []; sync(); });
+  };
+  // Menu edits must also reach board cards when Canvas is in list view, where no native card can supply them.
+  const canvasEdit = (id, patch) => {
+    if (ultra || !ID.test(id)) return;
+    const next = { ...canvasEdits.get(id), ...patch };
+    canvasEdits.set(id, next);
+    if (cards.has(id)) cards.set(id, { ...cards.get(id), ...next });
+    render();
   };
   const sync = (changed = notify) => {
     notify = changed;
@@ -117,6 +125,31 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   };
   // A Canvas card as Canvas draws one, marked as a board's (data-gz-tile-card): a link to the course, its picture under
   // its color, its name, code and term. Glaze's own additions to Canvas's cards come to it from their usual passes.
+  // Keep only the action row's static markup. Work on the root too: a cloned subtree retains inline handlers,
+  // and a blocked element must be removed even when it also has an id. Resolve links before checking their course.
+  const copyActions = (row, id) => {
+    if (!row) return null;
+    const copy = row.cloneNode(true);
+    const tags = new Set(['NAV', 'DIV', 'A', 'SPAN', 'I', 'B', 'STRONG', 'SMALL', 'SVG', 'G', 'PATH', 'RECT', 'CIRCLE', 'ELLIPSE', 'LINE', 'POLYLINE', 'POLYGON', 'TITLE']);
+    const attrs = new Set(['class', 'title', 'role', 'aria-label', 'aria-hidden', 'viewbox', 'd', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'width', 'height', 'focusable', 'points', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'x1', 'x2', 'y1', 'y2']);
+    const nodes = [copy];
+    for (let i = 0; i < nodes.length; i++) {
+      const e = nodes[i];
+      if (!tags.has(e.tagName.toUpperCase())) { if (e === copy) return null; e.remove(); continue; }
+      let href = '';
+      if (e.tagName.toUpperCase() === 'A') {
+        try {
+          const u = new URL(e.getAttribute('href') || '', location.origin);
+          if (u.origin === location.origin && (u.pathname === `/courses/${id}` || u.pathname.startsWith(`/courses/${id}/`))) href = u.href;
+        } catch { /* not a course link */ }
+        if (!href) { if (e === copy) return null; e.remove(); continue; }
+      }
+      for (const a of [...e.attributes]) if (!attrs.has(a.name.toLowerCase()) || (/^(fill|stroke)$/i.test(a.name) && /url\s*\(/i.test(a.value))) e.removeAttribute(a.name);
+      if (href) e.setAttribute('href', href);
+      nodes.push(...e.children);
+    }
+    return copy;
+  };
   const fillCanvas = (body, id) => {
     let alive = true;
     const hero = make('div', { className: 'ic-DashboardCard__header_hero' });
@@ -142,9 +175,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       const was = row?.innerHTML || '';
       if (was !== rowFrom) {
         rowFrom = was;
-        const copy = row?.cloneNode(true);
-        for (const e of copy?.querySelectorAll('script, iframe, object, embed, form, [id]') || []) if (e.matches('[id]')) e.removeAttribute('id'); else e.remove();
-        for (const a of copy?.querySelectorAll('a') || []) if (!/^\/courses\/\d+(\/|$)/.test(a.getAttribute('href') || '')) a.remove();
+        const copy = copyActions(row, id);
         if (copy) actions?.replaceWith(copy); else actions?.remove();
         if (copy && !actions) card.append(copy);
         actions = copy || null;
@@ -457,6 +488,6 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
 
   // Canvas: the courses its card view shows now, in its order (an empty list in its list view).
   const shown = () => [...nativeCards.keys()].map((id) => list().find((c) => c.id === id)).filter(Boolean);
-  return { sync, list, shown, title, fill, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
+  return { sync, list, shown, title, fill, canvasEdit, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
 })();
 GZ_COURSE_CARDS;

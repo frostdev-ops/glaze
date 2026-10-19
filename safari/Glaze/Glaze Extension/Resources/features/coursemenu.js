@@ -70,18 +70,36 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
   // -- Canvas: its own nickname and color, in this one menu with the tint and look --
   // Saved in Canvas (the course nickname and color its own card menu saves), so Canvas, its apps and every page show them;
   // the cards on this page take them at once. Canvas's own menu stays for moving or hiding a card.
-  const canvas = !ultra && !moodle;
-  const numOf = (cid) => /\/(\d+)$/.exec(cid || '')?.[1] || '';
-  const csrf = () => { const m = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/); return m ? decodeURIComponent(m[1]) : ''; };
-  const canvasSave = (path, method, body) => fetch(`${location.origin}/api/v1/users/self/${path}`, {
-    method, credentials: 'same-origin', headers: { accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': csrf(), 'x-requested-with': 'XMLHttpRequest' }, ...(body && { body: JSON.stringify(body) }),
-  }).then((r) => (r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(String(r.status)))));
+  const canvas = ctx.site === 'canvas';
+  const numOf = (cid) => {
+    const id = /\/(\d{1,20})$/.exec(cid || '')?.[1];
+    return id && cid === `canvas:${location.origin}/${id}` ? id : '';
+  };
+  const csrf = () => { try { const m = document.cookie.match(/(?:^|;\s*)_csrf_token=([^;]*)/); return m ? decodeURIComponent(m[1]) : ''; } catch { return ''; } };
+  // Serialize each resource across menu instances, so a slow earlier PUT cannot follow a newer pick. A missing or
+  // malformed token is a failed save, never a request without CSRF protection or a redirect to a different endpoint.
+  const writes = new Map();
+  const canvasSave = (path, method, body) => {
+    const next = (writes.get(path) || Promise.resolve()).catch(() => {}).then(() => {
+      const token = csrf();
+      if (!canvas || !token || !(/^(course_nicknames\/\d{1,20}|colors\/course_\d{1,20})$/.test(path))) throw new Error('save');
+      return fetch(`${location.origin}/api/v1/users/self/${path}`, {
+        method, credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': token, 'x-requested-with': 'XMLHttpRequest' }, ...(body && { body: JSON.stringify(body) }),
+      }).then((r) => (r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(String(r.status)))));
+    });
+    writes.set(path, next);
+    const done = () => { if (writes.get(path) === next) writes.delete(path); };
+    next.then(done, done);
+    return next;
+  };
   const cardsOf = (id) => [...document.querySelectorAll('.ic-DashboardCard')].filter((el) => el.querySelector('a[href*="/courses/"]')?.getAttribute('href')?.match(/\/courses\/(\d+)/)?.[1] === id);
-  // Its name and nickname: Canvas's course list has original_name only for a nickname. One saved here since stands.
-  const named = new Map();
-  const namesOf = (id) => (named.has(id) ? Promise.resolve(named.get(id)) : ctx.canvasCourses().then((rows) => {
+  // Keep the current draft and last confirmed value apart, shared by every menu instance for this course.
+  const named = new Map(), colored = new Map();
+  const namesOf = (id) => (named.has(id) ? Promise.resolve(named.get(id).current) : ctx.canvasCourses().then((rows) => {
     const r = (Array.isArray(rows) ? rows : []).find((x) => String(x?.id) === id);
-    return r && typeof r.name === 'string' ? { real: r.original_name || r.name, nick: r.original_name ? r.name : '' } : null;
+    const value = r && typeof r.name === 'string' ? { real: r.original_name || r.name, nick: r.original_name ? r.name : '' } : null;
+    if (value && !named.has(id)) named.set(id, { current: value, saved: value, rev: 0 });
+    return named.get(id)?.current || null;
   }, () => null));
   const paintName = (id, name) => {
     for (const card of cardsOf(id)) {
@@ -91,6 +109,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       if (h) h.title = name;
       card.setAttribute('aria-label', name);
     }
+    globalThis.GZ_COURSE_CARDS?.canvasEdit?.(id, { name });
   };
   const colorOf = (id) => cardsOf(id).map((card) => card.querySelector('.ic-DashboardCard__header_hero')?.style.backgroundColor).find(Boolean) || ctx.courseList()[`canvas:${location.origin}/${id}`]?.color || '';
   const paintColor = (id, color) => {
@@ -100,34 +119,51 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       const name = card.querySelector('.ic-DashboardCard__header-title span');
       if (name?.style.color) name.style.color = color;
     }
+    globalThis.GZ_COURSE_CARDS?.canvasEdit?.(id, { color });
   };
   const canvasNick = (m) => {
     if (!m?.edited || !m.names) return;
     m.edited = false;
     const id = numOf(m.cid), v = m.nick.value.replace(/[\p{Cc}\s]+/gu, ' ').trim(), before = m.names;
     m.nick.value = v;
-    if (v === before.nick) return;
-    m.names = { ...before, nick: v };
+    if (!id || v === before.nick) return;
+    const state = named.get(id) || { current: before, saved: before, rev: 0 };
+    named.set(id, state);
+    const value = { ...before, nick: v }, rev = ++state.rev;
+    state.current = m.names = value;
+    paintName(id, v || before.real);
     canvasSave(`course_nicknames/${id}`, v ? 'PUT' : 'DELETE', v ? { nickname: v } : null).then(() => {
-      named.set(id, m.names); paintName(id, v || before.real);
-      if (menu === m) menuNote('');
+      state.saved = value;
+      if (state.rev === rev && menu === m) menuNote('');
     }, () => {
-      m.names = before;
-      if (menu === m) { m.nick.value = before.nick; menuNote(t('Not saved. Try again in a moment.')); }
+      if (state.rev !== rev) return;
+      state.current = m.names = state.saved;
+      paintName(id, state.saved.nick || state.saved.real);
+      if (menu?.cid === m.cid) {
+        menu.names = state.saved;
+        if (!menu.edited) menu.nick.value = state.saved.nick;
+        menuNote(t('Not saved. Try again in a moment.'));
+      }
     });
   };
-  // A color dragged in the picker is one save, when it rests.
+  // A color dragged in the picker is one save, when it rests. Older answers never repaint a newer draft; a failed
+  // latest save restores the last confirmed color, including a successful earlier pick still pending at the time.
   const canvasColor = (m, hex, soon = false) => {
-    const id = numOf(m.cid);
-    m.color0 ??= colorOf(id);
+    const id = numOf(m?.cid);
+    if (!id || !/^#[0-9a-f]{6}$/i.test(hex)) return;
+    const state = colored.get(id) || { saved: colorOf(id), rev: 0 };
+    colored.set(id, state);
+    const rev = ++state.rev;
     paintColor(id, hex);
-    clearTimeout(m.colorTimer);
-    m.colorTimer = setTimeout(() => {
-      const back = m.color0;
-      m.color0 = undefined;
-      canvasSave(`colors/course_${id}`, 'PUT', { hexcode: hex }).then(() => { if (menu === m) { menuNote(''); paintMenu(m); } }, () => {
-        paintColor(id, back);
-        if (menu === m) { menuNote(t('Not saved. Try again in a moment.')); paintMenu(m); }
+    clearTimeout(state.timer);
+    state.timer = setTimeout(() => {
+      canvasSave(`colors/course_${id}`, 'PUT', { hexcode: hex }).then(() => {
+        state.saved = hex;
+        if (state.rev === rev && menu?.cid === m.cid) { menuNote(''); paintMenu(); }
+      }, () => {
+        if (state.rev !== rev) return;
+        paintColor(id, state.saved);
+        if (menu?.cid === m.cid) { menuNote(t('Not saved. Try again in a moment.')); paintMenu(); }
       });
     }, soon ? 500 : 0);
     if (menu === m) paintMenu(m);
@@ -225,7 +261,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     // The nickname: what the field shows empty is the real name. Saved on Enter, on leaving it, and on closing.
     // Canvas's: as Canvas has it, once its course list says (until then the field waits).
     const nick = make('input', { type: 'text', id: 'gz-cm-nick', className: 'gz-cm-nick', maxLength: GZ_NICK_MAX, placeholder: real, title: real, value: canvas ? '' : ctx.settings().courses.names[cid] || '', disabled: canvas, autocomplete: 'off', spellcheck: false });
-    nick.addEventListener('input', () => { if (menu?.nick === nick) menu.edited = true; });
+    nick.addEventListener('input', (e) => { if ((!canvas || e.isTrusted) && menu?.nick === nick) menu.edited = true; });
     nick.addEventListener('change', () => commitNick());
     const note = make('p', { className: 'gz-cm-note', hidden: true });
     note.setAttribute('role', 'status');
@@ -238,12 +274,12 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       b.setAttribute('aria-label', t(label));
       b.dataset.hex = hex;
       b.style.backgroundColor = hex;
-      b.addEventListener('click', () => (canvas ? canvasColor(menu, hex) : editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList()))));
+      b.addEventListener('click', (e) => { if (canvas) { if (e.isTrusted) canvasColor(menu, hex); } else editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList())); });
       return b;
     });
     const custom = make('input', { type: 'color', className: 'gz-cm-custom' });
     custom.setAttribute('aria-label', t('Colour for {name}', { name }));
-    custom.addEventListener('input', () => { const hex = custom.value; if (canvas) canvasColor(menu, hex, true); else editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList()), true); });
+    custom.addEventListener('input', (e) => { const hex = custom.value; if (canvas) { if (e.isTrusted) canvasColor(menu, hex, true); } else editCourse(`color ${cid}`, (c) => GZ_COURSE_EDIT.color(c, cid, hex, ctx.courseList()), true); });
     custom.addEventListener('change', saveEdits);
     const grid = group('gz-cm-colors', ...sw, custom);
     grid.className = 'gz-cm-grid';
@@ -283,12 +319,17 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     else if (moodle) box.append(note, make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid);
     else {
       // Canvas's own menu, for moving or hiding the card: its button stays in the card, out of sight (canvas.css).
-      const own = btn.closest('.ic-DashboardCard:not([data-gz-tile-card])')?.querySelector('.ic-DashboardCard__header-button');
+      const own = cardsOf(numOf(cid)).find((card) => !card.hasAttribute('data-gz-tile-card'))?.querySelector('.ic-DashboardCard__header-button');
       box.append(make('label', { className: 'gz-cm-cap', htmlFor: 'gz-cm-nick', textContent: t('Nickname') }), nick, note,
         cap(t('Colors'), 'gz-cm-colors'), grid,
         make('label', { className: 'gz-cm-tint' }, tint, t('Tint pages inside this course')), cap(t('Look'), 'gz-cm-look'), lookGrid,
         make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }),
-        ...(own ? [make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Move or hide in Canvas’s menu'), onclick: () => closeMenu(false) && own.click() })] : []));
+        ...(own ? [make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Move or hide in Canvas’s menu'), onclick: () => {
+          if (!closeMenu(false)) return;
+          // A board card proxies its original too; show Canvas's cards so its popover has a visible anchor.
+          if (document.documentElement.hasAttribute('data-gz-course-tiles')) document.querySelector('.gz-course-native')?.click();
+          own.click();
+        } })] : []));
     }
     if (ultra) box.append(make('button', { type: 'button', className: 'gz-cm-more', textContent: t('Card style and bookmarks'), onclick: () => closeMenu(false) && cardUI((m) => m.open(cid)) }));
     document.body.append(box);
@@ -353,7 +394,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     // The popover goes with its card: gone, hidden, or the extra switched off.
     sync: (on) => {
       if (menu && !menu.btn.isConnected) {
-        const again = document.getElementById(`gz-cm-${menu.cid}`); // a card Ultra drew again
+        const again = [...document.querySelectorAll('.gz-cm-btn')].find((b) => b.dataset.cid === menu.cid && b.getClientRects().length); // a visible replacement of the card
         if (again) menu.btn = again; else closeMenu(false, true);
       }
       if (menu && (!on || !menu.btn.getClientRects().length)) closeMenu(false, true);
