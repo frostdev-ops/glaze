@@ -757,7 +757,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const x = tabs.find((x) => x.cid === from), kept = L.clean([{ cid: from, path: e.data.path, top: e.data.top }], ctx.site)[0];
       if (x && kept && (x.path !== kept.path || x.top !== kept.top)) { x.path = kept.path; x.top = kept.top; save(); }
     }
-    else if (op === 'loaded') { frames.get(from).el.contentWindow.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin); globalThis.GZ_PET_WORLD?.refresh(); }
+    else if (op === 'loaded') {
+      const w = frames.get(from).el.contentWindow;
+      w.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin);
+      if (ctx.site === 'canvas' && from === showing) w.postMessage({ gzCtab: 'loading', cid: waiting }, location.origin);
+      globalThis.GZ_PET_WORLD?.refresh();
+    }
     else if (op === 'moved' && from === showing) { globalThis.GZ_PET_WORLD?.refresh(); later(700); }
     else if (op === 'open' && ctx.site === 'canvas' && from === showing && typeof url === 'string' && url.length < 1300) {
       const u = L.safe(...split(url)), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
