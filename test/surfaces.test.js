@@ -61,12 +61,12 @@ test('the editor and popup keep a solid readable ground and apply global depth',
   assert.equal(attrs['data-gz-motion'], 'subtle');
 });
 
-test('the Notes share panel reads preserve role defaults, reject stale answers, and fail closed', async () => {
+test('the Notes share panel reads the Look palette, rejects stale answers, and keeps the last successful paint', async () => {
   const vm = require('node:vm'), source = fs.readFileSync(require.resolve('../sharing/quick.js'), 'utf8');
   const code = source.slice(source.indexOf('  const LOOK_KEYS'), source.indexOf('  const say'));
   const style = {}, attrs = {}, reads = [], sync = { get: () => new Promise((resolve) => reads.push(resolve)) };
   const api = vm.runInNewContext(`let dead = false; ${code}; ({paintLook, stop: () => { dead = true; }})`, {
-    ...G, GZ_SURFACES: require('../lib/surfaces.js'), Date, setTimeout, clearTimeout,
+    ...G, GZ_FONTS: require('../lib/fonts.js'), GZ_COLOR: require('../lib/color.js'), Date, setTimeout, clearTimeout,
     chrome: { runtime: { id: 'glaze' }, storage: { sync, onChanged: { addListener() {} } } }, matchMedia: () => ({ matches: false, addEventListener() {} }),
     document: { documentElement: { style: { setProperty: (k, v) => { style[k] = v; }, removeProperty: (k) => { delete style[k]; } }, setAttribute: (k, v) => { attrs[k] = v; } } },
   });
@@ -74,7 +74,7 @@ test('the Notes share panel reads preserve role defaults, reject stale answers, 
   reads[0]({ look: { radius: 24 } }); await new Promise(setImmediate);
   assert.equal(style['--gz-radius'], '4px'); assert.equal(style['--gz-surface-color'], '#334455');
   assert.equal(style['--gz-surface-border'], '0%'); assert.equal(attrs['data-gz-depth'], '2');
-  assert.equal(style['--gz-surface'], undefined, 'the original standalone role palette remains the fallback');
+  assert.equal(style['--gz-surface'], G.GZ_DEFAULTS.colors['--gz-surface'], 'the selected Look supplies the role palette');
   sync.get = async () => { throw Error('failed'); }; await api.paintLook(); assert.equal(style['--gz-radius'], '4px');
   sync.get = async () => ({ look: { radius: 0 } }); api.stop(); await api.paintLook(); assert.equal(style['--gz-radius'], '4px');
 });

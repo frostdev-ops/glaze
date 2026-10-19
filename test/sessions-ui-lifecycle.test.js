@@ -7,7 +7,8 @@ const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(setIm
 const page = async () => {
   const nodes = new Map(), observers = [], messages = [], ports = [];
   class Element {
-    constructor() {
+    constructor(tag = '') {
+      this.tag = tag;
       this.hidden = false; this.value = ''; this.children = []; this.events = {};
       const classes = new Set();
       this.classList = { contains: (k) => classes.has(k), toggle: (k, on) => on ? classes.add(k) : classes.delete(k) };
@@ -15,7 +16,10 @@ const page = async () => {
     addEventListener(k, f) { this.events[k] = f; }
     append(...children) { this.children.push(...children); }
     replaceChildren(...children) { this.children = children; }
-    querySelectorAll() { return []; }
+    querySelectorAll(selector) {
+      const all = this.children.flatMap((e) => [e, ...(e.querySelectorAll?.('*') || [])]);
+      return selector === '*' ? all : all.filter((e) => e.tag === 'input' && (selector !== 'input:checked' || e.checked));
+    }
   }
   const node = (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };
   node('#panel-sharing').hidden = node('#panel-backup').hidden = true;
@@ -23,7 +27,7 @@ const page = async () => {
   vm.runInNewContext(fs.readFileSync(require.resolve('../lib/sessions-ui.js'), 'utf8'), {
     URL, URLSearchParams, location: { search: '' }, navigator: {}, addEventListener() {},
     GZ_I18N: { t: (k) => k, ui: () => 'en' }, GZ_NOTES: { KEY: /^notesIdx:/ },
-    document: { querySelector: node, createElement: () => new Element() },
+    document: { querySelector: node, createElement: (tag) => new Element(tag) },
     MutationObserver: class {
       constructor(fn) { this.fn = fn; }
       observe(target, options) { observers.push({ target, options, fn: this.fn }); }
@@ -31,7 +35,7 @@ const page = async () => {
     chrome: { runtime: {
       sendMessage: async (m) => { messages.push(m.op); return structuredClone(state); },
       connect: () => {
-        const p = { closed: false, onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, disconnect() { this.closed = true; } };
+        const p = { closed: false, onMessage: { addListener(f) { p.notify = f; } }, onDisconnect: { addListener() {} }, disconnect() { this.closed = true; } };
         ports.push(p); return p;
       },
     } },
@@ -41,7 +45,8 @@ const page = async () => {
     for (const o of observers) if (o.target === node('#panel-sharing') && o.options.attributeFilter.includes(attribute)) o.fn();
     await settle();
   };
-  return { panel: node('#panel-sharing'), messages, ports, change };
+  node('#ss-kind').value = 'notes';
+  return { panel: node('#panel-sharing'), sources: node('#ss-sources'), state, messages, ports, change };
 };
 
 test('Settings sessions connect only while the Sharing panel is visible, including search filtering', async () => {
@@ -61,4 +66,20 @@ test('Settings sessions connect only while the Sharing panel is visible, includi
   assert.equal(p.ports.length, 2);
   p.panel.hidden = true; await p.change('hidden');
   assert.equal(p.ports[1].closed, true, 'leaving the Sharing tab disconnects its port');
+});
+
+test('Settings refreshes Notes sources after the empty state and preserves a selection during live updates', async () => {
+  const p = await page();
+  p.panel.hidden = false; await p.change('hidden');
+  assert.equal(p.sources.querySelectorAll('input').length, 0);
+  p.state.sources = [{ kind: 'notes', key: 'notesIdx:https://school.example/5', ids: ['first'], title: 'First note' }];
+  p.ports[0].notify(); await settle();
+  assert.equal(p.sources.querySelectorAll('input').length, 1, 'the former empty state updates without reloading Settings');
+  const first = p.sources.querySelectorAll('input')[0]; first.checked = true;
+  p.ports[0].notify(); await settle();
+  assert.equal(p.sources.querySelectorAll('input')[0], first, 'unchanged sources keep their controls');
+  p.state.sources.push({ kind: 'notes', key: 'notesIdx:https://school.example/5', ids: ['second'], title: 'Second note' });
+  p.ports[0].notify(); await settle();
+  assert.equal(p.sources.querySelectorAll('input').length, 2);
+  assert.equal(p.sources.querySelectorAll('input:checked')[0].source.ids[0], 'first', 'the selection survives an updated source list');
 });

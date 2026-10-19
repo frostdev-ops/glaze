@@ -19,7 +19,7 @@
 svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 button { font: inherit; color: inherit; background: transparent; border: 0; margin: 0; padding: 0; cursor: pointer; }
 a { color: inherit; text-decoration: none; }
-.brand[hidden], .out[hidden] { display: none; }
+.brand[hidden], .out[hidden], .toggle[hidden], .pin[hidden] { display: none; }
 :focus-visible { outline: 2px solid var(--gz-accent-hi, #6fdcff); outline-offset: 2px; }
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -50,6 +50,10 @@ a { color: inherit; text-decoration: none; }
 .brand { display: flex; align-items: center; gap: 12px; height: var(--item); padding: 0 9px; margin-bottom: 14px; border-radius: 12px; }
 .brand .logo { flex: none; width: 30px; height: 30px; stroke: none; }
 .brand img.logo { object-fit: contain; border-radius: 8px; }
+/* The student's own logo keeps its shape: as wide as the open rail or a fifth of the top bar, a square in the icons rail. */
+.brand img.own { width: auto; max-width: calc(var(--open) - 2 * var(--gutter) - 20px); height: 34px; border-radius: 6px; }
+.rail:not([data-open]) .brand img.own { width: 30px; max-width: 30px; height: 30px; }
+.topbar .brand img.own { max-width: 100%; }
 .brand .label { display: flex; flex-direction: column; line-height: 1.15; }
 .brand b { font-size: 15px; font-weight: 700; }
 .brand small, .account small { font-size: 12px; color: var(--gz-ink-muted, #8fa8c0); overflow: hidden; text-overflow: ellipsis; }
@@ -127,7 +131,7 @@ a { color: inherit; text-decoration: none; }
   backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 :host([data-style="embed"]) .topbar { border-radius: 0; border-width: 0 0 1px; }
-.topbar .brand { flex: none; margin: 0; padding: 0 8px; }
+.topbar .brand { flex: 0 1 auto; min-width: 0; max-width: 20%; margin: 0; padding: 0 8px; }
 .topbar .label, .chip .label, .row .label { opacity: 1; transform: none; }
 .tlist { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; }
 .titems { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
@@ -151,8 +155,8 @@ a { color: inherit; text-decoration: none; }
 .tacc .avatar { width: 32px; height: 32px; margin: 0; font-size: 12px; }
 .tacc svg { width: 24px; height: 24px; }
 .tacc[hidden] { display: none; }
-.tip[data-below] { transform: translate(-50%, -4px); }
-.tip[data-below][data-on] { transform: translate(-50%, 0); }
+.tip[data-below], :host([dir="rtl"]) .tip[data-below] { transform: translate(-50%, -4px); }
+.tip[data-below][data-on], :host([dir="rtl"]) .tip[data-below][data-on] { transform: translate(-50%, 0); }
 
 /* ---- course tabs: in the rail, along the top bar, in the phone's sheet ---- */
 .ctab { position: relative; display: flex; align-items: center; min-width: 0; flex: none; }

@@ -15,6 +15,8 @@ var GZ_EDITOR = (() => {
     }
     return [...touched];
   };
+  // Sections that moved to another tab: their old addresses still open them.
+  const MOVED = { 'blackboard/tabs': 'navigation/tabs' };
   const mount = ({ doc = document, onRoute = () => {} } = {}) => {
     const tabs = [...doc.querySelectorAll('[data-editor-tab]')], panels = [...doc.querySelectorAll('[data-editor-panel]')];
     const sections = [...doc.querySelectorAll('[data-editor-section]')], routes = new Map(sections.map((s) => [s.dataset.editorSection, s]));
@@ -23,7 +25,7 @@ var GZ_EDITOR = (() => {
     let route = '', finding = false, searchScroll = null;
     const resolve = (hash) => {
       const value = hash.replace(/^#/, '');
-      return routes.has(value) ? value : legacy.get(value) || first(value) || first('look');
+      return routes.has(value) ? value : MOVED[value] && routes.has(MOVED[value]) ? MOVED[value] : legacy.get(value) || first(value) || first('look');
     };
     const show = (next, { scroll = false, focus = false, remember = false } = {}) => {
       route = resolve(next); const tab = route.split('/')[0];

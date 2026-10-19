@@ -7,11 +7,12 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
   if (typeof GZ_SPEC === 'undefined' && typeof module === 'undefined') return null;
 
   // Its settings (storage.sync `tabs`; the switch is enhance.tabs), added to GZ_SPEC from here so the first content script
-  // carries only the switch. at: the strip above the course's top bar, between its two rows, or below it. cap: how many
+  // carries only the switch. at: the strip above the course's top bar, between its two rows, or below it; nav: no strip,
+  // only Glaze's own navigation's tabs (the strip's `above` where that bar doesn't hold them). cap: how many
   // tabs before the least recently used unpinned one closes. place: a tab goes back to where it was. The rest is the tab
   // buttons' look; color: none, a tint of each course's colour, or more of it.
   const SPEC = {
-    at: ['above', ['above', 'between', 'below']], cap: [8, [2, 20]], place: [true, 'bool'],
+    at: ['above', ['above', 'between', 'below', 'nav']], cap: [8, [2, 20]], place: [true, 'bool'],
     shape: ['tab', ['tab', 'rounded', 'pill', 'square']], size: ['medium', ['small', 'medium', 'large']], width: [180, [96, 320]],
     label: ['short', ['short', 'name', 'code']], mark: ['dot', ['dot', 'icon', 'none']], color: ['off', ['off', 'tint', 'theme']],
   };

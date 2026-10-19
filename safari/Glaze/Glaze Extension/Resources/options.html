@@ -98,7 +98,7 @@
   /* Glaze navigation (the Navigation tab; lib/editor-navbar.js draws the items). Choice cards with a picture of each layout. */
   .nb-master { padding: .85rem 1rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 5 / 6); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
   .nb-body { display: grid; gap: 1.4rem; margin-top: 1.1rem; }
-  .nb-body[hidden] { display: none; }
+  .nb-body[hidden], .nb-group[hidden] { display: none; }
   .nb-group { display: grid; gap: .6rem; }
   .nb-group > h3, #navbar-items > h3 { margin: 0; font-size: 13px; letter-spacing: .02em; color: var(--gz-ink-muted); }
   .seg.nb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 220px)); gap: .75rem; padding: 0; border: 0; border-radius: 0; background: none; }
@@ -223,8 +223,9 @@
   #ss-status:empty, #nb-status:empty { display: none; }
   .ss-status { position: sticky; top: 0; z-index: 1; padding: 0.4rem 0; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); font-size: 13px; color: var(--gz-ink); }
   .ss-sources { display: grid; gap: 0.35rem; max-height: 16rem; overflow: auto; padding: 0.2rem; }
-  .ss-session { display: grid; gap: 0.35rem; padding: 0.75rem 0; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
-  .ss-session:first-child { border-top: 0; padding-top: 0; }
+  .ss-session { display: grid; gap: 0.5rem; margin-top: 0.6rem; padding: 0.75rem; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); overflow-wrap: anywhere; }
+  .ss-session:first-child { margin-top: 0; }
+  .ss-sources .check > .desc { grid-column: 2; }
   .ss-session h4, .ss-session ul, .ss-session h5, .ss-read p { margin: 0; }
   .ss-session ul { padding-inline-start: 1.2rem; font-size: 13px; }
   .ss-read { display: grid; gap: 0.3rem; padding: 0.6rem; border-radius: calc(var(--gz-radius, 12px) / 2); background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); }
@@ -615,7 +616,7 @@
             <span class="desc">Put stickers on any course page from the command palette (Ctrl+K): Place stickers on this page. They are kept on this computer, and never shown on a quiz you are taking.</span></label>
         </div>
 </section></div>
-<div id="panel-navigation" role="tabpanel" aria-labelledby="tab-navigation" data-editor-panel="navigation" hidden><nav class="section-links" aria-label="Sections"><a href="#navigation/bar" data-editor-alias>Glaze navigation</a><a href="#navigation/items" data-editor-alias>Navigation items</a></nav>
+<div id="panel-navigation" role="tabpanel" aria-labelledby="tab-navigation" data-editor-panel="navigation" hidden><nav class="section-links" aria-label="Sections"><a href="#navigation/bar" data-editor-alias>Glaze navigation</a><a href="#navigation/items" data-editor-alias>Navigation items</a><a href="#navigation/tabs" data-editor-alias>Course tabs</a></nav>
 <section id="navbar" data-editor-section="navigation/bar" data-sites="Blackboard Ultra" aria-labelledby="heading-navigation-bar">
 <p class="section-path" data-editor-breadcrumb><a href="#navigation/bar" data-editor-alias>Glaze navigation</a></p><div class="section-heading"><h2 id="heading-navigation-bar">Glaze navigation</h2><button type="button" class="section-reset" data-reset-section="navigation/bar">Reset section</button></div>
 <p class="desc section-note">Glaze's own navigation, the same in every Look, in place of the site's.</p><p class="site-scope" translate="no">Blackboard Ultra</p>
@@ -650,16 +651,19 @@
 <p class="desc">The navigation stays with you in a course, its tabs and anything opened over it. Give the course more room there with icons or a top bar, or hide it and use the course's own Home button.</p></div>
 <div class="nb-group"><h3>Course tabs</h3>
 <label class="check"><input type="checkbox" data-key="navbar.tabs"><span>Show course tabs in the navigation</span>
-          <span class="desc">The courses you open sit in the navigation instead of a strip above the page. Click one to switch; the middle button or Delete closes it, and P pins it.</span></label>
-<a href="#blackboard/tabs" data-editor-alias>Course tab settings</a></div>
+          <span class="desc">The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.</span></label>
+<a href="#navigation/tabs" data-editor-alias>Course tab settings</a></div>
 <div class="nb-group"><h3 id="nbar-logo-head">Details</h3>
 <label class="check"><input type="checkbox" data-key="navbar.badges"><span>Show unread counts</span></label>
 <div class="field wide"><span id="nbar-logo-label">Logo</span>
 <div class="seg" role="radiogroup" aria-labelledby="nbar-logo-label">
 <label><input type="radio" name="navbar.brand" value="glaze"><span translate="no">Glaze</span></label>
 <label><input type="radio" name="navbar.brand" value="school">School logo</label>
+<label><input type="radio" name="navbar.brand" value="custom">Your logo</label>
 <label><input type="radio" name="navbar.brand" value="none">No logo</label>
-</div></div></div>
+</div></div>
+<div class="row"><button type="button" id="nbar-logo-pick">Choose a logo</button><input id="nbar-logo-file" data-setting-owner="nav.li" type="file" accept="image/*" hidden><span id="nbar-logo-note" class="desc"></span></div>
+<p class="desc">Your logo stays on this device. A Look shared from here carries the Glaze logo in its place.</p></div>
 </div>
 </section>
 <section id="navbar-items" data-editor-section="navigation/items" data-sites="Blackboard Ultra" aria-labelledby="heading-navigation-items">
@@ -679,8 +683,59 @@
 </form>
 <p id="nbar-status" class="desc" role="status" aria-live="polite"></p>
 </section>
+<section id="tabs" data-editor-section="navigation/tabs" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-navigation-tabs">
+<p class="section-path" data-editor-breadcrumb><a href="#navigation/tabs" data-editor-alias>Course tabs</a></p><div class="section-heading"><h2 id="heading-navigation-tabs">Course tabs</h2><button type="button" class="section-reset" data-reset-section="navigation/tabs">Reset section</button></div>
+<p class="desc section-note">Keep your open Canvas and Blackboard courses in a tab strip.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
+<p class="desc">On Canvas and Blackboard Ultra, each course you open gets a tab. Pick a tab to return to its live page, including an open test or assignment. Up to four extra course pages stay live; edited pages stay until you close them.</p>
+<label class="check"><input type="checkbox" data-key="enhance.tabs"><span>Course tabs</span>
+          <span class="desc">Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.</span></label>
+<div class="field wide"><span>Where</span>
+          <div class="seg wrap" role="radiogroup" aria-label="Where the tabs go">
+            <label><input type="radio" name="tabs.at" value="above">Above the course's bar</label>
+            <label><input type="radio" name="tabs.at" value="between">Between its rows</label>
+            <label><input type="radio" name="tabs.at" value="below">Below it</label>
+            <label><input type="radio" name="tabs.at" value="nav">Only in the navigation</label>
+          </div></div>
+<p class="desc" data-tabs-nav-note>Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.</p>
+<label class="field"><span>Most tabs</span><input type="range" data-key="tabs.cap" min="2" max="20" step="1" aria-describedby="tabs-cap-note"><output data-for="tabs.cap"></output></label>
+<p class="desc" id="tabs-cap-note">With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.</p>
+<label class="check"><input type="checkbox" data-key="tabs.place"><span>Go back to where you were</span>
+          <span class="desc">A tab opens its course at the page and scroll you left it at. Off: the Canvas course home or Blackboard course content. Canvas has one header row, so Between its rows places tabs below the breadcrumbs.</span></label>
+<div class="group">
+          <h3>Tab buttons</h3>
+          <div class="field wide"><span>Shape</span>
+            <div class="seg wrap" role="radiogroup" aria-label="Tab shape">
+              <label><input type="radio" name="tabs.shape" value="tab">Tab</label>
+              <label><input type="radio" name="tabs.shape" value="rounded">Rounded</label>
+              <label><input type="radio" name="tabs.shape" value="pill">Pill</label>
+              <label><input type="radio" name="tabs.shape" value="square">Square</label>
+            </div></div>
+          <div class="field wide"><span>Size</span>
+            <div class="seg" role="radiogroup" aria-label="Tab size">
+              <label><input type="radio" name="tabs.size" value="small">Small</label>
+              <label><input type="radio" name="tabs.size" value="medium">Medium</label>
+              <label><input type="radio" name="tabs.size" value="large">Large</label>
+            </div></div>
+          <label class="field"><span>Widest tab</span><input type="range" data-key="tabs.width" min="96" max="320" step="4"><output data-for="tabs.width" data-format="px"></output></label>
+          <label class="field"><span>Name</span><select data-key="tabs.label"><option value="short">Auto short name</option><option value="name">Course name</option><option value="code">Course code</option></select></label>
+          <div class="field wide"><span>Marker</span>
+            <div class="seg" role="radiogroup" aria-label="Tab marker">
+              <label><input type="radio" name="tabs.mark" value="dot">Colour dot</label>
+              <label><input type="radio" name="tabs.mark" value="icon">Icon</label>
+              <label><input type="radio" name="tabs.mark" value="none">None</label>
+            </div></div>
+          <div class="field wide"><span>Course colour</span>
+            <div class="seg" role="radiogroup" aria-label="Course colour on tabs">
+              <label><input type="radio" name="tabs.color" value="off">Plain</label>
+              <label><input type="radio" name="tabs.color" value="tint">Tint</label>
+              <label><input type="radio" name="tabs.color" value="theme">Strong</label>
+            </div></div>
+          <p class="desc">Each course's colour and nickname are the ones under Courses and in a course card's menu.</p>
+        </div>
+<p class="desc">Switching tabs shows a still copy of the course as you last saw it at once, then Blackboard's live page fades in. The copies stay in memory and are never written to disk; they go when the browser closes, when you turn the tabs or Glaze off, or when someone else signs in. Glaze never opens or loads a course in the background.</p>
+</section>
 </div>
-<div id="panel-blackboard" role="tabpanel" aria-labelledby="tab-blackboard" data-editor-panel="blackboard" hidden><nav class="section-links" aria-label="Sections"><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a><a href="#blackboard/dashboard" data-editor-alias>Dashboard</a><a href="#blackboard/tabs" data-editor-alias>Course tabs</a><a href="#blackboard/folders" data-editor-alias>Hidden folders</a><a href="#blackboard/declutter" data-editor-alias>Declutter</a></nav>
+<div id="panel-blackboard" role="tabpanel" aria-labelledby="tab-blackboard" data-editor-panel="blackboard" hidden><nav class="section-links" aria-label="Sections"><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a><a href="#blackboard/dashboard" data-editor-alias>Dashboard</a><a href="#blackboard/folders" data-editor-alias>Hidden folders</a><a href="#blackboard/declutter" data-editor-alias>Declutter</a></nav>
 <section id="bb-navigation" data-editor-section="blackboard/nav" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-nav">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/nav" data-editor-alias>Blackboard navigation</a></p><div class="section-heading"><h2 id="heading-blackboard-nav">Blackboard navigation</h2></div>
 <p class="desc section-note">Arrange the rail, its labels, branding, links and widgets.</p><p class="site-scope" translate="no">Blackboard Ultra</p>
@@ -733,55 +788,6 @@
 <label class="check"><input type="checkbox" data-key="widgets.land"><span>Open Blackboard on the dashboard</span>
             <span class="desc">Off by default. When Blackboard Ultra opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></label>
 <a href="#study/widgets" data-editor-alias>Notes and widgets</a>
-</section>
-<section id="tabs" data-editor-section="blackboard/tabs" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-blackboard-tabs">
-<p class="section-path" data-editor-breadcrumb><a href="#blackboard/tabs" data-editor-alias>Course tabs</a></p><div class="section-heading"><h2 id="heading-blackboard-tabs">Course tabs</h2><button type="button" class="section-reset" data-reset-section="blackboard/tabs">Reset section</button></div>
-<p class="desc section-note">Keep your open Canvas and Blackboard courses in a tab strip.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
-<p class="desc">On Canvas and Blackboard Ultra, each course you open gets a tab. Pick a tab to return to its live page, including an open test or assignment. Up to four extra course pages stay live; edited pages stay until you close them.</p>
-<label class="check"><input type="checkbox" data-key="enhance.tabs"><span>Course tabs</span>
-          <span class="desc">Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.</span></label>
-<div class="field wide"><span>Where</span>
-          <div class="seg wrap" role="radiogroup" aria-label="Where the tabs go">
-            <label><input type="radio" name="tabs.at" value="above">Above the course's bar</label>
-            <label><input type="radio" name="tabs.at" value="between">Between its rows</label>
-            <label><input type="radio" name="tabs.at" value="below">Below it</label>
-          </div></div>
-<label class="field"><span>Most tabs</span><input type="range" data-key="tabs.cap" min="2" max="20" step="1" aria-describedby="tabs-cap-note"><output data-for="tabs.cap"></output></label>
-<p class="desc" id="tabs-cap-note">With more, the tab you used longest ago closes, and the strip says which. Pinned tabs never close on their own.</p>
-<label class="check"><input type="checkbox" data-key="tabs.place"><span>Go back to where you were</span>
-          <span class="desc">A tab opens its course at the page and scroll you left it at. Off: the Canvas course home or Blackboard course content. Canvas has one header row, so Between its rows places tabs below the breadcrumbs.</span></label>
-<div class="group">
-          <h3>Tab buttons</h3>
-          <div class="field wide"><span>Shape</span>
-            <div class="seg wrap" role="radiogroup" aria-label="Tab shape">
-              <label><input type="radio" name="tabs.shape" value="tab">Tab</label>
-              <label><input type="radio" name="tabs.shape" value="rounded">Rounded</label>
-              <label><input type="radio" name="tabs.shape" value="pill">Pill</label>
-              <label><input type="radio" name="tabs.shape" value="square">Square</label>
-            </div></div>
-          <div class="field wide"><span>Size</span>
-            <div class="seg" role="radiogroup" aria-label="Tab size">
-              <label><input type="radio" name="tabs.size" value="small">Small</label>
-              <label><input type="radio" name="tabs.size" value="medium">Medium</label>
-              <label><input type="radio" name="tabs.size" value="large">Large</label>
-            </div></div>
-          <label class="field"><span>Widest tab</span><input type="range" data-key="tabs.width" min="96" max="320" step="4"><output data-for="tabs.width" data-format="px"></output></label>
-          <label class="field"><span>Name</span><select data-key="tabs.label"><option value="short">Auto short name</option><option value="name">Course name</option><option value="code">Course code</option></select></label>
-          <div class="field wide"><span>Marker</span>
-            <div class="seg" role="radiogroup" aria-label="Tab marker">
-              <label><input type="radio" name="tabs.mark" value="dot">Colour dot</label>
-              <label><input type="radio" name="tabs.mark" value="icon">Icon</label>
-              <label><input type="radio" name="tabs.mark" value="none">None</label>
-            </div></div>
-          <div class="field wide"><span>Course colour</span>
-            <div class="seg" role="radiogroup" aria-label="Course colour on tabs">
-              <label><input type="radio" name="tabs.color" value="off">Plain</label>
-              <label><input type="radio" name="tabs.color" value="tint">Tint</label>
-              <label><input type="radio" name="tabs.color" value="theme">Strong</label>
-            </div></div>
-          <p class="desc">Each course's colour and nickname are the ones under Courses and in a course card's menu.</p>
-        </div>
-<p class="desc">Switching tabs shows a still copy of the course as you last saw it at once, then Blackboard's live page fades in. The copies stay in memory and are never written to disk; they go when the browser closes, when you turn the tabs or Glaze off, or when someone else signs in. Glaze never opens or loads a course in the background.</p>
 </section>
 <section id="bb-folders" data-editor-section="blackboard/folders" data-sites="Blackboard Ultra" aria-labelledby="heading-blackboard-folders">
 <p class="section-path" data-editor-breadcrumb><a href="#blackboard/folders" data-editor-alias>Hidden folders</a></p><div class="section-heading"><h2 id="heading-blackboard-folders">Hidden folders</h2><button type="button" class="section-reset" data-reset-section="blackboard/folders">Reset section</button></div>

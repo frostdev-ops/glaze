@@ -51,7 +51,7 @@ test('Canvas strip wraps above or below the single breadcrumb row, also outside 
   for (const at of ['above', 'between', 'below']) {
     const calls = [], bar = { prepend: (e) => calls.push(['before', e]), append: (e) => calls.push(['after', e]) }, strip = {};
     const home = vm.runInNewContext(part('  const home = ', '  let clearHeader = ') + '\nhome;', {
-      here: () => undefined, loaded: true, tabs: [{}], ctx: { site: 'canvas' }, P: () => ({ at }), courseBar: () => bar, strip,
+      here: () => undefined, loaded: true, tabs: [{}], ctx: { site: 'canvas' }, P: () => ({ at }), at: () => at, courseBar: () => bar, strip,
       document: { getElementById: () => null }, spot: (at, ok, put, clear) => ({ at, ok, put, clear }),
     });
     const result = home(); result.put();

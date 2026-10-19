@@ -115,7 +115,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // { at, ok (already there), put } or null (nowhere: hidden).
   const spot = (at, ok, put, clear = null) => ({ at, ok: !!ok, put, clear });
   const home = () => {
-    const a = P().at;
+    const a = at();
     if (ctx.site === 'canvas') {
       if (!here() && (!loaded || !tabs.length)) return null;
       const bar = courseBar(), body = document.getElementById('main') || document.getElementById('content');
@@ -169,8 +169,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     hadClear = !!header?.hasAttribute('data-gz-keep-clear');
     if (header && !hadClear) header.setAttribute('data-gz-keep-clear', '');
   };
-  // Glaze's own navigation bar can hold the tabs instead of the strip (features/navbar.js, data-gz-navbar's word `tabs`).
-  const hosted = () => !framed && !preview && (html.getAttribute('data-gz-navbar') || '').split(' ').includes('tabs');
+  // Glaze's own navigation bar holds the tabs too (features/navbar.js, data-gz-navbar's word `tabs`). At 'nav' they are only
+  // there: no strip, in a tab's own frame either (the page around it has the bar). Where no bar holds them, 'nav' is 'above'.
+  const navHolds = () => { try { return ((framed ? parent.document : document).documentElement.getAttribute('data-gz-navbar') || '').split(' ').includes('tabs'); } catch { return false; } };
+  const at = () => (P().at !== 'nav' ? P().at : navHolds() ? 'nav' : 'above');
+  const hosted = () => at() === 'nav';
   const place = () => {
     if (!on || !strip) return;
     if (hosted()) { keepClear(null); strip.remove(); return; }
@@ -209,7 +212,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // The first paint's reservation (extras.css, set by content-ultra.js from this tab's sessionStorage before this file is in):
   // the strip's place and size, and whether pages outside a course show it.
   const flag = () => {
-    const v = `${P().at} ${P().size}${loaded && tabs.length ? ' page' : ''}`;
+    const a = at(), v = a === 'nav' ? a : `${a} ${P().size}${loaded && tabs.length ? ' page' : ''}`;
     try { if (sessionStorage.getItem('gz-ctabs') !== v) sessionStorage.setItem('gz-ctabs', v); } catch { /* blocked */ }
     if (html.getAttribute('data-gz-ctabs') !== v) html.setAttribute('data-gz-ctabs', v);
   };
@@ -1069,7 +1072,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     move: (cid, to) => { if (on && tabs.some((x) => x.cid === cid) && Number.isInteger(to)) moveTab(cid, to); },
     // Back to the page under the tabs (a frame was showing), as picking the page's own item would.
     leave: () => { if (on && showing) show(''); },
-    place,
+    // The bar began or stopped holding the tabs: the strip and its first-paint word follow.
+    place: () => { if (on) flag(); place(); },
   };
   return { sync, held, petSurface, bar, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();

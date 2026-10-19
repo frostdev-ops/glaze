@@ -142,7 +142,7 @@ test('where the bar is: the placement, the course state, the style and the room 
   assert.deepEqual(L1({ course: 'icons' }, { width: 1440, course: true }), { place: 'rail', open: false, style: 'float', tabs: true, left: 96, top: 0, words: 'rail icons float tabs' });
   assert.equal(L1({ course: 'icons' }, { width: 1440, course: true, rail: 'open' }).open, false, 'icons inside a course whatever the pin');
   assert.equal(L1({ course: 'top' }, { course: true }).place, 'top');
-  assert.deepEqual(L1({ course: 'hide' }, { course: true }), { place: 'none', open: false, style: 'float', tabs: true, left: 0, top: 0, words: 'none float tabs' });
+  assert.deepEqual(L1({ course: 'hide' }, { course: true }), { place: 'none', open: false, style: 'float', tabs: false, left: 0, top: 0, words: 'none float' });
   assert.equal(L1({ course: 'hide' }, { course: false }).place, 'rail', 'only inside a course');
   assert.equal(L1({ tabs: true }, { tabs: false }).words, 'rail auto float', 'no course tabs to hold');
   assert.deepEqual([L1({}, { width: 800 }).left, L1({ place: 'top' }, { width: 800 }).top], [0, 0], 'a phone keeps no side or top room');
@@ -153,7 +153,7 @@ test('where the bar is: the placement, the course state, the style and the room 
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left', 272], ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left', 248]]) assert.ok(css.includes(`${rule}: ${px}px; }`), rule);
   for (const rule of ['#main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }', '#main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }',
     '.inner-wrap > section.course { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
-    '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-navbar~="tabs"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
+    '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
 });
 
 test("Ultra's first paint words the bar as the model does, for each setting, in and out of a course", () => {
@@ -265,14 +265,56 @@ test("the editor lists every item where the bar puts it, hidden ones too, with t
   assert.equal(gs[2].items[0].icon, 'star');
   assert.equal(gs[2].items[1].own, true, "the student's own link can be removed here");
   assert.equal(gs.flatMap((g) => g.items).filter((i) => i.tab)[0].id, 'calendar');
+  assert.equal(E.rows({ glaze: ['todo'] }, { names: (id) => id === 'glaze:todo' ? 'Tareas' : id }).flatMap((g) => g.items).find((i) => i.id === 'glaze:todo').name, 'Tareas');
   assert.match(read('options.html'), /<script src="lib\/navbar\.js"><\/script>\s*<script src="lib\/editor-navbar\.js"><\/script>/);
 });
 
-test('course tabs move into the bar when it holds them, and their strip steps aside', () => {
+test('course tabs show in the bar when it holds them, and at "only in the navigation" their strip steps aside', () => {
   const src = read('features/coursetabs.js');
-  assert.match(src, /const hosted = \(\) => !framed && !preview && \(html\.getAttribute\('data-gz-navbar'\) \|\| ''\)\.split\(' '\)\.includes\('tabs'\);/);
+  assert.deepEqual(require('../lib/coursetabs.js') && require('../defaults.js').GZ_SPEC.tabs.at, ['above', ['above', 'between', 'below', 'nav']]);
+  assert.match(src, /\(framed \? parent\.document : document\)\.documentElement\.getAttribute\('data-gz-navbar'\)/, "a tab's frame asks the page around it");
+  assert.match(src, /const at = \(\) => \(P\(\)\.at !== 'nav' \? P\(\)\.at : navHolds\(\) \? 'nav' : 'above'\);/, "'nav' is the strip's 'above' where no bar holds the tabs");
+  assert.match(src, /const hosted = \(\) => at\(\) === 'nav';/);
   assert.match(src, /if \(hosted\(\)\) \{ keepClear\(null\); strip\.remove\(\); return; \}/);
+  assert.match(src, /v = a === 'nav' \? a : /, 'the first paint keeps no room for a strip');
   assert.match(src, /if \(!framed\) globalThis\.GZ_NAVBAR_UI\?\.sync\(\);/, 'the bar redraws when the tabs change');
   for (const k of ['rows', 'visit', 'shut', 'pin', 'move', 'leave', 'place']) assert.match(src, new RegExp(`\\n    ${k}[:,]`), k);
-  assert.match(read('theme.css'), /html\[data-gz-navbar~="tabs"\] \{ --gz-ctabs-h: 0px !important; \}/, "and the strip's room with it");
+  assert.match(read('theme.css'), /html\[data-gz-ctabs~="nav"\] \{ --gz-ctabs-h: 0px !important; \}/, "and the strip's room with it");
+});
+
+const itemEditor = (set) => {
+  const source = read('lib/editor-navbar.js');
+  const status = { textContent: '' };
+  const ctx = vm.createContext({ GZ_NAVBAR: M, TextEncoder, MAX_BYTES: 8000, M: () => M, $: () => status,
+    t: (s) => s, hint() {}, render() {}, load() {}, chrome: { storage: { sync: { set } } } });
+  vm.runInContext(source.slice(source.indexOf('    let prefs ='), source.indexOf('    // The order of every group'))
+    + '\nglobalThis.edit = write; globalThis.current = () => prefs;', ctx);
+  return { edit: ctx.edit, current: () => JSON.parse(JSON.stringify(ctx.current())), status };
+};
+
+test('navigation item writes count UTF-8 bytes before attempting sync', async () => {
+  let calls = 0;
+  const editor = itemEditor(async () => { calls++; });
+  const next = M.clean({ items: Object.fromEntries(Array.from({ length: 44 }, (_, i) => [`mod:unicode.item${i}`, { label: '🦊'.repeat(40) }])) });
+  assert.ok(JSON.stringify({ navbarItems: next }).length < 8000);
+  assert.ok(new TextEncoder().encode(JSON.stringify({ navbarItems: next })).length > 8192);
+  assert.equal(await editor.edit(next), false);
+  assert.equal(calls, 0);
+  assert.deepEqual(editor.current(), M.clean(), 'an oversize edit leaves the stored model alone');
+});
+
+test('a failed navigation item write restores the last saved choices', async () => {
+  const editor = itemEditor(async () => { throw Error('quota'); });
+  assert.equal(await editor.edit({ items: { course: { label: 'Unsaved' } } }), false);
+  assert.deepEqual(editor.current(), M.clean());
+  assert.equal(editor.status.textContent, 'Not saved. Try again in a moment.');
+});
+
+test('queued navigation item writes restore the last successful edit if the next fails', async () => {
+  let calls = 0;
+  const editor = itemEditor(async () => { if (++calls === 2) throw Error('quota'); });
+  const kept = M.clean({ items: { course: { label: 'Saved name' } } });
+  const first = editor.edit(kept), second = editor.edit({ ...kept, glaze: ['notes'] });
+  assert.deepEqual(await Promise.all([first, second]), [true, false]);
+  assert.deepEqual(editor.current(), kept);
 });
