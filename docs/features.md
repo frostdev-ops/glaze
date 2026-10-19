@@ -105,8 +105,11 @@ On by default on Blackboard Ultra (Canvas and Moodle next), Glaze draws its own 
 up in Settings → **Navigation**. **Placement**: a side rail, open with labels or icons only (with a tooltip on each and
 a peek when you point at it or move focus into it), or a top bar whose items move under **More** when they don't fit.
 **Style**: floating glass with a little room around it, or embedded at the page's edge. **Inside a course** it can stay
-the same, become icons only, become a top bar, or hide (the course's own Home button remains). **Course tabs** can live
-in it instead of their strip: click one to switch, the middle button or Delete closes it, and P pins it. On a phone it is
+the same, become icons only, become a top bar, or hide (the course's own Home button remains). **Course tabs** show in it
+too: click one to switch, the middle button or Delete closes it, and P pins it. Course tab settings (Settings →
+Navigation → Course tabs) can keep them **only in the navigation**, with no strip, in course pages and their frames alike.
+The logo can be Glaze's, the school's, **your own picture** (kept on this device; a shared Look shows Glaze's logo in its
+place) or none. On a phone it is
 a bottom bar of four tabs and More, whose sheet holds the rest, the course tabs, your account, signing out and
 **Customize navigation**. The page keeps the bar's room from first paint, and the chevron and pin are saved for every
 tab.

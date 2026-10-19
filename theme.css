@@ -1163,9 +1163,9 @@ html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(#base_tools, [data-gz-n
    drawer is #main-content-inner's padding; a course is a section of its own beside the page; Glaze's course tabs are
    frames over the page. Below 900px the bar sits at the bottom and the page keeps room under its content. ---- */
 html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
-/* The course tabs in the bar: their strip and the room it would take go. */
-html[data-gz-navbar~="tabs"] { --gz-ctabs-h: 0px !important; }
-html[data-gz-navbar~="tabs"] #gz-ctabs { display: none !important; }
+/* Course tabs only in the bar (tabs.at 'nav', worded by features/coursetabs.js): no strip, and no room kept for one. */
+html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
+html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
 @media (min-width: 900px) {
   html[data-gz-navbar~="rail"] { --gz-navbar-left: 96px; }
   html[data-gz-navbar~="rail"][data-gz-navbar~="embed"] { --gz-navbar-left: 72px; }

@@ -152,14 +152,34 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     wrap.dataset.cid = r.cid;
     return wrap;
   };
+  // The student's own logo: a picture kept on this device (storage.local navLogo:<nav.li>, which Settings writes), drawn from
+  // a blob: address made here. Until it is read, and on a device without it, the Glaze logo stands in.
+  let logo = { id: '', url: '' };
+  const ownLogo = () => {
+    const id = X.settings().nav?.li || '';
+    if (id === logo.id) return logo.url;
+    if (logo.url) URL.revokeObjectURL(logo.url);
+    logo = { id, url: '' };
+    if (id) try {
+      chrome.storage.local.get(`navLogo:${id}`, (r) => {
+        const src = r?.[`navLogo:${id}`];
+        if (chrome.runtime.lastError || logo.id !== id || typeof src !== 'string' || src.length > 400000 || !/^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/.test(src)) return;
+        const [type, bytes] = src.split(',');
+        logo.url = URL.createObjectURL(new Blob([Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0))], { type: type.slice(5, type.indexOf(';')) }));
+        sig = ''; if (host) sync();
+      });
+    } catch { /* reloaded */ }
+    return '';
+  };
   const brandInto = (a) => {
     const brand = site.brand(), mode = settings().brand || 'glaze', home = byId(site.home());
+    const own = mode === 'custom' && ownLogo(), src = own || (mode === 'school' && brand.src);
     a.hidden = mode === 'none';
     a.href = home?.href || '/';
     a.dataset.id = home?.id || '';
     a.setAttribute('aria-label', home ? `${home.label} · ${brand.name || 'Glaze'}` : brand.name || 'Glaze');
-    a.replaceChildren(mode === 'school' && brand.src ? make('img', { className: 'logo', src: brand.src, alt: '' }) : glazeLogo());
-    if (mode !== 'school' || !brand.src) a.append(make('span', { className: 'label' }, make('b', { textContent: 'Glaze' }), brand.name ? make('small', { textContent: brand.name }) : null));
+    a.replaceChildren(src ? make('img', { className: own ? 'logo own' : 'logo', src, alt: '' }) : glazeLogo());
+    if (!src) a.append(make('span', { className: 'label' }, make('b', { textContent: 'Glaze' }), brand.name ? make('small', { textContent: brand.name }) : null));
   };
   const render = () => {
     const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tabs, .sheet, .menu'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
@@ -522,11 +542,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const look = X.parts()?.nav ? L.clean(X.parts().nav) : null;
     model = M.build({ native, prefs, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
       names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') } });
-    const next = JSON.stringify([model, rows, lay, settings(), site.brand(), site.avatar?.(), X.locale()]);
+    const next = JSON.stringify([model, rows, lay, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url]);
     if (next !== sig) { sig = next; render(); emit('change', view()); } else if (measured !== geometry()) layout();
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
   chrome.storage.onChanged.addListener((c, area) => {
+    if (area === 'local' && logo.id && c[`navLogo:${logo.id}`]) { logo.id = '\u0000'; sig = ''; if (host) sync(); }
     if (area !== 'sync' || !chrome.runtime?.id) return;
     if (c.navbarItems) prefs = M.clean(c.navbarItems.newValue);
     if (c.navItems) legacy = c.navItems.newValue ? N.clean(c.navItems.newValue) : null;

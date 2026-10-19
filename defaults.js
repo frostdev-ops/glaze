@@ -61,7 +61,7 @@ const GZ_SPEC = {
   },
   // Glaze's own navigation in place of the site's (lib/navbar.js has what each value means).
   navbar: { on: [true, 'bool'], place: ['rail', ['rail', 'top']], style: ['float', ['float', 'embed']], rail: ['auto', ['auto', 'open', 'icons']],
-    course: ['same', ['same', 'icons', 'top', 'hide']], tabs: [true, 'bool'], peek: [true, 'bool'], badges: [true, 'bool'], brand: ['glaze', ['glaze', 'school', 'none']] },
+    course: ['same', ['same', 'icons', 'top', 'hide']], tabs: [true, 'bool'], peek: [true, 'bool'], badges: [true, 'bool'], brand: ['glaze', ['glaze', 'school', 'custom', 'none']] },
   motion: {
     level: ['subtle', ['off', 'subtle', 'expressive']],
     followSystem: [true, 'bool'],

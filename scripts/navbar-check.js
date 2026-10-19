@@ -10,6 +10,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const G = require('../defaults.js');
+require('../lib/coursetabs.js'); require('../lib/nav.js'); // their settings, so GZ_SANITIZE keeps them
 
 const src = fs.realpathSync(process.env.EXT || path.join(__dirname, '..'));
 const out = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-navbar-'));
@@ -187,6 +188,16 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     await until((r) => r && !r.host.hidden && !r.querySelector('.rail').hasAttribute('data-open'), Boolean, 'the collapsed rail is ready for keyboard focus');
     await bar((r) => r.querySelector('.pin').focus());
     ok(await bar((r) => r.querySelector('.rail').hasAttribute('data-open')), 'keyboard focus reveals the collapsed pin control');
+    // The student's own logo, a picture kept on this device; until one is there, the Glaze logo.
+    await send({ on: true, rail: 'open', brand: 'custom' });
+    await until((r) => !!r.querySelector('.brand svg.logo') && !r.querySelector('.brand img'), Boolean, 'Your logo without a picture shows the Glaze logo');
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGP4z8DwHwQZIAwAXrgK9sD9ucwAAAAASUVORK5CYII=';
+    await page.evaluate((src) => chrome.storage.local.set({ 'navLogo:a1b2c3d4e5f6': src }), png);
+    await send({ on: true, rail: 'open', brand: 'custom' }, { nav: { li: 'a1b2c3d4e5f6' } });
+    const own = await until((r) => r.querySelector('.brand img.own')?.src || '', (v) => v.startsWith('blob:'), 'the chosen picture becomes the logo');
+    ok(await bar((r) => { const i = r.querySelector('.brand img.own'); return i.complete && i.naturalWidth === 2 && i.getBoundingClientRect().height === 34; }), 'drawn at the logo\'s height, keeping its shape');
+    await page.evaluate(() => chrome.storage.local.remove('navLogo:a1b2c3d4e5f6'));
+    await until((r) => !!r.querySelector('.brand svg.logo'), Boolean, 'a removed picture gives the Glaze logo back');
     await send({ on: true, brand: 'none' });
     await until((r) => getComputedStyle(r.querySelector('.brand')).display, (v) => v === 'none', 'No logo hides the brand');
     await page.evaluate(() => { document.querySelector('.MuiDrawer-paper footer a[href="#"]').remove(); });
@@ -195,12 +206,24 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     // ---- course tabs: in the rail instead of their strip ----
     await send({ on: true, rail: 'open', brand: 'glaze' });
     await until((r) => [...r.querySelectorAll('.courses .ctab-go')].map((e) => e.dataset.cid).join(' '), (v) => v === '_3_1 _1_1 _2_1', 'the course tabs sit in the rail, pinned first');
-    ok(await page.evaluate(() => { const s = document.getElementById('gz-ctabs'); return !s || getComputedStyle(s).display === 'none'; }), 'their strip steps aside');
+    ok(await page.evaluate(() => !!document.getElementById('gz-ctabs')?.isConnected), 'their strip stays too, unless they are only in the navigation');
     ok(await bar((r) => r.querySelector('.courses .ctab-go[aria-current="page"]')?.dataset.cid) === '_1_1', 'the open course is marked');
     ok(await bar((r) => !!r.querySelector('.courses [data-cid="_3_1"] .pinned')), 'a pinned tab shows its pin');
     await bar((r) => r.querySelector('.courses .ctab-go[data-cid="_2_1"]').click());
     await until((r) => r.querySelector('.courses .ctab-go[aria-current="page"]')?.dataset.cid, (v) => v === '_2_1', 'a tab opens its course');
     await shot('course-tabs');
+    // Only in the navigation (tabs.at 'nav'): no strip, and no room kept for one; without the bar's tabs, the strip again.
+    const tabsAt = (at, navbarTabs = true) => send({ on: true, rail: 'open', tabs: navbarTabs }, { tabs: { at } });
+    await tabsAt('nav');
+    const stripGone = async () => { const end = Date.now() + 5000; while (Date.now() < end) { if (await page.evaluate(() => !document.getElementById('gz-ctabs')?.isConnected && document.documentElement.getAttribute('data-gz-ctabs') === 'nav')) return true; await page.waitForTimeout(50); } return false; };
+    ok(await stripGone(), 'only in the navigation, the strip goes and the page is told so');
+    ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-ctabs-h').trim()) === '0px', 'and keeps no room for it');
+    ok((await bar((r) => r.querySelectorAll('.courses .ctab-go').length)) === 3, 'the tabs are still in the bar');
+    await tabsAt('nav', false);
+    await until((r) => r.querySelectorAll('.courses').length, (v) => v === 0, 'with the bar\'s tabs off,');
+    const stripBack = async () => { const end = Date.now() + 5000; while (Date.now() < end) { if (await page.evaluate(() => !!document.getElementById('gz-ctabs')?.isConnected && /^above /.test(document.documentElement.getAttribute('data-gz-ctabs') || ''))) return true; await page.waitForTimeout(50); } return false; };
+    ok(await stripBack(), "'only in the navigation' falls back to the strip above the course");
+    await tabsAt('above');
     await send({ on: true, rail: 'open', tabs: false });
     await until((r) => r.querySelectorAll('.courses').length, (v) => v === 0, 'turned off, the tabs leave the bar');
     ok(await page.evaluate(() => !!document.getElementById('gz-ctabs')?.isConnected), 'and their strip comes back');
@@ -239,8 +262,9 @@ const ok = (value, label) => { console.log(`${value ? 'ok  ' : 'FAIL'} ${label}`
     ok(longBrand, 'a long school name keeps the account within the top bar');
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate(() => { document.documentElement.dir = 'rtl'; GZ_NAVBAR_UI.sync(); });
-    await bar((r) => { r.activeElement?.blur(); r.querySelector('.tacc').focus(); });
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(300); // the resize above closes tips once it lands
+    const acc = await bar((r) => { const b = r.querySelector('.tacc').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; });
+    await page.mouse.move(acc[0], acc[1]);
     await until((r) => { const tip = r.querySelector('.tip'), b = tip.getBoundingClientRect(); return [tip.hasAttribute('data-on'), b.left, b.right, innerWidth, getComputedStyle(tip).transform]; }, (v) => v[0] && v[1] >= 0 && v[2] <= v[3], 'a top bar tooltip stays on screen in RTL');
     await page.evaluate(() => { document.documentElement.dir = ''; GZ_NAVBAR_UI.sync(); });
     await page.setViewportSize({ width: 1000, height: 800 });

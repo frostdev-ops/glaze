@@ -6,7 +6,7 @@ for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(p
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
 const TABS = ['look', 'navigation', 'blackboard', 'canvas', 'moodle', 'study', 'sharing', 'mods', 'backup', 'about'];
-const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', navbar: 'navigation/bar', tabs: 'blackboard/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses', mods: 'backup/privacy' };
+const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', navbar: 'navigation/bar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses', mods: 'backup/privacy' };
 const ENHANCE = {
   'study/tools': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'keys', 'newcontent', 'palette', 'drafts', 'download', 'search', 'place', 'coursemenu', 'docPages', 'toggles'],
   'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
@@ -15,7 +15,7 @@ const ENHANCE = {
   'study/pet': ['pet'],
   'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
   'study/imports': ['syllabus', 'insights'],
-  'blackboard/tabs': ['tabs'], 'blackboard/dashboard': ['dashboard'], 'blackboard/folders': ['hideFolders'],
+  'navigation/tabs': ['tabs'], 'blackboard/dashboard': ['dashboard'], 'blackboard/folders': ['hideFolders'],
   'canvas/documents': ['docTheme', 'docInk'], 'canvas/quizzes': ['quizLight'],
 };
 const OVERRIDE = {
@@ -218,7 +218,7 @@ test('E1 routes, remembered tabs, legacy entry points and tab-only keyboard hand
     addEventListener: (k, f) => { events[k] = f; }, chrome: { storage: { local: { get: async () => ({ editorTab: 'about' }), set: async (v) => { kept.push(v); } } } } });
   vm.runInContext(fs.readFileSync(path.join(root, 'lib/editor.js'), 'utf8'), ctx);
   const ui = ctx.GZ_EDITOR.mount();
-  for (const [hash, route] of Object.entries({ '#tabs': 'blackboard/tabs', '#sidebar': 'look/navigation', '#todo': 'study/todo', '#gcal': 'sharing/calendar', '#data': 'backup/privacy', '#background': 'look/background', '#blackboard/nav': 'blackboard/nav', '#unknown/section': 'look/palette' })) {
+  for (const [hash, route] of Object.entries({ '#tabs': 'navigation/tabs', '#blackboard/tabs': 'navigation/tabs', '#sidebar': 'look/navigation', '#todo': 'study/todo', '#gcal': 'sharing/calendar', '#data': 'backup/privacy', '#background': 'look/background', '#blackboard/nav': 'blackboard/nav', '#unknown/section': 'look/palette' })) {
     ctx.location.hash = hash; events.hashchange(); assert.equal(ui.route(), route);
     assert.equal(all.find((x) => x.dataset.editorPanel === route.split('/')[0]).hidden, false);
     assert.equal(all.filter((x) => x.dataset.editorTab && x.tabIndex === 0).length, 1);

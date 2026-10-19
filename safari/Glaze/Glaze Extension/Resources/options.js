@@ -573,8 +573,8 @@ GZ_UI.load().then((s) => {
   });
   $('#nav-link-cancel').addEventListener('click', () => { cancelLink(); $('#nav-link-name').focus(); });
   $('#nav-link-editor').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); cancelLink(); $('#nav-link-name').focus(); } });
-  $('#nav-logo-pick').addEventListener('click', () => $('#nav-logo-file').click());
-  $('#nav-logo-file').addEventListener('change', async (e) => {
+  // A logo picture, for the old sidebar and Glaze navigation alike: one picture on this device (nav.li), stored by the worker.
+  const pickLogo = async (e, after) => {
     const file = e.target.files[0], rev = ++navLogoPick; e.target.value = ''; if (!file) return;
     let logoImage;
     try { logoImage = await GZ_CARDS.picture(file); } catch { return hint(t("That file isn't a picture Glaze can read."), true); }
@@ -582,8 +582,12 @@ GZ_UI.load().then((s) => {
     const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:nav', nav: {}, logoImage }, (x) => res(chrome.runtime.lastError ? null : x)));
     if (rev !== navLogoPick) return;
     if (!r?.ok) return hint(t(r?.error === 'cap' ? "That picture is too big to keep. Try a smaller one, or remove another card's picture." : 'Not saved. Try again in a moment.'), true);
-    Object.assign(s.nav, r.nav); fill(); hint(t('Saved'));
-  });
+    Object.assign(s.nav, r.nav); after?.(); fill(); hint(t('Saved'));
+  };
+  $('#nav-logo-pick').addEventListener('click', () => $('#nav-logo-file').click());
+  $('#nav-logo-file').addEventListener('change', (e) => pickLogo(e));
+  $('#nbar-logo-pick').addEventListener('click', () => $('#nbar-logo-file').click());
+  $('#nbar-logo-file').addEventListener('change', (e) => pickLogo(e, () => { if (s.navbar.brand !== 'custom') { set('navbar.brand', 'custom'); save(['navbar']); } }));
   for (const button of $$('[data-nav-reset]')) button.addEventListener('click', async () => {
     const section = button.dataset.navReset;
     if (section === 'layout') return writeNavItems({ ...navItems, order: [], hidden: [] });
@@ -635,9 +639,12 @@ GZ_UI.load().then((s) => {
     $('#navbar [data-navbar]').hidden = !s.navbar.on;
     $('#navbar [data-navbar-rail]').hidden = s.navbar.place !== 'rail' && s.navbar.course !== 'icons';
     $('#sidebar [data-navbar-note]').hidden = !s.navbar.on;
+    $('#tabs [data-tabs-nav-note]').hidden = s.tabs.at !== 'nav' || (s.navbar.on && s.navbar.tabs);
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
     $('#nav-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
+    $('#nbar-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
+    $('#nbar-logo-pick').textContent = t(n.li ? 'Change logo' : 'Choose a logo');
     const note = $('#nav-contrast');
     note.classList.remove('err');
     if (n.k === 'default') { if (note.textContent) note.textContent = ''; return; }

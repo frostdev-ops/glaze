@@ -153,7 +153,7 @@ test('where the bar is: the placement, the course state, the style and the room 
     ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left', 272], ['html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left', 248]]) assert.ok(css.includes(`${rule}: ${px}px; }`), rule);
   for (const rule of ['#main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }', '#main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }',
     '.inner-wrap > section.course { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
-    '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-navbar~="tabs"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
+    '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
 });
 
 test("Ultra's first paint words the bar as the model does, for each setting, in and out of a course", () => {
@@ -269,13 +269,17 @@ test("the editor lists every item where the bar puts it, hidden ones too, with t
   assert.match(read('options.html'), /<script src="lib\/navbar\.js"><\/script>\s*<script src="lib\/editor-navbar\.js"><\/script>/);
 });
 
-test('course tabs move into the bar when it holds them, and their strip steps aside', () => {
+test('course tabs show in the bar when it holds them, and at "only in the navigation" their strip steps aside', () => {
   const src = read('features/coursetabs.js');
-  assert.match(src, /const hosted = \(\) => !framed && !preview && \(html\.getAttribute\('data-gz-navbar'\) \|\| ''\)\.split\(' '\)\.includes\('tabs'\);/);
+  assert.deepEqual(require('../lib/coursetabs.js') && require('../defaults.js').GZ_SPEC.tabs.at, ['above', ['above', 'between', 'below', 'nav']]);
+  assert.match(src, /\(framed \? parent\.document : document\)\.documentElement\.getAttribute\('data-gz-navbar'\)/, "a tab's frame asks the page around it");
+  assert.match(src, /const at = \(\) => \(P\(\)\.at !== 'nav' \? P\(\)\.at : navHolds\(\) \? 'nav' : 'above'\);/, "'nav' is the strip's 'above' where no bar holds the tabs");
+  assert.match(src, /const hosted = \(\) => at\(\) === 'nav';/);
   assert.match(src, /if \(hosted\(\)\) \{ keepClear\(null\); strip\.remove\(\); return; \}/);
+  assert.match(src, /v = a === 'nav' \? a : /, 'the first paint keeps no room for a strip');
   assert.match(src, /if \(!framed\) globalThis\.GZ_NAVBAR_UI\?\.sync\(\);/, 'the bar redraws when the tabs change');
   for (const k of ['rows', 'visit', 'shut', 'pin', 'move', 'leave', 'place']) assert.match(src, new RegExp(`\\n    ${k}[:,]`), k);
-  assert.match(read('theme.css'), /html\[data-gz-navbar~="tabs"\] \{ --gz-ctabs-h: 0px !important; \}/, "and the strip's room with it");
+  assert.match(read('theme.css'), /html\[data-gz-ctabs~="nav"\] \{ --gz-ctabs-h: 0px !important; \}/, "and the strip's room with it");
 });
 
 const itemEditor = (set) => {
