@@ -1131,6 +1131,31 @@ test('nav.layout lays over the student\'s like nav.set, first mod wins, and "Use
   port.close();
 });
 
+test('Use my own also withdraws a nav in Look overrides and keeps the worn layout', async () => {
+  let list = [W('a'), W('b')];
+  const p = page({ list: () => list });
+  const layouts = { a: { hidden: ['calendar'] }, b: { hidden: ['grades'] } };
+  p.chrome.runtime.sendMessage = async (m) => m.type === 'glaze:mod' ? { ok: true, value: { nav: layouts[m.mod], cursor: { kind: 'trail' } } } : { mods: list };
+  p.G.start(list);
+  const { port } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  for (const mod of ['a', 'b']) port.postMessage({ mod, via: 'worker', id: mod, call: 'look.override', args: [] });
+  await settle();
+  const base = { nav: { hidden: ['tools'] } };
+  eq(p.G.parts(base).nav, layouts.a);
+  list = list.map((m) => ({ ...m, arranges: false }));
+  p.chrome.changed({ 'modNavLayout:a': { newValue: false }, 'modNavLayout:b': { newValue: false } }, 'local');
+  await p.tick(100);
+  eq(p.G.parts(base).nav, base.nav, 'restore the worn layout');
+  assert.equal(p.G.parts(null).nav, undefined, 'no worn layout means no nav overlay');
+  eq(p.G.parts(null).cursor, { kind: 'trail' }, 'other Look parts still apply');
+  port.postMessage({ mod: 'a', via: 'worker', id: 'again', call: 'look.override', args: [] });
+  await settle();
+  assert.equal(p.G.parts(null).nav, undefined, 'proposing again cannot undo the opt-out');
+  port.close();
+});
+
 test('a nav replacement stands in for Glaze\'s bar, hides it, comes off again, and go() needs a click in its slot first', async () => {
   let list = [{ ...W('a'), on: ['nav'], slots: [{ key: 'nav', name: 'My nav', file: null }] }];
   const p = page({ list: () => list });

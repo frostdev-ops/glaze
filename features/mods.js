@@ -394,7 +394,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     const sig = JSON.stringify(o.map((x) => [x.nav, x.layout, x.off, x.rules, x.look]));
     if (sig === partsSig && base === partsBase) return partsOut;
     const x = { ...(base || {}) };
-    for (const p of o.map((y) => y.look).filter(Boolean).reverse()) Object.assign(x, p);
+    for (const p of o.map((y) => y.look).filter(Boolean).reverse()) { const { nav, ...rest } = p; Object.assign(x, rest); }
     const nav = o.map((y) => !y.off && (y.layout || y.nav || y.look?.nav)).find(Boolean);
     if (nav) x.nav = nav;
     const rules = [...(base?.rules || []), ...o.flatMap((y) => [...(y.look?.rules || []), ...(y.rules || [])])].slice(0, 64);
