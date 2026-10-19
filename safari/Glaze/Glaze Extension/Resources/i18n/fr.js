@@ -2849,5 +2849,16 @@
   "All messages": "Tous les messages",
   "No conversations": "Aucune conversation",
   "ePortfolios": "Portfolios électroniques",
-  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "L’horloge, la prochaine échéance, ton minuteur de concentration et ton compagnon, en haut ou en bas du rail, et en version compacte dans une barre du haut. Le même minuteur et le même compagnon que tes autres widgets : rien de plus n’est enregistré. Les widgets de navigation des mods se placent avec eux."
+  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "L’horloge, la prochaine échéance, ton minuteur de concentration et ton compagnon, en haut ou en bas du rail, et en version compacte dans une barre du haut. Le même minuteur et le même compagnon que tes autres widgets : rien de plus n’est enregistré. Les widgets de navigation des mods se placent avec eux.",
+  "Navigation — reads Glaze’s navigation bar: its items, course names and unread counts, and when you use it.": "Navigation — lit la barre de navigation de Glaze : ses éléments, les noms des cours et les compteurs non lus, et quand vous l’utilisez.",
+  "Navigation items — adds up to eight items of its own to Glaze’s navigation bar, linking only to pages of your school’s site.": "Éléments de navigation — ajoute jusqu’à huit éléments à la barre de navigation de Glaze, qui ne mènent qu’à des pages du site de votre établissement.",
+  "Navigation layout — can arrange Glaze’s navigation bar while it runs. You can always use your own.": "Disposition de navigation — peut organiser la barre de navigation de Glaze pendant son exécution. Vous pouvez toujours utiliser la vôtre.",
+  "navigation": "navigation",
+  "From {name}": "De {name}",
+  "Arranged by {name}": "Organisée par {name}",
+  "Use my own": "Utiliser la mienne",
+  "Arranged by mods": "Organisée par des mods",
+  "A mod may arrange the bar while it runs, never saved. Your own choices still win where you made them.": "Un mod peut organiser la barre pendant son exécution, sans jamais l’enregistrer. Vos propres choix l’emportent là où vous les avez faits.",
+  "Let {name} arrange it": "Laisser {name} l’organiser",
+  "No mod arranges it.": "Aucun mod ne l’organise."
 };

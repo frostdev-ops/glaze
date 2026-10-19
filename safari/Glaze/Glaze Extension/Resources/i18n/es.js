@@ -2849,5 +2849,16 @@
   "All messages": "Todos los mensajes",
   "No conversations": "No hay conversaciones",
   "ePortfolios": "Portafolios electrónicos",
-  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "El reloj, lo próximo que vence, tu temporizador de concentración y tu mascota, arriba o abajo en la barra, y compactos en una barra superior. El mismo temporizador y la misma mascota que tus otros widgets: no se registra nada más. Los widgets de navegación de los mods aparecen junto a ellos."
+  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "El reloj, lo próximo que vence, tu temporizador de concentración y tu mascota, arriba o abajo en la barra, y compactos en una barra superior. El mismo temporizador y la misma mascota que tus otros widgets: no se registra nada más. Los widgets de navegación de los mods aparecen junto a ellos.",
+  "Navigation — reads Glaze’s navigation bar: its items, course names and unread counts, and when you use it.": "Navegación — lee la barra de navegación de Glaze: sus elementos, nombres de cursos y contadores de no leídos, y cuándo la usas.",
+  "Navigation items — adds up to eight items of its own to Glaze’s navigation bar, linking only to pages of your school’s site.": "Elementos de navegación — añade hasta ocho elementos propios a la barra de navegación de Glaze, que solo enlazan a páginas del sitio de tu escuela.",
+  "Navigation layout — can arrange Glaze’s navigation bar while it runs. You can always use your own.": "Diseño de navegación — puede organizar la barra de navegación de Glaze mientras se ejecuta. Siempre puedes usar la tuya.",
+  "navigation": "navegación",
+  "From {name}": "De {name}",
+  "Arranged by {name}": "Organizado por {name}",
+  "Use my own": "Usar la mía",
+  "Arranged by mods": "Organizado por mods",
+  "A mod may arrange the bar while it runs, never saved. Your own choices still win where you made them.": "Un mod puede organizar la barra mientras se ejecuta, sin guardarlo nunca. Tus propias elecciones siguen mandando donde las hiciste.",
+  "Let {name} arrange it": "Dejar que {name} la organice",
+  "No mod arranges it.": "Ningún mod la organiza."
 };

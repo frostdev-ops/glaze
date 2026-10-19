@@ -2849,5 +2849,16 @@
   "All messages": "Alle Nachrichten",
   "No conversations": "Keine Unterhaltungen",
   "ePortfolios": "E-Portfolios",
-  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "Die Uhr, was als Nächstes fällig ist, dein Fokus-Timer und dein Haustier, oben oder unten in der Leiste und kompakt in einer oberen Leiste. Derselbe Timer und dasselbe Haustier wie in deinen anderen Widgets: Es wird nichts weiter aufgezeichnet. Navigations-Widgets aus Mods stehen bei ihnen."
+  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "Die Uhr, was als Nächstes fällig ist, dein Fokus-Timer und dein Haustier, oben oder unten in der Leiste und kompakt in einer oberen Leiste. Derselbe Timer und dasselbe Haustier wie in deinen anderen Widgets: Es wird nichts weiter aufgezeichnet. Navigations-Widgets aus Mods stehen bei ihnen.",
+  "Navigation — reads Glaze’s navigation bar: its items, course names and unread counts, and when you use it.": "Navigation — liest die Navigationsleiste von Glaze: ihre Einträge, Kursnamen und ungelesene Zähler, und wann du sie nutzt.",
+  "Navigation items — adds up to eight items of its own to Glaze’s navigation bar, linking only to pages of your school’s site.": "Navigationseinträge — fügt der Navigationsleiste von Glaze bis zu acht eigene Einträge hinzu, die nur auf Seiten deiner Schule verlinken.",
+  "Navigation layout — can arrange Glaze’s navigation bar while it runs. You can always use your own.": "Navigationslayout — kann die Navigationsleiste von Glaze anordnen, solange er läuft. Du kannst jederzeit deine eigene verwenden.",
+  "navigation": "Navigation",
+  "From {name}": "Von {name}",
+  "Arranged by {name}": "Angeordnet von {name}",
+  "Use my own": "Meine eigene verwenden",
+  "Arranged by mods": "Von Mods angeordnet",
+  "A mod may arrange the bar while it runs, never saved. Your own choices still win where you made them.": "Ein Mod kann die Leiste anordnen, solange er läuft, ohne etwas zu speichern. Deine eigenen Entscheidungen gelten weiterhin, wo du sie getroffen hast.",
+  "Let {name} arrange it": "{name} darf sie anordnen",
+  "No mod arranges it.": "Kein Mod ordnet sie an."
 };

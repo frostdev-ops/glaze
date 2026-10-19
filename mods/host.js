@@ -117,7 +117,10 @@
       settings: () => call('settings'),
       ui,
       cards: Object.freeze({ decorate: (fn) => { fns.decorate = typeof fn === 'function' ? fn : null; } }),
-      nav: Object.freeze({ items: (fn) => { fns.items = typeof fn === 'function' ? fn : null; } }),
+      // items(fn): the older transform. model, add, update, remove, layout and go: nav.read, nav.items, nav.layout, and a
+      // replacement's go (with its switch on, right after a click in its nav slot).
+      nav: Object.freeze({ items: (fn) => { fns.items = typeof fn === 'function' ? fn : null; }, model: () => call('nav.model'), add: (item) => call('nav.add', item),
+        update: (id, patch) => call('nav.update', id, patch), remove: (id) => call('nav.remove', id), layout: (patch) => call('nav.layout', patch === undefined ? null : patch), go: (id) => call('nav.go', id) }),
       // [{ id, title, hint?, run }]: run stays here and is called when the student picks the command in the palette.
       palette: Object.freeze({ commands: (list) => {
         commands.clear();

@@ -6,6 +6,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## 3.2.1 (unreleased)
+
+### Added
+- Mods and Glaze navigation: new permissions `nav.read` (read the bar, Worker only, as personal data), `nav.items` (up to eight items of a mod's own, linking only to the school's site) and `nav.layout` (a layout proposed over yours, with "Arranged by" and Use my own in the bar and in Settings → Navigation items). A mod's navigation replacement now stands in for Glaze's bar, and may open its items with `glaze.nav.go` right after a click.
+
+### Changed
+- Mods' older `glaze.nav.items` transform reads Glaze's bar. Items a mod adds to the bar link only to pages of the school's site.
+
 ## [3.2.0] — 2026-10-19
 
 ### Added

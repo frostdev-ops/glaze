@@ -2849,5 +2849,16 @@
   "All messages": "Alle berichten",
   "No conversations": "Geen gesprekken",
   "ePortfolios": "E-portfolio’s",
-  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "De klok, wat er hierna moet worden ingeleverd, je focustimer en je huisdier, boven- of onderaan de balk, en compact in een bovenbalk. Dezelfde timer en hetzelfde huisdier als je andere widgets: er wordt niets extra vastgelegd. Navigatiewidgets van mods staan erbij."
+  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "De klok, wat er hierna moet worden ingeleverd, je focustimer en je huisdier, boven- of onderaan de balk, en compact in een bovenbalk. Dezelfde timer en hetzelfde huisdier als je andere widgets: er wordt niets extra vastgelegd. Navigatiewidgets van mods staan erbij.",
+  "Navigation — reads Glaze’s navigation bar: its items, course names and unread counts, and when you use it.": "Navigatie — leest de navigatiebalk van Glaze: de onderdelen, cursusnamen en ongelezen tellers, en wanneer je hem gebruikt.",
+  "Navigation items — adds up to eight items of its own to Glaze’s navigation bar, linking only to pages of your school’s site.": "Navigatie-onderdelen — voegt tot acht eigen onderdelen toe aan de navigatiebalk van Glaze, die alleen naar pagina's van de site van je school linken.",
+  "Navigation layout — can arrange Glaze’s navigation bar while it runs. You can always use your own.": "Navigatie-indeling — kan de navigatiebalk van Glaze indelen zolang hij draait. Je kunt altijd je eigen indeling gebruiken.",
+  "navigation": "navigatie",
+  "From {name}": "Van {name}",
+  "Arranged by {name}": "Ingedeeld door {name}",
+  "Use my own": "Mijn eigen gebruiken",
+  "Arranged by mods": "Ingedeeld door mods",
+  "A mod may arrange the bar while it runs, never saved. Your own choices still win where you made them.": "Een mod kan de balk indelen zolang hij draait, zonder iets op te slaan. Je eigen keuzes blijven gelden waar je ze maakte.",
+  "Let {name} arrange it": "{name} mag hem indelen",
+  "No mod arranges it.": "Geen mod deelt hem in."
 };
