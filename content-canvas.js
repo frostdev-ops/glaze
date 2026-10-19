@@ -50,7 +50,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   const cardsHere = () => I.links.length && I.settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
-  const widgetsHere = () => I.links.length && window.top === window && (I.settings.enhance.widgets || I.settings.enhance.notes || I.settings.enhance.pet);
+  const widgetsHere = () => I.links.length && (window.top === window || I.tabFrame === 'page') && (I.settings.enhance.widgets || I.settings.enhance.notes || I.settings.enhance.pet);
   const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   const remindHere = () => I.links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
@@ -75,7 +75,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     if (html.dir === 'rtl' ? e.clientX >= b.left : e.clientX <= b.right) return; // on the code, not the chip
     e.preventDefault();
     const url = `${el.closest('a').href}/grades`;
-    if (e.ctrlKey || e.metaKey) open(url); else location.assign(url);
+    if (e.ctrlKey || e.metaKey) open(url); else globalThis.GZ_CTABS?.bar?.open(url) || location.assign(url); // through a course tab's frame when they run
   }, true);
   const tagCanvasCards = () => {
     if (!document.querySelector('.ic-DashboardCard')) return;

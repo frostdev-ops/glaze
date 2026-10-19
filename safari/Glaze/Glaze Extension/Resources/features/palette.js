@@ -26,7 +26,7 @@ var GZ_CMD = globalThis.GZ_CMD || (() => {
   const go = (url) => () => {
     let u;
     try { u = new URL(url, location.origin); } catch { return; }
-    if (u.protocol === 'https:' || u.protocol === 'http:') location.assign(u.href);
+    if (u.protocol === 'https:' || u.protocol === 'http:') globalThis.GZ_CTABS?.bar?.open(u.href) || location.assign(u.href); // this site's pages through the course tabs when they run
   };
   // Ultra's Institution page is Glaze's Dashboard while its switch is on (features/dashboard.js).
   const dash = () => (ctx.settings().enhance.dashboard ? [['/ultra/institution-page', 'Dashboard']] : []);

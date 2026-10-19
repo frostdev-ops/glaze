@@ -1565,6 +1565,7 @@
   "Course tabs": "Onglets de cours",
   "Close a course tab before opening another to keep your unsaved work.": "Fermez un onglet de cours avant d’en ouvrir un autre pour conserver votre travail non enregistré.",
   "{name} has unsaved work, so it stays where it was.": "{name} contient du travail non enregistré : il reste où il était.",
+  "This page has unsaved work, so it stays where it was.": "Cette page contient du travail non enregistré : elle reste où elle était.",
   "Pin a tab to keep it, drag tabs into order, close one with its × or the middle mouse button. On the keyboard: the arrow keys move between tabs, Delete closes one, P pins it, and Shift with an arrow key moves it.": "Épinglez un onglet pour le garder, faites glisser les onglets pour les ordonner, fermez-en un avec son × ou le bouton du milieu de la souris. Au clavier : les flèches passent d'un onglet à l'autre, Suppr en ferme un, P l'épingle et Maj avec une flèche le déplace.",
   "Above the course's bar": "Au-dessus de la barre du cours",
   "Between its rows": "Entre ses lignes",

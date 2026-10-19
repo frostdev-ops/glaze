@@ -615,7 +615,10 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const goNative = (id) => {
     const item = byId(id);
     if (!item) return;
-    tabsApi()?.leave();
+    const api = tabsApi();
+    // Canvas: a page's address goes through the course tabs while their frames run, so none of them reloads.
+    if (X.site === 'canvas' && globalThis.GZ_CTABS?.frames?.() && /^https?:[^#]*$/.test(item.href || '') && api?.open?.(item.href)) return;
+    api?.leave();
     if (!site.go(id)) location.assign(item.href);
   };
   const tabAct = (act, cid, e) => {
@@ -756,7 +759,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     lay = M.layout(settings(), { width: innerWidth, course: inCourse(), rail, tabs: !!api, menu: !!cmenu });
     rows = lay.tabs && api ? api.rows() : [];
     // A course tab shown over the page is in Courses, whatever the page under it is.
-    const framed = !!globalThis.GZ_CTABS?.showing?.();
+    const framed = !!globalThis.GZ_CTABS?.showing?.() && globalThis.GZ_CTABS.showing() !== 'page'; // (not Canvas's page frame: the page in it says)
     // Glaze's settings open as the page: nothing else is where you are.
     const glazePage = !!globalThis.GZ_SETTINGS_PAGE?.isOpen();
     const native = site.read().map((n) => (glazePage ? { ...n, active: false } : framed ? { ...n, active: n.id === 'course' } : n));

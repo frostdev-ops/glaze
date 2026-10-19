@@ -118,7 +118,7 @@ var GZ_SEARCH = globalThis.GZ_SEARCH || (() => {
         const n = await S.search({
           term, courses, cache: ultra ? null : kept, signal: c.signal, get: (p) => get(p, c.signal), ...adapter,
           onBatch: (rs) => {
-            cmd.found.push(...rs.map((r) => ({ label: r.title, hint: r.course, group: r.kind, run: () => location.assign(r.url) })));
+            cmd.found.push(...rs.map((r) => ({ label: r.title, hint: r.course, group: r.kind, run: () => globalThis.GZ_CTABS?.bar?.open(r.url) || location.assign(r.url) })));
             show(true);
           },
         });
