@@ -50,8 +50,18 @@ const sharedNote = async (d) => {
   const { sid } = await d.send('create', { kind: 'notes', title: 'Biology', key: NK, ids: [id] });
   return { id, sid };
 };
-const page = async (d, { note = '', relay: selected } = {}) => {
+const page = async (d, { note = '', relay: selected, observer = 'v2' } = {}) => {
   const doc = { activeElement: null }, ids = new Map(), events = new Map(), calls = [], messages = [], disconnects = [], copied = [];
+  let clock = 1000, watcher;
+  const observed = new Set();
+  const entry = (target, props = {}) => ({ target, time: clock, boundingClientRect: { ...target.getBoundingClientRect() }, isIntersecting: true, intersectionRatio: 1, ...(observer === 'v2' && { isVisible: true }), ...props });
+  class Observer {
+    constructor(f) { if (observer === 'throws') throw new Error('unsupported'); this.f = f; this.trackVisibility = observer === 'v2'; watcher = this; }
+    observe(target) { observed.add(target); this.f([entry(target)]); }
+    unobserve(target) { observed.delete(target); }
+    disconnect() { observed.clear(); }
+    takeRecords() { return []; }
+  }
   const make = (tag) => {
     const e = new El(tag, doc);
     e.classList = { toggle: (name, on) => { const classes = new Set(e.className.split(/\s+/).filter(Boolean)); if (on) classes.add(name); else classes.delete(name); e.className = [...classes].join(' '); } };
@@ -72,7 +82,9 @@ const page = async (d, { note = '', relay: selected } = {}) => {
     try { const value = await d.worker.handle({ ...m, scope: { id: 'panel-ui', key: NK, note } }); if (m.op === 'list' && selected) value.relay = selected; return value; }
     catch (e) { return { ok: false, error: e.message }; }
   };
-  const context = vm.createContext({ document: doc, URL, URLSearchParams, console, setTimeout, clearTimeout, Date,
+  const context = vm.createContext({ document: doc, URL, URLSearchParams, console, setTimeout, clearTimeout,
+    Date: class extends Date { static now() { return clock; } }, performance: { now: () => clock },
+    ...(observer !== 'absent' && { IntersectionObserver: Observer, IntersectionObserverEntry: class { get isVisible() { return true; } } }),
     location: { search: '?t=ticket' },
     navigator: { userActivation: { isActive: true }, clipboard: { writeText: async (v) => { copied.push(v); } } },
     GZ_I18N: { page() {}, ui() {}, t: (k, vars) => k.replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? '') }, GZ_RELAY: R,
@@ -87,8 +99,10 @@ const page = async (d, { note = '', relay: selected } = {}) => {
   vm.runInContext(SOURCE, context);
   events.get('message')?.({ data: { type: 'glaze:quick-start', ticket: 'ab'.repeat(16) } });
   await until(() => calls.some((m) => m.op === 'list') && !ids.get('who').hidden);
-  const click = (el) => { assert.ok(el, 'button exists'); if (el.disabled) return; for (const { type, f } of el.listeners) if (type === 'click') f({ isTrusted: true, target: el }); };
-  const p = { doc, calls, copied, disconnect: () => disconnects.forEach((f) => f()), click: (id) => click(typeof id === 'string' ? ids.get(id) : id), get: (id) => ids.get(id), message: async () => { for (const f of messages) f({ changed: true }); await settle(); }, button: (text) => doc.root.querySelectorAll('button').find((e) => e.textContent === text) };
+  const click = (el, age = 600) => { clock += age; assert.ok(el, 'button exists'); if (el.disabled) return; for (const { type, f } of el.listeners) if (type === 'click') f({ isTrusted: true, target: el, currentTarget: el }); };
+  const p = { doc, calls, copied, observed, advance: (ms) => { clock += ms; }, visible: (el, props) => watcher.f([entry(typeof el === 'string' ? ids.get(el) : el, props)]),
+    record: (el, props) => entry(el, props), deliver: (record) => watcher.f([record]),
+    disconnect: () => disconnects.forEach((f) => f()), click: (id, age) => click(typeof id === 'string' ? ids.get(id) : id, age), get: (id) => ids.get(id), message: async () => { for (const f of messages) f({ changed: true }); await settle(); }, button: (text) => doc.root.querySelectorAll('button').find((e) => e.textContent === text) };
   return p;
 };
 
@@ -101,6 +115,85 @@ test('quick Stop sharing deletes then leaves across broker interruptions and pre
   assert.deepEqual(p.calls.filter((m) => ['delete', 'leave'].includes(m.op)).map((m) => m.op), ['delete', 'leave']);
   assert.match((await N.run({ key: NK, op: 'load', id }, { local: d.local }, d.notes)).html, /Kept note/);
   assert.match(p.get('status').textContent, /Sharing stopped/);
+});
+
+test('quick sensitive clicks fail closed without verified IntersectionObserver v2', async (t) => {
+  const server = await start(t), d = device(t, server), id = await seed(d);
+  for (const observer of ['absent', 'throws', 'v1']) await t.test(observer, async () => {
+    const p = await page(d, { note: id, observer }), before = p.calls.length;
+    p.click('share'); await settle();
+    assert.equal(p.calls.length, before, 'no consent/create/link from an unverified embedded click');
+    p.disconnect();
+  });
+});
+
+test('quick visibility requires the whole button and resets the dwell for every question', async (t) => {
+  const server = await start(t), d = device(t, server), { id } = await sharedNote(d), p = await page(d, { note: id });
+  const stop = p.button('Stop sharing');
+  p.visible(stop, { intersectionRatio: 0.1 }); p.click(stop); await settle();
+  assert.equal(p.get('ask').hidden, true, 'a partly clipped button is not fully visible');
+  p.visible(stop, { intersectionRatio: 1, isVisible: false }); p.click(stop); await settle();
+  assert.equal(p.get('ask').hidden, true, 'a covered/faded button cannot open a question');
+  p.visible(stop, { isVisible: true }); p.click(stop, 499);
+  assert.equal(p.get('ask').hidden, true, '500 ms must elapse after visibility returns');
+  p.click(stop, 1); assert.equal(p.get('ask').hidden, false);
+  p.click('ask-yes', 0); await settle();
+  assert.ok(!p.calls.some((m) => m.op === 'delete'), 'a reused confirmation needs a fresh dwell for this question');
+  p.disconnect();
+});
+
+test('quick rerenders and teardown release observed buttons', async (t) => {
+  const server = await start(t), d = device(t, server), { id } = await sharedNote(d), p = await page(d, { note: id });
+  const before = p.observed.size;
+  for (let i = 0; i < 8; i++) await p.message();
+  assert.equal(p.observed.size, before, 'replaced buttons do not accumulate in the observer');
+  p.disconnect();
+  assert.equal(p.observed.size, 0);
+});
+
+test('quick confirmation does not inherit a hidden or previous question visibility timer', async (t) => {
+  const server = await start(t), d = device(t, server), { id } = await sharedNote(d), p = await page(d, { note: id });
+  p.click(p.button('Stop sharing')); await settle();
+  p.click('ask-yes', 0); await settle();
+  assert.ok(!p.calls.some((m) => m.op === 'delete'), 'fresh question cannot be confirmed immediately');
+  p.disconnect();
+});
+
+test('quick ignores a click after its button moves since the visibility observation', async (t) => {
+  const server = await start(t), d = device(t, server), { id } = await sharedNote(d), p = await page(d, { note: id });
+  const stop = p.button('Stop sharing');
+  stop.box = { left: 5, top: 5, width: 100, height: 20 };
+  p.click(stop); await settle();
+  assert.equal(p.get('ask').hidden, true);
+  p.click(stop); await settle();
+  assert.equal(p.get('ask').hidden, false, 'a new observation permits recovery after a fresh dwell');
+  p.disconnect();
+});
+
+test('quick does not treat a delayed visibility entry as a measurement of the current box', async (t) => {
+  const server = await start(t), d = device(t, server), { id } = await sharedNote(d), p = await page(d, { note: id });
+  const stop = p.button('Stop sharing'), old = p.record(stop);
+  stop.box = { left: 5, top: 5, width: 100, height: 20 };
+  p.deliver(old); p.click(stop); await settle();
+  assert.equal(p.get('ask').hidden, true);
+  p.disconnect();
+});
+
+test('quick explains when restarting other accounts requires Settings', async (t) => {
+  const server = await start(t), d = device(t, server), { id } = await sharedNote(d);
+  const other = 'notesIdx:https://school.instructure.com/6';
+  await d.local.set({ [other]: N.clean({}) });
+  const otherId = await seed(d, other);
+  await d.send('create', { kind: 'notes', title: 'Other account', key: other, ids: [otherId] });
+  await d.send('pause');
+  await d.local.set({ shareHosts: [server] });
+  const p = await page(d, { note: id });
+  assert.equal(p.get('paused').hidden, false);
+  p.click('resume'); await settle();
+  assert.ok(p.calls.some((m) => m.op === 'resume'), 'exercise the worker refusal, not the UI host precheck');
+  assert.equal(d.local.data.shareOn, false);
+  assert.match(p.get('status').textContent, /Resume sharing from Settings/);
+  p.disconnect();
 });
 
 test('quick worker restart disables stale controls and tells the user how to reopen', async (t) => {

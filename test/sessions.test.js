@@ -353,7 +353,7 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.match(ui, /if \(!human\(e\) \|\| busy \|\| !state\) return;/);
   assert.match(ui, /if \(!e\.isTrusted\) return;/);
   const quick = read('sharing/quick.js');
-  assert.match(quick, /const human = \(e\) => e\.isTrusted/);
+  assert.match(quick, /!e\.isTrusted/);
   assert.doesNotMatch(quick, /\bconfirm\(|parent\.|top\./, 'a framed panel asks inline and posts nothing to the page');
   assert.doesNotMatch(notes, /type: 'glaze:sessions'|op: 'link'/, 'the LMS world only frames the panel; it never asks the worker for a link');
   // <all_urls> covers the default relay and a local one alike; an optional entry for either would be redundant.

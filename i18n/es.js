@@ -2743,4 +2743,6 @@
   "Session created. Copy an invite below to share it.": "Sesión creada. Copia una invitación abajo para compartirla.",
   "Joined. Copy it into Notes or To Do below to keep working on it there.": "Te uniste. Cópiala abajo en Notas o To Do para seguir trabajando allí.",
   "Close this panel and open Share again.": "Cierra este panel y vuelve a abrir Compartir.",
+  "Sharing controls need visibility protection. Open Settings from Glaze to share.": "Los controles para compartir necesitan protección de visibilidad. Abre los Ajustes de Glaze para compartir.",
+  "Resume sharing from Settings before using this panel.": "Reanuda el uso compartido desde Ajustes antes de usar este panel.",
 };
