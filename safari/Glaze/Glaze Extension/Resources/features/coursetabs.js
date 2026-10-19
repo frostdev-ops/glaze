@@ -381,7 +381,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!on || signedOut || framed || preview || !who || petKey !== `pet:${location.origin}/${who}` || !showing || pic || !host?.hasAttribute('data-on')) return null;
     const { doc, path, frame: f } = surface();
     try {
-      if (!f?.ready || !f.el.isConnected || f.el.parentElement !== host || f.el.inert || f.el.style.visibility === 'hidden' || !doc?.body || f.uid !== who || f.accountDoc !== doc || doc.location.origin !== location.origin || !L.owns(path?.split('?')[0] || '', showing)) return null;
+      if (!f?.ready || !f.el.isConnected || f.el.parentElement !== host || f.el.inert || f.el.style.visibility === 'hidden' || !doc?.body || f.uid !== who || f.accountDoc !== doc || doc.location.origin !== location.origin || !(showing === PAGE ? L.outside(doc.location.pathname, doc.location.search) : L.owns(path?.split('?')[0] || '', showing))) return null;
       return { doc, frame: f.el };
     } catch { return null; }
   };
@@ -685,11 +685,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     el.addEventListener('load', () => {
       if (frames.get(cid) !== f) return;
       let away = false;
-      try { away = el.contentWindow.location.origin !== location.origin; } catch { away = true; }
+      try {
+        if (cid === PAGE && el.contentWindow.location.href === 'about:blank') return;
+        away = el.contentWindow.location.origin !== location.origin;
+      } catch { away = true; }
       if (!away) return;
+      const active = showing === cid || cid === PAGE && waiting === cid;
       const x = cid !== PAGE && tabs.find((y) => y.cid === cid);
-      el.src = location.origin + (x ? L.target(x, false) : f.url);
-      if (showing === cid) say(t("That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab."));
+      if (cid === PAGE) drop(cid); // its requested URL may itself redirect off-site: never reload that redirect in a loop
+      else el.src = location.origin + (x ? L.target(x, false) : f.url);
+      if (active) say(t("That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab."));
     });
     host.prepend(el);
     watch(cid, f);
@@ -1062,6 +1067,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     try { if (chrome.runtime?.id) chrome.storage.onChanged[yes ? 'addListener' : 'removeListener'](onStore); } catch { /* reloaded */ }
   };
   const start = () => {
+    const turn = showTurn;
     readPrefs().then(() => { drawn = ''; pass(); });
     if (preview) { tabs = L.order(DEMO.map((x) => ({ ...x }))); loaded = true; return; }
     // A reload while a tab's frame was on screen: that tab again.
@@ -1081,6 +1087,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
           loaded = true;
           last = undefined;
           pass();
+          if (showTurn !== turn) return; // a selection made while storage loaded takes precedence over the restore
           if (was && was !== ctx.courseId() && tabs.some((x) => x.cid === was)) show(was);
           else if (wasPage) openPage(wasPage);
         }));
@@ -1219,11 +1226,16 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // course's, through its own frame; on Ultra the shown course's), else on this page, as a click on it here would go.
     open: (href) => {
       let u; try { u = new URL(String(href), location.origin); } catch { return false; }
-      if (!on || framed || u.origin !== location.origin) return false;
+      if (!on || u.origin !== location.origin) return false;
       const url = L.safe(u.pathname, u.search) || (ctx.site === 'canvas' ? L.outside(u.pathname, u.search) : null), cid = url && (ctx.site === 'canvas' ? u.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1] : showing);
+      if (framed) {
+        if (ctx.site !== 'canvas' || !url || u.hash || /\/files\/\d+\/download/.test(u.pathname)
+          || (cid ? cid === framed : framed === PAGE || !pageable(u.pathname))) return false;
+        toTop('open', { url });
+        return true;
+      }
       if (ctx.site === 'canvas' && url && !u.hash && !/\/files\/\d+\/download/.test(u.pathname) && goes(cid || '', u.pathname)) { if (cid) openAt(cid, url); else openPage(url); return true; }
-      if (showing && cid && L.owns(u.pathname, cid)) {
-        if (ctx.site === 'canvas') { openAt(cid, url); return true; }
+      if (ctx.site !== 'canvas' && showing && cid && L.owns(u.pathname, cid)) {
         try { frames.get(showing).el.contentWindow.location.assign(location.origin + url); } catch { return false; }
         return true;
       }
