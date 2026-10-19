@@ -82,7 +82,7 @@
   const links = (s) => [button('Copy view invite', () => act(() => copy(s.sid, false))), s.edit && button('Copy edit invite', () => act(() => copy(s.sid, true)))].filter(Boolean);
   const stop = (s) => button(s.creator ? 'Stop sharing' : 'Leave', async () => {
     const yes = await ask(t(s.creator ? 'Stop sharing “{title}”? It is deleted from the relay; everyone keeps their own copy.' : 'Leave “{title}”? Your copy in Notes stays; you stop getting changes.', { title: s.title }), s.creator ? 'Stop sharing' : 'Leave');
-    if (yes) act(async () => { await send(s.creator ? 'delete' : 'leave', { sid: s.sid }); if (s.creator) await send('leave', { sid: s.sid }); say(s.creator ? 'Sharing stopped. Your note stays here.' : 'Left. Your copy stays in Notes.'); });
+    if (yes) act(async () => { if (s.creator && s.status !== 'gone') await send('delete', { sid: s.sid }); await send('leave', { sid: s.sid }); say(s.creator ? 'Sharing stopped. Your note stays here.' : 'Left. Your copy stays in Notes.'); });
   });
 
   const render = () => {
