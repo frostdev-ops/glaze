@@ -117,7 +117,10 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     boards.pages = each(Array.isArray(raw?.boards?.pages) ? raw.boards.pages : tiles.map((x) => ({ ...x, on: x.on && x.float })), ids, (x) => ptile(x, more));
     // The room's width each board (and the floating tiles) was last arranged in (arrange's and floating's w0).
     const widths = Object.fromEntries([...BOARDS, 'pages', 'canvas'].map((b) => [b, px(raw?.widths?.[b]) || 0]));
-    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true };
+    // filled: the boards that were given their first tiles already (features/widgets.js fillCourses), so one emptied since
+    // stays empty.
+    const filled = BOARDS.filter((b) => Array.isArray(raw?.filled) && raw.filled.includes(b));
+    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, filled };
   };
   // What an update keeps on a device with no layout stored: the tiles it showed when a new layout started with four. Its
   // notes box (the notes' own switch) and Ultra's Dashboard (shown whatever the widgets' switch) as they were, and the
@@ -329,6 +332,7 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     }
     for (const [b, w] of Object.entries(m?.widths && typeof m.widths === 'object' ? m.widths : {})) if (b in l.widths && px(w) !== null) l = { ...l, widths: { ...l.widths, [b]: w } };
     if (typeof m?.music === 'string') l = { ...l, music: m.music };
+    if (BOARDS.includes(m?.fill) && !l.filled.includes(m.fill)) l = { ...l, filled: [...l.filled, m.fill] };
     return layout(l, more);
   };
   // The worker's side: m's changes on what is stored now. → { ok, layout } (what is stored after).

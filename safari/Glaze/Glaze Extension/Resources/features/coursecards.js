@@ -136,6 +136,19 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       setText(name, shown); set(heading, 'title', shown); set(card, 'aria-label', shown);
       setText(code, c.code || ''); set(code, 'title', c.code || '');
       setText(term, c.term || ''); set(term, 'title', c.term || '');
+      // Canvas's row of links under it (announcements, assignments, discussions, files, with their unread counts): a copy
+      // of its own card's while that is on the page, links and pictures only.
+      const row = nativeCards.get(id)?.querySelector('.ic-DashboardCard__action-container');
+      const was = row?.innerHTML || '';
+      if (was !== rowFrom) {
+        rowFrom = was;
+        const copy = row?.cloneNode(true);
+        for (const e of copy?.querySelectorAll('script, iframe, object, embed, form, [id]') || []) if (e.matches('[id]')) e.removeAttribute('id'); else e.remove();
+        for (const a of copy?.querySelectorAll('a') || []) if (!/^\/courses\/\d+(\/|$)/.test(a.getAttribute('href') || '')) a.remove();
+        if (copy) actions?.replaceWith(copy); else actions?.remove();
+        if (copy && !actions) card.append(copy);
+        actions = copy || null;
+      }
       // Written only when what it comes from changed (a style read back is normalized, so it isn't compared).
       const look = JSON.stringify([c.image, c.color]);
       if (look !== painted) {
@@ -145,7 +158,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
         hero.style.opacity = c.image ? '0.6' : '';
       }
     };
-    let painted = '';
+    let painted = '', rowFrom = '', actions = null;
     mounted.add(update); update();
     ctx.need('features/cards.js', () => globalThis.GZ_CARD_UI).then(() => { if (alive && live()) GZ_CARD_UI.paint(); }, () => {});
     return { update, wake: update, stop: () => { alive = false; mounted.delete(update); } };
@@ -442,6 +455,8 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     }, () => {});
   };
 
-  return { sync, list, title, fill, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
+  // Canvas: the courses its card view shows now, in its order (an empty list in its list view).
+  const shown = () => [...nativeCards.keys()].map((id) => list().find((c) => c.id === id)).filter(Boolean);
+  return { sync, list, shown, title, fill, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
 })();
 GZ_COURSE_CARDS;

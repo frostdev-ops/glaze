@@ -557,6 +557,20 @@ test("Canvas course tiles: Canvas's numeric ids, on Canvas's Dashboard board onl
   assert.deepEqual(W.apply(l, { ops: [{ s: 'cdash', id: key(27), remove: true }] }).boards.cdash.filter((x) => W.course(x.id)), [], 'removed');
 });
 
+test('filled: a board given its first tiles is marked once, so one emptied since stays empty', () => {
+  const fresh = W.layout(undefined);
+  assert.deepEqual(fresh.filled, []);
+  const key = 'course:https://canvas.test/27';
+  const l = W.apply(fresh, { fill: 'cdash', ops: [{ s: 'cdash', id: key, set: { on: true } }] });
+  assert.deepEqual(l.filled, ['cdash']);
+  assert.ok(l.boards.cdash.some((x) => x.id === key && x.on));
+  const emptied = W.apply(l, { ops: [{ s: 'cdash', id: key, remove: true }] });
+  assert.deepEqual(emptied.filled, ['cdash'], 'kept when its tiles go');
+  assert.deepEqual(W.apply(emptied, { fill: 'cdash', ops: [] }).filled, ['cdash'], 'once');
+  assert.deepEqual(W.layout({ filled: ['cdash', 'nope', 'cdash'] }).filled, ['cdash'], 'only boards, each once');
+  assert.deepEqual(W.apply(fresh, { fill: 'nope', ops: [] }).filled, []);
+});
+
 test('kept: an update keeps what a device without a stored layout showed, and adds nothing the widgets switch now turns on', () => {
   const on = (l, b) => (b ? l.boards[b] : l.tiles).filter((t) => t.on).map((t) => t.id);
   const four = ['notes', 'agenda', 'timer', 'quotes'];
