@@ -47,7 +47,7 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
     if (action === 'next') to = m.links.next;
     else if (action === 'course') to = typeof m.links.cid === 'string' && COURSE[site]?.[0].test(m.links.cid) ? COURSE[site][1](m.links.cid) : '';
     else to = PLACE[site]?.[action] || '';
-    try { const u = new URL(to, location.origin); if (typeof to === 'string' && to && u.origin === location.origin) location.assign(u.href); } catch { /* not an address */ }
+    try { const u = new URL(to, location.origin); if (typeof to === 'string' && to && u.origin === location.origin) globalThis.GZ_CTABS?.bar?.open(u.href) || location.assign(u.href); } catch { /* not an address */ }
   };
 
   // ---- one widget ------------------------------------------------------------------------------------------------------------

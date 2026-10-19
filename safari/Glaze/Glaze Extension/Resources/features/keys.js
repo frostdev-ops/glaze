@@ -77,7 +77,7 @@ var GZ_KEYS = globalThis.GZ_KEYS || (() => {
     if (now - gAt < 1200 && GO[e.key]) {
       e.preventDefault();
       gAt = 0;
-      location.assign(root() + GO[e.key][0]);
+      globalThis.GZ_CTABS?.bar?.open(root() + GO[e.key][0]) || location.assign(root() + GO[e.key][0]); // as its link would: through the course tabs when they run
       return;
     }
     gAt = e.key === 'g' ? now : 0;
