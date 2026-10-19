@@ -417,7 +417,24 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const frames = new Map(); // cid → { el, at (last shown), ready, dirty }
   let showing = ''; // the course whose frame is on screen; '' for this page
   let shownFrom = ''; // this page's address when a frame covered it: if it changes, the student went somewhere here
-  let host = null, pic = null, showTurn = 0;
+  let host = null, pic = null, showTurn = 0, retryNote = null;
+  const clearSlow = () => { retryNote?.remove(); retryNote = null; };
+  const slowFrame = (cid, f) => {
+    if (showing !== cid || !host) return;
+    clearSlow(); unpicture(); f.el.style.visibility = '';
+    const box = document.createElement('div'); box.className = 'gz-ctabs-retry';
+    box.setAttribute('role', 'status');
+    const text = document.createElement('p'); text.textContent = t('Course content is taking longer to load.');
+    box.append(text);
+    if (!f.dirty) {
+      const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = t('Retry');
+      retry.addEventListener('click', () => { if (frames.get(cid) === f && !f.dirty) visit(cid); });
+      box.append(retry);
+    }
+    const back = document.createElement('button'); back.type = 'button'; back.textContent = t('Go back');
+    back.addEventListener('click', () => show(''));
+    box.append(back); host.append(box); retryNote = box;
+  };
   const toTop = (op, m = {}) => { try { window.top.postMessage({ gzCtab: op, ...m }, location.origin); } catch { /* gone */ } };
   let movedTimer = 0;
   const moved = () => { clearTimeout(movedTimer); movedTimer = setTimeout(() => toTop('moved'), 500); };
@@ -433,10 +450,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     frames.delete(cid);
     if (showing === cid && !replacing) show('');
   };
-  // A frame is shown once its page is built and has been still for 0.3 s (its place put back: data-gz-placing), 8 s at most.
+  // A frame is shown once rendered course content has settled. A stalled initial about:blank can be retried once;
+  // slow native pages keep loading, with their form state intact, rather than becoming falsely ready.
   const watch = (cid, f) => {
-    const t0 = performance.now();
+    let t0 = performance.now();
     let changed = t0, mo = null, doc = null;
+    f.slow = false;
     const step = () => {
       if (frames.get(cid) !== f) return mo?.disconnect();
       let d = null; try { d = f.el.contentDocument; } catch { /* gone */ }
@@ -451,13 +470,24 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       }
       const built = doc && doc.location.pathname.startsWith(`/ultra/courses/${cid}/`) && [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown)
         && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
-      if ((built && now - changed > 300) || now - t0 > 8000) {
+      if (built && now - changed > 300) {
         mo?.disconnect();
+        f.slow = false;
         f.ready = true;
-        if (showing === cid) { f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
+        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
         return;
       }
-      setTimeout(step, 50);
+      if (now - t0 > 8000 && !f.slow) {
+        if (d?.location.href === 'about:blank' && d.body && !d.body.childElementCount && !f.dirty && !f.retried) {
+          f.retried = true;
+          t0 = now;
+          f.el.src = location.origin + f.url;
+        } else {
+          f.slow = true;
+          if (showing === cid) slowFrame(cid, f);
+        }
+      }
+      setTimeout(step, f.slow ? 1000 : 50);
     };
     step();
   };
@@ -481,7 +511,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     unpicture(true);
     const s = snaps.get(cid);
     const put = (snap) => {
-      if (showing !== cid || f.ready || pic || !fits(snap, f.url)) { if (showing === cid && !f.ready && !pic) f.el.style.visibility = ''; return; }
+      if (showing !== cid || frames.get(cid) !== f || f.ready || f.slow || pic || !fits(snap, f.url)) { if (showing === cid && !f.ready && !pic) f.el.style.visibility = ''; return; }
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
       const img = Object.assign(document.createElement('img'), { src: snap.shot, alt: '', draggable: false });
@@ -537,8 +567,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid }, location.origin);
     }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
+    clearSlow();
     unpicture(true);
-    if (f && !f.ready) picture(cid, f);
+    if (f && !f.ready) { if (f.slow) slowFrame(cid, f); else picture(cid, f); }
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     ctx.scene();
     globalThis.GZ_PET_WORLD?.refresh();
@@ -557,6 +588,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (framed) return toTop('visit', { cid });
     x.at = Date.now();
     save();
+    const f = frames.get(cid);
+    if (cid === showing && f?.slow && !f.ready && !f.dirty) { drop(cid, true); showing = ''; }
     show(cid === ctx.courseId() ? '' : cid);
   };
   if (!framed && !preview) addEventListener('message', (e) => {
@@ -825,6 +858,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       // Every tab's frame stops; this page shows again.
       for (const k of [...frames.keys()]) drop(k);
       unpicture(true);
+      clearSlow();
       showing = '';
       host?.remove();
       host = null;

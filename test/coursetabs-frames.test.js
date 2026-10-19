@@ -9,6 +9,79 @@ const L = require(path.join(root, 'lib/coursetabs.js'));
 const part = (a, b) => source.slice(source.indexOf(a), source.indexOf(b, source.indexOf(a)));
 const origin = 'https://bb.school.test';
 
+const loadingFrame = () => {
+  let now = 1000, doc = { location: { href: 'about:blank', pathname: 'blank' }, body: { childElementCount: 0 } };
+  const timers = [], navigations = [], notices = [];
+  const f = { url: '/ultra/courses/_2_1/grades', ready: false, dirty: false, el: { style: {}, get contentDocument() { return doc; }, set src(v) { navigations.push(v); } } };
+  const frames = new Map([['_2_1', f]]);
+  const c = vm.createContext({ frames, showing: '_2_1', location: { origin }, performance: { now: () => now },
+    MutationObserver: class { observe() {} disconnect() {} }, loading: () => false, shown: (el) => !!el,
+    unpicture() {}, later() {}, clearSlow() {}, slowFrame: () => notices.push('slow'), t: (s) => s,
+    setTimeout: (fn, ms) => timers.push({ fn, ms }),
+  });
+  const watch = vm.runInContext(part('  const watch = ', '  const open = ') + '\nwatch;', c);
+  return { f, frames, navigations, notices, watch: () => watch('_2_1', f),
+    step(ms) { now += ms; timers.shift()?.fn(); },
+    document(d) { doc = d; },
+    built() { return { location: { href: `${origin}${f.url}`, pathname: f.url }, body: { childElementCount: 1 }, documentElement: { matches: () => false }, querySelector: (s) => s === '.bb-course-navigation' ? {} : null, addEventListener() {} }; },
+  };
+};
+
+test('a blank course frame is retried once and never declared ready by its timeout', () => {
+  const p = loadingFrame(); p.watch(); p.step(8100);
+  assert.equal(p.f.ready, false, 'elapsed time cannot turn about:blank into loaded course content');
+  assert.deepEqual(p.navigations, [`${origin}${p.f.url}`], 'retry the initial blank document once');
+  p.step(8100); p.step(8100);
+  assert.equal(p.navigations.length, 1, 'a persistent failure must not cause a navigation loop');
+  assert.equal(p.f.ready, false);
+  assert.equal(p.f.slow, true);
+  assert.equal(p.notices.length, 1, 'explain the slow load instead of silently presenting a blank page');
+  p.document(p.built()); p.step(1000); p.step(301);
+  assert.equal(p.f.ready, true, 'a late document can still become ready once it actually renders');
+});
+
+test('slow rendered course documents and edited frames are never automatically reloaded', () => {
+  for (const edited of [false, true]) {
+    const p = loadingFrame();
+    if (edited) p.f.dirty = true;
+    else { const d = p.built(); d.querySelector = () => null; p.document(d); }
+    p.watch(); p.step(8100);
+    assert.equal(p.f.ready, false);
+    assert.deepEqual(p.navigations, [], 'preserve native loading state and any edits');
+  }
+});
+
+test('selecting a timed-out course again retries only an untouched frame', () => {
+  for (const dirty of [false, true]) {
+    const dropped = [], shown = [];
+    const c = vm.createContext({ framed: '', preview: false, tabs: [{ cid: '_2_1' }], save() {}, Date,
+      frames: new Map([['_2_1', { slow: true, ready: false, dirty }]]), showing: '_2_1',
+      drop: (...args) => dropped.push(args), show: (cid) => shown.push(cid), ctx: { courseId: () => '_1_1' },
+    });
+    vm.runInContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + "\nvisit('_2_1');", c);
+    assert.equal(dropped.length, dirty ? 0 : 1);
+    assert.equal(c.showing, dirty ? '_2_1' : '', 'an edited frame keeps its existing document');
+    assert.deepEqual(shown, ['_2_1']);
+  }
+});
+
+test('a delayed snapshot cannot cover a stalled or replaced frame', async () => {
+  for (const state of ['slow', 'replaced']) {
+    let resolve, created = 0;
+    const f = { url: '/ultra/courses/_2_1/outline', ready: false, el: { style: {} } };
+    const frames = new Map([['_2_1', f]]);
+    const c = vm.createContext({ showing: '_2_1', frames, pic: null, snaps: new Map(), unpicture() {}, keep() {},
+      fits: () => true, send: () => new Promise((r) => { resolve = r; }),
+      document: { createElement() { created++; throw new Error('stale snapshot'); } },
+    });
+    vm.runInContext(part('  const picture = ', '  const unpicture = ') + "\npicture('_2_1', f);", Object.assign(c, { f }));
+    if (state === 'slow') f.slow = true; else frames.set('_2_1', {});
+    resolve({ snap: { cid: '_2_1' } });
+    await new Promise(setImmediate);
+    assert.equal(created, 0, 'the recovery surface or new document must remain uncovered');
+  }
+});
+
 test('the bridge takes picks only from this page\'s own frames, on this origin, and only Ultra addresses to go to', () => {
   let listen;
   const mine = {}, theirs = {}, did = [];
@@ -34,7 +107,7 @@ test('the bridge takes picks only from this page\'s own frames, on this origin, 
 test('a pick in a tab\'s frame goes to the page around it; on the page, its own course shows the page itself', () => {
   const sent = [], shown = [];
   const run = (framed, courseId) => vm.runInNewContext(part('  const visit = (cid) => {', "  if (!framed && !preview) addEventListener('message'") + '\nvisit;', {
-    framed, preview: false, tabs: [{ cid: '_1_1' }, { cid: '_2_1' }], save() {}, Date,
+    framed, preview: false, tabs: [{ cid: '_1_1' }, { cid: '_2_1' }], save() {}, Date, frames: new Map(), showing: '',
     toTop: (op, m) => sent.push([op, m.cid]), show: (c) => shown.push(c), ctx: { courseId: () => courseId },
   });
   run('_2_1', '_2_1')('_1_1');
@@ -53,7 +126,7 @@ test('at most four frames stay running: the least recently shown go, never the o
     showTurn: 0, showing: '_2_1', shownFrom: '', shooting: null, on: true, frames, host: { toggleAttribute() {} }, strip: null, list: null,
     LIVE: 4, Date, Promise, setTimeout() {}, clearTimeout() {}, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
-    open: (cid) => { const f = frame(6); frames.set(cid, f); return f; }, lay() {}, unpicture() {}, picture() {}, draw() {}, later() {}, drop: (k) => { dropped.push(k); frames.delete(k); },
+    open: (cid) => { const f = frame(6); frames.set(cid, f); return f; }, lay() {}, unpicture() {}, clearSlow() {}, slowFrame() {}, picture() {}, draw() {}, later() {}, drop: (k) => { dropped.push(k); frames.delete(k); },
   });
   await show('_3_1');
   assert.deepEqual(dropped, ['_1_1'], 'five frames, four kept: the one shown longest ago goes');
@@ -72,7 +145,7 @@ test('a hidden frame stays live however long it is hidden: no timer closes it', 
     LIVE: 4, Date, Promise, location: { pathname: '/ultra/course', search: '' }, document: { activeElement: null },
     setTimeout: (fn, ms) => timers.push(ms), clearTimeout() {},
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
-    lay() {}, unpicture() {}, picture() {}, draw() {}, later() {}, drop() { throw new Error('nothing is dropped under the cap'); },
+    lay() {}, unpicture() {}, clearSlow() {}, slowFrame() {}, picture() {}, draw() {}, later() {}, drop() { throw new Error('nothing is dropped under the cap'); },
   });
   await show('_1_1');
   await show('_3_1');
@@ -92,7 +165,7 @@ const switching = () => {
     setTimeout: (fn, ms) => { timers.set(++n, { fn, ms }); return n; }, clearTimeout: (id) => timers.delete(id),
     html: { toggleAttribute() {} }, ctx: { scene() {} }, sessionStorage: { setItem() {}, removeItem() {} },
     open: (cid) => { const f = frame(); frames.set(cid, f); return f; },
-    lay() {}, unpicture() {}, picture() {}, draw() {}, later() {},
+    lay() {}, unpicture() {}, clearSlow() {}, slowFrame() {}, picture() {}, draw() {}, later() {},
   });
   const show = vm.runInContext(part('  const drop = ', '  // A frame is shown once')
     + part('  const show = async (cid) => {', '  // A tab: its frame') + '\nshow;', context);

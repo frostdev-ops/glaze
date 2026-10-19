@@ -91,6 +91,10 @@ Notes **Export all** and **Import** open Glaze's own backup page. Both notes ZIP
   The first-load picture captures visible pixels, including CDN styling and visible form values; it is blurred while loading. At the hard limit of 40 retained entries, close or unpin one before another course gets a tab.
   Course-tab switches keep the surrounding page’s address in the address bar and add no history entry. Browser Back/Forward follows the browser’s frame history; copy a link inside the course to share its address. Hidden native pages continue running their own requests; Glaze pauses their animated scenes.
 
+  A course is ready only after content renders. An empty initial frame gets one automatic retry;
+  a slow load then offers **Retry** and **Go back** while continuing to wait for Blackboard.
+  Retry replaces only an unedited page. Go back retains the live frame and any native work.
+
 - **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain. Moodle is recognized by the keywords line its core writes in every page's head, together with the page id and layout it puts on the page's body.

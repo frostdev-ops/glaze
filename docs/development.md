@@ -40,6 +40,11 @@ check automatic recovery with fresh module URLs. Run it with the same `NODE_PATH
 optional evidence directory. It uses a routed synthetic site and a temporary browser profile;
 it does not establish live Blackboard behavior.
 
+`scripts/ultra-live-frames-check.js` holds course document requests to check a single automatic
+retry, a foreground manual recovery after a hidden tab stalls, and preservation of edited live
+frames. It accepts the same `NODE_PATH` setup and an optional evidence directory, and also uses
+only routed synthetic sites in a temporary browser profile.
+
 ### Publishing to the Chrome Web Store
 
 ```sh

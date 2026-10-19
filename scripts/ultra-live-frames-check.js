@@ -29,12 +29,21 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       headless: true, viewport: { width: 1280, height: 860 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
-    let uid = '_42_1';
+    let uid = '_42_1', stallFirstCourse = true, stalledCourse = null;
+    const stalledSixth = [];
     await ctx.route('**/*', (route) => {
       const u = new URL(route.request().url());
       if (u.protocol === 'chrome-extension:') return route.continue();
       requests.push({ method: route.request().method(), origin: u.origin, path: u.pathname, ...(u.pathname.endsWith('/users/me') && { fixtureUid: uid }) });
-      if (u.origin === site && u.pathname.startsWith('/ultra')) return route.fulfill({ contentType: 'text/html', body: html });
+      if (u.origin === site && u.pathname.startsWith('/ultra')) {
+        if (stallFirstCourse && u.pathname === '/ultra/courses/_102_1/outline' && route.request().isNavigationRequest()) {
+          stallFirstCourse = false; stalledCourse = route; return;
+        }
+        if (u.pathname === '/ultra/courses/_106_1/outline' && route.request().isNavigationRequest() && stalledSixth.length < 2) {
+          stalledSixth.push(route); return;
+        }
+        return route.fulfill({ contentType: 'text/html', body: html });
+      }
       if (u.origin === site && u.pathname.endsWith('/users/me')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: uid }), headers: { 'cache-control': 'no-store' } });
       if (u.origin === site && u.pathname.includes('/learn/api/')) return route.fulfill({ contentType: 'application/json', body: '{"results":[]}' });
       if (u.origin === 'https://cdn.school.test' && u.pathname.endsWith('.css')) return route.fulfill({ contentType: 'text/css', body: '' });
@@ -58,9 +67,32 @@ const check = (value, message) => { assert.ok(value, message); results.push(mess
       return f;
     };
     await page.goto(`${site}/ultra/courses/_101_1/outline`); await tab(page, '_102_1').waitFor(); await pause(800);
-    await tab(page, '_102_1').click(); let f2 = await ready('_102_1');
+    // Do not wait for the child navigation: its deliberately held request is the state under test.
+    await tab(page, '_102_1').click({ noWaitAfter: true });
+    await until(async () => stalledCourse && await page.locator('iframe[name="gz-ctab:_102_1"]').count());
+    const blank = await page.evaluate(() => { const d = document.querySelector('iframe[name="gz-ctab:_102_1"]').contentDocument; return { url: d?.location.href, children: d?.body?.childElementCount }; });
+    check(blank.url === 'about:blank' && blank.children === 0, `a held document request reproduces the empty course frame (${JSON.stringify(blank)})`);
+    let f2 = await ready('_102_1');
+    check(requests.filter((r) => r.path === '/ultra/courses/_102_1/outline').length === 2, 'the blank frame recovers with one bounded document retry');
+    await stalledCourse.abort().catch(() => {});
     check(page.url().endsWith('/_101_1/outline'), 'picking a live course keeps the surrounding address and native page');
     check(await f2.evaluate(() => document.querySelectorAll('#gz-ctabs').length === 1 && !document.querySelector('#gz-footer')), 'one strip and no duplicate footer inside a live frame');
+    await tab(f2, '_106_1').click({ noWaitAfter: true });
+    await until(async () => stalledSixth.length && await page.locator('iframe[name="gz-ctab:_106_1"]').count());
+    // Let both bounded attempts time out while another tab is selected.
+    await tab(page, '_101_1').focus(); await page.keyboard.press('Enter');
+    await until(() => Promise.resolve(stalledSixth.length === 2));
+    await pause(8200);
+    await tab(page, '_106_1').click({ noWaitAfter: true });
+    const retry = page.locator('.gz-ctabs-retry').getByRole('button', { name: 'Retry', exact: true });
+    await retry.waitFor({ state: 'visible' });
+    check(await retry.evaluate((e) => { const r = e.getBoundingClientRect(); return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === e; }), 'a tab that stalled while hidden exposes a clickable foreground Retry control');
+    if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, 'stalled-course.png') }); }
+    await retry.click({ noWaitAfter: true });
+    const f6 = await ready('_106_1');
+    check(!await page.locator('.gz-ctabs-retry').count() && requests.filter((r) => r.path === '/ultra/courses/_106_1/outline').length === 3, 'manual Retry replaces only the stalled clean frame and restores course content');
+    for (const held of stalledSixth) await held.abort().catch(() => {});
+    await tab(f6, '_102_1').click(); f2 = await ready('_102_1');
     const birth = await f2.evaluate(() => performance.timeOrigin);
     await f2.evaluate(() => { const t = document.createElement('textarea'); t.id = 'live-draft'; t.setAttribute('aria-label', 'Synthetic draft'); document.body.append(t); });
     await f2.locator('#live-draft').fill('unsaved synthetic work');
