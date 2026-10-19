@@ -529,6 +529,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     else if (f) {
       try { f.stale = f.el.contentDocument; f.el.contentWindow.location.assign(location.origin + url); } catch { return; }
       f.url = url;
+      f.away = false;
       f.ready = false;
       f.retried = false;
       watch(cid, f);
@@ -732,6 +733,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     x.at = Date.now();
     save();
     const f = frames.get(cid);
+    if (ctx.site === 'canvas' && f?.away) return openAt(cid, L.target(x, P().place));
     if (cid === showing && f?.slow && !f.ready && !f.dirty) { drop(cid, true); showing = ''; }
     reveal(cid === ctx.courseId() && !(ctx.site === 'canvas' && frames.has(cid)) ? '' : cid);
   };
