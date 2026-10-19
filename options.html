@@ -29,6 +29,7 @@
   html[data-embedded] .embed-gate h2 { margin: 0; font-size: 1.1rem; }
   html[data-embedded] .embed-gate p { margin: 0; }
   html[data-embedded] [data-editor-panel][data-gated] > :not(.embed-gate) { display: none !important; }
+  html[data-embedded]:not([data-embed-ok]) body { visibility: hidden; }
   .brand img { width: 24px; height: 24px; }
   .editor-tabs { display: flex; gap: .35rem; flex: 1 0 100%; overflow-x: auto; padding-block: .2rem; }
   .editor-tabs button { flex: none; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); font-size: 13px; }
