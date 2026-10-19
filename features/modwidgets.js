@@ -98,7 +98,7 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
       return { stop: attach(m.id, s.key, el) };
     },
   }])));
-  // Rail widgets for features/nav.js to put among its own.
+  // Rail widgets for features/nav.js to put among its own, or for Glaze navigation's dock (features/navbar.js).
   const rail = () => {
     const want = list.flatMap((m) => m.slots.filter((s) => s.key.startsWith('rail:')).map((s) => [m, s]));
     for (const k of [...railBoxes.keys()]) if (!want.some(([m, s]) => `${m.id}|${s.key}` === k)) { detach(k); railBoxes.get(k).remove(); railBoxes.delete(k); }
@@ -124,7 +124,7 @@ var GZ_MODWIDGETS = globalThis.GZ_MODWIDGETS || (() => {
     const want = list.some((m) => m.slots.some((s) => s.key.startsWith('rail:')));
     if (want || railBoxes.size) {
       if (!want) rail();
-      ctx().need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), () => {});
+      ctx().need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => GZ_NAV_UI.sync(), () => {}).then(() => globalThis.GZ_NAVBAR_UI?.sync());
     }
   };
 

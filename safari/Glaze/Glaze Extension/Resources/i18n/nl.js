@@ -2837,5 +2837,6 @@
   "No notifications": "Geen meldingen",
   "All messages": "Alle berichten",
   "No conversations": "Geen gesprekken",
-  "ePortfolios": "E-portfolio’s"
+  "ePortfolios": "E-portfolio’s",
+  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "De klok, wat er hierna moet worden ingeleverd, je focustimer en je huisdier, boven- of onderaan de balk, en compact in een bovenbalk. Dezelfde timer en hetzelfde huisdier als je andere widgets: er wordt niets extra vastgelegd. Navigatiewidgets van mods staan erbij."
 };

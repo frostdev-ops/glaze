@@ -118,8 +118,12 @@ tab.
 On Moodle, the bar replaces the top navigation and phone hamburger. Profile, notifications and conversations open in Glaze panels; messages link to Moodle's full messaging page. A course's secondary navigation, including More links, appears in the rail or the top bar's second row when **Course menu** is on. The course index and block drawers remain available. Turning navigation off restores Moodle's own navigation.
 
 **Navigation items** renames, re-icons, reorders and groups every item, hides any of them, picks the four phone tabs,
-adds up to eight links of your own, and turns on Notes, To Do, search and Glaze settings (off by default). A worn Look's
-navigation layout and your older navigation links, hidden items and order still apply under these choices. Look codes
+adds up to eight links of your own, and turns on Notes, To Do, search and Glaze settings (off by default). Its
+**Widgets** put the clock, what's due next, the focus timer and your pet at the top or bottom of the rail (a square each
+in the icons rail, with the details in its tip), compact in a top bar and in a phone's More sheet; they are the same
+timer and pet as your other widgets, and nothing more is recorded. Mods' navigation widgets sit under the rail's items,
+and with a top bar or on a phone they open over the page from a **Widgets** button, without loading again. A worn Look's
+navigation layout and your older navigation links, hidden items, order and widgets still apply under these choices. Look codes
 carry how the bar looks and sits (never whether it is on); Export all carries your items. On Canvas, Courses, Groups,
 Account, History, Help and Admin open as Glaze panels with Canvas's own session data. Course links and term names,
 account settings, recent pages and the school's help links stay within their permitted account. The course's own

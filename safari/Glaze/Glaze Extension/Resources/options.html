@@ -146,6 +146,11 @@
   .nb-picker button[aria-pressed="true"] { color: var(--gz-accent-ink); background: var(--gz-accent); border-color: var(--gz-accent); }
   .nb-glaze { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem; }
   .nb-glaze input { flex: none; }
+  .nb-widgets { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+  .nb-widgets li { display: flex; align-items: center; gap: .75rem; padding: .45rem .7rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
+  .nb-widgets li:has(input:checked) { border-color: var(--gz-accent); background: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent); }
+  .nb-widgets label { flex: 1; display: flex; align-items: center; gap: .55rem; font-size: 13px; cursor: pointer; }
+  .nb-widgets svg { flex: none; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .nb-glaze label { display: flex; align-items: center; gap: .55rem; padding: .55rem .7rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); font-size: 13px; cursor: pointer; }
   .nb-glaze label:has(input:checked) { border-color: var(--gz-accent); background: color-mix(in srgb, var(--gz-accent-soft) 40%, transparent); }
   .nb-link-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .5rem .75rem; align-items: end; padding: .75rem; border: 1px dashed var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gz-radius, 12px) * 2 / 3); }
@@ -688,6 +693,9 @@
 <h3>Glaze's own</h3>
 <p class="desc">Off by default. Each one opens where you are.</p>
 <div id="nbar-glaze" class="nb-glaze"></div>
+<h3>Widgets</h3>
+<p class="desc">The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.</p>
+<ul id="nbar-widgets" class="nb-widgets"></ul>
 <h3>Your links</h3>
 <ul id="nbar-links" class="nb-list"></ul>
 <form id="nbar-link-form" class="nb-link-form">

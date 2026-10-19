@@ -1,5 +1,5 @@
 // The editor's Navigation items (the Navigation tab): every item of Glaze's own bar with its name, icon, group and order,
-// whether it shows, the four on a phone's bar, Glaze's own items (opt-in) and the student's links. It edits sync
+// whether it shows, the four on a phone's bar, Glaze's own items (opt-in), its widgets and the student's links. It edits sync
 // navbarItems, cleaned by lib/navbar.js exactly as the bar cleans it, and shows the bar's own grouping (GZ_NAVBAR.build),
 // so what is listed here is what the bar draws. Extension options page only (mount); `rows` is for node tests.
 var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
@@ -9,6 +9,8 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
   const ULTRA = ['institution-page', 'stream', 'course', 'organization', 'calendar', 'messages', 'grades', 'tools'];
   const NAMES = { 'institution-page': 'Institution page', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades', tools: 'Tools', dashboard: 'Dashboard', home: 'Site home', groups: 'Groups', history: 'History', help: 'Help', admin: 'Admin', notifications: 'Notifications' };
   const GLAZE = { notes: 'Notes', todo: 'To Do', search: 'Search', settings: 'Glaze settings' };
+  // Glaze's widgets in the bar (features/navbar-widgets.js), by their English names and icons.
+  const WIDGETS = { clock: ['Clock and date', 'history'], next: ['Next due', 'calendar'], timer: ['Focus timer', 'timer'], pet: ['Pet habitat', 'star'] };
   const MAX_BYTES = 8000;
 
   // The groups as the bar has them, every item in its place, hidden ones too: [{ label, items: [{ id, name, icon, hidden, tab, link }] }].
@@ -146,6 +148,18 @@ var GZ_NAVBAREDIT = globalThis.GZ_NAVBAREDIT || (() => {
         const c = node('input', { type: 'checkbox', checked: prefs.glaze.includes(g) });
         c.addEventListener('change', () => write({ ...prefs, glaze: c.checked ? [...prefs.glaze, g] : prefs.glaze.filter((x) => x !== g) }));
         return node('label', {}, c, svg(g === 'settings' ? 'glaze' : g), t(GLAZE[g]));
+      }));
+      // Glaze's widgets: the student's once they choose, else what the bar shows now (the older rail's).
+      const shown = M().build({ prefs, legacy }).widgets;
+      $('#nbar-widgets').replaceChildren(...Object.keys(WIDGETS).map((id) => {
+        const on = shown.find((w) => w.id === id), name = t(WIDGETS[id][0]);
+        const pick = (next) => write({ ...prefs, widgets: Object.keys(WIDGETS).map((w) => (w === id ? next : shown.find((x) => x.id === w))).filter(Boolean) });
+        const c = node('input', { type: 'checkbox', checked: !!on });
+        const at = node('select', {}, node('option', { value: 'top', textContent: t('Top') }), node('option', { value: 'bottom', textContent: t('Bottom') }));
+        at.value = on?.at || 'bottom'; at.disabled = !on; at.setAttribute('aria-label', name);
+        c.addEventListener('change', () => pick(c.checked ? { id, at: at.value } : null));
+        at.addEventListener('change', () => pick({ id, at: at.value }));
+        return node('li', {}, node('label', {}, c, svg(WIDGETS[id][1]), name), at);
       }));
       $('#nbar-links').replaceChildren(...prefs.links.map((l) => node('li', {}, svg(l.i), node('span', { className: 'nb-name', textContent: l.n }), node('span', { className: 'desc', textContent: new URL(l.u).hostname, translate: false }))));
       if (focus) box.querySelector(`li[data-id="${CSS.escape(focus[0])}"] [data-nb="${focus[1]}"]`)?.focus();

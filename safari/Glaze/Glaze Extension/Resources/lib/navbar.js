@@ -45,10 +45,14 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     megaphone: 'M4 10v4h3l7 4V6L7 10zM17.5 9a4 4 0 0 1 0 6',
     quiz: 'M8 4h8v3H8zM6 5.5H4.5V21h15V5.5H18M8 12l1.5 1.5L12.5 10M14 12h3M8 17l1.5 1.5 3-3.5M14 17h3',
     people: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16.5 4.5a3.5 3.5 0 0 1 0 6.5M18.5 14a5.5 5.5 0 0 1 3 6',
+    timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 1.5M9.5 2.5h5',
+    play: 'M8 5.5v13l10.5-6.5z',
+    pause: 'M8.5 5.5v13M15.5 5.5v13',
+    reset: 'M4 12a8 8 0 1 0 2.4-5.7M4 4.5V8h3.5',
     gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3.1 15H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.6V4.5a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
   };
   // The icons a student, a Look or a mod may give an item: every drawing but the bar's own controls.
-  const PICKS = Object.keys(ICONS).filter((k) => !['chevron', 'pin', 'more', 'close'].includes(k));
+  const PICKS = Object.keys(ICONS).filter((k) => !['chevron', 'pin', 'more', 'close', 'play', 'pause', 'reset'].includes(k));
   // A native item's icon, by its id in the shared vocabulary.
   const ICON_OF = { 'institution-page': 'home', dashboard: 'home', home: 'home', stream: 'activity', course: 'book', organization: 'organization', groups: 'groups', calendar: 'calendar', messages: 'inbox', grades: 'grades', tools: 'tools', help: 'help', history: 'history', admin: 'admin', profile: 'account', logout: 'signout', notifications: 'bell' };
   // A course's own pages (the course menu a site's adapter reads, features/navbar.js draws): an icon by what the page is,
@@ -84,6 +88,8 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
   //   tabs: [id]                                mobile's tabs before More (up to 4)
   //   glaze: ['notes' | 'todo' | 'search' | 'settings']   Glaze's own items, opt-in
   //   links: [{ id, n, u, i, tab }]             their own links (lib/nav-items.js link)
+  //   widgets: [{ id, at }]                     the widgets shown, in order, at the rail's 'top' or 'bottom'; left out until
+  //                                             they choose, when a worn Look's or the older rail's (navItems.widgets) show
   const clean = (raw) => {
     const out = { items: {}, groups: [], tabs: [], glaze: [], links: [] };
     if (!obj(raw)) return out;
@@ -112,6 +118,10 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     }
     out.tabs = [...new Set((Array.isArray(raw.tabs) ? raw.tabs : []).filter((id) => named(id) && !FOOT.includes(id)))].slice(0, 4);
     out.glaze = GLAZE.filter((g) => Array.isArray(raw.glaze) && raw.glaze.includes(g));
+    if (Array.isArray(raw.widgets)) {
+      out.widgets = [];
+      for (const w of raw.widgets.slice(0, 20)) if (obj(w) && N.WIDGETS.includes(w.id) && !out.widgets.some((x) => x.id === w.id)) out.widgets.push({ id: w.id, at: w.at === 'top' ? 'top' : 'bottom' });
+    }
     return out;
   };
 
@@ -121,7 +131,8 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
   //   prefs: clean()'s navbarItems; look: a worn Look's x.nav (GZ_NAV_LAYOUT.clean); legacy: navItems (lib/nav-items.js)
   //   mods: [{ owner, id, label, icon, href, badge, group, slot }] items mods added (features/navbar.js checks them)
   //   names: { notes, todo, search, settings }: Glaze's own items' names, in the page's language
-  // -> { groups: [{ id, label, items }], slots: { top, bottom }, account, signout, tabs, sheet, items }
+  // -> { groups: [{ id, label, items }], slots: { top, bottom }, account, signout, tabs, sheet, items, widgets }
+  // widgets: [{ id, at }] the student's (prefs.widgets), else a worn Look's (its w: items, at the top), else the older rail's.
   // An item: { id, label, icon, href, action, active, badge, owner, tab, panel }. Hidden items are left out everywhere but
   // `items`, which has every item with `hidden` set, for the editor and nav.model().
   const build = ({ native = [], prefs, look = null, legacy = null, mods = [], names = {} } = {}) => {
@@ -180,7 +191,9 @@ var GZ_NAVBAR = globalThis.GZ_NAVBAR || (() => {
     for (const i of all) { if (tabs.length >= 4) break; if (!tabs.includes(i)) tabs.push(i); }
     const sheet = mobile.map((g) => ({ ...g, items: g.items.filter((i) => !tabs.includes(i)) })).filter((g) => g.items.length);
     const foot = (id) => { const i = pool.get(id); return i && !i.hidden ? i : null; };
-    return { groups: visible, slots: { top: shown(slots.top), bottom: shown(slots.bottom) }, account: foot('profile'), signout: foot('logout'), tabs, sheet, items: [...pool.values()] };
+    const worn = (look?.groups || []).flatMap((g) => g.items).filter((id) => /^w:/.test(id) && N.WIDGETS.includes(id.slice(2))).map((id) => ({ id: id.slice(2), at: 'top' }));
+    const widgets = p.widgets || (worn.length ? worn : (legacy?.widgets || []).filter((w) => w.on).map(({ id, at }) => ({ id, at })));
+    return { groups: visible, slots: { top: shown(slots.top), bottom: shown(slots.bottom) }, account: foot('profile'), signout: foot('logout'), tabs, sheet, items: [...pool.values()], widgets };
   };
 
   // The rail's state, from the student's setting and the window: open (labels), or icons with a peek on hover.

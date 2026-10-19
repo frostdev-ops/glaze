@@ -2837,5 +2837,6 @@
   "No notifications": "Nenhuma notificação",
   "All messages": "Todas as mensagens",
   "No conversations": "Nenhuma conversa",
-  "ePortfolios": "Portfólios eletrônicos"
+  "ePortfolios": "Portfólios eletrônicos",
+  "The clock, what's due next, your focus timer and your pet, at the top or the bottom of the rail, and compact in a top bar. The same timer and pet as your other widgets: nothing more is recorded. Mods' navigation widgets sit with them.": "O relógio, o próximo prazo, seu timer de foco e seu pet, no topo ou na base da barra, e compactos em uma barra superior. O mesmo timer e o mesmo pet dos seus outros widgets: nada a mais é registrado. Os widgets de navegação dos mods ficam junto deles."
 };

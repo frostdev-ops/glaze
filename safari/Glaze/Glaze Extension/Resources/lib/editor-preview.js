@@ -42,7 +42,7 @@
     else if (globalThis.GZ_MX?.EVENTS.includes(m)) globalThis.GZ_CTX?.moment?.(m);
   });
   if (site === 'ultra') {
-    for (const file of ['content-ultra.js', 'content.js', 'features/coursetabs.js', 'features/cards.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar.js', 'lib/lookx.js', 'features/rules.js', 'lib/motionx.js', 'features/motionx.js']) await load(file);
+    for (const file of ['content-ultra.js', 'content.js', 'features/coursetabs.js', 'features/cards.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-widgets.js', 'features/navbar.js', 'lib/lookx.js', 'features/rules.js', 'lib/motionx.js', 'features/motionx.js']) await load(file);
     // The mock supplies the phone drawer shell; the actual rail code still owns labels, shrink and hover expansion.
     const menu = document.querySelector('#preview-menu'), drawer = document.querySelector('.MuiDrawer-root');
     const close = () => { html.removeAttribute('data-preview-nav-open'); drawer.removeAttribute('role'); drawer.removeAttribute('aria-modal'); menu.setAttribute('aria-expanded', 'false'); menu.focus(); };
@@ -133,8 +133,8 @@
     });
     // The Look's page tweaks and motion on the mock, through the page's own code (each reads GZ_CTX as it loads).
     for (const file of ['lib/lookx.js', 'features/rules.js', 'features/motionx.js']) await load(file);
-    if (site === 'canvas') for (const file of ['features/coursetabs.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar.js']) await load(file);
-    if (site === 'moodle') for (const file of ['lib/navbar.js', 'features/navbar-moodle.js', 'features/navbar.js']) await load(file);
+    if (site === 'canvas') for (const file of ['features/coursetabs.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-widgets.js', 'features/navbar.js']) await load(file);
+    if (site === 'moodle') for (const file of ['lib/navbar.js', 'features/navbar-moodle.js', 'features/navbar-widgets.js', 'features/navbar.js']) await load(file);
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', paint);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paint);
     document.addEventListener('glaze:parts', paint);

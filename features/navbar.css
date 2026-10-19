@@ -120,11 +120,62 @@ a { color: inherit; text-decoration: none; }
 :host([data-style="embed"]) .rail[data-open] { clip-path: inset(0 -60px 0 0); }
 :host([data-style="embed"][dir="rtl"]) .rail[data-open] { clip-path: inset(0 0 0 -60px); }
 
+/* ---- Glaze's widgets: cards in the open rail, compact in the icons rail and the top bar, a grid in a phone's sheet ---- */
+.widgets { display: flex; flex-direction: column; gap: 6px; }
+.widgets:empty { display: none; }
+.wtop { margin-bottom: 10px; }
+.wbottom { margin: 8px 0; padding-top: 10px; border-top: 1px solid var(--nb-line); }
+.widget[data-w="pet"]:not([data-ready]) { display: none; }
+.widget {
+  position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--item); flex: none; padding: 7px 12px;
+  border-radius: 14px; background: var(--nb-hover); color: var(--gz-ink, #e8eef8); font-size: 13px; font-weight: 600; overflow: hidden;
+  transition: background-color 160ms ease;
+}
+a.widget[href]:hover { background: var(--nb-active); }
+a.widget[aria-disabled="true"] { cursor: default; }
+.widget .w-icon { width: 20px; height: 20px; color: var(--gz-accent-hi, #6fdcff); }
+.w-time { flex: none; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.w-detail, .w-when { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gz-ink-muted, #a9b8cf); font-size: 12px; }
+.w-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.w-text .w-detail { color: var(--gz-ink, #e8eef8); font-size: 13px; }
+.widget[data-w="clock"] { justify-content: space-between; }
+.widget[data-w="timer"] .w-time { flex: 1; }
+.widget[data-running] .w-time { color: var(--gz-accent-hi, #6fdcff); }
+.w-go, .w-reset { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; border-radius: 9px; transition: background-color 160ms ease; }
+.w-go { padding: 0 10px; background: var(--nb-active); box-shadow: inset 0 0 0 1px var(--nb-active-edge); font-size: 12px; font-weight: 700; }
+.w-reset { width: 30px; color: var(--gz-ink-muted, #a9b8cf); }
+.w-go:hover, .w-reset:hover { background: var(--nb-active-edge); color: var(--gz-ink, #e8eef8); }
+.w-go svg, .w-reset svg { width: 15px; height: 15px; }
+.w-status { position: absolute; inset-inline: 12px; bottom: 1px; font-size: 10px; color: var(--nb-badge); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-status:empty { display: none; }
+.w-pet { flex: none; display: grid; place-items: center; width: 34px; height: 34px; }
+.w-pet :is(img, canvas) { display: block; width: 34px; height: 34px; object-fit: contain; }
+.w-pet .gz-w-pet { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 10px; }
+.w-pet .gz-w-cheer { display: none; }
+/* The icons rail: each widget in a square, its words in its tip. */
+.rail:not([data-open]) .widget { width: calc(var(--shut) - 18px); flex-direction: column; justify-content: center; gap: 4px; padding: 7px 0; }
+.rail:not([data-open]) .widget :is(.w-detail, .w-when, .w-text, .w-label, .w-reset, .w-status), .rail:not([data-open]) .widget[data-w="timer"] .w-icon { display: none; }
+.rail:not([data-open]) .w-time { font-size: 13px; }
+.rail:not([data-open]) .w-go { width: 30px; height: 24px; padding: 0; }
+.rail:not([data-open]) .w-pet, .rail:not([data-open]) .w-pet :is(img, canvas) { width: 30px; height: 30px; }
+/* Mods' navigation widgets: the dock, under the open rail's items (it never moves: a frame moved loads again). */
+.dock { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; outline: none; }
+.dock:empty { display: none; }
+.dock > * { display: block; width: 100%; border-radius: 14px; overflow: hidden; background: var(--nb-hover); }
+.rail:not([data-open]) .dock { visibility: hidden; }
+
 /* ---- the top bar: its items in a row (what doesn't fit under More), the course tabs, the account ---- */
 .topbar, .menu { display: none; }
 :host([data-place="top"]) .rail, :host([data-place="none"]) :is(.rail, .topbar, .tabs) { display: none; }
 :host([data-place="top"]) .topbar { display: flex; }
 :host([data-place="top"]) .menu:not([hidden]) { display: flex; }
+/* With a top bar or on a phone, the dock opens over the page from its button: the rail stands invisible around it. */
+:host([data-dock]) .rail { display: flex; visibility: hidden; pointer-events: none; clip-path: none; backdrop-filter: none; -webkit-backdrop-filter: none; transition: none; }
+:host([data-dock]) .dock {
+  visibility: visible; pointer-events: auto; position: fixed; z-index: 3; width: 320px; max-height: min(70vh, 560px); margin: 0; padding: 10px;
+  overflow: auto; overscroll-behavior: contain; border-radius: 18px; background: var(--gz-surface, #121d2f); border: 1px solid var(--nb-line);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.4); animation: gz-nb-panel-down 180ms var(--ease) both;
+}
 .topbar {
   position: fixed; z-index: 1; inset-inline: var(--gutter); top: var(--gutter); height: 56px; align-items: center; gap: 8px; padding: 0 8px;
   background: var(--nb-bg); border: 1px solid var(--nb-line); border-radius: 18px;
@@ -167,6 +218,16 @@ a { color: inherit; text-decoration: none; }
 .tacc .avatar { width: 32px; height: 32px; margin: 0; font-size: 12px; }
 .tacc svg { width: 24px; height: 24px; }
 .tacc[hidden] { display: none; }
+.twidgets { flex: none; display: flex; align-items: center; gap: 2px; }
+.twidgets .widget { width: auto; min-height: 0; height: 40px; gap: 6px; padding: 0 10px; background: transparent; border-radius: 12px; }
+.twidgets .widget:hover { background: var(--nb-hover); }
+.twidgets .widget :is(.w-detail, .w-when, .w-text, .w-label, .w-reset, .w-status), .twidgets .widget[data-w="timer"] .w-icon { display: none; }
+.twidgets .w-time { font-size: 14px; }
+.twidgets .w-go { width: 28px; height: 28px; padding: 0; }
+.twidgets .w-pet, .twidgets .w-pet :is(img, canvas) { width: 30px; height: 30px; }
+.tdock { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; color: var(--gz-ink-muted, #a9b8cf); }
+.tdock:hover, .tdock[aria-expanded="true"] { background: var(--nb-hover); color: var(--gz-ink, #e8eef8); }
+.tdock[hidden] { display: none; }
 .tip[data-below], :host([dir="rtl"]) .tip[data-below] { transform: translate(-50%, -4px); }
 .tip[data-below][data-on], :host([dir="rtl"]) .tip[data-below][data-on] { transform: translate(-50%, 0); }
 
@@ -303,9 +364,14 @@ a { color: inherit; text-decoration: none; }
   .sheet .ctab { width: 100%; }
   .sheet .ctab .ctab-go { width: 100%; }
   .sheet .ctab-tools { opacity: 1; pointer-events: auto; inset-inline-end: 10px; }
+  .swidgets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 8px 10px; }
+  .swidgets .widget { min-height: 56px; }
+  .swidgets .widget:is([data-w="next"], [data-w="timer"]) { grid-column: 1 / -1; }
+  :host([data-dock]) .dock { inset-inline: 8px; top: auto; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); width: auto; animation-name: gz-nb-panel-up; }
+  :host([data-dock][data-footer]) .dock { bottom: calc(92px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* ---- motion: off, and the student's reduced motion ---- */
 :host([data-motion="off"]) *, :host([data-motion="off"]) *::before { transition: none !important; }
-:host([data-motion="off"]) .panel { animation: none; }
-@media (prefers-reduced-motion: reduce) { * , *::before { transition-duration: 1ms !important; transition-delay: 0ms !important; } .panel { animation: none; } }
+:host([data-motion="off"]) :is(.panel, .dock) { animation: none; }
+@media (prefers-reduced-motion: reduce) { * , *::before { transition-duration: 1ms !important; transition-delay: 0ms !important; } .panel, .dock { animation: none; } }

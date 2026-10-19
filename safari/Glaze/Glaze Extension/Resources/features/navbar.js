@@ -5,7 +5,11 @@
 // a top bar, or none). Glaze's course tabs show in it too. A site's own menus (Canvas's trays: Courses, Account, Help…)
 // open as Glaze's panels beside the bar, and a course's own menu (Canvas's course navigation, Moodle's) is a part of
 // the bar inside a course. Below 900px: a bottom bar and a More sheet. Looks and mods style it by part (::part(item));
-// mods add items and listen through the API at the end (features/mods.js carries their calls here).
+// mods add items and listen through the API at the end (features/mods.js carries their calls here). Glaze's widgets (the
+// clock, the next thing due, the focus timer, the pet: features/navbar-widgets.js) sit in the rail, compact in the icons
+// rail and the top bar, and in a phone's sheet; mods' navigation widgets sit in the rail's dock, which never moves (a frame
+// moved loads again): with a top bar or on a phone, the rail stands invisible and the dock opens over the page from a
+// Widgets button.
 //
 // A site's adapter (GZ_NAVBAR_<SITE>(X), below for Ultra, features/navbar-<site>.js for the others):
 //   read() -> [{ id, label, href, active, badge, panel }]   the site's own items (lib/navlayout.js's vocabulary)
@@ -42,6 +46,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   let host = null, root, el = {}, sizes = null, model = null, rows = [], sig = '', prefs = M.clean(), legacy = null, read = false, lay = null, words = '';
   let rail = null, applied = null, peek = false, shown = false, sheetOpen = false, menu = '', enter = 0, leave = 0, queued = 0, placed = false, frame = 0, sleeping = false, measured = '';
   let cmenu = null, panel = '', panelFrom = null, panelTurn = 0;
+  let wx = null, docked = false; // Glaze's widgets (features/navbar-widgets.js), once any is on; the dock open over the page
   const skipMain = new Set(); // Elements given a temporary focus target by Skip to content.
   const panels = new Map(); // id -> { at, data }: a panel's rows, kept a minute
   const listeners = new Map(), mods = new Map(); // event -> Set(fn); owner -> Map(id -> item)
@@ -80,6 +85,9 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // The rail.
     el.brand = part(make('a', { className: 'brand' }), 'brand');
     el.top = make('div', { className: 'slot' }); el.top.dataset.slot = 'top';
+    el.wtop = make('div', { className: 'widgets wtop' }); el.wbottom = make('div', { className: 'widgets wbottom' });
+    el.dock = part(make('div', { className: 'dock', role: 'group' }), 'dock');
+    el.dock.setAttribute('aria-label', t('Widgets')); el.dock.tabIndex = -1;
     el.ind = part(make('span', { className: 'ind', hidden: true }), 'indicator');
     el.list = make('div', { className: 'list' });
     el.bottom = make('div', { className: 'slot' }); el.bottom.dataset.slot = 'bottom';
@@ -89,7 +97,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.pin.style.setProperty('--i', 9);
     el.out = part(make('button', { type: 'button', className: 'item out label' }, icon('signout')), 'item signout');
     el.out.dataset.id = 'logout';
-    el.rail = part(make('nav', { className: 'rail' }, el.brand, el.top, el.list, make('div', { className: 'fill' }), el.bottom, el.account,
+    el.rail = part(make('nav', { className: 'rail' }, el.brand, el.wtop, el.top, el.list, make('div', { className: 'fill' }), el.wbottom, el.dock, el.bottom, el.account,
       make('div', { className: 'controls' }, el.toggle, el.pin, el.out)), 'bar rail');
     // The top bar: its items (what doesn't fit goes under More), the course tabs, the account.
     el.tbrand = part(make('a', { className: 'brand' }), 'brand');
@@ -106,9 +114,13 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       box.scrollBy({ left: (rtl() ? -1 : 1) * e.deltaY * (e.deltaMode === 1 ? 32 : 1), behavior: e.deltaMode === 0 && Math.abs(e.deltaY) < 40 ? 'auto' : 'smooth' });
     }, { passive: false });
     el.ttabs.addEventListener('scroll', () => tabsScroll(), { passive: true });
+    el.tdock = part(make('button', { type: 'button', className: 'tdock', hidden: true }, icon('layers')), 'item widgets');
+    el.tdock.dataset.act = 'widgets'; el.tdock.setAttribute('aria-label', t('Widgets')); el.tdock.dataset.tip = t('Widgets');
+    el.twidgets = make('div', { className: 'twidgets' }, el.tdock);
+    el.swidgets = make('div', { className: 'swidgets' });
     el.tacc = part(make('button', { type: 'button', className: 'tacc' }), 'account');
     el.tacc.setAttribute('aria-haspopup', 'menu');
-    el.topbar = part(make('nav', { className: 'topbar' }, el.tbrand, make('div', { className: 'tlist' }, el.tind, el.titems, el.tmore), el.ttabs, el.tacc), 'bar top');
+    el.topbar = part(make('nav', { className: 'topbar' }, el.tbrand, make('div', { className: 'tlist' }, el.tind, el.titems, el.tmore), el.ttabs, el.twidgets, el.tacc), 'bar top');
     // Inside a course: its own menu, as a second row under the top bar.
     el.tsub = part(make('nav', { className: 'tsub', hidden: true }), 'bar course-menu');
     // A site's own menus (Courses, Account, Help…), drawn by Glaze beside the rail, under the top bar, or as a sheet.
@@ -142,7 +154,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     (document.body || html).append(host);
     if (typeof ResizeObserver === 'function') {
       sizes = new ResizeObserver(() => { if (host === mounted) { measured = ''; queue(); } });
-      for (const box of [el.tbrand, el.titems, el.ttabs]) sizes.observe(box);
+      for (const box of [el.tbrand, el.titems, el.ttabs, el.twidgets]) sizes.observe(box);
     }
     site.observe(queue);
   };
@@ -229,6 +241,19 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     a.replaceChildren(src ? make('img', { className: own ? 'logo own' : 'logo', src, alt: '' }) : glazeLogo());
     if (!src) a.append(make('span', { className: 'label' }, make('b', { textContent: 'Glaze' }), brand.name ? make('small', { textContent: brand.name }) : null));
   };
+  // Glaze's widgets where the bar is: the rail (its top or its bottom), the top bar's row, or a phone's sheet. A widget is
+  // moved only when its place changes (a pet, a running timer or a focused button stay as they are).
+  const fill = (box, kids) => { if (kids.length !== box.childNodes.length || kids.some((k, i) => box.childNodes[i] !== k)) box.replaceChildren(...kids); };
+  const placeWidgets = () => {
+    const ws = wx ? model.widgets.filter((w) => wx.nodes.has(w.id)) : [], box = (w) => wx.nodes.get(w.id).box;
+    const phone = !wide(), top = !phone && lay.place === 'top';
+    fill(el.wtop, phone || top ? [] : ws.filter((w) => w.at === 'top').map(box));
+    fill(el.wbottom, phone || top ? [] : ws.filter((w) => w.at !== 'top').map(box));
+    fill(el.twidgets, [...(top ? ws.map(box) : []), el.tdock]);
+    fill(el.swidgets, phone ? ws.map(box) : []);
+    el.tdock.hidden = !el.dock.childElementCount;
+    el.tdock.setAttribute('aria-expanded', String(docked));
+  };
   const render = () => {
     const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tabs, .sheet, .menu'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
     const tabAt = focusedTab ? [...pane.querySelectorAll('.ctab-go')].findIndex((e) => e.dataset.cid === active.dataset.cid) : -1, wasMenu = menu;
@@ -301,10 +326,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.more.setAttribute('aria-haspopup', 'dialog'); el.more.setAttribute('aria-expanded', String(sheetOpen)); el.more.setAttribute('aria-controls', el.sheet.id);
     el.tabs.replaceChildren(el.pill, ...tabs, el.more);
     const row = (item) => { const b = badgeOf(item); return put(node(item, 'row', 'row'), icon(item.icon), make('span', { textContent: item.label }), b ? badge(b) : null); };
-    const sheetRows = [make('div', { className: 'handle' })];
+    placeWidgets();
+    const sheetRows = [make('div', { className: 'handle' }), ...(el.swidgets.childElementCount ? [el.swidgets] : [])];
     model.sheet.forEach((g, at) => { if (at) sheetRows.push(sep()); sheetRows.push(...g.items.map(row)); });
     if (cmenu) { sheetRows.push(sep(), courseLabel(), ...cmenu.items.map(row)); }
     if (lay.tabs && rows.length) { sheetRows.push(sep(), make('div', { className: 'group-label', textContent: t('Course tabs') }), ...rows.map((r) => courseTab(r, 'row'))); }
+    if (el.dock.childElementCount) {
+      const dock = part(make('button', { type: 'button', className: 'row' }, icon('layers'), make('span', { textContent: t('Widgets') })), 'row widgets');
+      dock.dataset.act = 'widgets'; dock.setAttribute('aria-haspopup', 'dialog');
+      sheetRows.push(sep(), dock);
+    }
     sheetRows.push(sep());
     if (acc) sheetRows.push(row({ ...acc, label: t('Account') }));
     if (model.signout) sheetRows.push(row(model.signout));
@@ -366,6 +397,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.tsub.hidden = !(lay.menu && cmenu && lay.place === 'top' && wide());
     room();
     if (panel) placePanel();
+    if (docked) { if (lay.place === 'rail' && wide() || lay.place === 'none' || !el.dock.childElementCount) dockTo(false, false); else placeDock(); }
     if (open !== shown) { shown = open; emit(open ? 'expand' : 'collapse', {}); if (open) tip(null); }
     if (host.hidden) return;
     measured = geometry();
@@ -429,7 +461,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const tip = (target) => {
     if (!el.tip) return;
     const vertical = lay?.place === 'top';
-    if (!target || !wide() || (!vertical && shown) || (vertical && !el.topbar.hasAttribute('data-compact') && !target.classList.contains('tacc') && !target.classList.contains('ctab-go'))) { el.tip.removeAttribute('data-on'); return; }
+    if (!target || !wide() || (!vertical && shown) || (vertical && !el.topbar.hasAttribute('data-compact') && !target.classList.contains('tacc') && !target.classList.contains('ctab-go') && !target.closest('.twidgets'))) { el.tip.removeAttribute('data-on'); return; }
     const r = target.getBoundingClientRect();
     el.tip.textContent = target.dataset.tip;
     el.tip.toggleAttribute('data-below', vertical);
@@ -501,6 +533,25 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (focus) el.menu.querySelector('a, button')?.focus({ preventScroll: true });
   };
   const outside = (e) => { if (!e.composedPath().includes(host)) menuTo('', false); };
+  // Mods' widgets with a top bar or on a phone: the rail's dock, open over the page under its button or over the phone's
+  // bar. The rail stands invisible around it (features/navbar.css), so the widgets' frames stay where they were.
+  const dockTo = (open, focus = true) => {
+    if (!host || docked === open || open && (!el.dock.childElementCount || lay.place === 'rail' && wide())) return;
+    docked = open;
+    host.toggleAttribute('data-dock', open);
+    el.tdock.setAttribute('aria-expanded', String(open));
+    if (open) { placeDock(); document.addEventListener('pointerdown', outsideDock, true); if (focus) el.dock.focus({ preventScroll: true }); return; }
+    document.removeEventListener('pointerdown', outsideDock, true);
+    el.dock.style.left = el.dock.style.top = '';
+    if (focus) (wide() ? el.tdock : el.more)?.focus({ preventScroll: true });
+  };
+  const placeDock = () => {
+    if (!docked || !wide()) { el.dock.style.left = el.dock.style.top = ''; return; }
+    const r = el.tdock.getBoundingClientRect(), w = el.dock.offsetWidth;
+    el.dock.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, rtl() ? r.left : r.right - w))}px`;
+    el.dock.style.top = `${r.bottom + 8}px`;
+  };
+  const outsideDock = (e) => { const path = e.composedPath(); if (!path.includes(el.dock) && !path.includes(el.tdock) && !path.includes(el.sheet)) dockTo(false, false); };
 
   // ---- panels: a site's own menus, drawn by Glaze ----------------------------------------------------------------------
   // Beside the rail (its full height), under the top bar's item, or on a phone as a sheet over the bottom bar.
@@ -645,9 +696,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       if (prow.href && prow.target !== '_blank' && sameSite(prow.href) && plain(e)) { e.preventDefault(); const href = prow.href; panelTo('', null, false); openHere(href); return; }
       if (prow.href) { panelTo('', null, false); return; }
     }
+    // What's due next, a page of this site: through the course tabs where they run, as the bar's other links.
+    const due = path.find((n) => n.dataset?.w === 'next');
+    if (due && e.type === 'click') {
+      globalThis.GZ_SETTINGS_PAGE?.close();
+      if (due.href && due.target !== '_blank' && sameSite(due.href) && plain(e)) { e.preventDefault(); const href = due.href; sheetTo(false); openHere(href); }
+      return;
+    }
     const target = path.find((n) => n.dataset && (n.dataset.id !== undefined || n.dataset.act));
     // Somewhere else picked in the bar leaves Glaze's settings page, as leaving any page.
-    if (target && e.type === 'click' && target.dataset.id !== 'glaze:settings' && !['customize', 'panel-close', 'panel-retry', 'tab-pin', 'tab-close'].includes(target.dataset.act)) globalThis.GZ_SETTINGS_PAGE?.close();
+    if (target && e.type === 'click' && target.dataset.id !== 'glaze:settings' && !['customize', 'panel-close', 'panel-retry', 'tab-pin', 'tab-close', 'widgets'].includes(target.dataset.act)) globalThis.GZ_SETTINGS_PAGE?.close();
     if (e.type === 'auxclick' && target?.dataset.act !== 'tab') return;
     if (!target) {
       if (path.includes(el.toggle)) { e.preventDefault(); pinTo(!(lay.open || peek)); }
@@ -661,6 +719,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const act = target.dataset.act;
     if (act === 'panel-close') { e.preventDefault(); panelTo(''); return; }
     if (act === 'panel-retry') { e.preventDefault(); panels.delete(panel); panelTo(panel, panelFrom); return; }
+    if (act === 'widgets') { e.preventDefault(); sheetTo(false); dockTo(!docked); return; }
     if (act?.startsWith('tab')) { e.preventDefault(); tabAct(act, target.dataset.cid, e); if (act === 'tab') { sheetTo(false); if (!lay.open) peekTo(false); } return; }
     if (act) { e.preventDefault(); sheetTo(false); menuTo('', false); glaze(act, e); return; }
     const item = byId(target.dataset.id);
@@ -693,6 +752,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     }
     if (e.key === 'Escape') {
       if (panel) { e.preventDefault(); panelTo(''); return; }
+      if (docked) { e.preventDefault(); dockTo(false); return; }
       if (sheetOpen) { e.preventDefault(); sheetTo(false); return; }
       if (menu) { e.preventDefault(); menuTo(''); return; }
       if (peek) { e.preventDefault(); peekTo(false); el.toggle.focus({ preventScroll: true }); }
@@ -722,6 +782,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     clearLogo();
     if (!host) return;
     if (sheetOpen) sheetTo(false);
+    dockTo(false, false);
+    wx?.stop();
     menuTo('', false);
     panelTo('', null, false);
     for (const main of skipMain) if (main.getAttribute('tabindex') === '-1') main.removeAttribute('tabindex');
@@ -764,7 +826,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     model = M.build({ native, prefs, look, legacy, mods: [...mods.values()].flatMap((m) => [...m.values()]),
       names: { notes: t('Notes'), todo: t('To Do'), search: t('Search'), settings: t('Glaze settings') } });
     if (glazePage) for (const i of model.items) if (i.id === 'glaze:settings') i.active = true;
-    const next = JSON.stringify([model, rows, lay, cmenu, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url]);
+    // Glaze's widgets load with the first one turned on; mods' navigation widgets go in the dock, once each.
+    const wants = model.widgets.map((w) => w.id);
+    if (wants.length && !wx) {
+      if (globalThis.GZ_NAVBAR_WIDGETS) wx = GZ_NAVBAR_WIDGETS(X, { make, icon, isPreview });
+      else X.need('features/navbar-widgets.js', () => globalThis.GZ_NAVBAR_WIDGETS).then(() => { sig = ''; queue(); }, () => {});
+    }
+    wx?.set(wants);
+    const docks = [...(globalThis.GZ_MODS?.rail() || []), ...(globalThis.GZ_MODWIDGETS?.rail() || [])];
+    for (const d of docks) if (d.el.parentNode !== el.dock) el.dock.append(d.el);
+    const next = JSON.stringify([model, rows, lay, cmenu, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url, !!wx, docks.map((d) => d.key), wide()]);
     if (next !== sig) { sig = next; render(); emit('change', view()); } else if (measured !== geometry()) layout();
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };

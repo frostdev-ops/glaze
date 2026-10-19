@@ -61,7 +61,7 @@ test('turning the bar off restores tabindex added by Skip to content', () => {
     const context = vm.createContext({ document: doc, html, el: { skip }, host: new El('div', doc), site: { main: () => main, unobserve() {} },
       chrome: { runtime: { id: "glaze" } }, clearLogo() {},
       enter: 0, leave: 0, frame: 0, queued: 0, sheetOpen: false, sizes: null, words: '', panels: new Map(),
-      clearTimeout() {}, cancelAnimationFrame() {}, menuTo() {}, panelTo() {}, emit() {} });
+      clearTimeout() {}, cancelAnimationFrame() {}, menuTo() {}, panelTo() {}, dockTo() {}, emit() {} });
     const declarations = src.slice(src.indexOf('  let cmenu ='), src.indexOf('  const panels ='));
     vm.runInContext(declarations + src.slice(src.indexOf('  const click ='), src.indexOf('  const key =')) + src.slice(src.indexOf('  const stop ='), src.indexOf('  const sync =')) + '\nglobalThis.skip = click; globalThis.stop = stop;', context);
     context.skip({ type: 'click', composedPath: () => [skip], preventDefault() {} });
