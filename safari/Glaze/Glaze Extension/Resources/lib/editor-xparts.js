@@ -22,7 +22,7 @@ var GZ_XEDIT = globalThis.GZ_XEDIT || (() => {
   const shift = (list, from, to) => { const out = [...list]; out.splice(to, 0, ...out.splice(from, 1)); return out; };
 
   // ---- nav layout ---------------------------------------------------------------------------------
-  const NAMES = { profile: 'Profile', 'institution-page': 'Institution page', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades', tools: 'Tools', logout: 'Sign out', glaze: 'Glaze settings', dashboard: 'Dashboard', home: 'Site home', history: 'History', help: 'Help', groups: 'Groups', admin: 'Admin' };
+  const NAMES = { profile: 'Profile', 'institution-page': 'Institution page', stream: 'Activity', course: 'Courses', organization: 'Organizations', calendar: 'Calendar', messages: 'Messages', grades: 'Grades', tools: 'Tools', logout: 'Sign out', glaze: 'Glaze settings', dashboard: 'Dashboard', home: 'Site home', history: 'History', help: 'Help', groups: 'Groups', admin: 'Admin', notifications: 'Notifications' };
   const WIDGETS = { clock: 'Clock and date', next: 'Next due', timer: 'Focus timer', pet: 'Pet habitat' };
   const ICONS = { link: 'Link', book: 'Book', video: 'Video', chat: 'Chat', doc: 'Document', calendar: 'Calendar', folder: 'Folder', code: 'Code', star: 'Star', globe: 'Globe' };
   const PLACES = { left: 'Left side', top: 'Top bar', bottom: 'Bottom bar', dock: 'Floating dock' };

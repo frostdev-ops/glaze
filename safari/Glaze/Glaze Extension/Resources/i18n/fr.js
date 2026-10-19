@@ -2823,4 +2823,8 @@
   "The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.": "Les cours que vous ouvrez figurent aussi dans la navigation. Cliquez sur l’un d’eux pour y passer ; le bouton du milieu ou Suppr le ferme, et P l’épingle. Pour ne les avoir que là, choisissez Seulement dans la navigation dans les réglages des onglets de cours.",
   "Only in the navigation": "Seulement dans la navigation",
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Seulement dans la navigation demande la navigation Glaze avec ses onglets de cours activés. Sans eux, les onglets se placent au-dessus de la barre du cours.",
+  "Couldn't load this. Try again in a moment.": "Impossible de charger ceci. Réessayez dans un instant.",
+  "Nothing here yet.": "Rien ici pour l’instant.",
+  "The course's menu in the navigation": "Le menu du cours dans la navigation",
+  "On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.": "Sur Canvas et Moodle, les pages d’un cours (Accueil, Modules, Notes…) figurent dans la navigation, sous le nom du cours, au lieu d’un menu à côté de la page. Avec une barre en haut, elles forment une deuxième ligne en dessous.",
 };

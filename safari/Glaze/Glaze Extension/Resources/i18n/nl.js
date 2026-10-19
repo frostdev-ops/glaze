@@ -2823,4 +2823,8 @@
   "The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.": "De cursussen die je opent staan ook in de navigatie. Klik op een cursus om te wisselen; de middelste knop of Delete sluit hem, en P zet hem vast. Wil je ze alleen daar, kies dan Alleen in de navigatie in de instellingen voor cursustabbladen.",
   "Only in the navigation": "Alleen in de navigatie",
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Alleen in de navigatie vraagt om Glaze-navigatie met cursustabbladen aan. Zonder die staan de tabbladen boven de balk van de cursus.",
+  "Couldn't load this. Try again in a moment.": "Dit kon niet worden geladen. Probeer het zo opnieuw.",
+  "Nothing here yet.": "Hier staat nog niets.",
+  "The course's menu in the navigation": "Het menu van de cursus in de navigatie",
+  "On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.": "Op Canvas en Moodle staan de eigen pagina’s van een cursus (Start, Modules, Cijfers…) in de navigatie, onder de naam van de cursus, in plaats van in een menu naast de pagina. Met een bovenbalk vormen ze een tweede rij eronder.",
 };

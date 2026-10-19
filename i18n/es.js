@@ -2823,4 +2823,8 @@
   "The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.": "Los cursos que abres también aparecen en la navegación. Haz clic en uno para cambiar; el botón central o Supr lo cierra, y P lo fija. Para tenerlos solo ahí, elige Solo en la navegación en los ajustes de pestañas de curso.",
   "Only in the navigation": "Solo en la navegación",
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Solo en la navegación necesita la navegación de Glaze con sus pestañas de curso activadas. Sin ellas, las pestañas van sobre la barra del curso.",
+  "Couldn't load this. Try again in a moment.": "No se pudo cargar. Inténtalo de nuevo en un momento.",
+  "Nothing here yet.": "Aún no hay nada aquí.",
+  "The course's menu in the navigation": "El menú del curso en la navegación",
+  "On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.": "En Canvas y Moodle, las páginas propias de un curso (Inicio, Módulos, Calificaciones…) aparecen en la navegación, bajo el nombre del curso, en lugar de en un menú junto a la página. Con una barra superior, forman una segunda fila debajo.",
 };
