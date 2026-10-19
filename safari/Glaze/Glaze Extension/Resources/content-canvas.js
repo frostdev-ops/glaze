@@ -35,10 +35,34 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     const kept = JSON.parse(sessionStorage.getItem(COURSE_CACHE)), age = Date.now() - kept?.at;
     if (age >= 0 && age < 60000 && Array.isArray(kept.list) && kept.colors && typeof kept.colors === 'object') canvasSnapshot = kept;
   } catch { /* blocked or empty */ }
-  const canvasCourses = () => (canvasList ||= canvasSnapshot ? Promise.resolve(canvasSnapshot.list) : capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
+  // Follow Canvas's next link, never off this API; a broken cycle or huge account stops at twenty pages.
+  const readCourses = async () => {
+    let next = '/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100';
+    const out = [], seen = new Set();
+    for (let page = 0; next && page < 20 && !seen.has(next); page++) {
+      const path = next;
+      seen.add(path); next = '';
+      let link;
+      const rows = await capi(path, (r) => { link = r.headers.get('Link'); });
+      if (!Array.isArray(rows)) throw new Error('Invalid list');
+      out.push(...rows);
+      const raw = /<([^>]+)>\s*;\s*rel="?next"?(?:\s*[,;]|$)/i.exec(link || '')?.[1];
+      if (raw) try {
+        const u = new URL(raw, `${location.origin}/api/v1${path}`);
+        if (u.origin === location.origin && !u.username && !u.password && u.pathname.startsWith('/api/v1/')) next = u.pathname.slice(7) + u.search;
+      } catch { /* malformed next link */ }
+    }
+    return out;
+  };
+  const canvasCourses = () => (canvasList ||= canvasSnapshot ? Promise.resolve(canvasSnapshot.list) : readCourses()
     .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
   let mine = null;
-  const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
+  const profile = () => (mine ||= capi('/users/self/profile').then((p) => { try { if (/^\d+$/.test(p?.id)) sessionStorage.setItem('gz-canvas-profile', JSON.stringify({ at: Date.now(), value: p })); } catch { /* blocked or full */ } return p; }).catch((e) => { mine = null; throw e; }));
+  // Like courses/colors, identity follows same-tab frames and navigation for sixty seconds.
+  try {
+    const kept = JSON.parse(sessionStorage.getItem('gz-canvas-profile')), age = Date.now() - kept?.at;
+    if (age >= 0 && age < 60000 && /^\d+$/.test(kept.value?.id)) mine = Promise.resolve(kept.value);
+  } catch { /* blocked or empty */ }
   const record = () => Promise.all([canvasCourses(), canvasSnapshot ? canvasSnapshot.colors : capi('/users/self/colors').catch(() => null)]).then(([list, colors]) => {
     // Failed reads must not turn into a fresh, empty snapshot.
     if (coursesRead && colors) try { sessionStorage.setItem(COURSE_CACHE, JSON.stringify({ at: Date.now(), list, colors })); } catch { /* blocked or full */ }
@@ -219,10 +243,10 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // The outline with a done state is Modules: the bar adds up the completion requirements the course sets, done or not
-  // as Canvas's own API has them for this student (asked once a page), above the Modules list, also on a course home
+  // as Canvas's own API has them for this student, above the Modules list, also on a course home
   // that shows it. A course that sets none gets no bar: Canvas calls a module without requirements "completed", and it
   // hides that itself, as nothing there was asked of you.
-  // Progress and new-content badges share this exact capped list; news can refresh after five minutes.
+  // Progress and new-content badges share this exact capped list; both refresh after five minutes.
   const canvasModuleLists = new Map();
   const canvasModules = (cid) => {
     let c = canvasModuleLists.get(cid);
@@ -242,25 +266,27 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const syncFolders = () => (I.links.length && I.settings.enhance.hideFolders && document.getElementById('context_modules')
     ? need('lib/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('features/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(true, me()), () => {})
     : globalThis.GZ_FOLDER_UI?.sync(false));
-  let reqs = null; // { cid, progress: { done, total } | null }, null when the whole total isn't known
+  let reqs = null; // { cid, load, progress: { done, total } | null }, tied to the shared Modules cache
   const canvasProgress = () => {
     syncFolders();
     const old = document.getElementById('gz-progress');
     const cid = canvasCourseId();
     const list = I.observer && I.settings.enabled && I.settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
     if (!list) return old?.remove();
-    if (reqs?.cid !== cid) {
-      const r = (reqs = { cid });
+    const load = canvasModules(cid);
+    if (reqs?.cid !== cid || reqs.load !== load) {
+      const r = (reqs = { cid, load });
       // shortcut: hide incomplete module lists; follow Link and items_url if large-course progress is needed.
-      canvasModules(cid).then((mods) => {
+      load.then((mods) => {
         r.progress = GZ_PAGE.canvasProgress(mods);
         if (reqs === r) canvasProgress();
-      }).catch(() => {});
+      }).catch(() => { if (reqs === r) reqs = null; }); // a failed request must not pin the course
       return;
     }
     if (!reqs.progress?.total) return old?.remove();
     drawProgress(old, reqs.progress.done, reqs.progress.total, list);
   };
+  addEventListener('pageshow', (e) => { if (e.persisted) canvasProgress(); }); // BFCache may outlive the Modules cache
 
   // ---- new grades and new content (Extras) ----------------------------------------------------
   // Canvas keeps unread grade dots itself. A passive HTML GET reads those exact dots, without running

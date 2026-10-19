@@ -373,9 +373,9 @@
   // (content-ultra.js). Absolute URLs: Ultra's <base href> points at its CDN.
   // Canvas's REST API is the same thing under /api/v1 (capi): its string-id JSON keeps long ids exact, and an
   // older Canvas starts a response with `while(1);`.
-  const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', redirect: 'error', headers: { accept } })
-    .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
-  const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
+  const api = (path, base = '/learn/api/v1', accept = 'application/json', reply) => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', redirect: 'error', headers: { accept } })
+    .then((r) => (r.ok ? (reply?.(r), r.text()) : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
+  const capi = (path, reply) => api(path, '/api/v1', 'application/json+canvas-string-ids', reply);
   // The Canvas course this page is in (/courses/:id/...), or undefined.
   const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1];
 

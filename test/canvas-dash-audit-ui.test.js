@@ -117,7 +117,7 @@ test('course widgets keep their Canvas DOM and share metadata across repeated re
   assert.equal(p.body.querySelector('.ic-DashboardCard'), card); assert.equal(p.body.querySelector('.ic-DashboardCard__header_image'), image); assert.equal(p.reads(), 1);
 });
 
-test('BUG: course widgets retain their image while Canvas replaces its native cards', async () => {
+test('course widgets retain their image while Canvas replaces its native cards', async () => {
   const p = courseWidget(); await settle(); const image = p.body.querySelector('.ic-DashboardCard__header_image'), before = image.style.backgroundImage;
   assert.ok(before, 'the widget has the native course picture before the redraw');
   p.native.remove(); p.ui.sync(); p.tile.update();
@@ -174,10 +174,12 @@ test('Canvas menu nickname failures restore both native and widget card names', 
   assert.deepEqual(structuredClone(p.edits.at(-1)), ['31', { name: 'Original course' }]); assert.equal(p.note().hidden, false);
 });
 
-test('BUG: Canvas color edits flush before a persisted pagehide freezes their debounce', async () => {
+test('Canvas color edits flush before a persisted pagehide freezes their debounce', async () => {
   const p = menu(); await settle(); p.custom().value = '#abcdef'; p.event(p.custom(), 'input');
   assert.equal(p.calls.length, 0, 'the 500ms debounce has not elapsed');
   p.fire('pagehide', { persisted: true }); await settle();
   assert.equal(p.calls.length, 1, 'navigation within 500ms must save the optimistic Canvas color before the page enters BFCache');
   assert.deepEqual(JSON.parse(p.calls[0].options.body), { hexcode: '#abcdef' });
+  assert.equal(p.calls[0].options.keepalive, true);
+  await p.runTimers(); assert.equal(p.calls.length, 1, 'the flushed debounce must not save again after restore');
 });

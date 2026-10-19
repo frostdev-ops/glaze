@@ -69,7 +69,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
     for (const id of new Set([...Object.keys(shown), ...Object.keys(api), ...Object.keys(list)])) {
       const n = shown[id] || {}, a = api[id] || {}, l = list[id] || {}, edited = canvasEdits.get(id) || {};
       cards.set(id, { id, name: n.name || edited.name || a.name || l.name || id, code: n.code || a.course_code || l.code || '', term: n.term || a.term?.name || '',
-        color: n.color || edited.color || (COLOR.test(l.color || '') ? l.color : ''), image: n.image || '' });
+        color: n.color || edited.color || (COLOR.test(l.color || '') ? l.color : ''), image: shown[id] ? n.image : cards.get(id)?.image || '' }); // retain the picture across native card replacement
     }
     if (!canvasRows) watch(ctx.canvasCourses(), (rows) => { canvasRows = Array.isArray(rows) ? rows : []; sync(); });
   };

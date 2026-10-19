@@ -77,6 +77,9 @@ const HIDE_MODULES = { ultra: 0, canvas: 594, moodle: 0 };
 // course/color snapshot and mutation-scoped color lifts (+1340 Canvas). Existing headroom covers the rest;
 // raise only enough for the excess over each site's budget.
 const LOAD_AUDIT = { ultra: 246, canvas: 1201, moodle: 0 };
+// Dashboard audit: response headers add 35 shared bytes; bounded course pagination, shared identity and progress
+// expiry/retry add 1659 Canvas bytes. Raise only the excess after existing headroom and the 2% allowance.
+const DASH_AUDIT = { ultra: 34, canvas: 1660, moodle: 0 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -85,7 +88,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site], budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site], budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }

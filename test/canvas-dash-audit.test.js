@@ -1,5 +1,4 @@
 // Canvas dashboard/in-course audit: real site and folders code, inert DOM, deterministic time and API replies.
-// BUG tests assert the desired behavior and intentionally fail against the unmodified source.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -30,7 +29,7 @@ class E extends El {
   }
 }
 
-const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async (p) => p === '/users/self/profile' ? { id: '42' } : p === '/users/self/colors' ? {} : p.includes('/modules?') ? modules() : [course()], store = {} } = {}) => {
+const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async (p) => p === '/users/self/profile' ? { id: '42' } : p === '/users/self/colors' ? {} : p.includes('/modules?') ? modules() : [course()], store = {}, session = new Map() } = {}) => {
   const doc = {}, make = (tag, props = {}, ...kids) => { const e = Object.assign(new E(tag, doc), props); e.append(...kids); return e; };
   doc.root = make('html'); doc.head = make('head'); doc.body = make('body'); doc.root.append(doc.head, doc.body);
   const events = new Map(), documentEvents = new Map(), observers = [], timers = new Map(), calls = [], loads = [], writes = [], storeListeners = [];
@@ -45,6 +44,8 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
     if (cb) cb(value); else return Promise.resolve(value);
   }, set: async (patch) => { writes.push(patch); Object.assign(store, structuredClone(patch)); return true; } };
   const c = { document: doc, location: { origin, pathname: where }, URL, Intl, console, Promise, GZ_PAGE: P, GZ_FOLDERS: F, GZ_I18N: I18N,
+    sessionStorage: { getItem: (k) => session.get(k) ?? null, setItem: (k, v) => session.set(k, String(v)) },
+    fetch: async (url) => { const u = new URL(url), p = u.pathname.slice(7) + u.search; calls.push(p); const value = await api(p); return value instanceof Response ? value : new Response(JSON.stringify(value)); },
     Date: class extends Date { constructor(...args) { super(...(args.length ? args : [now])); } static now() { return now; } },
     addEventListener: (type, fn) => listen(events, type, fn), removeEventListener: (type, fn) => events.get(type)?.delete(fn),
     setTimeout: (fn, ms = 0) => { const id = ++serial; timers.set(id, { at: now + ms, fn }); return id; }, clearTimeout: (id) => timers.delete(id),
@@ -56,7 +57,6 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
   const settings = D.GZ_SANITIZE({ enhance: { progress: true, hideFolders: false, ...enhance } });
   const input = { settings, observer: {}, links: [{}], solo: true, tabFrame: frame, html: doc.root, locale: () => 'en', t: (k, v) => I18N.t(k, v, 'en'),
     canvasCourseId: () => c.location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1], canvasCourseKey: (id) => id ? `canvas:${origin}/${id}` : null,
-    capi: (p) => { calls.push(p); return Promise.resolve().then(() => api(p)); },
     need: async (f) => { loads.push(f); if (f === 'features/folders.js' && !c.GZ_FOLDER_UI) vm.runInContext(read(f), context); },
     setAttr: (k, v) => { if (v !== false && v != null && v !== '') doc.root.setAttribute(k, v === true ? '' : v); else doc.root.removeAttribute(k); },
     setVar: (k, v) => doc.root.style.setProperty(k, v), setCourseList: (list) => { input.courseList = list; }, courseList: {},
@@ -66,6 +66,7 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
   const context = vm.createContext(c);
   // Use the actual shared progress renderer as well as the Canvas orchestration.
   const content = read('content.js'), from = content.indexOf('  const drawProgress = '), to = content.indexOf('\n  };', from) + 5;
+  input.capi = vm.runInContext(`${content.slice(content.indexOf('  const api = '), content.indexOf('  // The Canvas course this page'))} capi;`, context);
   input.drawProgress = vm.runInContext(`(() => { const locale = GZ_CTX.locale || (() => 'en'), t = GZ_CTX.t; ${content.slice(from, to)} return drawProgress; })()`, context);
   const site = vm.runInContext(read('content-canvas.js'), context)(input);
   const addModules = () => {
@@ -83,7 +84,7 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
     return { card, subtitle, link, header };
   };
   const advance = async (ms) => { now += ms; for (const [id, timer] of [...timers]) if (timer.at <= now) { timers.delete(id); timer.fn(); } await settle(); };
-  return { site, input, c, doc, calls, loads, store, writes, addModules, addCard, advance, fire: (type, extra) => fire(events, type, extra),
+  return { site, input, c, doc, calls, loads, store, session, writes, addModules, addCard, advance, fire: (type, extra) => fire(events, type, extra),
     storageChanged: (key) => storeListeners.forEach((fn) => fn({ [key]: { newValue: store[key] } }, 'local')) };
 };
 
@@ -167,7 +168,7 @@ test('module progress shares its in-flight request and reuses its rendered bar',
   p.input.settings.enhance.progress = false; p.site.renderProgress(); assert.equal(p.doc.getElementById('gz-progress'), null);
 });
 
-test('BUG: module progress retries after a failed Modules API request', async () => {
+test('module progress retries after a failed Modules API request', async () => {
   let attempts = 0; const p = page({ where: '/courses/31/modules', api: async () => { if (++attempts === 1) throw new Error('503'); return modules(); } }); p.addModules();
   p.site.renderProgress(); await settle(); assert.equal(p.doc.getElementById('gz-progress'), null);
   await p.advance(60000); p.site.renderProgress(); await settle();
@@ -175,35 +176,46 @@ test('BUG: module progress retries after a failed Modules API request', async ()
   assert.equal(p.doc.getElementById('gz-progress')?.dataset.v, '0/1 en');
 });
 
-test('BUG: module progress refreshes expired completion data after a BFCache restore', async () => {
+test('module progress refreshes expired completion data after a BFCache restore', async () => {
   let completed = false; const p = page({ where: '/courses/31/modules', api: async () => modules(completed) }); p.addModules();
   p.site.renderProgress(); await settle(); assert.equal(p.doc.getElementById('gz-progress').dataset.v, '0/1 en');
   p.fire('pagehide', { persisted: true }); completed = true; await p.advance(300001);
-  p.fire('pageshow', { persisted: true }); p.site.renderProgress(); await settle();
-  assert.equal(p.doc.getElementById('gz-progress').dataset.v, '1/1 en', 'even an explicit render after restore must stop using expired reqs.progress');
+  p.fire('pageshow', { persisted: true }); await settle();
+  assert.equal(p.doc.getElementById('gz-progress').dataset.v, '1/1 en', 'restore must stop using expired reqs.progress without waiting for a mutation');
 });
 
-test('BUG: course frames reuse the top page course-list and color requests', async () => {
+test('course frames reuse the top page course-list and color requests', async () => {
   const requests = [], api = async (s) => { requests.push(s); return s === '/users/self/colors' ? {} : [course()]; };
   const top = page({ api }); await top.site.record();
-  const frame = page({ api, where: '/courses/31/modules', frame: '31', parent: top.c, store: top.store }); await frame.site.record();
+  const frame = page({ api, where: '/courses/31/modules', frame: '31', parent: top.c, store: top.store, session: top.session }); await frame.site.record();
   assert.equal(frame.input.courseList[`canvas:${origin}/31`]?.name, 'Course 31');
   assert.deepEqual([requests.filter((s) => s.startsWith('/courses?')).length, requests.filter((s) => s === '/users/self/colors').length], [1, 1], 'a registered course frame is solo too, but its parent already fetched these records');
 });
 
-test('BUG: hidden modules in course frames reuse the top page profile identity', async () => {
+test('hidden modules in course frames reuse the top page profile identity', async () => {
   let profiles = 0; const api = async () => { profiles++; return { id: '42' }; }, top = page({ api }); await top.site.ctx.profile();
-  const frame = page({ api, where: '/courses/31/modules', frame: '31', parent: top.c, store: top.store, enhance: { progress: false, hideFolders: true } });
+  const frame = page({ api, where: '/courses/31/modules', frame: '31', parent: top.c, store: top.store, session: top.session, enhance: { progress: false, hideFolders: true } });
   const { row } = frame.addModules(); frame.site.renderProgress(); await settle();
   assert.ok(row.querySelector('.gz-folder-eye'), 'the frame still needs usable hide-module controls');
   assert.equal(profiles, 1, 'syncFolders/me() must not repeat the top page profile request');
 });
 
-test('BUG: dashboard course grades include courses beyond the first API page', async () => {
+test('dashboard course grades include courses beyond the first API page', async () => {
   const first = Array.from({ length: 100 }, (_, n) => course(String(n + 1)));
-  const p = page({ api: async (s) => /[?&]page=2(?:&|$)/.test(s) ? [course('101')] : first });
+  const p = page({ api: async (s) => /[?&]page=2(?:&|$)/.test(s) ? [course('101')] : new Response(JSON.stringify(first), { headers: { Link: `<${origin}/api/v1/courses?per_page=100&page=2>; rel="next"` } }) });
   const { subtitle } = p.addCard('101'); p.site.tagCards(); await settle();
   assert.equal(subtitle.getAttribute('data-gz-grade'), '92%', 'a visible Dashboard course must not silently lose its grade because /courses was truncated at 100');
+});
+
+test('course pagination stays on this API and stops at cycles or twenty pages', async () => {
+  for (const next of ['https://other.test/api/v1/courses?page=2', `${origin}/login`, 'http://[', `${origin}/api/v1/courses?page=2`, '?page=2']) {
+    const p = page({ api: async () => new Response(JSON.stringify([course()]), { headers: { Link: `<${next}>; rel="next"` } }) });
+    assert.equal((await p.site.ctx.canvasCourses()).length, next.endsWith('?page=2') && !next.includes('other.test') ? 2 : 1);
+    assert.ok(p.calls.length <= 2, 'cyclic links must stop without refetching a visited page');
+  }
+  let n = 0;
+  const p = page({ api: async () => new Response(JSON.stringify([course(String(++n))]), { headers: { Link: `<${origin}/api/v1/courses?page=${n + 1}>; rel="next"` } }) });
+  assert.equal((await p.site.ctx.canvasCourses()).length, 20); assert.equal(n, 20);
 });
 
 test('first-paint strip uses the saved placement synchronously and tolerates blocked storage', () => {
