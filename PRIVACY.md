@@ -205,7 +205,7 @@ Sessions remain until creator deletion unless the creator opts into deletion aft
   shows only on the Canvas or Blackboard site of the course it's placed with (and only for courses you're enrolled in there); what you tick off on a Gradescope item is kept with Better To Do's ticks above. No
   Gradescope password, cookie or session is stored. Placing a course elsewhere or forgetting it deletes what was read
   for it.
-- **Dashboard notes and widgets** (Canvas and Blackboard Ultra, off by default), in `chrome.storage.local`, on this device only: your notes
+- **Dashboard notes and widgets** (Canvas and Blackboard Ultra; widgets on by default with none added, notes off by default), in `chrome.storage.local`, on this device only: your notes
   (at most 20,000 characters) per site and signed-in user id, with when you last typed them, so a note typed later
   in another tab wins; an emptied note keeps only the time it was emptied, so an older copy can't bring it back. The widgets' layout (which are on, their order and size, where a
   floating one sits), the music link you typed and when your study buddy last had a win to be happy about; the focus timer's phase and when
@@ -546,13 +546,17 @@ you import) are bundled. It makes requests in these cases:
   page and kept on this device as above. Nothing read on Gradescope is sent to Canvas or anywhere else, and Glaze never
   writes to Gradescope. To suggest a Canvas course on Gradescope, Glaze uses the course names it already keeps on this
   device (above); the bar on Gradescope sits in a closed shadow root, so Gradescope's own scripts can't read that list.
-- **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). This is the only change Glaze
-  makes to any site. When you tick or untick an item, Glaze writes Canvas's own planner mark for it, as Canvas's List
-  View checkbox does: one request to your own Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark
-  that already exists) with the item's type and id, your user id and done or not done, and the page's own CSRF token.
-  Nothing is written at any other time, and nothing else is written. If Canvas refuses, the tick goes back and the
-  list says so. Off, ticks stay on this device.
-- **Dashboard notes and widgets** (Canvas, off by default). They ask your own Canvas site for your profile (user id
+- **Ticking off in Canvas** (Better To Do's "Tick off in Canvas too", off by default). When you tick or untick an
+  item, Glaze writes Canvas's own planner mark for it, as Canvas's List View checkbox does: one request to your own
+  Canvas site (`POST /api/v1/planner/overrides`, or `PUT` to the mark that already exists) with the item's type and id,
+  your user id and done or not done, and the page's own CSRF token. Nothing is written at any other time, and nothing
+  else is written. If Canvas refuses, the tick goes back and the list says so. Off, ticks stay on this device.
+- **A course's nickname and color on Canvas** (the course card's menu). Only when you change one there, Glaze saves it
+  in Canvas as Canvas's own card menu does: one request to your own Canvas site (`PUT` or, to clear a nickname, `DELETE`
+  `/api/v1/users/self/course_nicknames/<course>`; `PUT /api/v1/users/self/colors/course_<course>` with the color) and
+  the page's own CSRF token. These and the ticks above are the only changes Glaze makes to any site. To show the
+  nickname, the menu reads the course list Canvas's Dashboard already asks for.
+- **Dashboard notes and widgets** (Canvas; widgets on by default with none added, notes off by default). An empty panel asks for nothing; the notes and the widgets you add ask your own Canvas site for your profile (user id
   and time zone; one request a page, shared with the other extras). The agenda uses Better To Do's copy of your planner
   items when that covers the day shown and is under ten minutes old; otherwise it asks your own Canvas site for that one
   day's planner items, a read-only GET, at most every two minutes per day you look at. Nothing is written to Canvas.

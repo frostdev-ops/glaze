@@ -110,7 +110,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   // Better To Do's tile: on Ultra's Dashboard only, with its switch (it has its own place everywhere else: one copy).
   // The Dashboard is its own switch: its widgets need no other, but the notes and the pet keep theirs.
   const allowed = (id) => {
-    if (W?.course(id)) return ultra && !!board && W.course(id).origin === location.origin;
+    if (W?.course(id)) return !!board && W.course(id).origin === location.origin && W.course(id).canvas === !ultra;
     const e = ctx.settings().enhance;
     return id === 'todo' ? ultra && !!board && e.todo : id === 'pet' ? e.pet : id === 'notes' ? e.notes : e.widgets || (ultra && (board === 'dash' || (e.dashboard && fl(id))));
   };
@@ -915,11 +915,22 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const escape = (e) => { if (e.key === 'Escape' && editing && board) { setEditing(false); bar?.querySelector('.gz-dash-edit')?.focus(); } };
   let loadingCourses = null, nativeShown = false, courseSpace = null;
   const loadCourses = () => {
-    if (!ultra || globalThis.GZ_COURSE_CARDS || loadingCourses) return;
+    if (globalThis.GZ_COURSE_CARDS || loadingCourses) return;
     loadingCourses = ctx.need('features/coursecards.js', () => globalThis.GZ_COURSE_CARDS).then(() => {
       loadingCourses = null;
-      if (on && board && globalThis.GZ_COURSE_CARDS) { GZ_COURSE_CARDS.sync(draw); draw(); }
+      if (on && board && globalThis.GZ_COURSE_CARDS) { GZ_COURSE_CARDS.sync(draw); draw(); fillCourses(); }
     }, () => { loadingCourses = null; });
+  };
+  // Canvas's Dashboard with nothing on its board: the cards of Canvas's card view become its widgets, once (lay.filled),
+  // in Canvas's order, and its card view steps aside for them. A board with widgets on it, or emptied since, is left so.
+  const fillCourses = () => {
+    if (ultra || board !== 'cdash' || !on || !lay || lay.filled.includes('cdash') || editing || flying) return;
+    const C = globalThis.GZ_COURSE_CARDS;
+    if (!C) { loadCourses(); return; }
+    const cards = C.shown();
+    if (!cards.length) return; // its list view, or not drawn yet: when its cards are
+    const empty = !lay.boards.cdash.some((x) => x.on && allowed(x.id));
+    change({ fill: 'cdash', ops: empty ? cards.slice(0, W.COURSE_MAX).map((c) => ({ s: 'cdash', id: c.key, set: { on: true, size: 's', term: c.term || '' } })) : [] });
   };
   // The board's Course cards button: its dialog (features/coursecards.js) ticks courses on and off this board, each
   // tick or Select all one change, with the cards new to it placed in the board's free room (arrange). It asks the
@@ -955,22 +966,22 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     nativeShown = false;
   };
   const nativeCourses = (want, away) => {
-    const selected = board === 'courses' && want.some((x) => W.course(x.id));
+    const selected = (board === 'courses' || board === 'cdash') && want.some((x) => W.course(x.id));
     const cardsOn = selected && !away && !nativeShown;
-    if (!ultra) return;
+    // Canvas's own cards (the card view) step aside as Ultra's list does.
     document.documentElement?.toggleAttribute('data-gz-course-tiles', cardsOn);
     let toggle = bar?.querySelector('.gz-course-native');
     if (selected && !toggle) {
       toggle = button('', () => { nativeShown = !nativeShown; draw(); }, { className: 'gz-w-small gz-course-native' });
-      toggle.title = t("Ultra's search, filters and term picker stay in its course list.");
+      if (ultra) toggle.title = t("Ultra's search, filters and term picker stay in its course list.");
       bar.append(toggle);
     }
     if (toggle) {
       if (!selected) toggle.remove();
-      else { const text = t(nativeShown ? 'Show course cards' : "Show Ultra’s course list"); if (toggle.textContent !== text) toggle.textContent = text; toggle.setAttribute('aria-pressed', String(nativeShown)); }
+      else { const text = t(nativeShown ? ultra ? 'Show course cards' : 'Show course card widgets' : ultra ? "Show Ultra’s course list" : "Show Canvas’s course cards"); if (toggle.textContent !== text) toggle.textContent = text; toggle.setAttribute('aria-pressed', String(nativeShown)); }
     }
     for (const [id, x] of tiles) if (W.course(id) && x.el.hidden !== (nativeShown && selected)) x.el.hidden = nativeShown && selected;
-    const home = cardsOn && document.querySelector('.courses-panel .base-courses');
+    const home = ultra && cardsOn && document.querySelector('.courses-panel .base-courses');
     if (home) { courseSpace ||= make('div', { className: 'gz-course-space', ariaHidden: 'true' }); if (courseSpace.parentNode !== home) home.append(courseSpace); }
     else { courseSpace?.remove(); courseSpace = null; }
   };
@@ -1128,7 +1139,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       add.replaceChildren(...(editing && off.length ? [make('span', { className: 'gz-w-faint', textContent: t('Add:') }),
         ...off.map((x) => button(`+ ${t(nameOf(x.id))}`, () => change({ ops: [{ s: board || 'canvas', id: x.id, set: board ? { on: true, x: null, y: null } : { on: true } }] }), { className: 'gz-w-small' }))]
         : empty ? [make('p', { className: 'gz-w-faint', textContent: t('Nothing here yet. Edit layout adds widgets.') })] : []));
-      if (ultra && board && editing) { loadCourses(); coursePicker(add); }
+      if (board && editing) { loadCourses(); coursePicker(add); }
     }
   };
 
@@ -1353,7 +1364,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       setTimeout(() => { starting = null; }, 60000);
     });
     else if (W && lay) {
-      if (ultra && board) globalThis.GZ_COURSE_CARDS?.sync(draw);
+      if (board) { globalThis.GZ_COURSE_CARDS?.sync(draw); fillCourses(); }
       // A pass: draw only when something changed (a switch let a tile in or out, Canvas redrew the Dashboard), so the
       // page's observer isn't fed changes of Glaze's own.
       const h = home();

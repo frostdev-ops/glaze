@@ -415,6 +415,13 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     setAttr('data-gz-nav', n.k !== 'default' && (n.k === 'image' && !src ? 'solid' : n.k));
     for (const [k, v] of [['ink', n.ink], ['c', n.c], ['d', n.d], ['a', `${n.a}deg`], ['o', n.o / 100], ['img', src ? `url("${src}")` : 'none']]) setVar(`--gz-nav-${k}`, v);
   };
+  // Course tabs (features/coursetabs.js, on demand): the strip's place and size as this browser tab last had them, else
+  // the defaults, as data-gz-ctabs from the first paint: canvas.css holds that room, so the row doesn't move when it comes.
+  const paintTabs = () => {
+    let at = null;
+    try { at = sessionStorage.getItem('gz-ctabs'); } catch { /* blocked */ }
+    setAttr('data-gz-ctabs', !!I.links.length && I.solo && !!I.settings.enhance.tabs && !globalThis.GZ_CTABS?.revoked?.() && (at ?? 'above medium'));
+  };
   const syncNav = () => {
     if (isPreview || window.top !== window) return;
     if (I.worn.nav.i || I.worn.nav.collapsed || I.worn.nav.labels === 'icons' || (I.links.length && globalThis.GZ_CTX?.parts()?.nav)) need('features/nav.js', () => globalThis.GZ_NAV_UI).then(() => globalThis.GZ_NAV_UI.sync()).catch(() => {});
@@ -423,7 +430,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
 
   return {
     record, planner: () => todoHere() || cardsHere(), tagCards: tagCanvasCards, tagExtras: tagCanvasExtras, lift: liftCourses,
-    renderProgress: canvasProgress, renderNew: renderCanvasNew, renderCalc: canvasGrades, paintCourses, paintNav, syncNav,
+    renderProgress: canvasProgress, renderNew: renderCanvasNew, renderCalc: canvasGrades, paintCourses, paintNav, paintTabs, syncNav,
     syncTodo, syncCardTasks, syncWidgets, syncRemind, syncSyl,
     syncInsights: () => {
       syncInsights();

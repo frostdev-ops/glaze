@@ -369,10 +369,16 @@ BROKER.widgetLayout = {
   allow: async (m, s) => {
     if (!Array.isArray(m.ops) || m.ops.length > 64) return false;
     if (fromEditor(s)) return true;
-    const site = (s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s)));
+    const canvas = s.frameId === 0 && (await fromCanvas(s));
+    const site = canvas || (ultraPage(s) && (await fromUltra(s)));
     if (!site || (await chrome.storage.sync.get('enabled')).enabled === false) return false;
+    if (m.fill !== undefined && (!canvas || m.fill !== 'cdash')) return false;
+    // Course cards: only the page's own site's, Canvas's on its Dashboard, Ultra's on its two boards.
     const courses = m.ops.filter((o) => typeof o?.id === 'string' && o.id.startsWith('course:'));
-    return !courses.length || (s.frameId === 0 && site === await fromUltra(s) && courses.every((o) => GZ_WIDGETS.course(o.id)?.origin === site && ['courses', 'dash'].includes(o.s)));
+    return !courses.length || (s.frameId === 0 && (canvas || site === await fromUltra(s)) && courses.every((o) => {
+      const c = GZ_WIDGETS.course(o.id);
+      return c?.origin === site && c.canvas === !!canvas && (canvas ? o.s === 'cdash' : ['courses', 'dash'].includes(o.s));
+    }));
   },
   run: (m, { local }) => GZ_WIDGETS.change(m, local),
 };
@@ -755,7 +761,18 @@ const notesHome = (canvas) => {
 };
 const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/*'], js: ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js'], runAt: 'document_idle', persistAcrossSessions: true };
 chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && (changes.enhance || changes.enabled)) serial(ensure); });
-chrome.runtime.onInstalled.addListener(() => serial(async () => { await chrome.scripting.unregisterContentScripts(); await ensure(); }));
+// An update keeps the widgets a device showed while it had no layout stored (lib/widgets.js kept): new layouts start empty.
+// In the broker's queue, so a page's layout change ('glaze:widgetLayout') is never written over.
+const keepWidgets = async (fresh) => {
+  if ((await chrome.storage.local.get('widgetLayout')).widgetLayout) return;
+  const { enhance } = await chrome.storage.sync.get('enhance');
+  await chrome.storage.local.set({ widgetLayout: fresh ? GZ_WIDGETS.layout() : GZ_WIDGETS.kept(enhance?.widgets) });
+};
+chrome.runtime.onInstalled.addListener((d) => {
+  // Mark fresh installs too: a later update must not mistake their untouched empty layout for a pre-change device.
+  if (['install', 'update'].includes(d?.reason)) (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {});
+  serial(async () => { await chrome.scripting.unregisterContentScripts(); await ensure(); });
+});
 chrome.runtime.onStartup.addListener(() => serial(ensure));
 // An Ultra site found (content-ultra.js, once Glaze has started on a page it found to be Ultra): its top frame's origin is
 // kept, so its pages may write their own site's data (fromUltra).

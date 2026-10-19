@@ -74,7 +74,7 @@ const GZ_SPEC = {
     inline: [true, 'bool'], overall: [true, 'bool'], previews: [true, 'bool'], hideFolders: [true, 'bool'], progress: [true, 'bool'], keys: [false, 'bool'],
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
-    notes: [false, 'bool'], widgets: [false, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'],
+    notes: [false, 'bool'], widgets: [true, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'],
     // place: reopen course content at its saved folders and scroll. coursemenu: each course card's button for its color,
     // tint and look. tabs: Ultra's course tabs (lib/coursetabs.js).
     place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'],
