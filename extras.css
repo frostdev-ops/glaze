@@ -24,9 +24,10 @@ html[data-gz-bg][data-gz-bg-grain]:not([data-gz-bg="solid"]) {
   --gz-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 .07'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 html[data-gz-bg="image"]:not([data-gz-bg-failed]) { --gz-bg-art: var(--gz-bg-image) center / cover no-repeat, var(--gz-surface-2); }
-/* Clipped to its own box: a panel that starts below a bar (a discussion, under its back-and-breadcrumb
-   header) would otherwise paint its viewport-sized layer over that bar. */
+/* Keep viewport backgrounds below a panel's header. Off-canvas shells also own the close button
+   that hangs into Ultra's side gutter: clip vertically, but let the backdrop cover that gutter. */
 html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { isolation: isolate; clip-path: inset(0); background: transparent !important; }
+html[data-gz-bg]:not([data-gz-bg="solid"]) :is(.bb-offcanvas-panel, .bb-offcanvas-panel .panel-wrap):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) { clip-path: inset(0 -100vmax); }
 /* :where() keeps this base layer at element specificity, so the per-kind rules below refine it. */
 html:where([data-gz-bg]:not([data-gz-bg="solid"]))::before,
 html:where([data-gz-bg]:not([data-gz-bg="solid"])) :where(.panel-wrap, .bb-offcanvas-panel):where(:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *))::before {
@@ -528,6 +529,8 @@ html[data-gz-ctabs~="above"] .routed-page.bb-offcanvas-container [class*="header
 html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .routed-page.bb-offcanvas-container [class*="headerRoot"]:not(:has(#gz-ctabs)) { padding-bottom: var(--gz-ctabs-h); }
 html[data-gz-ctabs] .routed-page.bb-offcanvas-container [class*="headerRoot"]:has(#gz-ctabs) { position: sticky; top: 0; z-index: 2; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, Canvas)); }
 #gz-ctabs[data-at="routed"] { position: sticky; top: 0; z-index: 2; }
+/* Native panel headers pull into their scroller's padding; after a tab row that would cover the subtitle. */
+#gz-ctabs[data-at="nested"] + :is(.panel-header, header) { margin-block-start: 0 !important; }
 #gz-ctabs {
   position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 8px; box-sizing: border-box; flex: none; width: 100%;
   height: var(--gz-ctabs-h, 40px); padding: 6px 12px 0; margin: 0; font: 500 13px/1.2 var(--gz-font, inherit); color: var(--gz-ink-muted);
@@ -593,6 +596,9 @@ html[data-gz-bg="solid"] :is(#gz-ctabs, #gz-doc-tools button) { backdrop-filter:
 #gz-ctabs-frames[data-on] { visibility: visible; }
 #gz-ctabs-frames > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
 #gz-ctabs-frames > .gz-ctabs-pic { position: absolute; inset: 0; z-index: 1; overflow: hidden; transition: opacity var(--gz-t-page, 0.28s) var(--gz-ease, ease); }
+.gz-ctabs-retry { position: absolute; z-index: 2; top: 80px; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: min(420px, calc(100% - 32px)); padding: 20px; border: 1px solid var(--gz-line); border-radius: var(--gz-radius, 12px); background: var(--gz-surface-grain, none), var(--gz-surface-paint, var(--gz-surface, Canvas)); color: var(--gz-ink, CanvasText); box-shadow: var(--gz-shadow); }
+.gz-ctabs-retry p { margin: 0 0 12px; }
+.gz-ctabs-retry button { font: inherit; margin-inline-end: 8px; padding: 6px 12px; cursor: pointer; }
 html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion="off"] #gz-ctabs .gz-ctab { transition: none; }
 html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
 /* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */

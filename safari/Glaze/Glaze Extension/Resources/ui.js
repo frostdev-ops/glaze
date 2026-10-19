@@ -13,16 +13,25 @@ const GZ_UI = (() => {
   // Writes only the given top-level keys: sync storage counts every write against a per-minute
   // quota, and the content script re-reads everything anyway. `note` gets '' or the error. The key 'parts' is the
   // Look's parts, written in the same call as the rest (null clears them).
-  const save = (s, keys, note = () => {}, navPatch, partKeys) => {
+  const save = (s, keys, note = () => {}, navPatch, partKeys, navbarPatch) => {
     const patch = { version: 2 };
     for (const k of keys) patch[k] = s[k];
     const parts = 'parts' in patch, lookParts = patch.parts ?? null;
     delete patch.parts;
     const failed = (error) => GZ_I18N.t('Not saved: {error}', { error }, GZ_I18N.ui());
+    if ('navbar' in patch && navbarPatch) patch.navbar = navbarPatch;
     if (parts) {
       if ('nav' in patch && navPatch) patch.nav = navPatch;
       try { chrome.runtime.sendMessage({ type: 'glaze:look', parts: lookParts, patch, ...(partKeys && { partKeys }) }, (r) => note(chrome.runtime.lastError || !r?.ok ? GZ_I18N.t('Not saved. Try again in a moment.', {}, GZ_I18N.ui()) : '')); }
       catch (e) { note(failed(e.message)); }
+      return;
+    }
+    if ('navbar' in patch) {
+      try { chrome.runtime.sendMessage({ type: 'glaze:navbar', patch: patch.navbar }, (r) => {
+        if (chrome.runtime.lastError || !r?.ok) return note(GZ_I18N.t('Not saved. Try again in a moment.', {}, GZ_I18N.ui()));
+        const rest = keys.filter((k) => k !== 'navbar');
+        if (rest.length) save(s, rest, note, navPatch, partKeys); else note('');
+      }); } catch (e) { note(failed(e.message)); }
       return;
     }
     const write = () => {

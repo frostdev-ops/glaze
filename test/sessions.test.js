@@ -108,6 +108,90 @@ test('Pause during a pending consent read cannot let the older Create enable sha
   } finally { release(true); worker.stop(); }
 });
 
+test('a scoped panel cannot restart paused sessions outside its account', async (t) => {
+  for (const owner of ['bound', 'copy', 'unbound']) for (const op of ['resume', 'create', 'join']) await t.test(`${owner} ${op}`, async () => {
+    const d = device('http://127.0.0.1:1'), id = await seed(d), scope = { key: NK, note: id, id: 'panel-a' };
+    try {
+      const foreign = { st: G.create('collection', { server: 'http://127.0.0.1:1' }), kind: 'notes', title: 'Other account', bind: { key: 'notesIdx:https://school.instructure.com/6', map: {}, files: {} } };
+      if (owner === 'copy') foreign.copy = { key: foreign.bind.key, notes: [] };
+      if (owner !== 'bound') delete foreign.bind;
+      await d.db.put('sessions', foreign.st.sid, foreign);
+      await d.local.set({ shareOn: false, shareName: 'Keep name', shareHosts: [] });
+      const saved = clone(d.local.data), records = await d.db.all('sessions');
+      const joined = G.create('collection', { server: 'http://127.0.0.1:1' });
+      const message = op === 'create' ? { kind: 'notes', title: 'Scoped', key: NK, ids: [id] }
+        : op === 'join' ? { link: G.link(joined.server, { sid: joined.sid, seed: G.unb64(joined.seed) }, true) } : {};
+      await assert.rejects(d.send(op, { ...message, name: 'Changed name', scope }), /confirmation/);
+      assert.deepEqual(d.local.data, saved, 'no settings or consent changes before Settings confirms');
+      assert.deepEqual(await d.db.all('sessions'), records, 'no session added or changed');
+      assert.equal(d.requests.length, 0);
+    } finally { d.worker.stop(); }
+  });
+});
+
+test('scoped activation keeps existing account consent and already-enabled background sharing', async () => {
+  const d = device('http://127.0.0.1:1'), scope = { key: NK, note: '', id: 'panel-a' };
+  try {
+    const own = { st: G.create('collection', { server: 'http://127.0.0.1:1' }), kind: 'notes', title: 'Own account', bind: { key: NK, map: {}, files: {} } };
+    await d.db.put('sessions', own.st.sid, own);
+    await d.local.set({ shareOn: false });
+    assert.equal((await d.send('resume', { scope })).ok, true);
+    const foreign = { ...own, st: G.create('collection', { server: 'http://127.0.0.1:1' }), bind: { ...own.bind, key: 'notesIdx:https://school.instructure.com/6' } };
+    await d.db.put('sessions', foreign.st.sid, foreign);
+    assert.equal((await d.send('resume', { scope })).ok, true, 'existing global consent stays valid');
+    await d.local.set({ shareOn: false });
+    assert.equal((await d.send('resume')).ok, true, 'Settings can restart every account');
+  } finally { d.worker.stop(); }
+});
+
+test('a scoped panel attaches only sessions joined by that panel without taking a foreign detached copy', async (t) => {
+  for (const owner of ['unbound', 'other-panel', 'foreign-copy', 'missing-ticket', 'empty-ticket']) await t.test(owner, async () => {
+    const d = device('http://127.0.0.1:1'), scope = { key: NK, note: '', id: 'panel-a' };
+    try {
+      const record = { st: G.create('collection', { server: 'http://127.0.0.1:1' }), kind: 'notes', title: 'Private shared note' };
+      await G.session(record.st).edit({ _: { kind: 'notes', title: record.title }, shared: { title: 'Private', html: '<p>Other account content</p>' } });
+      if (owner === 'other-panel') record.joinedScope = 'panel-b';
+      if (owner === 'missing-ticket') { record.joinedScope = scope.id; delete scope.id; }
+      if (owner === 'empty-ticket') record.joinedScope = scope.id = '';
+      if (owner === 'foreign-copy') {
+        record.joinedScope = scope.id;
+        record.copy = { key: 'notesIdx:https://school.instructure.com/6', notes: [crypto.randomUUID()] };
+        delete record.st.seed;
+      }
+      await d.db.put('sessions', record.st.sid, record);
+      const stored = clone(d.local.data), noteBodies = [...d.notes.stores.bodies];
+      await assert.rejects(d.send('attach', { sid: record.st.sid, key: NK, scope }), /bad/);
+      assert.deepEqual(d.local.data, stored, 'no foreign note copied into this account');
+      assert.deepEqual([...d.notes.stores.bodies], noteBodies);
+      assert.deepEqual(await session(d, record.st.sid), record, 'the original account and provenance remain intact');
+      assert.equal((await d.send('attach', { sid: record.st.sid, key: NK })).ok, true, 'Settings retains explicit attach authority');
+      const attached = await session(d, record.st.sid), copied = Object.values(attached.bind?.map || {})[0] || attached.copy?.notes[0];
+      assert.match((await N.run({ key: NK, op: 'load', id: copied }, { local: d.local }, d.notes)).html, /Other account content/);
+    } finally { d.worker.stop(); }
+  });
+});
+
+test('a scoped Join records its panel provenance and permits its own Notes attachment', async () => {
+  const d = device('http://127.0.0.1:1'), scope = { key: NK, note: '', id: 'panel-a' };
+  try {
+    const st = G.create('collection', { server: 'http://127.0.0.1:1' });
+    await G.session(st).edit({ _: { kind: 'notes', title: 'Joined' }, shared: { title: 'Joined', html: '<p>Joined by this panel</p>' } });
+    const joined = await d.send('join', { link: G.link(st.server, { sid: st.sid, seed: G.unb64(st.seed) }, true), scope });
+    const record = await session(d, joined.sid);
+    assert.equal(record.joinedScope, scope.id);
+    assert.deepEqual((await d.send('list', { scope })).scope, { key: NK, note: '' }, 'the private provenance stays in the worker');
+    await d.send('pause');
+    await assert.rejects(d.send('resume', { scope: { ...scope, id: 'another-panel' } }), /confirmation/);
+    assert.equal((await d.send('resume', { scope })).ok, true, 'the same panel can retry its own unbound Join');
+    // Supply the actual decrypted client state that a later successful relay sync would retain.
+    Object.assign(record, { st, kind: 'notes', title: 'Joined' });
+    await d.db.put('sessions', st.sid, record);
+    assert.equal((await d.send('attach', { sid: st.sid, key: NK, scope })).ok, true);
+    const copy = Object.values((await session(d, st.sid)).bind.map)[0];
+    assert.match((await N.run({ key: NK, op: 'load', id: copy }, { local: d.local }, d.notes)).html, /Joined by this panel/);
+  } finally { d.worker.stop(); }
+});
+
 test('disk relay: create, read/edit join, local files, offline restart catch-up and explicit file re-upload', async (t) => {
   const { url } = await start(t), a = device(url), b = device(url);
   t.after(() => { a.worker.stop(); b.worker.stop(); });
@@ -260,13 +344,18 @@ test('key-bearing import/export runs only in extension pages; LMS actions route 
   assert.match(notes.slice(start), /glaze:sessions-open/);
   assert.doesNotMatch(notes.slice(start), /exportKeys|importKeys|shareKeys|createObjectURL|GZ_ZIP/);
   assert.doesNotMatch(notes, /accept: '\.zip,application\/zip'/);
-  const page = read('sharing/sessions.html');
+  const page = read('options.html');
   assert.match(page, /Includes all share keys and creator delete tokens/);
-  assert.ok(!require('../manifest.json').web_accessible_resources.some((e) => e.resources.some((p) => p.startsWith('sharing/'))));
-  const ui = read('sharing/sessions.js');
+  // Only the Notes share panel is framed into LMS pages; Settings never is.
+  assert.deepEqual(require('../manifest.json').web_accessible_resources.flatMap((e) => e.resources.filter((p) => p.startsWith('sharing/'))), ['sharing/quick.html']);
+  const ui = read('lib/sessions-ui.js');
   assert.match(ui, /const human = \(e\) => e\.isTrusted/);
   assert.match(ui, /if \(!human\(e\) \|\| busy \|\| !state\) return;/);
   assert.match(ui, /if \(!e\.isTrusted\) return;/);
+  const quick = read('sharing/quick.js');
+  assert.match(quick, /!e\.isTrusted/);
+  assert.doesNotMatch(quick, /\bconfirm\(|parent\.|top\./, 'a framed panel asks inline and posts nothing to the page');
+  assert.doesNotMatch(notes, /type: 'glaze:sessions'|op: 'link'/, 'the LMS world only frames the panel; it never asks the worker for a link');
   // <all_urls> covers the default relay and a local one alike; an optional entry for either would be redundant.
   assert.equal(require('../manifest.json').optional_host_permissions, undefined);
   assert.deepEqual(require('../manifest.json').host_permissions, ['<all_urls>']);
@@ -284,39 +373,62 @@ test('session worker accepts only exact extension pages; an LMS or another exten
   const send = (op, url, id = 'glaze', extra = {}, rest = {}) => new Promise((resolve) => {
     for (const f of listeners) if (f({ type: 'glaze:sessions', op, ...rest }, { id, url, frameId: 0, tab: {}, ...extra }, resolve) === true) return;
   });
-  for (const [url, id] of [['https://school.instructure.com/courses/1'], ['chrome-extension://glaze/sharing/sessions.html.evil'], ['chrome-extension://other/sharing/sessions.html'], ['chrome-extension://glaze/sharing/sessions.html', 'other']]) {
+  const SETTINGS = 'chrome-extension://glaze/options.html', QUICK = 'chrome-extension://glaze/sharing/quick.html?key=x';
+  for (const [url, id] of [['https://school.instructure.com/courses/1'], ['chrome-extension://glaze/options.html.evil'], ['chrome-extension://other/options.html'], [SETTINGS, 'other'], ['chrome-extension://glaze/sharing/sessions.html']]) {
     const r = await send('exportKeys', url, id);
     assert.equal(r.error, 'sender');
   }
-  for (const op of ['exportKeys', 'relaySave', 'relayTest']) for (const extra of [{ frameId: 2 }, { origin: 'https://school.instructure.com' }]) assert.equal((await send(op, 'chrome-extension://glaze/sharing/sessions.html', 'glaze', extra)).error, 'sender');
-  assert.equal((await send('unknown', 'chrome-extension://glaze/sharing/sessions.html')).error, 'sender');
-  assert.equal((await send('exportKeys', 'chrome-extension://glaze/sharing/sessions.html', 'glaze', { origin: 'chrome-extension://glaze' }, { payload: 'x'.repeat(33 << 20) })).error, 'sender');
+  for (const op of ['exportKeys', 'relaySave', 'relayTest']) for (const extra of [{ frameId: 2 }, { origin: 'https://school.instructure.com' }]) assert.equal((await send(op, SETTINGS, 'glaze', extra)).error, 'sender');
+  assert.equal((await send('unknown', SETTINGS)).error, 'sender');
+  assert.equal((await send('exportKeys', SETTINGS, 'glaze', { origin: 'chrome-extension://glaze' }, { payload: 'x'.repeat(33 << 20) })).error, 'sender');
+  // The Notes share panel: only as a subframe of the extension's own origin, and never for keys, backups or the relay setting.
+  for (const op of ['exportKeys', 'importKeys', 'backupNotes', 'notesRead', 'relaySave', 'relayTest', 'pause', 'useLook']) assert.equal((await send(op, QUICK, 'glaze', { frameId: 3, origin: 'chrome-extension://glaze' })).error, 'sender', op);
+  for (const extra of [{ frameId: 0, origin: 'chrome-extension://glaze' }, { frameId: 3, origin: 'https://school.instructure.com' }, { frameId: 3 }]) assert.equal((await send('list', QUICK, 'glaze', extra)).error, 'sender', JSON.stringify(extra));
   assert.ok(!imported.includes('sharing.js'), 'refused callers do not even load the crypto dependency');
 });
 
-test('E1 editor relay caller is limited to the exact extension top frame and two relay operations', async () => {
-  const listeners = [], handled = [], area = localArea();
+test('E1 Settings is the session caller in its exact top frame; the Notes panel frame gets quick operations only', async () => {
+  const scopes = [], listeners = [], handled = [], area = localArea();
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
-    GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(m.op); return { ok: true }; } }) },
+    GZ_SESSIONS: { make: () => ({ handle: async (m) => { handled.push(m.op); scopes.push(m.scope); return { ok: true }; } }) },
     importScripts: (...files) => { for (const f of files) vm.runInContext(read(`lib/${f}`), ctx); },
     chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
   const editor = { id: 'glaze', url: 'chrome-extension://glaze/options.html#sharing/relay', origin: 'chrome-extension://glaze', frameId: 0 };
-  const send = (op, sender = editor) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op, server: 'http://127.0.0.1:8787' }, sender, resolve) === true) return; });
+  const send = (op, sender = editor, rest = {}) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op, server: 'http://127.0.0.1:8787', ...rest }, sender, resolve) === true) return; });
   for (const sender of [{ ...editor, frameId: 1 }, { ...editor, origin: 'https://school.instructure.com' }, { ...editor, id: 'other' },
     { ...editor, url: 'chrome-extension://glaze/preview.html' }, { ...editor, url: 'https://school.instructure.com/options.html' },
     { ...editor, url: 'chrome-extension://glaze/options.html.evil' }, { ...editor, url: 'chrome-extension://other/options.html' }]) {
     for (const op of ['relaySave', 'relayTest']) assert.equal((await send(op, sender)).error, 'sender');
   }
-  for (const op of ['create', 'join', 'resume', 'list', 'unknown']) assert.equal((await send(op)).error, 'sender');
+  assert.equal((await send('unknown')).error, 'sender');
   assert.deepEqual(handled, []);
-  for (const op of ['relaySave', 'relayTest']) assert.equal((await send(op)).ok, true);
-  assert.deepEqual(handled, ['relaySave', 'relayTest']);
+  // Settings owns every session operation now that Share sessions is a Settings tab.
+  for (const op of ['relaySave', 'relayTest', 'list', 'create']) assert.equal((await send(op)).ok, true);
+  assert.deepEqual(handled, ['relaySave', 'relayTest', 'list', 'create']);
+  // Issuance stays origin-bound. Panel RPC now uses a consumed-ticket port (quick-broker.test.js), never URL claims.
+  const lms = { id: 'glaze', url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com', frameId: 0, tab: { id: 9, url: 'https://school.instructure.com/courses/1' } };
+  const ask = (m, sender) => new Promise((resolve) => { for (const f of listeners) if (f(m, sender, resolve) === true) return; resolve({ ok: false, error: 'unhandled' }); });
+  const NKEY = 'notesIdx:https://school.instructure.com/5', NOTE = '11111111-1111-4111-8111-111111111111';
+  assert.equal((await ask({ type: 'glaze:quick-ticket', key: 'notesIdx:https://elsewhere.example.edu/5', note: '' }, lms)).ok, false, 'only an account on the asking site');
+  assert.equal((await ask({ type: 'glaze:quick-ticket', key: NKEY, note: '' }, { ...lms, frameId: 2 })).ok, false, 'only a top frame');
+  assert.equal((await ask({ type: 'glaze:quick-ticket', key: NKEY, note: '' }, { ...editor })).ok, false, 'not from an extension page');
+  const { ticket } = await ask({ type: 'glaze:quick-ticket', key: NKEY, note: NOTE }, lms);
+  assert.match(ticket, /^[0-9a-f]{32}$/);
+  const quick = { id: 'glaze', url: `chrome-extension://glaze/sharing/quick.html?t=${ticket}`, origin: 'chrome-extension://glaze', frameId: 4, documentId: 'doc1', tab: { id: 9 } };
+  assert.equal((await send('list', { ...quick, url: 'chrome-extension://glaze/sharing/quick.html?key=' + NKEY })).error, 'sender', 'no ticket');
+  assert.equal((await send('list', { ...quick, tab: { id: 10 } })).error, 'sender', 'another tab');
+  assert.equal((await send('list', { ...quick, frameId: 0 })).error, 'sender', 'the panel is never a top frame');
+  assert.equal((await send('list', quick, { scope: { key: 'forged' } })).error, 'sender', 'URL ticket conveys no message authority');
+  assert.equal((await send('list', { ...quick, documentId: 'doc2' })).error, 'sender', 'a second frame with the same ticket');
+  assert.equal((await send('relaySave', quick)).error, 'sender');
+  assert.equal((await send('list', editor, { scope: { key: NKEY } })).ok, true);
+  assert.equal(scopes.at(-1), undefined, 'Settings is never scoped, and cannot be scoped by a sent value');
 });
 
-test('E1 synced relay changes refresh an open Sessions page without scheduling network work', async () => {
+test('E1 synced relay changes refresh an open Sharing tab without scheduling network work', async () => {
   const changes = [], messages = [], connections = [], area = localArea(); let network = 0;
   const ctx = vm.createContext({ URL, console, TextEncoder, TextDecoder, structuredClone, Date, setTimeout, clearTimeout, crypto, atob, btoa, navigator: {},
     GZ_SESSIONS: { make: () => ({ connect: () => () => {}, changed: () => network++ }) },
@@ -325,7 +437,7 @@ test('E1 synced relay changes refresh an open Sessions page without scheduling n
       onMessage: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener: (fn) => connections.push(fn) } },
       storage: { local: area, sync: area, onChanged: { addListener: (fn) => changes.push(fn) } } } });
   vm.runInContext(read('lib/background.js'), ctx);
-  for (const connect of connections) connect({ name: 'glaze:sessions', sender: { id: 'glaze', url: 'chrome-extension://glaze/sharing/sessions.html', origin: 'chrome-extension://glaze', frameId: 0 },
+  for (const connect of connections) connect({ name: 'glaze:sessions', sender: { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 },
     onMessage: { addListener() {} }, onDisconnect: { addListener() {} }, postMessage: (message) => messages.push(message), disconnect() {} });
   await new Promise(setImmediate);
   for (const fn of changes) fn({ shareRelay: { newValue: 'https://new-relay.example.edu' } }, 'sync');
@@ -364,7 +476,7 @@ test('Pause interrupts a running sync before waiting for the shared storage queu
       onMessage: { addListener: (f) => listeners.push(f) }, onInstalled: { addListener() {} }, onStartup: { addListener() {} }, onConnect: { addListener() {} } },
       storage: { local: area, sync: area, onChanged: { addListener() {} } } } });
   vm.runInContext(read('lib/background.js'), ctx);
-  const send = (op) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op }, { id: 'glaze', url: 'chrome-extension://glaze/sharing/sessions.html', origin: 'chrome-extension://glaze', frameId: 0 }, resolve) === true) return; });
+  const send = (op) => new Promise((resolve) => { for (const f of listeners) if (f({ type: 'glaze:sessions', op }, { id: 'glaze', url: 'chrome-extension://glaze/options.html', origin: 'chrome-extension://glaze', frameId: 0 }, resolve) === true) return; });
   const pending = send('sync'); await ready;
   const queued = send('sync');
   const queuedHealth = send('relayTest');

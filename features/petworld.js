@@ -21,11 +21,17 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     let b = { x: 30, y: 30, w: 80, h: 86, vx: 0, vy: 0 }, surfaces = [], lastScan = 0, nextAction = 0, last = 0, wandering = false;
     let props = [], offs = [], dirty = false, suppressClick = false, lastMotion = '', lastGaze = -1, path = location.pathname, awake = true, outing = null;
     const hosts = new Set(), floating = new Map();
-    let decision = null, feedbackAt = -Infinity, feedbackEvent = '', focus = false, focusEnd = 0;
+    let decision = null, feedbackAt = -Infinity, feedbackEvent = '', carePending = false, focus = false, focusEnd = 0;
     let cursor = { x: -1000, y: -1000 }, cursorAt = 0, cursorSpeed = 0, pointerForm = false, typedAt = -Infinity, scrolledAt = -Infinity, movedAt = -Infinity, celebratedAt = -Infinity, playedAt = -Infinity;
     let energy = .8, idleUntil = 0, idlePose = 'idle', activity = null, toy = null, observedAt = -Infinity, observedAction = '', xpSeen = null, wasStill = false, facing = 1;
     let groundY = 0, offscreenAt = 0, recovery = null, geometryDirty = false, focusTimer = null, anchor = null;
     let viewDoc = document, viewFrame = null, viewBlocked = false, frameOffs = [];
+    let scanStyles = null;
+    const styleOf = (n) => {
+      if (scanStyles?.has(n)) return scanStyles.get(n);
+      const style = (n.ownerDocument?.defaultView || globalThis).getComputedStyle?.(n);
+      scanStyles?.set(n, style); return style;
+    };
     const recent = [];
     const facingPose = (delta) => { if (Math.abs(delta) > 8) facing = Math.sign(delta); return facing < 0 ? 'running-left' : 'running-right'; };
     const typing = () => performance.now() - typedAt < 3500 || !!(document.activeElement === viewFrame ? viewDoc.activeElement : document.activeElement)?.matches('input,textarea,select,[contenteditable="true"],[role="textbox"]');
@@ -39,31 +45,49 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const clearActivity = () => { recovery = null; offscreenAt = 0; activity = outing = null; toy?.remove(); toy = null; idleUntil = 0; avatar.style.clipPath = ''; actor.dataset.intent = actor.dataset.behavior = ''; lastMotion = ''; b.vx = b.vy = 0; };
     const activeDecision = () => decision && actor.dataset.intent === decision.action ? { action: decision.action, context: features(activity?.target || outing?.surface) } : null;
     const changeMode = (wander, voluntary = false, prior = activeDecision()) => commit({ op: 'wander', wander, ...(voluntary && { voluntary }), ...prior });
-    const feedback = (event, prior = activeDecision()) => {
-      if (!alive || !data || (feedbackEvent === event && performance.now() - feedbackAt < 800)) return;
+    const feedback = async (event, prior = activeDecision()) => {
+      if (!alive || !data || (feedbackEvent === event && performance.now() - feedbackAt < 800)) return false;
+      const limited = ['pet', 'play'].includes(event), allowance = P.care(data.care);
+      if (limited && (carePending || !allowance.remaining || Date.now() < allowance.nextAt)) return false;
       feedbackAt = performance.now(); feedbackEvent = event;
-      commit({ op: 'interact', event, ...prior });
+      if (limited) carePending = true;
+      try { const reply = await commit({ op: 'interact', event, ...prior }); return !!(reply?.ok && (!limited || reply.interaction?.accepted)); }
+      finally { if (limited) carePending = false; }
+    };
+    const petTouch = async (event, prior) => {
+      if (await feedback(event, prior) && alive) { playedAt = performance.now(); play('playing', event === 'pet' ? t('Happy to see you!') : ''); }
     };
     const on = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); offs.push(() => el.removeEventListener(type, fn, opts)); };
     const still = () => reduced?.matches || document.documentElement.getAttribute('data-gz-motion') === 'off';
     const quiet = () => /\/quizzes\/|\/assessments?\/|\/(?:attempt|lti)(?:\/|$)|\/external_tools\//.test(viewDoc.location.pathname) || !!viewDoc.querySelector('iframe#tool_content');
     const pageSize = () => ({ width: Math.min(1e8, Math.max(window.innerWidth, document.documentElement.scrollWidth, document.body?.scrollWidth || 0)), height: Math.min(1e8, Math.max(window.innerHeight, document.documentElement.scrollHeight, document.body?.scrollHeight || 0)) });
-    const scrollAnchor = (el) => {
-      const nodes = [];
+    const scrollAnchor = (el, surface = false) => {
+      const nodes = [], clips = [];
       const doc = el?.ownerDocument;
-      if (doc && doc !== document && doc.scrollingElement) { const n = doc.scrollingElement; nodes.push({ el: n, x: n.scrollLeft, y: n.scrollTop }); }
+      let fixed = false;
       for (let n = el, i = 0; n && i < 30; n = n.parentElement, i++) {
         if (n === doc?.scrollingElement || n === doc?.documentElement || n.closest?.('.gz-game,.gz-game-dialog,.gz-game-world')) continue;
-        const style = globalThis.getComputedStyle?.(n);
-        if (style && (/auto|scroll/.test(style.overflowX) && n.scrollWidth > n.clientWidth || /auto|scroll/.test(style.overflowY) && n.scrollHeight > n.clientHeight)) nodes.push({ el: n, x: n.scrollLeft, y: n.scrollTop });
+        const style = styleOf(n);
+        if (n === el) fixed = style?.position === 'fixed';
+        else if (fixed && style && (['transform', 'perspective', 'filter', 'backdropFilter'].some((key) => style[key] && style[key] !== 'none') || /paint|layout|strict|content/.test(style.contain))) fixed = false;
+        if (fixed && n !== el) continue;
+        if (n !== el && style && /auto|scroll|hidden|clip/.test(`${style.overflowX} ${style.overflowY}`)) {
+          const r = pageRect(n);
+          clips.push({ x: r.x + n.clientLeft, y: r.y + n.clientTop, w: n.clientWidth, h: n.clientHeight, horizontal: /auto|scroll|hidden|clip/.test(style.overflowX), vertical: /auto|scroll|hidden|clip/.test(style.overflowY) });
+        }
+        if ((!surface || n !== el) && style && (/auto|scroll/.test(style.overflowX) && n.scrollWidth > n.clientWidth || /auto|scroll/.test(style.overflowY) && n.scrollHeight > n.clientHeight)) nodes.push({ el: n, x: n.scrollLeft, y: n.scrollTop });
       }
-      return { nodes, x: -nodes.reduce((n, p) => n + p.x, 0), y: -nodes.reduce((n, p) => n + p.y, 0) };
+      if (!fixed && doc && doc !== document && doc.scrollingElement) { const n = doc.scrollingElement; nodes.unshift({ el: n, x: n.scrollLeft, y: n.scrollTop }); }
+      return { el, nodes, clips, fixed, x: -nodes.reduce((n, p) => n + p.x, 0), y: -nodes.reduce((n, p) => n + p.y, 0) };
     };
+    // Not the page: the companion's own layers, and Glaze's navigation bar, a fixed shadow host that answers a hit test for its
+    // whole rail, top bar and phone tabs. Anchoring to it would pin the pet to the viewport instead of the page behind it.
+    const pageAt = (doc, x, y) => doc.elementsFromPoint?.(x, y).find((el) => !el.closest?.('.gz-game,.gz-game-dialog,.gz-game-world,.gz-game-home,#gz-navbar'));
     const frameOffset = () => { const r = viewFrame?.getBoundingClientRect(); return { x: r ? r.left + viewFrame.clientLeft : 0, y: r ? r.top + viewFrame.clientTop : 0 }; };
     const anchorAt = (x, y) => {
       const p = frameOffset(), cx = x - window.scrollX, cy = y - window.scrollY;
       const doc = viewFrame && cx >= p.x && cy >= p.y && cx < p.x + viewFrame.clientWidth && cy < p.y + viewFrame.clientHeight ? viewDoc : document;
-      return scrollAnchor(doc.elementsFromPoint?.(cx - (doc === document ? 0 : p.x), cy - (doc === document ? 0 : p.y)).find((el) => !el.closest?.('.gz-game,.gz-game-dialog,.gz-game-world,.gz-game-home')));
+      return scrollAnchor(pageAt(doc, cx - (doc === document ? 0 : p.x), cy - (doc === document ? 0 : p.y)));
     };
     const extent = (at) => {
       const box = pageSize();
@@ -74,13 +98,47 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const step = (body, options, at) => {
       const x = at?.x || 0, y = at?.y || 0;
       const next = F.step({ ...body, x: body.x - x, y: body.y - y }, { ...options, height: options.height - y, platforms: options.platforms?.map((p) => ({ ...p, x: p.x - x, y: p.y - y })) });
+      if (next.support) next.support = { ...next.support, x: next.support.x + x, y: next.support.y + y };
       return { ...next, x: next.x + x, y: next.y + y };
     };
     const pageRect = (el) => { const r = el.getBoundingClientRect(), p = el.ownerDocument === viewDoc && viewFrame ? frameOffset() : { x: 0, y: 0 }; return { x: r.left + p.x + window.scrollX, y: r.top + p.y + window.scrollY, w: r.width, h: r.height }; };
-    const perchable = (s) => s.y >= window.scrollY + b.h && s.y <= window.scrollY + window.innerHeight && Math.min(s.x + s.w, window.scrollX + window.innerWidth) - Math.max(s.x, window.scrollX) >= b.w;
+    // A fixed footer is in the viewport's frame. A pet or toy riding a scroll container (Ultra's page) is in its page's: it would be
+    // carried by the viewport instead, never ride its page again, and lose every ledge the page scrolls (those need its anchor).
+    const viewportFooter = (s, at) => s.kind === 'footer' && s.fixed && !!at?.nodes.length;
+    const pagePlatforms = (at, solid = false) => surfaces.filter((s) => s.el && !viewportFooter(s, at) && s.anchor.nodes.every((p) => at?.nodes.some((n) => n.el === p.el))).map((s) => ({ ...s, solid: solid && s.kind !== 'heading' }));
+    const pageFloor = (body, fallback, at) => Math.min(fallback, ...surfaces.filter((s) => s.kind === 'footer' && s.fixed && !viewportFooter(s, at) && s.y >= window.scrollY + window.innerHeight / 2 && body.x + body.w > s.x && body.x < s.x + s.w).map((s) => s.y));
+    const carry = (body) => {
+      const old = body.support;
+      if (!old?.el) return;
+      const next = surfaces.find((s) => s.el === old.el && s.top !== false);
+      if (!next || body.vy < 0 || body.x + body.w <= old.x || body.x >= old.x + old.w) { body.support = null; body.grounded = false; return; }
+      const delta = { x: next.x - old.x, y: next.y - old.y };
+      body.x += delta.x; body.y += delta.y; body.support = next; return delta;
+    };
+    const aboveFooter = (body, at) => {
+      const floor = pageFloor(body, Infinity, at);
+      if (Number.isFinite(floor) && body.y + body.h >= floor - .5 && body.y < window.scrollY + window.innerHeight && (body.vy >= 0 || body.y + body.h > floor + 1)) {
+        body.y = floor - body.h; body.vy = Math.min(0, body.vy); body.grounded = body.vy === 0;
+        body.support = surfaces.find((s) => s.kind === 'footer' && s.y === floor);
+      }
+    };
+    const seatDrop = (body, at) => {
+      if (!data.physics) return;
+      const ledge = pagePlatforms(at).filter((s) => s.top !== false && body.x + body.w > s.x + 3 && body.x < s.x + s.w - 3 && body.y + body.h >= s.y - 4 && body.y <= s.y + body.h / 2).sort((a, c) => Math.abs(body.y + body.h - a.y) - Math.abs(body.y + body.h - c.y))[0];
+      if (ledge) { body.y = ledge.y - body.h; body.vy = Math.min(0, body.vy); body.grounded = body.vy === 0; body.support = body.grounded ? ledge : null; }
+    };
+    const perchable = (s) => s.top !== false && s.y >= window.scrollY + b.h && s.y <= window.scrollY + window.innerHeight && Math.min(s.x + s.w, window.scrollX + window.innerWidth) - Math.max(s.x, window.scrollX) >= b.w;
     const perchX = (s) => Math.max(Math.max(s.x, window.scrollX), Math.min(Math.min(s.x + s.w, window.scrollX + window.innerWidth) - b.w, s.x + (s.w - b.w) / 2));
     const visible = (p, margin = 0) => p.x + p.w > window.scrollX - margin && p.x < window.scrollX + window.innerWidth + margin && p.y + p.h > window.scrollY - margin && p.y < window.scrollY + window.innerHeight + margin;
-    const worldHost = () => { if (!world.isConnected) document.documentElement.append(world); return world; };
+    // The overlay clips at the viewport so an offscreen toy cannot grow the page and toggle its scrollbar.
+    // Its children still use document coordinates, including when the document itself scrolls.
+    const scrollWorld = () => {
+      for (const [axis, value] of [['x', window.scrollX], ['y', window.scrollY]]) {
+        const key = `--gz-world-${axis}`, px = `${value}px`;
+        if (world.style.getPropertyValue(key) !== px) world.style.setProperty(key, px);
+      }
+    };
+    const worldHost = () => { if (!world.isConnected) document.documentElement.append(world); scrollWorld(); return world; };
     const homeVisible = () => { const r = stage?.getBoundingClientRect(); return r && r.width > 0 && r.bottom > 0 && r.top < window.innerHeight; };
     const allowed = () => alive && !globalThis.GZ_CTABS?.revoked?.() && !!chrome.runtime?.id && !document.hidden && !viewBlocked && (wandering ? !quiet() : homeVisible());
     const art = (id) => { const img = make('img', ''); img.src = chrome.runtime.getURL(`assets/art/stickers/${P.DECOR[id].art}.webp`); img.alt = ''; img.draggable = false; return img; };
@@ -96,7 +154,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       (wander ? worldHost() : stage)?.append(actor);
       if (wander) document.body.append(home); else home.remove();
       const box = bounds(); groundY = wander ? Math.min(box.height, window.scrollY + window.innerHeight - 6) : box.height;
-      b = { ...b, x: at?.x ?? Math.max(0, wander ? window.scrollX + (window.innerWidth - b.w) / 2 : (box.width - b.w) / 2), y: at?.y ?? Math.max(0, groundY - b.h), vx: 0, vy: 0 };
+      b = { ...b, x: at?.x ?? Math.max(0, wander ? window.scrollX + (window.innerWidth - b.w) / 2 : (box.width - b.w) / 2), y: at?.y ?? Math.max(0, groundY - b.h), vx: 0, vy: 0, support: null, grounded: false };
       anchor = wander ? anchorAt(b.x + b.w / 2, b.y + b.h / 2) : null;
       lastScan = 0; display();
     };
@@ -106,6 +164,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       if (!alive) return;
       if (reply?.ok && reply.data) setData(reply.data);
       else { if (data) { relocate(data.wander); renderProps(); } play('failed', t('Couldn’t save your buddy. Try again.')); }
+      return reply;
     };
     const positionOf = (id) => data.positions[id] || P.cellPosition(data.decor[id]);
     const renderProps = () => {
@@ -147,19 +206,47 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       scan(); wake();
     };
     const putProp = (p) => { p.el.style.left = '0'; p.el.style.top = '0'; p.el.style.transform = `translate3d(${p.x}px,${p.y}px,0)`; };
+    const shelves = () => props.filter((p) => !floating.has(p.id) && P.DECOR[p.id].shelf).map((p) => ({ x: p.x, y: p.y + 10, w: p.w }));
     const scan = () => {
       surfaces = [];
-      if (!wandering) surfaces = props.filter((p) => P.DECOR[p.id].shelf).map((p) => ({ x: p.x, y: p.y + 10, w: p.w }));
-      else {
+      if (wandering || floating.size) {
         // Observe only geometry; never activate a page control or change student content.
         const active = outing?.surface.el || activity?.target?.el;
-        const elements = new Set([...viewDoc.querySelectorAll('h1,h2,h3,article,section,[role="region"],.ic-DashboardCard,.element-card,.gz-w')].slice(0, 80));
-        if (active?.isConnected && active.ownerDocument === viewDoc) elements.add(active);
-        for (const el of elements) {
-          if (el.closest('.gz-game,.gz-game-dialog,.gz-game-world,form,nav,header,aside,[role="navigation"],[contenteditable="true"]') || el.querySelector('input,textarea,select,[contenteditable="true"]')) continue;
-          const r = pageRect(el);
-          if (r.w >= 70 && r.h > 5 && (el === active || visible(r, 100))) surfaces.push({ el, ...r, kind: /^H[1-3]$/.test(el.tagName) ? 'heading' : el.matches('.gz-w') ? 'widget' : 'card' });
+        const selector = 'footer,[role="contentinfo"],#gz-footer,h1,h2,h3,h4,article,section,figure,table,[role="region"],.ic-DashboardCard,.element-card,.course-element-card,.course-card,.gz-course-card,.gz-w,.item-group-container,.ig-header,.ig-row,.module-item,[data-gz-surface]';
+        const elements = new Set(document.querySelectorAll('#gz-footer,footer,[role="contentinfo"]'));
+        const addParents = (el) => { for (let n = el, depth = 0; n && depth < 12; n = n.parentElement, depth++) if (n.matches(selector)) elements.add(n); };
+        for (const el of [active, b.support?.el, ...[...floating.values()].map((p) => p.support?.el)]) if (el?.isConnected && [document, viewDoc].includes(el.ownerDocument)) elements.add(el);
+        for (const at of [anchor, ...[...floating.values()].map((p) => p.anchor)]) if (at?.el?.isConnected && [document, viewDoc].includes(at.el.ownerDocument)) addParents(at.el);
+        // Sample the viewport first so long course pages do not use the entire budget above the fold.
+        for (const doc of new Set([document, viewDoc])) {
+          const frame = doc === viewDoc && viewFrame ? frameOffset() : { x: 0, y: 0 };
+          for (let row = 0; row < 5; row++) for (let col = 0; col < 6; col++) {
+            const el = pageAt(doc, (col + .5) * window.innerWidth / 6 - frame.x, (row + .5) * window.innerHeight / 5 - frame.y);
+            addParents(el);
+          }
         }
+        for (const el of [...viewDoc.querySelectorAll(selector)].slice(0, 600)) elements.add(el);
+        scanStyles = new WeakMap();
+        let inspected = 0;
+        for (const el of elements) {
+          if (++inspected > 800 || surfaces.length >= 160) break;
+          if (el.closest('.gz-game,.gz-game-dialog,.gz-game-world,form,nav,header,aside,[role="navigation"],[role="dialog"],dialog,[hidden],[aria-hidden="true"],[inert],[contenteditable="true"]') || el.querySelector('input,textarea,select,[contenteditable="true"]') || !el.getClientRects().length || el.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) === false) continue;
+          const r = pageRect(el);
+          if (r.w < 36 || r.h <= 5 || !(el === active || el === b.support?.el || [...floating.values()].some((p) => p.support?.el === el) || visible(r, 100))) continue;
+          const at = scrollAnchor(el, true), clips = [...at.clips];
+          if (el.ownerDocument === viewDoc && viewFrame) { const f = pageRect(viewFrame); clips.push({ ...f, horizontal: true, vertical: true }); }
+          let top = true;
+          for (const c of clips) {
+            if (c.horizontal) { const right = Math.min(r.x + r.w, c.x + c.w); r.x = Math.max(r.x, c.x); r.w = right - r.x; }
+            if (c.vertical) { if (r.y < c.y - 1) top = false; r.h = Math.min(r.y + r.h, c.y + c.h) - r.y; if (r.y + r.h <= c.y) r.h = 0; }
+          }
+          if (r.w < 36 || r.h <= 5) continue;
+          const kind = el.matches('footer,[role="contentinfo"],#gz-footer') ? 'footer' : /^H[1-4]$/.test(el.tagName) ? 'heading' : el.matches('.gz-w') ? 'widget' : 'card';
+          surfaces.push({ el, ...r, kind, top, anchor: at, fixed: at.fixed || styleOf(el)?.position === 'sticky' });
+        }
+        scanStyles = null;
+        if (wandering && !outing && (!activity?.target || activity.toy) && !drag) { const moved = carry(b); if (moved && b.support?.kind === 'footer' && b.support.fixed) groundY += moved.y; }
+        for (const p of floating.values()) if (p !== movingItem) { const moved = carry(p); if (moved && p.support?.kind === 'footer' && p.support.fixed) p.ground += moved.y; }
       }
       if (outing) {
         const next = surfaces.find((surface) => surface.el === outing.surface.el);
@@ -193,8 +280,9 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         if (Math.abs(delta) < 2) { o.phase = o.hide ? 'conceal' : 'settle'; b.y = y; }
       }
       if (o.phase === 'settle') {
-        controlled = true; b.y = s.y - b.h; b.vy = 0; pose = facingPose(s.x - b.x);
+        controlled = true; b.y = s.y - b.h; b.vy = 0;
         const x = Math.max(0, Math.min(bounds().width - b.w, perchX(s)));
+        pose = facingPose(x - b.x);
         const done = toward(x, 65); b.x += b.vx * dt;
         if (done) { b.vx = 0; o.phase = 'perch'; o.until = now + 45000 + Math.random() * 75000; nextAction = o.until; }
       }
@@ -222,7 +310,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     const targets = () => {
       const r = wandering && stage ? pageRect(stage) : null;
       const furniture = props.filter((p) => p.el.isConnected && (floating.has(p.id) || !wandering || stage?.isConnected && r?.w > 0)).map((p) => ({ ...p, kind: p.id, x: p.x + (floating.has(p.id) ? 0 : r?.x || 0), y: p.y + (floating.has(p.id) ? 0 : r?.y || 0) }));
-      return [...surfaces.filter((s) => s.el), ...furniture].filter((s) => s.x + s.w > 0 && s.x < bounds().width && s.y + s.h > 0 && s.y < bounds().height);
+      return [...(wandering ? surfaces.filter((s) => s.el) : []), ...furniture].filter((s) => s.x + s.w > 0 && s.x < bounds().width && s.y + s.h > 0 && s.y < bounds().height);
     };
     const takeOut = (p, x, y) => {
       const focused = document.activeElement === p.el;
@@ -244,9 +332,9 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       const choices = targets().filter((s) => !wandering || visible(s)), busy = typing() || pointerForm || now - scrolledAt < 1200, invited = now - playedAt < 45000;
       const available = [...(recent[recent.length - 1] !== 'walk' ? ['walk'] : []), 'rest', 'greet', 'groom', 'stretch', ...(choices.length ? ['investigate', 'study'] : []), ...(!focus && !busy && invited ? ['play'] : []),
         ...(!focus && !busy && invited && now - cursorAt < 6000 ? ['follow'] : []), ...(wandering && !focus && stage?.isConnected && homeVisible() ? ['home'] : []),
-        ...(wandering && data.physics && surfaces.some((s) => visible(s) && perchable(s)) ? ['perch'] : []), ...(wandering && data.physics && surfaces.some((s) => visible(s) && s.h > 100 && s.w > 150) ? ['hide'] : [])];
+        ...(wandering && data.physics && surfaces.some((s) => visible(s) && perchable(s)) ? ['perch'] : []), ...(wandering && data.physics && surfaces.some((s) => visible(s) && s.kind !== 'footer' && s.h > 100 && s.w > 150) ? ['hide'] : [])];
       const action = B.choose(data.learning ? data.brain : null, features(), available, Math.random, { recent });
-      let candidates = ['hide', 'perch'].includes(action) ? surfaces.filter((s) => visible(s) && s.w >= b.w && (action === 'perch' ? perchable(s) : s.h > 100 && s.w > 150)) : choices;
+      let candidates = ['hide', 'perch'].includes(action) ? surfaces.filter((s) => visible(s) && s.w >= b.w && (action === 'perch' ? perchable(s) : s.kind !== 'footer' && s.h > 100 && s.w > 150)) : choices;
       if (action === 'play') candidates = choices.filter((s) => P.DECOR[s.id]?.toy && (!wandering || floating.has(s.id)));
       if (action === 'rest') candidates = choices.filter((s) => ['bed', 'pillow'].includes(s.kind));
       if (action === 'study') { const reading = choices.filter((s) => ['books', 'lamp', 'heading'].includes(s.kind)); if (reading.length) candidates = reading; }
@@ -258,7 +346,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         observedAt = now; observedAction = action; commit({ op: 'observe', action, context: decision.context });
       }
       nextAction = now + (action === 'play' ? 15000 : action === 'walk' ? 5000 + Math.random() * 4000 : ['rest', 'study', 'groom'].includes(action) ? 45000 + Math.random() * 75000 : 20000 + Math.random() * 20000);
-      if (wandering && target?.el) anchor = target.id && floating.has(target.id) ? { ...floating.get(target.id).anchor, nodes: floating.get(target.id).anchor.nodes.map((p) => ({ ...p })) } : scrollAnchor(target.el);
+      if (wandering && target?.el) anchor = target.id && floating.has(target.id) ? { ...floating.get(target.id).anchor, nodes: floating.get(target.id).anchor.nodes.map((p) => ({ ...p })) } : scrollAnchor(target.el, !target.id);
       if (target && ['perch', 'hide'].includes(action)) outing = { surface: target, phase: 'approach', left: b.x + b.w / 2 < target.x + target.w / 2, hide: action === 'hide', until: 0 };
       else if (['investigate', 'study', 'rest', 'follow', 'play', 'groom', 'stretch', 'home'].includes(action)) {
         activity = { action, target: ['investigate', 'study', 'rest', 'play'].includes(action) ? target : null, toy: action === 'play' && target ? props.find((p) => p.id === target.id) : null, phase: target && ['investigate', 'study', 'rest'].includes(action) || action === 'home' ? 'approach' : action, started: now, until: nextAction, hop: 0 };
@@ -296,8 +384,9 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         if (a.phase !== 'arrived' && toward(r.x + (r.w - b.w) / 2, r.y + r.h - b.h - 12, 110)) { a.phase = 'arrived'; a.until = now + 15000; changeMode(false, true); }
       } else if (a.phase === 'approach') {
         const s = a.target, left = a.left ??= b.x + b.w / 2 < s.x + s.w / 2;
-        pose = left ? 'running-right' : 'running-left'; controlled = true;
+        controlled = true;
         const x = a.action === 'rest' ? s.x + (s.w - b.w) / 2 : left ? s.x - b.w + 12 : s.x + s.w - 12;
+        pose = facingPose(x - b.x);
         if (toward(x, a.action === 'rest' ? s.y + s.h - b.h : s.y + Math.min(s.h / 2, 90) - b.h / 2)) { a.phase = 'settle'; a.settled = now; a.until = Math.max(a.until, now + 3500); }
       } else if (a.action === 'follow') {
         if (now - cursorAt > 6000) { clearActivity(); nextAction = now + 1000; return null; }
@@ -307,9 +396,21 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         if (distance > 155) toward(b.x + dx * (distance - 145) / distance, b.y + dy * (distance - 145) / distance, 70);
         else { b.vx = b.vy = 0; }
       } else if (a.action === 'play') {
+        const ledge = wandering && a.toy?.support?.el && surfaces.find((s) => s.el === a.toy.support.el && perchable(s));
+        if (ledge && (a.climbing === ledge.el || b.y + b.h > ledge.y + 65)) {
+          const left = b.x + b.w / 2 < ledge.x + ledge.w / 2, edge = left ? ledge.x - b.w * .65 : ledge.x + ledge.w - b.w * .35;
+          controlled = true;
+          if (a.climbing === ledge.el || Math.abs(edge - b.x) < 5) {
+            a.climbing = ledge.el; b.support = null; pose = 'climbing';
+            if (toward(edge, ledge.y - b.h, 105)) { b.y = ledge.y - b.h; b.support = ledge; b.grounded = true; a.climbing = null; }
+          } else { pose = facingPose(edge - b.x); toward(edge, b.y, 85); }
+          actor.dataset.behavior = a.climbing ? 'climb' : 'play-approach';
+          return { controlled, pose };
+        }
+        a.climbing = null;
         const elapsed = (now - a.started) / 1000, x = clampX(a.toy ? a.toy.x + (a.toy.w - b.w) / 2 : (wandering ? window.scrollX + window.innerWidth / 2 : box.width / 2) + Math.sin(elapsed * 1.3) * Math.min(100, (wandering ? window.innerWidth : box.width) / 3)), delta = x - b.x;
         b.vx += (Math.sign(delta) * Math.min(90, Math.abs(delta) * 4) - b.vx) * (1 - Math.exp(-dt / .15)); pose = Math.abs(delta) > 8 ? facingPose(delta) : 'look';
-        if (a.toy && Math.abs(delta) < 24 && now - a.hop > 1500) { a.toy.vx = (Math.random() > .5 ? 1 : -1) * 45; a.toy.vy = -100; if (data.physics && b.grounded) { b.vy = -230; pose = 'jumping'; } a.hop = now; }
+        if (a.toy && Math.abs(delta) < 24 && Math.abs(a.toy.y + a.toy.h - b.y - b.h) < 65 && now - a.hop > 1500) { a.toy.support = null; a.toy.vx = (Math.random() > .5 ? 1 : -1) * 45; a.toy.vy = -100; if (data.physics && b.grounded) { b.support = null; b.vy = -230; pose = 'jumping'; } a.hop = now; }
         if (!a.toy && data.physics && b.grounded && now - a.hop > 1500) { b.vy = -230; a.hop = now; pose = 'jumping'; }
         if (toy) { toy.dataset.wander = String(wandering); toy.style.transform = `translate3d(${x + b.w / 2}px,${(wandering ? groundY : box.height) - 14 - Math.abs(Math.sin(elapsed * 3)) * 20}px,0)`; }
       } else {
@@ -345,7 +446,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       actor.dataset.behavior = 'recover';
       if (distance < 4 && visible(b)) {
         const goal = r.goal; groundY = goal.ground; clearActivity();
-        anchor = goal.el ? scrollAnchor(goal.el) : anchorAt(b.x + b.w / 2, b.y + b.h / 2);
+        anchor = goal.el ? scrollAnchor(goal.el, true) : anchorAt(b.x + b.w / 2, b.y + b.h / 2);
         const action = goal.surface?.el.isConnected ? 'perch' : 'rest';
         decision = { action, context: features(goal.surface), at: now }; actor.dataset.intent = actor.dataset.behavior = action; idlePose = 'idle'; idleUntil = nextAction = now + 45000;
         if (action === 'perch') outing = { surface: goal.surface, phase: 'perch', left: b.x < goal.surface.x + goal.surface.w / 2, hide: false, until: nextAction };
@@ -363,39 +464,62 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       actor.hidden = !allowed(); if (toy) toy.hidden = actor.hidden; for (const p of floating.values()) p.el.hidden = actor.hidden;
       if (actor.hidden) { if (awake) player?.sleep(); awake = false; return; }
       if (!awake) player?.wake(); awake = true;
-      if (still()) { if (!wasStill) { clearActivity(); nextAction = 0; wasStill = true; } const box = bounds(); b.vx = b.vy = 0; const ax = anchor?.x || 0, ay = anchor?.y || 0; b.x = Math.max(ax, Math.min(ax + box.width - b.w, b.x)); b.y = Math.max(ay, Math.min(ay + box.height - b.h, b.y)); display(); return; }
+      const now = performance.now(), dt = Math.min(.05, (now - last) / 1000 || 1 / 30), box = bounds(); last = now;
+      if (now - lastScan > 2000 || geometryDirty && (still() || now - lastScan >= 80)) { scan(); lastScan = now; geometryDirty = false; }
+      if (still()) {
+        if (!wasStill) { clearActivity(); nextAction = 0; wasStill = true; }
+        b.vx = b.vy = 0;
+        const ax = anchor?.x || 0, ay = anchor?.y || 0;
+        b.x = Math.max(ax, Math.min(ax + box.width - b.w, b.x)); b.y = Math.max(ay, Math.min(ay + box.height - b.h, b.y));
+        if (wandering && !drag) { aboveFooter(b, anchor); if (b.support?.el && b.support.el !== anchor?.el) anchor = scrollAnchor(b.support.el, true); }
+        for (const p of floating.values()) if (p !== movingItem) { aboveFooter(p, p.anchor); if (p.support?.el && p.support.el !== p.anchor?.el) p.anchor = scrollAnchor(p.support.el, true); putProp(p); }
+        display(); return;
+      }
       wasStill = false;
       if (focus && focusEnd <= Date.now()) updateFocus(focusTimer);
-      const now = performance.now(), dt = Math.min(.05, (now - last) / 1000 || 1 / 30), box = bounds(); last = now;
-      if (now - lastScan > 2000 || geometryDirty && now - lastScan >= 80) { scan(); lastScan = now; geometryDirty = false; }
       const outside = wandering && !visible(b), resting = !recovery && (activity?.action === 'rest' && activity.phase !== 'approach' || now < idleUntil && idlePose === 'sleeping');
       if (outside && resting && !drag) { b.vx = b.vy = 0; display(); return; }
       if (outside && !offscreenAt) offscreenAt = now;
       if (!outside && !recovery) offscreenAt = 0;
       const returning = !drag && wandering && (recovery || outside && now - offscreenAt >= 3000);
       const water = !wandering && data.habitat === 'aquarium';
+      const fromX = b.x;
       const action = !drag ? returning ? recover(now, dt) : wandering ? explore(now, dt) : atHome(now, dt) : null;
       energy = Math.max(0, Math.min(1, energy + dt * (decision?.action === 'rest' ? .035 : -.003)));
       if (!drag) {
         if (action?.controlled) { /* The pet grips the ledge while climbing, perching or peeking. */ }
-        else if (data.physics) b = step(b, { ...box, height: wandering ? Math.max(b.y + b.h, groundY) : box.height, platforms: surfaces, water, dt }, anchor);
+        else if (data.physics) {
+          const previous = b.support?.el;
+          b = step(b, { ...box, height: wandering ? pageFloor(b, Math.max(b.y + b.h, groundY), anchor) : box.height, platforms: wandering ? pagePlatforms(anchor) : shelves(), water, dt }, anchor);
+          if (wandering && b.support?.el && b.support.el !== previous) anchor = scrollAnchor(b.support.el, true);
+        }
         else { const ax = anchor?.x || 0; b.x = Math.max(ax, Math.min(ax + box.width - b.w, b.x + b.vx * dt)); if (b.x <= ax || b.x >= ax + box.width - b.w) b.vx *= -1; b.y = (wandering ? groundY : box.height) - b.h; }
+        if (wandering) { aboveFooter(b, anchor); if (b.support?.el && b.support.el !== anchor?.el) anchor = scrollAnchor(b.support.el, true); }
         display();
         let state = action?.pose || (Math.abs(b.vx) > 3 ? facingPose(b.vx) : 'idle'), direction = action?.direction || 0;
+        const travel = b.x - fromX, travelling = Math.abs(travel) > Math.max(.04, dt * 2);
+        if (travelling) {
+          facing = Math.sign(travel); actor.dataset.facing = facing < 0 ? 'left' : 'right';
+          if (['running', 'running-left', 'running-right', 'look', 'idle'].includes(state)) state = facing < 0 ? 'running-left' : 'running-right';
+        }
         const r = !wandering ? stage?.getBoundingClientRect() : null, dx = cursor.x - (wandering ? -window.scrollX : r?.left || 0) - b.x - b.w / 2, dy = cursor.y - (wandering ? -window.scrollY : r?.top || 0) - b.y - b.h / 2;
-        const near = Math.hypot(dx, dy), watching = now - cursorAt < 2400 && near < 600 && (['idle', 'perching', 'waiting', 'look'].includes(state) || state === 'sleeping' && near < 120 && !focus && energy > .3);
+        const near = Math.hypot(dx, dy), watching = !travelling && now - cursorAt < 2400 && near < 600 && (['idle', 'perching', 'waiting', 'look'].includes(state) || state === 'sleeping' && near < 120 && !focus && energy > .3);
         if (watching && globalThis.GZ_PET_SPRITES) { state = 'look'; direction = GZ_PET_SPRITES.direction(dx, dy); }
         if (!actor.dataset.reaction && (state !== lastMotion || state === 'look' && direction !== lastGaze)) { lastMotion = state; lastGaze = direction; player?.play(state, direction); }
       }
       for (const p of floating.values()) if (p !== movingItem) {
         if (p.anchor?.nodes.some((n) => !n.el.isConnected)) p.anchor = anchorAt(p.x + p.w / 2, p.y + p.h / 2);
-        if (data.physics) Object.assign(p, step(p, { width: extent(p.anchor).width, height: p.ground, dt }, p.anchor));
+        const x = p.x, previous = p.support?.el;
+        if (data.physics) Object.assign(p, step(p, { width: extent(p.anchor).width, height: pageFloor(p, p.ground, p.anchor), platforms: pagePlatforms(p.anchor, true), bounce: p.id === 'ball' ? .42 : .24, dt }, p.anchor));
         else { p.vx = p.vy = 0; }
+        aboveFooter(p, p.anchor);
+        if (p.support?.el && (p.support.el !== previous || p.support.el !== p.anchor?.el)) p.anchor = scrollAnchor(p.support.el, true);
+        p.roll = ((p.roll || 0) + (p.x - x) / p.w * 360) % 360; if (p.el.firstElementChild) p.el.firstElementChild.style.rotate = `${p.roll}deg`;
         p.vx *= Math.exp(-1.2 * dt); putProp(p);
       }
       if (!wandering && data.physics) for (const p of props) {
         if (p === movingItem || floating.has(p.id) || P.DECOR[p.id].fixed) continue;
-        Object.assign(p, F.step(p, { ...box, platforms: surfaces, water, dt })); putProp(p);
+        Object.assign(p, F.step(p, { ...box, platforms: shelves(), water, dt })); putProp(p);
       }
       timer = setTimeout(tick, 1000 / 30);
     };
@@ -406,6 +530,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       const target = item?.el || actor, r = target.getBoundingClientRect();
       drag = { target, pointer: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, x: e.clientX, y: e.clientY, at: performance.now(), moved: false, was: wandering, decision: activeDecision(), itemOutside: item && floating.has(item.id), itemX: item?.x, itemY: item?.y, vx: 0, vy: 0 };
       movingItem = item; target.dataset.dragging = 'true';
+      (item || b).support = null;
       clearActivity(); movedAt = performance.now();
       if (!item && !wandering) { relocate(true, { x: r.left + window.scrollX, y: r.top + window.scrollY }); }
       target.setPointerCapture(e.pointerId);
@@ -444,7 +569,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         if (P.DECOR[item.id].toy && floating.has(item.id)) {
           const inside = r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
           if (inside) { floating.delete(item.id); item.el.remove(); commit({ op: 'place', item: item.id, position: { x: Math.max(5, Math.min(95, (item.x - window.scrollX - r.left + item.w / 2) / r.width * 100)), y: Math.max(10, Math.min(96, (item.y - window.scrollY - r.top + item.h) / r.height * 100)) } }); renderProps(); }
-          else { item.anchor = anchorAt(item.x + item.w / 2, item.y + item.h / 2); item.ground = Math.max(item.y + item.h, window.scrollY + window.innerHeight - 6); item.vx = Math.max(-90, Math.min(90, d.vx * .2)); item.vy = Math.max(-100, Math.min(100, d.vy * .15)); if (!wandering) { relocate(true); changeMode(true, false, d.decision); } startToyPlay(item); }
+          else { item.anchor = anchorAt(item.x + item.w / 2, item.y + item.h / 2); item.ground = Math.max(item.y + item.h, window.scrollY + window.innerHeight - 6); item.vx = Math.max(-90, Math.min(90, d.vx * .2)); item.vy = Math.max(-100, Math.min(100, d.vy * .15)); if (!wandering) { relocate(true); changeMode(true, false, d.decision); } scan(); seatDrop(item, item.anchor); if (item.support) item.anchor = scrollAnchor(item.support.el, true); startToyPlay(item); }
           if (dirty) renderProps(); wake(); return;
         }
         if (!r) { wake(); return; }
@@ -454,10 +579,10 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
         const r = stage?.getBoundingClientRect(), inside = r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
         const wander = d.moved ? !inside : d.was;
         relocate(wander); if (wander) groundY = Math.max(b.y + b.h, window.scrollY + window.innerHeight - 6); b.vx = d.vx; b.vy = d.vy; nextAction = performance.now() + 1800;
-        if (wander) anchor = anchorAt(b.x + b.w / 2, b.y + b.h / 2);
+        if (wander) { anchor = anchorAt(b.x + b.w / 2, b.y + b.h / 2); scan(); seatDrop(b, anchor); if (b.support) anchor = scrollAnchor(b.support.el, true); }
         if (wander !== data.wander) changeMode(wander, false, d.decision);
         if (d.moved && wander === data.wander) feedback(d.was && wander ? 'away' : 'play', d.decision);
-        if (!d.moved) { playedAt = performance.now(); feedback('pet', d.decision); play('playing', t('Happy to see you!')); }
+        if (!d.moved) { suppressClick = true; petTouch('pet', d.decision); }
       }
       if (dirty) renderProps(); wake();
     };
@@ -518,12 +643,13 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     };
     on(actor, 'pointerdown', (e) => begin(e)); on(document, 'pointermove', move, { passive: false });
     on(document, 'pointerup', end); on(document, 'pointercancel', end);
-    on(actor, 'click', (e) => { if (!e.isTrusted || e.target.closest('.gz-game-home')) return; if (suppressClick) { suppressClick = false; return; } playedAt = performance.now(); feedback('pet'); play('playing', t('Happy to see you!')); });
-    on(actor, 'keydown', (e) => { if (!e.isTrusted || e.target !== actor) return; const k = e.key.toLowerCase(); if (['w', 'h', 'escape'].includes(k)) { e.preventDefault(); changeMode(k === 'w'); } else if (k === ' ' || k === 'enter') { e.preventDefault(); playedAt = performance.now(); feedback('play'); play('playing'); } });
+    on(actor, 'click', (e) => { if (!e.isTrusted || e.target.closest('.gz-game-home')) return; if (suppressClick) { suppressClick = false; return; } petTouch('pet'); });
+    on(actor, 'keydown', (e) => { if (!e.isTrusted || e.target !== actor) return; const k = e.key.toLowerCase(); if (['w', 'h', 'escape'].includes(k)) { e.preventDefault(); changeMode(k === 'w'); } else if (k === ' ' || k === 'enter') { e.preventDefault(); if (!e.repeat) petTouch('play'); } });
     on(document, 'visibilitychange', wake); on(window, 'resize', () => { if (stage && data) renderProps(); wake(); });
     const typed = (e) => { if (e.isTrusted && (e.target.matches?.('input,textarea,select,[contenteditable="true"],[role="textbox"]') || e.target.closest?.('[contenteditable="true"]'))) typedAt = performance.now(); };
     on(document, 'keydown', typed, { passive: true });
     const scrolled = (e) => {
+      if (world.isConnected) scrollWorld();
       const target = e.target.nodeType === 9 ? e.target.scrollingElement : e.target;
       const shift = (at) => {
         const p = at?.nodes.find((p) => p.el === target);
@@ -535,6 +661,7 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       const moved = wandering && shift(anchor);
       if (moved && !drag) {
         b.x += moved.dx; b.y += moved.dy; groundY += moved.dy;
+        if (b.support?.el && target.contains(b.support.el)) b.support = { ...b.support, x: b.support.x + moved.dx, y: b.support.y + moved.dy };
         if (outing?.surface.el && target.contains(outing.surface.el)) { outing.surface = { ...outing.surface, x: outing.surface.x + moved.dx, y: outing.surface.y + moved.dy }; }
         if (activity?.target?.el && !activity.toy && target.contains(activity.target.el)) { activity.target = { ...activity.target, x: activity.target.x + moved.dx, y: activity.target.y + moved.dy }; }
         if (recovery) recovery.goal = null;
@@ -542,9 +669,9 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       }
       for (const p of floating.values()) {
         const moved = shift(p.anchor);
-        if (moved && p !== movingItem) { p.x += moved.dx; p.y += moved.dy; p.ground += moved.dy; putProp(p); }
+        if (moved && p !== movingItem) { p.x += moved.dx; p.y += moved.dy; p.ground += moved.dy; if (p.support?.el && target.contains(p.support.el)) p.support = { ...p.support, x: p.support.x + moved.dx, y: p.support.y + moved.dy }; putProp(p); }
       }
-      scrolledAt = performance.now(); geometryDirty = true; if (!timer && allowed() && !still()) wake();
+      scrolledAt = performance.now(); geometryDirty = true; if (!timer && allowed()) wake();
     };
     on(window, 'scroll', scrolled, { passive: true, capture: true });
     const syncSurface = () => {
@@ -557,7 +684,8 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
       viewDoc = doc; viewFrame = frame;
       clearActivity(); surfaces = []; lastScan = -Infinity; geometryDirty = true; nextAction = 0; cursorAt = 0; pointerForm = false;
       anchor = wandering ? anchorAt(b.x + b.w / 2, b.y + b.h / 2) : null;
-      for (const p of floating.values()) p.anchor = anchorAt(p.x + p.w / 2, p.y + p.h / 2);
+      b.support = null;
+      for (const p of floating.values()) { p.support = null; p.anchor = anchorAt(p.x + p.w / 2, p.y + p.h / 2); }
       if (frame) {
         const bind = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); frameOffs.push(() => el.removeEventListener(type, fn, opts)); };
         bind(doc, 'pointermove', move, { passive: true }); bind(doc, 'keydown', typed, { passive: true });

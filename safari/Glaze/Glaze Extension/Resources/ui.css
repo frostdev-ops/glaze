@@ -36,7 +36,7 @@ input[type="color"] {
 }
 input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
 input[type="color"]::-webkit-color-swatch { border: 0; border-radius: calc(var(--gz-radius, 12px) * 1 / 4); }
-input[type="text"], input[type="url"], select {
+input[type="text"], input[type="url"], input[type="password"], select {
   font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
   border-radius: calc(var(--gz-radius, 12px) * 2 / 3); padding: 0.4rem 0.6rem; min-width: 0;
 }
@@ -108,7 +108,7 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
   input[type="checkbox"]:not(.switch > input)::before { width: 22px; height: 22px; }
   input[type="checkbox"]:not(.switch > input):checked::before { transform: translateX(18px); }
   input[type="color"] { width: 40px; height: 34px; }
-  input[type="text"], input[type="url"], select { font-size: 16px; }
+  input[type="text"], input[type="url"], input[type="password"], select { font-size: 16px; }
   .switch { width: 46px; height: 28px; }
   .switch span::after { width: 22px; height: 22px; }
   .switch input:checked + span::after { transform: translateX(18px); }

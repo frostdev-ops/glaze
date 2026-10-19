@@ -36,13 +36,13 @@ Your character choice is shared across this device: the habitat, Study buddy wid
 
 ## Share sessions
 
-**Optional share sessions:** open **Share sessions** in settings, Ctrl/⌘K, Notes or To Do. Nothing connects until you create, join or resume. Share selected notes/a folder (including encrypted pictures and attachments), your current Look, or selected custom tasks with their steps and plans. Paste invites into Glaze rather than opening them in a web page. Anyone holding an edit invite can edit; a view invite can only read. Joining keeps a separate local copy; explicitly copy into a chosen local account to add new items. An editable copy follows updates; a viewer's copy is detached. A Look changes your theme only after **Use this Look** opens the existing editor preview and you apply it.
+**Optional share sessions:** everything lives in **Settings → Sharing and sync → Share sessions** (Ctrl/⌘K and To Do open it too). In Notes, **Share** on a note shares it in one step and copies an edit invite; **Shared notes** lists the account's shared notes with their invites and joins a pasted invite straight into Notes. Nothing connects until you create, join or resume. Share selected notes/a folder (including encrypted pictures and attachments), your current Look, or selected custom tasks with their steps and plans. Paste invites into Glaze rather than opening them in a web page. Anyone holding an edit invite can edit; a view invite can only read. Joining keeps a separate local copy; explicitly copy into a chosen local account to add new items. An editable copy follows updates; a viewer's copy is detached. A Look changes your theme only after **Use this Look** opens the existing editor preview and you apply it.
 
 While a shared surface is open, changes sync through `https://share.frostdev.io` by default, end-to-end encrypted, with catch-up on reopening. **Pause sharing** stops connections; Glaze and your local copies still work without the relay. **Leave this device** forgets its keys; only the creator can delete the session from the relay. App copies remain. Sessions stay until deleted unless the creator opts into deletion after a year unused. The device list shows self-chosen editing-device names and last-seen times, not verified identities; view-only devices cannot announce themselves. Pause, Leave and Delete remain available while a sync is busy; old queued updates cannot reconnect afterward.
 
 **Share sessions → Relay** can select a custom HTTPS origin, or HTTP `localhost`/`127.0.0.1` for local testing. Saving only changes the synced preference for **new** sessions; existing sessions and backup keys keep their own server. **Test connection** explicitly checks `/health` with a five-second timeout and never enables sharing. Joining a custom-server invite first names the host and asks for confirmation in Glaze, before permission checks or connections. Restoring custom keys stays offline until Resume confirms any new hosts. Custom operators receive encrypted data and metadata under their own policies; Glaze cannot vouch for them. See [Run your own relay](../server/README.md) for Node/Docker, TLS proxies, disk/R2 storage, limits, backups and updates.
 
-Notes **Export all** and **Import** open Glaze's own backup page. Both notes ZIPs and settings backups always include all share keys and creator delete tokens, even while sharing is paused: anyone with the backup can open those sessions and may change or delete them. Keep backups private. Restoring keys does not connect; resume explicitly. After a relay restore, **Re-upload retained files** sends this device's retained bytes encrypted again and publishes fresh references. Missing local bytes cannot be recreated. Caps are 20 sessions, 200 selected notes/tasks, 16 MiB session state, 64 MiB files per session and 200 MiB retained session files per device. Additional carriers need an optional adapter; arbitrary storage and LMS assignments are not shared.
+Notes **Back up or restore** opens **Settings → Backup and privacy → Notes backup** for that account. Both notes ZIPs and settings backups always include all share keys and creator delete tokens, even while sharing is paused: anyone with the backup can open those sessions and may change or delete them. Keep backups private. Restoring keys does not connect; resume explicitly. After a relay restore, **Re-upload retained files** sends this device's retained bytes encrypted again and publishes fresh references. Missing local bytes cannot be recreated. Caps are 20 sessions, 200 selected notes/tasks, 16 MiB session state, 64 MiB files per session and 200 MiB retained session files per device. Additional carriers need an optional adapter; arbitrary storage and LMS assignments are not shared.
 
 ## Everything else
 
@@ -53,6 +53,10 @@ Notes **Export all** and **Import** open Glaze's own backup page. Both notes ZIP
 - **Palettes** — six presets, 14 colour tokens, your own saved palettes, and automatic light/dark palettes that follow the system or a schedule (dark from 20:00 to 08:00, say). Keep quizzes light (off by default) leaves quizzes you're taking and external tools such as New Quizzes unthemed on Canvas.
 - **Look** — fonts for text, headings and code (two bundled; about forty more from Google Fonts and Nerd Fonts, or any Google Font by name, each previewed in its own face), text size, line height, corner radius, density, depth and glass.
 - **Backgrounds** — solid; a gradient you shape (linear, radial, conic or mesh; angle, blend, spread); a drifting aurora; your own image; a looping video, animated picture (WebP or AVIF) or Lottie animation from a link or a file (always muted, held on its first frame when motion is off, paused while the tab is hidden); or ten slow animated scenes (three.js, drawn at low resolution; two for Halloween, a moonlit graveyard and a pumpkin patch) with one Intensity slider. Palette colors or your own.
+
+  A temporary animation startup failure gets two automatic retries. Failed module loads use fresh
+  addresses so the browser can recover from a cached failure. Changing the background or turning
+  Glaze off and on permits another attempt; refused shaders and missing media keep their fallback.
 - **Motion** — Off, Subtle or Expressive. Reduced-motion users get Off automatically.
 - **Course colors** — every course its own color, from Ultra's stripes blended into your palette or set one by one, on course pages, Messages, Grades and the calendar.
 - **Tooltips and hints** — themed tooltips. Hover a date for how far off it is, a grade for its share.
@@ -86,9 +90,38 @@ Notes **Export all** and **Import** open Glaze's own backup page. Both notes ZIP
 - **Course tabs (Blackboard Ultra, on by default)** — each course you open gets a tab, above the course's top bar (or between its rows, or below it), on an item opened over the course or its full routed header, and above pages outside a course. A tab picked from the strip is a live Blackboard page of its own, kept running while hidden, like a browser tab: a retained live page keeps its native state while you switch. Up to four framed course pages stay live alongside the surrounding page. Edited pages stay until explicitly closed; if all four are edited, close one before opening another. A clean older page may reopen at its saved URL and scroll, losing other native state. Closing, reloading or turning tabs off can lose unsaved native work. While a tab's page first loads, a blurred picture of how it last looked covers it; pictures stay in memory only, never on disk. Glaze does not prefetch other courses; hidden native pages can continue their own requests. Close, pin and reorder with the mouse or the keyboard; past the cap the least recently used unpinned tab closes, with a word. Shape, size, width, name or code, a colour dot or icon, and each course's colour as a tint, with a live preview in the editor.
   The first-load picture captures visible pixels, including CDN styling and visible form values; it is blurred while loading. At the hard limit of 40 retained entries, close or unpin one before another course gets a tab.
   Course-tab switches keep the surrounding page’s address in the address bar and add no history entry. Browser Back/Forward follows the browser’s frame history; copy a link inside the course to share its address. Hidden native pages continue running their own requests; Glaze pauses their animated scenes.
+
+  A course is ready only after content renders. An empty initial frame gets one automatic retry;
+  a slow load then offers **Retry** and **Go back** while continuing to wait for Blackboard.
+  Retry replaces only an unedited page. Go back retains the live frame and any native work.
+
 - **Languages** — English, Spanish, French, German, Portuguese (Brazil) and Dutch. On Blackboard, Glaze writes in the language Ultra is shown in; the editor and popup follow the browser. Adding one is a file in `i18n/` (see `lib/i18n.js`); the five above are machine translations, and corrections are welcome as bug reports.
 
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain. Moodle is recognized by the keywords line its core writes in every page's head, together with the page id and layout it puts on the page's body.
+
+## Glaze navigation
+
+On by default on Blackboard Ultra (Canvas and Moodle next), Glaze draws its own navigation in place of the site's, set
+up in Settings → **Navigation**. **Placement**: a side rail, open with labels or icons only (with a tooltip on each and
+a peek when you point at it or move focus into it), or a top bar whose items move under **More** when they don't fit.
+**Style**: floating glass with a little room around it, or embedded at the page's edge. **Inside a course** it can stay
+the same, become icons only, become a top bar, or hide (the course's own Home button remains). **Course tabs** show in it
+too: click one to switch, the middle button or Delete closes it, and P pins it. Course tab settings (Settings →
+Navigation → Course tabs) can keep them **only in the navigation**, with no strip, in course pages and their frames alike.
+The logo can be Glaze's, the school's, **your own picture** (kept on this device; a shared Look shows Glaze's logo in its
+place) or none. On a phone it is
+a bottom bar of four tabs and More, whose sheet holds the rest, the course tabs, your account, signing out and
+**Customize navigation**. The page keeps the bar's room from first paint, and the chevron and pin are saved for every
+tab.
+
+**Navigation items** renames, re-icons, reorders and groups every item, hides any of them, picks the four phone tabs,
+adds up to eight links of your own, and turns on Notes, To Do, search and Glaze settings (off by default). A worn Look's
+navigation layout and your older navigation links, hidden items and order still apply under these choices. Look codes
+carry how the bar looks and sits (never whether it is on); Export all carries your items. Every item opens through the
+site's own link, so its pages and menus work as before, and the site's own navigation stays in the page, out of sight,
+coming back when the switch is off. Where Blackboard opens a course at its own address without its drawer, the items
+last seen on this device stand in. Motion follows Glaze's motion setting and your system's reduced motion;
+right-to-left pages mirror it.
 
 ## Blackboard navigation
 

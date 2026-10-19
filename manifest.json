@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.0.6",
+  "version": "3.1.0",
   "description": "__MSG_description__",
   "default_locale": "en",
   "permissions": [
@@ -160,6 +160,7 @@
         "features/lookx.css",
         "features/rules.css",
         "features/navlayout.css",
+        "features/navbar.css",
         "features/apps.css",
         "features/surfaces.css",
         "assets/logo.svg",
@@ -179,6 +180,14 @@
         "lib/lottie/lottie_light_canvas.min.js",
         "reader.html",
         "fonts/*.woff2"
+      ],
+      "matches": [
+        "https://*/*"
+      ]
+    },
+    {
+      "resources": [
+        "sharing/quick.html"
       ],
       "matches": [
         "https://*/*"

@@ -289,6 +289,8 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
     };
     const brief = (r) => ({ sid: r.st.sid, server: r.st.server, title: r.title, kind: r.kind, edit: !!r.st.seed, creator: !!r.st.del, expire: !!r.st.expire,
       status: r.st.gone ? 'gone' : r.st.pending.length ? 'pending' : r.status || 'offline', error: r.error, at: r.at || 0, bound: !!r.bind,
+      // Where a shared copy lives here: the Notes share panel finds a note's session by its account and note id.
+      account: r.bind?.key || r.copy?.key || '', notes: r.kind === 'notes' ? (r.bind ? Object.values(r.bind.map) : r.copy?.notes || []) : [], folder: r.kind === 'notes' && r.bind?.wholeFolder ? r.bind.folder : '',
       members: Object.values(C.view(r.st)).filter((x) => x.member).map((x) => x.member).slice(0, LIMIT.items),
       items: Object.entries(C.view(r.st)).filter(([, v]) => v.html !== undefined || v.task || v.code).map(([id, v]) => ({ id, title: v.title || v.task?.title || r.title })) });
     const handle = async (m) => {
@@ -309,7 +311,13 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
         }
         return { ok: true, done, skipped };
       }
-      if (m.op === 'list') return { ok: true, on: await enabled(), relay: await selected(), defaultRelay: C.SERVER, hosts: await hosts(), sessions: (await all()).map(brief), ...await sources() };
+      // m.scope (set only by the worker, from a Notes share panel's ticket): that one Notes account and note.
+      if (m.op === 'list') {
+        const out = { ok: true, on: await enabled(), relay: await selected(), defaultRelay: C.SERVER, hosts: await hosts(), name: str((await local.get('shareName')).shareName, 60) || '', sessions: (await all()).map(brief), ...await sources() };
+        if (!m.scope) return out;
+        return { ...out, scope: { key: m.scope.key, note: m.scope.note }, sessions: out.sessions.filter((s) => s.account === m.scope.key), sources: out.sources.filter((s) => s.key === m.scope.key && s.ids), accounts: out.accounts.filter((k) => k === m.scope.key) };
+      }
+      if (m.scope && m.op === 'create') check(m.kind === 'notes' && m.key === m.scope.key && m.scope.note && !m.folder && Array.isArray(m.ids) && m.ids.length === 1 && m.ids[0] === m.scope.note, 'bad');
       if (m.op === 'relaySave') { const server = R.normalize(m.server); check(server, 'bad'); check(await sync.set({ shareRelay: server })); return { ok: true, server }; }
       if (m.op === 'relayTest') return health(R.normalize(m.server));
       if (m.op === 'exportKeys') return { ok: true, keys: await keys() };
@@ -325,14 +333,20 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
       }
       if (m.op === 'pause') { check(await local.set({ shareOn: false })); stop(); return { ok: true }; }
       if (m.op === 'resume' || m.op === 'create' || m.op === 'join') {
+        const rs = await all();
+        // Restarting the device-wide switch also restarts every saved session. A panel cannot consent for other accounts.
+        if (m.scope && !await enabled()) check(rs.every((r) => r.st.gone || brief(r).account === m.scope.key
+          || (!r.bind && !r.copy && typeof m.scope.id === 'string' && !!m.scope.id && r.joinedScope === m.scope.id)), 'confirmation');
         let server, joined;
+        // The device name is remembered for the next share, wherever it is typed.
+        if (m.op !== 'resume' && str(m.name, 60)?.trim()) check(await local.set({ shareName: m.name.trim() }));
         if (m.op === 'create') { server = await selected(); check(m.server === undefined || m.server === server, 'bad'); }
         if (m.op === 'join') {
           server = R.invite(m.link); check(server, 'bad');
           check((server === relay && server === await selected()) || m.confirmServer === server, 'confirmation');
           joined = C.join(m.link, true); check(joined && joined.server === server, 'bad');
         }
-        const rs = await all(), servers = server ? [server] : [...new Set(rs.filter((r) => !r.st.gone).map((r) => r.st.server))];
+        const servers = server ? [server] : [...new Set(rs.filter((r) => !r.st.gone).map((r) => r.st.server))];
         check(servers.every((s) => R.normalize(s) === s), 'bad');
         if (m.op === 'resume') for (const s of servers) check(await approved(s) || (Array.isArray(m.confirmServers) && m.confirmServers.length <= LIMIT.sessions && m.confirmServers.includes(s)), 'confirmation');
         for (const s of servers) check(await permission(s), 'permission');
@@ -362,7 +376,7 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
         } else if (m.op === 'join') {
           const st = joined;
           check(!rs.some((r) => r.st.sid === st.sid), 'duplicate');
-          r = { st, title: '…', name: str(m.name, 60) || '…', status: 'offline' };
+          r = { st, title: '…', name: str(m.name, 60) || '…', status: 'offline', ...(m.scope?.id ? { joinedScope: m.scope.id } : {}) };
         }
         current();
         if (r) await save(r);
@@ -378,9 +392,13 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
           await update(r);
         }
         await refresh();
-        return { ok: true, sid: r?.st.sid };
+        return { ok: true, sid: r?.st.sid, kind: r?.kind, title: r?.title };
       }
       const r = typeof m.sid === 'string' && await db.get('sessions', m.sid); check(r, 'missing');
+      // A panel reaches only its account's sessions, and attaches a session it just joined only into that account.
+      if (m.scope) check(m.op === 'attach'
+        ? typeof m.scope.id === 'string' && !!m.scope.id && r.joinedScope === m.scope.id && !r.bind && m.key === m.scope.key && (!r.copy || r.copy.key === m.scope.key)
+        : brief(r).account === m.scope.key, 'bad');
       if (m.op === 'read') return { ok: true, view: C.view(r.st) };
       if (m.op === 'link') return { ok: true, link: await client(r).link(m.edit === true) };
       if (m.op === 'leave') {
@@ -392,7 +410,10 @@ var GZ_SESSIONS = globalThis.GZ_SESSIONS || (() => {
         check(!r.bind && ['notes', 'todo'].includes(r.kind) && (r.kind === 'notes' ? N.KEY : T.STORE_KEY).test(m.key), 'bad');
         check(Object.hasOwn(await local.get(m.key), m.key), 'bad');
         r.bind = { key: m.key, map: {}, files: {} }; await save(r); await apply(r, client(r));
-        if (!r.st.seed) r.bind = null; // View access makes a detached editable copy; the session itself stays read-only.
+        if (!r.st.seed) {
+          // Keep the detached copy discoverable in Notes without binding its edits back to the read-only session.
+          r.copy = { key: m.key, notes: Object.values(r.bind.map) }; r.bind = null;
+        }
         await save(r); return { ok: true };
       }
       if (m.op === 'useLook') {

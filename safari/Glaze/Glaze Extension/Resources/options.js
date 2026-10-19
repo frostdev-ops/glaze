@@ -183,16 +183,17 @@ GZ_UI.load().then((s) => {
   geometry.observe($('.top')); geometry.observe($('.preview-stage'));
 
   // ---- saving: keys touched while an input moves go out together once it rests ----
-  const pending = new Set(), pendingNav = new Set();
+  const pending = new Set(), pendingNav = new Set(), pendingNavbar = new Set();
   let timer = 0, partKeys = [], saving = 0, settingsRead = 0;
   const flush = () => {
     clearTimeout(timer);
     timer = 0;
     if (!pending.size) return;
     const navPatch = pendingNav.size ? Object.fromEntries([...pendingNav].map((k) => [k, s.nav[k]])) : undefined;
+    const navbarPatch = pendingNavbar.size ? Object.fromEntries([...pendingNavbar].map((k) => [k, s.navbar[k]])) : undefined;
     saving++;
-    GZ_UI.save(s, [...pending], (err) => { saving--; hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined);
-    pending.clear(); pendingNav.clear(); partKeys = [];
+    GZ_UI.save(s, [...pending], (err) => { saving--; hint(err || t('Saved'), !!err); if (!err) syncSettings(); }, navPatch, partKeys?.length ? partKeys : undefined, navbarPatch);
+    pending.clear(); pendingNav.clear(); pendingNavbar.clear(); partKeys = [];
   };
   const save = (keys, soon = false, parts) => {
     settingsRead++;
@@ -205,10 +206,10 @@ GZ_UI.load().then((s) => {
   addEventListener('pagehide', flush);
 
   const get = (path) => path.startsWith('nav.') && Object.hasOwn(GZ_NAV.dimensions(s.nav), path.slice(4)) ? GZ_NAV.dimensions(s.nav)[path.slice(4)] : path.split('.').reduce((o, k) => o[k], s);
-  const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); };
+  const set = (path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((o, k) => o[k], s)[last] = v; if (ks[0] === 'nav') pendingNav.add(last); if (ks[0] === 'navbar') pendingNavbar.add(last); };
   const group = (path) => path.split('.')[0];
 
-  // Relay preference and explicit health action only; session keys and joins stay on the Sessions page.
+  // Relay preference and explicit health action; sessions themselves are lib/sessions-ui.js's.
   const defaultRelay = 'https://share.frostdev.io';
   let relayBusy = false;
   const relayStatus = (text, error = false) => { $('#relay-status').textContent = text; $('#relay-status').classList.toggle('error', error); };
@@ -572,8 +573,8 @@ GZ_UI.load().then((s) => {
   });
   $('#nav-link-cancel').addEventListener('click', () => { cancelLink(); $('#nav-link-name').focus(); });
   $('#nav-link-editor').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); cancelLink(); $('#nav-link-name').focus(); } });
-  $('#nav-logo-pick').addEventListener('click', () => $('#nav-logo-file').click());
-  $('#nav-logo-file').addEventListener('change', async (e) => {
+  // A logo picture, for the old sidebar and Glaze navigation alike: one picture on this device (nav.li), stored by the worker.
+  const pickLogo = async (e, after) => {
     const file = e.target.files[0], rev = ++navLogoPick; e.target.value = ''; if (!file) return;
     let logoImage;
     try { logoImage = await GZ_CARDS.picture(file); } catch { return hint(t("That file isn't a picture Glaze can read."), true); }
@@ -581,8 +582,12 @@ GZ_UI.load().then((s) => {
     const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:nav', nav: {}, logoImage }, (x) => res(chrome.runtime.lastError ? null : x)));
     if (rev !== navLogoPick) return;
     if (!r?.ok) return hint(t(r?.error === 'cap' ? "That picture is too big to keep. Try a smaller one, or remove another card's picture." : 'Not saved. Try again in a moment.'), true);
-    Object.assign(s.nav, r.nav); fill(); hint(t('Saved'));
-  });
+    Object.assign(s.nav, r.nav); after?.(); fill(); hint(t('Saved'));
+  };
+  $('#nav-logo-pick').addEventListener('click', () => $('#nav-logo-file').click());
+  $('#nav-logo-file').addEventListener('change', (e) => pickLogo(e));
+  $('#nbar-logo-pick').addEventListener('click', () => $('#nbar-logo-file').click());
+  $('#nbar-logo-file').addEventListener('change', (e) => pickLogo(e, () => { if (s.navbar.brand !== 'custom') { set('navbar.brand', 'custom'); save(['navbar']); } }));
   for (const button of $$('[data-nav-reset]')) button.addEventListener('click', async () => {
     const section = button.dataset.navReset;
     if (section === 'layout') return writeNavItems({ ...navItems, order: [], hidden: [] });
@@ -617,7 +622,7 @@ GZ_UI.load().then((s) => {
   const navAverages = new Map();
   const renderNav = () => {
     const n = { ...(offer || s).nav };
-    const signature = JSON.stringify([n, n.k === 'default' ? activeColors(offer || s) : null]);
+    const signature = JSON.stringify([n, n.k === 'default' ? activeColors(offer || s) : null, s.navbar]);
     if (signature === navRendered) return;
     navRendered = signature;
     const rev = ++navReview;
@@ -630,9 +635,16 @@ GZ_UI.load().then((s) => {
     };
     paint(n.u);
     for (const el of $$('#sidebar [data-nav-kinds]')) el.hidden = !el.dataset.navKinds.split(' ').includes(n.k);
+    // Glaze navigation (the Navigation tab): its controls while it is on, the rail's while it is a rail somewhere.
+    $('#navbar [data-navbar]').hidden = !s.navbar.on;
+    $('#navbar [data-navbar-rail]').hidden = s.navbar.place !== 'rail' && s.navbar.course !== 'icons';
+    $('#sidebar [data-navbar-note]').hidden = !s.navbar.on;
+    $('#tabs [data-tabs-nav-note]').hidden = s.tabs.at !== 'nav' || (s.navbar.on && s.navbar.tabs);
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
     $('#nav-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
+    $('#nbar-logo-note').textContent = n.li ? t('Logo kept on this device') : '';
+    $('#nbar-logo-pick').textContent = t(n.li ? 'Change logo' : 'Choose a logo');
     const note = $('#nav-contrast');
     note.classList.remove('err');
     if (n.k === 'default') { if (note.textContent) note.textContent = ''; return; }
@@ -1014,14 +1026,14 @@ GZ_UI.load().then((s) => {
     let got;
     try { got = await GZ_SHARE.decode(code); } catch (e) { endOffer(); return hint(t(e.why || e.message, e.vars), true); }
     from = gallery;
-    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav) });
+    offer = GZ_SANITIZE({ ...s, colors: got.colors, look: { ...s.look, ...got.look }, bg: { ...s.bg, ...got.bg }, nav: GZ_SHARE.nav(s.nav, got.nav), navbar: { ...s.navbar, ...got.navbar || {} } });
     offer.preset = GZ_MATCH_PRESET(offer.colors, s.presets);
     offer.auto = { ...s.auto, on: false };
     offer.card = GZ_CARDS.settings({ ...s.card, ...got.card });
     offer.cardSet = got.cards;
     offer.code = code;
     // Every code brings its own parts or clears the previous Look's parts.
-    const paletteOnly = !Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !got.cards.length && !got.parts;
+    const paletteOnly = !Object.keys(got.look).length && !Object.keys(got.bg).length && !Object.keys(got.nav).length && !Object.keys(got.navbar || {}).length && !got.cards.length && !got.parts;
     offer.parts = got.parts;
     const palette = offer.preset ? t('The {name} palette', { name: offer.preset }) : t('A custom palette');
     const what = $('#share-what');
@@ -1221,20 +1233,19 @@ GZ_UI.load().then((s) => {
   // ---- backup ----
   // Better To Do's own tasks and plans (storage.local, per Canvas site and user) go in the same file as `tasks`;
   // card styles and bookmarks go too; a picture kept on this computer stays here.
-  $('#share-sessions').addEventListener('click', (e) => { if (e.isTrusted) chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => hint(t('Could not finish. Your local copies are kept. Try again.'), true)); });
   $('#export').addEventListener('click', async (e) => {
     if (!e.isTrusted || !(navigator.userActivation?.isActive ?? true)) return;
     try {
       const keys = await chrome.runtime.sendMessage({ type: 'glaze:sessions', op: 'exportKeys' });
       if (!keys?.ok || !Array.isArray(keys.keys)) throw new Error('keys');
-      const r = await chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks', 'navItems']);
+      const r = await chrome.storage.sync.get(['cards', 'links', 'ucards', 'ulinks', 'navItems', 'navbarItems']);
       const all = await chrome.storage.local.get(null);
       const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
       const pets = GZ_PET.backup(Object.fromEntries(Object.entries(all).filter(([k]) => GZ_PET.KEY.test(k))));
       if (!pets) throw new Error('pet history');
       const folders = GZ_FOLDERS.backup(all);
       const nav = { ...s.nav, i: '', li: '', ...(s.nav.li && { brand: 'glaze' }), ...(s.nav.i && { k: 'default', u: '' }) };
-      const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ ...s, nav, navItems: N.clean(r?.navItems), navbarItems: GZ_NAVBAR.clean(r?.navbarItems), folders, cards: GZ_CARDS.styles(r.cards), links: GZ_CARDS.links(r.links), ucards: GZ_CARDS.styles(r.ucards), ulinks: GZ_CARDS.links(r.ulinks), tasks, pets, shareKeys: keys.keys }, null, 2)], { type: 'application/json' });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'glaze-settings.json' });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch { hint(t('Could not finish. Your local copies are kept. Try again.'), true); }
@@ -1261,7 +1272,7 @@ GZ_UI.load().then((s) => {
     const tasks = raw.tasks && typeof raw.tasks === 'object'
       ? Object.fromEntries(Object.entries(raw.tasks).filter(([k]) => GZ_TODO.STORE_KEY.test(k)).map(([k, v]) => [k, GZ_TODO.clean(v)])) : {};
     flush(); // an edit still waiting goes out first, so it can't land on top of the import
-    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, pets: raw.pets, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null, settings: { version: 2, ...next, navItems: N.clean(raw.navItems) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
+    const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:todo', restore: { tasks, pets: raw.pets, folders: GZ_FOLDERS.backup(raw.folders), parts: raw.parts ?? null, settings: { version: 2, ...next, navItems: N.clean(raw.navItems), ...(raw.navbarItems !== undefined && { navbarItems: GZ_NAVBAR.clean(raw.navbarItems) }) } } }, (x) => res(chrome.runtime.lastError ? { ok: false } : x || { ok: false })));
     if (!r.ok) {
       // The settings didn't take, and putting the tasks back didn't either: say so, and show the settings as stored.
       if (r.undone === false) {
@@ -1332,6 +1343,7 @@ GZ_UI.load().then((s) => {
   GZ_PET_LIBRARY.mount($('#pet-library'), t);
   // Mods (lib/editor-mods.js): installed mods, adding one, its install prompt and dev mode.
   const widgets = GZ_WIDGETEDIT.mount({ t, show: (route) => editor.show(route, { scroll: true }) }); // widgets made of blocks (lib/editor-widget.js)
+  GZ_NAVBAREDIT.mount({ t, settings: () => s, hint }); // Glaze navigation's items (lib/editor-navbar.js)
   GZ_MODSEDIT.mount({ t, and: (list) => new Intl.ListFormat(GZ_I18N.locale(GZ_I18N.ui())).format(list), edit: widgets.edit, canEdit: widgets.canEdit,
     when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at), show: (route) => editor.show(route, { scroll: true }) });
   followSection(editor.route());

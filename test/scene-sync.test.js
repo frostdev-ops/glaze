@@ -11,34 +11,102 @@ const a = source.indexOf('  // ---- animated background');
 const b = source.indexOf('  // ---- course colors and tint', a);
 assert.ok(a > 0 && b > a, 'markers');
 // The block imports lib/scene.js (or lib/scene-media.js) with import(), which a VM can't do without flags: the recorder stands in by name.
-const block = source.slice(a, b).replace('import(chrome.runtime.getURL(file))', 'importScene(file)');
-assert.ok(block.includes('importScene(file)'));
+const block = source.slice(a, b).replace(/import\((chrome\.runtime\.getURL\(file\)(?: \+ `[^`]*`)?)\)/, 'importScene($1, file)');
+assert.ok(block.includes('importScene('));
 
 const settle = () => new Promise(setImmediate);
-const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true } = {}) => {
-  const log = { starts: [], updates: [], needs: [], stops: 0, removed: 0, imports: 0, files: [], listeners: new Map() };
+const rig = ({ kind = 'scene', parts = null, glsl = false, needFails = false, enabled = true, solo = true, importFails = 0, startFails = 0 } = {}) => {
+  const log = { starts: [], updates: [], needs: [], stops: 0, removed: 0, imports: 0, files: [], urls: [], listeners: new Map() };
+  const timers = new Map(); let nextTimer = 0;
   let failScene = null;
   const canvas = (tag) => ({ tag, remove() { log.removed++; }, setAttribute() {}, parentNode: null });
   const ctx = vm.createContext({
-    solo, ultra: false, location: { protocol: 'https:' },
+    solo, ultra: false, docId: 'fixture-document', location: { protocol: 'https:' },
     settings: { enabled }, links: [1], hid: () => false, palette: { '--gz-surface-2': '#202030', '--gz-accent': '#abcdef' },
     html: { hasAttribute: () => false, getAttribute: () => 'normal' },
     worn: { bg: { kind, scene: 'mist', intensity: 50, colors: [] } },
     GZ_SCENE_LOOK: () => ({ dim: 0.3, amount: 0.5, pace: 1 }), GZ_BG_COLORS: () => ['#111111', '#222222', '#333333'],
     document: { body: { append() {} }, createElement: canvas, querySelectorAll: () => [], addEventListener: (event, fn) => log.listeners.set(event, fn) },
     chrome: { runtime: { id: 'glaze', getURL: (f) => f } },
-    importScene: (file) => { log.imports++; log.files.push(file); return Promise.resolve({ start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } }); },
+    importScene: (url, file) => { log.imports++; log.files.push(file); log.urls.push(url); if (importFails-- > 0) return Promise.reject(new Error('temporary module load failure')); return Promise.resolve({ start: (c, live, onFail) => { failScene = onFail; log.starts.push(c); if (startFails-- > 0) throw new Error('temporary WebGL context failure'); return { update: (o) => log.updates.push(o), draw() {}, stop() { log.stops++; } }; } }); },
     need: (file, ready) => { log.needs.push(file); return needFails ? Promise.reject(new Error('no')) : Promise.resolve().then(() => { if (!ready()) ctx.GZ_GLSL = {}; }); },
     applySettings: () => ctx.api.syncScene(), // the settings paint finishes by syncing the scene
     GZ_CTX: { parts: () => ctx.parts },
     parts, GZ_GLSL: glsl ? {} : undefined,
-    JSON, Promise,
+    JSON, Promise, setTimeout: (fn, ms) => { timers.set(++nextTimer, { fn, ms }); return nextTimer; }, clearTimeout: (id) => timers.delete(id),
   });
   vm.runInContext(`${block}; globalThis.api = { syncScene, stopScene, sceneKind, sceneSig, sceneOpts, state: () => ({ scene, sceneCanvas, sceneFailed, sceneBad }) };`, ctx);
-  return { api: ctx.api, log, ctx, fail: (...a) => failScene(...a) };
+  return { api: ctx.api, log, ctx, timers, retry: async () => { const [id, timer] = timers.entries().next().value || []; assert.ok(timer, 'a recovery attempt must be scheduled'); timers.delete(id); timer.fn(); await settle(); }, fail: (...a) => failScene(...a) };
 };
 const SHADER = { bg: { shader: { src: 'vec4 scene(vec2 uv) { return vec4(1.); }' } } };
 const LAYERS = { bg: { layers: [{ k: 'noise' }] } };
+
+test('a temporary animation module failure recovers without reloading the page', async () => {
+  const r = rig({ importFails: 1 });
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.starts.length, 0);
+  await r.retry();
+  assert.equal(r.log.imports, 2, 'discard the rejected module promise');
+  assert.equal(r.log.updates.length, 1, 'the animation starts after the transient failure');
+  assert.equal(r.api.state().sceneFailed, false);
+});
+
+test('temporary WebGL startup failures retry with the already loaded scene module', async () => {
+  const r = rig({ startFails: 1 });
+  r.api.syncScene(); r.api.syncScene(); await settle();
+  assert.equal(r.timers.size, 1, 'concurrent paints share one startup attempt and recovery timer');
+  assert.equal(r.log.removed, 1, 'remove the failed canvas');
+  await r.retry();
+  assert.equal(r.log.imports, 1, 'a healthy module is retained after renderer startup fails');
+  assert.equal(r.log.updates.length, 1);
+});
+
+test('persistent startup failures have bounded retries and do not block a different background', async () => {
+  const r = rig({ startFails: 3 });
+  r.api.syncScene(); await settle();
+  await r.retry(); await r.retry();
+  assert.equal(r.log.starts.length, 3);
+  assert.equal(r.timers.size, 0, 'persistent failures must not retry indefinitely');
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.starts.length, 3);
+  r.ctx.worn.bg.kind = 'media'; r.ctx.parts = { bg: { media: { type: 'video', src: 'https://cdn.example.com/loop.webm' } } };
+  r.api.syncScene(); await settle();
+  assert.equal(r.log.updates.at(-1).kind, 'media', 'WebGL failure cannot disable video backgrounds');
+});
+
+test('disabling a failed animation cancels its pending recovery', async () => {
+  const r = rig({ startFails: 1 }); r.api.syncScene(); await settle();
+  assert.equal(r.timers.size, 1);
+  r.ctx.settings.enabled = false; r.api.syncScene();
+  assert.equal(r.timers.size, 0);
+  r.ctx.settings.enabled = true; r.api.syncScene(); await settle();
+  assert.equal(r.log.updates.length, 1, 'enabling gives the animation a fresh chance');
+});
+
+test('a new background attempt never reuses module URLs poisoned by previous failures', async () => {
+  const r = rig(), actual = r.ctx.importScene, poisoned = new Map(); let healthy = false;
+  r.ctx.importScene = (url, file) => {
+    if (poisoned.has(url)) return poisoned.get(url);
+    const p = healthy ? actual(url, file) : Promise.reject(new Error('cached module failure'));
+    poisoned.set(url, p); return p;
+  };
+  r.api.syncScene(); await settle(); await r.retry(); await r.retry();
+  assert.equal(r.api.state().sceneFailed, true);
+  healthy = true;
+  r.ctx.settings.enabled = false; r.api.syncScene();
+  r.ctx.settings.enabled = true; r.api.syncScene(); await settle();
+  assert.equal(r.log.updates.length, 1, 'off/on can recover even after every old module URL failed');
+  assert.equal(poisoned.size, 4);
+});
+
+test('asynchronous player module failures share the bounded startup recovery', async () => {
+  const r = rig(); r.api.syncScene(); await settle();
+  r.fail('module'); await r.retry();
+  r.fail('module'); await r.retry();
+  r.fail('module');
+  assert.equal(r.timers.size, 0, 'asynchronous initialization must not reset the retry budget');
+  assert.equal(r.api.state().sceneBad, '', 'a failed player import is not a refused media file');
+});
 
 test('a built-in scene loads lib/scene.js, starts it once, and updates it from then on, as before', async () => {
   const r = rig();
@@ -48,7 +116,7 @@ test('a built-in scene loads lib/scene.js, starts it once, and updates it from t
   assert.equal(r.log.imports, 1);
   assert.deepEqual(r.log.needs, [], 'a built-in scene needs no shader checker');
   r.api.syncScene();
-  assert.equal(r.log.updates.length, 3, 'the third update is immediate: the module is here');
+  assert.equal(r.log.updates.length, 2, 'one shared startup, then an immediate update from the loaded module');
   const o = r.log.updates[0];
   assert.equal(o.kind, 'scene'); assert.equal(o.name, 'mist');
   assert.equal(o.ground, '#202030'); assert.equal(o.palette['--gz-accent'], '#abcdef');

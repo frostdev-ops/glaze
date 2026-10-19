@@ -969,28 +969,20 @@
     } else if (!want && have) have.remove();
   };
 
-  // ---- animated background (bg.kind "scene", "shader", "layers", "media") --------------------------------
-  // lib/scene.js and three.js (~520 KB) load only once a scene is picked (a video or animation: lib/scene-media.js), and only in a page of its own
-  // (solo) or the editor's preview; a course tab's hidden frame lets its canvas go. The canvas lives in
-  // the topmost full-screen layer (see extras.css); flush() moves it when a course or item panel opens or closes.
+  // ---- animated background -----------------------
   const LAYERS = ':is(.panel-wrap, .bb-offcanvas-panel):not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *)';
   const sceneFrame = solo || location.protocol !== 'https:';
-  let scene = null; // { update, draw, stop } from lib/scene.js
-  let sceneCanvas = null;
-  const sceneLoad = {}; // module file → its import
-  let sceneFile = ''; // the module the running scene came from
-  let sceneFailed = false; // no WebGL, or the module was blocked: the gradient under it stays
-  let sceneBad = ''; // a background this device couldn't draw (lib/scene.js onFail): the gradient stays until it changes
-  // GZ_CTX.parts() supplies the background after first paint and announces changes with glaze:parts.
+  let scene = null, sceneCanvas = null, sceneFile = '';
+  const sceneLoad = {};
+  let sceneLoadId = 0;
+  let sceneFailed = false, sceneRetry = null, scenePending = null;
+  let sceneBad = '';
   const partsOf = () => globalThis.GZ_CTX?.parts() ?? null;
   const bgKind = () => globalThis.GZ_XPARTS_PAGE?.bgKind(partsOf()?.bg) || worn.bg.kind;
   const sceneKind = () => { const k = bgKind(), b = partsOf()?.bg; return k === 'scene' || (k === 'shader' ? !!b?.shader?.src : k === 'media' ? !!b?.media : k === 'layers' && !!b?.layers?.length); };
   const sceneModule = () => (bgKind() === 'media' ? 'lib/scene-media.js' : 'lib/scene.js');
   const sceneSig = () => JSON.stringify([bgKind(), worn.bg.scene, partsOf()?.bg]);
-  // ponytail: the last visible layer in document order is taken as the top one, which holds while
-  // Ultra stacks panels in DOM order. Compare z-index if a panel ever opens under the canvas.
-  // LAYERS is Ultra's; Canvas has no layer picked yet, so its scene goes in the body (canvas.css places it).
-  let modBg = null; // a mod's background (features/mods.js), in the scene's place while the student has it on
+  let modBg = null;
   const placeScene = () => {
     const c = modBg || sceneCanvas;
     if (!c) return;
@@ -1000,10 +992,25 @@
     scene?.draw();
   };
   const stopScene = () => {
+    clearTimeout(sceneRetry?.timer);
+    sceneRetry = scenePending = null;
+    sceneFailed = false;
     scene?.stop();
     scene = null;
     sceneCanvas?.remove();
     sceneCanvas = null;
+  };
+  // Retry startup twice. sceneBad still blocks refused shaders and over-budget scenes.
+  const retryScene = (key, error) => {
+    console.warn('[Glaze] Background startup failed', error);
+    const tries = (sceneRetry?.tries || 0) + 1;
+    stopScene();
+    sceneFailed = true;
+    const retry = sceneRetry = { key, tries, timer: 0 };
+    if (tries < 3) retry.timer = setTimeout(() => {
+      if (sceneRetry !== retry) return;
+      retry.timer = 0; sceneFailed = false; syncScene();
+    }, tries === 1 ? 1000 : 5000);
   };
   const sceneOpts = () => {
     const { dim, amount, pace } = GZ_SCENE_LOOK(worn.bg.intensity);
@@ -1020,27 +1027,34 @@
     };
   };
   const syncScene = () => {
-    // Cut off by a reload of Glaze: the scene keeps its last frame (lib/scene.js) until the page loads again.
+    // An extension reload leaves the last frame in place.
     if (!chrome.runtime?.id) return;
     if (modBg) { stopScene(); return placeScene(); }
-    if (!settings.enabled || !links.length || !sceneKind() || !sceneFrame || sceneFailed || !document.body || hid() || (sceneBad && sceneBad === sceneSig())) return stopScene();
+    const key = sceneSig();
+    if (sceneRetry && sceneRetry.key !== key) { clearTimeout(sceneRetry.timer); sceneRetry = null; sceneFailed = false; }
+    if (scenePending && scenePending.key !== key) scenePending = null;
+    if (!settings.enabled || !links.length || !sceneKind() || !sceneFrame || !document.body || hid() || sceneBad === key) return stopScene();
+    if (sceneFailed || scenePending) return;
     const file = sceneModule();
     if (scene && sceneFile !== file) stopScene();
-    const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL; // its checker (lib/glsl.js) first
-    if (scene && !wait) return scene.update(sceneOpts());
-    sceneLoad[file] ||= import(chrome.runtime.getURL(file));
+    const wait = bgKind() === 'shader' && !globalThis.GZ_GLSL;
+    if (scene && !wait) { try { scene.update(sceneOpts()); } catch (error) { retryScene(key, error); } return; }
+    sceneLoad[file] ||= import(chrome.runtime.getURL(file) + `?r=${docId}-${++sceneLoadId}`).catch((error) => { delete sceneLoad[file]; throw error; });
+    const pending = scenePending = { key };
     Promise.all([sceneLoad[file], wait && need('lib/glsl.js', () => globalThis.GZ_GLSL).catch(() => {})]).then(([mod]) => {
-      if (!settings.enabled || !sceneFrame || sceneFailed || (sceneBad && sceneBad === sceneSig()) || !chrome.runtime?.id || !links.length || !sceneKind() || hid() || (bgKind() === 'shader' && !globalThis.GZ_GLSL) || file !== sceneModule()) return;
+      if (scenePending !== pending) return;
+      if (!settings.enabled || sceneBad === key || !chrome.runtime?.id || !links.length || hid() || key !== sceneSig() || (bgKind() === 'shader' && !globalThis.GZ_GLSL)) { scenePending = null; return; }
       if (!scene) {
         sceneCanvas = document.createElement(file === 'lib/scene.js' ? 'canvas' : 'div');
         sceneCanvas.id = 'gz-scene';
         sceneCanvas.setAttribute('aria-hidden', 'true');
         placeScene();
         sceneFile = file;
-        scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, () => { sceneBad = sceneSig(); stopScene(); });
+        scene = mod.start(sceneCanvas, () => !!chrome.runtime?.id, (why) => { if (why === 'module') retryScene(sceneSig(), why); else { sceneBad = sceneSig(); stopScene(); } });
       }
       scene.update(sceneOpts());
-    }).catch(() => { sceneFailed = true; stopScene(); });
+      scenePending = null;
+    }).catch((error) => { if (scenePending === pending) retryScene(key, error); });
   };
   document.addEventListener('glaze:parts', () => settings.enabled && links.length ? applySettings() : syncScene());
 

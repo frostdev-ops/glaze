@@ -4,6 +4,7 @@ var GZ_PET = globalThis.GZ_PET || (() => {
   const WORK = /^(?:assignment|quiz|discussion_topic|sub_assignment):(?:\d{1,20}|_\d{1,20}_\d{1,20})$/;
   const ITEM = /^(?:(?:assignment|quiz|discussion_topic|sub_assignment):(?:\d{1,20}|_\d{1,20}_\d{1,20})|task:[\w-]{1,40})$/;
   const MAX = 65536, MAX_DAYS = 32768;
+  const CARE_LIMIT = 5, CARE_COOLDOWN = 60000;
   const LEVELS = [0, 60, 160, 320, 600];
   const DECOR = {
     books: { level: 1, art: 'study/closed-books', name: 'Books' }, plant: { level: 2, art: 'cozy-autumn/mushroom', name: 'Mushroom' },
@@ -25,6 +26,18 @@ var GZ_PET = globalThis.GZ_PET || (() => {
   const WEAR = { plain: { level: 1, art: 'study-buddy' }, bandana: { level: 2, art: 'study-buddy-bandana' }, happy: { level: 5, art: 'study-buddy-happy' } };
   const obj = (v) => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
   const storeKey = (origin, uid) => `pet:${origin}/${uid}`;
+  const cleanCare = (raw) => {
+    if (raw === undefined) return { day: 0, used: 0, at: 0, zone: '' };
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !Number.isSafeInteger(raw.day) || raw.day < 0 || raw.day > 1e6 || !Number.isInteger(raw.used) || raw.used < 0 || raw.used > CARE_LIMIT || !Number.isSafeInteger(raw.at) || raw.at < 0 || raw.at >= 1e14 || typeof raw.zone !== 'string' || raw.zone.length > 100) return null;
+    return { day: raw.day, used: raw.used, at: raw.at, zone: raw.zone };
+  };
+  const care = (raw, tz, now = Date.now()) => {
+    // Keep the first account zone and a forward-only day so tabs, reloads and clock rollback cannot refill care.
+    const T = (globalThis.GZ_TODO || require('./todo.js')), saved = cleanCare(raw), zone = T.zone(saved?.zone || tz) || new Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const today = T.dayOf(now, zone), day = Math.max(today, saved?.day || 0);
+    const used = saved ? today > saved.day ? 0 : saved.used : CARE_LIMIT, at = saved?.at || 0;
+    return { day, used, at, zone, remaining: CARE_LIMIT - used, nextAt: at ? at + CARE_COOLDOWN : 0, resetAt: T.midnight(day + 1, zone) };
+  };
   const taskSource = (todo, k) => [k.startsWith('task:') ? todo.tasks.find((x) => `task:${x.id}` === k)?.done ?? null : null, todo.items[k]?.done ?? null, todo.items[k]?.on ?? null];
   const sourceValid = (v) => Array.isArray(v) && v.length === 3 && (v[0] === null || Number.isFinite(v[0]) && v[0] >= 0 && v[0] < 1e14) && (v[1] === null || typeof v[1] === 'boolean') && (v[2] === null || typeof v[2] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v[2]) && Number.isFinite(Date.parse(v[2])) && new Date(v[2]).toISOString().slice(0, 10) === v[2]);
   const restoredTodo = (state, raw) => {
@@ -71,7 +84,8 @@ var GZ_PET = globalThis.GZ_PET || (() => {
       }
     }
     for (const id of Object.keys(a.earned)) delete b.restored[id.slice(5)];
-    return clean({ ...b, brain, restored: { ...b.restored, ...a.restored }, timerSignal: a.timerSignal,
+    const latest = a.care.day > b.care.day ? a.care : b.care.day > a.care.day ? b.care : { ...a.care, zone: a.care.zone || b.care.zone, used: Math.max(a.care.used, b.care.used), at: Math.max(a.care.at, b.care.at) };
+    return clean({ ...b, brain, care: { ...latest, at: Math.max(a.care.at, b.care.at), zone: a.care.zone || b.care.zone }, restored: { ...b.restored, ...a.restored }, timerSignal: a.timerSignal,
       needs: incoming?.needs && (!current?.needs || b.needs.at > a.needs.at) ? b.needs : a.needs,
       earned: { ...b.earned, ...a.earned }, days: [...new Set([...a.days, ...b.days])], seen: maxima(a.seen, b.seen), sub: maxima(a.sub, b.sub) });
   };
@@ -83,7 +97,10 @@ var GZ_PET = globalThis.GZ_PET || (() => {
     if (Object.keys(sub).length > MAX || Object.entries(sub).some(([k, v]) => !WORK.test(k) || !Number.isFinite(v) || v <= 0 || v >= 1e14)) return null;
     if (Object.keys(obj(raw?.restored)).length > MAX) return null;
     if (Object.keys(obj(raw?.earned)).length > MAX || Object.keys(obj(raw?.seen)).length > MAX || (Array.isArray(raw?.days) && raw.days.length > MAX_DAYS)) return null;
+    const affection = cleanCare(raw?.care);
+    if (!affection) return null;
     return {
+      care: affection,
       earned: Object.fromEntries(Object.entries(obj(raw?.earned)).filter(([k, v]) => ((k.startsWith('work:') && WORK.test(k.slice(5))) || (k.startsWith('plan:') && ITEM.test(k.slice(5)))) && [0, 8, 10, 15, 20].includes(v))),
       restored: Object.fromEntries(Object.entries(obj(raw?.restored)).filter(([k, v]) => ITEM.test(k) && sourceValid(v?.from) && sourceValid(v?.to)).map(([k, v]) => [k, { from: v.from.slice(), to: v.to.slice() }])),
       timerSignal: typeof raw?.timerSignal === 'string' && /^(work|rest):[0-9.e+]{1,24}:[0-9.e+]{1,24}:(focus|break)$/.test(raw.timerSignal) ? raw.timerSignal : '',
@@ -185,10 +202,11 @@ var GZ_PET = globalThis.GZ_PET || (() => {
     const cur = clean(got[m.key]);
     if (!cur) return { ok: false, error: 'history' };
     const T = (globalThis.GZ_TODO || require('./todo.js'));
+    const now = Date.now();
     const prefs = sync?.get ? await sync.get(['todo', 'enhance', 'card']) : {};
     const sanitize = typeof GZ_SANITIZE !== 'undefined' ? GZ_SANITIZE : require('../defaults.js').GZ_SANITIZE;
     const options = sanitize(prefs), cache = got.todoCache?.key === tk ? got.todoCache : null;
-    const s = reconcile(cur, { todo: got[tk], insights: got[ik], planner: cache?.items, cache, streak: got[rk]?.streak, streakOn: options.enhance.streak, todoO: { ...options.todo, sync: options.todo.sync && !/_\d+_\d+$/.test(suffix) }, now: Date.now(), tz: T.zone(m.tz) });
+    const s = reconcile(cur, { todo: got[tk], insights: got[ik], planner: cache?.items, cache, streak: got[rk]?.streak, streakOn: options.enhance.streak, todoO: { ...options.todo, sync: options.todo.sync && !/_\d+_\d+$/.test(suffix) }, now, tz: T.zone(m.tz) });
     if (!s) return { ok: false, error: 'history', data: view(cur) };
     const sprites = globalThis.GZ_PET_SPRITES || require('./petsprites.js');
     if (got.petCharacter === undefined && !s.sprite && ['cat', 'bunny'].includes(prefs.card?.pet)) s.sprite = prefs.card.pet;
@@ -196,10 +214,12 @@ var GZ_PET = globalThis.GZ_PET || (() => {
     if (s.sprite && !(await sprites.change({ op: 'get', id: s.sprite }, { local })).pet) s.sprite = '';
     const v = view(s);
     const B = (globalThis.GZ_PET_BRAIN || require('./petbrain.js'));
+    const allowance = care(s.care, m.tz, now);
+    let interaction;
     if ((m.action !== undefined || m.context !== undefined) && (!B.ACTIONS.includes(m.action) || !B.context(m.context))) return { ok: false, error: 'bad' };
     const respond = (event) => {
-      s.needs = B.interact(s.needs, event);
-      if (s.learning) s.brain = B.feedback(s.brain, event, { action: m.action, context: m.context });
+      s.needs = B.interact(s.needs, event, now);
+      if (s.learning) s.brain = B.feedback(s.brain, event, { action: m.action, context: m.context, now });
     };
     if (v.xp > view(cur).xp) respond('celebrate');
     const signal = timerSignal(got.widgetTimer);
@@ -225,11 +245,13 @@ var GZ_PET = globalThis.GZ_PET || (() => {
       s.habitat = m.habitat;
       if (cur.habitat !== s.habitat) respond('discover');
     } else if (m.op === 'interact') {
-      if (['focus', 'break', 'celebrate'].includes(m.event)) return { ok: false, error: 'bad' };
-      const needs = B.interact(s.needs, m.event);
-      if (!needs) return { ok: false, error: 'bad' };
-      s.needs = needs;
-      if (s.learning) s.brain = B.feedback(s.brain, m.event, { action: m.action, context: m.context });
+      if (!Object.hasOwn(B.EVENTS, m.event) || ['focus', 'break', 'celebrate'].includes(m.event)) return { ok: false, error: 'bad' };
+      if (['pet', 'play'].includes(m.event)) {
+        // This runs in the shared broker queue; page throttles alone cannot enforce a daily allowance.
+        const reason = !allowance.remaining ? 'daily' : now < allowance.nextAt ? 'cooldown' : '';
+        interaction = { accepted: !reason, reason };
+        if (!reason) { s.care = { day: allowance.day, used: allowance.used + 1, at: now, zone: allowance.zone }; respond(m.event); }
+      } else respond(m.event);
     } else if (m.op === 'observe') {
       const brain = B.observe(s.brain, m.action, m.context);
       if (!s.learning || !brain) return { ok: false, error: 'bad' };
@@ -249,8 +271,8 @@ var GZ_PET = globalThis.GZ_PET || (() => {
     const patch = { [m.key]: s };
     if (m.op === 'sprite' || (got.petCharacter === undefined && s.sprite)) patch.petCharacter = s.sprite;
     if ((JSON.stringify(s) !== JSON.stringify(cur) || Object.hasOwn(patch, 'petCharacter')) && !await local.set(patch)) return { ok: false, error: 'write' };
-    return { ok: true, data: view(s) };
+    return { ok: true, data: view(s), ...(interaction && { interaction }) };
   };
-  return { KEY, MAX, MAX_DAYS, LEVELS, DECOR, HABITATS, WEAR, floor, position, cellPosition, storeKey, clean, view, reconcile, change, backup, merge };
+  return { KEY, MAX, MAX_DAYS, CARE_LIMIT, CARE_COOLDOWN, LEVELS, DECOR, HABITATS, WEAR, floor, position, cellPosition, storeKey, care, clean, view, reconcile, change, backup, merge };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_PET; else GZ_PET;

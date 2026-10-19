@@ -6,6 +6,23 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-10-19
+
+### Added
+- Glaze navigation on Blackboard Ultra, on by default: Glaze draws its own bar in place of Blackboard's, the same in every Look. A side rail (open with labels, or icons with tooltips and a peek) or a top bar whose extra items move under More; floating over the page or embedded at its edge. On phones, a bottom bar of four tabs and a More sheet. Turning it off brings Blackboard's own navigation back.
+- Inside a course the bar can stay the same, become icons only, become a top bar, or hide. Course tabs show in the bar too, and a new course tab placement, Only in the navigation, keeps them there with no strip.
+- Navigation items: rename, re-icon, reorder and group every item, hide any of them, choose the four phone tabs, add up to eight links, and opt in to Notes, To Do, search and Glaze settings. The bar's logo can be Glaze's, the school's, your own picture (kept on this device) or none. Looks carry the bar's settings; mods can add items and listen through the navigation API.
+- A Navigation tab in Settings holds the bar, its items and the course tab settings (moved from the Blackboard tab; old links still open them).
+- Share sessions moved into Settings, with quick sharing of a note from Notes in a protected panel.
+
+### Changed
+- The pet habitat shows daily bonding moments, placed furniture and toys, wellbeing and progress, and wandering pets stay with the page as it scrolls instead of catching on the navigation bar or the footer.
+
+### Fixed
+- The Notes share panel opens at its full size, follows the Look, and says why when a click is refused instead of doing nothing.
+- Course tabs recover when their pages stall and keep clear of panel headings; Ultra panel gutters and close buttons are kept.
+- Animations recover after a failed start, pet overlays no longer shift the Dashboard, and Ultra's Activity Stream hover no longer covers themed cards.
+
 ## [3.0.6] — 2026-10-18
 
 ### Fixed

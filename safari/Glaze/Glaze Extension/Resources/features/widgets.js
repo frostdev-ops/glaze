@@ -472,6 +472,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     buddy(body, options = {}) {
       let st = { happyAt: 0, patAt: 0, running: false }, wait = 0, todoKey = '', petKey = '', alive = true, sleeping = false, player = null, sprite = '', pose = null;
       let attentionWait = 0, attentionAt = 0, attentionBlocked = 0, gaze = -1, gazing = false;
+      let patPending = false, cheer = null, cheerWait = 0, lastPat = 0;
       const saved = {}, versions = new Map();
       const img = make('img', { alt: '', draggable: false, decoding: 'async' });
       const read = (keys) => {
@@ -521,28 +522,38 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (m.until && !sleeping && document.visibilityState !== 'hidden') wait = setTimeout(paint, m.until - Date.now() + 50);
       };
       const win = () => { st.happyAt = Date.now(); attentionBlocked = Date.now() + 1600; gazing = false; clearTimeout(attentionWait); put({ widgetBuddy: { happyAt: st.happyAt, patAt: st.patAt } }); paint(); };
-      const pat = (state = 'waving') => {
-        if (!alive || !validContext()) return;
+      const pat = async (state = 'waving') => {
+        if (!alive || !validContext() || patPending || Date.now() - lastPat < 2500) return;
+        const data = globalThis.GZ_PET_BRAIN && globalThis.GZ_PET?.view(saved[petKey]);
+        if (ctx.settings().enhance.pet) {
+          if (!petKey || !data || !globalThis.GZ_TODO) return;
+          const allowance = GZ_PET.care(data.care, me?.tz);
+          if (!allowance.remaining || Date.now() < allowance.nextAt) return;
+          patPending = true;
+          let reply;
+          try { reply = await send({ type: 'glaze:pet', key: petKey, tz: me?.tz, op: 'interact', event: state === 'jumping' ? 'play' : 'pet', action: 'greet',
+            context: GZ_PET_BRAIN.vector({ focus: W.cleanTimer(saved.widgetTimer).phase === 'work' && st.running, pointerNear: true, needs: data.needs, wandering: false, water: data.habitat === 'aquarium' }) }); }
+          finally { patPending = false; }
+          if (!alive || !validContext() || !reply?.ok || !reply.interaction?.accepted) return;
+          saved[petKey] = reply.data;
+        }
+        lastPat = Date.now();
         st.patAt = Date.now();
         attentionBlocked = Date.now() + 1600; gazing = false;
         put({ widgetBuddy: { happyAt: st.happyAt, patAt: st.patAt } });
-        const data = globalThis.GZ_PET_BRAIN && globalThis.GZ_PET?.view(saved[petKey]);
-        if (petKey && data && ctx.settings().enhance.pet) {
-          send({ type: 'glaze:pet', key: petKey, tz: me?.tz, op: 'interact', event: state === 'jumping' ? 'play' : 'pet', action: 'greet',
-            context: GZ_PET_BRAIN.vector({ focus: W.cleanTimer(saved.widgetTimer).phase === 'work' && st.running, pointerNear: true, needs: data.needs, wandering: false, water: data.habitat === 'aquarium' }) });
-        }
         paint();
         player?.play(state);
+        clearTimeout(cheerWait); cheer?.remove();
         const w = make('span', { className: 'gz-w-cheer', textContent: t(CHEERS[Math.floor(Math.random() * CHEERS.length)]) });
         w.setAttribute('aria-hidden', 'true');
         pet.after(w);
-        setTimeout(() => w.remove(), 1600);
+        cheer = w; cheerWait = setTimeout(() => { w.remove(); if (cheer === w) cheer = null; }, 1600);
       };
       const pet = options.interactive === false ? make('span', { className: 'gz-w-pet' }) : button('', () => pat(), { className: 'gz-w-pet' });
       pet.setAttribute('aria-label', t('Pet your study buddy'));
       pet.append(img);
       if (options.interactive !== false) {
-        pet.addEventListener('keydown', (e) => { if (e.isTrusted && ['Enter', ' '].includes(e.key)) { e.preventDefault(); e.stopPropagation(); pat('jumping'); } });
+        pet.addEventListener('keydown', (e) => { if (e.isTrusted && ['Enter', ' '].includes(e.key)) { e.preventDefault(); e.stopPropagation(); if (!e.repeat) pat('jumping'); } });
       }
       const releaseGaze = () => { clearTimeout(attentionWait); if (gazing) { gazing = false; player?.set('idle'); } };
       const watch = (e) => {
@@ -583,7 +594,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       const show = () => paint();
       const stop = () => {
         if (!alive) return;
-        alive = false; clearTimeout(wait); clearTimeout(attentionWait); player?.stop();
+        alive = false; clearTimeout(wait); clearTimeout(attentionWait); clearTimeout(cheerWait); cheer?.remove(); player?.stop();
         try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
         document.removeEventListener?.('visibilitychange', show); document.removeEventListener?.('pointermove', watch); removeEventListener('pagehide', stop);
       };
@@ -594,7 +605,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         todoKey = `todo:${location.origin}/${me.uid}`; petKey = `pet:${location.origin}/${me.uid}`;
         read([petKey]);
       }, () => {});
-      Promise.all(['lib/petbrain.js', 'lib/pet.js', 'lib/petsprites.js', 'lib/petplayer.js'].map((file) => ctx.need(file, () => ({ 'lib/petbrain.js': globalThis.GZ_PET_BRAIN, 'lib/pet.js': globalThis.GZ_PET, 'lib/petsprites.js': globalThis.GZ_PET_SPRITES, 'lib/petplayer.js': globalThis.GZ_PET_PLAYER })[file]))).then(paint, () => {});
+      Promise.all(['lib/petbrain.js', 'lib/pet.js', 'lib/todo.js', 'lib/petsprites.js', 'lib/petplayer.js'].map((file) => ctx.need(file, () => ({ 'lib/petbrain.js': globalThis.GZ_PET_BRAIN, 'lib/pet.js': globalThis.GZ_PET, 'lib/todo.js': globalThis.GZ_TODO, 'lib/petsprites.js': globalThis.GZ_PET_SPRITES, 'lib/petplayer.js': globalThis.GZ_PET_PLAYER })[file]))).then(paint, () => {});
       Promise.resolve().then(paint);
       return { wake: () => { sleeping = false; paint(); }, sleep: () => { sleeping = true; clearTimeout(wait); releaseGaze(); player?.sleep(); }, update: paint, play: (state, direction) => { pose = [state, direction]; attentionBlocked = Date.now() + 900; gazing = false; player?.play(state, direction); }, stop };
     },

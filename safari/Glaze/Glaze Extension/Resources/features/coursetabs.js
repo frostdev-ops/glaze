@@ -108,7 +108,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // { at, ok (already there), put } or null (nowhere: hidden).
   const spot = (at, ok, put, clear = null) => ({ at, ok: !!ok, put, clear });
   const home = () => {
-    const a = P().at;
+    const a = at();
     const bar = courseBar();
     const top = topLayer();
     if (shown(bar) && (!top || top.contains(bar) || !covers(top, bar))) {
@@ -141,8 +141,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     hadClear = !!header?.hasAttribute('data-gz-keep-clear');
     if (header && !hadClear) header.setAttribute('data-gz-keep-clear', '');
   };
+  // Glaze's own navigation bar holds the tabs too (features/navbar.js, data-gz-navbar's word `tabs`). At 'nav' they are only
+  // there: no strip, in a tab's own frame either (the page around it has the bar). Where no bar holds them, 'nav' is 'above'.
+  const navHolds = () => { try { return ((framed ? parent.document : document).documentElement.getAttribute('data-gz-navbar') || '').split(' ').includes('tabs'); } catch { return false; } };
+  const at = () => (P().at !== 'nav' ? P().at : navHolds() ? 'nav' : 'above');
+  const hosted = () => at() === 'nav';
   const place = () => {
     if (!on || !strip) return;
+    if (hosted()) { keepClear(null); strip.remove(); return; }
     const w = home();
     keepClear(w?.clear || null);
     if (!w) { strip.remove(); return; }
@@ -177,7 +183,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // The first paint's reservation (extras.css, set by content-ultra.js from this tab's sessionStorage before this file is in):
   // the strip's place and size, and whether pages outside a course show it.
   const flag = () => {
-    const v = `${P().at} ${P().size}${loaded && tabs.length ? ' page' : ''}`;
+    const a = at(), v = a === 'nav' ? a : `${a} ${P().size}${loaded && tabs.length ? ' page' : ''}`;
     try { if (sessionStorage.getItem('gz-ctabs') !== v) sessionStorage.setItem('gz-ctabs', v); } catch { /* blocked */ }
     if (html.getAttribute('data-gz-ctabs') !== v) html.setAttribute('data-gz-ctabs', v);
   };
@@ -232,21 +238,26 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     return e;
   };
   const labelFor = (cid, name, code) => ctx.nickOf(cid) || (P().label === 'code' && code) || (P().label === 'short' ? L.shortName(name) : name);
-  const draw = () => {
-    if (!strip) return;
-    const p = P();
+  const rowsOf = () => {
     const cur = showing || here();
-    const known = ctx.courseList();
-    const rows = (loaded ? tabs : []).map((x) => {
+    const known = ctx.courseList(), colors = ctx.courseColors?.() || {};
+    return (loaded ? tabs : []).map((x) => {
       const c = known[x.cid] || {};
       const nick = ctx.nickOf(x.cid);
       const name = c.name || x.name || c.code || x.code || t('Course');
       const code = c.code || x.code || '';
-      return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: labelFor(x.cid, name, code), full: [...new Set([nick, name, code].filter(Boolean))].join(' · '), slot: c.slot || x.slot || '' };
+      return { cid: x.cid, pin: x.pin, cur: x.cid === cur, label: labelFor(x.cid, name, code), full: [...new Set([nick, name, code].filter(Boolean))].join(' · '), slot: c.slot || x.slot || '', color: colors[x.cid]?.color || '' };
     });
+  };
+  const draw = () => {
+    if (!strip) return;
+    const p = P();
+    const cur = showing || here();
+    const rows = rowsOf();
     const k = JSON.stringify([rows, p, ctx.locale(), drag?.on && drag.cid]);
     if (k === drawn) return;
     drawn = k;
+    if (!framed) globalThis.GZ_NAVBAR_UI?.sync();
     for (const a of ['shape', 'size', 'mark', 'color']) set(strip, `data-${a}`, p[a]);
     if (strip.style.getPropertyValue('--gz-ctab-w') !== `${p.width}px`) strip.style.setProperty('--gz-ctab-w', `${p.width}px`);
     set(list, 'aria-label', t('Course tabs'));
@@ -427,7 +438,24 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const frames = new Map(); // cid → { el, at (last shown), ready, dirty }
   let showing = ''; // the course whose frame is on screen; '' for this page
   let shownFrom = ''; // this page's address when a frame covered it: if it changes, the student went somewhere here
-  let host = null, pic = null, showTurn = 0;
+  let host = null, pic = null, showTurn = 0, retryNote = null;
+  const clearSlow = () => { retryNote?.remove(); retryNote = null; };
+  const slowFrame = (cid, f) => {
+    if (showing !== cid || !host) return;
+    clearSlow(); unpicture(); f.el.style.visibility = '';
+    const box = document.createElement('div'); box.className = 'gz-ctabs-retry';
+    box.setAttribute('role', 'status');
+    const text = document.createElement('p'); text.textContent = t('Course content is taking longer to load.');
+    box.append(text);
+    if (!f.dirty) {
+      const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = t('Retry');
+      retry.addEventListener('click', () => { if (frames.get(cid) === f && !f.dirty) visit(cid); });
+      box.append(retry);
+    }
+    const back = document.createElement('button'); back.type = 'button'; back.textContent = t('Go back');
+    back.addEventListener('click', () => show(''));
+    box.append(back); host.append(box); retryNote = box;
+  };
   const toTop = (op, m = {}) => { try { window.top.postMessage({ gzCtab: op, ...m }, location.origin); } catch { /* gone */ } };
   let movedTimer = 0;
   const moved = () => { clearTimeout(movedTimer); movedTimer = setTimeout(() => toTop('moved'), 500); };
@@ -443,10 +471,12 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     frames.delete(cid);
     if (showing === cid && !replacing) show('');
   };
-  // A frame is shown once its page is built and has been still for 0.3 s (its place put back: data-gz-placing), 8 s at most.
+  // A frame is shown once rendered course content has settled. A stalled initial about:blank can be retried once;
+  // slow native pages keep loading, with their form state intact, rather than becoming falsely ready.
   const watch = (cid, f) => {
-    const t0 = performance.now();
+    let t0 = performance.now();
     let changed = t0, mo = null, doc = null;
+    f.slow = false;
     const step = () => {
       if (frames.get(cid) !== f) return mo?.disconnect();
       let d = null; try { d = f.el.contentDocument; } catch { /* gone */ }
@@ -461,13 +491,24 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       }
       const built = doc && doc.location.pathname.startsWith(`/ultra/courses/${cid}/`) && [doc.querySelector('.bb-course-navigation'), doc.querySelector('.routed-page')].some(shown)
         && !loading(doc.body) && !doc.documentElement.matches('[data-gz-placing]');
-      if ((built && now - changed > 300) || now - t0 > 8000) {
+      if (built && now - changed > 300) {
         mo?.disconnect();
+        f.slow = false;
         f.ready = true;
-        if (showing === cid) { f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
+        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); later(600); }
         return;
       }
-      setTimeout(step, 50);
+      if (now - t0 > 8000 && !f.slow) {
+        if (d?.location.href === 'about:blank' && d.body && !d.body.childElementCount && !f.dirty && !f.retried) {
+          f.retried = true;
+          t0 = now;
+          f.el.src = location.origin + f.url;
+        } else {
+          f.slow = true;
+          if (showing === cid) slowFrame(cid, f);
+        }
+      }
+      setTimeout(step, f.slow ? 1000 : 50);
     };
     step();
   };
@@ -491,7 +532,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     unpicture(true);
     const s = snaps.get(cid);
     const put = (snap) => {
-      if (showing !== cid || f.ready || pic || !fits(snap, f.url)) { if (showing === cid && !f.ready && !pic) f.el.style.visibility = ''; return; }
+      if (showing !== cid || frames.get(cid) !== f || f.ready || f.slow || pic || !fits(snap, f.url)) { if (showing === cid && !f.ready && !pic) f.el.style.visibility = ''; return; }
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
       const img = Object.assign(document.createElement('img'), { src: snap.shot, alt: '', draggable: false });
@@ -549,8 +590,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid }, location.origin);
     }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
+    clearSlow();
     unpicture(true);
-    if (f && !f.ready) picture(cid, f);
+    if (f && !f.ready) { if (f.slow) slowFrame(cid, f); else picture(cid, f); }
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     ctx.scene();
     globalThis.GZ_PET_WORLD?.refresh();
@@ -569,6 +611,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (framed) return toTop('visit', { cid });
     x.at = Date.now();
     save();
+    const f = frames.get(cid);
+    if (cid === showing && f?.slow && !f.ready && !f.dirty) { drop(cid, true); showing = ''; }
     show(cid === ctx.courseId() ? '' : cid);
   };
   if (!framed && !preview) addEventListener('message', (e) => {
@@ -837,6 +881,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       // Every tab's frame stops; this page shows again.
       for (const k of [...frames.keys()]) drop(k);
       unpicture(true);
+      clearSlow();
       showing = '';
       host?.remove();
       host = null;
@@ -892,7 +937,19 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     addEventListener('message', (e) => { if (e.data?.gzPreview) follow(); });
     follow();
   }
-  return { sync, held, petSurface, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
+  // For Glaze's own navigation bar, which can hold the tabs (hosted): the rows it draws and what its tabs do.
+  const bar = {
+    rows: () => (on && !framed && !signedOut ? rowsOf() : []),
+    visit: (cid) => { if (on && tabs.some((x) => x.cid === cid)) visit(cid); },
+    shut: (cid) => { if (on && tabs.some((x) => x.cid === cid)) shut(cid); },
+    pin: (cid) => { if (on && tabs.some((x) => x.cid === cid)) pinTab(cid); },
+    move: (cid, to) => { if (on && tabs.some((x) => x.cid === cid) && Number.isInteger(to)) moveTab(cid, to); },
+    // Back to the page under the tabs (a frame was showing), as picking the page's own item would.
+    leave: () => { if (on && showing) show(''); },
+    // The bar began or stopped holding the tabs: the strip and its first-paint word follow.
+    place: () => { if (on) flag(); place(); },
+  };
+  return { sync, held, petSurface, bar, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
 
 GZ_CTABS;

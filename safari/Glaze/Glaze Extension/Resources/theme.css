@@ -265,6 +265,9 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
   border-color: var(--gz-border-strong, var(--gz-line-strong)) !important;
 }
 .course-banner, .status-bar { border-radius: var(--gz-radius) 0 0 var(--gz-radius) !important; }
+/* Activity Stream: Ultra's full-width white hover overlay sits behind the themed card.
+   Keep the card's own hover treatment; the colour sweep cannot reach pseudo-elements. */
+#site-wrap .activity-stream .stream-item::before { background: none !important; }
 /* Courses grid: the banner is the card's top, not its left. */
 .multi-column-view .course-banner { border-radius: calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)) calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)) 0 0 !important; }
 /* Ultra's 4px frame around each top-level outline card drew a second, squarer outline outside it. */
@@ -603,7 +606,7 @@ html[data-gz-footer] .pagehelp-directive, html[data-gz-footer] [data-gz-fixed-bo
   max-height: calc(100vh - var(--gz-footer-h)) !important;
 }
 html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, html[data-gz-footer] [data-gz-vh] {
-  max-height: calc(100vh - var(--gz-footer-h)) !important;
+  max-height: calc(100vh - var(--gz-footer-h) - var(--gz-navbar-top, 0px)) !important;
 }
 #gz-footer {
   position: fixed;
@@ -949,7 +952,7 @@ html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-c
 /* The banner's height sets the card's least height (Ultra's 156px of details below it), never a fixed one. */
 html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card { height: auto !important; min-height: calc(var(--gz-card-h) + 156px); }
 /* A term's cards that happened to be one window high when swept are tagged data-gz-vh; they still grow. */
-html[data-gz-footer] #site-wrap .course-org-list [data-gz-vh] { max-height: none !important; }
+html[data-gz-footer] #site-wrap .course-org-list [data-gz-vh], html[data-gz-navbar] #site-wrap .course-org-list [data-gz-vh] { max-height: none !important; }
 #site-wrap .multi-column-view article.course-element-card .course-banner { border-radius: calc(var(--gz-card-r, var(--gz-radius)) - calc(var(--gz-radius, 12px) * 1 / 12)) calc(var(--gz-card-r, var(--gz-radius)) - calc(var(--gz-radius, 12px) * 1 / 12)) 0 0 !important; }
 html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title { position: absolute; top: auto; bottom: calc(100% - var(--gz-card-banner-h, var(--gz-card-h, 146px))); inset-inline: 12px; margin: 0 !important; padding: 0 0 8px !important; max-height: calc(var(--gz-card-banner-h, var(--gz-card-h, 146px)) - 8px); line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; color: white !important; z-index: 1; text-shadow: 0 1px 3px #000; }
 html[data-gz-card-condensed] #site-wrap .multi-column-view article.course-element-card .course-title :is(a, span) { color: white !important; }
@@ -1155,3 +1158,40 @@ html[data-gz-motion="off"][data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_too
 html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header { position: relative; padding-block-end: 38px !important; }
 
 html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) a { font-size: var(--gz-nav-fit, 10px); }
+
+/* ---- Glaze's own navigation (features/navbar.js) in place of Ultra's drawer. The drawer stays in the page, out of sight
+   (the bar opens its items through its links and reads its badges). The page keeps the bar's room, from the saved settings
+   at first paint (data-gz-navbar, words: rail, top or none; open, icons or auto; float or embed; tabs when the course tabs
+   are in the bar) and from the bar once it is drawn (--gz-navbar-left and --gz-navbar-top, inline). Ultra's own room for its
+   drawer is #main-content-inner's padding; a course is a section of its own beside the page; Glaze's course tabs are
+   frames over the page. Below 900px the bar sits at the bottom and the page keeps room under its content. ---- */
+html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; }
+/* Course tabs only in the bar (tabs.at 'nav', worded by features/coursetabs.js): no strip, and no room kept for one. */
+html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
+html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
+@media (min-width: 900px) {
+  html[data-gz-navbar~="rail"] { --gz-navbar-left: 96px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="embed"] { --gz-navbar-left: 72px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="open"] { --gz-navbar-left: 272px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="open"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
+  html[data-gz-navbar~="top"] { --gz-navbar-top: 80px; }
+  html[data-gz-navbar~="top"][data-gz-navbar~="embed"] { --gz-navbar-top: 56px; }
+  html[data-gz-navbar] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]):not(#gz-navbar) {
+    width: 0 !important; min-width: 0 !important; max-width: none !important; flex-basis: 0 !important;
+    overflow: hidden !important; background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; pointer-events: none;
+  }
+  html[data-gz-navbar] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) > * { visibility: hidden !important; }
+  html[data-gz-navbar] #main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }
+  html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
+  html[data-gz-navbar] .inner-wrap > section.course { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
+  html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
+  html[data-gz-navbar]:not([data-gz-footer]) :is(.route-view-container, .routed-page, [data-gz-vh]) { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
+}
+@media (min-width: 1280px) {
+  html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left: 272px; }
+  html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
+}
+@media (max-width: 899.98px) {
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > section.course) { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { margin-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+}

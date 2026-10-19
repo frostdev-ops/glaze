@@ -437,7 +437,7 @@ test('the page may load the player and the media module, and the first script lo
   }
   const content = fs.readFileSync(path.join(__dirname, '../content.js'), 'utf8');
   assert.ok(!/lottie/i.test(content), 'content.js does not know Lottie');
-  assert.match(content, /import\(chrome\.runtime\.getURL\(file\)\)/);
+  assert.match(content, /import\(chrome\.runtime\.getURL\(file\)(?: \+ `[^`]*`)?\)/);
 });
 
 

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><title>Share</title><link rel="stylesheet" href="../ui.css"><link rel="stylesheet" href="quick.css"><link rel="stylesheet" href="../features/surfaces.css"></head>
+<body><main>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="ask" hidden><p id="ask-text"></p><div class="row"><button id="ask-yes" type="button" class="primary">Connect</button><button id="ask-no" type="button">Cancel</button></div></div>
+<p id="paused" hidden><span>Sharing is paused. Your local copies are kept.</span> <button id="resume" type="button">Resume sessions</button></p>
+<label id="who" hidden>Your name, shown to the people you share with<input id="name" type="text" maxlength="60" autocomplete="off"></label>
+<section id="note" hidden><h2 id="note-title"></h2><p id="note-state"></p>
+<div id="note-new"><div class="row"><button id="share" type="button" class="primary">Share this note</button></div><p class="small">Invite only, end-to-end encrypted. Edits sync both ways while Notes is open.</p></div>
+<div id="note-shared" class="row" hidden></div></section>
+<section id="others" hidden><h2>Shared from these notes</h2><ul id="list"></ul></section>
+<section><h2>Join a shared note</h2><label>Invite link<input id="invite" type="password" maxlength="1024" autocomplete="off" spellcheck="false"></label><div class="row"><button id="join" type="button">Join and add to my notes</button></div></section>
+<p class="row"><button id="settings" type="button">All sharing settings</button></p>
+</main>
+<script src="../lib/relay.js"></script><script src="../lib/color.js"></script><script src="../lib/fonts.js"></script><script src="../lib/surfaces.js"></script><script src="../defaults.js"></script>
+<script src="../i18n/de.js"></script><script src="../i18n/es.js"></script><script src="../i18n/fr.js"></script><script src="../i18n/nl.js"></script><script src="../i18n/pt-BR.js"></script><script src="../lib/i18n.js"></script><script src="quick.js"></script>
+</body></html>

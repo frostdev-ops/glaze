@@ -33,6 +33,23 @@ node --test
 
 Runs the tests for the colour, settings and page-text logic. Use Node 26, matching CI and the browser's strict compression-stream behavior. No dependencies to install.
 
+For Ultra background clipping, run `NODE_PATH=/path/to/node_modules nice -n 15 node scripts/ultra-panel-background-check.js` with Playwright available. It checks native off-canvas gutters, close-button clicks, scene continuity and scrolled headers at desktop/mobile widths in both text directions, plus partial-width sheet exclusions. Panel course tabs are checked above and below native headers with negative margins, at every strip size, so announcement labels stay exposed. An optional output directory saves screenshots; `CHROME` selects a different Chromium executable.
+
+`scripts/navbar-check.js` checks Glaze's own navigation bar in the editor's Ultra preview: the drawer it stands in for,
+the room it keeps, items, badges and the current page, the icons rail's tooltips, peek and keyboard, right-to-left, the
+phone bar and its More sheet, and turning it off. Run it with the same `NODE_PATH` setup and an optional screenshots
+directory.
+
+`scripts/scene-page-check.js` also aborts the first scene module and renderer dependency requests to
+check automatic recovery with fresh module URLs. Run it with the same `NODE_PATH` setup and an
+optional evidence directory. It uses a routed synthetic site and a temporary browser profile;
+it does not establish live Blackboard behavior.
+
+`scripts/ultra-live-frames-check.js` holds course document requests to check a single automatic
+retry, a foreground manual recovery after a hidden tab stalls, and preservation of edited live
+frames. It accepts the same `NODE_PATH` setup and an optional evidence directory, and also uses
+only routed synthetic sites in a temporary browser profile.
+
 ### Publishing to the Chrome Web Store
 
 ```sh

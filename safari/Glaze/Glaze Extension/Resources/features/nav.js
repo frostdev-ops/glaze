@@ -23,7 +23,8 @@ var GZ_NAV_UI = globalThis.GZ_NAV_UI || (() => {
   const forget = () => { if (loaded) URL.revokeObjectURL(loaded.src); loaded = null; };
   const sync = () => {
     const n = X.nav();
-    const on = X.on() && X.settings().enabled;
+    // Glaze's own bar (features/navbar.js) stands in for Ultra's nav: this leaves Ultra's as it was.
+    const on = X.on() && X.settings().enabled && !(X.site === 'ultra' && X.settings().navbar?.on);
     rail?.sync(on);
     // A bar or a dock has no collapsed rail to expand.
     overlay?.sync(on && !rail.placed());
