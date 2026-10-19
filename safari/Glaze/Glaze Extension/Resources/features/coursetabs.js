@@ -945,6 +945,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const mine = tabs.find((x) => x.cid === ctx.courseId());
       tabs = got.map((x) => (mine && x.cid === mine.cid ? { ...x, path: mine.path, top: mine.top } : x));
       for (const cid of [...frames.keys()]) if (!tabs.some((x) => x.cid === cid)) drop(cid);
+      if (ctx.site === 'canvas' && closedCourse && !showing && !waiting && !tabs.length) { route('/courses'); return; }
       pass();
     }
   };
@@ -987,7 +988,6 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   let awayFrom = '';
   const pass = () => {
     if (!on) return;
-    if (!framed && ctx.site === 'canvas' && closedCourse && !showing && !waiting && !tabs.length) { route('/courses'); return; }
     observeView();
     const cid = here();
     // In a tab's frame, its page leaving its course (another course, a page outside one): the page around goes there.
