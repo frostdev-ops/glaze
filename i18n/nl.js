@@ -2823,4 +2823,5 @@
   "The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.": "De cursussen die je opent staan ook in de navigatie. Klik op een cursus om te wisselen; de middelste knop of Delete sluit hem, en P zet hem vast. Wil je ze alleen daar, kies dan Alleen in de navigatie in de instellingen voor cursustabbladen.",
   "Only in the navigation": "Alleen in de navigatie",
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Alleen in de navigatie vraagt om Glaze-navigatie met cursustabbladen aan. Zonder die staan de tabbladen boven de balk van de cursus.",
+  "That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab.": "Die pagina kan niet in een cursustabblad openen, dus de cursus is terug. Open de link met Ctrl of Cmd om hem in een nieuw tabblad te zien.",
 };

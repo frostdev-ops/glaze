@@ -2823,4 +2823,5 @@
   "The courses you open sit in the navigation too. Click one to switch; the middle button or Delete closes it, and P pins it. To keep them only there, choose Only in the navigation in the course tab settings.": "Die Kurse, die du öffnest, stehen auch in der Navigation. Klicke einen an, um zu wechseln; die mittlere Maustaste oder Entf schließt ihn, und P heftet ihn an. Damit sie nur dort stehen, wähle in den Kurs-Tab-Einstellungen Nur in der Navigation.",
   "Only in the navigation": "Nur in der Navigation",
   "Only in the navigation needs Glaze navigation with its course tabs on. Without them, the tabs sit above the course's bar.": "Nur in der Navigation braucht die Glaze-Navigation mit eingeschalteten Kurs-Tabs. Ohne sie stehen die Tabs über der Leiste des Kurses.",
+  "That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab.": "Diese Seite kann nicht in einem Kurs-Tab geöffnet werden, deshalb ist der Kurs zurück. Öffne ihren Link mit Strg oder Cmd, um sie in einem neuen Tab zu sehen.",
 };

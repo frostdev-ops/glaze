@@ -651,6 +651,17 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     el.inert = true;
     const f = { el, at: Date.now(), ready: false, url, dirty: false };
     frames.set(cid, f);
+    // A frame taken to another site (a script, a form: links are caught in the frame) can't be read, nor shown as a course:
+    // that page opens in a new tab, as far as the browser lets us say which, and the frame goes back to its course.
+    el.addEventListener('load', () => {
+      if (frames.get(cid) !== f) return;
+      let away = false;
+      try { away = el.contentWindow.location.origin !== location.origin; } catch { away = true; }
+      if (!away) return;
+      const x = tabs.find((y) => y.cid === cid);
+      el.src = location.origin + (x ? L.target(x, false) : f.url);
+      if (showing === cid) say(t("That page can't open inside a course tab, so the course is back. Open its link with Ctrl or Cmd to see it in a new tab."));
+    });
     host.prepend(el);
     watch(cid, f);
     return f;
@@ -776,13 +787,30 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (c && c !== from) openAt(c, u);
     }
     // A hidden page leaving its course waits until it is shown again (it then says so anew).
-    else if (op === 'away' && from === showing && typeof url === 'string' && url.length < 1300 && (ctx.site === 'canvas' ? /^\/(?!\/)/.test(url) : /^\/ultra(\/|$)/.test(url))) {
+    else if (op === 'away' && from === showing && typeof url === 'string' && url.length < 1300 && /^\/(?!\/)/.test(url)) {
       // Canvas: another course's page goes to that course's frame; the frame that left stays on screen until it shows.
       const u = ctx.site === 'canvas' && L.safe(...split(url)), c = u && u.match(/^\/courses\/(\d+)/)?.[1];
       if (c && c !== from) { frames.get(from).away = true; openAt(c, u); }
       else { drop(from); show(''); route(url); }
     }
   });
+  // In a tab's frame on Ultra, a link out of its course opens in the page around it, never in the frame: an Ultra page
+  // through the page's own router, another of this site's pages as a load there, another site in a new tab. (Canvas
+  // routes its course links itself.) Links the page opens in a new tab or window keep doing that.
+  if (framed && !preview && ctx.site !== 'canvas') document.addEventListener('click', (e) => {
+    if (!on || !e.isTrusted || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.composedPath().find((n) => n instanceof HTMLAnchorElement && n.hasAttribute('href'));
+    if (!a || a.target && a.target !== '_self' || a.hasAttribute('download')) return;
+    let u;
+    try { u = new URL(a.href, location.href); } catch { return; }
+    if (!/^https?:$/.test(u.protocol) || u.href.split('#')[0] === location.href.split('#')[0]) return;
+    const own = u.origin === location.origin;
+    // Its own course's pages (and Ultra's redirects into them) stay in the frame.
+    if (own && (u.pathname.startsWith(`/ultra/courses/${framed}/`) || u.pathname === `/ultra/courses/${framed}` || u.pathname === '/ultra/redirect' && (u.searchParams.get('course_id') || u.searchParams.get('courseId') || framed) === framed)) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (own) toTop('away', { url: u.pathname + u.search + u.hash });
+    else window.open(u.href, '_blank', 'noopener');
+  }, true);
   if (framed && !preview) {
     // Track before load: slow native resources must not leave usable editors unprotected.
     // shortcut: native work without edit/submit events is unknown; use an LMS save-state API when available.
@@ -802,7 +830,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   // Ultra routes without reloading: the address goes in history, and the page hears it as Forward. Absolute: Ultra's
   // <base href> is its CDN, another origin.
   const route = (url) => {
-    if (ctx.site === 'canvas') { location.assign(location.origin + url); return; }
+    // Ultra's own router knows only its /ultra pages: anything else here (an older /webapps page, a tool) loads.
+    if (ctx.site === 'canvas' || !/^\/ultra(\/|$)/.test(url)) { location.assign(location.origin + url); return; }
     try { history.pushState(null, '', location.origin + url); dispatchEvent(new PopStateEvent('popstate', { state: null })); } catch { location.assign(location.origin + url); }
   };
   const otherCourse = (bar, cid) => [...bar.querySelectorAll('a[href*="/courses/_"]')].some((a) => !a.getAttribute('href').includes(`/courses/${cid}/`));
