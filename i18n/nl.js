@@ -2779,7 +2779,7 @@
   "Open the rail while you point at it": "De balk openen terwijl je ernaar wijst",
   "Show unread counts": "Aantal ongelezen tonen",
   "No logo": "Geen logo",
-  "Blackboard uses Glaze navigation, set up in the Navigation tab. The styles here are for Canvas, and for Blackboard's own navigation while Glaze navigation is off.": "Blackboard gebruikt Glaze-navigatie, ingesteld op het tabblad Navigatie. De stijlen hier zijn voor Canvas en voor de eigen navigatie van Blackboard zolang Glaze-navigatie uit staat.",
+  "Blackboard and Canvas use Glaze navigation, set up in the Navigation tab. These styles apply to the site's own navigation while Glaze navigation is off.": "Blackboard en Canvas gebruiken Glaze-navigatie, ingesteld op het tabblad Navigatie. Deze stijlen gelden voor de eigen navigatie van de site wanneer Glaze-navigatie uitstaat.",
   "Glaze navigation settings": "Instellingen voor Glaze-navigatie",
   "Navigation items": "Navigatie-items",
   "Glaze's own navigation, the same in every Look, in place of the site's.": "De eigen navigatie van Glaze, in elke Look hetzelfde, in plaats van die van de site.",
@@ -2827,4 +2827,5 @@
   "Nothing here yet.": "Hier staat nog niets.",
   "The course's menu in the navigation": "Het menu van de cursus in de navigatie",
   "On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.": "Op Canvas en Moodle staan de eigen pagina’s van een cursus (Start, Modules, Cijfers…) in de navigatie, onder de naam van de cursus, in plaats van in een menu naast de pagina. Met een bovenbalk vormen ze een tweede rij eronder.",
+  "ePortfolios": "E-portfolio’s",
 };

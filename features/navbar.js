@@ -46,14 +46,14 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const listeners = new Map(), mods = new Map(); // event -> Set(fn); owner -> Map(id -> item)
   const emit = (event, data) => { for (const fn of listeners.get(event) || []) { try { fn(data); } catch { /* one listener's error isn't the bar's */ } } };
   const settings = () => X.settings().navbar || {};
-  const on = () => !sleeping && !!site && !!chrome.runtime?.id && X.on() && X.settings().enabled && !!settings().on && (isPreview || window.top === window);
+  const on = () => !(X.site === 'canvas' && /^\/(?:login|logout)(?:\/|$)/.test(location.pathname)) && !sleeping && !!site && !!chrome.runtime?.id && X.on() && X.settings().enabled && !!settings().on && (isPreview || window.top === window);
   const tabsApi = () => (X.settings().enhance?.tabs && globalThis.GZ_CTABS?.bar) || null;
   // Inside a course: its own page, or one of Glaze's course tabs showing over the page.
   const inCourse = () => !!site?.inCourse?.() || !!globalThis.GZ_CTABS?.showing?.();
   const byId = (id) => model?.items.find((i) => i.id === id) || cmenu?.items.find((i) => i.id === id) || null;
   // A page of this site: through the course tabs where they run (into the course's frame, or leaving it), else a load.
   const openHere = (href) => { const api = tabsApi(); if (api?.open) api.open(href); else location.assign(href); };
-  const sameSite = (href) => { try { return new URL(href, location.href).origin === location.origin; } catch { return false; } };
+  const sameSite = (href) => { try { const u = new URL(href, location.href); return u.origin === location.origin || isPreview && u.protocol === location.protocol && u.host === location.host; } catch { return false; } };
   // The open course's own menu, from the page or the course tab's frame on screen: its pages, each with an icon by what it is.
   const readMenu = () => {
     if (settings().cmenu === false || !site?.menu || !inCourse()) return null;
@@ -141,7 +141,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const label = (text, i) => { const s = part(make('span', { className: 'label', textContent: text }), 'label'); if (i !== undefined) s.style.setProperty('--i', i); return s; };
   // One item: a link where it goes somewhere (open in a new tab works), a button where Glaze does something.
   const node = (item, cls, partName) => {
-    const link = item.href && !item.action;
+    const link = item.href && !item.action && !item.panel;
     const e = make(link ? 'a' : 'button', { className: cls });
     if (link) { e.href = item.href; if (item.tab) { e.target = '_blank'; e.rel = 'noopener noreferrer'; } } else e.type = 'button';
     e.dataset.id = item.id;
@@ -609,8 +609,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (act) { e.preventDefault(); sheetTo(false); menuTo('', false); glaze(act, e); return; }
     const item = byId(target.dataset.id);
     if (!item) return;
-    // A site's own menu (Courses, Account, Help…) opens as Glaze's panel; with a modifier, its own page in a new tab.
-    if (item.panel && site.panel && plain(e)) { e.preventDefault(); sheetTo(false); panelTo(panel === item.id ? '' : item.id, target); return; }
+    // A site's own menu (Courses, Account, Help…) is a button opening Glaze's panel.
+    if (item.panel && site.panel) { e.preventDefault(); sheetTo(false); panelTo(panel === item.id ? '' : item.id, target); return; }
     emit('navigate', { id: item.id });
     // The course's own pages: through the course tabs where they run, so a course tab's frame follows.
     if (item.course) { if (plain(e)) { e.preventDefault(); openHere(item.href); } sheetTo(false); if (!lay.open) peekTo(false); return; }

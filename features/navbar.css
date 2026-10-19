@@ -207,7 +207,7 @@ a { color: inherit; text-decoration: none; }
 .rail:not([data-open]) .cm-name { color: transparent; padding-inline: 0; justify-content: center; }
 .tsub {
   position: fixed; z-index: 1; inset-inline: calc(var(--gutter) + 12px); top: calc(var(--gutter) + 56px); height: 40px; display: flex; align-items: center; gap: 4px;
-  padding: 0 8px; overflow: hidden; background: var(--nb-bg); border: 1px solid var(--nb-line); border-top: 0; border-radius: 0 0 14px 14px;
+  padding: 0 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; background: var(--nb-bg); border: 1px solid var(--nb-line); border-top: 0; border-radius: 0 0 14px 14px;
   backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 .tsub[hidden] { display: none; }
@@ -246,7 +246,8 @@ a { color: inherit; text-decoration: none; }
 .panel .row svg { flex: none; width: 18px; height: 18px; }
 .panel .group-label { padding: 10px 12px 4px; }
 .panel .note { margin: 8px 12px; font-size: 14px; color: var(--gz-ink-muted, #8fa8c0); }
-.panel[data-phone] { inset: auto 8px calc(84px + env(safe-area-inset-bottom, 0px)) 8px; width: auto; max-height: 70vh; animation-name: gz-nb-panel-up; }
+.panel[data-phone] { inset: auto 8px calc(92px + env(safe-area-inset-bottom, 0px)) 8px; width: auto; max-height: 70vh; animation-name: gz-nb-panel-up; }
+:host([data-footer]) .panel[data-phone] { bottom: calc(92px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)); }
 @keyframes gz-nb-panel-up { from { opacity: 0; transform: translateY(8px); } }
 
 @media (max-width: 899.98px) {

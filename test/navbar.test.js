@@ -190,10 +190,12 @@ test('the editor may change navbar fields; an Ultra top frame may only pin its r
   const source = read('lib/background.js');
   const DEF = G.GZ_SANITIZE({}).navbar;
   const store = { navbar: { on: true, rail: 'auto', brand: 'school' } };
-  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromUltra: async (s) => s.ultra === true });
+  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromUltra: async (s) => s.ultra === true, fromCanvas: async (s) => s.canvas === true });
   const h = vm.runInContext(`({${source.match(/\n {2}navbar: \{([\s\S]*?)\n {2}\},/)[1]}})`, ctx);
   assert.equal(await h.allow({ patch: { rail: 'open' } }, { ultra: true, frameId: 0 }), true);
   assert.equal(await h.allow({ patch: { rail: 'icons' } }, { editor: true }), true);
+  assert.equal(await h.allow({ patch: { rail: 'open' } }, { canvas: true, frameId: 0 }), true);
+  assert.equal(await h.allow({ patch: { rail: 'open' } }, { canvas: true, frameId: 1 }), false);
   for (const [m, s] of [[{ patch: { rail: 'open' } }, { ultra: true, frameId: 2 }], [{ patch: { rail: 'open' } }, { frameId: 0 }], [{ patch: { on: false } }, { ultra: true, frameId: 0 }],
     [{ patch: { rail: 'open', on: false } }, { ultra: true, frameId: 0 }], [{ patch: { rail: 'auto' } }, { ultra: true, frameId: 0 }], [{ patch: ['open'] }, { editor: true }], [{}, { editor: true }],
     [{ patch: {} }, { editor: true }], [{ patch: { badges: 'false' } }, { editor: true }], [{ patch: { unknown: true } }, { editor: true }]]) assert.equal(await h.allow(m, s), false, JSON.stringify([m, s]));
@@ -211,7 +213,7 @@ test("Ultra's part marks first paint from the setting and loads the bar only whe
   const ultra = read('content-ultra.js');
   assert.match(ultra, /if \(!globalThis\.GZ_NAVBAR_UI\?\.live\(\)\) I\.setAttr\('data-gz-navbar', !!b\?\.on && /);
   assert.match(ultra, /if \(globalThis\.GZ_NAVBAR_UI \|\| \(I\.links\.length && I\.settings\?\.navbar\?\.on\)\) need\('features\/navbar\.js'/);
-  assert.match(read('features/nav.js'), /const on = X\.on\(\) && X\.settings\(\)\.enabled && !\(X\.site === 'ultra' && X\.settings\(\)\.navbar\?\.on\);/);
+  assert.match(read('features/nav.js'), /let on = X\.on\(\) && X\.settings\(\)\.enabled && !\(X\.site === 'ultra' && X\.settings\(\)\.navbar\?\.on\);/);
 });
 
 // The renderer's API: mods add, change and remove only their own items, and nothing unsafe gets through.

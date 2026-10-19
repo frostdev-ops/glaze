@@ -664,9 +664,11 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       const box = document.createElement('div');
       box.className = 'gz-ctabs-pic';
       const img = Object.assign(document.createElement('img'), { src: snap.shot, alt: '', draggable: false });
+      // A Canvas frame sits inside the navigation's room; crop that same room from the full-window picture.
+      const view = ctx.site === 'canvas' && html.hasAttribute('data-gz-navbar') ? host.getBoundingClientRect() : { x: 0, y: 0 };
       // Blurred, with a spinner over it: a picture of the page, not the page, until the page itself is ready.
       const root = box.attachShadow({ mode: 'closed' });
-      root.innerHTML = `<style>img{position:absolute;top:0;left:0;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}
+      root.innerHTML = `<style>img{position:absolute;top:${-view.y}px;left:${-view.x}px;width:${innerWidth}px;height:${innerHeight}px;filter:blur(6px) brightness(.9);user-select:none}
 .s{position:absolute;top:50%;left:50%;width:2.25rem;height:2.25rem;margin:-1.125rem;box-sizing:border-box;border-radius:50%;border:3px solid color-mix(in srgb,var(--gz-ink,#fff) 25%,transparent);border-top-color:var(--gz-accent,#6fdcff);animation:r .8s linear infinite}
 @keyframes r{to{transform:rotate(1turn)}}:host([data-still]) .s{animation:none}</style><div class="s" role="progressbar"></div>`;
       root.querySelector('.s').setAttribute('aria-label', t('Loading…'));
@@ -953,7 +955,14 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
   };
   const onHide = () => { if (on) saveNow(); };
-  const onResize = () => { lay(); if (ctx.site === 'canvas') place(); };
+  const onResize = () => {
+    lay();
+    if (ctx.site === 'canvas') {
+      // A picture made at the old viewport no longer fits; keep the live frame through the resize.
+      if (pic) { const f = frames.get(showing); if (f) f.el.style.visibility = ''; unpicture(true); }
+      place();
+    }
+  };
   const listen = (yes) => {
     const f = yes ? 'addEventListener' : 'removeEventListener';
     document[f]('scroll', onScroll, { capture: true, passive: true });

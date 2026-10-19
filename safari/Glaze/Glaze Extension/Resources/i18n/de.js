@@ -2779,7 +2779,7 @@
   "Open the rail while you point at it": "Leiste öffnen, während du darauf zeigst",
   "Show unread counts": "Ungelesene Anzahl anzeigen",
   "No logo": "Kein Logo",
-  "Blackboard uses Glaze navigation, set up in the Navigation tab. The styles here are for Canvas, and for Blackboard's own navigation while Glaze navigation is off.": "Blackboard verwendet die Glaze-Navigation, eingerichtet im Tab „Navigation“. Die Stile hier gelten für Canvas und für die eigene Navigation von Blackboard, solange die Glaze-Navigation aus ist.",
+  "Blackboard and Canvas use Glaze navigation, set up in the Navigation tab. These styles apply to the site's own navigation while Glaze navigation is off.": "Blackboard und Canvas verwenden die Glaze-Navigation, die im Tab Navigation eingerichtet wird. Diese Stile gelten für die eigene Navigation der Website, wenn die Glaze-Navigation ausgeschaltet ist.",
   "Glaze navigation settings": "Einstellungen der Glaze-Navigation",
   "Navigation items": "Navigationseinträge",
   "Glaze's own navigation, the same in every Look, in place of the site's.": "Die eigene Navigation von Glaze, in jedem Look gleich, anstelle der Navigation der Seite.",
@@ -2827,4 +2827,5 @@
   "Nothing here yet.": "Hier ist noch nichts.",
   "The course's menu in the navigation": "Das Menü des Kurses in der Navigation",
   "On Canvas and Moodle, a course's own pages (Home, Modules, Grades…) sit in the navigation, under the course's name, instead of a menu beside the page. With a top bar, they're a second row under it.": "Auf Canvas und Moodle stehen die Seiten eines Kurses (Startseite, Module, Bewertungen…) in der Navigation unter dem Namen des Kurses statt in einem Menü neben der Seite. Mit einer oberen Leiste bilden sie eine zweite Zeile darunter.",
+  "ePortfolios": "E-Portfolios",
 };

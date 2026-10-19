@@ -101,7 +101,7 @@ Notes **Back up or restore** opens **Settings → Backup and privacy → Notes b
 
 ## Glaze navigation
 
-On by default on Blackboard Ultra (Canvas and Moodle next), Glaze draws its own navigation in place of the site's, set
+On by default on Blackboard Ultra and Canvas (Moodle next), Glaze draws its own navigation in place of the site's, set
 up in Settings → **Navigation**. **Placement**: a side rail, open with labels or icons only (with a tooltip on each and
 a peek when you point at it or move focus into it), or a top bar whose items move under **More** when they don't fit.
 **Style**: floating glass with a little room around it, or embedded at the page's edge. **Inside a course** it can stay
@@ -117,8 +117,11 @@ tab.
 **Navigation items** renames, re-icons, reorders and groups every item, hides any of them, picks the four phone tabs,
 adds up to eight links of your own, and turns on Notes, To Do, search and Glaze settings (off by default). A worn Look's
 navigation layout and your older navigation links, hidden items and order still apply under these choices. Look codes
-carry how the bar looks and sits (never whether it is on); Export all carries your items. Every item opens through the
-site's own link, so its pages and menus work as before, and the site's own navigation stays in the page, out of sight,
+carry how the bar looks and sits (never whether it is on); Export all carries your items. On Canvas, Courses, Groups,
+Account, History, Help and Admin open as Glaze panels with Canvas's own session data. Course links and term names,
+account settings, recent pages and the school's help links stay within their permitted account. The course's own
+menu joins the rail or a second row below a top bar; switch that option off to keep Canvas's course menu. Other
+items open through the site's own links, and the site's own navigation stays in the page, out of sight,
 coming back when the switch is off. Where Blackboard opens a course at its own address without its drawer, the items
 last seen on this device stand in. Motion follows Glaze's motion setting and your system's reduced motion;
 right-to-left pages mirror it.

@@ -60,6 +60,7 @@ const MEDIA_BG = { ultra: 479 + 59, canvas: 479 + 59, moodle: 479 + 59 };
 // rail or top bar, floating or embedded, its own state inside a course and the course tabs in it): defaults.js's navbar
 // settings on every site (414 bytes), and on Ultra the words theme.css reserves the bar's room from and the hook that loads
 // features/navbar.js (677). The bar itself, its model and its sheet load on demand. Measured against 21a5d51c.
+// Canvas adds its adapter loader and first-paint words within the original budget by trimming first-script prose.
 const NAVBAR = { ultra: 414 + 677, canvas: 414, moodle: 414 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
@@ -164,6 +165,8 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['features/navbar-canvas.js', 'getComputedStyle(el)', 1], // school logo background, one header mark per replacement
+
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.
   ['content.js', "querySelectorAll('*')", 2],
