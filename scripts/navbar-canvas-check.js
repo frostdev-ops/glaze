@@ -233,12 +233,15 @@ const api = async (route, method = 'GET', form) => {
       await navigateRow(id);
       if (id === 'course') {
         const second = new URL(courses.rows[1].href).pathname;
+        // The course row opened that course in its tab over the page; a load brings back the tab on screen, so start clean.
+        await page.evaluate(() => sessionStorage.removeItem('gz-ctabs-shown'));
         await page.goto(local + second); await ready();
         await wait(() => bar((r) => [...r.querySelectorAll('.rail .ctab-go')].filter((e) => e.getAttribute('aria-current') !== 'page').length), (n) => n > 0, 'another saved course tab');
         await bar((r) => [...r.querySelectorAll('.rail .ctab-go')].find((e) => e.getAttribute('aria-current') !== 'page').click());
         await wait(() => page.evaluate(() => { const f = document.querySelector('#gz-ctabs-frames[data-on] iframe'); return !!f?.contentDocument?.documentElement.hasAttribute('data-gz-navbar-frame') && !document.querySelector('#gz-ctabs-frames .gz-ctabs-pic'); }), Boolean, 'course frame navigation');
-        const frame = await page.locator('#gz-ctabs-frames[data-on]').boundingBox();
-        ok(frame.x >= 271, 'course frame is inset by the rail room');
+        // The frame fills the window under the bar (its background runs under the glass); its page keeps the rail's room.
+        const inset = await page.locator('#gz-ctabs-frames[data-on] iframe').evaluate((f) => Math.round(f.contentDocument.getElementById('wrapper').getBoundingClientRect().left));
+        ok(inset >= 271, `course frame's page keeps the rail room (${inset}px)`);
         ok(await page.locator('#gz-ctabs-frames[data-on] iframe').evaluate((f) => getComputedStyle(f.contentDocument.getElementById('header')).display === 'none'), 'course frame has no duplicate Canvas nav');
         const modulePath = await page.locator('#gz-ctabs-frames[data-on] iframe').evaluate((f) => f.contentDocument.querySelector('#section-tabs a.modules')?.pathname);
         ok(!!modulePath, 'framed course has a Modules destination');
