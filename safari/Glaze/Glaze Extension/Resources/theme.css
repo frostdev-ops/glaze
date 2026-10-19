@@ -1155,3 +1155,21 @@ html[data-gz-motion="off"][data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_too
 html[data-gz-nav-collapsed] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) header { position: relative; padding-block-end: 38px !important; }
 
 html[data-gz-nav-overflow="shrink"] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) :is(footer, [class*="makeStylesfooter"]) a { font-size: var(--gz-nav-fit, 10px); }
+
+/* ---- Glaze's own navigation (features/navbar.js) in place of Ultra's drawer. The drawer stays in the page, out of sight
+   (the bar opens its items through its links and reads its badges), and keeps the page's room for the floating rail:
+   from the saved setting at first paint (data-gz-navbar: auto, open or icons), from the bar once it is drawn
+   (--gz-navbar-space, inline). Below 900px the bar sits at the bottom and the page keeps room under its content. ---- */
+html[data-gz-navbar] { --gz-navbar-space: 96px; }
+html[data-gz-navbar="open"] { --gz-navbar-space: 272px; }
+@media (min-width: 1280px) { html[data-gz-navbar="auto"] { --gz-navbar-space: 272px; } }
+@media (min-width: 900px) {
+  html[data-gz-navbar] :is(.MuiDrawer-root, .MuiDrawer-paper):has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"], > .MuiDrawer-paper > nav[class*="makeStylesnavigation"]):not(#gz-navbar) {
+    width: var(--gz-navbar-space) !important; min-width: 0 !important; max-width: none !important; flex-basis: var(--gz-navbar-space) !important;
+    overflow: hidden !important; background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; pointer-events: none;
+  }
+  html[data-gz-navbar] .MuiDrawer-paper:has(#base_tools, [data-gz-nav-root], > nav[class*="makeStylesnavigation"]) > * { visibility: hidden !important; }
+}
+@media (max-width: 899.98px) {
+  html[data-gz-navbar] :is(body, #main-content) { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+}

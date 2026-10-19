@@ -59,6 +59,8 @@ const GZ_SPEC = {
     u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', ['none', 'vivid', 'mono', 'noir', 'warm', 'cool', 'faded', 'dreamy']], ink: ['#ffffff', 'hex'],
     logo: [true, 'bool'], labels: ['normal', ['normal', 'small', 'icons']], size: ['medium', ['small', 'medium', 'large']], collapsed: [false, 'bool'],
   },
+  // Glaze's own navigation in place of the site's (lib/navbar.js). rail: open, icons, or auto (open on wide windows).
+  navbar: { on: [false, 'bool'], rail: ['auto', ['auto', 'open', 'icons']], peek: [true, 'bool'], badges: [true, 'bool'], brand: ['glaze', ['glaze', 'school', 'none']] },
   motion: {
     level: ['subtle', ['off', 'subtle', 'expressive']],
     followSystem: [true, 'bool'],

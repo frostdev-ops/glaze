@@ -679,6 +679,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     for (const k of ['labels', 'collapsed', 'f']) I.setAttr(`data-gz-nav-${k}`, n[k]);
     I.setAttr('data-gz-nav-no-logo', !n.logo);
     I.setAttr('data-gz-nav-brand', n.brand);
+    I.setAttr('data-gz-navbar', !!I.settings.navbar?.on && I.settings.navbar.rail);
     I.setAttr('data-gz-nav-detailed', n.detailed);
     for (const [k, v] of Object.entries(GZ_NAV.dimensions(n))) I.setVar(`--gz-nav-${k}`, `${v}px`);
     const src = n.i ? picture : n.u;
@@ -702,6 +703,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (!isPreview && window.top !== window) return;
     syncDashboard();
     glazeItem(I.links.length && I.settings?.enabled);
+    if (globalThis.GZ_NAVBAR_UI || (I.links.length && I.settings?.navbar?.on)) need('features/navbar.js', () => globalThis.GZ_NAVBAR_UI).then(() => GZ_NAVBAR_UI.sync(), () => {});
     if (globalThis.GZ_NAV_UI) GZ_NAV_UI.sync();
     else if (I.links.length && navItems) {
       const n = I.worn.nav;

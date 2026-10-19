@@ -482,6 +482,14 @@
 <section id="sidebar" data-editor-section="look/navigation" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-look-navigation">
 <p class="section-path" data-editor-breadcrumb><a href="#look/navigation" data-editor-alias>Navigation appearance</a></p><div class="section-heading"><h2 id="heading-look-navigation">Navigation appearance</h2><button type="button" class="section-reset" data-reset-section="look/navigation">Reset section</button></div>
 <p class="desc section-note">Style the shared Canvas and Blackboard navigation.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
+<label class="check"><input type="checkbox" data-key="navbar.on"><span>Use Glaze navigation</span>
+          <span class="desc">Glaze draws its own navigation in place of Blackboard's: a floating rail on wide windows and a bottom bar on phones. Turn it off to get Blackboard's back.</span></label>
+<div data-navbar>
+<label class="field"><span>Rail</span><select data-key="navbar.rail"><option value="auto">Open on wide windows</option><option value="open">Always open</option><option value="icons">Icons only</option></select></label>
+<label class="check"><input type="checkbox" data-key="navbar.peek"><span>Open the rail while you point at it</span></label>
+<label class="check"><input type="checkbox" data-key="navbar.badges"><span>Show unread counts</span></label>
+<label class="field"><span>Rail logo</span><select data-key="navbar.brand"><option value="glaze" translate="no">Glaze</option><option value="school">School logo</option><option value="none">No logo</option></select></label>
+</div>
 <label class="field"><span>Sidebar background</span><select data-key="nav.k"><option value="default">Palette default</option><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image">Picture</option></select></label>
 <div class="row" data-nav-kinds="solid gradient image">
           <label><span>First color</span> <input type="color" data-key="nav.c"></label>

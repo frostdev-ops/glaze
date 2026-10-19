@@ -630,6 +630,7 @@ GZ_UI.load().then((s) => {
     };
     paint(n.u);
     for (const el of $$('#sidebar [data-nav-kinds]')) el.hidden = !el.dataset.navKinds.split(' ').includes(n.k);
+    $('#sidebar [data-navbar]').hidden = !s.navbar.on;
     $('#nav-url').value = n.u;
     $('#nav-picture-note').textContent = n.i ? t('Picture kept on this device') : '';
     $('#nav-logo-note').textContent = n.li ? t('Logo kept on this device') : '';

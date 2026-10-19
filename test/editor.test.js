@@ -6,7 +6,7 @@ for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(p
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
 const TABS = ['look', 'blackboard', 'canvas', 'moodle', 'study', 'sharing', 'mods', 'backup', 'about'];
-const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', tabs: 'blackboard/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses', mods: 'backup/privacy' };
+const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', navbar: 'look/navigation', tabs: 'blackboard/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses', mods: 'backup/privacy' };
 const ENHANCE = {
   'study/tools': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'keys', 'newcontent', 'palette', 'drafts', 'download', 'search', 'place', 'coursemenu', 'docPages', 'toggles'],
   'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],

@@ -139,6 +139,15 @@ const BROKER = {
       && (fromEditor(s) || (!m.image && !m.logoImage && !m.items && !m.nav.i && !m.nav.li && !!await fromCanvas(s))),
     run: (m, area) => GZ_NAV_STORE.change({ nav: m.nav, image: m.image, logoImage: m.logoImage, items: m.items }, area),
   },
+  // Glaze's own navigation bar (lib/navbar.js): an Ultra page pins or unpins its rail; the editor saves the rest itself.
+  navbar: {
+    allow: async (m, s) => !!m.patch && typeof m.patch === 'object' && !Array.isArray(m.patch) && Object.keys(m.patch).length === 1 && ['open', 'icons'].includes(m.patch.rail)
+      && (fromEditor(s) || (s.frameId === 0 && !!await fromUltra(s))),
+    run: async (m, { sync }) => {
+      const navbar = GZ_SANITIZE({ navbar: { ...(await sync.get('navbar')).navbar, rail: m.patch.rail } }).navbar;
+      return { ok: await sync.set({ navbar }) };
+    },
+  },
   // Better To Do's own data (lib/todo.js change). A Canvas or Ultra page edits its own site's accounts' lists; only the
   // editor restores a backup.
   todo: {
@@ -497,14 +506,16 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   })().then(reply, () => reply({ ok: false }));
   return true;
 });
-// Opening Settings conveys no keys. A source account is a selection hint for its Notes backup; Export still needs a
+// Opening Settings (Sharing, a Notes account's backup, or the navigation bar's own section) conveys no keys. A source account is a selection hint for its Notes backup; Export still needs a
 // trusted click there after its key warning. Only known top-frame LMS callers and the editor may ask.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:sessions-open') return;
   (async () => {
     if (!fromEditor(s) && !((s.frameId === 0 && (await fromCanvas(s))) || (ultraPage(s) && (await fromUltra(s))))) return { ok: false };
     const key = typeof m.key === 'string' && GZ_NOTES.KEY.test(m.key) && (fromEditor(s) || m.key.startsWith(`notesIdx:${new URL(addressOf(s)).origin}/`)) ? m.key : '';
-    await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + (key ? `?notes=${encodeURIComponent(key)}#backup/notes` : '#sharing/sessions') });
+    // The navigation bar's "Customize navigation" opens its own section instead.
+    const at = m.section === 'look/navigation' ? '#look/navigation' : '#sharing/sessions';
+    await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') + (key ? `?notes=${encodeURIComponent(key)}#backup/notes` : at) });
     return { ok: true };
   })().then(reply, () => reply({ ok: false }));
   return true;
@@ -794,7 +805,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // it asks (a site's part too, where its host was registered for the other LMS). Only these files, and only into a
 // frame of a tab Glaze already runs in (Chrome reports which).
 const SAFARI = new URL(chrome.runtime.getURL('')).protocol === 'safari-web-extension:';
-const LOADABLE = new Set(['lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js']);
+const LOADABLE = new Set(['lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];
@@ -804,7 +815,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
   }
   if (files.includes('features/mods.js')) blocklistCheck(); // a page is about to run mods: the daily blocklist check, if due
   if (files.includes('features/mods.js')) channelCheck().catch(() => {}); // and the daily check of followed mod channels
-  const injected = [...new Set([...(files.includes('content-ultra.js') ? ['lib/nav.js'] : []), ...(files.includes('features/nav.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js'] : []), ...(files.includes('lib/navlayout.js') ? ['lib/nav.js', 'lib/nav-items.js'] : []), ...(files.includes('features/coursetabs.js') ? ['lib/coursetabs.js'] : []), ...(files.includes('features/lookparts.js') ? ['lib/lookx.js', 'lib/lookparts.js'] : []), ...files])];
+  const injected = [...new Set([...(files.includes('content-ultra.js') ? ['lib/nav.js'] : []), ...(files.includes('features/nav.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js'] : []), ...(files.includes('features/navbar.js') ? ['lib/nav.js', 'lib/nav-items.js', 'lib/navlayout.js', 'lib/navbar.js'] : []), ...(files.includes('lib/navlayout.js') ? ['lib/nav.js', 'lib/nav-items.js'] : []), ...(files.includes('features/coursetabs.js') ? ['lib/coursetabs.js'] : []), ...(files.includes('features/lookparts.js') ? ['lib/lookx.js', 'lib/lookparts.js'] : []), ...files])];
   // The document that asked, where the browser names it (Chrome): one that has since navigated away gets nothing.
   // Without a documentId, the frame, after asking it whether it still holds the document that asked (content.js's
   // docId, in Glaze's own world there). Pin the probe's document id too where available; otherwise modules must

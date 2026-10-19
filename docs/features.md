@@ -99,6 +99,20 @@ Notes **Back up or restore** opens **Settings → Backup and privacy → Notes b
 
 - **Any host** — matches `https://*/ultra/*`, so it works on your university's Blackboard without configuration. Canvas is matched on `*.instructure.com`, and recognized by its own stylesheet on a school's own domain. Moodle is recognized by the keywords line its core writes in every page's head, together with the page id and layout it puts on the page's body.
 
+## Glaze navigation
+
+**Look → Navigation appearance → Use Glaze navigation** (off by default; Blackboard Ultra for now, Canvas and Moodle
+next) draws Glaze's own navigation in place of the site's. On wide windows it is a floating rail: open with labels, or
+icons only with a tooltip on each and a peek when you point at it or move focus into it. The chevron collapses or
+expands it and the pin keeps it open; both are saved for every tab. On a phone it is a bottom bar of four tabs and More,
+whose sheet holds the rest, your account, signing out and **Customize navigation**. It lists the site's own items with
+Glaze's icons, groups and order, the site's unread counts (optional), and marks where you are with a gliding highlight.
+A worn Look's navigation layout and your older navigation links, hidden items and order apply to it. Notes, To Do,
+search and Glaze settings can join it; none are there by default. Every item opens through the site's own link, so
+its pages and menus work as before, and the site's own navigation stays in the page, out of sight, coming back when the
+switch is off. Motion follows Glaze's motion setting and your system's reduced motion; right-to-left pages put it on
+the right.
+
 ## Blackboard navigation
 
 Blackboard Ultra's base navigation supports both its newer MUI drawer and legacy rail. In the editor, choose a Glaze,
