@@ -303,5 +303,5 @@ test('dev mode changes refresh the declarative widget list', async () => {
   p.chrome.changed({ modDev: { newValue: true } }, 'local');
   await p.tick(100);
   assert.equal(p.G.stats().list.length, 1);
-  assert.match(read('content.js'), /\/\^mod\(s\$\|:\|Dev\$\|Order\$\|sBlocklist\$\)\/\.test\(k\)\)\) modsIn\(true\)/);
+  assert.match(read('content.js'), /\/\^mod\(s\$\|:\|Dev\$\|Order\$\|sBlocklist\$\|NavLayout:\)\/\.test\(k\)\)\) modsIn\(true\)/);
 });

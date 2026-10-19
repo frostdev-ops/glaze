@@ -309,11 +309,12 @@ var GZ_MODBROKER = globalThis.GZ_MODBROKER || (() => {
       const list = await env.blocklist();
       const want = api().order(Array.isArray(ids) ? [...new Set(ids)].filter((id) => typeof id === 'string' && ID.test(id)) : [], (await env.local.get('modOrder')).modOrder);
       if (m.op === 'parts') {
-        const recs = await env.local.get(['modDev', ...want.map((id) => `mod:${id}`)]), parts = [];
+        const recs = await env.local.get(['modDev', ...want.flatMap((id) => [`mod:${id}`, `modNavLayout:${id}`])]), parts = [];
         for (const id of want) {
           const rec = recs[`mod:${id}`];
           const x = usable(rec, id, recs.modDev) && !blocked(list, rec) && isObj(rec.manifest.parts) ? X().clean(rec.manifest.parts) : null;
-          if (x) parts.push(served(x, id));
+          if (x && recs[`modNavLayout:${id}`] === false) delete x.nav;
+          if (x && Object.keys(x).length) parts.push(served(x, id));
         }
         return { ok: true, parts };
       }

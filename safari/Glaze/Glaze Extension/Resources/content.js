@@ -1541,7 +1541,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (changes.lookX && area === 'sync') lookX = changes.lookX.newValue;
-    if (area === 'local' && Object.keys(changes).some((k) => /^mod(s$|:|Dev$|Order$|sBlocklist$)/.test(k))) modsIn(true);
+    if (area === 'local' && Object.keys(changes).some((k) => /^mod(s$|:|Dev$|Order$|sBlocklist$|NavLayout:)/.test(k))) modsIn(true);
     else if (changes.lookX && (area !== 'sync' || !changes.enabled)) partsIn();
     if (area === 'local' && changes.seenCourses) {
       courseList = changes.seenCourses.newValue || {};

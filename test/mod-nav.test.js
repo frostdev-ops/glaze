@@ -76,6 +76,24 @@ test('the runnable list says which mods the student told "Use my own"', async ()
   assert.equal((await B.page({ op: 'list' }, e)).mods[0].arranges, true);
 });
 
+test('Use my own also removes manifest navigation parts, leaving other parts intact', async () => {
+  const parts = { nav: { hidden: ['calendar'] }, cursor: { kind: 'trail' } };
+  const e = env({ parts }, {}, { [`modNavLayout:${ID}`]: false });
+  assert.deepEqual((await B.page({ op: 'parts' }, e)).parts, [{ cursor: parts.cursor }]);
+  assert.deepEqual(e.data[`mod:${ID}`].manifest.parts, parts, 'the installed manifest is unchanged');
+  e.data[`modNavLayout:${ID}`] = true;
+  assert.deepEqual((await B.page({ op: 'parts' }, e)).parts, [parts]);
+});
+
+test('the page refreshes installed parts when a navigation layout opt-out changes', () => {
+  const fs = require('node:fs'), vm = require('node:vm'), source = fs.readFileSync(require.resolve('../content.js'), 'utf8');
+  const from = source.indexOf('    if (changes.lookX && area'), to = source.indexOf("    if (area !== 'sync'", from);
+  let reads = 0;
+  const changed = vm.runInNewContext(`(changes, area) => { ${source.slice(from, to)} }`, { modsIn: () => reads++, partsIn() {} });
+  changed({ [`modNavLayout:${ID}`]: { newValue: false } }, 'local');
+  assert.equal(reads, 1);
+});
+
 test('the prompt names each nav permission, and reading the bar counts as data a network host could get', () => {
   const t = (k, v = {}) => k.replace(/\{(\w+)\}/g, (_, x) => v[x]);
   for (const id of ['nav.read', 'nav.items', 'nav.layout']) assert.match(E.permText(id, t), /^Navigation/);
