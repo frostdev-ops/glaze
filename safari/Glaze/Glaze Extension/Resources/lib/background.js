@@ -120,7 +120,8 @@ const BROKER = {
     run: (m, area) => GZ_NAV_STORE.timer(m.op, area),
   },
   folders: {
-    allow: async (m, s) => ultraPage(s) && typeof m.key === 'string' && GZ_FOLDERS.KEY.test(m.key) && m.key.startsWith(`hiddenFolders:${await fromUltra(s)}/`) && await switchOn('hideFolders'),
+    allow: async (m, s) => typeof m.key === 'string' && GZ_FOLDERS.KEY.test(m.key) && ((ultraPage(s) && m.key.startsWith(`hiddenFolders:${await fromUltra(s)}/_`))
+      || m.key.startsWith(`hiddenFolders:${await fromCanvas(s)}/`) && /\/\d+\/\d+$/.test(m.key)) && await switchOn('hideFolders'),
     run: (m, area) => GZ_FOLDERS.change(m, area),
   },
   pet: {
