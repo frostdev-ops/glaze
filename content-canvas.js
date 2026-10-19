@@ -422,7 +422,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   };
 
   return {
-    record, stop: () => globalThis.GZ_NAVBAR_UI?.sync(), planner: () => todoHere() || cardsHere(), tagCards: tagCanvasCards, tagExtras: tagCanvasExtras, lift: liftCourses,
+    record, stop: () => { globalThis.GZ_FOLDER_UI?.sync(false); globalThis.GZ_NAVBAR_UI?.sync(); }, planner: () => todoHere() || cardsHere(), tagCards: tagCanvasCards, tagExtras: tagCanvasExtras, lift: liftCourses,
     renderProgress: canvasProgress, renderNew: renderCanvasNew, renderCalc: canvasGrades, paintCourses, paintNav, paintTabs, syncNav,
     syncTodo, syncCardTasks, syncWidgets, syncRemind, syncSyl,
     syncInsights: () => {

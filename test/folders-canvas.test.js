@@ -57,12 +57,13 @@ const fixture = () => {
   const chrome = { storage: { local, onChanged: { addListener() {} } }, runtime: { sendMessage: async (m) => { sent.push(m); return F.change(m, { local }); } } };
   const document = { head, body, querySelectorAll: (s) => html.querySelectorAll(s), getElementById: (id) => html.querySelector(`#${id}`) };
   html.setOwner(document); document.createElement = (t) => { const e = new E(t); e.setOwner(document); return e; }; document.activeElement = body;
-  const ctx = { site: 'canvas', on: () => true, settings: () => ({ enhance: { hideFolders: true } }), courseId: () => undefined, toggleOf: () => null,
+  let on = true;
+  const ctx = { site: 'canvas', on: () => on, settings: () => ({ enhance: { hideFolders: true } }), courseId: () => undefined, toggleOf: () => null,
     canvasCourseId: () => location.pathname.match(/^\/courses\/(\d+)/)?.[1], t: (k, args) => k.replace(/\{(\w+)\}/g, (_, p) => args[p]) };
   const c = vm.createContext({ document, location, chrome, GZ_CTX: ctx, GZ_FOLDERS: F, MutationObserver: class { observe() {} disconnect() {} }, requestAnimationFrame() {}, setTimeout: () => 0, clearTimeout() {} });
   vm.runInContext(fs.readFileSync(require.resolve('../features/folders.js'), 'utf8'), c);
   const click = async (el) => { el.listeners.click({ isTrusted: true, detail: 1, preventDefault() {}, stopPropagation() {} }); await settle(); };
-  return { ui: c.GZ_FOLDER_UI, a, b, blank, list, document, store, sent, click, location };
+  return { ui: c.GZ_FOLDER_UI, a, b, blank, list, document, store, sent, click, location, setOn: (v) => { on = v; } };
 };
 const eye = (m) => m.querySelector(`#gz-folder-eye-${m.dataset.moduleId}`);
 
@@ -122,4 +123,47 @@ test('Canvas loads hidden modules on demand where a course lists its modules, as
   const worker = fs.readFileSync(require.resolve('../lib/background.js'), 'utf8');
   assert.match(worker, /m\.key\.startsWith\(`hiddenFolders:\$\{await fromUltra\(s\)\}\/_`\)/, 'an Ultra page writes only Ultra keys');
   assert.match(worker, /m\.key\.startsWith\(`hiddenFolders:\$\{await fromCanvas\(s\)\}\/`\) && \/\\\/\\d\+\\\/\\d\+\$\/\.test\(m\.key\)/, 'a Canvas page only its own site\'s module keys');
+});
+
+test('the Canvas stop hook restores hidden modules even when the native page makes no further mutations', async () => {
+  const e = fixture(); e.ui.sync(true, Promise.resolve('42')); await settle();
+  await e.click(eye(e.a));
+  const part = fs.readFileSync(require.resolve('../content-canvas.js'), 'utf8');
+  const start = part.indexOf('stop: () => '), end = part.indexOf(', planner:', start);
+  const stop = vm.runInNewContext(`(${part.slice(start + 6, end)})`, { GZ_FOLDER_UI: e.ui });
+  e.setOn(false); stop();
+  assert.equal(e.a.getAttribute('data-gz-folder-hidden'), null);
+  assert.equal(e.document.getElementById('gz-folder-style'), null);
+  assert.equal(e.document.querySelectorAll('.gz-folder-eye, #gz-folders-toggle').length, 0);
+});
+
+test('the folders worker isolates Canvas and Ultra origins, including same-origin course-tab frames and switch revocation', async () => {
+  const listeners = [], store = { local: { ultra: ['https://bb.example.edu'], canvas: ['https://campus.test/*'] }, sync: {} };
+  const area = (s) => ({
+    get: async (k) => structuredClone(k === null ? s : Object.fromEntries([].concat(k).filter(x => x in s).map(x => [x, s[x]]))),
+    set: async (v) => { Object.assign(s, structuredClone(v)); }, remove: async () => {},
+  });
+  const c = vm.createContext({ URL, TextEncoder, structuredClone, console, setTimeout, clearTimeout, crypto,
+    importScripts: (...files) => files.forEach(f => vm.runInContext(fs.readFileSync(require.resolve(`../lib/${f}`), 'utf8'), c)),
+    chrome: { runtime: { id: 'glaze', getURL: (f = '') => `chrome-extension://glaze/${f}`, getManifest: () => require('../manifest.json'),
+      onMessage: { addListener: (f) => listeners.push(f) }, onConnect: { addListener() {} }, onInstalled: { addListener() {} }, onStartup: { addListener() {} } },
+      tabs: { onRemoved: { addListener() {} } }, storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener() {} } } },
+  });
+  vm.runInContext(fs.readFileSync(require.resolve('../lib/background.js'), 'utf8'), c);
+  const send = (m, s) => new Promise(resolve => { for (const f of listeners) if (f(m, s, r => resolve(structuredClone(r))) === true) return; resolve(null); });
+  const canvas = { id: 'glaze', tab: { id: 9, url: 'https://school.instructure.com/courses/31/modules' }, frameId: 0, url: 'https://school.instructure.com/courses/31/modules' };
+  const ultra = { ...canvas, url: 'https://bb.example.edu/ultra/courses/_8_1/outline', tab: { id: 10, url: 'https://bb.example.edu/ultra/courses/_8_1/outline' } };
+  const msg = (origin, user = '42', course = '31', id = '96') => ({ type: 'glaze:folders', key: F.key(origin, user, course), id, hidden: true });
+  for (const [sender, m] of [[canvas, msg('https://school.instructure.com')], [ultra, msg('https://bb.example.edu', '_7_1', '_8_1', '_9_1')],
+    [{ ...canvas, frameId: 7, url: 'about:blank', origin: 'https://school.instructure.com' }, msg('https://school.instructure.com')],
+    [{ ...ultra, frameId: 7, url: 'about:blank', origin: 'https://bb.example.edu' }, msg('https://bb.example.edu', '_7_1', '_8_1', '_9_1')],
+    [{ ...canvas, url: 'https://campus.test/courses/31/modules' }, msg('https://campus.test')]]) assert.equal((await send(m, sender)).ok, true);
+  const before = structuredClone(store.local), m = msg('https://school.instructure.com');
+  for (const [sender, request] of [[canvas, msg('https://other.instructure.com')], [canvas, msg('https://school.instructure.com', '_7_1', '_8_1', '_9_1')],
+    [ultra, msg('https://bb.example.edu')], [{ ...canvas, id: 'other' }, m], [{ ...canvas, tab: undefined }, m],
+    [{ ...canvas, url: 'https://unknown.test/courses/31/modules' }, msg('https://unknown.test')],
+    [{ ...canvas, frameId: 7, url: 'about:blank', origin: 'https://other.instructure.com' }, m]]) assert.equal((await send(request, sender)).ok, false);
+  store.sync.enabled = false; assert.equal((await send(m, canvas)).ok, false);
+  store.sync.enabled = true; store.sync.enhance = { hideFolders: false }; assert.equal((await send(m, canvas)).ok, false);
+  assert.deepEqual(store.local, before, 'refused writes preserve both sites\' records');
 });
