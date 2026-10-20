@@ -90,7 +90,7 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   const fresh = W.layout(undefined);
   assert.deepEqual(fresh.tiles.map((t) => t.id), W.TILES);
   assert.deepEqual(fresh.tiles.filter((t) => t.on).map((t) => t.id), [], 'a first layout has no widget on');
-  assert.deepEqual(Object.fromEntries(W.BOARDS.map((b) => [b, fresh.boards[b].filter((t) => t.on).map((t) => t.id)])), { courses: ['todo'], dash: ['todo'], cdash: ['todo'] }, 'only Better To Do, in each board');
+  assert.deepEqual(Object.fromEntries(W.BOARDS.map((b) => [b, fresh.boards[b].filter((t) => t.on).map((t) => t.id)])), { courses: ['todo'], dash: ['pet', 'timer', 'notes', 'quotes', 'todo'], cdash: ['pet', 'timer', 'notes', 'quotes', 'todo'] }, 'owner 2026-10-20: starter Dashboards supersede the empty default');
   // A layout stored before then: a tile kept without its on/off reads as it did.
   assert.deepEqual(W.layout({ tiles: [{ id: 'agenda' }, { id: 'music' }] }).tiles.filter((t) => t.on).map((t) => t.id), ['agenda', 'notes', 'timer', 'quotes']);
   const kept = W.layout({ tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: 2 }, { id: 'music' }, { id: 'evil' }, { id: 'timer', size: 'xl' }, null], music: 'javascript:x' });
@@ -99,10 +99,10 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   assert.equal(kept.music, '');
   assert.equal(W.layout({ music: ' https://youtu.be/jfKfPfyJRdk ' }).music, 'https://youtu.be/jfKfPfyJRdk');
   const ids = (l) => l.tiles.map((t) => t.id).join(' ');
-  assert.equal(ids(W.move(fresh, 'timer', -1)), 'notes timer agenda quotes music breathe buddy todo');
+  assert.equal(ids(W.move(fresh, 'timer', -1)), 'notes timer agenda quotes music breathe buddy todo settings pet');
   assert.equal(ids(W.move(fresh, 'notes', -1)), ids(fresh), 'the first stays first');
-  assert.equal(ids(W.move(fresh, 'todo', 1)), ids(fresh), 'the last stays last');
-  assert.equal(ids(W.move(fresh, 'buddy', 0, 'agenda')), 'notes buddy agenda timer quotes music breathe todo');
+  assert.equal(ids(W.move(fresh, 'pet', 1)), ids(fresh), 'the last stays last');
+  assert.equal(ids(W.move(fresh, 'buddy', 0, 'agenda')), 'notes buddy agenda timer quotes music breathe todo settings pet');
   assert.equal(ids(W.move(fresh, 'buddy', 0, 'nope')), ids(fresh));
   assert.deepEqual(W.set(fresh, 'timer', { size: 'zz', on: false }).tiles[2], { id: 'timer', on: false, size: 's', float: false, x: null, y: null, z: 0, fold: false });
   // Floating: inside the margin, onto an edge within SNAP of it, and kept as where in the free room it is.
@@ -205,13 +205,13 @@ test('study buddy: happy after a win, awake while the timer runs or after a pat,
 });
 
 test('layout: a tile another file declares (MORE) comes after the built-in ones, off and at its size, and keeps its place', () => {
-  const more = { pet: { size: 'm' }, notes: { size: 'l' }, 'Bad id': {}, x: {} };
+  const more = { sample: { size: 'm' }, notes: { size: 'l' }, 'Bad id': {}, x: {} };
   const lay = W.layout(undefined, more);
-  assert.deepEqual(lay.tiles.map((t) => t.id), [...W.TILES, 'pet'], 'a built-in id or a bad one is not added');
-  assert.deepEqual(lay.tiles.at(-1), { id: 'pet', on: false, size: 'm', float: false, x: null, y: null, z: 0, fold: false });
-  const kept = W.layout({ tiles: [{ id: 'pet', on: true, size: 's', float: true, x: 0.5, y: 0 }, { id: 'notes' }] }, more);
-  assert.deepEqual(kept.tiles.slice(0, 2).map((t) => [t.id, t.on, t.size, t.float]), [['pet', true, 's', true], ['notes', true, 'm', false]]);
-  assert.ok(!W.layout(kept).tiles.some((t) => t.id === 'pet'), 'without its declaration, not a tile');
+  assert.deepEqual(lay.tiles.map((t) => t.id), [...W.TILES, 'sample'], 'a built-in id or a bad one is not added');
+  assert.deepEqual(lay.tiles.at(-1), { id: 'sample', on: false, size: 'm', float: false, x: null, y: null, z: 0, fold: false });
+  const kept = W.layout({ tiles: [{ id: 'sample', on: true, size: 's', float: true, x: 0.5, y: 0 }, { id: 'notes' }] }, more);
+  assert.deepEqual(kept.tiles.slice(0, 2).map((t) => [t.id, t.on, t.size, t.float]), [['sample', true, 's', true], ['notes', true, 'm', false]]);
+  assert.ok(!W.layout(kept).tiles.some((t) => t.id === 'sample'), 'without its declaration, not a tile');
 });
 
 test('notes: an Ultra account (_N_N) has its own key on its own site', () => {
@@ -567,7 +567,7 @@ test('filled: a board given its first tiles is marked once, so one emptied since
   const emptied = W.apply(l, { ops: [{ s: 'cdash', id: key, remove: true }] });
   assert.deepEqual(emptied.filled, ['cdash'], 'kept when its tiles go');
   assert.deepEqual(W.apply(emptied, { fill: 'cdash', ops: [] }).filled, ['cdash'], 'once');
-  assert.deepEqual(W.layout({ filled: ['cdash', 'nope', 'cdash'] }).filled, ['cdash'], 'only boards, each once');
+  assert.deepEqual(W.layout({ starter: true, filled: ['cdash', 'nope', 'cdash'] }).filled, ['cdash'], 'only boards, each once');
   assert.deepEqual(W.apply(fresh, { fill: 'nope', ops: [] }).filled, []);
 });
 

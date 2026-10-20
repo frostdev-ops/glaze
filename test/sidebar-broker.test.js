@@ -301,11 +301,29 @@ test('a new install marks its layout fresh, an update does not, and the mark giv
   fresh.installed[0]({ reason: 'update' }); await settle();
   assert.equal(fresh.store.local.widgetLayout.sidebarFresh, true, 'kept by later updates');
   const r = await fresh.send(sb(uKey(), [{ op: 'migrate' }]), UP);
-  assert.deepEqual(S.docked(r.rec).map((x) => x.id), ['todo']);
+  assert.deepEqual(S.docked(r.rec).map((x) => x.id), ['todo', 'settings']); // owner, 2026-10-20
+  assert.equal(fresh.store.sync.enhance.notes, true);
+  assert.equal(fresh.store.sync.enhance.pet, true);
   // A layout change keeps the mark (lib/widgets.js layout passes it through).
   await fresh.send({ type: 'glaze:widgetLayout', ops: [{ s: 'cdash', id: 'notes', set: { on: true } }] }, CP);
   assert.equal(fresh.store.local.widgetLayout.sidebarFresh, true);
   const old = worker();
   old.installed[0]({ reason: 'update' }); await settle();
   assert.ok(!('sidebarFresh' in old.store.local.widgetLayout));
+});
+
+test('fresh Dashboard auto-fill commits through the worker on each site, with site and surface boundaries intact', async () => {
+  for (const [sender, origin, board, id] of [[CP, CANVAS, 'cdash', '1'], [UP, ULTRA, 'dash', '_1_1']]) {
+    const w = worker();
+    w.installed[0]({ reason: 'install' }); await settle();
+    const key = `course:${origin}/${id}`;
+    const msg = { type: 'glaze:widgetLayout', fill: board, ops: [{ s: board, id: key, set: { on: true } }] };
+    assert.equal((await w.send(msg, sender)).ok, true, `${board} fills through the broker`);
+    assert.ok(w.store.local.widgetLayout.boards[board].some((x) => x.id === key && x.on));
+    for (const fill of ['courses', board === 'dash' ? 'cdash' : 'dash']) assert.equal((await w.send({ ...msg, fill }, sender)).ok, false, 'only this site Dashboard may auto-fill');
+    assert.equal((await w.send(msg, { ...sender, frameId: 2 })).ok, false, 'auto-fill stays top-only');
+    await w.send({ type: 'glaze:widgetLayout', ops: [{ s: board, id: key, remove: true }] }, sender);
+    await w.send(msg, sender);
+    assert.ok(!w.store.local.widgetLayout.boards[board].some((x) => x.id === key), 'a later fill never resurrects a removed card');
+  }
 });

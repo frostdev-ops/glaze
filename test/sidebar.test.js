@@ -153,15 +153,16 @@ test('docking remembers where the widget was, for Move back; the layout is never
 const yes = { lms: 'canvas', todo: true };
 // A board listing every built-in tile, off unless given.
 const all = (on = {}) => [...Object.entries(on).map(([id, v]) => ({ id, ...v })), ...W.TILES.filter((id) => !(id in on)).map((id) => ({ id, on: false }))];
-test('migration: a new install gets To Do docked first, on both sites, and nothing else', () => {
+test('migration: a new install gets To Do then Glaze settings on both sites', () => {
   const fresh = { ...W.layout(), sidebarFresh: true };
   for (const lms of ['canvas', 'ultra']) {
     const r = S.migrate(fresh, null, { lms, todo: true });
-    assert.equal(r.mig, 1); assert.deepEqual(docked(r), ['todo']); assert.deepEqual(Object.keys(r.dest), ['todo']);
+    // Owner 2026-10-20: settings joins To Do; starter widgets stay on the Dashboard.
+    assert.equal(r.mig, 1); assert.deepEqual(docked(r), ['todo', 'settings']); assert.deepEqual(Object.keys(r.dest), ['todo', 'settings']);
   }
-  // Better To Do off: nothing moves, and the account counts as migrated.
+  // Better To Do off: only settings docks, and the account counts as migrated.
   const off = S.migrate(fresh, null, { lms: 'canvas', todo: false });
-  assert.equal(off.mig, 1); assert.deepEqual(off.dest, {}); assert.deepEqual(off.dock, []);
+  assert.equal(off.mig, 1); assert.deepEqual(docked(off), ['settings']);
 });
 
 test('migration on Canvas: the old always-there list docks; the Dashboard tile docks; a removed tile stays removed', () => {
@@ -226,7 +227,7 @@ test('a fresh-install marker never overrides a later To Do removal or Ultra boar
   for (const [lms, lay] of [['canvas', canvas], ['ultra', ultra]]) {
     const rec = S.migrate(lay, null, { lms, todo: true });
     assert.equal(rec.dest.todo, 'off', lms);
-    assert.deepEqual(docked(rec), []);
+    assert.deepEqual(docked(rec), ['settings']); // owner 2026-10-20: To Do removal still wins
     assert.deepEqual(S.migrate(lay, rec, { lms, todo: true }), rec);
   }
   const split = W.apply(fresh, { ops: [{ s: 'dash', id: 'todo', set: { on: false } }] });

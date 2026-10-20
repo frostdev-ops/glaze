@@ -951,10 +951,11 @@ span.enhanced-tooltip span.enhanced-tooltip-pip { background-color: var(--gz-tip
 #site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { background: var(--gz-card-ov); opacity: var(--gz-card-ov-a); }
 html[data-gz-card-plain] #site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { display: none; }
 /* Only the measured grid gets sizing/condensing. List rows keep Ultra's native geometry. */
-html[data-gz-card-width] #site-wrap .multi-column-view .course-columns { display: flex !important; flex-wrap: wrap; }
+#site-wrap :is(.multi-column-view.course-columns, .multi-column-view .course-columns) { width: 100%; min-width: 0; box-sizing: border-box; }
+#site-wrap .multi-column-view .course-org-list > :is(.term-group, .favorites-group) { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--gz-card-w, 262px)), 1fr)); gap: var(--gz-card-gap, 16px); }
 html[data-gz-card-width] #site-wrap .multi-column-view .course-card-term-name { flex-basis: 100%; }
 html[data-gz-card-gap] #site-wrap .multi-column-view :is(.course-columns, .course-org-list > div) { gap: var(--gz-card-gap) !important; }
-html[data-gz-card-width] #site-wrap .multi-column-view article.course-element-card { width: min(100%, var(--gz-card-w)) !important; flex: 0 1 var(--gz-card-w); margin: 0 !important; }
+html[data-gz-card-width] #site-wrap .multi-column-view article.course-element-card { width: 100% !important; min-width: 0; margin: 0 !important; }
 html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card .course-banner { height: var(--gz-card-h) !important; }
 /* The banner's height sets the card's least height (Ultra's 156px of details below it), never a fixed one. */
 html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card { height: auto !important; min-height: calc(var(--gz-card-h) + 156px); }

@@ -381,7 +381,7 @@ BROKER.widgetLayout = {
     const canvas = s.frameId === 0 && (await fromCanvas(s));
     const site = canvas || (ultraPage(s) && (await fromUltra(s)));
     if (!site || (await chrome.storage.sync.get('enabled')).enabled === false) return false;
-    if (m.fill !== undefined && (!canvas || m.fill !== 'cdash')) return false;
+    if (m.fill !== undefined && (s.frameId !== 0 || m.fill !== (canvas ? 'cdash' : 'dash') || m.ops.some((o) => o?.s !== m.fill))) return false;
     // Course cards: only the page's own site's, Canvas's on its Dashboard, Ultra's on its two boards.
     const courses = m.ops.filter((o) => typeof o?.id === 'string' && o.id.startsWith('course:'));
     return !courses.length || (s.frameId === 0 && (canvas || site === await fromUltra(s)) && courses.every((o) => {
@@ -797,16 +797,17 @@ const notesHome = (canvas) => {
 };
 const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/*'], js: ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js'], runAt: 'document_idle', persistAcrossSessions: true };
 chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && (changes.enhance || changes.enabled)) serial(ensure); });
-// An update keeps the widgets a device showed while it had no layout stored (lib/widgets.js kept): new layouts start empty,
-// marked as a new install's (sidebarFresh), whose accounts get To Do in the sidebar (lib/sidebar.js migrate).
+// An update keeps the widgets a device showed while it had no layout stored (lib/widgets.js kept): new layouts get the starter Dashboard,
+// marked as a new install's (sidebarFresh), whose accounts get To Do and Glaze settings in the sidebar (lib/sidebar.js migrate).
 // In the broker's queue, so a page's layout change ('glaze:widgetLayout') is never written over.
 const keepWidgets = async (fresh) => {
   if ((await chrome.storage.local.get('widgetLayout')).widgetLayout) return;
   const { enhance } = await chrome.storage.sync.get('enhance');
+  if (fresh) await chrome.storage.sync.set({ enhance: { ...enhance, notes: true, pet: true } });
   await chrome.storage.local.set({ widgetLayout: fresh ? { ...GZ_WIDGETS.layout(), sidebarFresh: true } : GZ_WIDGETS.kept(enhance?.widgets) });
 };
 chrome.runtime.onInstalled.addListener((d) => {
-  // Mark fresh installs too: a later update must not mistake their untouched empty layout for a pre-change device.
+  // Mark fresh installs too: a later update must not mistake their untouched starter layout for a pre-change device.
   if (['install', 'update'].includes(d?.reason)) (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {});
   serial(async () => { await chrome.scripting.unregisterContentScripts(); await ensure(); });
 });
