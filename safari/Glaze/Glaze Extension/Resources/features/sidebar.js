@@ -408,8 +408,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const mains = [...wrap.querySelectorAll('main')], main = mains.length === 1 && mains[0], kids = main && [...main.children];
     if (!kids || kids.length !== 2 || kids[0].tagName !== 'SECTION' || kids[1].tagName !== 'ASIDE') return null;
     const viewer = kids[0], el = kids[1], rubrics = [...el.querySelectorAll('.rubric-inline-container')], headings = [...el.children].filter((e) => e.tagName === 'H2');
+    const editor = el.closest('[contenteditable]');
     if (rubrics.length !== 1 || !rubrics[0].children.length || headings.length !== 1 || !headings[0].textContent.trim()
-      || el.querySelector('form, input, select, textarea, iframe, [contenteditable="true"], button[type="submit"]')) return null;
+      || editor && editor.getAttribute('contenteditable') !== 'false'
+      || [...el.querySelectorAll('[contenteditable]')].some((e) => e.getAttribute('contenteditable') !== 'false')
+      || el.querySelector('form, input, select, textarea, iframe, [role="textbox"], [role="combobox"], button[type="submit"]')) return null;
     const frames = [...viewer.querySelectorAll('[role="tabpanel"] iframe')];
     if (frames.length !== 1 || !frames[0].parentElement.id.startsWith('files-viewer-tab-panel-')) return null;
     try { const u = new URL(frames[0].getAttribute('src')); if (u.origin !== 'https://annotate-us.foundations.blackboard.com' || !/^\/ui\/pdf-viewer\/[^/]+\/index\.html$/.test(u.pathname)) return null; } catch { return null; }
