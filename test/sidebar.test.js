@@ -20,6 +20,10 @@ test('keys name a site and an account: Canvas or Ultra, https or local Canvas, n
   assert.deepEqual(S.parse(`sidebar:ultra:${ULTRA}/_9_1`), { lms: 'ultra', origin: ULTRA, uid: '_9_1' });
   assert.equal(S.parse(`sidebar:ultra:${ULTRA}/_9_1/x`), null);
   assert.equal(S.parse(null), null);
+  for (const [lms, uid] of [['canvas', '_9_1'], ['ultra', '42']]) {
+    assert.equal(S.key(lms, CANVAS, uid), null, 'account ids belong to their LMS');
+    assert.equal(S.parse(`sidebar:${lms}:${CANVAS}/${uid}`), null);
+  }
 });
 
 test('clean gives a whole v1 record from anything, each field in its bounds and unknown ones dropped', () => {
@@ -49,6 +53,12 @@ test('clean gives a whole v1 record from anything, each field in its bounds and 
   const big = S.clean({ dock: many.map((id) => ({ id })), dest: Object.fromEntries(many.map((id) => [id, 'off'])), fold: Object.fromEntries(many.map((id) => [`f${id}`, { page: true }])) });
   assert.equal(big.dock.length, 24); assert.equal(Object.keys(big.dest).length, 64); assert.equal(Object.keys(big.fold).length, 32);
   assert.deepEqual(S.clean(S.clean(r)), S.clean(r), 'cleaning is stable');
+});
+
+test('malformed dock ids cannot occupy slots or resolve as widgets through string coercion', () => {
+  const rec = S.clean({ dock: [{}, { id: null }, { id: ['notes'] }, { id: true }, { id: 'notes' }] });
+  assert.deepEqual(rec.dock, [{ id: 'notes' }]);
+  assert.deepEqual(S.clean(rec), rec);
 });
 
 test('each change: dock, fold, height, width, open, section, To Do scope, offer; malformed ops change nothing', () => {
@@ -209,6 +219,49 @@ test('migration runs once: repeated, it changes nothing; a choice already made i
   assert.ok(!('sidebarFresh' in W.layout(lay)));
 });
 
+test('a fresh-install marker never overrides a later To Do removal or Ultra board disagreement', () => {
+  const fresh = { ...W.layout(), sidebarFresh: true };
+  const canvas = W.apply(fresh, { ops: [{ s: 'cdash', id: 'todo', set: { on: false } }] });
+  const ultra = W.apply(fresh, { ops: ['courses', 'dash'].map((s) => ({ s, id: 'todo', set: { on: false } })) });
+  for (const [lms, lay] of [['canvas', canvas], ['ultra', ultra]]) {
+    const rec = S.migrate(lay, null, { lms, todo: true });
+    assert.equal(rec.dest.todo, 'off', lms);
+    assert.deepEqual(docked(rec), []);
+    assert.deepEqual(S.migrate(lay, rec, { lms, todo: true }), rec);
+  }
+  const split = W.apply(fresh, { ops: [{ s: 'dash', id: 'todo', set: { on: false } }] });
+  const offer = S.migrate(split, null, { lms: 'ultra', todo: true });
+  assert.deepEqual(offer.offer, { todo: 'pending' });
+  assert.equal(offer.dest.todo, undefined);
+});
+
+test('Ultra migrates To Do in the saved Courses board order with its fold state', () => {
+  const lay = W.layout({ todo: true, boards: {
+    courses: all({ notes: { on: true }, todo: { on: true, fold: true }, timer: { on: true } }),
+    dash: all({ todo: { on: true } }),
+  } });
+  const rec = S.migrate(lay, null, { lms: 'ultra', todo: true });
+  assert.deepEqual(rec.dock, [{ id: 'notes' }, { id: 'todo', fold: true }, { id: 'timer' }]);
+  assert.deepEqual(S.migrate(lay, rec, { lms: 'ultra', todo: true }), rec);
+});
+
+test('migration respects a full dock and override map without dropping active widgets or creating orphan destinations', () => {
+  const full = ops(null, ...Array.from({ length: 24 }, (_, i) => ({ op: 'dock', id: `w${i}` })));
+  const migrated = S.migrate(W.layout(), full, yes);
+  assert.deepEqual(docked(migrated), docked(full));
+  assert.equal(migrated.dest.todo, undefined, 'no room: leave its legacy placement');
+  const room = ops(full, { op: 'remove', id: 'w2' });
+  const added = S.migrate(W.layout(), room, yes);
+  assert.equal(added.dock.length, 24);
+  assert.deepEqual(docked(added), ['todo', ...docked(room)]);
+  assert.ok(!added.dock.some((x) => x.id === 'w2'));
+  const bounded = S.clean({ dest: Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`w${i}`, 'off'])) });
+  const capped = S.migrate(W.layout(), bounded, yes);
+  assert.deepEqual(S.clean(capped), capped);
+  assert.deepEqual(capped.dock, []);
+  assert.deepEqual(capped.dest, bounded.dest);
+});
+
 // ---- placement -------------------------------------------------------------------------------------------------------
 test('placement: board → dock → float → board, one destination each, the board spot and float spot kept throughout', () => {
   const where = (lay, rec, enabled = true) => Object.fromEntries([...S.resolve(lay, rec, { site: 'canvas', board: 'cdash', enabled })].map(([id, v]) => [id, v.where]));
@@ -250,6 +303,44 @@ test('placement: not dockable or not allowed here decides; Ultra floats from its
   assert.equal(S.resolve(W.apply(lay, { ops: [{ s: 'courses', id: 'quotes', set: { on: true } }] }), rec, { site: 'ultra', board: 'courses', allowed: (id) => id !== 'quotes' }).get('quotes').where, 'off');
   assert.deepEqual(docked(rec), ['notes', 'mabcdefghijklmn0']);
   for (const [, v] of S.resolve(lay, rec, { site: 'ultra', board: 'courses' })) assert.ok(['dock', 'board', 'float', 'off'].includes(v.where));
+});
+
+test('declared widgets keep their legacy board and float placements, return destination and Ultra migration', () => {
+  const id = 'mabcdefghijklmn0', more = { pet: { size: 'm' }, [id]: { size: 's' } };
+  const lay = W.apply(W.layout(), { ops: [
+    { s: 'courses', id: 'pet', set: { on: true, x: 900, y: 32, fold: true } },
+    { s: 'dash', id, set: { on: true, x: 16, y: 64, w: 300 } },
+    { s: 'pages', id, set: { on: true, x: 0.3, y: 0.5 } },
+  ] }, more);
+  const keep = structuredClone(lay);
+  assert.equal(S.resolve(lay, null, { site: 'ultra', board: 'courses' }).get('pet')?.where, 'board');
+  assert.equal(S.resolve(lay, null, { site: 'ultra', board: 'dash' }).get(id)?.where, 'float');
+  const rec = S.apply(null, [{ op: 'dock', id }], { lms: 'ultra', lay });
+  assert.deepEqual(rec.ret[id], { to: 'float' });
+  const moved = S.apply(rec, [{ op: 'undock', id, to: 'float' }], { lms: 'ultra', lay });
+  assert.equal(S.resolve(lay, moved, { site: 'ultra', board: 'dash' }).get(id)?.where, 'float');
+  const migrated = S.migrate(lay, null, { lms: 'ultra', todo: false });
+  assert.deepEqual(migrated.dock, [{ id: 'pet', fold: true }]);
+  assert.deepEqual(lay, keep);
+});
+
+test('an explicit Ultra board destination selects that board and survives docking again', () => {
+  const lay = W.apply(W.layout(), { ops: ['courses', 'dash'].map((s) => ({ s, id: 'notes', set: { on: true } })) });
+  let rec = S.apply(null, [{ op: 'dock', id: 'notes' }, { op: 'undock', id: 'notes', to: 'board', board: 'dash' }], { lms: 'ultra', lay });
+  assert.equal(S.resolve(lay, rec, { site: 'ultra', board: 'dash' }).get('notes').where, 'board');
+  assert.equal(S.resolve(lay, rec, { site: 'ultra', board: 'courses' }).get('notes').where, 'off');
+  rec = S.apply(rec, [{ op: 'dock', id: 'notes' }], { lms: 'ultra', lay });
+  assert.deepEqual(rec.ret.notes, { to: 'board', board: 'dash' });
+  rec = S.apply(rec, [{ op: 'remove', id: 'notes' }, { op: 'dock', id: 'notes' }], { lms: 'ultra', lay });
+  assert.deepEqual(rec.ret.notes, { to: 'board', board: 'dash' });
+});
+
+test('an override map at its bound cannot leave a new dock entry without its destination', () => {
+  let rec = S.clean({ dest: Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`w${i}`, 'off'])) });
+  assert.deepEqual(ops(rec, { op: 'dock', id: 'notes' }), rec);
+  rec = ops(rec, { op: 'dock', id: 'w0' });
+  assert.deepEqual(docked(rec), ['w0'], 'existing overrides remain editable');
+  assert.equal(rec.dest.w0, 'dock');
 });
 
 // ---- the layout's mode -----------------------------------------------------------------------------------------------
@@ -295,7 +386,7 @@ test("migration on Ultra: the Courses column's widgets dock in board order with 
   } }, { mabcdefghijklmn0: { size: 's' } });
   const keep = structuredClone(lay);
   const r = S.migrate(lay, null, { lms: 'ultra', todo: true });
-  assert.deepEqual(r.dock, [{ id: 'todo' }, { id: 'timer', fold: true }, { id: 'notes' }, { id: 'mabcdefghijklmn0' }], 'To Do first, then the column in order; a room-placed tile docks too');
+  assert.deepEqual(r.dock, [{ id: 'timer', fold: true }, { id: 'todo' }, { id: 'notes' }, { id: 'mabcdefghijklmn0' }], 'the column in order; a room-placed tile docks too');
   assert.equal(r.dest.music, undefined, 'floating stays floating'); assert.equal(r.dest.agenda, undefined, "the Dashboard's board stays");
   assert.ok(!Object.keys(r.dest).some((k) => k.startsWith('course:')));
   assert.deepEqual(r.ret.timer, { to: 'board', board: 'courses' });

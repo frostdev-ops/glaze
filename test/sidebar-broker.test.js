@@ -17,6 +17,8 @@ const worker = ({ local = {} } = {}) => {
   const m = require('../manifest.json');
   const store = { sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [ULTRA, ULTRA2], ...local }, session: {} };
   const fail = { set: 0 }, slow = { get: 0 };
+  const accounts = { [CANVAS]: '42', [CANVAS2]: '42', [ULTRA]: '_9_1', [ULTRA2]: '_9_1' };
+  const pages = new Map(), probes = [];
   const area = (s, name) => ({
     get: async (k) => {
       for (let i = 0; i < (name === 'local' ? slow.get : 0); i++) await new Promise(setImmediate);
@@ -36,16 +38,29 @@ const worker = ({ local = {} } = {}) => {
       },
       tabs: { onRemoved: { addListener() {} } },
       storage: { session: area(store.session, 'session'), local: area(store.local, 'local'), sync: area(store.sync, 'sync'), onChanged: { addListener() {} } },
-      scripting: { getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {} },
+      scripting: {
+        getRegisteredContentScripts: async () => [], registerContentScripts: async () => {}, unregisterContentScripts: async () => {},
+        executeScript: async (o) => {
+          probes.push(JSON.parse(JSON.stringify(o.target)));
+          const s = pages.get(o.target.documentIds?.[0] || `${o.target.tabId}:${o.target.frameIds[0]}`);
+          if (!s) throw Error('document gone');
+          const origin = new URL(s.url === 'about:blank' ? s.tab.url : s.url).origin;
+          const page = vm.createContext({ location: { origin }, GZ_CTX: {
+            site: origin.includes('instructure') ? 'canvas' : 'ultra', on: () => true, me: async () => accounts[origin],
+          } });
+          return [{ result: await vm.runInContext(`(${o.func})(...${JSON.stringify(o.args || [])})`, page) }];
+        },
+      },
     },
   });
   vm.runInContext(read('lib/background.js'), context);
   const send = (msg, sender) => new Promise((res) => {
+    pages.set(sender.documentId || `${sender.tab.id}:${sender.frameId}`, sender);
     let kept = false;
     for (const f of listeners) if (f(msg, sender, (r) => res(JSON.parse(JSON.stringify(r)))) === true) kept = true;
     if (!kept) res('ignored');
   });
-  return { store, send, installed, fail, slow };
+  return { store, send, installed, fail, slow, accounts, pages, probes };
 };
 // A tab's frame: Canvas's pages anywhere on the site, Ultra's under /ultra.
 const at = (url, frameId = 0, tab = url) => ({ id: 'glaze', url, frameId, tab: { id: 1, url: tab } });
@@ -53,7 +68,7 @@ const cKey = (o = CANVAS, uid = '42') => S.key('canvas', o, uid), uKey = (o = UL
 const sb = (key, ops) => ({ type: 'glaze:sidebar', key, ops });
 const CP = at(`${CANVAS}/courses/1`), UP = at(`${ULTRA}/ultra/course`);
 
-test("a Canvas or Ultra page writes its own site's accounts' records; any other sender, frame or shape is refused", async () => {
+test("a Canvas or Ultra page writes its account's record; any other sender, frame or shape is refused", async () => {
   const w = worker();
   const ok = await w.send(sb(cKey(), [{ op: 'width', px: 400 }]), CP);
   assert.equal(ok.ok, true); assert.equal(ok.rec.width, 400); assert.equal(w.store.local[cKey()].width, 400);
@@ -86,9 +101,13 @@ test("a Canvas or Ultra page writes its own site's accounts' records; any other 
 test('two schools and two accounts on one site each keep their own record; none overwrites another', async () => {
   const w = worker();
   const keys = [cKey(CANVAS, '1'), cKey(CANVAS, '2'), cKey(CANVAS2, '1')];
+  w.accounts[CANVAS] = '1';
   await w.send(sb(keys[0], [{ op: 'dock', id: 'notes' }]), CP);
+  w.accounts[CANVAS] = '2';
   await w.send(sb(keys[1], [{ op: 'dock', id: 'timer' }, { op: 'width', px: 300 }]), CP);
+  w.accounts[CANVAS2] = '1';
   await w.send(sb(keys[2], [{ op: 'remove', id: 'todo' }]), at(`${CANVAS2}/`));
+  w.accounts[ULTRA] = w.accounts[ULTRA2] = '_1_1';
   await w.send(sb(uKey(ULTRA, '_1_1'), [{ op: 'todoScope', v: 'all' }]), UP);
   await w.send(sb(uKey(ULTRA2, '_1_1'), [{ op: 'dock', id: 'quotes' }]), at(`${ULTRA2}/ultra/stream`));
   const L = w.store.local;
@@ -97,6 +116,28 @@ test('two schools and two accounts on one site each keep their own record; none 
   assert.equal(L[keys[2]].dest.todo, 'off'); assert.ok(!L[keys[2]].dest.notes);
   assert.equal(L[uKey(ULTRA, '_1_1')].todoScope, 'all'); assert.equal(L[uKey(ULTRA2, '_1_1')].todoScope, 'follow');
   assert.ok(!L[uKey(ULTRA, '_1_1')].dest.quotes);
+});
+
+test('sidebar writes match the authenticated account in the exact sending document, including sign-out', async () => {
+  const w = worker();
+  for (const [sender, key, origin, uid] of [[CP, cKey(), CANVAS, '42'], [UP, uKey(), ULTRA, '_9_1']]) {
+    const doc = { ...sender, documentId: `doc-${uid}` };
+    const other = origin === CANVAS ? cKey(CANVAS, '99') : uKey(ULTRA, '_99_1');
+    const before = structuredClone(w.store.local);
+    assert.deepEqual(await w.send(sb(other, [{ op: 'width', px: 410 }]), doc), { ok: false, error: 'sender' });
+    assert.deepEqual(w.store.local, before, 'another account must not even be migrated');
+    assert.equal((await w.send(sb(key, [{ op: 'width', px: 410 }]), doc)).ok, true);
+    assert.deepEqual(w.probes.at(-1), { tabId: doc.tab.id, documentIds: [doc.documentId] });
+    w.accounts[origin] = null;
+    assert.deepEqual(await w.send(sb(key, [{ op: 'width', px: 450 }]), doc), { ok: false, error: 'sender' }, 'signed out');
+    assert.equal(w.store.local[key].width, 410);
+    w.accounts[origin] = uid;
+  }
+  const doc = { ...CP, documentId: 'replaced' };
+  const pending = w.send(sb(cKey(), [{ op: 'width', px: 470 }]), doc);
+  w.pages.delete(doc.documentId);
+  assert.deepEqual(await pending, { ok: false, error: 'sender' }, 'the document no longer exists');
+  assert.equal(w.store.local[cKey()].width, 410);
 });
 
 test("two tabs' changes to different fields both survive, in the queue's order", async () => {
