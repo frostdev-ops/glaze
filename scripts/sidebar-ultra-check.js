@@ -33,6 +33,10 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         window.chrome = { storage: { local: { get: (key, cb) => cb({ [key]: rec }) }, onChanged: { addListener() {}, removeListener() {} } }, runtime: {} };
         window.GZ_CTX = { site: 'ultra', t: (s) => s, need: async () => {}, account: async () => '_42_1', courseId: () => '_101_1', settings: () => ({ enhance: { sidebar: true, notes: true, todo: true } }) };
       }, w);
+      await page.evaluate(() => {
+        window.nativeRoot = [...document.documentElement.attributes].map((a) => [a.name, a.value]);
+        window.nativeTree = document.getElementById('site-wrap').outerHTML;
+      });
       await page.addScriptTag({ path: path.join(root, 'features/sidebar.js') });
       await page.evaluate(async () => { GZ_SIDEBAR_UI.sync(true); await GZ_SIDEBAR_UI.ready(); });
       await page.waitForSelector('[data-gz-sidebar-host]', { state: 'attached' });
@@ -53,8 +57,11 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       }
       await page.evaluate(() => document.documentElement.setAttribute('data-gz-sidebar', 'collapsed'));
       check(await clear(), `${family}: collapsed content keeps the sidebar width and gap`);
-      await page.evaluate(() => GZ_SIDEBAR_UI.sync(false));
+      await page.evaluate(() => { document.getElementById('gz-room')?.remove(); GZ_SIDEBAR_UI.sync(false); });
       check(await page.locator('[data-gz-sidebar-host]').count() === 0 && await page.locator('#main-end').isVisible(), `${family}: teardown restores native flow`);
+      const restored = await page.evaluate(() => ({ tree: nativeTree === document.getElementById('site-wrap').outerHTML,
+        root: [...document.documentElement.attributes].map((a) => [a.name, a.value]), before: nativeRoot }));
+      check(restored.tree && JSON.stringify(restored.before) === JSON.stringify(restored.root), `${family}: teardown restores the complete native DOM and html attributes (${JSON.stringify(restored)})`);
     }
     await setup('outline');
     await page.evaluate(() => { document.querySelector('aside.outline-actions').remove(); GZ_SIDEBAR_UI.sync(true); });
@@ -115,6 +122,9 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.keyboard.press('Escape');
     await page.evaluate(() => { document.documentElement.dir = 'rtl'; });
     check(await page.locator('#gz-sb-launch').evaluate((e) => e.getBoundingClientRect().left >= 44 + 12 - 1), 'the RTL launcher clears the left safe area');
+    await page.locator('#gz-sb-launch').click();
+    check(await page.locator('[data-gz-sidebar-host]').evaluate((e) => e.getBoundingClientRect().left >= 44 + 12 - 1 && e.getBoundingClientRect().right <= innerWidth - 12), 'the RTL floating drawer clears the left safe area');
+    await page.keyboard.press('Escape');
     await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: {} });
     await cdp.detach();
     await page.evaluate(() => { document.documentElement.dir = 'ltr'; });
@@ -211,6 +221,18 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       check(await page.evaluate(() => document.querySelector('#main-end').getBoundingClientRect().right + 16 <= document.querySelector('.layer-details').getBoundingClientRect().left + 1), `discussion ${tag}: the thread keeps clear of it`);
       check(await unmovedLive(), `discussion ${tag}: no node moved`);
       await shot(`p6-ultra-discussion-${style}-${look}`);
+      for (const surface of ['glass', 'solid']) {
+        await page.evaluate((surface) => { SET.sidebar.surface = surface; GZ_SIDEBAR_UI.sync(true); }, surface);
+        await page.waitForTimeout(80);
+        check(await page.locator('[data-gz-sidebar-host]').evaluate((e, surface) => {
+          const c = getComputedStyle(e);
+          return surface === 'solid' ? c.backdropFilter === 'none' : c.backdropFilter.includes('blur');
+        }, surface), `discussion ${tag} ${surface}: the chosen surface filter`);
+        check(await page.locator('[data-gz-sidebar-host]').evaluate((e, style) => {
+          const c = getComputedStyle(e);
+          return parseFloat(c.borderInlineStartWidth) > 0 && (style === 'float' ? c.boxShadow !== 'none' && parseFloat(c.borderRadius) > 0 : c.boxShadow === 'none' && parseFloat(c.borderRadius) === 0);
+        }, style), `discussion ${tag} ${surface}: the style's border, shadow and corners`);
+      }
       await live('assessment', { style, look });
       const a = await page.evaluate(() => {
         const sec = document.querySelector('.overview-attempts-section'), h = document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect(), r = sec.getBoundingClientRect(), v = document.getElementById('view').getBoundingClientRect();
@@ -225,6 +247,14 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       check(await unmovedLive(), `assessment ${tag}: no node moved`);
       check(await page.evaluate(() => nativeHTML === document.getElementById('site-wrap').outerHTML), `assessment ${tag}: native subtree bytes unchanged while absorbed`);
       await shot(`p6-ultra-assessment-${style}-${look}`);
+    }
+    for (const style of ['float', 'embed']) {
+      await live('discussion', { style, width: 1000 });
+      check(await page.evaluate(() => {
+        const grid = document.querySelector('.course-main-container').getBoundingClientRect();
+        const thread = document.querySelector('.thread').getBoundingClientRect();
+        return document.documentElement.dataset.gzSidebar === 'drawer' && grid.right - thread.right <= 25;
+      }), `discussion ${style}: closed drawer returns the details column's room to the thread`);
     }
     await live('assessment');
     await page.focus('#main-end');
@@ -327,13 +357,27 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     await page.emulateMedia({ media: 'print' });
     check(await page.evaluate((before) => { const c = getComputedStyle(document.querySelector('.overview-attempts-section')); return JSON.stringify(before) === JSON.stringify([c.position, c.padding, c.margin, c.zIndex, c.clipPath]); }, nativeStyles), 'printing restores native computed styles');
     await page.emulateMedia({ media: 'screen' });
-    for (const style of ['float', 'embed']) for (const width of [1800, 1440, 1280]) for (const w of [352, 480]) {
+    for (const style of ['float', 'embed']) for (const width of [1800, 1468, 1479, 1480, 1440, 1280]) for (const w of [352, 480]) {
       await live('gradebook', { style, width, w });
-      const g = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]'), r = h.getBoundingClientRect(), tb = document.getElementById('course-student-grades-sortable-table').getBoundingClientRect(); return { mode: document.documentElement.dataset.gzSidebar, family: document.documentElement.dataset.gzSbFamily, hostLeft: r.left, tableRight: tb.right }; });
+      const g = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]'), r = h.getBoundingClientRect(), tb = document.getElementById('course-student-grades-sortable-table').getBoundingClientRect(); return { mode: document.documentElement.dataset.gzSidebar, family: document.documentElement.dataset.gzSbFamily, hostLeft: r.left, tableRight: tb.right, panel: (() => { const p = document.querySelector('.course-content-container > .panel-wrap').getBoundingClientRect(); return { right: p.right, width: p.width }; })() }; });
       check(g.family === 'grades', `gradebook ${style} ${width} @${w}: the grades family`);
       check(g.mode === 'drawer' || g.tableRight <= g.hostLeft - 16 + 1, `gradebook ${style} ${width} @${w}: ${g.mode}, the table ends at the sidebar's edge less the gap (${Math.round(g.tableRight)} / ${Math.round(g.hostLeft)})`);
-      check(g.mode !== 'expanded' || width - 200 - w - 16 >= 900, `gradebook ${style} ${width} @${w}: expanded only with 900px for the table`);
+      check(g.mode !== 'expanded' || Math.abs(g.hostLeft - g.panel.right - 16) <= 1 && g.panel.width >= 900, `gradebook ${style} ${width} @${w}: exactly one reserved column and at least 900px of usable panel (${Math.round(g.panel.width)}px)`);
+      check(g.mode !== 'expanded' || width - 200 - w - 16 - (style === 'float' ? 12 : 0) >= 900, `gradebook ${style} ${width} @${w}: expanded only with 900px for the table`);
       if (w === 480 && width === 1800) await shot(`p6-ultra-gradebook-${style}`);
+    }
+    await live('gradebook');
+    await page.evaluate(() => document.documentElement.setAttribute('data-gz-focus', ''));
+    check(await page.evaluate(() => Math.abs(document.querySelector('.course-content-container > .panel-wrap').getBoundingClientRect().right - innerWidth) <= 1), 'focus-document mode returns all sidebar room to the course tool');
+    for (const tool of ['announcements', 'calendar', 'discussions', 'messages', 'groups', 'achievements']) {
+      await live('gradebook');
+      await page.evaluate((tool) => {
+        document.querySelector('.course-content-container > .panel-wrap').className = `panel-wrap ${tool}`;
+        history.replaceState({}, '', `/ultra/courses/_101_1/${tool}`);
+        GZ_SIDEBAR_UI.sync(true);
+      }, tool);
+      await page.waitForTimeout(100);
+      check(await page.evaluate(() => Math.abs(document.querySelector('.course-content-container > .panel-wrap').getBoundingClientRect().right + 16 - document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left) <= 1), `${tool}: the course tool panel keeps the sidebar's gap`);
     }
     console.log(JSON.stringify({ checks, fails }));
     process.exitCode = fails ? 1 : 0;

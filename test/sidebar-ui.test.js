@@ -24,7 +24,8 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
   doc.root = new El('html', doc);
   doc.body = parse(read(`test/fixtures/${fixture}`), doc);
   const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], keyListeners = [], winListeners = [], observers = [];
-  const net = { fail: false };
+  const net = { fail: false }, timers = new Map();
+  let timerId = 0;
   let queue = Promise.resolve();
   const fire = (v, old) => { for (const f of [...storeListeners]) f(Object.fromEntries(Object.keys(v).map((k) => [k, { newValue: structuredClone(v[k]), oldValue: old[k] }])), 'local'); };
   const area = {
@@ -35,7 +36,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
   const sync = { get: async () => ({ enhance: settings().enhance }) };
   const c = {
     console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, structuredClone,
-    setTimeout: () => 0, clearTimeout() {}, setImmediate,
+    setTimeout: (f, ms) => { const id = ++timerId; timers.set(id, { f, ms }); return id; }, clearTimeout: (id) => timers.delete(id), setImmediate,
     addEventListener: (type, f) => winListeners.push({ type, f }), removeEventListener: (type, f) => { const i = winListeners.findIndex((l) => l.type === type && l.f === f); if (i >= 0) winListeners.splice(i, 1); },
     innerWidth: width, innerHeight: 900, location: { origin: O, pathname: where },
     document: doc, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
@@ -81,7 +82,7 @@ const page = ({ fixture = 'canvas-course-home.html', where = '/courses/25', widt
   const mode = () => doc.root.dataset.gzSidebar;
   const host = () => doc.root.all().find((e) => e.dataset?.gzSidebarHost);
   const ours = (e) => { for (let p = e; p && p.tagName; p = p.parentNode) if (/^gz-/.test(p.id) || /(^|\s)gz-/.test(String(p.className))) return true; return false; };
-  return { c, doc, side, ui, store, sent, loads, net, observers, storeListeners, winListeners, pass, resize, $, mode, host, ours, fire: doc.fire };
+  return { c, doc, side, ui, store, sent, loads, net, timers, observers, storeListeners, winListeners, pass, resize, $, mode, host, ours, fire: doc.fire };
 };
 const record = (x = {}) => ({ [KEY]: { ...S.clean({ mig: 1, ...x }) } });
 
@@ -704,4 +705,139 @@ test('Canvas reserves the footer height before it scrolls into view, without mea
   assert.equal(p.winListeners.some((x) => x.type === 'scroll'), false, 'no per-scroll layout reads');
   p.side.sync(false);
   assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-foot'), '', 'teardown restores the page');
+});
+
+test('a disabled page never starts the sidebar runtime, and disabling an active page removes its listeners', async () => {
+  const p = page({ stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  p.c.sidebarSettings = { off: ['course'] };
+  await p.pass();
+  assert.equal(p.storeListeners.length, 0, 'no storage observer while off');
+  assert.equal(p.winListeners.filter((x) => x.type === 'resize').length, 0, 'no resize listener while off');
+  assert.equal(p.loads.length, 0, 'no state or migration work on a disabled page');
+  p.c.sidebarSettings = {};
+  await p.pass();
+  assert.equal(p.side.active(), true);
+  p.c.sidebarSettings = { off: ['course'] };
+  await p.pass();
+  assert.equal(p.storeListeners.length, 0);
+  assert.equal(p.winListeners.filter((x) => x.type === 'resize').length, 0);
+  assert.ok(p.observers.every((x) => !x.on));
+});
+
+test('resizing begins at the displayed settings width, with keyboard and pointer in either direction', async () => {
+  for (const dir of ['ltr', 'rtl']) {
+    const p = page({ width: 1800, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    p.doc.root.dir = dir;
+    p.c.sidebarSettings = { width: 416 };
+    await p.pass();
+    p.fire(p.$('.gz-sb-resize'), 'keydown', { key: dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft' });
+    await settle();
+    assert.equal(p.side.rec().width, 432, `${dir}: one keyboard step from the visible width`);
+    await p.side.op([{ op: 'reset' }]); await settle();
+    const grip = p.$('.gz-sb-resize');
+    p.fire(grip, 'pointerdown', { clientX: 1200 });
+    p.fire(grip, 'pointermove', { clientX: dir === 'rtl' ? 1220 : 1180 });
+    p.fire(grip, 'pointerup', { clientX: dir === 'rtl' ? 1220 : 1180 });
+    await settle();
+    assert.equal(p.side.rec().width, 436, `${dir}: drag from the visible width`);
+    p.side.sync(false);
+  }
+});
+
+test('each new route starts at the configured expansion without forgetting a choice during the same route', async () => {
+  const p = page({ width: 1800, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  p.c.sidebarSettings = { open: 'expanded' };
+  await p.pass();
+  p.$('.gz-sb-toggle').click(); await settle();
+  assert.equal(p.mode(), 'collapsed');
+  await p.pass();
+  assert.equal(p.mode(), 'collapsed');
+  p.c.location.pathname = '/courses/25/assignments/9';
+  await p.pass();
+  assert.equal(p.mode(), 'expanded', 'the next route starts expanded');
+});
+
+test('a floating card counts its outside inset when keeping the main content minimum', async () => {
+  const p = page({ fixture: 'canvas-course-grades.html', where: '/courses/25/grades', width: 1352, left: 84,
+    stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  await p.pass();
+  assert.equal(p.mode(), 'drawer', '900 + 352 + 16 leaves no room for the floating inset');
+  p.c.sidebarSettings = { style: 'embed' };
+  await p.pass();
+  assert.equal(p.mode(), 'expanded', 'the flush column fits at the exact threshold');
+  p.c.sidebarSettings = { style: 'float' };
+  await p.resize(1364);
+  assert.equal(p.mode(), 'expanded', 'the floating card fits with its inset');
+});
+
+test('Canvas page switches restore the legacy To Do hook when that page kind is disabled', async () => {
+  const p = page();
+  const calls = [];
+  p.c.sidebarSettings = { off: ['course'] };
+  await p.pass();
+  p.c.window = p.c; p.c.top = p.c;
+  p.c.I = { links: [1], get settings() { return p.c.GZ_CTX.settings(); } };
+  p.c.need = async () => {};
+  p.c.GZ_TODO_UI = { sync: (v) => calls.push(v) };
+  const hooks = read('content-canvas.js').match(/ {2}const sidebarHere = .*\n(?: {2}const \w+ = .*\n)*? {2}const syncTodo = .*\n/)[0];
+  await vm.runInContext(`${hooks}\nsyncTodo();`, p.c);
+  assert.equal(calls.at(-1), true, 'legacy To Do runs on a disabled course page');
+  p.c.GZ_SIDEBAR_UI = undefined;
+  await vm.runInContext('syncTodo();', p.c);
+  assert.equal(calls.at(-1), true, 'legacy To Do also runs before the disabled sidebar file arrives');
+});
+
+test('Canvas off matches the frozen pre-sidebar DOM and html attributes, including the Dashboard and To Do board tile', async () => {
+  const baseline = require('./fixtures/sidebar-legacy.json').canvas;
+  const snapshot = require('./sidebar-snapshot.js');
+  for (const kindOff of [false, true]) {
+    const sw = { sidebar: false, widgets: false, notes: false, pet: false, todo: true };
+    const p = page({ fixture: 'canvas-dashboard-cards.html', where: '/', width: 1700, left: 84, widgets: true, enhance: sw,
+      stored: { widgetLayout: W.layout({ canvasTodo: true, boards: { cdash: [{ id: 'todo', on: true }, { id: 'notes', on: false }] } }) } });
+    p.c.GZ_TODO = require('../lib/todo.js');
+    p.c.GZ_TODO_UI = { sync() {}, mount() {}, unmount() {} };
+    p.ui.sync(true); await settle();
+    assert.deepEqual(snapshot(p, ['#right-side-wrapper', '#gz-dash']), baseline, 'off from startup');
+    const native = p.$('#right-side').children.map((e) => [e, e.parentNode]);
+    sw.sidebar = true;
+    await p.pass();
+    if (kindOff) p.c.sidebarSettings = { off: ['dashboard'] }; else sw.sidebar = false;
+    p.side.sync(!kindOff ? false : true); p.ui.sync(true); await settle();
+    assert.deepEqual(snapshot(p, ['#right-side-wrapper', '#gz-dash']), baseline, `off after on, page switch: ${kindOff}`);
+    for (const [e, parent] of native) assert.equal(e.parentNode, parent);
+    assert.equal(p.$('.gz-sb-head'), null);
+  }
+});
+
+test('turning off cancels the failed-start retry timer', async () => {
+  const p = page();
+  p.c.GZ_CTX.account = async () => '';
+  await p.pass();
+  assert.equal([...p.timers.values()].filter((x) => x.ms === 60000).length, 1);
+  p.side.sync(false);
+  assert.equal(p.timers.size, 0, 'no startup retry or status timer survives off');
+});
+
+test('a renamed sidebar renders a sanitized length-limited title as text in its labelled landmark', async () => {
+  const p = page({ width: 1800, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const raw = ' \u202e<img src=x onerror=alert(1)> ' + '💠'.repeat(50);
+  p.c.sidebarSettings = { title: raw };
+  await p.pass();
+  assert.equal(p.$('#gz-sb-title').textContent, D.GZ_SANITIZE({ sidebar: { title: raw } }).sidebar.title);
+  assert.equal([...p.$('#gz-sb-title').textContent].length, 40);
+  assert.equal(p.$('#gz-sb-title img'), null);
+  assert.equal(p.host().getAttribute('aria-labelledby'), 'gz-sb-title');
+  assert.equal(p.host().getAttribute('role'), 'complementary');
+});
+
+test('a disabled Canvas page kind keeps the legacy widget-loader boundary in course frames', async () => {
+  const p = page();
+  p.c.sidebarSettings = { off: ['course'] };
+  p.c.window = p.c; p.c.top = {};
+  p.c.I = { links: [1], tabFrame: 'course', get settings() { return p.c.GZ_CTX.settings(); } };
+  const src = read('content-canvas.js');
+  const hooks = ['sidebarHere', 'sidebarOn', 'widgetsHere'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))?.[0] || '').join('');
+  assert.equal(vm.runInContext(`${hooks}\n!!widgetsHere();`, p.c), false);
+  p.c.sidebarSettings = {};
+  assert.equal(vm.runInContext('!!widgetsHere();', p.c), true);
 });

@@ -65,8 +65,8 @@
     inset-inline-end: 0; inset-inline-start: auto; height: auto !important; max-height: none;
   }
   /* The room the page keeps beside the column: its width, the gap, and a floating card's inset. */
-  html[data-gz-sidebar="expanded"] { --gz-sb-room: calc(var(--gz-sidebar-w) + 16px + var(--gz-sb-inset, 0px)); }
-  html[data-gz-sidebar="collapsed"] { --gz-sb-room: calc(3rem + 16px + var(--gz-sb-inset, 0px)); }
+  html[data-gz-sidebar="expanded"] { --gz-sb-room: calc(var(--gz-sidebar-w) + 16px + var(--gz-sb-inset, 0px) + var(--gz-sb-safe, 0px)); }
+  html[data-gz-sidebar="collapsed"] { --gz-sb-room: calc(3rem + 16px + var(--gz-sb-inset, 0px) + var(--gz-sb-safe, 0px)); }
   /* Ultra's Courses page keeps the room on the whole page (its header and Glaze's toolbar in it, the list or grid, the
      filters and pagination), not only the list beside the column. */
   html[data-gz-sb-ultra]:not([data-gz-sb-fixed]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(.base-courses-container, .course-outline-content),
@@ -81,12 +81,14 @@
   html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap {
     width: auto !important; inset-inline-start: 0 !important; inset-inline-end: var(--gz-sb-room) !important; max-width: none !important;
   }
+  html[data-gz-sb-tool]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: 0 !important; }
   /* A discussion's details column is the sidebar, fixed at the edge: the thread takes the grid's whole width, short of
      the column's room. Below Ultra's large breakpoint its participants hide themselves, as before. */
-  html[data-gz-sb-family="discussion"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-main-container:has(> [data-gz-sidebar-host]) {
-    grid-template-columns: minmax(0, 1fr) !important; padding-inline-end: var(--gz-sb-room) !important; box-sizing: border-box;
+  html[data-gz-sb-family="discussion"][data-gz-sidebar] .course-main-container:has(> [data-gz-sidebar-host]) {
+    grid-template-columns: minmax(0, 1fr) !important; box-sizing: border-box;
   }
-  html[data-gz-sb-family="discussion"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-main-container:has(> [data-gz-sidebar-host]) > :not([data-gz-sidebar-host]) { grid-column: 1 / -1 !important; }
+  html[data-gz-sb-family="discussion"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-main-container:has(> [data-gz-sidebar-host]) { padding-inline-end: var(--gz-sb-room) !important; }
+  html[data-gz-sb-family="discussion"][data-gz-sidebar] .course-main-container:has(> [data-gz-sidebar-host]) > :not([data-gz-sidebar-host]) { grid-column: 1 / -1 !important; }
   /* The overview's projection is a Glaze-owned, screen-only sheet; native nodes carry no markers or inline styles. */
   .gz-sb-slot { display: block; pointer-events: none; }
   html:not([data-gz-sidebar="expanded"]) .gz-sb-slot, .gz-sb-slot:not([style*="height"]) { display: none; }
@@ -191,7 +193,7 @@
      Corners and spacing follow the Look unless chosen. The ids in the selectors outweigh Canvas's ground rule
      (canvas.css), which paints #right-side-wrapper and #right-side with the page's ground. */
   :root {
-    --gz-sb-r: var(--gz-radius, 12px); --gz-sb-pad: calc(1rem * var(--gz-space, 1)); --gz-sb-gap: calc(0.75rem * var(--gz-space, 1)); --gz-sb-inset: 0px;
+    --gz-sb-r: var(--gz-radius, 12px); --gz-sb-pad: calc(1rem * var(--gz-space, 1)); --gz-sb-gap: calc(0.75rem * var(--gz-space, 1)); --gz-sb-inset: 0px; --gz-sb-safe: 0px;
     --gz-sb-paint: var(--gz-surface-paint, var(--gz-surface-fill, var(--gz-surface)));
     --gz-sb-fill: color-mix(in srgb, var(--gz-sb-paint) var(--gz-sb-alpha, 88%), transparent); --gz-sb-filter: blur(var(--gz-sb-blur, 16px)) saturate(1.2);
     --gz-sb-head-fill: var(--gz-sb-fill);
@@ -205,7 +207,8 @@
   html[data-gz-sb-density="compact"] { --gz-sb-pad: 0.65rem; --gz-sb-gap: 0.5rem; }
   html[data-gz-sb-density="cozy"] { --gz-sb-pad: 1rem; --gz-sb-gap: 0.75rem; }
   html[data-gz-sb-density="comfortable"] { --gz-sb-pad: 1.3rem; --gz-sb-gap: 1rem; }
-  html[data-gz-sb-style="float"] { --gz-sb-inset: 12px; }
+  html[data-gz-sb-style="float"] { --gz-sb-inset: 12px; --gz-sb-safe: env(safe-area-inset-right, 0px); }
+  html[dir="rtl"][data-gz-sb-style="float"] { --gz-sb-safe: env(safe-area-inset-left, 0px); }
   /* The inner corners: blocks and widgets in the column, a little tighter than the column's own. */
   :root { --gz-sb-ir: max(0px, calc(var(--gz-sb-r) - 4px)); }
 
@@ -215,10 +218,10 @@
   }
   /* Floating: a card off the edges. */
   html[data-gz-sb-style="float"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] {
-    top: calc(var(--gz-sb-top, 0px) + var(--gz-sb-inset)) !important; bottom: calc(var(--gz-sb-end) + var(--gz-sb-inset)) !important; inset-inline-end: calc(var(--gz-sb-inset) + env(safe-area-inset-right, 0px)) !important;
+    top: calc(var(--gz-sb-top, 0px) + var(--gz-sb-inset)) !important; bottom: calc(var(--gz-sb-end) + var(--gz-sb-inset)) !important; inset-inline-end: calc(var(--gz-sb-inset) + var(--gz-sb-safe)) !important;
     border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-sb-r) !important; box-shadow: var(--gz-shadow) !important;
   }
-  html[data-gz-sb-style="float"][data-gz-sidebar="drawer"][data-gz-sidebar-open] :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] { width: min(var(--gz-sidebar-w), calc(100vw - 2 * var(--gz-sb-inset) - 16px)) !important; }
+  html[data-gz-sb-style="float"][data-gz-sidebar="drawer"][data-gz-sidebar-open] :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] { width: min(var(--gz-sidebar-w), calc(100vw - 2 * var(--gz-sb-inset) - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))) !important; }
   html[data-gz-sb-style="float"] .gz-sb-head { border-radius: var(--gz-sb-r) var(--gz-sb-r) 0 0; }
   html[data-gz-sb-style="float"] .gz-sb-resize { inset-inline-start: -4px; }
   /* Embedded: flush, a hairline inside, no outer corners. */
@@ -227,8 +230,8 @@
   }
   html[data-gz-sb-style="embed"][data-gz-sidebar="drawer"][data-gz-sidebar-open] :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] { box-shadow: var(--gz-shadow) !important; }
   /* The page keeps clear of a floating card's inset too. */
-  html[data-gz-sb-style="float"][data-gz-sidebar="expanded"] #not_right_side { padding-inline-end: calc(var(--gz-sidebar-w) + 16px + var(--gz-sb-inset)) !important; }
-  html[data-gz-sb-style="float"][data-gz-sidebar="collapsed"] #not_right_side { padding-inline-end: calc(64px + var(--gz-sb-inset)) !important; }
+  html[data-gz-sb-style="float"][data-gz-sidebar="expanded"] #not_right_side { padding-inline-end: var(--gz-sb-room) !important; }
+  html[data-gz-sb-style="float"][data-gz-sidebar="collapsed"] #not_right_side { padding-inline-end: var(--gz-sb-room) !important; }
 
   /* Canvas's own blocks in the column: never its square ground-painted box. #right-side is see-through and unpadded;
      each block in it is an inner panel with the Look's fill, line and the inner corners. Nothing is moved. */
@@ -257,6 +260,9 @@
   /* This page hidden (sidebar.page): only Glaze's parts show. */
   [data-gz-sb-page-hidden] > #right-side, [data-gz-sb-page-hidden] > .gz-sb-pagehead,
   [data-gz-sb-page-hidden][data-gz-sb-self] > :not(.gz-sb-resize, .gz-sb-head, #gz-sb-widgets) { display: none !important; }
+
+  html[data-gz-focus][data-gz-sidebar] { --gz-sb-room: 0px; }
+  html[data-gz-focus][data-gz-sidebar] #not_right_side { padding-inline-end: 0 !important; }
 
   /* A course tab's frame on screen has the sidebar: the page under it shows none of its own (a hidden frame neither). */
   html[data-gz-ctab-framed] :is(#gz-sidebar, .gz-sb-edge, .gz-sb-launch, .gz-sb-backdrop, .gz-sb-menu) { display: none !important; }

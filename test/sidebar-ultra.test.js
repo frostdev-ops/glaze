@@ -334,10 +334,10 @@ test('Ultra\'s Dashboard stays a board; Move to Dashboard sends a docked widget 
 test('content-ultra.js: the sidebar on the page and in a course tab\'s frame (dock widgets only there), with Better To Do\'s old places off while it runs', () => {
   const src = read('content-ultra.js');
   assert.match(src, /const sidebarHere = \(\) => !!top\(\)\?\.sidebar && I\.settings\.sidebar\?\.ultra !== false && \/\^/);
-  assert.match(src, /if \(e && tabFrame\) return sidebarHere\(\) && /);
+  assert.match(src, /if \(e && tabFrame\) return sidebarOn\(\) && /);
   assert.match(src, /const syncSidebar = \(\) => load\(sidebarHere, 'features\/sidebar\.js', 'GZ_SIDEBAR_UI'\);/);
-  assert.match(src, /\(e\.todo && sidebarHere\(\)\)/);
-  assert.match(src, /!\(sidebarHere\(\) && !globalThis\.GZ_SIDEBAR_UI\?\.failed\(\)\)/);
+  assert.match(src, /\(e\.todo && sidebarOn\(\)\)/);
+  assert.ok(src.includes("sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()"));
   assert.match(src, /const syncWidgets = \(\) => \{\n {4}syncSidebar\(\);/);
 });
 
@@ -542,7 +542,7 @@ test('an assignment overview gets the assignment family and Glaze\'s own column;
   // The course's absolute tool panel ends at the column's edge and the gap (features/sidebar.css).
   const css = read('features/sidebar.css');
   assert.match(css, /html\[data-gz-sb-fixed\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*inset-inline-end: var\(--gz-sb-room\) !important/);
-  assert.match(css, /html\[data-gz-sidebar="expanded"\] \{ --gz-sb-room: calc\(var\(--gz-sidebar-w\) \+ 16px \+ var\(--gz-sb-inset, 0px\)\); \}/);
+  assert.match(css, /html\[data-gz-sidebar="expanded"\] \{ --gz-sb-room: calc\(var\(--gz-sidebar-w\) \+ 16px \+ var\(--gz-sb-inset, 0px\) \+ var\(--gz-sb-safe, 0px\)\); \}/);
 });
 
 test("a pinned column's height is its top and bottom's, whatever height the site gives it", () => {
@@ -558,4 +558,62 @@ test("a pinned column's height is its top and bottom's, whatever height the site
     assert.match(r, /bottom: var\(--gz-sb-end\)/, head);
     assert.match(r, /height: auto !important/, head);
   }
+});
+
+test('Ultra page switches restore the legacy To Do hook when that page kind is disabled', async () => {
+  const p = page({ at: 'courses' });
+  const calls = [];
+  p.c.sidebarSettings = { off: ['dashboard'] };
+  await p.pass();
+  p.c.I = { links: [1], get settings() { return p.c.GZ_CTX.settings(); } };
+  p.c.solo = true;
+  p.c.need = async () => {};
+  p.c.GZ_TODO_UI = { sync: (v) => calls.push(v) };
+  const src = read('content-ultra.js');
+  const hooks = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
+  await vm.runInContext(`${hooks}\nsyncTodo();`, p.c);
+  assert.equal(calls.at(-1), true, 'legacy To Do runs on a disabled Courses page');
+  p.c.GZ_SIDEBAR_UI = undefined;
+  await vm.runInContext('syncTodo();', p.c);
+  assert.equal(calls.at(-1), true, 'legacy To Do also runs before the disabled sidebar file arrives');
+});
+
+test('Ultra off matches the frozen pre-sidebar Courses board DOM and html attributes', async () => {
+  const baseline = require('./fixtures/sidebar-legacy.json').ultra;
+  const snapshot = require('./sidebar-snapshot.js');
+  for (const kindOff of [false, true]) {
+    const sw = { sidebar: false, widgets: false, notes: false, pet: false, todo: true };
+    const p = page({ at: 'courses', widgets: true, todo: true, enhance: sw,
+      stored: { widgetLayout: W.layout({ todo: true, tiles: [{ id: 'todo', on: true }, { id: 'notes', on: false }] }) } });
+    await p.pass();
+    assert.deepEqual(snapshot(p, ['#site-wrap']), baseline, 'off from startup');
+    sw.sidebar = true;
+    await p.pass();
+    if (kindOff) p.c.sidebarSettings = { off: ['dashboard'] }; else sw.sidebar = false;
+    await p.pass();
+    assert.deepEqual(snapshot(p, ['#site-wrap']), baseline, `off after on, page switch: ${kindOff}`);
+    assert.equal(p.$('.gz-sb-head'), null);
+  }
+});
+
+test('a hidden outgoing outline cannot erase the Gradebook navigation allowance', async () => {
+  const p = page({ at: 'gradebook', width: 1400, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const outgoing = p.el('section', 'course-outline-content');
+  outgoing.box = { left: 0, top: 0, width: 0, height: 0 };
+  p.$('#main-content-inner').prepend(outgoing);
+  await p.pass();
+  assert.equal(p.mode(), 'drawer', 'the Gradebook still needs 900px after the visible navigation');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-left'), '200px');
+});
+
+test('a disabled Ultra page kind keeps the legacy widget-loader boundary in course frames', async () => {
+  const p = page({ at: 'courses' });
+  p.c.sidebarSettings = { off: ['dashboard'] };
+  p.c.I = { links: [1], get settings() { return p.c.GZ_CTX.settings(); } };
+  p.c.solo = true; p.c.tabFrame = 'course';
+  const src = read('content-ultra.js');
+  const hooks = ['top', 'sidebarHere', 'sidebarOn', 'widgetsHere'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))?.[0] || '').join('');
+  assert.equal(vm.runInContext(`${hooks}\n!!widgetsHere();`, p.c), false);
+  p.c.sidebarSettings = {};
+  assert.equal(vm.runInContext('!!widgetsHere();', p.c), true);
 });

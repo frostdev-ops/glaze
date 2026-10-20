@@ -214,6 +214,7 @@ const STYLE_READS = [
   ['features/sidebar.js', 'getComputedStyle(html())', 1], // the root's navigation offsets in a batched sidebar layout pass
   ['features/sidebar.js', 'getComputedStyle(x)', 1], // only the drawer's focusable controls, on Tab or a focus escape
   ['features/sidebar.js', 'getComputedStyle(node)', 1], // one exact overview and at most 30 ancestors, only when starting a projection; none on scroll or while off
+  ['features/sidebar.js', 'getComputedStyle(p)', 1], // visible Ultra course tool panels: reserve their width once, in the absolute panel
   ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later

@@ -125,8 +125,8 @@ const layoutOk = async (name, width) => {
       await layoutOk(name, 1600);
     }
     const STYLE_PAGES = [['dashboard', '/'], ['course-home', `/courses/${calc.id}`], ...PAGES.filter(([n]) => n === 'discussion' || n === 'assignment')];
-    for (const style of process.env.SIDEBAR_SCROLL_ONLY ? [] : ['float', 'embed']) for (const [preset, dark] of [['Frost', true], ['Paper', false]]) {
-      await store(settings(true, false, { preset, colors: G.GZ_PRESETS.find(([n]) => n === preset)[1], sidebar: { style } }), { widgetLayout: lay });
+    for (const style of process.env.SIDEBAR_SCROLL_ONLY ? [] : ['float', 'embed']) for (const [preset, dark] of [['Frost', true], ['Paper', false]]) for (const surface of ['glass', 'solid']) {
+      await store(settings(true, false, { preset, colors: G.GZ_PRESETS.find(([n]) => n === preset)[1], sidebar: { style, surface } }), { widgetLayout: lay });
       for (const [name, where] of STYLE_PAGES) {
         await page.goto(local + where); await page.waitForSelector('[data-gz-sidebar-host]');
         await page.waitForTimeout(400);
@@ -136,18 +136,20 @@ const layoutOk = async (name, width) => {
           const blocks = rs ? [...rs.children].filter((e) => e.getClientRects().length && e.textContent.trim()).map((e) => parseFloat(getComputedStyle(e).borderTopLeftRadius)) : [];
           const c = document.getElementById('content')?.getBoundingClientRect();
           return { mode: document.documentElement.dataset.gzSidebar, style: document.documentElement.dataset.gzSbStyle, radius: parseFloat(cs.borderTopLeftRadius), right: innerWidth - r.right, bg: cs.backgroundImage + cs.backgroundColor,
-            rsBg: rcs?.backgroundColor, rsRadius: rcs && parseFloat(rcs.borderTopLeftRadius), blocks, clear: !c || c.right <= r.left - 15 };
+            filter: cs.backdropFilter, border: parseFloat(cs.borderInlineStartWidth), shadow: cs.boxShadow, rsBg: rcs?.backgroundColor, rsRadius: rcs && parseFloat(rcs.borderTopLeftRadius), blocks, clear: !c || c.right <= r.left - 15 };
         });
-        const tag = `${name} ${style} ${dark ? 'dark' : 'light'}`;
+        const tag = `${name} ${style} ${surface} ${dark ? 'dark' : 'light'}`;
         probe(g.style === style, `${tag}: data-gz-sb-style`);
         if (g.mode === 'expanded') {
           probe(style === 'float' ? g.radius > 0 && g.right >= 10 : g.radius === 0 && g.right <= 1, `${tag}: ${style === 'float' ? 'a card off the edge' : 'flush with the edge'} (radius ${g.radius}, right ${g.right})`);
           probe(!/rgba\(0, 0, 0, 0\)$/.test(g.bg) || /gradient|color-mix|rgb/.test(g.bg), `${tag}: the column has a surface`);
+          probe(surface === 'solid' ? g.filter === 'none' : g.filter.includes('blur'), `${tag}: the chosen surface filter`);
+          probe(g.border > 0 && (style === 'float' ? g.shadow !== 'none' : g.shadow === 'none'), `${tag}: border and shadow match the style`);
           if (g.rsBg !== undefined) probe(g.rsBg === 'rgba(0, 0, 0, 0)', `${tag}: Canvas's #right-side is see-through, not its ground box (${g.rsBg})`);
           probe(g.blocks.every((x) => x > 0), `${tag}: Canvas's blocks are rounded inner panels (${g.blocks.join(',')})`);
           probe(g.clear, `${tag}: the content keeps clear of the column`);
         }
-        await shot(`p6-canvas-${name}-${style}-${dark ? 'dark' : 'light'}`);
+        await shot(`p6-canvas-${name}-${style}-${surface}-${dark ? 'dark' : 'light'}`);
       }
     }
     if (process.env.SIDEBAR_STYLES_ONLY) { console.log(JSON.stringify({ checks, failures: failures.length, errors })); process.exitCode = failures.length ? 1 : 0; return; }
@@ -410,6 +412,12 @@ const layoutOk = async (name, width) => {
       await shot(`polish-footer-${footer ? 'on' : 'off'}${navbar ? '-navbar' : ''}-${w}`);
       if (s.mode === 'drawer') await page.keyboard.press('Escape');
     }
+
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.goto(`${local}/courses/${calc.id}`); await page.waitForSelector('[data-gz-sidebar-host]');
+    await page.locator('html').evaluate((e) => e.setAttribute('data-gz-focus', ''));
+    probe(await page.locator('#not_right_side').evaluate((e) => parseFloat(getComputedStyle(e).paddingInlineEnd) === 0), 'focus-document mode returns the sidebar room immediately');
+    await page.locator('html').evaluate((e) => e.removeAttribute('data-gz-focus'));
 
     // The Look's: a light and two dark presets, the column's surface and text from each; 640px (1280 at 200% zoom).
     const bgs = {};

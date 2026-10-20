@@ -8,18 +8,25 @@ const C = require('../lib/cards.js');
 
 const source = fs.readFileSync(require.resolve('../options.js'), 'utf8');
 const backup = source.slice(source.indexOf('  // ---- backup ----'), source.indexOf('  // Two clicks, so a stray'));
-const restore = async (src, kind = 'media') => {
-  const raw = { ...structuredClone(G.GZ_DEFAULTS), bg: { ...G.GZ_DEFAULTS.bg, kind }, parts: { x: { bg: { media: { type: 'video', src } }, cursor: { kind: 'glow' } } } };
+const restore = async (src, kind = 'media', extra = {}, roundTrip = false) => {
+  let raw = { ...structuredClone(G.GZ_DEFAULTS), bg: { ...G.GZ_DEFAULTS.bg, kind }, parts: { x: { bg: { media: { type: 'video', src } }, cursor: { kind: 'glow' } } }, ...extra };
   const elements = {}, sent = [], hints = [], s = {};
+  let exported;
   const context = {
-    s, navigator: {}, document: {}, URL, Blob, setTimeout, structuredClone, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: C, GZ_XPARTS: P,
-    GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_FOLDERS: { backup: () => ({}) }, N: { clean: () => ({}) },
+    s, navigator: {}, document: { createElement: () => ({ click() {} }) }, URL: { createObjectURL: (blob) => { exported = blob; return 'blob:test'; }, revokeObjectURL() {} }, Blob, setTimeout: () => 0, structuredClone, GZ_SANITIZE: G.GZ_SANITIZE, GZ_CARDS: C, GZ_XPARTS: P,
+    GZ_TODO: { STORE_KEY: /^todo:/ }, GZ_PET: { KEY: /^pet:/, backup: () => ({}) }, GZ_NAVBAR: { clean: () => ({}) }, GZ_FOLDERS: { backup: () => ({}) }, N: { clean: () => ({}) },
     $: (id) => (elements[id] ||= { addEventListener: (type, fn) => { elements[id][type] = fn; } }),
     flush() {}, fill() {}, renderNavItems() {}, showNavPreview() {}, cardsOp: async () => true,
     hint: (...v) => hints.push(v), t: (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => vars[k]),
-    chrome: { runtime: { sendMessage: (m, cb) => { sent.push(m); cb?.({ ok: true }); } } },
+    chrome: { storage: { local: { get: async () => ({}) }, sync: { get: async () => ({}) } }, runtime: { sendMessage: (m, cb) => { if (m.type === 'glaze:sessions') return Promise.resolve({ ok: true, keys: [] }); sent.push(m); cb?.({ ok: true }); } } },
   };
   vm.runInNewContext(backup, context);
+  if (roundTrip) {
+    Object.assign(s, G.GZ_SANITIZE(raw));
+    await elements['#export'].click({ isTrusted: true });
+    assert.ok(exported, hints.map((x) => x[0]).join(', '));
+    raw = JSON.parse(await exported.text());
+  }
   await elements['#import'].change({ isTrusted: true, target: { files: [{ name: 'backup.json', text: async () => JSON.stringify(raw) }] } });
   return { s, sent: JSON.parse(JSON.stringify(sent)), hints };
 };
@@ -39,4 +46,13 @@ test('backup restore preserves URL backgrounds and inactive media drafts', async
     assert.equal(r.s.parts.x.bg.media.src, src);
     assert.equal(r.hints.at(-1)[0], 'Imported backup.json.');
   }
+});
+
+test('Backup export and import preserve every synced sidebar option through the real handlers', async () => {
+  const sidebar = { title: 'My tools', style: 'embed', open: 'drawer', width: 416, order: 'widgets', page: 'folded', heading: false, jump: false,
+    surface: 'solid', blur: 30, opacity: 60, radius: 'large', density: 'compact', min: 800, grades: 1000, canvas: false, ultra: false,
+    off: ['discussion', 'quiz'], todo: 'all', absorb: false };
+  const r = await restore('https://cdn.example.com/loop.webm', 'media', { sidebar }, true);
+  assert.deepEqual(r.sent[0].restore.settings.sidebar, sidebar);
+  assert.deepEqual(r.s.sidebar, sidebar);
 });

@@ -103,8 +103,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       // Where the page's content starts: a course's panel, else the page (#main-content-inner, whose start padding is
       // Glaze's bar's room), right of Ultra's own nav.
       left() {
-        const m = document.querySelector('.course-outline-content') || document.querySelector('div.bb-course-navigation')
-          || document.querySelector('.routed-page.bb-offcanvas-container') || document.getElementById('main-content-inner');
+        // An outgoing view may stay mounted but hidden while the next course tool is shown.
+        const m = ['.course-outline-content', 'div.bb-course-navigation', '.routed-page.bb-offcanvas-container', '#main-content-inner']
+          .flatMap((s) => [...document.querySelectorAll(s)]).find((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
         if (!m) return 0;
         const r = m.getBoundingClientRect();
         let pad = 0;
@@ -130,6 +131,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const styleOf = () => { const c = cfg().style ?? 'float'; return c === 'auto' ? (ctx.settings().navbar?.style === 'embed' ? 'embed' : 'float') : c === 'embed' ? 'embed' : 'float'; };
   const KIND = { dashboard: 'dashboard', courses: 'dashboard', 'course-home': 'course', outline: 'course', discussion: 'discussion', assignment: 'assignment', assessment: 'assignment', grades: 'grades', calendar: 'calendar', syllabus: 'calendar', quiz: 'quiz' };
   const offOn = (fam) => (cfg().off || []).includes(KIND[fam] || 'other');
+  const enabled = () => ctx.settings().enhance.sidebar !== false && cfg()[LMS] !== false && !offOn(A.family());
   const name = () => cfg().title || t('Sidebar');
   // Native To Do lists Better To Do can take the place of (features/apps.css hides them while data-gz-sidebar-todo is set).
   const NATIVE_TODO = '.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list, bb-todo';
@@ -153,7 +155,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0, modalAway = false;
   let modalObserver = null, backdrop = null, widthCancel = null, lifted = null;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
-  let mo = null, frame = 0, noteTimer = 0, passFrame = 0, offer = null, asleep = false;
+  let mo = null, frame = 0, noteTimer = 0, retryTimer = 0, passFrame = 0, offer = null, asleep = false;
   let openHere = null; // expanded or collapsed on this page, when the settings start each page one way
   const isOpen = () => (['expanded', 'collapsed'].includes(cfg().open) ? openHere ?? cfg().open === 'expanded' : rec.open);
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
@@ -229,11 +231,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Resolves true once the record is in, false if it can't be here (no account, the extension reloaded): then the page
   // stays as it was, and it tries again after a minute.
   const ready = () => {
+    if (!enabled()) return Promise.resolve(false);
     const g = epoch;
     return (starting ||= start().then((ok) => { if (g === epoch) failed = false; return ok; }, () => {
       if (g !== epoch) return false;
       failed = true;
-      setTimeout(() => { if (g === epoch) { starting = null; failed = false; } }, 60000);
+      retryTimer = setTimeout(() => { if (g === epoch) { starting = null; failed = false; } }, 60000);
       return false;
     }));
   };
@@ -509,10 +512,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
 
   // ---- the layout ---------------------------------------------------------------------------------------------------
   const widgetsOn = () => { const e = ctx.settings().enhance; return e.widgets || e.notes || e.pet || e.todo; };
-  const setVar = (k, v) => { const s = html().style; if (s.getPropertyValue(k) !== v) s.setProperty(k, v); };
+  let hadStyle = null;
+  const setVar = (k, v) => { if (hadStyle === null) hadStyle = html().hasAttribute('style'); const s = html().style; if (s.getPropertyValue(k) !== v) s.setProperty(k, v); };
   const setAttr = (el, k, v) => { if (v === false || v == null) { if (el.hasAttribute(k)) el.removeAttribute(k); } else if (el.getAttribute(k) !== v) el.setAttribute(k, v); };
   const minMain = () => { const c = cfg(); return family === 'grades' ? c.grades ?? S.MAIN_GRADES : c.min ?? S.MAIN; };
-  const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - S.GAP - minMain());
+  let safeEnd = 0;
+  const inset = () => styleOf() === 'float' ? 12 : 0;
+  const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - inset() - safeEnd - S.GAP - minMain());
   // How the sidebar looks (the settings): on <html>, for features/sidebar.css.
   const dress = () => {
     const c = cfg(), h = html();
@@ -530,12 +536,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const layout = () => {
     if (!active || !host || asleep) return;
     dress();
+    const css = typeof getComputedStyle === 'function' ? getComputedStyle(html()) : null;
+    safeEnd = styleOf() === 'float' ? parseFloat(css?.getPropertyValue('--gz-sb-safe')) || 0 : 0;
     const hidePage = cfg().page === 'hidden';
     const shownPanels = family === 'assessment' && host.own ? absorbable() : [];
     const pageEmpty = hidePage || ((!host.page || (ultra && A.overlay()) || !filled(host.page)) && !shownPanels.length);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
     const width = S.shown(rec, cfg()).width;
-    const m = S.mode({ vw: innerWidth, left: A.left(), width: dragW || width, min: minMain(), empty: pageEmpty && !docked && !forced, open: isOpen() });
+    const m = S.mode({ vw: innerWidth, left: A.left(), right: inset() + safeEnd, width: dragW || width, min: minMain(), empty: pageEmpty && !docked && !forced, open: isOpen() });
     // Over a layer (A.overlay: Ultra's details column), as a standalone fallback, or set to (sidebar.open), with anything
     // to show, a drawer.
     const next = (forced || ((host.fallback || A.overlay?.() || cfg().open === 'drawer') && m.mode !== 'none')) && m.mode !== 'drawer' ? 'drawer' : m.mode;
@@ -544,6 +552,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
     setAttr(html(), 'data-gz-sb-fixed', host.own && A.own ? '' : false);
     setAttr(html(), 'data-gz-sb-ultra', ultra ? '' : false);
+    // Absolute course tools reserve room in their panel, instead of also narrowing its containing page.
+    const tool = ultra && host.own && [...document.querySelectorAll('.course-content-container > .panel-wrap')].some((p) =>
+      p.getBoundingClientRect().width > 0 && typeof getComputedStyle === 'function' && getComputedStyle(p).position === 'absolute');
+    setAttr(html(), 'data-gz-sb-tool', tool ? '' : false);
     setAttr(html(), 'data-gz-sb-family', family || false);
     setAttr(host.el, 'data-gz-sb-overlay', ultra && A.overlay() ? '' : false);
     setAttr(html(), 'data-gz-sidebar', next);
@@ -551,7 +563,6 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setVar('--gz-sidebar-w', `${w}px`);
     setVar('--gz-sb-left', `${A.left()}px`);
     const main = document.getElementById('main');
-    const css = typeof getComputedStyle === 'function' ? getComputedStyle(html()) : null;
     const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
     // Ultra's adapter says where a fixed column starts (a course's top bar), else below the navigation.
     const top = A.top ? A.top() ?? navTop : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0));
@@ -622,16 +633,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     asleep = false;
     build();
     const path = location.pathname + (location.search || '');
-    if (route !== path) { absorbInvalid(); route = path; genOf(); closeDrawer(false); }
+    if (route !== path) { absorbInvalid(); route = path; openHere = null; genOf(); closeDrawer(false); }
     const fam = A.family(), cid = A.courseId();
     // A kind of page the sidebar is off on (sidebar.off): the page as the LMS has it, no dock, until a page it is on.
-    if (offOn(fam)) {
-      if (fam !== family || cid !== course) { family = fam; course = cid; gen++; }
-      closeDrawer(false); detach(); bare();
-      for (const b of [edge, launch, backdrop]) b?.remove();
-      if (active) { active = false; mode = 'none'; emit('change'); }
-      return;
-    }
+    if (!enabled()) { teardown(); return; }
     const moved = fam !== family || cid !== course;
     const n = A.native();
     if (moved && !settled(fam, cid, n)) return;
@@ -688,7 +693,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || mode !== 'expanded') return;
       e.preventDefault();
-      const x0 = e.clientX, w0 = rec.width, max = Math.max(S.MIN_WIDTH, roomFor());
+      const x0 = e.clientX, w0 = S.shown(rec, cfg()).width, max = Math.max(S.MIN_WIDTH, roomFor());
       const move = (ev) => {
         dragW = Math.max(S.MIN_WIDTH, Math.min(max, w0 + (rtl() ? ev.clientX - x0 : x0 - ev.clientX)));
         setVar('--gz-sidebar-w', `${dragW}px`);
@@ -699,7 +704,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
         const w = dragW;
         dragW = 0;
-        if (ev?.type === 'pointerup' && w && w !== rec.width) keep(w); else layout();
+        if (ev?.type === 'pointerup' && w && w !== w0) keep(w); else layout();
       };
       widthCancel = () => up(null);
       el.setPointerCapture?.(e.pointerId);
@@ -708,7 +713,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     el.addEventListener('keydown', (e) => {
       const step = e.shiftKey ? 64 : 16;
       const by = { ArrowLeft: step, ArrowRight: -step }[e.key];
-      const w = by ? rec.width + (rtl() ? -by : by) : e.key === 'Home' ? S.MIN_WIDTH : e.key === 'End' ? S.MAX_WIDTH : null;
+      const w = by ? S.shown(rec, cfg()).width + (rtl() ? -by : by) : e.key === 'Home' ? S.MIN_WIDTH : e.key === 'End' ? S.MAX_WIDTH : null;
       if (w === null) return;
       e.preventDefault();
       keep(Math.min(w, Math.max(S.MIN_WIDTH, roomFor())));
@@ -887,6 +892,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     cancelAnimationFrame(frame);
     cancelAnimationFrame(passFrame);
     clearTimeout(noteTimer);
+    clearTimeout(retryTimer);
     nativeView = null; route = '';
     asleep = false;
     bare();
@@ -899,16 +905,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     mode = 'none';
   };
   // <html> as before the sidebar: its attributes and variables gone.
-  const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family',
+  const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool',
     'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle'];
   const bare = () => {
     const h = html();
     if (!h) return;
     for (const k of SB_ATTRS) h.removeAttribute(k);
-    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha']) h.style?.removeProperty?.(k);
+    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha']) if (h.style?.getPropertyValue?.(k)) h.style.removeProperty(k);
+    if (hadStyle === false && h.getAttribute('style') === '') h.removeAttribute('style');
+    hadStyle = null;
   };
   const sync = (want) => {
-    on = !!want;
+    on = !!want && enabled();
     if (!on) { teardown(); return; }
     document.addEventListener('visibilitychange', cover);
     ready().then(async (ok) => {
@@ -919,7 +927,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (g !== epoch || !on) return;
       if (S.key(LMS, location.origin, uid) !== key) { teardown(); sync(true); return; }
       if (covered()) { cover(); return; }
-      if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
+      if (!active) { addEventListener('resize', onResize); document.addEventListener('visibilitychange', cover); }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
       if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();
@@ -938,7 +946,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // To Do's scope here: the account's choice, else the settings' (lib/sidebar.js shown).
   const scope = () => (rec && S ? S.shown(rec, cfg()).todoScope : 'follow');
-  return { scope, sync, ready, cover, asleep: () => asleep, active: () => active, failed: () => failed, rec: () => rec, op, host: hostOf, context, on: on_, say, status, drawn, menu, add: () => { if (mode === 'none' || (mode === 'drawer' && !drawer)) { forced = mode === 'none'; openDrawer(document.activeElement); } openAdd(true); } };
+  return { enabled, scope, sync, ready, cover, asleep: () => asleep, active: () => active, failed: () => failed, rec: () => rec, op, host: hostOf, context, on: on_, say, status, drawn, menu, add: () => { if (mode === 'none' || (mode === 'drawer' && !drawer)) { forced = mode === 'none'; openDrawer(document.activeElement); } openAdd(true); } };
 })();
 
 GZ_SIDEBAR_UI;
