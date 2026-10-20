@@ -119,15 +119,15 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     },
   };
   const A = ADAPTERS[LMS] || ADAPTERS.canvas;
-  // The sidebar settings (defaults.js sidebar), one for every account: title ('' is "Sidebar"); style float | embed, or
-  // auto as Glaze's navigation's; open auto (the account's expanded or collapsed), expanded or collapsed at the start of
+  // The sidebar settings (defaults.js sidebar), one for every account: title ('' is "Sidebar"); style float (the default,
+  // as the navigation's default) | embed, or auto as Glaze's navigation's; open auto (the account's expanded or collapsed), expanded or collapsed at the start of
   // each page, or drawer always; width until the account drags one (lib/sidebar.js shown); order This page or My widgets
   // first; page This page shown, folded at first or hidden; heading and jump the header's name and Jump to widgets;
   // surface glass (blur px, opacity %), solid or clear; radius and density, auto for the Look's; min and grades the room
   // the content keeps, else a drawer; canvas and ultra per site (the site's part); off the kinds of page
   // (GZ_SIDEBAR_KINDS, from the page families here) it stays off on; todo To Do's scope until the account picks one.
   const cfg = () => ctx.settings().sidebar || {};
-  const styleOf = () => { const c = cfg().style; return c === 'float' || c === 'embed' ? c : ctx.settings().navbar?.style === 'embed' ? 'embed' : 'float'; };
+  const styleOf = () => { const c = cfg().style ?? 'float'; return c === 'auto' ? (ctx.settings().navbar?.style === 'embed' ? 'embed' : 'float') : c === 'embed' ? 'embed' : 'float'; };
   const KIND = { dashboard: 'dashboard', courses: 'dashboard', 'course-home': 'course', outline: 'course', discussion: 'discussion', assignment: 'assignment', assessment: 'assignment', grades: 'grades', calendar: 'calendar', syllabus: 'calendar', quiz: 'quiz' };
   const offOn = (fam) => (cfg().off || []).includes(KIND[fam] || 'other');
   const name = () => cfg().title || t('Sidebar');

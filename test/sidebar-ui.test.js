@@ -567,16 +567,25 @@ test('off returns exactly to before (Canvas\'s column, the Dashboard\'s To Do ti
   assert.deepEqual(p.$('#gz-sb-widgets .gz-sb-dock').children.filter((e) => e.dataset?.tile).map((e) => e.dataset.tile), ['todo', 'notes']);
 });
 
-test('style: float or embed on <html>, following Glaze\'s navigation unless chosen; surface, corners, density, order and the header from the settings', async () => {
+test('style: Floating by default, Embedded or like the navigation when chosen; surface, corners, density, order and the header from the settings', async () => {
   const p = page({ stored: record() });
   await p.pass();
   const r = p.doc.root.dataset;
-  assert.equal(r.gzSbStyle, 'float', 'the navigation\'s default');
+  assert.equal(r.gzSbStyle, 'float', 'Floating by default (owner, 2026-10-20)');
   assert.equal(r.gzSbSurface, 'glass');
   assert.equal(r.gzSbRadius, undefined, 'the Look\'s corners');
   p.c.navbarSettings = { style: 'embed' };
   await p.pass();
-  assert.equal(r.gzSbStyle, 'embed', 'follows the navigation');
+  assert.equal(r.gzSbStyle, 'float', 'never chosen: still Floating, whatever the navigation\'s');
+  p.c.sidebarSettings = { style: 'auto' };
+  await p.pass();
+  assert.equal(r.gzSbStyle, 'embed', 'Like the navigation follows it');
+  p.c.sidebarSettings = { style: 'embed' };
+  p.c.navbarSettings = {};
+  await p.pass();
+  assert.equal(r.gzSbStyle, 'embed', 'an explicit Embedded is kept');
+  assert.equal(D.GZ_SANITIZE({ sidebar: { style: 'embed' } }).sidebar.style, 'embed');
+  assert.equal(D.GZ_SANITIZE({}).sidebar.style, 'float');
   p.c.sidebarSettings = { style: 'float', surface: 'solid', radius: 'large', density: 'compact', order: 'widgets', heading: false, blur: 30, opacity: 60, title: 'My stuff' };
   await p.pass();
   assert.deepEqual([r.gzSbStyle, r.gzSbSurface, r.gzSbRadius, r.gzSbDensity, r.gzSbOrder, r.gzSbNotitle], ['float', 'solid', 'large', 'compact', 'widgets', '']);

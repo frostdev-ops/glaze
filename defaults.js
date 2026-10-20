@@ -66,7 +66,7 @@ const GZ_SPEC = {
   // The sidebar's look and behaviour for every account (features/sidebar.js has what each value means); where widgets
   // sit, the width dragged and folds are each account's (lib/sidebar.js). The switch is enhance.sidebar.
   sidebar: {
-    title: ['', 'label'], style: ['auto', ['auto', 'float', 'embed']], open: ['auto', ['auto', 'expanded', 'collapsed', 'drawer']],
+    title: ['', 'label'], style: ['float', ['float', 'embed', 'auto']], open: ['auto', ['auto', 'expanded', 'collapsed', 'drawer']],
     width: [352, [288, 480]], order: ['page', ['page', 'widgets']], page: ['shown', ['shown', 'folded', 'hidden']], heading: [true, 'bool'], jump: [true, 'bool'],
     surface: ['glass', ['glass', 'solid', 'clear']], blur: [16, [0, 40]], opacity: [88, [40, 100]],
     radius: ['auto', ['auto', 'none', 'small', 'medium', 'large']], density: ['auto', ['auto', 'compact', 'cozy', 'comfortable']],
