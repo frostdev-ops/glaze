@@ -57,10 +57,11 @@ const watchHidden = () => page.evaluate(() => {
   for (const d of all) {
     const name = d === document ? 'top' : d.defaultView.name;
     counts[name] = { hidden: d.documentElement.hasAttribute('data-gz-ctab-framed'), n: 0, what: [] };
-    const ours = (n) => { const e = n?.nodeType === 1 ? n : n?.parentElement; return !!e?.closest?.('[data-gz-sidebar-host], #gz-sidebar, .gz-sb-edge, .gz-sb-launch, .gz-sb-backdrop, .gz-sb-menu'); };
+    // Glaze's sidebar parts only: the LMS's own column content, and other features' marks on it, are not sidebar work.
+    const ours = (n) => { const e = n?.nodeType === 1 ? n : n?.parentElement; return !!e?.closest?.('.gz-sb-head, .gz-sb-pagehead, .gz-sb-resize, #gz-sb-widgets, #gz-sidebar, .gz-sb-edge, .gz-sb-launch, .gz-sb-backdrop, .gz-sb-menu'); };
     const o = new d.defaultView.MutationObserver((rs) => {
       for (const r of rs) {
-        const mine = r.type === 'attributes' && r.target === d.documentElement ? /^data-gz-(sidebar|sb)/.test(r.attributeName) : ours(r.target) || [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1 && (n.matches?.('[data-gz-sidebar-host], #gz-sidebar, .gz-sb-head, #gz-sb-widgets, .gz-w') || ours(n)));
+        const mine = r.type === 'attributes' && (r.target === d.documentElement || r.target.hasAttribute?.('data-gz-sidebar-host')) ? /^(data-gz-(sidebar|sb)|role|aria-)/.test(r.attributeName) : ours(r.target) || [...r.addedNodes, ...r.removedNodes].some((n) => n.nodeType === 1 && (n.matches?.('#gz-sidebar, .gz-sb-head, #gz-sb-widgets, .gz-w') || ours(n)));
         if (mine) { counts[name].n++; if (counts[name].what.length < 5) counts[name].what.push(`${r.type}:${r.attributeName || ''}:${r.target.id || r.target.className || r.target.nodeName}`); }
       }
     });
@@ -100,7 +101,18 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     const [A, B] = courses.map((c) => String(c.id));
     const recordKey = `sidebar:canvas:${local}/${me.id}`;
     const record = async () => (await localGet(recordKey))[recordKey];
-    const tab = (cid) => page.locator(`#gz-ctabs .gz-ctab[data-course-id="${cid}"]`).first();
+    // A tab, in the strip of the document on screen (a frame over the page has its own).
+    const tab = (cid) => ({
+      count: () => page.locator(`#gz-ctabs .gz-ctab[data-course-id="${cid}"]`).count(),
+      click: async () => {
+        const on = (await onScreen())[0];
+        const root = on && on.name !== 'top' ? page.frameLocator(`#gz-ctabs-frames > iframe[name="${on.name}"]`) : page;
+        const el = root.locator(`#gz-ctabs .gz-ctab[data-course-id="${cid}"]`).first();
+        // Mid-switch (a picture or the next frame on top), the press lands wherever the student's would: at its place.
+        const b = await el.boundingBox({ timeout: 5000 });
+        await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+      },
+    });
 
     // A course page loaded directly: the page's own dock.
     await page.goto(`${local}/courses/${A}`);
@@ -173,9 +185,9 @@ const hiddenCounts = () => page.evaluate(() => globalThis.__gzSbCounts);
     await f.locator('[data-tile="timer"] button', { hasText: 'Reset' }).click();
 
     // Rapid switching: several picks before anything settles.
-    for (let i = 0; i < 3; i++) { await tab(B).click({ delay: 0 }); await tab(A).click({ delay: 0 }); }
+    for (let i = 0; i < 3; i++) { await tab(B).click(); await tab(A).click(); }
     await oneDock('rapid switching', `gz-ctab:${A}`);
-    await tab(B).click({ delay: 0 }); await tab(A).click({ delay: 0 }); await tab(B).click({ delay: 0 });
+    await tab(B).click(); await tab(A).click(); await tab(B).click();
     await oneDock('rapid switching ending on the page', 'top');
     // Back and Forward through the tabs' history.
     for (const [go, label] of [['back', 'Back'], ['back', 'Back again'], ['forward', 'Forward'], ['forward', 'Forward again']]) {
