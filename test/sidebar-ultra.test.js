@@ -619,3 +619,18 @@ test('a frame hidden before its first mount keeps committed sidebar changes for 
   visible = true; p.side.cover(); await settle();
   assert.equal(p.side.rec().dest.timer, 'dock', 'first show uses the record committed while waiting');
 });
+
+test("a pinned column's height is its top and bottom's, whatever height the site gives it", () => {
+  // Ultra gives a course outline's column a height of its own (in sheets the page can't read): left alone, the pinned
+  // column ran past the window's bottom with nothing to scroll. Expanded, the drawer and Glaze's own column alike.
+  const css = read('features/sidebar.css');
+  const rule = (head) => { const i = css.indexOf(head); assert.ok(i >= 0, head); return css.slice(i, css.indexOf('}', i)); };
+  for (const head of ['html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) [data-gz-sidebar-host] {',
+    'html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {',
+    'html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-sidebar.gz-sb-fixed {']) {
+    const r = rule(head);
+    assert.match(r, /position: fixed !important; [^}]*top: var\(--gz-sb-top/, head);
+    assert.match(r, /bottom: var\(--gz-sb-end\)/, head);
+    assert.match(r, /height: auto !important/, head);
+  }
+});

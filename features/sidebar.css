@@ -23,10 +23,12 @@
   html[dir="rtl"][data-gz-sidebar="collapsed"] #not_right_side { padding-left: 64px; }
   html[dir="rtl"] [data-gz-sidebar-host] { direction: rtl; }
   html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) [data-gz-sidebar-host] { padding-left: calc(1rem + env(safe-area-inset-left, 0px)) !important; padding-right: 1rem !important; }
+  /* Pinned between --gz-sb-top and --gz-sb-end, so its height is theirs: Ultra gives a course outline's column a height of
+     its own, which left the column taller than the window and nothing in it to scroll. */
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) [data-gz-sidebar-host] {
     display: block !important; position: fixed !important; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-end); inset-inline-end: 0; inset-inline-start: auto;
     flex: 0 0 var(--gz-sidebar-w) !important; width: var(--gz-sidebar-w) !important; min-width: 0; max-width: none !important; margin: 0 !important;
-    max-height: none !important; overflow-y: auto; overscroll-behavior: contain;
+    height: auto !important; max-height: none !important; overflow-y: auto; overscroll-behavior: contain;
     padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem !important; color: var(--gz-ink); font-family: var(--gz-font);
     background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-paint, var(--gz-surface))) !important;
     border-inline-start: 1px solid var(--gz-border-line, var(--gz-line));
@@ -41,7 +43,7 @@
   html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {
     display: block !important; position: fixed !important; z-index: 1300; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-end);
     inset-inline-end: 0; inset-inline-start: auto; width: min(var(--gz-sidebar-w), calc(100vw - 16px)) !important; max-width: none !important; margin: 0 !important;
-    height: auto; max-height: none; overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem !important;
+    height: auto !important; max-height: none; overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem !important;
     color: var(--gz-ink); font-family: var(--gz-font);
     background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; box-shadow: var(--gz-shadow);
     border-inline-start: 1px solid var(--gz-border-strong, var(--gz-line-strong));
@@ -64,7 +66,7 @@
   [data-gz-sb-fold-page][data-gz-sb-self] > :not(.gz-sb-resize, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets) { display: none !important; }
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-sidebar.gz-sb-fixed {
     position: fixed !important; z-index: 1000; top: var(--gz-sb-top, calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px))); bottom: var(--gz-sb-end);
-    inset-inline-end: 0; inset-inline-start: auto; max-height: none;
+    inset-inline-end: 0; inset-inline-start: auto; height: auto !important; max-height: none;
   }
   html[data-gz-sb-ultra]:not([data-gz-sb-fixed])[data-gz-sidebar="expanded"] :is(.base-courses-content, .course-outline-content),
   html[data-gz-sb-fixed][data-gz-sidebar="expanded"] :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: calc(var(--gz-sidebar-w) + 16px) !important; }
