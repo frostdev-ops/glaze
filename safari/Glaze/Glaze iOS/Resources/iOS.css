@@ -1,12 +1,13 @@
 /* iPhone and iPad: Style.css (the Mac guide) at touch sizes, with Dynamic Type and iOS-shaped mocks. */
 :root {
     /* -apple-system-control-accent is macOS only. */
-    --accent: #007aff;
+    --accent: #0067d6;
+    --action: #0067d6;
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: none;
 }
 @media (prefers-color-scheme: dark) {
-    :root { --accent: #0a84ff; --ok: #30d158; }
+    :root { --accent: #6db5ff; }
 }
 
 html { background: Canvas; }
@@ -27,7 +28,7 @@ h2 { font: -apple-system-headline; gap: 10px; margin-bottom: 8px; }
 .guide header img { border-radius: 22%; }
 
 .steps { gap: 16px; }
-.step { grid-template-columns: 1fr 280px; gap: 20px; padding: 18px; border-radius: 16px; }
+.step { grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; padding: 18px; border-radius: 16px; }
 .badge { width: 24px; height: 24px; font-size: 14px; flex: none; }
 .state-on .step-enable .badge::after { font-size: 14px; }
 
@@ -46,6 +47,9 @@ button { min-height: 44px; padding: 8px 14px; font: -apple-system-subheadline; }
 @media (max-width: 620px) {
     .step { grid-template-columns: 1fr; }
     .mock { max-width: 320px; width: 100%; justify-self: center; }
+    footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    footer .app-version, footer [data-action="copy-setup"] { grid-column: 1 / -1; }
+    footer .app-version { margin: 0; }
 }
 
 /* Drawn stand-ins for iOS screens; Style.css draws the Mac ones. */

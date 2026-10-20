@@ -39,7 +39,11 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
         self.webView.loadFileURL(guideURL, allowingReadAccessTo: Bundle.main.resourceURL!)
     }
 
-    override func viewDidAppear() { super.viewDidAppear(); resumeStateChecks() }
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        view.window?.contentMinSize = NSSize(width: 480, height: 440)
+        resumeStateChecks()
+    }
     override func viewWillDisappear() { stopStateChecks(); super.viewWillDisappear() }
     deinit { stateTimer?.invalidate(); NotificationCenter.default.removeObserver(self) }
 

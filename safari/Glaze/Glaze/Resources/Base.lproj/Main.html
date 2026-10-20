@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <title>Glaze setup</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
 
@@ -10,19 +11,19 @@
     <script src="../Script.js" defer></script>
 </head>
 <body>
-    <section class="install">
+    <section class="install" role="main" aria-labelledby="install-title">
         <img src="../Icon.png" width="112" height="112" alt="">
-        <h1>Glaze for Safari</h1>
+        <h1 id="install-title">Glaze for Safari</h1>
         <p>Your colors on Blackboard Ultra, Canvas and Moodle.</p>
         <button class="primary install-button">Install Glaze</button>
         <p class="note">Copies Glaze into Applications, then shows you how to turn it on in Safari.</p>
     </section>
 
-    <section class="guide">
+    <section class="guide" role="main" aria-labelledby="guide-title">
         <header>
             <img src="../Icon.png" width="44" height="44" alt="">
             <div>
-                <h1>Turn on Glaze in Safari</h1>
+                <h1 id="guide-title">Turn on Glaze in Safari</h1>
                 <p class="note">Glaze is installed. Two steps in Safari and you’re done.</p>
             </div>
         </header>
@@ -30,7 +31,7 @@
         <ol class="steps">
             <li class="step step-enable">
                 <div class="step-text">
-                    <h2><span class="badge">1</span> Tick Glaze in <span class="settings-name">Settings</span></h2>
+                    <h2><span class="badge" aria-hidden="true">1</span><span>Turn on Glaze in <span class="settings-name">Settings</span></span></h2>
                     <p>In Safari’s <span class="settings-name">Settings</span> → Extensions, select the checkbox beside <b>Glaze</b>.</p>
                     <p class="status" role="status" aria-live="polite">Checking Safari…</p>
                     <button class="open-preferences" data-action="open-preferences">Open Safari <span class="settings-name">Settings</span></button>
@@ -50,7 +51,7 @@
 
             <li class="step">
                 <div class="step-text">
-                    <h2><span class="badge">2</span> Allow it on your school’s website</h2>
+                    <h2><span class="badge" aria-hidden="true">2</span><span>Allow it on your school’s website</span></h2>
                     <p>Open Blackboard Ultra, Canvas or Moodle in Safari, click the Glaze button in the toolbar and choose <b>Always Allow on This Website</b>. Then reload the page.</p>
                 </div>
                 <div class="mock mock-toolbar" aria-hidden="true">

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <title>Glaze setup</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
 
@@ -12,11 +13,11 @@
     <script src="Script.js" defer></script>
 </head>
 <body data-view="guide">
-    <section class="guide">
+    <section class="guide" role="main" aria-labelledby="guide-title">
         <header>
             <img src="Icon.png" width="56" height="56" alt="">
             <div>
-                <h1>Turn on Glaze in Safari</h1>
+                <h1 id="guide-title">Turn on Glaze in Safari</h1>
                 <p class="note">Your colors on Blackboard Ultra, Canvas and Moodle.</p>
             </div>
         </header>
@@ -24,7 +25,7 @@
         <ol class="steps">
             <li class="step step-enable">
                 <div class="step-text">
-                    <h2><span class="badge">1</span> Turn Glaze on in Settings</h2>
+                    <h2><span class="badge" aria-hidden="true">1</span><span>Turn Glaze on in Settings</span></h2>
                     <p>Open <b>Settings</b> › <b>Apps</b> › <b>Safari</b> › <b>Extensions</b>, tap <b>Glaze</b> and turn on <b>Allow Extension</b>.</p>
                     <p class="status" role="status" aria-live="polite">Checking Safari…</p>
                     <button class="primary open-preferences" data-action="open-preferences">Open Settings</button>
@@ -40,8 +41,9 @@
 
             <li class="step">
                 <div class="step-text">
-                    <h2><span class="badge">2</span> Allow it on your school’s website</h2>
-                    <p>In Safari, open Blackboard Ultra, Canvas or Moodle and tap the extensions button in the address bar: the puzzle piece, or on iPhone the page menu at the left. Tap <b>Glaze</b>, then <b>Always Allow…</b> and <b>Always Allow on This Website</b>. Then reload the page.</p>
+                    <h2><span class="badge" aria-hidden="true">2</span><span>Allow it on your school’s website</span></h2>
+                    <p>In Safari, open Blackboard Ultra, Canvas or Moodle and tap the extensions button in the address bar: the puzzle piece, or on iPhone the page menu at the left.</p>
+                    <p>Tap <b>Glaze</b>, then <b>Always Allow…</b> and <b>Always Allow on This Website</b>. Then reload the page.</p>
                 </div>
                 <div class="mock mock-toolbar" aria-hidden="true">
                     <div class="mock-popover">

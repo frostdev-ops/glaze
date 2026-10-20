@@ -10,6 +10,10 @@ All notable changes to Glaze are documented here. The format follows
 - Blackboard assessment information shares the sidebar with docked widgets: Grades / Attempts on current assignment overviews, including submitted work and pages without optional Description or Assessment Details sections, and Details & Information while editing an attempt. Native rubric links, the editor and submission controls keep their existing behavior.
 - Sidebar headers and controls stay below Blackboard breadcrumbs, document and assessment headers, and Canvas course-tab rows, including when those headers resize.
 - Blackboard discussion participants render in the sidebar again. The column stays within the native discussion layout so participant loading and scrolling continue to work.
+- The downloaded Mac app respects automatic-update preferences, keeps manual checks available, and reports updater failures and compatibility limits accurately.
+
+### Changed
+- Mac, iPhone and iPad setup guides explain Safari profiles and website access, include update and support controls, and pause status checks while inactive. The Mac guide can be resized; phone layouts, keyboard focus and status contrast are clearer.
 
 ## [3.3.0] — 2026-10-20
 
