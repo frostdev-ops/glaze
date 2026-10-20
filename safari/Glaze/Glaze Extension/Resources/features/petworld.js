@@ -59,7 +59,13 @@ var GZ_PET_WORLD = globalThis.GZ_PET_WORLD || (() => {
     };
     const on = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); offs.push(() => el.removeEventListener(type, fn, opts)); };
     const still = () => reduced?.matches || document.documentElement.getAttribute('data-gz-motion') === 'off';
-    const quiet = () => /\/quizzes\/|\/assessments?\/|\/(?:attempt|lti)(?:\/|$)|\/external_tools\//.test(viewDoc.location.pathname) || !!viewDoc.querySelector('iframe#tool_content');
+    const quiet = () => {
+      const path = viewDoc.location.pathname;
+      // Ultra's overview is the assignment's information page, including submitted work, not an attempt.
+      // A buddy dragged from its habitat onto that course frame must remain visible after the drop.
+      const overview = /^\/ultra\/courses\/_\d+_\d+\/(?:outline\/)?assessments?\/_\d+_\d+\/overview\/?$/.test(path);
+      return (!overview && /\/quizzes\/|\/assessments?\/|\/(?:attempt|lti)(?:\/|$)|\/external_tools\//.test(path)) || !!viewDoc.querySelector('iframe#tool_content');
+    };
     const pageSize = () => ({ width: Math.min(1e8, Math.max(window.innerWidth, document.documentElement.scrollWidth, document.body?.scrollWidth || 0)), height: Math.min(1e8, Math.max(window.innerHeight, document.documentElement.scrollHeight, document.body?.scrollHeight || 0)) });
     const scrollAnchor = (el, surface = false) => {
       const nodes = [], clips = [];
