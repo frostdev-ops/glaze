@@ -118,6 +118,7 @@ struct Guide: UIViewRepresentable {
             switch message.body as? String {
             case "open-preferences":
                 guard #available(iOS 26.2, *) else { return }
+                call("showError", "")
                 SFSafariSettings.openExtensionsSettings(forIdentifiers: [extensionBundleIdentifier]) { [weak self] error in
                     guard error != nil else { return }
                     DispatchQueue.main.async {

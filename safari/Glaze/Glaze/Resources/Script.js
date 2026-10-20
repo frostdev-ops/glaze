@@ -1,5 +1,5 @@
 // Native code supplies app details and refreshes extension status while this guide is active.
-// The iOS app calls only show(enabled), and only on iOS 26.2 or later.
+// Live extension status is available on iOS 26.2 or later.
 let installLabel = 'Install Glaze';
 
 // installed: null, or the Glaze already in Applications: {version, relation: 'older' | 'same' | 'newer', appStore}.
@@ -54,8 +54,9 @@ function configureApp(info) {
   updates.hidden = false;
   if (info.channel === 'dmg') {
     document.querySelector('.automatic-checks').checked = info.automaticChecks === true;
+    document.querySelector('.automatic-checks').disabled = info.updaterAvailable !== true;
     document.querySelector('.automatic-downloads').checked = info.automaticDownloads === true;
-    document.querySelector('.automatic-downloads').disabled = info.automaticChecks !== true;
+    document.querySelector('.automatic-downloads').disabled = info.updaterAvailable !== true || info.automaticChecks !== true;
     document.querySelector('.check-updates').disabled = info.canCheck !== true;
     document.querySelector('.update-status').textContent = info.updateStatus || '';
   }

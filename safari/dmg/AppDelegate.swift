@@ -134,7 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
     }
 
     func updateSettings() -> [String: Any] {
-        ["automaticChecks": updater?.automaticallyChecksForUpdates == true,
+        ["updaterAvailable": updater != nil,
+         "automaticChecks": updater?.automaticallyChecksForUpdates == true,
          "automaticDownloads": updater?.automaticallyDownloadsUpdates == true,
          "canCheck": updater?.canCheckForUpdates == true,
          "updateStatus": updateStatus]
@@ -165,7 +166,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
     private func finishHidden(_ reason: String) {
         NSLog("Glaze update: %@, user=%d", reason, userSession)
         guard !userSession else { return }
-        DispatchQueue.main.async { NSApp.terminate(nil) }
+        DispatchQueue.main.async { [weak self] in
+            // A normal launch can open the guide before this queued termination runs.
+            guard let self, !self.userSession else { return }
+            NSApp.terminate(nil)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { userSession }
@@ -192,7 +197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NS
         let detail = error as NSError?
         let noUpdate = detail?.domain == SUSparkleErrorDomain && detail?.code == Int(SUError.noUpdateError.rawValue)
         let checked = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .short)
-        updateStatus = noUpdate ? "You’re up to date. Last checked \(checked)."
+        // Sparkle also reports noUpdateError when a newer release is incompatible with this Mac.
+        updateStatus = noUpdate ? "No update is available for this Mac. Last checked \(checked)."
             : error == nil ? "Last checked \(checked)."
             : "The update check did not complete. Check your connection and try again."
         publishUpdateSettings()
