@@ -89,6 +89,20 @@ test('Rubric structure, viewer origin, stacking and painted controls are require
   }
 });
 
+test('editable Rubric controls keep their native layout for every editing mode', async () => {
+  for (const [attribute, value] of [['contenteditable', ''], ['contenteditable', 'plaintext-only'], ['role', 'textbox'], ['role', 'combobox']]) {
+    const p = review(), control = p.el('div', '', 'Rubric feedback');
+    control.setAttribute(attribute, value); p.rubric.querySelector('.rubric-inline-container').append(control);
+    const was = snapshot(p.rubric); await p.pass();
+    assert.equal(p.$('#gz-sb-absorb'), null, `${attribute}=${value}`);
+    assert.equal(p.mode(), 'drawer'); assert.equal(snapshot(p.rubric), was);
+  }
+  const p = review(); p.rubric.setAttribute('contenteditable', 'plaintext-only');
+  await p.pass(); assert.equal(p.$('#gz-sb-absorb'), null, 'an editable ancestor makes the Rubric editable too');
+  const readonly = review(); readonly.rubric.setAttribute('contenteditable', 'false');
+  await readonly.pass(); assert.ok(readonly.$('#gz-sb-absorb'), 'explicitly read-only content still qualifies');
+});
+
 test('scroll, native re-render, print, focus, drawer and absorption off restore the native Rubric', async () => {
   for (const how of ['scroll', 'rerender', 'print', 'focus', 'drawer', 'absorb', 'fold']) {
     const p = review(), was = snapshot(p.rubric); await p.pass(); assert.ok(p.$('#gz-sb-absorb'), how);
@@ -119,4 +133,14 @@ test('review styles never inset or narrow the full-window layer', () => {
   const css = read('features/sidebar.css');
   assert.doesNotMatch(css, /\.bb-offcanvas-panel[^{}]*\{[^}]*inset-inline-end: var\(--gz-sb-room\)/);
   assert.match(read('features/sidebar.js'), /const RUBRIC = .*main > aside:has\(\.rubric-inline-container\)/);
+});
+
+test('release documentation describes visual Rubric absorption and the native attempt fallback', () => {
+  for (const file of ['docs/features.md', 'CHANGELOG.md']) {
+    const text = read(file);
+    assert.match(text, /attempt panels stay native/i, file);
+    assert.match(text, /Rubric[^.]*visually/i, file);
+    assert.match(text, /document review/i, file);
+  }
+  assert.match(read('CHANGELOG.md'), /## 3\.2\.1 \(unreleased\)/);
 });

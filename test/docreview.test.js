@@ -45,6 +45,19 @@ test('review gates on the exact submitted route, native anchors and verified vie
     const bad = page({}, fixture.replaceAll(before, after)); bad.ui.sync(); assert.equal(bad.doc.root.hasAttribute('data-gz-review'), false); assert.equal(bad.$('[data-gz-review-ui]'), null);
   }
 });
+test('course tabs in the submission header preserve document review and its native close control', async () => {
+  const p = page(), close = p.$('.review-title button'), frame = p.$('iframe');
+  p.ui.sync();
+  const strip = p.doc.createElement('div'); strip.id = 'gz-ctabs';
+  for (const text of ['Course one', 'Course two']) { const b = p.doc.createElement('button'); b.textContent = text; strip.append(b); }
+  p.$('.review-title').append(strip); await p.mutate();
+  assert.ok(p.doc.root.hasAttribute('data-gz-review'), 'the integrated course strip does not make the native close ambiguous');
+  assert.equal(close.getAttribute('data-gz-review-part'), 'close');
+  p.ui.enter(); assert.ok(p.doc.root.hasAttribute('data-gz-review-focus'));
+  assert.equal(p.$('iframe'), frame); assert.equal(strip.parentNode, p.$('.review-title'));
+  p.ui.leave(); p.$('.review-title').append(p.doc.createElement('button')); await p.mutate();
+  assert.equal(p.doc.root.hasAttribute('data-gz-review'), false, 'a second native button still fails the strict close gate');
+});
 test('compact chrome folds and expands feedback in place and preserves the native close button', () => {
   const p = page(); const close = p.$('.review-title button'), feedback = p.$('.feedback-text'); p.ui.sync();
   assert.ok(p.doc.root.hasAttribute('data-gz-review-compact')); const toggle = p.$('#gz-review-feedback');

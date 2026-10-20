@@ -13,6 +13,7 @@
   html[data-gz-review="ultra"] #gz-review-tools { position: absolute; inset-inline-end: 44px; top: 2px; height: 32px; z-index: 1; }
   html[data-gz-review="ultra"] [data-gz-review-part="tabs"] { padding-inline-end: 250px; }
   html[data-gz-review-compact] [data-gz-review-part="title"] { height: 0 !important; min-height: 0 !important; padding-block: 0 !important; border: 0 !important; }
+  html[data-gz-review-compact]:not([data-gz-ctabs~="nav"]) [data-gz-review-part="title"]:has(#gz-ctabs) { height: var(--gz-ctabs-h, 40px) !important; min-height: var(--gz-ctabs-h, 40px) !important; }
   html[data-gz-review-compact] [data-gz-review-part="heading"] { position: absolute !important; width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; overflow: hidden !important; clip-path: inset(50%) !important; }
   html[data-gz-review-compact] [data-gz-review-part="close"] { position: absolute !important; inset-inline-start: 4px !important; inset-inline-end: auto !important; top: 2px !important; z-index: 5; width: 36px; height: 36px; }
   html[data-gz-review-compact] [data-gz-review-part="grade"] { box-sizing: border-box; display: flex !important; flex-flow: row nowrap !important; align-items: center; gap: 12px; height: 40px !important; min-height: 40px !important; padding: 2px 12px 2px 48px !important; margin: 0 !important; overflow: auto; font-size: 13px; }

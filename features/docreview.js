@@ -39,12 +39,16 @@ var GZ_DOCREVIEW = globalThis.GZ_DOCREVIEW || (() => {
     const files = childOf(pane, section), feed = childOf(feedback, section), grade = main.previousElementSibling;
     const tabs = files && one(files, '[role="tablist"]');
     // The title sits before the scrolling body; the grade row sits immediately before main.
+    const nativeClose = (root) => {
+      const es = [...root.querySelectorAll('button, a[aria-label]')].filter((e) => !e.closest('#gz-ctabs, [data-gz-review-ui]'));
+      return es.length === 1 ? es[0] : null;
+    };
     let title = null;
     for (let el = main.parentElement; el && el !== root; el = el.parentElement) {
       const prev = el.previousElementSibling;
-      if (prev?.querySelector('h1, h2, [role="heading"]') && one(prev, 'button, a[aria-label]')) { title = prev; break; }
+      if (prev?.querySelector('h1, h2, [role="heading"]') && nativeClose(prev)) { title = prev; break; }
     }
-    const heading = title && one(title, 'h1, h2, [role="heading"]'), close = title && one(title, 'button, a[aria-label]');
+    const heading = title && one(title, 'h1, h2, [role="heading"]'), close = title && nativeClose(title);
     const texts = feed && [...feed.children].filter((e) => e !== feedback && !e.contains(feedback) && !owned(e));
     const text = texts?.length === 1 && texts[0];
     if (!files || !feed || files === feed || !grade || !tabs || !heading || !close || !text || !grade.textContent.trim()) return null;
