@@ -524,33 +524,61 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (!framed || told !== true) { res(null); return; }
     const n = ++askN;
     const timer = setTimeout(() => { if (asks.delete(n)) res(null); }, 15000);
-    asks.set(n, { gen, res: (r) => { clearTimeout(timer); res(r); } });
+    asks.set(n, { kind: 'sidebar', gen, res: (r) => { clearTimeout(timer); res(r); } });
     toTop('sidebar', { key, ops, gen, n });
   });
   // An answer to another question, or not with the gen it was asked with, is not this document's.
-  const acked = (d) => {
+  const timerGen = Math.random().toString(36).slice(2);
+  const askTimer = (op) => new Promise((res) => {
+    if (!framed || told !== true || !['toggle', 'reset', 'advance'].includes(op)) { res(null); return; }
+    const n = ++askN, gen = timerGen;
+    const timer = setTimeout(() => { if (asks.delete(n)) res(null); }, 15000);
+    asks.set(n, { kind: 'timer', gen, res: (r) => { clearTimeout(timer); res(r); } });
+    toTop('timer', { op, n, gen });
+  });
+  const acked = (d, kind = 'sidebar') => {
     const a = asks.get(d.n);
-    if (!a || d.gen !== a.gen) return;
+    if (!a || a.kind !== kind || d.gen !== a.gen) return;
     asks.delete(d.n);
-    a.res({ ok: d.ok === true, gen: d.gen, ...(d.ok === true && d.rec && typeof d.rec === 'object' && { rec: d.rec }) });
+    a.res(kind === 'timer' ? { ok: d.ok === true, ...(d.ok === true && d.timer && typeof d.timer === 'object' && { timer: d.timer }), ...(d.ok === true && Number.isFinite(d.advanced) && { advanced: d.advanced }) }
+      : { ok: d.ok === true, gen: d.gen, ...(d.ok === true && d.rec && typeof d.rec === 'object' && { rec: d.rec }) });
   };
   const drawer = (v) => { if (framed) toTop('drawer', { on: !!v }); };
   // Released as soon as its frame is hidden (made inert) or goes, whatever hid it.
   let drawerFrom = null, drawerInert = [], drawerWatch = null;
-  const drawerOff = () => { drawerWatch?.disconnect(); drawerWatch = null; for (const e of drawerInert) e.inert = false; drawerInert = []; drawerFrom = null; };
+  const drawerOff = () => { drawerFrom?.el.removeEventListener('load', drawerOff); drawerWatch?.disconnect(); drawerWatch = null; for (const e of drawerInert) e.inert = false; drawerInert = []; drawerFrom = null; };
   const drawerOn = (src) => {
     drawerOff();
-    if (!host || src.el.parentNode !== host || typeof MutationObserver !== 'function') return;
+    if (!currentFrame(showing, src) || typeof MutationObserver !== 'function') return;
     drawerFrom = src;
     for (const e of document.body.children) if (e !== host && !e.inert && !['SCRIPT', 'STYLE', 'LINK', 'TEMPLATE'].includes(e.tagName)) { e.inert = true; drawerInert.push(e); }
-    drawerWatch = new MutationObserver(() => { if (src.el.inert || src.el.parentNode !== host) drawerOff(); });
-    drawerWatch.observe(src.el, { attributes: true, attributeFilter: ['inert'] });
+    src.el.addEventListener('load', drawerOff);
+    drawerWatch = new MutationObserver(() => { if (!currentFrame(showing, src)) drawerOff(); });
+    drawerWatch.observe(src.el, { attributes: true, attributeFilter: ['inert', 'style'] });
     drawerWatch.observe(host, { childList: true });
+    drawerWatch.observe(document.body, { childList: true });
+  };
+  const currentFrame = (from, src) => {
+    try {
+      const doc = src.el.contentDocument;
+      return on && !signedOut && from === showing && frames.get(from) === src && src.ready && !pic && !!host
+        && src.el.isConnected && src.el.parentNode === host && !src.el.inert && src.el.style.visibility !== 'hidden' && src.el.style.display !== 'none'
+        && !!who && src.uid === who && !!doc?.body && src.accountDoc === doc && doc.location.origin === location.origin
+        && !!(from === PAGE ? pageable(doc.location.pathname) && L.outside(doc.location.pathname, doc.location.search) : L.owns(doc.location.pathname, from));
+    } catch { return false; }
+  };
+  const relayTimer = (from, src, d) => {
+    if (!Number.isSafeInteger(d.n) || d.n < 1 || typeof d.gen !== 'string' || !d.gen || d.gen.length > 64 || !['toggle', 'reset', 'advance'].includes(d.op)) return;
+    const doc = src.el.contentDocument;
+    const ack = (r) => { try { if (src.el.contentDocument === doc) src.el.contentWindow?.postMessage({ gzCtab: 'timer:ack', n: d.n, gen: d.gen, ok: r?.ok === true, ...(r?.ok === true && { timer: r.timer, advanced: r.advanced }) }, location.origin); } catch { /* gone */ } };
+    if (!currentFrame(from, src)) { ack(null); return; }
+    try { chrome.runtime.sendMessage({ type: 'glaze:widgetTimer', op: d.op }, (r) => ack(chrome.runtime.lastError ? null : r)); } catch { ack(null); }
   };
   const relay = (from, src, d) => {
     if (!Number.isSafeInteger(d.n) || typeof d.gen !== 'string') return;
-    const ack = (r) => { try { src.el.contentWindow?.postMessage({ gzCtab: 'sidebar:ack', n: d.n, gen: d.gen, ok: r?.ok === true, ...(r?.ok === true && r.rec && { rec: r.rec }) }, location.origin); } catch { /* gone */ } };
-    const current = () => { let doc = null; try { doc = src.el.contentDocument; } catch { /* gone */ } return from === showing && frames.get(from) === src && !!who && src.uid === who && !!doc && src.accountDoc === doc; };
+    const doc = src.el.contentDocument;
+    const ack = (r) => { try { if (src.el.contentDocument === doc) src.el.contentWindow?.postMessage({ gzCtab: 'sidebar:ack', n: d.n, gen: d.gen, ok: r?.ok === true, ...(r?.ok === true && r.rec && { rec: r.rec }) }, location.origin); } catch { /* gone */ } };
+    const current = () => currentFrame(from, src) && src.el.contentDocument === doc;
     if (!current()) { ack(null); return; }
     (globalThis.GZ_SIDEBAR ? Promise.resolve() : ctx.need('lib/sidebar.js', () => globalThis.GZ_SIDEBAR)).then(() => {
       if (!current() || !globalThis.GZ_SIDEBAR?.relayable(d, ctx.site === 'canvas' ? 'canvas' : 'ultra', location.origin, who)) { ack(null); return; }
@@ -571,6 +599,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const f = frames.get(cid);
     if (!f) return;
     if (ctx.site === 'canvas') f.unwatch?.();
+    if (drawerFrom === f) drawerOff();
     f.el.remove();
     frames.delete(cid);
     if (waiting === cid) { ++showTurn; wait(''); }
@@ -853,6 +882,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const f = frames.get(cid);
     if (keepOld && !canKeep(cid, g)) { g.el.remove(); if (g.key ? entry() === g.key : turnHere() === g.turn) restamp(cid, pathOf(f)); return false; }
     const focused = !!f && document.activeElement === f.el;
+    if (drawerFrom === f) drawerOff();
     wake(g);
     if (push) stamp(cid, pathOf(g));
     spare.set(cid, (spare.get(cid) || []).filter((s) => s !== g));
@@ -873,7 +903,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     if (f && f !== g) { f.el.style.visibility = 'hidden'; f.el.inert = true; f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: false }, location.origin); }
     if (g.slow) { g.ready = false; watch(cid, g); }
     if (showing !== cid) return;
-    g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: true }, location.origin);
+    g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: g.ready }, location.origin);
     if (focused) g.el.focus();
     globalThis.GZ_PET_WORLD?.refresh();
     globalThis.GZ_NAVBAR_UI?.sync();
@@ -1041,7 +1071,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         f.stale = null;
         if (waiting === cid && showing !== cid) { show(cid); return; }
         if (waiting === cid) wait('');
-        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
+        if (showing === cid) { clearSlow(); f.el.style.visibility = ''; unpicture(); f.el.contentWindow?.postMessage({ gzCtab: 'visible', on: true }, location.origin); globalThis.GZ_PET_WORLD?.refresh(); globalThis.GZ_NAVBAR_UI?.sync(); later(600); }
         return;
       }
       if (now - t0 > 8000 && !f.slow) {
@@ -1153,6 +1183,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     const f = cid && (frames.get(cid) || open(cid));
     if (cid && !f) { if (ctx.site === 'canvas') wait(''); return; }
     if (ctx.site === 'canvas') wait('');
+    drawerOff();
     showing = cid;
     shownFrom = location.pathname + location.search;
     for (const [k, g] of [...frames]) if (g.away && k !== cid) drop(k, true);
@@ -1160,7 +1191,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (k === cid) g.at = Date.now();
       g.el.style.visibility = k === cid && g.ready ? '' : 'hidden';
       g.el.inert = k !== cid;
-      g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid }, location.origin);
+      g.el.contentWindow?.postMessage({ gzCtab: 'visible', on: k === cid && g.ready }, location.origin);
     }
     if (host) { host.toggleAttribute('data-on', !!cid); lay(); }
     clearSlow();
@@ -1214,6 +1245,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (op === 'edited') src.dirty = true;
       // A hidden or replaced page's sidebar asks nothing.
       else if (op === 'sidebar') relay(from, src, e.data);
+      else if (op === 'timer') relayTimer(from, src, e.data);
       else if (op === 'loaded') src.el.contentWindow.postMessage({ gzCtab: 'visible', on: false }, location.origin);
       else if (op === 'signout' && ctx.site === 'canvas') { send({ op: 'drop', signout: true }); revoke(); }
       else if (op === 'account' && L.validId(e.data.uid, ctx.site)) {
@@ -1223,6 +1255,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       return;
     }
     if (op === 'sidebar') { relay(from, src, e.data); return; }
+    if (op === 'timer') { relayTimer(from, src, e.data); return; }
     if (op === 'drawer') { if (e.data.on === true && from === showing) drawerOn(src); else if (drawerFrom === src) drawerOff(); return; }
     if (ctx.site === 'canvas' && from !== showing && ['visit', 'shut', 'pin', 'move', 'go', 'warm', 'open', 'away'].includes(op)) return;
     if (op === 'visit' && id) visit(id);
@@ -1231,6 +1264,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       if (who && e.data.uid !== who) { send({ op: 'drop', signout: true }); revoke(); }
       else {
         const f = frames.get(from); let doc = null; try { doc = f.el.contentDocument; } catch { /* gone */ }
+        if (f.accountDoc !== doc && drawerFrom === f) drawerOff();
         if (f.accountDoc !== doc && f.ready) { f.ready = false; watch(from, f); }
         f.uid = e.data.uid; f.accountDoc = doc;
       }
@@ -1246,7 +1280,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     }
     else if (op === 'loaded') {
       const w = frames.get(from).el.contentWindow;
-      w.postMessage({ gzCtab: 'visible', on: from === showing }, location.origin);
+      w.postMessage({ gzCtab: 'visible', on: from === showing && frames.get(from).ready }, location.origin);
       if (ctx.site === 'canvas' && from === showing) w.postMessage({ gzCtab: 'loading', cid: waiting }, location.origin);
       globalThis.GZ_PET_WORLD?.refresh();
     }
@@ -1302,6 +1336,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
         if (e.data.on) { awayFrom = ''; pass(); }
       }
       else if (e.data?.gzCtab === 'sidebar:ack' && Number.isSafeInteger(e.data.n)) acked(e.data);
+      else if (e.data?.gzCtab === 'timer:ack' && Number.isSafeInteger(e.data.n)) acked(e.data, 'timer');
       else if (e.data?.gzCtab === 'note' && typeof e.data.text === 'string' && e.data.text.length <= 500) say(e.data.text);
       else if (e.data?.gzCtab === 'loading' && (e.data.cid === '' || L.validId(e.data.cid, ctx.site))) { waiting = e.data.cid; mark(); }
     });
@@ -1375,7 +1410,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const pinTab = (cid) => { if (framed) return toTop('pin', { cid }); tabs = L.pin(tabs, cid, !tabs.find((x) => x.cid === cid)?.pin); save(); draw(); };
   const moveTab = (cid, to) => { if (framed) return toTop('move', { cid, to }); tabs = L.move(tabs, cid, to); save(); draw(); };
   const tabOf = (e) => e.target instanceof Element && e.target.closest('.gz-ctab');
-  let dragged = 0;
+  let dragged = -Infinity;
   const onClick = (e) => {
     const el = tabOf(e);
     if (!el || (e.type === 'auxclick' && e.button !== 1) || (e.type === 'click' && e.button)) return;
@@ -1699,7 +1734,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       return true;
     },
   };
-  return { sync, held, petSurface, bar, visible, sidebar: askSidebar, drawer, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
+  return { sync, held, petSurface, bar, visible, sidebar: askSidebar, timer: askTimer, drawer, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
 
 GZ_CTABS;

@@ -462,3 +462,160 @@ test('content-ultra.js: the sidebar on the page and in a course tab\'s frame (do
   assert.match(src, /!\(sidebarHere\(\) && !globalThis\.GZ_SIDEBAR_UI\?\.failed\(\)\)/);
   assert.match(src, /const syncWidgets = \(\) => \{\n {4}syncSidebar\(\);/);
 });
+
+test('a slow Ultra route never relabels the outgoing column on a timeout', async () => {
+  const p = page({ stored: record() });
+  let now = 10000, timers = [];
+  p.c.Date = class extends Date { static now() { return now; } };
+  p.c.setTimeout = (f) => { timers.push(f); return timers.length; };
+  await p.pass();
+  p.c.location.pathname = '/ultra/courses/_102_1/outline';
+  await p.pass();
+  now += 10000;
+  for (const f of timers.splice(0)) f();
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_101_1', 'elapsed time does not establish a new native view');
+  const old = p.$('aside.outline-actions');
+  old.append(p.el('section', 'gz-course-notes', 'Glaze helper loaded for the new address'));
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_101_1', 'Glaze helpers do not establish a new native view');
+  const fresh = p.el('aside', 'outline-actions', p.el('div', 'spinner', 'Loading'));
+  old.replaceWith(fresh);
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_101_1', 'a replacement that is still loading is not ready');
+  fresh.replaceChildren(p.el('div', 'js-details-and-actions', 'New course details'));
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_102_1');
+});
+
+test('a route change invalidates callbacks even while its native view is still outgoing', async () => {
+  const p = page({ stored: record() });
+  await p.pass();
+  const before = p.side.context();
+  p.c.location.pathname = '/ultra/courses/_102_1/outline';
+  assert.notEqual(p.side.context().gen, before.gen, 'callbacks can arrive before the site schedules its next pass');
+  await p.pass();
+  assert.notEqual(p.side.context().gen, before.gen);
+  assert.equal(p.side.context().courseId, before.courseId);
+});
+
+test('an outgoing details layer cannot establish a different course from its address alone', async () => {
+  const p = page({ at: 'detail', stored: record() });
+  await p.pass();
+  p.c.location.pathname = '/ultra/courses/_102_1/outline';
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_101_1', 'the outgoing layer and column are still the old course');
+  p.$('.layer-details').remove();
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_101_1', 'closing the old layer still does not establish the new course');
+  p.$('aside.outline-actions').replaceWith(p.el('aside', 'outline-actions', p.el('div', 'js-details-and-actions', 'New course details')));
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_102_1');
+});
+
+test('a new native course body establishes context even when Ultra keeps identical column blocks', async () => {
+  const p = page({ stored: record() });
+  const panel = p.$('.course-content-container');
+  panel.setAttribute('bb-course-membership-markups', '_101_1');
+  await p.pass();
+  p.c.location.pathname = '/ultra/courses/_102_1/outline';
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_101_1');
+  panel.setAttribute('bb-course-membership-markups', '_102_1');
+  p.$('.course-outline-content').replaceWith(p.el('section', 'course-outline-content', 'New course content'));
+  await p.pass();
+  assert.equal(p.side.context().courseId, '_102_1', 'identical faculty and details do not hold the new course back');
+});
+
+test('a hidden browser document closes the drawer and suspends observation until visible again', async () => {
+  const p = page({ width: 900, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const events = new Map();
+  p.doc.addEventListener = (name, f) => { events.set(name, f); };
+  p.doc.removeEventListener = (name) => { events.delete(name); };
+  await p.pass();
+  p.fire(p.$('#gz-sb-launch'), 'click');
+  assert.equal(p.doc.root.dataset.gzSidebarOpen, '');
+  p.doc.visibilityState = 'hidden';
+  events.get('visibilitychange')?.();
+  assert.equal(p.side.asleep(), true);
+  assert.equal(p.side.host(), null);
+  assert.ok(p.observers.every((o) => !o.on));
+  assert.ok(!p.doc.body.all().some((e) => e.inert), 'drawer inertness released');
+  p.doc.visibilityState = 'visible';
+  events.get('visibilitychange')?.();
+  await settle();
+  assert.equal(p.side.asleep(), false);
+  assert.ok(p.side.host());
+  assert.ok(p.observers.some((o) => o.on));
+});
+
+test('covering an Ultra drawer releases its top-layer popover as well as its inert lock', async () => {
+  const p = page({ width: 900, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  let visible = true, lifted = false;
+  p.c.GZ_CTABS = { visible: () => visible };
+  await p.pass();
+  const host = p.host();
+  host.showPopover = () => { lifted = true; };
+  host.hidePopover = () => { lifted = false; };
+  p.fire(p.$('#gz-sb-launch'), 'click');
+  assert.equal(lifted, true);
+  visible = false; p.side.cover();
+  assert.equal(lifted, false, 'a hidden drawer cannot cover the next course frame from the top layer');
+  assert.equal(host.getAttribute('popover'), null);
+});
+
+test('an account change resets the sidebar record and generation before its next render', async () => {
+  const other = S.key('ultra', O, '_4_1');
+  const p = page({ stored: { ...record({ open: false }), [other]: S.clean({ mig: 1, open: true }) } });
+  await p.pass();
+  const before = p.side.context().gen;
+  p.c.GZ_CTX.account = async () => '_4_1';
+  await p.pass();
+  assert.equal(p.side.context().accountId, '_4_1');
+  assert.notEqual(p.side.context().gen, before);
+  assert.equal(p.side.rec().open, true, 'new account record');
+  await p.side.op([{ op: 'open', v: false }]);
+  assert.equal(p.sent.at(-1).key, other, 'new writes use the new account');
+});
+
+test('a failed write waiting on another callback cannot show its error after navigation', async () => {
+  const p = page({ stored: record() });
+  await p.pass();
+  const held = [];
+  p.c.chrome.runtime.sendMessage = (m, cb) => held.push(cb);
+  const a = p.side.op([{ op: 'open', v: false }]);
+  const b = p.side.op([{ op: 'width', px: 400 }]);
+  held.shift()({ ok: false });
+  await a;
+  p.c.location.pathname = '/ultra/courses/_101_1/outline/discussion/_9_1';
+  p.$('#main-content-inner').append(p.el('div', 'layer-details', 'Participation'));
+  await p.pass();
+  held.shift()({ ok: true });
+  await b; await settle();
+  assert.equal(p.$('.gz-sb-note').textContent, '', 'the old route owns the failed save');
+});
+
+test('Add widgets opened before the widget renderer finishes fills when its catalog arrives', async () => {
+  const p = page({ stored: record() });
+  await p.pass();
+  p.fire(p.$('.gz-sb-add'), 'click');
+  assert.equal(p.$('#gz-sb-adding').hidden, false);
+  assert.equal(p.$('.gz-sb-row'), null, 'the renderer has not loaded yet');
+  p.c.GZ_WIDGETS_UI = { catalog: () => [{ id: 'timer', name: 'Focus timer', where: 'off' }] };
+  p.side.drawn(0);
+  assert.ok(p.$('.gz-sb-row')?.textContent.includes('Focus timer'), 'the open chooser learns the loaded catalog');
+});
+
+test('a frame hidden before its first mount keeps committed sidebar changes for its first show', async () => {
+  const p = page({ stored: record() }), listeners = [];
+  let visible = false;
+  p.c.GZ_CTABS = { visible: () => visible };
+  p.c.chrome.storage.onChanged.addListener = (f) => listeners.push(f);
+  await p.pass();
+  assert.equal(p.side.active(), false);
+  const next = S.clean({ mig: 1, dock: [{ id: 'timer' }], dest: { timer: 'dock' } });
+  p.store[KEY] = next;
+  for (const f of listeners) f({ [KEY]: { newValue: next } }, 'local');
+  visible = true; p.side.cover(); await settle();
+  assert.equal(p.side.rec().dest.timer, 'dock', 'first show uses the record committed while waiting');
+});

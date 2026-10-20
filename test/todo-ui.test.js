@@ -104,7 +104,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
   };
   c.globalThis = c;
   const src = read('features/todo.js').replace('  return { sync, add, cmds, mount, unmount, suspend, resume };', `  return { sync, add, cmds, mount, unmount, suspend, resume, probe: {
-    refresh, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
+    refresh, keepDraft, onStore, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
       box = new E('section'); head = new E(); line = new E('p'); body = new E(); },
@@ -520,4 +520,55 @@ test('a course-tab switch hands the open task form to the document shown next th
   a.c.GZ_TODO_UI.suspend();
   assert.equal(a.p.formNow().draft.title, 'Essay outline');
   assert.equal(key in shared.store, false);
+});
+
+test('a suspended task list cannot erase a handed-off draft on pagehide or unmount, or refresh on settings changes', async () => {
+  const f = feature(), ui = f.c.GZ_TODO_UI, target = new E();
+  ui.mount(target, { courseId: '25', scope: 'follow' }); await settle(); await settle();
+  f.p.form({ cid: '25', draft: { title: 'Hand this forward' } });
+  ui.suspend();
+  const key = 'draft:todo:https://canvas.test/3';
+  f.p.keepDraft();
+  assert.equal(f.store[key]?.todo.draft.title, 'Hand this forward', 'a hidden pagehide preserves the handoff');
+  const before = planner(f.calls);
+  await f.p.refresh(true);
+  assert.equal(planner(f.calls), before, 'no forced refresh while covered');
+  ui.mount(target, { courseId: '26', scope: 'follow' });
+  await f.p.refresh(true);
+  assert.equal(planner(f.calls), before, 'a context update cannot wake a covered list');
+  ui.unmount(target);
+  assert.equal(f.store[key]?.todo.draft.title, 'Hand this forward', 'hidden teardown preserves the handoff');
+});
+
+test('only the latest task draft resume can consume storage after rapid tab switches', async () => {
+  const f = feature(), ui = f.c.GZ_TODO_UI;
+  ui.mount(new E(), { courseId: '25', scope: 'follow' }); await settle(); await settle();
+  ui.suspend();
+  const reads = [], key = 'draft:todo:https://canvas.test/3';
+  f.c.chrome.storage.local.get = (k, cb) => reads.push(cb);
+  const first = ui.resume(); ui.suspend(); const second = ui.resume();
+  reads[1]({ [key]: { at: Date.now(), todo: { draft: { title: 'Latest owner' } } } }); await second;
+  // The old callback must not consume a newer draft that another document has since deposited.
+  f.store[key] = { at: Date.now(), todo: { draft: { title: 'Waiting for next owner' } } };
+  f.p.form(null);
+  reads[0]({ [key]: { at: Date.now(), todo: { draft: { title: 'Old snapshot' } } } }); await first;
+  assert.equal(f.p.formNow(), null);
+  assert.equal(f.store[key].todo.draft.title, 'Waiting for next owner');
+});
+
+test('a draft handoff committed after the next document resumed arrives through storage, and failed backups stay in memory', async () => {
+  const shared = { store: {}, waiting: [] }, key = 'draft:todo:https://canvas.test/3';
+  const a = feature({ shared }), b = feature({ shared });
+  for (const f of [a, b]) f.c.GZ_TODO_UI.mount(new E(), { courseId: '25', scope: 'follow' });
+  await settle(); await settle(); b.c.GZ_TODO_UI.suspend();
+  const held = [], set = a.c.chrome.storage.local.set;
+  a.c.chrome.storage.local.set = (v, cb) => { if (v[key]) held.push(() => { set(v, () => cb?.()); b.p.onStore({ [key]: { newValue: v[key] } }, 'local'); }); else set(v, cb); };
+  a.p.form({ draft: { title: 'Late handoff' } }); a.c.GZ_TODO_UI.suspend();
+  await b.c.GZ_TODO_UI.resume(); assert.equal(b.p.formNow(), null, 'the first read precedes commit');
+  held.shift()(); await settle();
+  assert.equal(b.p.formNow()?.draft.title, 'Late handoff'); assert.equal(a.p.formNow(), null);
+  b.c.GZ_TODO_UI.suspend();
+  a.c.chrome.storage.local.set = (v, cb) => { a.c.chrome.runtime.lastError = { message: 'quota' }; cb(); a.c.chrome.runtime.lastError = undefined; };
+  await a.c.GZ_TODO_UI.resume(); a.p.form({ draft: { title: 'Keep on failure' } }); a.c.GZ_TODO_UI.suspend();
+  await settle(); assert.equal(a.p.formNow()?.draft.title, 'Keep on failure', 'a rejected backup cannot lose the only copy');
 });

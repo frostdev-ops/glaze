@@ -9,6 +9,8 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const G = require('../defaults.js');
+const I = require('../lib/i18n.js');
+for (const lang of I.CODES) require(`../i18n/${lang}.js`);
 const W = require('../lib/widgets.js');
 const src = path.resolve(__dirname, '..');
 const out = path.resolve(process.argv[2] || path.join(os.tmpdir(), 'glaze-sidebar-canvas-evidence'));
@@ -375,7 +377,7 @@ const layoutOk = async (name, width) => {
     });
     const move = async (label) => {
       await page.locator('section.gz-w[data-tile="notes"] .gz-w-dest').click();
-      await page.locator('#gz-sb-menu .gz-sb-item', { hasText: label }).click();
+      await page.locator('#gz-sb-menu .gz-sb-item', { hasText: I.t(label, {}, await page.locator('html').getAttribute('lang')) }).click();
       await page.waitForTimeout(500);
     };
     await page.click('#gz-dash .gz-dash-edit');

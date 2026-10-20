@@ -115,7 +115,7 @@ test('Canvas file downloads with queries remain native from both course and page
 function bridge(from = '12') {
   const mine = {}, calls = [], replies = [];
   let listener;
-  const frame = { el: { contentWindow: mine } };
+  const frame = { ready: true, el: { contentWindow: mine } };
   const c = vm.createContext({ L, PAGE: 'page', ctx: { site: 'canvas' }, location: { origin },
     framed: '', preview: false, on: true, showing: from, waiting: '14', who: '42',
     spare: new Map(), next: new Map(), frames: new Map([[from, frame]]), tabs: [{ cid: '12', path: '/courses/12/pages/reading', top: 430, pin: true }],
@@ -133,7 +133,9 @@ test('Canvas loaded messages restore visibility and pending selection to only th
   const p = bridge(); p.c.showing = '13';
   p.post({ gzCtab: 'loaded' });
   assert.deepEqual(p.replies, [{ gzCtab: 'visible', on: false, site: origin }]);
-  p.replies.length = 0; p.c.showing = '12'; p.post({ gzCtab: 'loaded' });
+  p.replies.length = 0; p.c.showing = '12'; p.frame.ready = false; p.post({ gzCtab: 'loaded' });
+  assert.deepEqual(p.replies, [{ gzCtab: 'visible', on: false, site: origin }, { gzCtab: 'loading', cid: '14', site: origin }], 'a selected document still loading cannot operate the sidebar');
+  p.replies.length = 0; p.frame.ready = true; p.post({ gzCtab: 'loaded' });
   assert.deepEqual(p.replies, [{ gzCtab: 'visible', on: true, site: origin }, { gzCtab: 'loading', cid: '14', site: origin }]);
 });
 
