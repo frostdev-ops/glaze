@@ -27,7 +27,7 @@ For the dedicated Firefox for Android emulator, launcher and validation checklis
 
 ## Safari on Mac
 
-[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.0.5/glaze-3.0.5-safari-macos.dmg): signed and notarized, attached to each release on
+[Download the Mac app](https://github.com/frostdev-ops/glaze/releases/download/v3.3.0/glaze-3.3.0-safari-macos.dmg): signed and notarized, attached to each release on
 [GitHub Releases](https://github.com/frostdev-ops/glaze/releases). It runs
 on Intel and Apple Silicon Macs with macOS 12 or newer. Glaze's styling needs Safari 17.2 or newer;
 the frosted-glass blur needs Safari 18.
