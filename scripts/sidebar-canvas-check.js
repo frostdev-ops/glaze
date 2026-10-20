@@ -168,18 +168,27 @@ const layoutOk = async (name, width) => {
           await page.goto(`${local}/courses/${other.id}`);
           await page.waitForSelector('#gz-ctabs', { state: 'attached' });
           await page.waitForFunction(() => document.querySelector('#gz-ctabs .gz-ctab'));
+          // Canvas can mount its app after the in-flow footer. Reproduce that ordering without a timing race.
+          const earlyFooter = name === 'course-home' && width === 1440;
+          if (earlyFooter) { await page.waitForSelector('#gz-footer'); await page.locator('#gz-footer').evaluate((e) => document.body.prepend(e)); }
           await page.locator('#content').evaluate((e, at) => { const a = document.createElement('a'); a.id = 'sidebar-check-link'; a.href = at; a.textContent = 'Open'; e.prepend(a); }, at);
           await page.locator('#sidebar-check-link').click();
           const cid = at.match(/^\/courses\/(\d+)/)?.[1] || 'page';
           await page.waitForSelector(`#gz-ctabs-frames[data-on] > iframe[name="gz-ctab:${cid}"]:not([inert])`);
           root = page.frame({ name: `gz-ctab:${cid}` });
+          if (earlyFooter) {
+            ok(await page.locator('#gz-ctabs-frames').evaluate((e) => Math.abs(e.clientHeight - (innerHeight - document.getElementById('gz-footer').getBoundingClientRect().height)) <= 1), 'a footer before the Canvas app cannot collapse the course frame');
+            await page.locator('#gz-footer').evaluate((e) => document.body.append(e));
+          }
         } else await page.goto(local + at);
         await wheelScroll(root, `${name} ${width} ${tabs ? 'course tabs' : 'direct'}`);
+        if (tabs && name === 'course-home' && width === 1440) await shot('scroll-course-home-fixed');
       }
     }
     if (process.env.SIDEBAR_SCROLL_ONLY) { console.log(`passed; ${checks} wheel checks`); return; }
 
     // Real pointer gestures, modal keyboard behavior, and appearance under alternate browser settings.
+    await page.setViewportSize({ width: 1600, height: 1000 });
     await store(settings(true), { widgetLayout: lay });
     await page.goto(local + '/'); await page.waitForSelector('.gz-sb-dock #gz-todo');
     const record = async () => (await localGet(recordKey))[recordKey];

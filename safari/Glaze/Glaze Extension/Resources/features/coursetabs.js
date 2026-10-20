@@ -590,7 +590,9 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
   const lay = () => {
     if (!host) return;
     const foot = document.getElementById('gz-footer');
-    host.style.bottom = `${shown(foot) ? Math.max(0, Math.round(innerHeight - foot.getBoundingClientRect().top)) : 0}px`;
+    const r = shown(foot) ? foot.getBoundingClientRect() : null;
+    // Canvas's footer is in flow and can precede its late-mounted app. Its position must never collapse the frame.
+    host.style.bottom = `${r ? Math.max(0, Math.round(ctx.site === 'canvas' ? r.height : innerHeight - r.top)) : 0}px`;
   };
   const drop = (cid, replacing = false) => {
     for (const s of spare.get(cid) || []) s.el.remove();
