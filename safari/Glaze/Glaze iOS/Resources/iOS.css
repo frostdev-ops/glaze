@@ -35,8 +35,12 @@ h2 { font: -apple-system-headline; gap: 10px; margin-bottom: 8px; }
 .status, .open-preferences { display: none; }
 .live .status { display: block; }
 .live .open-preferences { display: block; }
-.live.state-on .open-preferences { display: none; }
 button.primary { width: 100%; min-height: 50px; margin-top: 6px; border-radius: 14px; font: -apple-system-headline; }
+button { min-height: 44px; padding: 8px 14px; font: -apple-system-subheadline; }
+.help-panel summary, .help-panel p, .updates h2 { font: -apple-system-subheadline; }
+.help-panel summary { min-height: 44px; padding-block: 10px; font-weight: 600; }
+.help-panel p { line-height: 1.5; }
+.app-version { font: -apple-system-caption1; }
 
 /* iPhone: the picture under its step. */
 @media (max-width: 620px) {

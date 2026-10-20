@@ -102,7 +102,8 @@ body[data-view="guide"] .guide { display: block; }
 .status-on, .state-on .status-off { display: none; }
 .state-on .status-on { display: inline; color: var(--ok); }
 .status-off { color: var(--muted); }
-.state-on .open-preferences { display: none; }
+.state-unknown .status { color: var(--muted); }
+.state-on .status { color: var(--ok); }
 
 /* Drawn stand-ins for Safari's own screens; the highlighted part is what to click. */
 .mock {
@@ -173,6 +174,22 @@ body.updated.state-on[data-view="guide"] .guide { display: flex; flex-direction:
 
 .error:empty { display: none; }
 .error { margin: 12px 0 0; color: #d9480f; text-align: center; font-size: 12.5px; }
+
+[hidden] { display: none !important; }
+button, summary, input, label { cursor: pointer; }
+button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.help-panel, .updates { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.help-panel summary { font-weight: 600; font-size: 13px; }
+.help-panel p { margin: 10px 0 0; font-size: 12.5px; }
+body[data-view="guide"] .updates { display: block; }
+.dmg-updates, body[data-channel="dmg"] .store-updates { display: none; }
+body[data-channel="dmg"] .dmg-updates { display: block; }
+.dmg-updates label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12.5px; }
+.dmg-updates input { accent-color: var(--accent); }
+.update-status { margin-top: 8px; }
+footer { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+.app-version { margin-right: auto; font-size: 12px; color: var(--muted); }
+body.updated.state-on .help-panel, body.updated.state-on .updates { text-align: left; }
 
 @keyframes pulse { 50% { outline-color: transparent; } }
 @media (prefers-reduced-motion: reduce) { .target { animation: none; } }

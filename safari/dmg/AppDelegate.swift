@@ -2,7 +2,7 @@ import Cocoa
 import Sparkle
 
 @main
-final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate, NSMenuItemValidation {
     private var updater: SPUUpdater?
     private let driver = GlazeUpdateDriver()
     private var window: NSWindowController?
@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var pendingCheck = false
     private var userSession = false
     private var deadline: Timer?
+    private var updaterObservations: [NSKeyValueObservation] = []
+    private var updateStatus = ""
 
     func application(_ application: NSApplication, open urls: [URL]) {
         // URL parameters never select a feed, file, action or installation target.
@@ -26,6 +28,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         launched = true
+        if let appMenu = NSApp.mainMenu?.items.first?.submenu {
+            let item = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdatesByUser), keyEquivalent: "")
+            item.target = self
+            appMenu.insertItem(item, at: min(1, appMenu.items.count))
+        }
         driver.unexpectedExtraction = { [weak self] in self?.finishHidden("unexpected interactive extraction") }
         if notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true {
             showGuide()
@@ -73,10 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         startUpdater(background: true)
     }
 
-    private func startUpdater(background: Bool) {
-        driver.backgroundCheck = background
+    private func startUpdater(background: Bool, manual: Bool = false) {
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
               let decoded = Data(base64Encoded: key), decoded.count == 32 else {
+            updateStatus = "Updates are unavailable in this build. Get a signed release from frostdev.io."
+            publishUpdateSettings()
             finishHidden("public update key is not configured")
             return
         }
@@ -87,13 +95,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
                 updater = instance
                 instance.sendsSystemProfile = false
                 try instance.start()
+                updaterObservations = [
+                    instance.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, _ in self?.publishUpdateSettings() },
+                    instance.observe(\.automaticallyDownloadsUpdates, options: [.new]) { [weak self] _, _ in self?.publishUpdateSettings() },
+                    instance.observe(\.canCheckForUpdates, options: [.new]) { [weak self] _, _ in self?.publishUpdateSettings() }
+                ]
             }
-            updater?.checkForUpdatesInBackground()
-            NSLog("Glaze update: background check started, hidden=%d", !userSession)
+            guard let updater else { return }
+            if manual {
+                guard updater.canCheckForUpdates else {
+                    updateStatus = "An update check or download is already in progress."
+                    publishUpdateSettings()
+                    return
+                }
+                driver.backgroundCheck = false
+                updater.checkForUpdates()
+            } else {
+                // A native check-only message must respect the user's automatic-check preference too.
+                guard updater.automaticallyChecksForUpdates else {
+                    publishUpdateSettings()
+                    finishHidden("automatic checks are disabled")
+                    return
+                }
+                driver.backgroundCheck = background
+                updater.checkForUpdatesInBackground()
+            }
+            updateStatus = "Checking for updates…"
+            publishUpdateSettings()
+            NSLog("Glaze update: check started, manual=%d hidden=%d", manual, !userSession)
         } catch {
+            updater = nil
+            updaterObservations = []
+            updateStatus = "Updates could not start. Try again, or open Setup help."
+            publishUpdateSettings()
             NSLog("Glaze update: startup failed: %@", String(describing: error))
             finishHidden("startup error")
         }
+    }
+
+    func updateSettings() -> [String: Any] {
+        ["automaticChecks": updater?.automaticallyChecksForUpdates == true,
+         "automaticDownloads": updater?.automaticallyDownloadsUpdates == true,
+         "canCheck": updater?.canCheckForUpdates == true,
+         "updateStatus": updateStatus]
+    }
+
+    private func publishUpdateSettings() {
+        NotificationCenter.default.post(name: Notification.Name("GlazeUpdateStateChanged"), object: nil)
+    }
+
+    func setUpdatePreference(_ preference: String, enabled: Bool) {
+        guard let updater else { return }
+        if preference == "automatic-checks" { updater.automaticallyChecksForUpdates = enabled }
+        if preference == "automatic-downloads", updater.automaticallyChecksForUpdates {
+            updater.automaticallyDownloadsUpdates = enabled
+        }
+        publishUpdateSettings()
+    }
+
+    @objc func checkForUpdatesByUser() {
+        showGuide()
+        startUpdater(background: false, manual: true)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        menuItem.action != #selector(checkForUpdatesByUser) || updater?.canCheckForUpdates == true
     }
 
     private func finishHidden(_ reason: String) {
@@ -123,6 +189,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         NSLog("Glaze update: cycle finished, error=%@", String(describing: error))
         finishHidden("cycle complete")
         driver.backgroundCheck = false
+        let detail = error as NSError?
+        let noUpdate = detail?.domain == SUSparkleErrorDomain && detail?.code == Int(SUError.noUpdateError.rawValue)
+        let checked = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .short)
+        updateStatus = noUpdate ? "You’re up to date. Last checked \(checked)."
+            : error == nil ? "Last checked \(checked)."
+            : "The update check did not complete. Check your connection and try again."
+        publishUpdateSettings()
     }
 
     func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? { [] }
