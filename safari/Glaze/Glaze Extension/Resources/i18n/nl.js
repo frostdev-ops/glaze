@@ -2860,5 +2860,6 @@
   "Arranged by mods": "Ingedeeld door mods",
   "A mod may arrange the bar while it runs, never saved. Your own choices still win where you made them.": "Een mod kan de balk indelen zolang hij draait, zonder iets op te slaan. Je eigen keuzes blijven gelden waar je ze maakte.",
   "Let {name} arrange it": "{name} mag hem indelen",
-  "No mod arranges it.": "Geen mod deelt hem in."
+  "No mod arranges it.": "Geen mod deelt hem in.",
+  "On Canvas and Blackboard Ultra: the page's own sidebar with your widgets docked under it, at the right edge on wide screens and a drawer on narrow ones. Where each widget goes is kept for each site and account, on this device.": "Op Canvas en Blackboard Ultra: de zijbalk van de pagina met je vastgezette widgets eronder, aan de rechterrand op brede schermen en als lade op smalle. Waar elke widget staat, wordt per site en account op dit apparaat bewaard."
 };

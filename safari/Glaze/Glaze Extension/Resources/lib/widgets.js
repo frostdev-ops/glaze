@@ -124,7 +124,9 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
     const filled = BOARDS.filter((b) => Array.isArray(raw?.filled) && raw.filled.includes(b));
     // Layouts kept before auto-fill had no marker. Their board, including an intentionally empty one, stays as it was.
     if (raw && Object.keys(raw).length && !Array.isArray(raw.filled)) filled.push('cdash');
-    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled };
+    // sidebarFresh: this device's layout began with a new install (lib/background.js keepWidgets), for the sidebar's
+    // one-time move of To Do (lib/sidebar.js migrate). Kept as it is; nothing here reads it.
+    return { tiles, music: music(raw?.music) ? raw.music.trim() : '', boards, widths, todo: true, canvasTodo: true, filled, ...(raw?.sidebarFresh === true && { sidebarFresh: true }) };
   };
   // What an update keeps on a device with no layout stored: the tiles it showed when a new layout started with four. Its
   // notes box (the notes' own switch) and Ultra's Dashboard (shown whatever the widgets' switch) as they were, and the

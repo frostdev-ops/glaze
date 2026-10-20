@@ -166,7 +166,7 @@ test('a fresh install stays empty on later updates, while an older install keeps
   const fresh = worker();
   fresh.installed[0]({ reason: 'install' }); await settle();
   fresh.installed[0]({ reason: 'update' }); await settle();
-  assert.deepEqual(W.layout(fresh.store.local.widgetLayout), W.layout(), 'an untouched fresh layout must not gain old widgets');
+  assert.deepEqual(W.layout(fresh.store.local.widgetLayout), { ...W.layout(), sidebarFresh: true }, 'an untouched fresh layout must not gain old widgets');
   const old = worker(); old.store.sync.enhance.widgets = true;
   old.installed[0]({ reason: 'update' }); await settle();
   assert.deepEqual(W.layout(old.store.local.widgetLayout), W.kept(true));

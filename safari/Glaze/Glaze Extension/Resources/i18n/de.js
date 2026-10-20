@@ -2860,5 +2860,6 @@
   "Arranged by mods": "Von Mods angeordnet",
   "A mod may arrange the bar while it runs, never saved. Your own choices still win where you made them.": "Ein Mod kann die Leiste anordnen, solange er läuft, ohne etwas zu speichern. Deine eigenen Entscheidungen gelten weiterhin, wo du sie getroffen hast.",
   "Let {name} arrange it": "{name} darf sie anordnen",
-  "No mod arranges it.": "Kein Mod ordnet sie an."
+  "No mod arranges it.": "Kein Mod ordnet sie an.",
+  "On Canvas and Blackboard Ultra: the page's own sidebar with your widgets docked under it, at the right edge on wide screens and a drawer on narrow ones. Where each widget goes is kept for each site and account, on this device.": "Auf Canvas und Blackboard Ultra: die Seitenleiste der Seite mit deinen angedockten Widgets darunter, am rechten Rand auf breiten Bildschirmen und als Schublade auf schmalen. Wo jedes Widget hingehört, wird für jede Website und jedes Konto auf diesem Gerät gespeichert."
 };

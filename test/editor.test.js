@@ -11,7 +11,7 @@ const ENHANCE = {
   'study/tools': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'keys', 'newcontent', 'palette', 'drafts', 'download', 'search', 'place', 'coursemenu', 'docPages', 'toggles'],
   'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
   'study/todo': ['todo', 'cardTasks', 'gradescope'],
-  'study/widgets': ['notes', 'widgets'],
+  'study/widgets': ['notes', 'widgets', 'sidebar'],
   'study/pet': ['pet'],
   'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
   'study/imports': ['syllabus', 'insights'],
