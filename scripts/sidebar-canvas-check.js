@@ -111,9 +111,7 @@ const layoutOk = async (name, width) => {
     await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, dockRecord]);
     await page.waitForSelector('.gz-sb-dock [data-tile="notes"]');
     const drag = async (sel, dx, dy) => {
-      const el = page.locator(sel); await el.evaluate((e) => e.scrollIntoView({ block: 'center' }));
-      // The column ends above the footer as the page scrolls: measured once that has settled.
-      await page.waitForTimeout(150);
+      const el = page.locator(sel); await el.scrollIntoViewIfNeeded();
       const r = await el.boundingBox(), x = r.x + Math.min(4, r.width / 2), y = r.y + Math.min(20, r.height / 2);
       await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + dx, y + dy, { steps: 8 }); await page.mouse.up();
     };
@@ -121,7 +119,7 @@ const layoutOk = async (name, width) => {
     await drag('.gz-sb-resize', -40, 0);
     await wait(record, (r) => r.width !== width0, 'pointer width saved');
     ok((await record()).width === width0 + 40, 'pointer width resize saves once released');
-    await page.waitForTimeout(200);
+    await page.waitForFunction((w) => Math.round(document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().width) === w, width0 + 40);
     const h0 = await page.locator('[data-tile="notes"] .gz-w-body').evaluate((e) => e.offsetHeight);
     await drag('[data-tile="notes"] .gz-w-vsize', 0, 48);
     await wait(record, (r) => r.dock.find((x) => x.id === 'notes').h != null, 'pointer height saved');
@@ -167,7 +165,7 @@ const layoutOk = async (name, width) => {
     await wait(state, (s) => s.mode === 'collapsed', 'desktop preference restored');
     await page.locator('.gz-sb-toggle').click();
     await page.goto(`${local}/courses/${calc.id}/modules`); await page.waitForSelector('#gz-sidebar');
-    probe(await page.locator('#gz-sidebar').evaluate((e) => Math.abs(e.getBoundingClientRect().bottom - innerHeight) <= 1), 'the owned column fills the viewport below navigation');
+    probe(await page.locator('#gz-sidebar').evaluate((e) => Math.abs(e.getBoundingClientRect().bottom - (innerHeight - (document.getElementById('gz-footer')?.getBoundingClientRect().height || 0))) <= 1), 'the owned column fills the viewport below navigation, keeping footer room');
     probe(await page.locator('.gz-sb-more').evaluate((e) => getComputedStyle(e).backgroundColor === 'rgba(0, 0, 0, 0)'), 'sidebar icon buttons inherit the Look surface');
     await page.emulateMedia({ reducedMotion: 'reduce', forcedColors: 'active' });
     probe(await page.locator('#gz-sidebar').evaluate((e) => getComputedStyle(e).borderInlineStartStyle !== 'none'), 'high contrast keeps a visible sidebar border');
@@ -246,7 +244,14 @@ const layoutOk = async (name, width) => {
       await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, { ...dockRecord, width: 352, open: true }]);
       await page.setViewportSize({ width: w, height: 900 }); await page.goto(`${local}/courses/${calc.id}`);
       await wait(() => page.evaluate(() => document.documentElement.dataset.gzSidebar || null), Boolean, `footer ${footer} ${w}: sidebar ready`);
-      await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(500);
+      await page.waitForFunction((on) => !!document.getElementById('gz-footer') === on, footer);
+      const bottom0 = await page.locator('[data-gz-sidebar-host]').evaluate((e) => e.getBoundingClientRect().bottom);
+      await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForFunction(() => {
+        const f = document.getElementById('gz-footer')?.getBoundingClientRect(), h = document.querySelector('[data-gz-sidebar-host]');
+        return !f || !h?.getClientRects().length || h.getBoundingClientRect().bottom <= f.top + 1;
+      });
+      if (footer && w === 1600) probe(await page.locator('[data-gz-sidebar-host]').evaluate((e, before) => Math.abs(e.getBoundingClientRect().bottom - before) <= 1, bottom0), `footer ${w}${navbar ? ' navbar' : ''}: scrolling never shrinks the fixed column`);
       const s = await layoutOk(`footer-${footer ? 'on' : 'off'}${navbar ? '-navbar' : ''}`, w);
       // Covered by Glaze's column or buttons (an open drawer's backdrop covers the whole page, as a dialog's does).
       const free = await page.evaluate(() => {

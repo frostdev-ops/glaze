@@ -147,14 +147,16 @@
     position: fixed; z-index: 1250; inset-inline-end: calc(0.75rem + env(safe-area-inset-right, 0px)); bottom: calc(var(--gz-sb-end) + 1rem + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 1.5rem); padding: 0.45rem 0.95rem !important; color: var(--gz-accent-ink) !important; background: var(--gz-accent) !important; border-color: var(--gz-accent) !important; box-shadow: var(--gz-shadow);
   }
+  html[dir="rtl"] :is(.gz-sb-edge, .gz-sb-launch) { inset-inline-end: calc(0.75rem + env(safe-area-inset-left, 0px)); }
   @media (max-width: 899.98px) {
-    html[data-gz-navbar]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: 96px; }
+    html[data-gz-navbar]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
     /* The bar sits above the footer. */
-    html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: calc(96px + var(--gz-footer-h, 2rem)); }
+    html[data-gz-navbar][data-gz-footer]:not([data-gz-navbar~="none"]) { --gz-sb-bottom: calc(96px + var(--gz-footer-h, 2rem) + env(safe-area-inset-bottom, 0px)); }
   }
 
   .gz-sb-menu {
     position: fixed; z-index: 1400; display: grid; min-width: 12rem; max-width: calc(100vw - 16px); padding: 0.25rem; box-sizing: border-box;
+    max-height: calc(100vh - 16px); overflow-y: auto;
     font: 0.85rem/1.4 var(--gz-font); color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface));
     border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow);
   }

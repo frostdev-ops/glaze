@@ -108,6 +108,19 @@ test('Ultra: the same relay, its own key shape; the page\'s own account check st
   assert.ok(!('gen' in p.sent[0]) && !('n' in p.sent[0]), 'the worker gets the change, nothing of the frame');
 });
 
+test('reset uses the same relay allowlist and account isolation on both sites', async () => {
+  for (const site of ['canvas', 'ultra']) {
+    const p = topPage({ site, who: site === 'canvas' ? '3' : '_3_1' });
+    p.post(p.frames.get('26'), p.ask({ ops: [{ op: 'reset' }] }));
+    p.post(p.frames.get('25'), p.ask({ ops: [{ op: 'reset' }], key: S.key(site, p.c.location.origin, site === 'canvas' ? '4' : '_4_1') }));
+    await settle();
+    assert.equal(p.sent.length, 0, 'hidden and wrong-account resets are refused');
+    p.post(p.frames.get('25'), p.ask({ ops: [{ op: 'reset' }] }));
+    await settle();
+    assert.deepEqual(p.sent, [{ type: 'glaze:sidebar', key: p.ask().key, ops: [{ op: 'reset' }] }]);
+  }
+});
+
 test('an accepted change answered after the switch still reaches the frame that asked, never the one now on screen', async () => {
   const p = topPage({ replies: ['hold'] });
   p.post(p.frames.get('25'), p.ask({ n: 7, gen: 'a.3' }));
