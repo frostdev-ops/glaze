@@ -142,5 +142,7 @@ test('release documentation describes visual Rubric absorption and the native at
     assert.match(text, /Rubric[^.]*visually/i, file);
     assert.match(text, /document review/i, file);
   }
-  assert.match(read('CHANGELOG.md'), /## 3\.2\.1 \(unreleased\)/);
+  // The release that ships it names the Rubric in its own section, not a later one.
+  const [, notes] = read('CHANGELOG.md').split(/\n## \[3\.3\.0\][^\n]*\n/);
+  assert.match(notes.split(/\n## /)[0], /Rubric[^.]*visually/i);
 });
