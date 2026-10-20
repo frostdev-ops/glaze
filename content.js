@@ -343,10 +343,7 @@
   };
   // Moodle's extras, on first use: its data read (lib/moodle.js), then asked of the page's own Moodle.
   const moodleIn = () => need('lib/moodle.js', () => globalThis.GZ_MOODLE).then(() => need('features/moodle.js', () => globalThis.GZ_MOODLE_PAGE)).then(() => GZ_MOODLE_PAGE);
-  // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
-  // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
-  // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
-  // English for good, since switching language under the student later would be worse than not switching.
+  // Load the page's catalogue once. Text extras wait for it; the theme doesn't. A failure keeps English for this page.
   let wordsFor = null; // the catalogue the words are ready for ('' for none)
   let wordsLate = false; // a pass skipped its extras while waiting: the next one covers the whole page
   const wordsIn = new Set(); // what was drawn outside the extras' wait (the keyboard help) redraws itself in the words
@@ -899,13 +896,16 @@
     try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
+    // Read-only review is independently lazy, including when the reading tools are off.
+    if (observer && /\/(?:student-submission-view|submissions\/\d+)\/?$/.test(location.pathname)) need('features/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => GZ_DOCREVIEW.sync(!!observer), () => {});
+    else globalThis.GZ_DOCREVIEW?.sync(false);
     globalThis.GZ_KEYS?.sync();
     if (globalThis.GZ_DOCS) return GZ_DOCS.sync();
     if (observer && ((ultra && document.querySelector(PREVIEWS)) || (solo && settings.enhance.toggles && document.querySelector(`${DOC}, ${PREVIEWS}`)))) {
       need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
     }
   };
-  // Here, so it is first to see the key: Esc leaves focus mode, and the site doesn't also act on it.
+  // Reading focus gets Escape before the site.
   addEventListener('keydown', (e) => globalThis.GZ_DOCS?.esc(e), true);
 
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
@@ -1479,8 +1479,7 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   // Wearing or taking off a Look can change the nav's layout (GZ_CTX.parts).
   document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 
-  // The helpers a file loaded by need() may use (features/*.js): this frame's, through one name. The part's are asked
-  // of it when called, so a part that comes late still answers.
+  // This frame's helpers for lazy features; site helpers resolve when called.
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
     account: () => (site === 'canvas' ? X.ctx.profile().then((p) => String(p.id)) : X.ctx.me()),
     // The palette, the keys, the course menu, the previews and Download all (W0c).

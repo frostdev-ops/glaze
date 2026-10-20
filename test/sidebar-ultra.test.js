@@ -13,133 +13,7 @@ const vm = require('node:vm');
 const D = require('../defaults.js');
 const W = require('../lib/widgets.js');
 const S = require('../lib/sidebar.js');
-const { El } = require('./stand-in-dom.js');
-
-const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
-const O = 'https://school.blackboard.test';
-const KEY = S.key('ultra', O, '_3_1');
-const CARD = `course:${O}/_101_1`;
-
-// at: 'courses' | 'outline' | 'detail' | 'stream' (no column); width: the window; stored: storage.local; enhance;
-// widgets: run features/widgets.js too; todo: a stand-in Better To Do (features/todo.js) that mounts a list.
-const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets = false, todo = false, registration = null } = {}) => {
-  const doc = { activeElement: null };
-  const make = (t) => new El(t, doc);
-  const el = (tag, cls, ...kids) => { const e = make(tag); e.className = cls; e.append(...kids); return e; };
-  doc.root = make('html');
-  doc.body = make('body');
-  doc.root.append(doc.body);
-  const inner = el('div', '');
-  inner.id = 'main-content-inner';
-  const wrap = el('div', '', el('nav', 'MuiDrawer-paper'), el('main', '', inner));
-  wrap.id = 'site-wrap';
-  doc.body.append(wrap);
-  const where = { courses: '/ultra/course', outline: '/ultra/courses/_101_1/outline', detail: '/ultra/courses/_101_1/outline/discussion/_9_1', stream: '/ultra/stream' }[at];
-  if (at === 'courses') {
-    inner.append(el('section', 'base-courses-container route-view-container', el('div', 'base-courses-header-container', el('h1', 'page-title', 'Courses'), el('div', 'base-header-tools')),
-      el('div', 'base-courses-content', el('div', 'courses-panel', el('div', 'base-courses')), el('div', 'todo-panel js-todo-panel-skip-link-target', el('bb-todo', 'react-container', 'Due soon: Essay')))));
-  } else if (at !== 'stream') {
-    const faculty = el('bb-course-instructors', '', 'Course Faculty');
-    const details = el('div', 'js-details-and-actions outline-action-block', 'Details & Actions');
-    const sched = el('div', 'conditional-block', 'Schedule');
-    inner.append(el('div', 'course-content-container', el('div', 'panel-wrap', el('div', 'bb-course-navigation', 'Course'), el('section', 'course-outline-content', 'Week 1'), el('aside', 'outline-actions', faculty, details, sched))));
-    if (at === 'detail') inner.append(el('div', 'layer-content', 'A discussion'), el('div', 'layer-details', el('div', 'discussion-settings', 'Details & Information'), el('div', 'discussion-participants', 'Participation')));
-  }
-  const store = structuredClone(stored), sent = [], loads = [], storeListeners = [], winListeners = [], observers = [], todoCalls = [];
-  let queue = Promise.resolve();
-  const fire = (v, old) => { for (const f of [...storeListeners]) f(Object.fromEntries(Object.keys(v).map((k) => [k, { newValue: structuredClone(v[k]), oldValue: old[k] }])), 'local'); };
-  const area = {
-    get: async (ks) => Object.fromEntries([ks].flat().filter((k) => k in store).map((k) => [k, structuredClone(store[k])])),
-    set: async (v) => { const old = structuredClone(store); Object.assign(store, structuredClone(v)); setImmediate(() => fire(v, old)); return true; },
-  };
-  const settings = () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, todo: true, sidebar: true, dashboard: true, ...enhance } });
-  const sync = { get: async () => ({ enhance: settings().enhance }) };
-  const c = {
-    console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, structuredClone,
-    setTimeout: () => 0, clearTimeout() {}, setImmediate,
-    addEventListener: (type, f) => winListeners.push({ type, f }), removeEventListener: (type, f) => { const i = winListeners.findIndex((l) => l.type === type && l.f === f); if (i >= 0) winListeners.splice(i, 1); },
-    innerWidth: width, innerHeight: 900, location: { origin: O, pathname: where, href: `${O}${where}` },
-    document: doc, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
-    MutationObserver: class { constructor(f) { this.f = f; this.targets = []; observers.push(this); } observe(target) { this.targets.push(target); this.on = true; } disconnect() { this.on = false; this.targets = []; } },
-    requestAnimationFrame: (f) => { f(); return 1; }, cancelAnimationFrame() {},
-    performance: { getEntriesByType: () => [{ type: 'navigate' }] }, history: { length: 1 },
-    GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W, GZ_SIDEBAR: S,
-    GZ_CTX: {
-      site: 'ultra', solo: true, t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n]), locale: () => 'en', settings, acted: () => 0,
-      account: async () => '_3_1', profile: async () => ({ id: '_3_1', time_zone: 'UTC' }),
-      courseId: () => c.location.pathname.match(/\/ultra\/courses\/(_\d+_\d+)\//)?.[1],
-      need: async (f) => { loads.push(f); },
-    },
-    chrome: {
-      runtime: { id: 'glaze', lastError: undefined, getURL: (p) => p, getManifest: () => ({ version: '3' }), sendMessage: (m, cb) => {
-        sent.push(structuredClone(m));
-        const run = () => {
-          if (registration && m.type === 'glaze:ultra') registration.ready = true;
-          if (registration && !registration.ready && m.type === 'glaze:sidebar') return { ok: false };
-          return m.type === 'glaze:sidebar' ? S.change(structuredClone(m), area, sync) : m.type === 'glaze:widgetLayout' ? W.change(structuredClone(m), area) : { ok: true, timer: W.IDLE };
-        };
-        queue = queue.then(run).then((r) => cb?.(structuredClone(r)), () => cb?.({ ok: false }));
-      } },
-      storage: { local: { get: (ks, cb) => area.get(ks).then(cb), set: (v, cb) => { area.set(v).then(() => cb?.()); }, remove: (k, cb) => { for (const x of [k].flat()) delete store[x]; cb?.(); } },
-        sync: { get: (k, cb) => cb({}) }, onChanged: { addListener: (f) => storeListeners.push(f), removeListener: (f) => { const i = storeListeners.indexOf(f); if (i >= 0) storeListeners.splice(i, 1); } } },
-    },
-  };
-  // Ultra at this width: its nav 200px, the page from there; a course's top bar 60px high.
-  doc.boxOf = (e) => {
-    if (e.id === 'main-content-inner' || e.className === 'course-content-container' || e.className === 'course-outline-content') return { left: 200, top: 0, width: c.innerWidth - 200, height: 900 };
-    if (e.className === 'bb-course-navigation') return { left: 200, top: 0, width: c.innerWidth - 200, height: 60 };
-    if (e.dataset?.gzSidebarHost) return { left: c.innerWidth - 352, top: 60, width: 352, height: 800 };
-    if (/route-view-container/.test(e.className)) return { left: 200, top: 0, width: c.innerWidth - 200, height: 1600 };
-    if (e.id === 'gz-room') return { left: 200, top: 0, width: c.innerWidth - 200, height: 0 };
-    if (e.className === 'gz-dash-grid') return { left: c.innerWidth - 320 + 16, top: 120, width: 288, height: 0 };
-    if (e.className === 'base-courses') return { left: 200, top: 120, width: c.innerWidth - 600, height: 600 };
-    if (e.className === 'gz-w') return { left: Number(String(e.style.left || '0').replace('px', '')), top: 0, width: 288, height: 200 };
-    return null;
-  };
-  doc.fire = (target, type, extra = {}) => { const ev = { type, target, key: extra.key, shiftKey: false, button: 0, pointerId: 1, clientX: 0, clientY: 0, isTrusted: true, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} };
-    for (let x = target; x; x = x.parentNode) x.dispatchEvent?.(ev);
-    return ev; };
-  Object.assign(doc, {
-    documentElement: doc.root, visibilityState: 'visible', createElement: make, createTextNode: (textContent) => ({ textContent }),
-    querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), getElementById: (id) => doc.root.all().find((x) => x.id === id) || null,
-    addEventListener() {}, removeEventListener() {},
-  });
-  c.globalThis = c; c.window = c; c.top = c;
-  // Better To Do, as far as the dock needs it: mount puts its one list in the tile, unmount takes it away; sync is the
-  // legacy path (the site's own places), which must not run while the dock has it.
-  if (todo) {
-    let box = null;
-    c.GZ_TODO_UI = {
-      mount: (target, x) => { todoCalls.push(['mount', x.courseId, x.scope]); if (!box) { box = Object.assign(make('section'), { id: 'gz-todo' }); box.setAttribute('data-ready', ''); } target.append(box); return true; },
-      unmount: () => { todoCalls.push(['unmount']); box?.remove(); },
-      sync: (on) => todoCalls.push(['sync', on]),
-    };
-  }
-  // Course cards, as far as a board needs them: a tile's body.
-  c.GZ_COURSE_CARDS = { fill: (body) => { body.append('A course'); return {}; }, sync() {}, picker: { close() {} }, title: () => 'A course' };
-  vm.createContext(c);
-  const side = vm.runInContext(read('features/sidebar.js'), c);
-  const ui = widgets ? vm.runInContext(read('features/widgets.js'), c) : null;
-  // A pass of the site's part (content-ultra.js syncWidgets): the sidebar as its switch says, then the widgets.
-  const pass = async () => { const on = settings().enhance.sidebar; side.sync(on); await settle(); ui?.sync(true); await settle(); side.sync(on); await settle(); };
-  const resize = async (w) => { c.innerWidth = w; for (const l of winListeners.filter((x) => x.type === 'resize')) l.f(); await settle(); };
-  const $ = (s) => doc.querySelector(s);
-  const mode = () => doc.root.dataset.gzSidebar;
-  const host = () => doc.root.all().find((x) => x.dataset?.gzSidebarHost);
-  const ours = (x) => { for (let p = x; p && p.tagName; p = p.parentNode) if (/^gz-/.test(p.id) || /(^|\s)gz-/.test(String(p.className))) return true; return false; };
-  const mutate = (target, change = {}) => { for (const o of observers.filter((x) => x.on && x.targets.includes(target))) o.f([{ target, addedNodes: [], removedNodes: [], ...change }]); };
-  return { c, doc, side, ui, store, sent, loads, observers, todoCalls, pass, resize, $, mode, host, ours, mutate, el, fire: doc.fire };
-};
-const record = (x = {}) => ({ [KEY]: S.clean({ mig: 1, ...x }) });
-const natives = (p) => p.doc.body.all().filter((x) => !p.ours(x)).map((x) => [x, x.parentNode, x.parentNode.children.filter((k) => !p.ours(k)).indexOf(x)]);
-const unmoved = (p, before, what) => {
-  for (const [x, parent, i] of before) {
-    assert.equal(x.parentNode, parent, `${what}: ${x.tagName}.${x.className} moved`);
-    assert.equal(parent.children.filter((k) => !p.ours(k)).indexOf(x), i, `${what}: ${x.tagName}.${x.className} out of its place`);
-  }
-  assert.equal(p.doc.body.all().filter((x) => !p.ours(x)).length, before.length, `${what}: no copies of Ultra's nodes`);
-};
+const { page, record, natives, unmoved, settle, read, KEY, O, CARD } = require('./sidebar-ultra-page.js');
 
 test('each kind of Ultra page: its own column dressed in place, or Glaze\'s own where there is none or only a layer', async () => {
   for (const [at, family, host, cls] of [['courses', 'courses', 'native', 'todo-panel'], ['outline', 'outline', 'native', 'outline-actions'], ['detail', 'detail', 'native', 'outline-actions'], ['stream', 'other', 'glaze', null]]) {
@@ -459,11 +333,11 @@ test('Ultra\'s Dashboard stays a board; Move to Dashboard sends a docked widget 
 
 test('content-ultra.js: the sidebar on the page and in a course tab\'s frame (dock widgets only there), with Better To Do\'s old places off while it runs', () => {
   const src = read('content-ultra.js');
-  assert.match(src, /const sidebarHere = \(\) => !!top\(\)\?\.sidebar && \/\^/);
-  assert.match(src, /if \(e && tabFrame\) return sidebarHere\(\) && /);
+  assert.match(src, /const sidebarHere = \(\) => !!top\(\)\?\.sidebar && I\.settings\.sidebar\?\.ultra !== false && \/\^/);
+  assert.match(src, /if \(e && tabFrame\) return sidebarOn\(\) && /);
   assert.match(src, /const syncSidebar = \(\) => load\(sidebarHere, 'features\/sidebar\.js', 'GZ_SIDEBAR_UI'\);/);
-  assert.match(src, /\(e\.todo && sidebarHere\(\)\)/);
-  assert.match(src, /!\(sidebarHere\(\) && !globalThis\.GZ_SIDEBAR_UI\?\.failed\(\)\)/);
+  assert.match(src, /\(e\.todo && sidebarOn\(\)\)/);
+  assert.ok(src.includes("sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()"));
   assert.match(src, /const syncWidgets = \(\) => \{\n {4}syncSidebar\(\);/);
 });
 
@@ -624,6 +498,53 @@ test('a frame hidden before its first mount keeps committed sidebar changes for 
   assert.equal(p.side.rec().dest.timer, 'dock', 'first show uses the record committed while waiting');
 });
 
+// ---- live structures (2026-10-20) ------------------------------------------------------------------------------------
+test("a discussion's details column (a column of its grid, not a layer) is the sidebar in place: This page, expanded, the dock under it", async () => {
+  const p = page({ at: 'discussion', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const before = natives(p);
+  await p.pass();
+  const details = p.$('.layer-details');
+  assert.equal(p.side.context().family, 'discussion');
+  assert.equal(p.host(), details, 'Ultra\'s own column is dressed');
+  assert.equal(details.dataset.gzSidebarHost, 'native');
+  assert.equal(p.mode(), 'expanded', 'room enough: never a forced drawer');
+  assert.equal(details.getAttribute('role'), 'complementary');
+  assert.equal(details.dataset.gzSbOverlay, undefined);
+  assert.equal(p.doc.root.dataset.gzSbFamily, 'discussion');
+  assert.equal(details.lastElementChild.id, 'gz-sb-widgets');
+  assert.equal(p.side.context().courseId, '_101_1', 'Follow page: the discussion\'s course');
+  unmoved(p, before, 'discussion');
+  // Ultra hides its participants below its large breakpoint itself: nothing of Glaze's says otherwise.
+  assert.equal(p.$('.discussion-participants').hidden, false);
+  // No room: a drawer, with the same column.
+  await p.resize(900);
+  assert.equal(p.mode(), 'drawer');
+  assert.equal(p.host(), details);
+  unmoved(p, before, 'discussion, narrow');
+});
+
+test('an assignment overview gets the assignment family and Glaze\'s own column; the Gradebook keeps the grades minimum, else a drawer', async () => {
+  const a = page({ at: 'assessment', stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  await a.pass();
+  assert.equal(a.side.context().family, 'assessment');
+  assert.equal(a.host().id, 'gz-sidebar');
+  assert.equal(a.doc.root.dataset.gzSbFixed, '');
+  for (const [w, want] of [[1800, 'expanded'], [1440, 'drawer'], [1280, 'drawer']]) {
+    const g = page({ at: 'gradebook', width: w, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    await g.pass();
+    assert.equal(g.side.context().family, 'grades', `${w}`);
+    assert.equal(g.mode(), want, `${w}: 900px for the table beside 352 (the nav takes 200)`);
+    // At the widest width the student can drag (480) the table still keeps 900px, else a drawer.
+    const wide = page({ at: 'gradebook', width: w, stored: record({ width: 480, chose: { width: true }, dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+    await wide.pass();
+    assert.equal(wide.mode(), w - 200 - 480 - 16 >= 900 ? 'expanded' : 'drawer', `${w} at 480`);
+  }
+  // The course's absolute tool panel ends at the column's edge and the gap (features/sidebar.css).
+  const css = read('features/sidebar.css');
+  assert.match(css, /html\[data-gz-sb-fixed\]:is\(\[data-gz-sidebar="expanded"\], \[data-gz-sidebar="collapsed"\]\) \.course-content-container > \.panel-wrap \{[^}]*inset-inline-end: var\(--gz-sb-room\) !important/);
+  assert.match(css, /html\[data-gz-sidebar="expanded"\] \{ --gz-sb-room: calc\(var\(--gz-sidebar-w\) \+ 16px \+ var\(--gz-sb-inset, 0px\) \+ var\(--gz-sb-safe, 0px\)\); \}/);
+});
+
 test("a pinned column's height is its top and bottom's, whatever height the site gives it", () => {
   // Ultra gives a course outline's column a height of its own (in sheets the page can't read): left alone, the pinned
   // column ran past the window's bottom with nothing to scroll. Expanded, the drawer and Glaze's own column alike.
@@ -637,6 +558,64 @@ test("a pinned column's height is its top and bottom's, whatever height the site
     assert.match(r, /bottom: var\(--gz-sb-end\)/, head);
     assert.match(r, /height: auto !important/, head);
   }
+});
+
+test('Ultra page switches restore the legacy To Do hook when that page kind is disabled', async () => {
+  const p = page({ at: 'courses' });
+  const calls = [];
+  p.c.sidebarSettings = { off: ['dashboard'] };
+  await p.pass();
+  p.c.I = { links: [1], get settings() { return p.c.GZ_CTX.settings(); } };
+  p.c.solo = true;
+  p.c.need = async () => {};
+  p.c.GZ_TODO_UI = { sync: (v) => calls.push(v) };
+  const src = read('content-ultra.js');
+  const hooks = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
+  await vm.runInContext(`${hooks}\nsyncTodo();`, p.c);
+  assert.equal(calls.at(-1), true, 'legacy To Do runs on a disabled Courses page');
+  p.c.GZ_SIDEBAR_UI = undefined;
+  await vm.runInContext('syncTodo();', p.c);
+  assert.equal(calls.at(-1), true, 'legacy To Do also runs before the disabled sidebar file arrives');
+});
+
+test('Ultra off matches the frozen pre-sidebar Courses board DOM and html attributes', async () => {
+  const baseline = require('./fixtures/sidebar-legacy.json').ultra;
+  const snapshot = require('./sidebar-snapshot.js');
+  for (const kindOff of [false, true]) {
+    const sw = { sidebar: false, widgets: false, notes: false, pet: false, todo: true };
+    const p = page({ at: 'courses', widgets: true, todo: true, enhance: sw,
+      stored: { widgetLayout: W.layout({ todo: true, tiles: [{ id: 'todo', on: true }, { id: 'notes', on: false }] }) } });
+    await p.pass();
+    assert.deepEqual(snapshot(p, ['#site-wrap']), baseline, 'off from startup');
+    sw.sidebar = true;
+    await p.pass();
+    if (kindOff) p.c.sidebarSettings = { off: ['dashboard'] }; else sw.sidebar = false;
+    await p.pass();
+    assert.deepEqual(snapshot(p, ['#site-wrap']), baseline, `off after on, page switch: ${kindOff}`);
+    assert.equal(p.$('.gz-sb-head'), null);
+  }
+});
+
+test('a hidden outgoing outline cannot erase the Gradebook navigation allowance', async () => {
+  const p = page({ at: 'gradebook', width: 1400, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
+  const outgoing = p.el('section', 'course-outline-content');
+  outgoing.box = { left: 0, top: 0, width: 0, height: 0 };
+  p.$('#main-content-inner').prepend(outgoing);
+  await p.pass();
+  assert.equal(p.mode(), 'drawer', 'the Gradebook still needs 900px after the visible navigation');
+  assert.equal(p.doc.root.style.getPropertyValue('--gz-sb-left'), '200px');
+});
+
+test('a disabled Ultra page kind keeps the legacy widget-loader boundary in course frames', async () => {
+  const p = page({ at: 'courses' });
+  p.c.sidebarSettings = { off: ['dashboard'] };
+  p.c.I = { links: [1], get settings() { return p.c.GZ_CTX.settings(); } };
+  p.c.solo = true; p.c.tabFrame = 'course';
+  const src = read('content-ultra.js');
+  const hooks = ['top', 'sidebarHere', 'sidebarOn', 'widgetsHere'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))?.[0] || '').join('');
+  assert.equal(vm.runInContext(`${hooks}\n!!widgetsHere();`, p.c), false);
+  p.c.sidebarSettings = {};
+  assert.equal(vm.runInContext('!!widgetsHere();', p.c), true);
 });
 
 test('an Ultra document can recover registration lost during a worker restart without reloading', async () => {

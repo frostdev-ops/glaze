@@ -95,29 +95,83 @@ const layoutOk = async (name, width) => {
     // Inspect only an existing untimed attempt; never start, answer or submit a quiz.
     const take = quizzes.find((q, i) => q.id === 49 && !q.time_limit && subs[i].some((s) => s.workflow_state === 'untaken'));
     const done = quizzes.find((q, i) => subs[i].some((s) => s.workflow_state === 'complete'));
+    let topic = null;
+    for (const c of courses) { const list = await api(`/api/v1/courses/${c.id}/discussion_topics`).catch(() => []); const d = Array.isArray(list) && list.find((x) => !x.is_announcement); if (d) { topic = { ...d, course: c.id }; break; } }
     const PAGES = [
       ['dashboard', '/'], ['course-home', `/courses/${calc.id}`], ['assignment', `/courses/${calc.id}/assignments/${asg.id}`],
+      ['submission', `/courses/${calc.id}/assignments/${asg.id}/submissions/${me.id}`], ...(topic ? [['discussion', `/courses/${topic.course}/discussion_topics/${topic.id}`]] : []),
       ['grades', `/courses/${calc.id}/grades`], ['calendar', '/calendar'], ['syllabus', `/courses/${calc.id}/assignments/syllabus`],
       ['modules', `/courses/${calc.id}/modules`], ...(done ? [['quiz-results', `/courses/${hist.id}/quizzes/${done.id}`]] : []),
     ];
     const lay = { ...W.layout({ tiles: W.TILES.map((id) => ({ id, on: id === 'notes', size: 'l' })) }), filled: ['cdash'] };
     lay.boards.cdash = lay.boards.cdash.map((x) => ({ ...x, on: x.id === 'notes' || x.id === 'todo' }));
 
+    // Discussions and assignments, each with its family; then both styles (Floating, Embedded) under a dark and a light
+    // Look on the Dashboard, a course's home, a discussion and an assignment: the column a card off the edges or flush
+    // with a hairline, Canvas's own blocks inner panels (never its square ground box), the content clear of it.
+    // SIDEBAR_FIXTURES=<dir> also saves the discussion and submission pages (sidebar off, scripts out) as test fixtures.
+    const FAMILY = { submission: 'assignment', discussion: 'discussion', assignment: 'assignment' };
+    for (const [name, where] of process.env.SIDEBAR_SCROLL_ONLY ? [] : PAGES.filter(([n]) => FAMILY[n])) {
+      if (process.env.SIDEBAR_FIXTURES && name !== 'assignment') {
+        await store(settings(false), { widgetLayout: lay });
+        await page.goto(local + where); await page.waitForLoadState('networkidle').catch(() => {});
+        const body = await page.evaluate(() => { const b = document.body.cloneNode(true); for (const e of b.querySelectorAll('script, style, link, noscript, svg')) e.remove(); return `<!doctype html><html><body class="${document.body.className}">${b.innerHTML}</body></html>`; });
+        fs.writeFileSync(path.join(process.env.SIDEBAR_FIXTURES, `canvas-${name === 'discussion' ? 'discussion-topic' : name}.html`), body);
+      }
+      await store(settings(true), { widgetLayout: lay });
+      await page.goto(local + where); await page.waitForSelector('[data-gz-sidebar-host]');
+      const fam = await page.evaluate(() => document.documentElement.dataset.gzSbFamily);
+      ok(fam === FAMILY[name], `${name}: the ${FAMILY[name]} family (${fam})`);
+      await layoutOk(name, 1600);
+    }
+    const STYLE_PAGES = [['dashboard', '/'], ['course-home', `/courses/${calc.id}`], ...PAGES.filter(([n]) => n === 'discussion' || n === 'assignment')];
+    for (const style of process.env.SIDEBAR_SCROLL_ONLY ? [] : ['float', 'embed']) for (const [preset, dark] of [['Frost', true], ['Paper', false]]) for (const surface of ['glass', 'solid']) {
+      await store(settings(true, false, { preset, colors: G.GZ_PRESETS.find(([n]) => n === preset)[1], sidebar: { style, surface } }), { widgetLayout: lay });
+      for (const [name, where] of STYLE_PAGES) {
+        await page.goto(local + where); await page.waitForSelector('[data-gz-sidebar-host]');
+        await page.waitForTimeout(400);
+        const g = await page.evaluate(() => {
+          const h = document.querySelector('[data-gz-sidebar-host]'), cs = getComputedStyle(h), r = h.getBoundingClientRect();
+          const rs = h.querySelector(':scope > #right-side'), rcs = rs && getComputedStyle(rs);
+          const blocks = rs ? [...rs.children].filter((e) => e.getClientRects().length && e.textContent.trim()).map((e) => parseFloat(getComputedStyle(e).borderTopLeftRadius)) : [];
+          const c = document.getElementById('content')?.getBoundingClientRect();
+          return { mode: document.documentElement.dataset.gzSidebar, style: document.documentElement.dataset.gzSbStyle, radius: parseFloat(cs.borderTopLeftRadius), right: innerWidth - r.right, bg: cs.backgroundImage + cs.backgroundColor,
+            filter: cs.backdropFilter, border: parseFloat(cs.borderInlineStartWidth), shadow: cs.boxShadow, rsBg: rcs?.backgroundColor, rsRadius: rcs && parseFloat(rcs.borderTopLeftRadius), blocks, clear: !c || c.right <= r.left - 15 };
+        });
+        const tag = `${name} ${style} ${surface} ${dark ? 'dark' : 'light'}`;
+        probe(g.style === style, `${tag}: data-gz-sb-style`);
+        if (g.mode === 'expanded') {
+          probe(style === 'float' ? g.radius > 0 && g.right >= 10 : g.radius === 0 && g.right <= 1, `${tag}: ${style === 'float' ? 'a card off the edge' : 'flush with the edge'} (radius ${g.radius}, right ${g.right})`);
+          probe(!/rgba\(0, 0, 0, 0\)$/.test(g.bg) || /gradient|color-mix|rgb/.test(g.bg), `${tag}: the column has a surface`);
+          probe(surface === 'solid' ? g.filter === 'none' : g.filter.includes('blur'), `${tag}: the chosen surface filter`);
+          probe(g.border > 0 && (style === 'float' ? g.shadow !== 'none' : g.shadow === 'none'), `${tag}: border and shadow match the style`);
+          if (g.rsBg !== undefined) probe(g.rsBg === 'rgba(0, 0, 0, 0)', `${tag}: Canvas's #right-side is see-through, not its ground box (${g.rsBg})`);
+          probe(g.blocks.every((x) => x > 0), `${tag}: Canvas's blocks are rounded inner panels (${g.blocks.join(',')})`);
+          probe(g.clear, `${tag}: the content keeps clear of the column`);
+        }
+        await shot(`p6-canvas-${name}-${style}-${surface}-${dark ? 'dark' : 'light'}`);
+      }
+    }
+    if (process.env.SIDEBAR_STYLES_ONLY) { console.log(JSON.stringify({ checks, failures: failures.length, errors })); process.exitCode = failures.length ? 1 : 0; return; }
     // Wheel the real LMS scroller (Canvas course pages use DrawerLayout, not scrollY) and the dock independently.
     // Short pages get a temporary tail in their existing content flow; the LMS's layout and overflow rules stay intact.
     const wheelScroll = async (root, label) => {
       const behind = root === page ? null : await page.evaluate(() => [scrollY, document.getElementById('drawer-layout-content')?.scrollTop || 0]);
       await root.waitForSelector('[data-gz-sidebar-host]', { state: 'attached' });
+      // Canvas can mount its app drawer after the sidebar is ready, changing which element owns the page scroll.
+      await root.waitForLoadState('networkidle');
       await root.waitForFunction(() => document.documentElement.dataset.gzSidebar && !document.documentElement.hasAttribute('data-gz-ctab-framed') && !document.documentElement.hasAttribute('data-gz-placing'));
+      if (/\/discussion_topics\/\d+/.test(new URL(root.url()).pathname)) await root.waitForSelector('#discussion-drawer-layout [data-testid="discussion-topic-container"]');
       await root.evaluate(() => {
         const content = document.getElementById('content');
-        let main = content;
+        const discussion = document.getElementById('discussion-drawer-layout');
+        let main = discussion || content;
         while (main && main !== document.body && !/^(auto|scroll|overlay)$/.test(getComputedStyle(main).overflowY)) main = main.parentElement;
         if (!main || main === document.body) main = document.scrollingElement;
         const host = document.querySelector('[data-gz-sidebar-host]');
         const tail = document.createElement('div'); tail.id = 'sidebar-check-tail';
-        if (main.scrollHeight < main.clientHeight + 200) { tail.style.height = `${innerHeight * 2}px`; content.append(tail); }
-        globalThis.__gzSbScrollCheck = { main, host, tail, content };
+        if (main.scrollHeight < main.clientHeight + 200) { tail.style.height = `${innerHeight * 2}px`; (discussion?.querySelector('#module_sequence_footer_container') || content).append(tail); }
+        globalThis.__gzSbScrollCheck = { main, host, tail, content, discussion };
         main.scrollTop = 0; host.scrollTop = 0;
       });
       try {
@@ -125,8 +179,9 @@ const layoutOk = async (name, width) => {
         const offset = root === page ? { x: 0, y: 0 } : await (await root.frameElement()).boundingBox();
         const wheel = async (side, delta, down) => {
           const point = await root.evaluate((side) => {
-            const { main, host, content } = __gzSbScrollCheck, r = (side ? host : content).getBoundingClientRect();
-            const x = side ? r.right - 20 : Math.max(20, Math.min(r.left + r.width / 2, innerWidth - 20));
+            const { main, host, content, discussion } = __gzSbScrollCheck, r = (side ? host : discussion || content).getBoundingClientRect();
+            // The discussion's gutter stays outside its RCE iframe and reply controls.
+            const x = side ? r.right - 20 : discussion ? r.left + 12 : Math.max(20, Math.min(r.left + r.width / 2, innerWidth - 20));
             const y = side ? r.top + r.height / 2 : Math.min(innerHeight - 120, Math.max(140, r.top + 60));
             const sc = side ? host : main;
             return { x, y, before: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight, hit: (side ? host : content).contains(document.elementFromPoint(x, y)) };
@@ -134,7 +189,12 @@ const layoutOk = async (name, width) => {
           ok(point.hit, `${label}: ${side ? 'sidebar' : 'main'} receives pointer input`);
           await page.mouse.move(offset.x + point.x, offset.y + point.y); await page.mouse.wheel(0, delta);
           const target = Math.max(0, Math.min(point.max, point.before + delta));
-          await root.waitForFunction(({ side, target }) => Math.abs(__gzSbScrollCheck[side ? 'host' : 'main'].scrollTop - target) <= 1, { side, target }, { timeout: 10000 });
+          await root.waitForFunction(({ side, before, delta }) => {
+            const sc = __gzSbScrollCheck[side ? 'host' : 'main'];
+            // Native sidebar blocks can finish loading during the gesture and extend its scroll range.
+            return Math.abs(sc.scrollTop - Math.max(0, Math.min(sc.scrollHeight - sc.clientHeight, before + delta))) <= 1;
+          }, { side, before: point.before, delta }, { timeout: 10000 });
+          if (target === point.before) await page.waitForTimeout(100);
           ok(true, `${label}: ${side ? 'sidebar' : 'main'} wheels ${down ? 'down' : 'up'}`);
         };
         await wheel(false, 400, true); await wheel(false, -400, false);
@@ -144,25 +204,43 @@ const layoutOk = async (name, width) => {
         await root.waitForFunction(() => { const { host } = __gzSbScrollCheck; return host.getClientRects().length && host.scrollHeight > host.clientHeight + 200; });
         await wheel(true, 400, true); await wheel(true, -400, false);
         ok(await root.evaluate(() => __gzSbScrollCheck.main.scrollTop <= 1), `${label}: sidebar wheels leave the main content in place`);
-        if (behind) ok(JSON.stringify(behind) === JSON.stringify(await page.evaluate(() => [scrollY, document.getElementById('drawer-layout-content')?.scrollTop || 0])), `${label}: wheels never chain to the covered document`);
+        // Exhaust both scrollers, then wheel again: a middle-of-page gesture cannot expose scroll chaining.
+        await wheel(true, 100000, true); await wheel(true, 400, true); await wheel(true, -100000, false);
         if (drawer) { await page.keyboard.press('Escape'); await root.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-sidebar-open')); }
+        const discussion = await root.evaluate(() => !!__gzSbScrollCheck.discussion);
+        const outside = discussion && await root.evaluate(() => [scrollY, document.getElementById('drawer-layout-content').scrollTop]);
+        await wheel(false, 100000, true); await wheel(false, 400, true); await wheel(false, -100000, false);
+        if (discussion) {
+          ok(JSON.stringify(outside) === JSON.stringify(await root.evaluate(() => [scrollY, document.getElementById('drawer-layout-content').scrollTop])), `${label}: discussion boundaries leave the outer document and drawer in place`);
+          // Open the existing reply form and inspect/focus its empty RCE. Never type, post, or submit.
+          await root.locator('[data-testid="discussion-topic-reply"]').click();
+          await root.waitForFunction(() => document.querySelector('iframe.tox-edit-area__iframe')?.contentDocument?.body?.isContentEditable);
+          ok(await root.locator('iframe.tox-edit-area__iframe').evaluate((e) => {
+            __gzSbScrollCheck.editor = e; e.contentDocument.body.focus({ preventScroll: true });
+            return document.activeElement === e && e.contentDocument.activeElement === e.contentDocument.body;
+          }), `${label}: the native reply editor accepts focus`);
+          await wheel(false, 400, true); await wheel(false, -400, false);
+          ok(await root.evaluate(() => { const e = __gzSbScrollCheck.editor; return e.isConnected && e === document.querySelector('iframe.tox-edit-area__iframe') && e.contentDocument.body.isContentEditable; }), `${label}: discussion scrolling preserves the native RCE iframe`);
+        }
+        if (behind) ok(JSON.stringify(behind) === JSON.stringify(await page.evaluate(() => [scrollY, document.getElementById('drawer-layout-content')?.scrollTop || 0])), `${label}: wheels never chain to the covered document`);
       } finally {
         await root.evaluate(() => { __gzSbScrollCheck.tail.remove(); delete globalThis.__gzSbScrollCheck; });
       }
     };
     const scrollPages = [...PAGES, ...(take ? [['quiz-take', `/courses/${hist.id}/quizzes/${take.id}/take`]] : [])];
+    const wheelStart = checks;
     const recordKey = `sidebar:canvas:${local}/${me.id}`;
     for (const tabs of [false, true]) {
       const s = settings(true, true); s.enhance.tabs = tabs; s.navbar.tabs = false;
       await store(s, { widgetLayout: lay, [recordKey]: { v: 1, rev: 1, mig: 1, open: true, width: 352,
         dock: [{ id: 'todo' }, { id: 'notes', h: 1800 }], dest: { todo: 'dock', notes: 'dock' } } });
-      for (const [name, at] of scrollPages) for (const width of [1440, 1024, 768, 390]) {
+      for (const [name, at] of scrollPages.filter(([n]) => !process.env.SIDEBAR_SCROLL_PAGES || process.env.SIDEBAR_SCROLL_PAGES.split(',').includes(n))) for (const width of [1440, 1024, 768, 390]) {
         console.log(`wheel ${name} ${width} ${tabs ? 'course tabs' : 'direct'}`);
+        // Each viewport starts without a prior page's scroll gesture or same-URL history restoration.
+        await page.close(); page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
         await page.setViewportSize({ width, height: 900 });
         let root = page;
         if (tabs) {
-          await page.close(); page = await ctx.newPage(); page.on('pageerror', (e) => errors.push(String(e))); page.setDefaultNavigationTimeout(30000);
-          await page.setViewportSize({ width, height: 900 });
           // A real owned frame, reached through the same link interception as native LMS navigation.
           const other = courses.find((c) => String(c.id) !== at.match(/^\/courses\/(\d+)/)?.[1]);
           await page.goto(`${local}/courses/${other.id}`);
@@ -182,10 +260,17 @@ const layoutOk = async (name, width) => {
           }
         } else await page.goto(local + at);
         await wheelScroll(root, `${name} ${width} ${tabs ? 'course tabs' : 'direct'}`);
+        if (tabs && name === 'discussion' && width === 1440) {
+          const cid = new URL(page.url()).pathname.match(/^\/courses\/(\d+)/)[1];
+          await root.locator(`#gz-ctabs .gz-ctab[data-course-id="${cid}"] .gz-ctab-name`).click();
+          await page.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-ctab-framed'));
+          ok(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY !== 'hidden' && getComputedStyle(document.getElementById('drawer-layout-content')).overflowY === 'auto'), 'returning to the top course restores its native scrolling');
+        }
         if (tabs && name === 'course-home' && width === 1440) await shot('scroll-course-home-fixed');
       }
     }
-    if (process.env.SIDEBAR_SCROLL_ONLY) { console.log(`passed; ${checks} wheel checks`); return; }
+    console.log(`passed; ${checks - wheelStart} wheel checks`);
+    if (process.env.SIDEBAR_SCROLL_ONLY) return;
 
     // Real pointer gestures, modal keyboard behavior, and appearance under alternate browser settings.
     await page.setViewportSize({ width: 1600, height: 1000 });
@@ -250,7 +335,7 @@ const layoutOk = async (name, width) => {
     await wait(state, (s) => s.mode === 'collapsed', 'desktop preference restored');
     await page.locator('.gz-sb-toggle').click();
     await page.goto(`${local}/courses/${calc.id}/modules`); await page.waitForSelector('#gz-sidebar');
-    probe(await page.locator('#gz-sidebar').evaluate((e) => Math.abs(e.getBoundingClientRect().bottom - (innerHeight - (document.getElementById('gz-footer')?.getBoundingClientRect().height || 0))) <= 1), 'the owned column fills the viewport below navigation, keeping footer room');
+    probe(await page.locator('#gz-sidebar').evaluate((e) => Math.abs(e.getBoundingClientRect().bottom - (innerHeight - (document.getElementById('gz-footer')?.getBoundingClientRect().height || 0) - (document.documentElement.dataset.gzSbStyle === 'float' ? 12 : 0))) <= 1), 'the owned column fills the viewport below navigation, keeping footer room (less a floating card\'s inset)');
     probe(await page.locator('.gz-sb-more').evaluate((e) => getComputedStyle(e).backgroundColor === 'rgba(0, 0, 0, 0)'), 'sidebar icon buttons inherit the Look surface');
     await page.emulateMedia({ reducedMotion: 'reduce', forcedColors: 'active' });
     probe(await page.locator('#gz-sidebar').evaluate((e) => getComputedStyle(e).borderInlineStartStyle !== 'none'), 'high contrast keeps a visible sidebar border');
@@ -261,7 +346,7 @@ const layoutOk = async (name, width) => {
     await page.locator('html').evaluate((e) => { e.dir = 'rtl'; }); await page.reload();
     // Set direction after navigation too: local Canvas itself is English.
     await page.locator('html').evaluate((e) => { e.dir = 'rtl'; }); await page.waitForTimeout(250);
-    probe((await state()).overflow <= 1 && await page.locator('#gz-sidebar').evaluate((e) => Math.abs(e.getBoundingClientRect().left) <= 1), 'RTL places the dock at the logical end without overflow');
+    probe((await state()).overflow <= 1 && await page.locator('#gz-sidebar').evaluate((e) => Math.abs(e.getBoundingClientRect().left - (document.documentElement.dataset.gzSbStyle === 'float' ? 12 : 0)) <= 1), 'RTL places the dock at the logical end without overflow');
     await page.locator('html').evaluate((e) => { e.dir = 'ltr'; });
     await page.emulateMedia({ media: 'print' });
     probe(!await page.locator('#gz-sidebar').isVisible(), 'printing omits the owned dock');
@@ -360,6 +445,12 @@ const layoutOk = async (name, width) => {
       await shot(`polish-footer-${footer ? 'on' : 'off'}${navbar ? '-navbar' : ''}-${w}`);
       if (s.mode === 'drawer') await page.keyboard.press('Escape');
     }
+
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.goto(`${local}/courses/${calc.id}`); await page.waitForSelector('[data-gz-sidebar-host]');
+    await page.locator('html').evaluate((e) => e.setAttribute('data-gz-focus', ''));
+    probe(await page.locator('#not_right_side').evaluate((e) => parseFloat(getComputedStyle(e).paddingInlineEnd) === 0), 'focus-document mode returns the sidebar room immediately');
+    await page.locator('html').evaluate((e) => e.removeAttribute('data-gz-focus'));
 
     // The Look's: a light and two dark presets, the column's surface and text from each; 640px (1280 at 200% zoom).
     const bgs = {};

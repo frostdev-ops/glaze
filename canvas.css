@@ -1543,6 +1543,8 @@ html[data-gz-ctabs]:not([data-gz-ctabs~="nav"]) #sticky-container { top: var(--g
 html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs))::before { order: 99; }
 html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point, #gz-scene) { visibility: hidden !important; }
 html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"]) { visibility: visible; }
+/* A visible course frame owns scrolling. Exhausting its native scroller must not wheel the covered document or drawer. */
+html[data-gz-ctab-framed], html[data-gz-ctab-framed] #drawer-layout-content { overflow-y: hidden !important; }
 
 /* Glaze navigation replaces only Canvas's navigation chrome. Portal trays, dialogs and alerts stay outside these rules.
    The words reserve first-paint room; the renderer supplies the same dimensions inline once mounted. */

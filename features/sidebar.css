@@ -7,6 +7,9 @@
   /* Where the column and the edge buttons end: above Glaze's footer (--gz-sb-foot, from features/sidebar.js) and the
      navigation's bottom bar on narrow screens (--gz-sb-bottom), whichever reaches higher. */
   :root { --gz-sb-end: max(var(--gz-sb-bottom, 0px), var(--gz-sb-foot, 0px)); }
+  /* Canvas's nested discussion drawer can exhaust before the outer app drawer. Keep the wheel in the app rather than
+     chaining into the document's in-flow footer and changing the sidebar's viewport offsets. */
+  html[data-gz-sidebar] :is(#drawer-layout-content, #discussion-drawer-layout) { overscroll-behavior-y: contain; }
   /* Beside the content, the whole window wide: the column ends at the window's edge, not halfway across. The content's
      own reading width still holds its prose. */
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #wrapper { max-width: none; }
@@ -22,16 +25,14 @@
   html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #not_right_side { padding-right: 0; padding-left: calc(var(--gz-sidebar-w) + 16px); }
   html[dir="rtl"][data-gz-sidebar="collapsed"] #not_right_side { padding-left: 64px; }
   html[dir="rtl"] [data-gz-sidebar-host] { direction: rtl; }
-  html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) [data-gz-sidebar-host] { padding-left: calc(1rem + env(safe-area-inset-left, 0px)) !important; padding-right: 1rem !important; }
+  html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) [data-gz-sidebar-host] { padding-left: calc(var(--gz-sb-pad) + env(safe-area-inset-left, 0px)) !important; padding-right: var(--gz-sb-pad) !important; }
   /* Pinned between --gz-sb-top and --gz-sb-end, so its height is theirs: Ultra gives a course outline's column a height of
      its own, which left the column taller than the window and nothing in it to scroll. */
   html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) [data-gz-sidebar-host] {
     display: block !important; position: fixed !important; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-end); inset-inline-end: 0; inset-inline-start: auto;
     flex: 0 0 var(--gz-sidebar-w) !important; width: var(--gz-sidebar-w) !important; min-width: 0; max-width: none !important; margin: 0 !important;
     height: auto !important; max-height: none !important; overflow-y: auto; overscroll-behavior: contain;
-    padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem !important; color: var(--gz-ink); font-family: var(--gz-font);
-    background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-paint, var(--gz-surface))) !important;
-    border-inline-start: 1px solid var(--gz-border-line, var(--gz-line));
+    padding: 0 calc(var(--gz-sb-pad) + env(safe-area-inset-right, 0px)) calc(var(--gz-sb-pad) + env(safe-area-inset-bottom, 0px)) var(--gz-sb-pad) !important; color: var(--gz-ink); font-family: var(--gz-font);
   }
   html[data-gz-sidebar="collapsed"] [data-gz-sidebar-host] { flex-basis: 3rem !important; width: 3rem !important; padding: 0 0.25rem !important; overflow: hidden; }
   html[data-gz-sidebar="collapsed"] [data-gz-sidebar-host] > :not(.gz-sb-head) { display: none !important; }
@@ -43,10 +44,8 @@
   html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {
     display: block !important; position: fixed !important; z-index: 1300; top: var(--gz-sb-top, 0px); bottom: var(--gz-sb-end);
     inset-inline-end: 0; inset-inline-start: auto; width: min(var(--gz-sidebar-w), calc(100vw - 16px)) !important; max-width: none !important; margin: 0 !important;
-    height: auto !important; max-height: none; overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem !important;
+    height: auto !important; max-height: none; overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(var(--gz-sb-pad) + env(safe-area-inset-right, 0px)) calc(var(--gz-sb-pad) + env(safe-area-inset-bottom, 0px)) var(--gz-sb-pad) !important;
     color: var(--gz-ink); font-family: var(--gz-font);
-    background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; box-shadow: var(--gz-shadow);
-    border-inline-start: 1px solid var(--gz-border-strong, var(--gz-line-strong));
   }
   html[data-gz-sidebar-open] #main { z-index: auto !important; }
   .gz-sb-backdrop { position: fixed; inset: 0; z-index: 1299; background: rgb(0 0 0 / 0.32); }
@@ -68,26 +67,50 @@
     position: fixed !important; z-index: 1000; top: var(--gz-sb-top, calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px))); bottom: var(--gz-sb-end);
     inset-inline-end: 0; inset-inline-start: auto; height: auto !important; max-height: none;
   }
-  html[data-gz-sb-ultra]:not([data-gz-sb-fixed])[data-gz-sidebar="expanded"] :is(.base-courses-content, .course-outline-content),
-  html[data-gz-sb-fixed][data-gz-sidebar="expanded"] :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: calc(var(--gz-sidebar-w) + 16px) !important; }
-  html[data-gz-sb-ultra]:not([data-gz-sb-fixed])[data-gz-sidebar="collapsed"] :is(.base-courses-content, .course-outline-content),
-  html[data-gz-sb-fixed][data-gz-sidebar="collapsed"] :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: calc(3rem + 16px) !important; }
-  html[data-gz-sb-ultra]:not([data-gz-sb-fixed])[data-gz-sidebar="expanded"] #gz-room { margin-inline-end: calc(var(--gz-sidebar-w) + 16px); }
-  html[data-gz-sb-ultra]:not([data-gz-sb-fixed])[data-gz-sidebar="collapsed"] #gz-room { margin-inline-end: calc(3rem + 16px); }
+  /* The room the page keeps beside the column: its width, the gap, and a floating card's inset. */
+  html[data-gz-sidebar="expanded"] { --gz-sb-room: calc(var(--gz-sidebar-w) + 16px + var(--gz-sb-inset, 0px) + var(--gz-sb-safe, 0px)); }
+  html[data-gz-sidebar="collapsed"] { --gz-sb-room: calc(3rem + 16px + var(--gz-sb-inset, 0px) + var(--gz-sb-safe, 0px)); }
+  /* Ultra's Courses page keeps the room on the whole page (its header and Glaze's toolbar in it, the list or grid, the
+     filters and pagination), not only the list beside the column. */
+  html[data-gz-sb-ultra]:not([data-gz-sb-fixed]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(.base-courses-container, .course-outline-content),
+  html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: var(--gz-sb-room) !important; }
+  html[data-gz-sb-ultra]:not([data-gz-sb-fixed]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-room { margin-inline-end: var(--gz-sb-room); }
+  /* Canvas's module sequence footer (Previous / Next), fixed at the window's foot with a width Canvas computes: between
+     the content's start (--gz-sb-left, from features/sidebar.js) and the column's room. */
+  html:not([dir="rtl"]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #module_sequence_footer { left: var(--gz-sb-left, auto) !important; right: var(--gz-sb-room) !important; width: auto !important; }
+  html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #module_sequence_footer { right: var(--gz-sb-left, auto) !important; left: var(--gz-sb-room) !important; width: auto !important; }
+  /* A course's tool pages (Gradebook, Calendar, Announcements, Discussions, Messages, Groups, Achievements) are an
+     absolute panel the whole width of the course: beside Glaze's own column it ends at the column's edge and the gap. */
+  html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap {
+    width: auto !important; inset-inline-start: 0 !important; inset-inline-end: var(--gz-sb-room) !important; max-width: none !important;
+  }
+  html[data-gz-sb-tool]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: 0 !important; }
+  /* A discussion's details column is the sidebar, fixed at the edge: the thread takes the grid's whole width, short of
+     the column's room. Below Ultra's large breakpoint its participants hide themselves, as before. */
+  html[data-gz-sb-family="discussion"][data-gz-sidebar] .course-main-container:has(> [data-gz-sidebar-host]) {
+    grid-template-columns: minmax(0, 1fr) !important; box-sizing: border-box;
+  }
+  html[data-gz-sb-family="discussion"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-main-container:has(> [data-gz-sidebar-host]) { padding-inline-end: var(--gz-sb-room) !important; }
+  html[data-gz-sb-family="discussion"][data-gz-sidebar] .course-main-container:has(> [data-gz-sidebar-host]) > :not([data-gz-sidebar-host]) { grid-column: 1 / -1 !important; }
+  /* The overview's projection is a Glaze-owned, screen-only sheet; native nodes carry no markers or inline styles. */
+  .gz-sb-slot { display: block; pointer-events: none; }
+  html:not([data-gz-sidebar="expanded"]) .gz-sb-slot, .gz-sb-slot:not([style*="height"]) { display: none; }
   html[data-gz-sb-ultra][data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] { z-index: 2100; }
   html[data-gz-sb-ultra] .gz-sb-backdrop { z-index: 2099; }
   html[data-gz-sb-ultra] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 2050; }
   html[data-gz-sb-ultra] .gz-sb-menu { z-index: 2200; }
+  html[data-gz-sb-layer] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 1012; }
   .gz-sb-offer { display: grid; gap: 0.4rem; justify-items: start; margin: 0 0 0.6rem; padding: 0.6rem 0.75rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
   .gz-sb-offer[hidden] { display: none; }
 
   /* The header: the title, Jump to widgets, the menu and collapse, staying at the top while the column scrolls. */
   .gz-sb-head {
     position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem;
-    margin: 0 -1rem 0.5rem; padding: 0.6rem 1rem 0.5rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
-    background: var(--gz-surface-grain, none), var(--gz-panel, var(--gz-surface-paint, var(--gz-surface)));
+    margin: 0 calc(-1 * var(--gz-sb-pad)) var(--gz-sb-gap); padding: 0.6rem var(--gz-sb-pad) 0.5rem; border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
+    background: var(--gz-sb-head-fill); backdrop-filter: var(--gz-sb-filter);
   }
-  html[data-gz-sidebar-open] .gz-sb-head { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
+  html[data-gz-sb-notitle] .gz-sb-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  html[data-gz-sb-notitle] .gz-sb-head { justify-content: flex-end; }
   .gz-sb-title { flex: 1 1 6rem; min-width: 0; margin: 0; padding: 0; border: 0; font: 600 0.95rem/1.3 var(--gz-font-head, var(--gz-font)); color: var(--gz-ink); overflow-wrap: anywhere; text-transform: none; letter-spacing: 0; }
   :is(.gz-sb-head, #gz-sb-widgets, .gz-sb-own, .gz-sb-menu) .gz-sb-btn, .gz-sb-btn, .gz-sb-icon {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; padding: 0.2rem 0.75rem; font: 600 0.8rem/1.4 var(--gz-font); color: var(--gz-ink);
@@ -116,7 +139,7 @@
 
   /* The dock: the widgets as wide as the column, one under another, each its own height. */
   #gz-sb-widgets { margin-top: 0.25rem; }
-  .gz-sb-dock { display: grid; gap: 0.75rem; }
+  .gz-sb-dock { display: grid; gap: var(--gz-sb-gap); }
   .gz-sb-dock[hidden] { display: none; }
   .gz-sb-dock > .gz-w { position: relative !important; inset: auto !important; width: auto !important; z-index: auto !important; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 0.25rem; font-family: var(--gz-font); line-height: 1.4; }
   .gz-sb-dock > .gz-w > :not(.gz-w-head, .gz-w-tools) { grid-column: 1 / -1; }
@@ -166,6 +189,85 @@
   .gz-sb-menu .gz-sb-item:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-ink); }
 
   html[data-gz-focus] :is(#gz-sidebar, .gz-sb-edge, .gz-sb-launch) { display: none !important; }
+
+  /* ---- style (sidebar settings; data-gz-sb-* on <html>, from features/sidebar.js) ------------------------------------
+     Floating (data-gz-sb-style="float"): one card inset from the window's edges (--gz-sb-inset), with the Look's border,
+     shadow and corners. Embedded ("embed"): flush with the window's edge like the site's own column, a hairline inside
+     and no outer corners. The surface is the Look's: glass (its fill at the chosen opacity, blurred), solid, or clear.
+     Corners and spacing follow the Look unless chosen. The ids in the selectors outweigh Canvas's ground rule
+     (canvas.css), which paints #right-side-wrapper and #right-side with the page's ground. */
+  :root {
+    --gz-sb-r: var(--gz-radius, 12px); --gz-sb-pad: calc(1rem * var(--gz-space, 1)); --gz-sb-gap: calc(0.75rem * var(--gz-space, 1)); --gz-sb-inset: 0px; --gz-sb-safe: 0px;
+    --gz-sb-paint: var(--gz-surface-paint, var(--gz-surface-fill, var(--gz-surface)));
+    --gz-sb-fill: color-mix(in srgb, var(--gz-sb-paint) var(--gz-sb-alpha, 88%), transparent); --gz-sb-filter: blur(var(--gz-sb-blur, 16px)) saturate(1.2);
+    --gz-sb-head-fill: var(--gz-sb-fill);
+  }
+  html[data-gz-sb-surface="solid"] { --gz-sb-fill: var(--gz-surface); --gz-sb-filter: none; }
+  html[data-gz-sb-surface="clear"] { --gz-sb-fill: transparent; --gz-sb-filter: none; --gz-sb-head-fill: color-mix(in srgb, var(--gz-sb-paint) 92%, transparent); }
+  html[data-gz-sb-radius="none"] { --gz-sb-r: 0px; }
+  html[data-gz-sb-radius="small"] { --gz-sb-r: 6px; }
+  html[data-gz-sb-radius="medium"] { --gz-sb-r: 12px; }
+  html[data-gz-sb-radius="large"] { --gz-sb-r: 20px; }
+  html[data-gz-sb-density="compact"] { --gz-sb-pad: 0.65rem; --gz-sb-gap: 0.5rem; }
+  html[data-gz-sb-density="cozy"] { --gz-sb-pad: 1rem; --gz-sb-gap: 0.75rem; }
+  html[data-gz-sb-density="comfortable"] { --gz-sb-pad: 1.3rem; --gz-sb-gap: 1rem; }
+  html[data-gz-sb-style="float"] { --gz-sb-inset: 12px; --gz-sb-safe: env(safe-area-inset-right, 0px); }
+  html[dir="rtl"][data-gz-sb-style="float"] { --gz-sb-safe: env(safe-area-inset-left, 0px); }
+  /* The inner corners: blocks and widgets in the column, a little tighter than the column's own. */
+  :root { --gz-sb-ir: max(0px, calc(var(--gz-sb-r) - 4px)); }
+
+  html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] {
+    background: var(--gz-surface-grain, none), var(--gz-sb-fill) !important; backdrop-filter: var(--gz-sb-filter); -webkit-backdrop-filter: var(--gz-sb-filter);
+    scrollbar-width: thin; scrollbar-gutter: stable; scrollbar-color: color-mix(in srgb, var(--gz-ink-muted) 45%, transparent) transparent;
+  }
+  /* Floating: a card off the edges. */
+  html[data-gz-sb-style="float"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] {
+    top: calc(var(--gz-sb-top, 0px) + var(--gz-sb-inset)) !important; bottom: calc(var(--gz-sb-end) + var(--gz-sb-inset)) !important; inset-inline-end: calc(var(--gz-sb-inset) + var(--gz-sb-safe)) !important;
+    border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-sb-r) !important; box-shadow: var(--gz-shadow) !important;
+  }
+  html[data-gz-sb-style="float"][data-gz-sidebar="drawer"][data-gz-sidebar-open] :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] { width: min(var(--gz-sidebar-w), calc(100vw - 2 * var(--gz-sb-inset) - 16px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))) !important; }
+  html[data-gz-sb-style="float"] .gz-sb-head { border-radius: var(--gz-sb-r) var(--gz-sb-r) 0 0; }
+  html[data-gz-sb-style="float"] .gz-sb-resize { inset-inline-start: -4px; }
+  /* Embedded: flush, a hairline inside, no outer corners. */
+  html[data-gz-sb-style="embed"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] {
+    border: 0 !important; border-inline-start: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: 0 !important; box-shadow: none !important;
+  }
+  html[data-gz-sb-style="embed"][data-gz-sidebar="drawer"][data-gz-sidebar-open] :is(#right-side-wrapper, #gz-sidebar, [data-gz-sidebar-host])[data-gz-sidebar-host] { box-shadow: var(--gz-shadow) !important; }
+  /* The page keeps clear of a floating card's inset too. */
+  html[data-gz-sb-style="float"][data-gz-sidebar="expanded"] #not_right_side { padding-inline-end: var(--gz-sb-room) !important; }
+  html[data-gz-sb-style="float"][data-gz-sidebar="collapsed"] #not_right_side { padding-inline-end: var(--gz-sb-room) !important; }
+
+  /* Canvas's own blocks in the column: never its square ground-painted box. #right-side is see-through and unpadded;
+     each block in it is an inner panel with the Look's fill, line and the inner corners. Nothing is moved. */
+  html[data-gz-sidebar] #right-side-wrapper[data-gz-sidebar-host] > #right-side {
+    background: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important;
+    display: grid; gap: var(--gz-sb-gap); align-content: start;
+  }
+  html[data-gz-sidebar] #right-side-wrapper[data-gz-sidebar-host] > #right-side > :where(:not(script, style, link, template, [hidden], :empty, .gz-sr, #gz-todo)) {
+    box-sizing: border-box; margin: 0 !important; padding: calc(var(--gz-sb-pad) * 0.75) !important; border: 1px solid var(--gz-border-line, var(--gz-line));
+    border-radius: var(--gz-sb-ir); background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-sb-paint) 70%, transparent); max-width: 100%; overflow-wrap: anywhere;
+  }
+  html[data-gz-sidebar] #right-side-wrapper[data-gz-sidebar-host] > #right-side > * > :first-child { margin-top: 0; }
+  html[data-gz-sidebar] #right-side-wrapper[data-gz-sidebar-host] > #right-side > * > :last-child { margin-bottom: 0; }
+  html[data-gz-sidebar] #right-side-wrapper[data-gz-sidebar-host] > #right-side :is(h2, h3) { font-family: var(--gz-font-head, var(--gz-font)); margin-top: 0; }
+  /* Docked widgets and Ultra's blocks share the inner corners. */
+  [data-gz-sidebar-host] .gz-sb-dock > .gz-w { border-radius: var(--gz-sb-ir) !important; }
+  #site-wrap [data-gz-sidebar-host] :is(.outline-action-block, .discussion-settings, .discussion-participants) { border-radius: var(--gz-sb-ir) !important; }
+  /* Collapsed: the strip keeps its card or edge, without the scrollbar's room. */
+  html[data-gz-sidebar="collapsed"] [data-gz-sidebar-host] { scrollbar-gutter: auto; }
+
+  /* Order: My widgets before This page (sidebar.order). Ultra's columns are flex already; Canvas's becomes one. */
+  html[data-gz-sb-order="widgets"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="drawer"][data-gz-sidebar-open]) [data-gz-sidebar-host]:not([data-gz-sb-self]) { display: flex !important; flex-direction: column; }
+  html[data-gz-sb-order="widgets"] [data-gz-sidebar-host] > .gz-sb-head { order: -5; }
+  html[data-gz-sb-order="widgets"] [data-gz-sidebar-host] > #gz-sb-widgets { order: -4; margin-bottom: var(--gz-sb-gap); }
+  html[data-gz-sb-order="widgets"] [data-gz-sidebar-host] > .gz-sb-pagehead { order: -3; }
+  /* This page hidden (sidebar.page): only Glaze's parts show. */
+  [data-gz-sb-page-hidden] > #right-side, [data-gz-sb-page-hidden] > .gz-sb-pagehead,
+  [data-gz-sb-page-hidden][data-gz-sb-self] > :not(.gz-sb-resize, .gz-sb-head, #gz-sb-widgets) { display: none !important; }
+
+  html[data-gz-focus][data-gz-sidebar] { --gz-sb-room: 0px; }
+  html[data-gz-focus][data-gz-sidebar] #not_right_side { padding-inline-end: 0 !important; }
+
   /* A course tab's frame on screen has the sidebar: the page under it shows none of its own (a hidden frame neither). */
   html[data-gz-ctab-framed] :is(#gz-sidebar, .gz-sb-edge, .gz-sb-launch, .gz-sb-backdrop, .gz-sb-menu) { display: none !important; }
 }

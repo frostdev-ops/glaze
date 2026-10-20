@@ -96,10 +96,10 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const validContext = () => { try { return !!chrome.runtime.id; } catch { return false; } };
   // In course tabs (features/coursetabs.js) only the document on screen draws, ticks or chimes: the page itself, or the
   // tab's frame over it (whose widgets are the dock's only). A covered or hidden one keeps its state and waits (cover).
-  const covered = () => { const c = globalThis.GZ_CTABS; return c?.visible ? !c.visible() : !!ctx.tabFrame && !atTop; };
+  const covered = () => { const c = globalThis.GZ_CTABS; return document.documentElement?.hasAttribute?.('data-gz-review-focus') || document.documentElement?.hasAttribute?.('data-gz-review-immersive') || (c?.visible ? !c.visible() : !!ctx.tabFrame && !atTop); };
   // A floating tile is the page's own, over every tab: it stays on screen while a tab's frame covers the page.
   const onTop = (el) => atTop && !!el?.closest?.('[data-float]');
-  const shown = (el) => document.visibilityState === 'visible' && (!covered() || onTop(el));
+  const shown = (el) => document.visibilityState === 'visible' && !document.documentElement?.hasAttribute?.('data-gz-review-focus') && !document.documentElement?.hasAttribute?.('data-gz-review-immersive') && (!covered() || onTop(el));
   const lang = () => GZ_I18N.locale(ctx.locale());
   // The Courses page's board is there with the widgets, notes or pet; the Dashboard with its own switch (on by default).
   const boardOf = () => {
@@ -502,7 +502,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     todo(body) {
       if (!side) { body.append(make('div', { className: 'gz-w-todo-spot' })); return {}; }
       let alive = true;
-      const scope = () => (side ? { courseId: side.context().courseId, scope: side.rec()?.todoScope || 'follow', setScope: (v) => side?.op([{ op: 'todoScope', v }]), rendered: () => todoIn(), failed: () => todoIn() } : null);
+      const scope = () => (side ? { courseId: side.context().courseId, scope: side.scope?.() || side.rec()?.todoScope || 'follow', setScope: (v) => side?.op([{ op: 'todoScope', v }]), rendered: () => todoIn(), failed: () => todoIn() } : null);
       const mount = () => { if (alive && side && globalThis.GZ_TODO_UI?.mount) { GZ_TODO_UI.mount(body, scope()); todoIn(); } };
       ctx.need('features/todo.js', () => globalThis.GZ_TODO_UI).then(mount, () => {});
       return { context: mount, suspend: () => globalThis.GZ_TODO_UI?.suspend?.(), resume: () => globalThis.GZ_TODO_UI?.resume?.(), stop: () => { alive = false; globalThis.GZ_TODO_UI?.unmount?.(body); } };
