@@ -147,6 +147,8 @@
   .gz-sb-menu .gz-sb-item:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-ink); }
 
   html[data-gz-focus] :is(#gz-sidebar, .gz-sb-edge, .gz-sb-launch) { display: none !important; }
+  /* A course tab's frame on screen has the sidebar: the page under it shows none of its own (a hidden frame neither). */
+  html[data-gz-ctab-framed] :is(#gz-sidebar, .gz-sb-edge, .gz-sb-launch, .gz-sb-backdrop, .gz-sb-menu) { display: none !important; }
 }
 @media screen and (prefers-reduced-motion: no-preference) {
   html[data-gz-sidebar-open] [data-gz-sidebar-host] { animation: gz-sb-in 160ms ease-out; }

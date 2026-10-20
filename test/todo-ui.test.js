@@ -103,7 +103,7 @@ const feature = ({ summary = () => ({ graded: 1, ungraded: 2 }), setOk = true, d
     },
   };
   c.globalThis = c;
-  const src = read('features/todo.js').replace('  return { sync, add, cmds, mount, unmount };', `  return { sync, add, cmds, mount, unmount, probe: {
+  const src = read('features/todo.js').replace('  return { sync, add, cmds, mount, unmount, suspend, resume };', `  return { sync, add, cmds, mount, unmount, suspend, resume, probe: {
     refresh, onChange, onShow, onSubmit, onClick, form: (x) => { form = x; }, formNow: () => form, save, rowOf, render, get: () => ({ data, cache, fetching, note: line?.textContent, box, dead, who }),
     seed(x) { L = GZ_TODO; who = { uid: '3', tz: 'America/New_York' }; key = 'todo:https://canvas.test/3'; prefs = { ...x.prefs };
       data = x.data || { tasks: [], items: {} }; cache = x.cache || null; started = Promise.resolve(); courses = { cids: null, names: {}, list: [] };
@@ -493,4 +493,31 @@ test('a retained task draft never follows a different signed-in account', async 
   ui.mount(target, { courseId: '', scope: 'follow' }); await settle(); await settle();
   assert.equal(f.p.formNow(), null);
   assert.equal(f.store['draft:todo:https://canvas.test/3'].todo.draft.title, 'Private outline');
+});
+
+test('a course-tab switch hands the open task form to the document shown next through the drafts store, never to two at once', async () => {
+  const shared = { store: {}, waiting: [] };
+  const key = 'draft:todo:https://canvas.test/3';
+  const a = feature({ shared }), b = feature({ shared });
+  for (const f of [a, b]) f.c.GZ_TODO_UI.mount(new E(), { courseId: '25', scope: 'follow', setScope() {} });
+  await settle(); await settle();
+  b.c.GZ_TODO_UI.suspend(); // b is a hidden frame
+  a.p.form({ cid: '25', draft: { title: 'Essay outline', notes: 'Three sources' } });
+  // Switch to b: a keeps the form in the drafts store and lets go of it; b takes it once.
+  a.c.GZ_TODO_UI.suspend();
+  assert.equal(shared.store[key].todo.draft.title, 'Essay outline');
+  assert.equal(a.p.formNow(), null);
+  await b.c.GZ_TODO_UI.resume(); await settle();
+  assert.deepEqual({ ...b.p.formNow().draft }, { title: 'Essay outline', notes: 'Three sources' });
+  assert.equal(key in shared.store, false);
+  // And back: it follows again; the document left holds none.
+  b.c.GZ_TODO_UI.suspend();
+  await a.c.GZ_TODO_UI.resume(); await settle();
+  assert.equal(a.p.formNow().draft.title, 'Essay outline');
+  assert.equal(b.p.formNow(), null);
+  // Without Back up what you type, the form stays in the document's own memory only.
+  a.c.GZ_CTX.settings = () => ({ enhance: { drafts: false } });
+  a.c.GZ_TODO_UI.suspend();
+  assert.equal(a.p.formNow().draft.title, 'Essay outline');
+  assert.equal(key in shared.store, false);
 });

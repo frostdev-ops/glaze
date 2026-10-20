@@ -74,16 +74,17 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   });
 
   // ---- code on demand ------------------------------------------------------------------------------
-  // The sidebar (features/sidebar.js): the top page's column, with Better To Do and the docked widgets in it. Better To Do
-  // takes the site's sidebar itself only without it (or while it can't start).
-  const sidebarHere = () => I.links.length && I.settings.enhance.sidebar && window.top === window && !/^\/log(in|out)\b/.test(location.pathname);
+  // The sidebar (features/sidebar.js): the page's column, with Better To Do and the docked widgets in it, on the page or in
+  // a course tab's frame (only the one on screen works it). Better To Do takes the site's sidebar itself only without it
+  // (or while it can't start).
+  const sidebarHere = () => I.links.length && I.settings.enhance.sidebar && (window.top === window || !!I.tabFrame) && !/^\/log(in|out)\b/.test(location.pathname);
   const syncSidebar = () => (sidebarHere() ? need('features/sidebar.js', () => globalThis.GZ_SIDEBAR_UI).then(() => GZ_SIDEBAR_UI.sync(sidebarHere()), () => {}) : globalThis.GZ_SIDEBAR_UI?.sync(false));
   const todoHere = () => I.links.length && I.settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
   const todoSide = () => todoHere() && !(sidebarHere() && !globalThis.GZ_SIDEBAR_UI?.failed());
   const syncTodo = () => (todoSide() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoSide()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   const cardsHere = () => I.links.length && I.settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
-  const widgetsHere = () => { const e = I.settings.enhance; return I.links.length && (window.top === window || I.tabFrame === 'page') && (e.widgets || e.notes || e.pet || (e.todo && (location.pathname === '/' || sidebarHere()))); };
+  const widgetsHere = () => { const e = I.settings.enhance; return I.links.length && (window.top === window || I.tabFrame === 'page' || (!!I.tabFrame && sidebarHere())) && (e.widgets || e.notes || e.pet || (e.todo && (location.pathname === '/' || sidebarHere()))); };
   const syncWidgets = () => (syncSidebar(), widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   const remindHere = () => I.links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));

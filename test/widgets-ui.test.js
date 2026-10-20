@@ -81,7 +81,7 @@ const page = ({ local = {}, replies = [], clock = { t: Date.now() }, hold = fals
     vm.runInContext(read('lib/ultra.js'), c);
   }
   // The widgets themselves, reached as todo-ui.test.js reaches the list's insides: through the source's return.
-  const src = read('features/widgets.js').replace('  return { sync, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, set: (w, s, m) => { W = w; o = s; me = m; } } };');
+  const src = read('features/widgets.js').replace('  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };', '  return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probe: { WIDGETS, tileEl, added, tiles, set: (w, s, m) => { W = w; o = s; me = m; } } };');
   assert.notEqual(src, read('features/widgets.js'));
   const ui = vm.runInContext(src, c);
   ui.probe.set(W, D.GZ_SANITIZE({}).widgets, { uid: ultra ? '_5_1' : '3', tz: ultra ? undefined : 'UTC' });
@@ -517,4 +517,36 @@ test('declaring and revoking a built-in tile replacement disposes the previous r
   assert.equal(p.ui.probe.added.has('timer'), false);
   assert.equal(stops, 2);
   assert.equal(removed, 2);
+});
+
+test('course tabs: the timer ticks in the document on screen only, from the one stored deadline, and only that one moves it on', async () => {
+  const clock = { t: 1e12 };
+  const running = { phase: 'work', end: clock.t + 10 * 6e4, left: 0 };
+  const view = { on: 'a' };
+  const doc = (name) => {
+    const p = page({ clock, local: { widgetTimer: running } });
+    p.c.GZ_CTABS = { visible: () => view.on === name };
+    const body = new E();
+    const tile = p.ui.probe.WIDGETS.timer(body);
+    p.answer();
+    return { p, body, tile, shows: () => find(body, (e) => e.className === 'gz-w-clock').children[0].data, tick: () => [...p.timers.values()].at(-1).f() };
+  };
+  const a = doc('a'), b = doc('b');
+  await settle();
+  assert.equal(a.p.timers.size, 1, 'the document on screen ticks');
+  assert.equal(b.p.timers.size, 0, 'a covered one arms nothing');
+  // The switch: a sleeps, b wakes where the stored deadline says, not from the start.
+  view.on = 'b';
+  a.tile.suspend();
+  clock.t += 4 * 6e4;
+  b.tile.wake();
+  assert.equal(a.p.timers.size, 0);
+  assert.equal(b.p.timers.size, 1);
+  assert.equal(b.shows(), W.clock(6 * 6e4));
+  // The phase ends while b is on screen: b asks the worker to move it on (and would ring); a, asleep, does nothing.
+  clock.t = running.end + 300;
+  b.tick();
+  await settle();
+  assert.deepEqual(b.p.sent.map((m) => m.op), ['advance']);
+  assert.deepEqual(a.p.sent, []);
 });

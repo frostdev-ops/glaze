@@ -400,9 +400,10 @@ test('Ultra\'s Dashboard stays a board; Move to Dashboard sends a docked widget 
   assert.ok(!q.$('#gz-sb-menu').children.some((b) => b.textContent === 'Move to Dashboard'));
 });
 
-test('content-ultra.js: the sidebar on the top page only, with the widgets for its To Do and Better To Do\'s old places off while it runs', () => {
+test('content-ultra.js: the sidebar on the page and in a course tab\'s frame (dock widgets only there), with Better To Do\'s old places off while it runs', () => {
   const src = read('content-ultra.js');
-  assert.match(src, /const sidebarHere = \(\) => !!top\(\)\?\.sidebar && !tabFrame && /);
+  assert.match(src, /const sidebarHere = \(\) => !!top\(\)\?\.sidebar && \/\^/);
+  assert.match(src, /if \(e && tabFrame\) return sidebarHere\(\) && /);
   assert.match(src, /const syncSidebar = \(\) => load\(sidebarHere, 'features\/sidebar\.js', 'GZ_SIDEBAR_UI'\);/);
   assert.match(src, /\(e\.todo && sidebarHere\(\)\)/);
   assert.match(src, /!\(sidebarHere\(\) && !globalThis\.GZ_SIDEBAR_UI\?\.failed\(\)\)/);

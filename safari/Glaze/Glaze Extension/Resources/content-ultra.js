@@ -41,9 +41,10 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
   const top = () => I.links.length && solo && I.settings.enhance;
-  // The sidebar (features/sidebar.js): the top page's right column, with Better To Do and the docked widgets in it. Better
-  // To Do takes Ultra's places itself only without it (or while it can't start).
-  const sidebarHere = () => !!top()?.sidebar && !tabFrame && /^\/ultra(\/|$)/.test(location.pathname);
+  // The sidebar (features/sidebar.js): the page's right column, with Better To Do and the docked widgets in it, on the page
+  // or in a course tab's frame (only the one on screen works it). Better To Do takes Ultra's places itself only without
+  // it (or while it can't start).
+  const sidebarHere = () => !!top()?.sidebar && /^\/ultra(\/|$)/.test(location.pathname);
   const syncSidebar = () => load(sidebarHere, 'features/sidebar.js', 'GZ_SIDEBAR_UI');
   const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarHere() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
@@ -378,7 +379,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     syncWidgets();
   };
   const dash = () => top()?.dashboard && /^\/ultra\/institution-page\/?$/.test(location.pathname);
-  const widgetsHere = () => { const e = !tabFrame && top(); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats) || (e.todo && sidebarHere())); };
+  // A course tab's frame has the dock's widgets only (floats and the wandering pet are the page's).
+  const widgetsHere = () => { const e = top(); if (e && tabFrame) return sidebarHere() && !!(e.widgets || e.notes || e.pet || e.todo); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats) || (e.todo && sidebarHere())); };
   const syncWidgets = () => {
     syncSidebar();
     const on = widgetsHere();

@@ -367,6 +367,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   const render = (force = false) => {
     if (!box || !L || !who) return;
+    if (asleep) { drawn = ''; return; }
     const now = Date.now();
     // here(): Ultra moves the list between its Courses page and a course's outline without a page load.
     const sig = JSON.stringify([prefs, lang(), Math.floor(now / 6e4), here(), mounted?.scope]);
@@ -543,7 +544,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const k = e.target.dataset?.kind;
     if (k) { if (e.target.open) shut.delete(k); else shut.add(k); }
   };
-  const onShow = () => { if (document.visibilityState === 'visible') { render(); refresh(); } };
+  const onShow = () => { if (document.visibilityState === 'visible' && !asleep) { render(); refresh(); } };
   const onStore = (changes, area) => {
     if (!L || !who) return;
     if (area === 'sync' && changes.todo) readPrefs().then(() => { render(true); refresh(); });
@@ -568,11 +569,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       const r = await new Promise((res) => { try { store().get([key, CACHE, draftKey()], res); } catch { res({}); } });
       if (g !== gen) return;
       // A form left open on another page (keepDraft) opens again here, once.
-      const d = r?.[draftKey()];
-      if (!form && mounted && ctx.settings().enhance.drafts && d && Date.now() - d.at < 14 * 864e5 && d.todo && typeof d.todo === 'object') {
-        form = draftForm(d.todo);
-        try { store().remove(draftKey()); } catch { /* reloaded */ }
-      }
+      takeDraft(r?.[draftKey()]);
       data = L.clean(r?.[key]);
       cache = r?.[CACHE]?.key === key ? r[CACHE] : null;
       if (!box) return;
@@ -632,6 +629,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     if (!target || !c) return false;
     const was = mounted && JSON.stringify([mounted.courseId, mounted.scope]);
     if (!mounted && box) off(); // the site's own sidebar had it
+    asleep = false;
     mounted = { target, courseId: String(c.courseId || ''), scope: c.scope === 'all' ? 'all' : 'follow', setScope: c.setScope, rendered: c.rendered, failed: c.failed };
     boxIn();
     if (box.parentNode !== target) target.append(box);
@@ -661,6 +659,32 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (form && ctx.settings().enhance.drafts) store().set({ [k]: { text: form.draft?.title || form.title || '', at: Date.now(), todo: form } });
       else if (!form) store().remove(k);
     } catch { /* reloaded */ }
+  };
+  const takeDraft = (d) => {
+    if (form || !mounted || !ctx.settings().enhance.drafts || !d || !(Date.now() - d.at < 14 * 864e5) || !d.todo || typeof d.todo !== 'object') return;
+    form = draftForm(d.todo);
+    try { store().remove(draftKey()); } catch { /* reloaded */ }
+  };
+  // Another document takes the sidebar (a course tab's frame shown, or this one hidden; features/widgets.js): the open
+  // form goes to the drafts store for whichever document shows next, this one too, and nothing draws or refreshes here
+  // meanwhile. Without Back up what you type, it stays in this document's memory only.
+  let asleep = false;
+  const suspend = () => {
+    if (!mounted || asleep) return;
+    asleep = true;
+    captureForm();
+    if (form && who && ctx.settings().enhance.drafts) { keepDraft(); form = null; }
+  };
+  const resume = async () => {
+    if (!asleep) return;
+    asleep = false;
+    if (!mounted || !who || !box) return;
+    const g = gen, k = draftKey();
+    const r = await new Promise((res) => { try { store().get(k, res); } catch { res({}); } });
+    if (g !== gen || asleep || !mounted || draftKey() !== k) return;
+    takeDraft(r?.[k]);
+    render(true);
+    refresh();
   };
   const FIELDS = ['title', 'cid', 'date', 'time', 'notes'];
   const draftForm = (x) => ({
@@ -695,7 +719,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // The command palette's entries while the list is on the page.
   const cmds = () => (box && who ? [{ label: t('Add task'), hint: 'Glaze', group: 'Glaze', run: add }] : []);
 
-  return { sync, add, cmds, mount, unmount };
+  return { sync, add, cmds, mount, unmount, suspend, resume };
 })();
 
 GZ_TODO_UI;

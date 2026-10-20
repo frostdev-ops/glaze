@@ -511,6 +511,52 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     box.append(back); host.append(box); retryNote = box;
   };
   const toTop = (op, m = {}) => { try { window.top.postMessage({ gzCtab: op, ...m }, location.origin); } catch { /* gone */ } };
+  // The sidebar (features/sidebar.js) works in the document on screen only: this page, or the tab's frame over it. A
+  // frame learns which it is from the page around it ('visible'), and counts as hidden until then. Its record's changes
+  // go through that page ('sidebar'), which sends them only for the frame on screen, signed in as the page is, and
+  // answers that frame alone ('sidebar:ack', with the request's number and the gen it was asked with). A drawer open in
+  // the frame keeps the page around it inert ('drawer') until it closes or the frame is no longer on screen.
+  let told = null;
+  const visible = () => (framed ? told === true : !showing);
+  const asks = new Map();
+  let askN = 0;
+  const askSidebar = (key, ops, gen) => new Promise((res) => {
+    if (!framed || told !== true) { res(null); return; }
+    const n = ++askN;
+    const timer = setTimeout(() => { if (asks.delete(n)) res(null); }, 15000);
+    asks.set(n, { gen, res: (r) => { clearTimeout(timer); res(r); } });
+    toTop('sidebar', { key, ops, gen, n });
+  });
+  // An answer to another question, or not with the gen it was asked with, is not this document's.
+  const acked = (d) => {
+    const a = asks.get(d.n);
+    if (!a || d.gen !== a.gen) return;
+    asks.delete(d.n);
+    a.res({ ok: d.ok === true, gen: d.gen, ...(d.ok === true && d.rec && typeof d.rec === 'object' && { rec: d.rec }) });
+  };
+  const drawer = (v) => { if (framed) toTop('drawer', { on: !!v }); };
+  // Released as soon as its frame is hidden (made inert) or goes, whatever hid it.
+  let drawerFrom = null, drawerInert = [], drawerWatch = null;
+  const drawerOff = () => { drawerWatch?.disconnect(); drawerWatch = null; for (const e of drawerInert) e.inert = false; drawerInert = []; drawerFrom = null; };
+  const drawerOn = (src) => {
+    drawerOff();
+    if (!host || src.el.parentNode !== host || typeof MutationObserver !== 'function') return;
+    drawerFrom = src;
+    for (const e of document.body.children) if (e !== host && !e.inert && !['SCRIPT', 'STYLE', 'LINK', 'TEMPLATE'].includes(e.tagName)) { e.inert = true; drawerInert.push(e); }
+    drawerWatch = new MutationObserver(() => { if (src.el.inert || src.el.parentNode !== host) drawerOff(); });
+    drawerWatch.observe(src.el, { attributes: true, attributeFilter: ['inert'] });
+    drawerWatch.observe(host, { childList: true });
+  };
+  const relay = (from, src, d) => {
+    if (!Number.isSafeInteger(d.n) || typeof d.gen !== 'string') return;
+    const ack = (r) => { try { src.el.contentWindow?.postMessage({ gzCtab: 'sidebar:ack', n: d.n, gen: d.gen, ok: r?.ok === true, ...(r?.ok === true && r.rec && { rec: r.rec }) }, location.origin); } catch { /* gone */ } };
+    const current = () => { let doc = null; try { doc = src.el.contentDocument; } catch { /* gone */ } return from === showing && frames.get(from) === src && !!who && src.uid === who && !!doc && src.accountDoc === doc; };
+    if (!current()) { ack(null); return; }
+    (globalThis.GZ_SIDEBAR ? Promise.resolve() : ctx.need('lib/sidebar.js', () => globalThis.GZ_SIDEBAR)).then(() => {
+      if (!current() || !globalThis.GZ_SIDEBAR?.relayable(d, ctx.site === 'canvas' ? 'canvas' : 'ultra', location.origin, who)) { ack(null); return; }
+      try { chrome.runtime.sendMessage({ type: 'glaze:sidebar', key: d.key, ops: d.ops }, (r) => ack(chrome.runtime.lastError ? null : r)); } catch { ack(null); }
+    }, () => ack(null));
+  };
   let movedTimer = 0;
   const moved = () => { clearTimeout(movedTimer); movedTimer = setTimeout(() => toTop('moved'), 500); };
   const lay = () => {
@@ -1123,6 +1169,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     primed = '';
     html.toggleAttribute('data-gz-ctab-framed', !!cid);
     ctx.scene();
+    for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI']) globalThis[n]?.cover?.();
     globalThis.GZ_PET_WORLD?.refresh();
     try { if (cid) sessionStorage.setItem('gz-ctabs-shown', cid); else sessionStorage.removeItem('gz-ctabs-shown'); } catch { /* blocked */ }
     keepPage();
@@ -1165,6 +1212,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     // A frame's earlier page, or its next one loading: hidden, so only what it holds and who is signed in there count.
     if (frames.get(from) !== src) {
       if (op === 'edited') src.dirty = true;
+      // A hidden or replaced page's sidebar asks nothing.
+      else if (op === 'sidebar') relay(from, src, e.data);
       else if (op === 'loaded') src.el.contentWindow.postMessage({ gzCtab: 'visible', on: false }, location.origin);
       else if (op === 'signout' && ctx.site === 'canvas') { send({ op: 'drop', signout: true }); revoke(); }
       else if (op === 'account' && L.validId(e.data.uid, ctx.site)) {
@@ -1173,6 +1222,8 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       }
       return;
     }
+    if (op === 'sidebar') { relay(from, src, e.data); return; }
+    if (op === 'drawer') { if (e.data.on === true && from === showing) drawerOn(src); else if (drawerFrom === src) drawerOff(); return; }
     if (ctx.site === 'canvas' && from !== showing && ['visit', 'shut', 'pin', 'move', 'go', 'warm', 'open', 'away'].includes(op)) return;
     if (op === 'visit' && id) visit(id);
     else if (op === 'shut' && id) shut(id, e.data.keys === true);
@@ -1244,10 +1295,13 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
     addEventListener('message', (e) => {
       if (e.origin !== location.origin || e.source !== window.top) return;
       if (e.data?.gzCtab === 'visible' && typeof e.data.on === 'boolean') {
+        told = e.data.on;
         html.toggleAttribute('data-gz-ctab-framed', !e.data.on); ctx.scene();
+        for (const n of ['GZ_SIDEBAR_UI', 'GZ_WIDGETS_UI']) globalThis[n]?.cover?.();
         // A hidden page may have left its course while its navigation request was ignored.
         if (e.data.on) { awayFrom = ''; pass(); }
       }
+      else if (e.data?.gzCtab === 'sidebar:ack' && Number.isSafeInteger(e.data.n)) acked(e.data);
       else if (e.data?.gzCtab === 'note' && typeof e.data.text === 'string' && e.data.text.length <= 500) say(e.data.text);
       else if (e.data?.gzCtab === 'loading' && (e.data.cid === '' || L.validId(e.data.cid, ctx.site))) { waiting = e.data.cid; mark(); }
     });
@@ -1645,7 +1699,7 @@ var GZ_CTABS = globalThis.GZ_CTABS || (() => {
       return true;
     },
   };
-  return { sync, held, petSurface, bar, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
+  return { sync, held, petSurface, bar, visible, sidebar: askSidebar, drawer, showing: () => showing, frames: () => frames.size, revoked: () => signedOut, snapshots: () => snaps.size };
 })();
 
 GZ_CTABS;

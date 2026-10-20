@@ -30,7 +30,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // native() its own column ({ el, page }: the column and its content) when the page shows one Glaze recognizes, else
   // null; boundary() where Glaze's own column goes without one; left() what its navigation takes from the window's width.
   // Optional: own, a class for Glaze's own column; overlay() the page is a layer the sidebar only opens over; top() where
-  // a fixed column starts (px, null for the navigation's). Course tabs' frames come later still.
+  // a fixed column starts (px, null for the navigation's).
   const ADAPTERS = {
     canvas: {
       family() {
@@ -108,6 +108,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const A = ADAPTERS[LMS] || ADAPTERS.canvas;
   // Native To Do lists Better To Do can take the place of (features/apps.css hides them while data-gz-sidebar-todo is set).
   const NATIVE_TODO = '.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list, bb-todo';
+  // In a course tab's frame (features/coursetabs.js), the sidebar is the frame's while the frame is on screen, and the
+  // page around it hides its own. Only the document on screen draws, watches or changes anything: a covered or hidden one
+  // keeps its record up to date and waits (asleep), and its changes go through the page around it (GZ_CTABS.sidebar).
+  const framed = !!ctx.tabFrame && globalThis.top !== globalThis.window;
+  const covered = () => { const c = globalThis.GZ_CTABS; return c?.visible ? !c.visible() : framed; };
+  // A request's answer is for the page it was asked on: gen moves on with the route, the account and the document.
+  const DOC = Math.random().toString(36).slice(2, 10);
 
   // ---- state --------------------------------------------------------------------------------------------------------
   let S = null; // lib/sidebar.js
@@ -121,7 +128,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0, modalAway = false;
   let modalObserver = null, backdrop = null, widthCancel = null;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
-  let mo = null, frame = 0, noteTimer = 0, passFrame = 0, offer = null;
+  let mo = null, frame = 0, noteTimer = 0, passFrame = 0, offer = null, asleep = false, movedAt = 0, movedTimer = 0;
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
   const emit = (e, ...a) => { for (const f of subs[e]) { try { f(...a); } catch { /* one listener's fault stays its own */ } } };
   const on_ = (e, f) => { subs[e]?.add(f); return () => subs[e]?.delete(f); };
@@ -138,23 +145,26 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     paint();
     layout();
   };
+  const genOf = () => `${DOC}.${gen}`;
+  const post = (k, ops) => (framed ? globalThis.GZ_CTABS?.sidebar?.(k, ops, genOf()) || Promise.resolve(null) : send({ type: 'glaze:sidebar', key: k, ops }));
+  // A change that finishes after the page moved on still counts (what is stored is adopted), but says nothing here.
   const op = (ops) => {
-    if (!active || !rec || !S?.ops(ops)) return Promise.resolve(false);
+    if (!active || asleep || !rec || !S?.ops(ops)) return Promise.resolve(false);
     reads++;
     rec = S.apply(rec, ops, { lms: LMS });
     emit('change');
     paint();
     layout();
     flying++;
-    const k = key, g = epoch;
-    return send({ type: 'glaze:sidebar', key: k, ops }).then((r) => {
+    const k = key, g = epoch, asked = genOf();
+    return post(k, ops).then((r) => {
       const ok = r?.ok === true;
       if (g !== epoch) return ok;
-      if (!ok) lost = true;
+      if (!ok && asked === genOf()) lost = true;
       if (--flying || k !== key) return ok;
       const n = ++reads;
       get(k).then((x) => { if (g === epoch && !flying && n === reads && k === key && active) adopt(x[k]); });
-      if (lost) { lost = false; status(t("Couldn't save. Try again.")); }
+      if (lost) { lost = false; if (!asleep) status(t("Couldn't save. Try again.")); }
       return ok;
     });
   };
@@ -176,8 +186,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (g !== epoch) return false;
     let next = S.clean(r[k]);
     // The one-time move into the dock is written first, and only then shown (lib/sidebar.js migrate).
-    if (!next.mig) { const a = await send({ type: 'glaze:sidebar', key: k, ops: [{ op: 'migrate' }] }); if (a?.ok && a.rec) next = S.clean(a.rec); }
+    if (!next.mig) { const a = await post(k, [{ op: 'migrate' }]); if (a?.ok && a.rec) next = S.clean(a.rec); }
     if (g !== epoch) return false;
+    if (key !== k) gen++;
     key = k;
     rec = next;
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
@@ -297,14 +308,17 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (self()) { host.el.setAttribute('data-gz-sb-self', ''); head.after(pageHead); }
     else if (host.page) host.page.before(pageHead);
     host.el.append(dock);
-    // The page's own content may arrive late (Canvas's Dashboard fills its column after load): looked at again once a
-    // frame, never rebuilt.
-    if (host.page && typeof MutationObserver === 'function') {
-      mo ||= new MutationObserver((rs) => { if (!rs?.length || !rs.every(mine)) { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active) (ultra ? place() : layout()); }); } });
-      mo.observe(host.page, { childList: true, subtree: true });
-      // Ultra (Angular) may swap its column for a new one between the site's passes: its parent is watched for that.
-      if (ultra && host.el.parentNode) mo.observe(host.el.parentNode, { childList: true });
-    }
+    watch();
+  };
+  // The page's own content may arrive late (Canvas's Dashboard fills its column after load): looked at again once a
+  // frame, never rebuilt. Not while asleep.
+  const watch = () => {
+    mo?.disconnect();
+    if (!host?.page || asleep || typeof MutationObserver !== 'function') return;
+    mo ||= new MutationObserver((rs) => { if (!asleep && (!rs?.length || !rs.every(mine))) { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) (ultra ? place() : layout()); }); } });
+    mo.observe(host.page, { childList: true, subtree: true });
+    // Ultra (Angular) may swap its column for a new one between the site's passes: its parent is watched for that.
+    if (ultra && host.el.parentNode) mo.observe(host.el.parentNode, { childList: true });
   };
   // Ultra's columns are their own content (ADAPTERS.ultra).
   const self = () => !!host && host.page === host.el;
@@ -323,7 +337,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const setAttr = (el, k, v) => { if (v === false || v == null) { if (el.hasAttribute(k)) el.removeAttribute(k); } else if (el.getAttribute(k) !== v) el.setAttribute(k, v); };
   const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - S.GAP - (family === 'grades' ? S.MAIN_GRADES : S.MAIN));
   const layout = () => {
-    if (!active || !host) return;
+    if (!active || !host || asleep) return;
     const pageEmpty = !host.page || !filled(host.page);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
     const m = S.mode({ vw: innerWidth, left: A.left(), width: dragW || rec.width, grades: family === 'grades', empty: pageEmpty && !docked && !forced, open: rec.open });
@@ -361,7 +375,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (next !== mode) { mode = next; emit('mode', mode); }
   };
   const paint = () => {
-    if (!active || !host) return;
+    if (!active || !host || asleep) return;
     const f = rec.fold[family] || {};
     pageBtn.setAttribute('aria-expanded', String(!f.page));
     setAttr(host.el, 'data-gz-sb-fold-page', f.page && host.page ? '' : false);
@@ -373,11 +387,29 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!adding.hidden) openAdd(true, false);
   };
   // A pass (the site's, or the column changed): the column found again, dressed if it isn't, laid out.
+  // The page's kind and course move on only once its new view is there: an address alone (Ultra routes in place) doesn't
+  // relabel what still shows. Its column replaced, or a page without one, is the new view; else at most a moment later.
+  const settled = (fam) => {
+    if (!ultra || !family || !host) return true;
+    const n = A.native();
+    if (n ? n.el !== host.el : ['other', 'detail'].includes(fam)) return true;
+    movedAt ||= Date.now();
+    const left = 1200 - (Date.now() - movedAt);
+    if (left <= 0) return true;
+    clearTimeout(movedTimer);
+    movedTimer = setTimeout(() => { if (on && active && !asleep) place(); }, left + 20);
+    return false;
+  };
   const place = () => {
     if (!on || !rec) return;
+    if (covered()) { asleep = true; return; }
+    asleep = false;
     build();
     const fam = A.family(), cid = A.courseId();
     const moved = fam !== family || cid !== course;
+    if (moved && !settled(fam)) return;
+    movedAt = 0;
+    clearTimeout(movedTimer);
     if (moved) { family = fam; course = cid; gen++; }
     const n = A.native();
     if (!host || !host.el.isConnected || (n ? host.el !== n.el || host.page !== n.page : !host.own)) attach(n);
@@ -397,7 +429,23 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     paint();
     layout();
   };
-  const onResize = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active) layout(); }); };
+  const onResize = () => { if (asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
+  // The document on screen changed (features/coursetabs.js): asleep, the drawer and menu close and nothing is watched;
+  // awake again, the column is looked at as on a pass.
+  const cover = () => {
+    const now = covered();
+    if (now === asleep) return;
+    asleep = now;
+    if (asleep) {
+      closeMenu();
+      closeDrawer(false);
+      mo?.disconnect();
+      for (const f of [frame, passFrame]) cancelAnimationFrame(f);
+      clearTimeout(movedTimer);
+      return;
+    }
+    if (on) { watch(); sync(true); }
+  };
 
   // The inner edge: a drag within 288–480 and the room the content keeps (shown as it moves, saved once let go), or the
   // arrow keys a step at a time (Shift: further), Home and End the narrowest and widest.
@@ -453,7 +501,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (modalAway !== away) { modalAway = away; layout(); }
   };
   const openDrawer = (from) => {
-    if (!active) return;
+    if (!active || asleep) return;
     opener = from || document.activeElement;
     drawer = true;
     layout();
@@ -462,6 +510,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     modalObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'aria-hidden', 'open', 'hidden', 'style', 'class'] });
     document.addEventListener('keydown', onKey);
     document.addEventListener('focusin', onFocus);
+    // In a course tab's frame, the page around it (its navigation, the tabs) is inert while the drawer is open.
+    if (framed) globalThis.GZ_CTABS?.drawer?.(true);
     toggle.focus();
   };
   const closeDrawer = (restore = true) => {
@@ -475,6 +525,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     document.removeEventListener('keydown', onKey);
     document.removeEventListener('focusin', onFocus);
     if (!was) return;
+    if (framed) globalThis.GZ_CTABS?.drawer?.(false);
     closeMenu();
     if (adding && !adding.hidden) openAdd(false, false);
     layout();
@@ -579,6 +630,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     cancelAnimationFrame(frame);
     cancelAnimationFrame(passFrame);
     clearTimeout(noteTimer);
+    clearTimeout(movedTimer);
+    movedAt = 0;
+    asleep = false;
     const h = html();
     if (h) {
       for (const k of ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed']) h.removeAttribute(k);
@@ -596,20 +650,22 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!on) { teardown(); return; }
     ready().then((ok) => {
       if (!ok || !on) return;
+      if (covered()) { asleep = true; return; }
       if (!active) { addEventListener('resize', onResize); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
       // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
-      if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active) place(); }); }
+      if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active && !asleep) place(); }); }
       else place();
     });
   };
 
   // What features/widgets.js and other files use: host() the column's parts while it is here; context() the page it is
-  // for (gen moves on with the page or the account); on('change' | 'mode' | 'context', fn) → stop; drawn(n) how many
-  // widgets it drew into the dock.
-  const context = () => ({ site: ctx.site, family, courseId: course, gen });
-  const hostOf = () => (active && host ? { el: host.el, widgets: list, page: host.page, mode, active: true } : null);
+  // for (gen moves on with the page, the account or the document); on('change' | 'mode' | 'context', fn) → stop; drawn(n)
+  // how many widgets it drew into the dock; asleep() while another document has the sidebar; cover() said by course tabs
+  // when the document on screen changes.
+  const context = () => ({ site: ctx.site, family, courseId: course, gen: genOf() });
+  const hostOf = () => (active && host && !asleep ? { el: host.el, widgets: list, page: host.page, mode, active: true } : null);
   const drawn = (n) => { if (drawnCount !== n) { drawnCount = n; layout(); } };
-  return { sync, ready, active: () => active, failed: () => failed, rec: () => rec, op, host: hostOf, context, on: on_, say, status, drawn, menu, add: () => { if (mode === 'none' || (mode === 'drawer' && !drawer)) { forced = mode === 'none'; openDrawer(document.activeElement); } openAdd(true); } };
+  return { sync, ready, cover, asleep: () => asleep, active: () => active, failed: () => failed, rec: () => rec, op, host: hostOf, context, on: on_, say, status, drawn, menu, add: () => { if (mode === 'none' || (mode === 'drawer' && !drawer)) { forced = mode === 'none'; openDrawer(document.activeElement); } openAdd(true); } };
 })();
 
 GZ_SIDEBAR_UI;
