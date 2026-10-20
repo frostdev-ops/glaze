@@ -111,9 +111,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       native() {
         // A details layer covers the outline; it does not replace its column or the live widgets in it.
         const f = /^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) ? 'outline' : ADAPTERS.ultra.family();
+        const attempt = f === 'assessment' && nativeAttempt();
+        if (attempt) return { el: attempt, page: attempt, kind: 'attempt' };
         const el = f === 'courses' ? document.querySelector('div.todo-panel') : f === 'outline' ? document.querySelector('aside.outline-actions')
+          : f === 'assessment' ? nativeAssessment()
           : f === 'discussion' ? ADAPTERS.ultra.discussion() : null;
-        return el ? { el, page: el } : null;
+        return el ? { el, page: el, kind: f === 'assessment' ? 'overview' : '' } : null;
       },
       boundary: () => document.body,
       own: 'gz-sb-fixed',
@@ -395,7 +398,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     closeDrawer(false);
     detach();
     if (n) {
-      host = { el: n.el, page: n.page, own: false };
+      host = { el: n.el, page: n.page, own: false, kind: n.kind };
       kept = ATTRS.map((k) => [k, n.el.getAttribute(k)]);
     } else {
       own ||= make('aside', { id: 'gz-sidebar', className: A.own ? `gz-sb-own ${A.own}` : 'gz-sb-own' });
@@ -436,7 +439,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // inline styles, listeners or nodes of Ultra's are changed. Its heading and controls keep their native reading order.
   // Independent scrollers cannot safely share keyboard scrolling: only a fully visible, non-scrolling slot qualifies.
   // Any scroll, re-render, obstruction or changed geometry restores native flow, without trying again on every pass.
-  // Attempt details have no verified structure yet; they always keep Ultra's presentation, even with the setting on.
+  // Unrecognized attempt shells keep Ultra's presentation. Verified current shells use their native column as host.
   let absorbed = [], absorbSheet = null, absorbRO = null, absorbMO = null, absorbRootMO = null, absorbBox = null, absorbBlocked = new WeakMap(), absorbGen = 0, rubricNative = null;
   const OVERVIEW = 'section.assessment-overview-modern-panel.routed-page.route-view-container > learning-module-panel-view.routed-page-body > div.table-of-contents-disabled > div.panel-content-body > div.root-learning-module-panel > div#learningModulePanelContainerId.content-item-container > div.content-item-container-children > content-body > div.base-body > div.content-root > div.standard-content-body > div.assessment-overview-grid';
   const PANEL = `${OVERVIEW} > div.overview-section.overview-attempts-section.overview-attempts-section-container:nth-child(3):has(> h2#grades-attempts-header.section-label)`;
@@ -464,27 +467,70 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!el.isConnected || el.closest('[hidden], [aria-hidden="true"]')) return null;
     return { layer, wrap, main, viewer, el, heading: headings[0], frame: frames[0] };
   };
+  const readOnlyPanel = (el) => {
+    const editor = el.closest('[contenteditable]');
+    if (editor && editor.getAttribute('contenteditable') !== 'false' || el.closest('form')) return false;
+    const owned = (x) => { for (let p = x; p && p !== el; p = p.parentElement) if (part(p)) return true; return false; };
+    return ![...el.querySelectorAll('[contenteditable]')].some((x) => x.getAttribute('contenteditable') !== 'false' && !owned(x))
+      && ![...el.querySelectorAll('form, input, select, textarea, iframe, button, [role="button"], [role="textbox"], [role="combobox"]')].some((x) => !owned(x));
+  };
+  const overviewPanel = () => {
+    if (!ultra || cfg().absorb === false || !/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/overview\/?$/.test(location.pathname) || html().hasAttribute('data-gz-focus')) return null;
+    const grids = [...document.querySelectorAll('div.assessment-overview-grid')];
+    if (grids.length !== 1) return null;
+    const grid = grids[0], kids = [...grid.children].filter((e) => e !== backdrop);
+    const classes = ['overview-description-section', 'overview-due-date-section', 'overview-attempts-section', 'assessment-details-section'];
+    if (kids.length !== 4 || kids.some((e, i) => e.tagName !== 'DIV' || !has(e, 'overview-section') || !has(e, classes[i]) || (i !== 2 && !has(e, 'main-section-container')))) return null;
+    // Check direct parents ourselves, rather than accepting a descendant selector's partial match.
+    const chain = ['div.standard-content-body', 'div.content-root', 'div.base-body', 'content-body', 'div.content-item-container-children',
+      'div#learningModulePanelContainerId.content-item-container', 'div.root-learning-module-panel', 'div.panel-content-body',
+      'div.table-of-contents-disabled, div.table-of-contents-enabled', 'learning-module-panel-view.routed-page-body', 'section.assessment-overview-modern-panel.routed-page.route-view-container'];
+    let parent = grid.parentElement;
+    for (const sel of chain) { if (!parent || parent.closest(sel) !== parent) return null; parent = parent.parentElement; }
+    const e = kids[2], heads = [...e.children].filter((n) => n.tagName === 'H2' && has(n, 'section-label'));
+    if (!has(e, 'overview-attempts-section-container') || heads.length !== 1 || heads[0].id !== 'grades-attempts-header'
+      || document.querySelectorAll('#grades-attempts-header').length !== 1 || !e.querySelector('a.button.button-attempt.js-multiple')
+      || !readOnlyPanel(e) || !e.isConnected || e.closest('[hidden], [aria-hidden="true"]')) return null;
+    return { el: e, grid };
+  };
+  // Current Ultra overviews have a TOC shell or a query-container grid. Use their existing column as the host:
+  // native controls and docked widgets then share one scroller, with no projection, cloning or native-node moves.
+  // The older verified shell keeps its conservative projection path for compatibility.
+  const nativeAssessment = () => {
+    const panel = overviewPanel();
+    if (!panel) return null;
+    return panel.el.closest('div.table-of-contents-enabled') || getComputedStyle(panel.grid).containerType === 'inline-size' ? panel.el : null;
+  };
+  const nativeAttempt = () => {
+    if (!ultra || cfg().absorb === false || html().hasAttribute('data-gz-focus')
+      || !/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/.test(location.pathname)) return null;
+    const roots = [...document.querySelectorAll('bb-assignment-attempt-authoring-panel.react-container')];
+    if (roots.length !== 1) return null;
+    const root = roots[0], panels = [...root.querySelectorAll('div[class*="makeStylesdetails-"]')];
+    if (panels.length !== 1) return null;
+    const el = panels[0], container = el.parentElement, body = container?.parentElement, content = body?.parentElement;
+    const base = content?.parentElement, panel = base?.parentElement, wrap = panel?.parentElement;
+    const styled = (e, name) => String(e?.className || '').split(/\s+/).some((c) => c.startsWith(`makeStyles${name}-`));
+    if (!styled(container, 'container') || !styled(body, 'body') || !styled(content, 'contentRoot') || !styled(base, 'baseBody')
+      || !styled(panel, 'panelRoot') || wrap?.parentElement !== root || root.children.length !== 1 || wrap.children.length !== 1
+      || panel.children.length !== 1 || content.children.length !== 1 || body.children.length !== 1) return null;
+    const columns = [...container.children].filter((e) => e !== backdrop), shells = [...base.children];
+    if (columns.length !== 2 || columns[1] !== el || !styled(columns[0], 'authoring') || shells.length !== 3
+      || !styled(shells[0], 'headerRoot') || shells[1] !== content || !styled(shells[2], 'footerWrapper')) return null;
+    const editor = columns[0].querySelector('#bb-editorassignment-attempt-authoring-submission[contenteditable="true"]');
+    const footer = shells[2].firstElementChild, buttons = footer && [...footer.querySelectorAll('button')];
+    const native = [...el.children].filter((e) => !part(e)), title = native[0]?.querySelector('h2');
+    if (!editor || footer?.tagName !== 'FOOTER' || !styled(footer, 'footerRoot') || buttons.length !== 2
+      || buttons.some((e) => e.getAttribute('type') !== 'button') || !styled(native[0], 'sidePanelContentMarginFix') || !title?.textContent.trim()
+      || !el.isConnected || el.closest('[hidden], [aria-hidden="true"]') || !readOnlyPanel(el)) return null;
+    return el;
+  };
   const absorbable = () => {
     if (!ultra || cfg().absorb === false) { absorbBlocked = new WeakMap(); return []; }
     const review = rubricView();
     if (review) return absorbBlocked.get(review.el) === absorbKey() ? [] : [review.el];
-    if (!/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/overview\/?$/.test(location.pathname) || html().hasAttribute('data-gz-focus')) return [];
-    const grids = [...document.querySelectorAll('div.assessment-overview-grid')];
-    if (grids.length !== 1) return [];
-    const grid = grids[0], kids = [...grid.children];
-    const classes = ['overview-description-section', 'overview-due-date-section', 'overview-attempts-section', 'assessment-details-section'];
-    if (kids.length !== 4 || kids.some((e, i) => e.tagName !== 'DIV' || !has(e, 'overview-section') || !has(e, classes[i]) || (i !== 2 && !has(e, 'main-section-container')))) return [];
-    // Check direct parents ourselves, rather than accepting a descendant selector's partial match.
-    const chain = ['div.standard-content-body', 'div.content-root', 'div.base-body', 'content-body', 'div.content-item-container-children',
-      'div#learningModulePanelContainerId.content-item-container', 'div.root-learning-module-panel', 'div.panel-content-body',
-      'div.table-of-contents-disabled', 'learning-module-panel-view.routed-page-body', 'section.assessment-overview-modern-panel.routed-page.route-view-container'];
-    let parent = grid.parentElement;
-    for (const sel of chain) { if (!parent || parent.closest(sel) !== parent) return []; parent = parent.parentElement; }
-    const e = kids[2], heads = [...e.children].filter((n) => n.tagName === 'H2' && has(n, 'section-label'));
-    if (!has(e, 'overview-attempts-section-container') || heads.length !== 1 || heads[0].id !== 'grades-attempts-header'
-      || document.querySelectorAll('#grades-attempts-header').length !== 1 || !e.querySelector('a.button.button-attempt.js-multiple')
-      || e.querySelector('form, input, select, textarea, iframe, [contenteditable="true"], button, [role="button"]')
-      || !e.isConnected || e.closest('[hidden], [aria-hidden="true"]')) return [];
+    const e = overviewPanel()?.el;
+    if (!e) return [];
     return absorbBlocked.get(e) === absorbKey() ? [] : [e];
   };
   const pv = (e, k, v) => { if (e.style.getPropertyValue(k) !== v) e.style.setProperty(k, v); };
@@ -640,9 +686,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const minMain = () => { const c = cfg(); return family === 'grades' ? c.grades ?? S.MAIN_GRADES : c.min ?? S.MAIN; };
   let safeEnd = 0;
   const inset = () => styleOf() === 'float' ? 12 : 0;
-  // Ultra only mounts participant cards while they intersect this explicit root. A viewport-fixed/top-layer host
-  // leaves its containing-block chain, so keep that native column sticky inside its own discussion instead.
-  const discussionRoot = () => ultra && family === 'discussion' && !host?.own ? host?.el.closest('#full-discussions[bb-intersection-observer-root]') : null;
+  // Keep columns inside their native scroll/layout roots: discussion participants depend on that ancestry, and
+  // current assessment grids are query containers. Sticky positioning lets native controls and widgets scroll together.
+  const nativeScrollRoot = () => {
+    if (!ultra || host?.own) return null;
+    return family === 'discussion' ? host?.el.closest('#full-discussions[bb-intersection-observer-root]')
+      : family === 'assessment' ? host.kind === 'attempt' ? host.el.parentElement : host?.el.closest('.assessment-overview-grid') : null;
+  };
   let nativeScroller = null;
   const watchNativeScroll = (root) => {
     let next = null;
@@ -699,7 +749,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       p.getBoundingClientRect().width > 0 && typeof getComputedStyle === 'function' && getComputedStyle(p).position === 'absolute');
     setAttr(html(), 'data-gz-sb-tool', tool ? '' : false);
     setAttr(html(), 'data-gz-sb-family', family || false);
-    const nativeRoot = discussionRoot();
+    setAttr(html(), 'data-gz-sb-assessment', family === 'assessment' && !host.own ? host.kind : false);
+    const nativeRoot = nativeScrollRoot();
     setAttr(html(), 'data-gz-sb-native-root', nativeRoot ? '' : false);
     watchNativeScroll(nativeRoot);
     setAttr(html(), 'data-gz-sb-layer', layer ? '' : false);
@@ -1083,7 +1134,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // <html> as before the sidebar: its attributes and variables gone.
   const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
-    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root'];
+    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root', 'data-gz-sb-assessment'];
   const bare = () => {
     const h = html();
     if (!h) return;

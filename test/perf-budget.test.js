@@ -224,6 +224,7 @@ const STYLE_READS = [
   // and the native discussion host's ancestors up to its nearest scroller. No descendant or whole-page style sweep.
   ['features/sidebar.js', 'getComputedStyle(p)', 3],
   ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
+  ['features/sidebar.js', 'getComputedStyle(panel.grid)', 1], // one verified assessment overview grid, to identify Ultra's current native sidebar shell
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.

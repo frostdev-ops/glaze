@@ -20,7 +20,7 @@ The sidebar's title, style, page choices and other general settings sync too. It
 dock order/heights, widget destinations and migration markers stay in local records keyed by LMS, school origin and
 account id. The page's shared account reader gets Canvas's profile id or Ultra's me id from your own school session.
 Reset sidebar for this account resets its presentation but keeps widget destinations, order and data. The LMS's own
-side column, Ultra's Grades / Attempts and submission Rubric stay in place and are shown visually; the sidebar saves
+side column, Ultra's Grades / Attempts, attempt Details & Information and submission Rubric stay in place; the sidebar saves
 none of their text or grades and makes no panel request. Docked widgets use their existing data stores.
 
 New installs get pet, timer, notes and quote tiles, course cards once listed, and To Do/settings in the first sidebar;

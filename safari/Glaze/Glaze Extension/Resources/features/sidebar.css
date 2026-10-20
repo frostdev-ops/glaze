@@ -92,7 +92,28 @@
   }
   html[data-gz-sb-family="discussion"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-main-container:has(> [data-gz-sidebar-host]) { padding-inline-end: var(--gz-sb-room) !important; }
   html[data-gz-sb-family="discussion"][data-gz-sidebar] .course-main-container:has(> [data-gz-sidebar-host]) > :not([data-gz-sidebar-host]) { grid-column: 1 / -1 !important; }
-  /* The overview's projection is a Glaze-owned, screen-only sheet; native nodes carry no markers or inline styles. */
+  /* Current assessment overviews use their native Grades / Attempts column as the sidebar. Keep the query container
+     and every native child in place; one grid track holds the metadata and widgets with a single scroll container. */
+  html[data-gz-sb-assessment][data-gz-sidebar] .standard-content-body:has(> .assessment-overview-grid > [data-gz-sidebar-host]) { padding-inline-end: var(--gz-sb-inset) !important; }
+  html[data-gz-sb-assessment][data-gz-sidebar] .assessment-overview-grid:has(> [data-gz-sidebar-host]) {
+    grid-template-columns: minmax(0, 1fr) var(--gz-sidebar-w) !important; grid-template-rows: auto auto minmax(0, 1fr); column-gap: 16px;
+  }
+  html[data-gz-sb-assessment][data-gz-sidebar] .assessment-overview-grid > .main-section-container { grid-column: 1 !important; align-self: start; }
+  html[data-gz-sb-assessment][data-gz-sidebar] .assessment-overview-grid > [data-gz-sidebar-host] { grid-row: 1 / span 3 !important; }
+  html[data-gz-sb-assessment][data-gz-sidebar="collapsed"] .assessment-overview-grid:has(> [data-gz-sidebar-host]) { grid-template-columns: minmax(0, 1fr) 3rem !important; }
+  html[data-gz-sb-assessment]:is([data-gz-sidebar="drawer"], [data-gz-sidebar="none"]) .assessment-overview-grid:has(> [data-gz-sidebar-host]) { grid-template-columns: minmax(0, 1fr) !important; }
+  html[data-gz-sb-assessment][data-gz-sidebar="drawer"] .assessment-overview-grid > [data-gz-sidebar-host] { grid-column: 1 !important; z-index: 2100; }
+  html[data-gz-sb-assessment] [data-gz-sidebar-host] { z-index: 1000; }
+  /* The verified attempt's authoring column and footer remain native. Its read-only details column shares the dock. */
+  html[data-gz-sb-assessment="attempt"][data-gz-sidebar] bb-assignment-attempt-authoring-panel [class*="makeStylesbody-"]:has(> [class*="makeStylescontainer-"] > [data-gz-sidebar-host]) { padding-inline-end: var(--gz-sb-inset) !important; }
+  html[data-gz-sb-assessment="attempt"][data-gz-sidebar] bb-assignment-attempt-authoring-panel [class*="makeStylescontainer-"]:has(> [data-gz-sidebar-host]) {
+    display: grid !important; grid-template-columns: minmax(0, 1fr) var(--gz-sidebar-w) !important; column-gap: 16px; align-items: start;
+  }
+  html[data-gz-sb-assessment="attempt"][data-gz-sidebar] bb-assignment-attempt-authoring-panel [class*="makeStylesauthoring-"] { grid-column: 1; grid-row: 1; width: auto !important; min-width: 0 !important; max-width: none !important; }
+  html[data-gz-sb-assessment="attempt"][data-gz-sidebar="collapsed"] bb-assignment-attempt-authoring-panel [class*="makeStylescontainer-"]:has(> [data-gz-sidebar-host]) { grid-template-columns: minmax(0, 1fr) 3rem !important; }
+  html[data-gz-sb-assessment="attempt"]:is([data-gz-sidebar="drawer"], [data-gz-sidebar="none"]) bb-assignment-attempt-authoring-panel [class*="makeStylescontainer-"]:has(> [data-gz-sidebar-host]) { grid-template-columns: minmax(0, 1fr) !important; }
+  html[data-gz-sb-assessment="attempt"][data-gz-sidebar="drawer"] bb-assignment-attempt-authoring-panel [data-gz-sidebar-host] { grid-column: 1 !important; z-index: 2100; }
+  /* The older overview's projection is a Glaze-owned, screen-only sheet. */
   .gz-sb-slot { display: block; pointer-events: none; }
   html:not([data-gz-sidebar="expanded"]) .gz-sb-slot, .gz-sb-slot:not([style*="height"]) { display: none; }
   html[data-gz-sb-ultra][data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] { z-index: 2100; }
@@ -273,14 +294,18 @@
     max-width: none !important; margin-inline: 0 !important; column-gap: 16px;
   }
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar] #full-discussions[bb-intersection-observer-root] .course-main-container > :not([data-gz-sidebar-host], .gz-sb-backdrop) { grid-column: 1 !important; grid-row: 1; }
-  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"] {
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"],
+  html[data-gz-sb-native-root][data-gz-sb-family="assessment"][data-gz-sidebar] #learningModulePanelContainerId .assessment-overview-grid > [data-gz-sidebar-host="native"],
+  html[data-gz-sb-native-root][data-gz-sb-assessment="attempt"][data-gz-sidebar] #site-wrap bb-assignment-attempt-authoring-panel [data-gz-sidebar-host="native"] {
     position: sticky !important; grid-column: 2; grid-row: 1; align-self: start; justify-self: end;
     top: calc(var(--gz-sb-native-offset, 0px) + var(--gz-sb-inset)) !important; bottom: auto !important; inset-inline: auto !important;
     height: calc(100dvh - var(--gz-sb-native-top, var(--gz-sb-top, 0px)) - max(var(--gz-sb-end), var(--gz-sb-native-end, 0px)) - var(--gz-sb-inset)) !important;
     max-height: calc(100dvh - var(--gz-sb-top, 0px) - max(var(--gz-sb-end), var(--gz-sb-native-end, 0px)) - 2 * var(--gz-sb-inset)) !important;
   }
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="collapsed"] #full-discussions[bb-intersection-observer-root] .course-main-container { grid-template-columns: minmax(0, 1fr) 3rem !important; }
-  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="collapsed"] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"] { height: auto !important; }
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="collapsed"] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"],
+  html[data-gz-sb-native-root][data-gz-sb-family="assessment"][data-gz-sidebar="collapsed"] #learningModulePanelContainerId .assessment-overview-grid > [data-gz-sidebar-host="native"],
+  html[data-gz-sb-native-root][data-gz-sb-assessment="attempt"][data-gz-sidebar="collapsed"] #site-wrap bb-assignment-attempt-authoring-panel [data-gz-sidebar-host="native"] { height: auto !important; }
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"]:is([data-gz-sidebar="drawer"], [data-gz-sidebar="none"]) #full-discussions[bb-intersection-observer-root] .course-main-container { grid-template-columns: minmax(0, 1fr) !important; }
   html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="drawer"] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"] { grid-column: 1; z-index: 2100; }
 
