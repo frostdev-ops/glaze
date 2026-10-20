@@ -1,7 +1,7 @@
 // The sidebar on real Canvas at localhost:3000 (local test logins only): each kind of page at five widths, before (the
 // sidebar off) and after, with Canvas's own controls still working, and a widget moved board → sidebar → floating → board
 // with a reload after each move. Uses a temporary localhost-enabled extension and profile, removed on exit; never answers
-// or submits a quiz (a quiz without a time limit is opened, only looked at).
+// or submits a quiz, and only inspects an already started untimed attempt.
 // Hold /private/tmp/claude-501/glaze-heavy.lock and run under nice (as for the full test suite).
 // NODE_PATH=/path/to/node_modules nice -n 15 node scripts/sidebar-canvas-check.js [screenshots directory]
 const { chromium } = require('playwright');
@@ -87,8 +87,8 @@ const layoutOk = async (name, width) => {
     const asg = (await api(`/api/v1/courses/${calc.id}/assignments`))[0];
     const quizzes = await api(`/api/v1/courses/${hist.id}/quizzes`);
     const subs = await Promise.all(quizzes.map((q) => api(`/api/v1/courses/${hist.id}/quizzes/${q.id}/submissions`).then((r) => r.quiz_submissions || []).catch(() => [])));
-    // To take: one without a time limit not yet finished (opening it starts an attempt that can't time out); done: one finished.
-    const take = quizzes.find((q, i) => !q.time_limit && !subs[i].some((s) => s.workflow_state === 'complete'));
+    // Inspect only an existing untimed attempt; never start, answer or submit a quiz.
+    const take = quizzes.find((q, i) => q.id === 49 && !q.time_limit && subs[i].some((s) => s.workflow_state === 'untaken'));
     const done = quizzes.find((q, i) => subs[i].some((s) => s.workflow_state === 'complete'));
     const PAGES = [
       ['dashboard', '/'], ['course-home', `/courses/${calc.id}`], ['assignment', `/courses/${calc.id}/assignments/${asg.id}`],
@@ -97,6 +97,106 @@ const layoutOk = async (name, width) => {
     ];
     const lay = { ...W.layout({ tiles: W.TILES.map((id) => ({ id, on: id === 'notes', size: 'l' })) }), filled: ['cdash'] };
     lay.boards.cdash = lay.boards.cdash.map((x) => ({ ...x, on: x.id === 'notes' || x.id === 'todo' }));
+
+    // Real pointer gestures, modal keyboard behavior, and appearance under alternate browser settings.
+    await store(settings(true), { widgetLayout: lay });
+    await page.goto(local + '/'); await page.waitForSelector('.gz-sb-dock #gz-todo');
+    const recordKey = `sidebar:canvas:${local}/${me.id}`;
+    const record = async () => (await localGet(recordKey))[recordKey];
+    const dockRecord = { ...await record(), dock: [{ id: 'notes' }, { id: 'timer' }, { id: 'todo' }], dest: { notes: 'dock', timer: 'dock', todo: 'dock' } };
+    await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, dockRecord]);
+    await page.waitForSelector('.gz-sb-dock [data-tile="notes"]');
+    const drag = async (sel, dx, dy) => {
+      const el = page.locator(sel); await el.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+      const r = await el.boundingBox(), x = r.x + Math.min(4, r.width / 2), y = r.y + Math.min(20, r.height / 2);
+      await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + dx, y + dy, { steps: 8 }); await page.mouse.up();
+    };
+    const width0 = (await record()).width;
+    await drag('.gz-sb-resize', -40, 0);
+    await wait(record, (r) => r.width !== width0, 'pointer width saved');
+    ok((await record()).width === width0 + 40, 'pointer width resize saves once released');
+    await page.waitForTimeout(200);
+    const h0 = await page.locator('[data-tile="notes"] .gz-w-body').evaluate((e) => e.offsetHeight);
+    await drag('[data-tile="notes"] .gz-w-vsize', 0, 48);
+    await wait(record, (r) => r.dock.find((x) => x.id === 'notes').h != null, 'pointer height saved');
+    ok((await record()).dock.find((x) => x.id === 'notes').h === h0 + 48, 'pointer dock height resize is kept');
+    await page.locator('[data-tile="notes"] .gz-w-fold').click();
+    await page.locator('[data-tile="timer"] .gz-w-fold').click();
+    const handle = page.locator('[data-tile="notes"] .gz-w-handle');
+    await handle.scrollIntoViewIfNeeded();
+    const a = await handle.boundingBox(), b = await page.locator('.gz-sb-dock [data-tile="timer"]').boundingBox();
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down();
+    await page.mouse.move(a.x + a.width / 2, b.y + b.height - 2, { steps: 10 }); await page.mouse.up();
+    await page.waitForTimeout(400);
+    probe((await record()).dock[0].id === 'timer', 'pointer dock reorder commits the new order');
+    await page.reload(); await page.waitForSelector('.gz-sb-dock [data-tile="notes"]');
+    probe((await record()).dock[0].id === 'timer' && (await record()).width === width0 + 40, 'pointer order, width and height survive reload');
+    await page.locator('.gz-sb-toggle').click();
+    await wait(state, (s) => s.mode === 'collapsed', 'collapsed mode');
+    probe((await state()).host.w === 48 && !await page.locator('.gz-sb-dock').isVisible(), 'collapsed mode reserves only the header strip');
+    await page.setViewportSize({ width: 768, height: 1000 });
+    await page.waitForSelector('#gz-sb-launch'); await page.click('#gz-sb-launch');
+    probe(await page.locator('.gz-sb-toggle').evaluate((e) => { const r = e.getBoundingClientRect(); return e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), 'backdrop stays behind the drawer controls');
+    // Discover the endpoints in the page so hidden/disabled native controls do not become trap endpoints.
+    await page.locator('[data-gz-sidebar-host]').evaluate((e) => {
+      const all = [...e.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')].filter((x) => x.tabIndex >= 0 && !x.disabled && !x.closest('[inert]') && x.getClientRects().length);
+      all[0].dataset.sbFirst = ''; all.at(-1).dataset.sbLast = ''; all.at(-1).focus();
+    });
+    await page.keyboard.press('Tab');
+    probe(await page.locator('[data-sb-first]').evaluate((e) => document.activeElement === e), 'Tab wraps from the last to the first drawer control');
+    await page.keyboard.press('Shift+Tab');
+    probe(await page.locator('[data-sb-last]').evaluate((e) => document.activeElement === e), 'Shift+Tab wraps back to the last drawer control');
+    // Canvas reuses portal roots that already existed before opening the drawer.
+    await page.evaluate(() => {
+      const root = document.getElementById('nav-tray-portal') || document.getElementById('content-wrapper');
+      const dialog = document.createElement('div'); dialog.id = 'sidebar-check-dialog'; dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+      const btn = document.createElement('button'); btn.textContent = 'Close'; dialog.append(btn); root.append(dialog);
+    });
+    await page.waitForTimeout(150);
+    probe(await page.locator('#sidebar-check-dialog button').evaluate((e) => { e.focus(); return !e.closest('[inert]') && document.activeElement === e; }), 'an LMS dialog in an existing portal remains reachable');
+    await page.locator('#sidebar-check-dialog').evaluate((e) => e.remove()); await page.waitForTimeout(150);
+    await page.locator('.gz-sb-toggle').focus(); await page.keyboard.press('Escape');
+    probe(!(await state()).open && (await record()).open === false, 'closing a drawer preserves the collapsed desktop preference');
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await wait(state, (s) => s.mode === 'collapsed', 'desktop preference restored');
+    await page.locator('.gz-sb-toggle').click();
+    await page.goto(`${local}/courses/${calc.id}/modules`); await page.waitForSelector('#gz-sidebar');
+    probe(await page.locator('#gz-sidebar').evaluate((e) => Math.abs(e.getBoundingClientRect().bottom - innerHeight) <= 1), 'the owned column fills the viewport below navigation');
+    probe(await page.locator('.gz-sb-more').evaluate((e) => getComputedStyle(e).backgroundColor === 'rgba(0, 0, 0, 0)'), 'sidebar icon buttons inherit the Look surface');
+    await page.emulateMedia({ reducedMotion: 'reduce', forcedColors: 'active' });
+    probe(await page.locator('#gz-sidebar').evaluate((e) => getComputedStyle(e).borderInlineStartStyle !== 'none'), 'high contrast keeps a visible sidebar border');
+    await page.setViewportSize({ width: 768, height: 1000 }); await page.waitForSelector('#gz-sb-launch'); await page.click('#gz-sb-launch');
+    probe(await page.locator('#gz-sidebar').evaluate((e) => getComputedStyle(e).animationName === 'none'), 'reduced motion removes the drawer entrance animation');
+    await page.keyboard.press('Escape'); await page.setViewportSize({ width: 1600, height: 1000 });
+    await page.emulateMedia({ forcedColors: 'none' });
+    await page.locator('html').evaluate((e) => { e.dir = 'rtl'; }); await page.reload();
+    // Set direction after navigation too: local Canvas itself is English.
+    await page.locator('html').evaluate((e) => { e.dir = 'rtl'; }); await page.waitForTimeout(250);
+    probe((await state()).overflow <= 1 && await page.locator('#gz-sidebar').evaluate((e) => Math.abs(e.getBoundingClientRect().left) <= 1), 'RTL places the dock at the logical end without overflow');
+    await page.locator('html').evaluate((e) => { e.dir = 'ltr'; });
+    await page.emulateMedia({ media: 'print' });
+    probe(!await page.locator('#gz-sidebar').isVisible(), 'printing omits the owned dock');
+    await page.emulateMedia({ media: 'screen' });
+    await page.goto(`${local}/courses/${calc.id}`); await page.waitForSelector('.gz-todo-scope');
+    probe(await page.locator('.gz-todo-scope').evaluate((e) => { const [a, b] = e.children; return a.getAttribute('aria-pressed') === 'true' && getComputedStyle(a).backgroundColor !== getComputedStyle(b).backgroundColor; }), 'To Do scope has a visible and accessible selection');
+    await page.emulateMedia({ media: 'print' });
+    probe(await page.locator('#right-side .Sidebar__TodoListContainer, #right-side ul.to-do-list').first().evaluate((e) => getComputedStyle(e).display !== 'none'), 'printing removes Glaze\'s native To Do hiding rule');
+    await page.emulateMedia({ media: 'screen' });
+    await page.locator('#right-side').evaluate((e) => { for (const child of e.children) child.hidden = true; });
+    const empty = await record(); empty.dest = { notes: 'off', timer: 'off', todo: 'off' };
+    await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, empty]);
+    await wait(state, (s) => s.mode === 'none', 'empty sidebar');
+    probe(!await page.locator('[data-gz-sidebar-host]').isVisible() && await page.locator('#gz-sb-edge').isVisible(), 'an empty native column reserves no room and keeps Add widgets');
+    await opts.evaluate(([k, v]) => chrome.storage.local.set({ [k]: v }), [recordKey, dockRecord]);
+    await page.reload(); await page.waitForSelector('[data-gz-sidebar-host="native"]');
+    await page.locator('[data-gz-sidebar-host="native"]').evaluate((e) => { window.sidebarCheckOldHost = e; e.remove(); });
+    await wait(state, (s) => s.host?.kind === 'glaze' && s.mode === 'drawer', 'lost native host recovery');
+    probe(!(await state()).open && await page.evaluate(() => !window.sidebarCheckOldHost.hasAttribute('data-gz-sidebar-host') && !window.sidebarCheckOldHost.hasAttribute('aria-modal')), 'host loss restores the native attributes and leaves a closed standalone drawer');
+    if (process.env.SIDEBAR_REVIEW_ONLY) {
+      console.log(`${failures.length ? 'FAILED' : 'passed'}; ${checks} checks, ${failures.length} layout failures`);
+      if (failures.length) process.exitCode = 1;
+      return;
+    }
 
     // Before: the sidebar off, Canvas's own column as Canvas (and Glaze's theme) has it.
     await store(settings(false), { widgetLayout: lay });
@@ -157,7 +257,7 @@ const layoutOk = async (name, width) => {
     probe((await title()) !== t0, `calendar: navigation still moves (${t0} → ${await title()})`);
     probe(await page.locator('#right-side #minical').count() === 1, 'calendar: the mini calendar in the column');
     if (take) {
-      // Open the quiz (no time limit), look, leave. No answer is typed, nothing is submitted.
+      // Resume the existing untimed attempt for read-only control checks. No answer is typed or submitted.
       await page.goto(`${local}/courses/${hist.id}/quizzes/${take.id}/take`); await page.waitForTimeout(2000);
       const q = await layoutOk('quiz-take', 1600);
       if (q.mode === 'drawer') await page.click('#gz-sb-launch');
@@ -166,7 +266,7 @@ const layoutOk = async (name, width) => {
       const link = page.locator('#right-side #question_list a').first();
       if (await link.count() && await link.isVisible()) { await link.click(); probe(new URL(page.url()).pathname.endsWith('/take'), 'quiz: a question link stays on the quiz'); }
       await shot('after-quiz-take-1600');
-    } else console.log('note quiz: no quiz without a time limit left to open');
+    } else console.log('note quiz: no existing untimed attempt to inspect');
 
     // A widget moved board → sidebar → floating → board, with a reload after each move.
     await store(settings(true), { widgetLayout: lay });

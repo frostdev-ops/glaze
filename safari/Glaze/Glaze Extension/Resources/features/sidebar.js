@@ -53,6 +53,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       },
       // Last in the row beside the content, where Canvas's own column would be.
       boundary: () => document.getElementById('not_right_side') || document.body,
+      standalone: () => has(document.body, 'with-right-side') && document.getElementById('right-side-wrapper')?.style.display !== 'none',
       // Canvas's #main starts right of its navigation and course menu (or Glaze's bar, which moves #wrapper).
       left() {
         const m = document.getElementById('main') || document.getElementById('wrapper');
@@ -69,13 +70,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // ---- state --------------------------------------------------------------------------------------------------------
   let S = null; // lib/sidebar.js
   let on = false, starting = null, failed = false, active = false;
-  let key = '', rec = null, flying = 0, reads = 0, lost = false;
+  let key = '', rec = null, flying = 0, reads = 0, lost = false, epoch = 0;
   let family = '', course = '', gen = 0;
   let host = null; // { el, page, own }: the column dressed now
   let kept = []; // the native column's own attributes before, as [name, value | null]
   let own = null, head = null, title = null, jump = null, more = null, toggle = null, grip = null, pageHead = null, pageBtn = null;
   let dock = null, dockBtn = null, list = null, note = null, addBtn = null, adding = null, live = null, edge = null, launch = null;
-  let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0;
+  let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0, modalAway = false;
+  let modalObserver = null, backdrop = null, widthCancel = null;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
   let mo = null, frame = 0, noteTimer = 0;
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
@@ -102,13 +104,14 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     paint();
     layout();
     flying++;
-    const k = key;
+    const k = key, g = epoch;
     return send({ type: 'glaze:sidebar', key: k, ops }).then((r) => {
       const ok = r?.ok === true;
+      if (g !== epoch) return ok;
       if (!ok) lost = true;
       if (--flying || k !== key) return ok;
       const n = ++reads;
-      get(k).then((x) => { if (!flying && n === reads && k === key && active) adopt(x[k]); });
+      get(k).then((x) => { if (g === epoch && !flying && n === reads && k === key && active) adopt(x[k]); });
       if (lost) { lost = false; status(t("Couldn't save. Try again.")); }
       return ok;
     });
@@ -118,26 +121,37 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Who is signed in: the page's account reader (content.js GZ_CTX.account), the uid the worker checks the key against.
   const account = async () => String((await ctx.account()) ?? '');
   const start = async () => {
+    const g = epoch;
     await ctx.need('lib/widgets.js', () => globalThis.GZ_WIDGETS);
+    if (g !== epoch) return false;
     await ctx.need('lib/sidebar.js', () => globalThis.GZ_SIDEBAR);
+    if (g !== epoch) return false;
     S = globalThis.GZ_SIDEBAR;
     const k = S.key(LMS, location.origin, await account());
+    if (g !== epoch) return false;
     if (!k) throw new Error('no account');
     const r = await get(k);
+    if (g !== epoch) return false;
     let next = S.clean(r[k]);
     // The one-time move into the dock is written first, and only then shown (lib/sidebar.js migrate).
     if (!next.mig) { const a = await send({ type: 'glaze:sidebar', key: k, ops: [{ op: 'migrate' }] }); if (a?.ok && a.rec) next = S.clean(a.rec); }
+    if (g !== epoch) return false;
     key = k;
     rec = next;
     try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
+    return true;
   };
   // Resolves true once the record is in, false if it can't be here (no account, the extension reloaded): then the page
   // stays as it was, and it tries again after a minute.
-  const ready = () => (starting ||= start().then(() => { failed = false; return true; }, () => {
-    failed = true;
-    setTimeout(() => { starting = null; failed = false; }, 60000);
-    return false;
-  }));
+  const ready = () => {
+    const g = epoch;
+    return (starting ||= start().then((ok) => { if (g === epoch) failed = false; return ok; }, () => {
+      if (g !== epoch) return false;
+      failed = true;
+      setTimeout(() => { if (g === epoch) { starting = null; failed = false; } }, 60000);
+      return false;
+    }));
+  };
 
   // ---- Glaze's parts of the column -----------------------------------------------------------------------------------
   let live0 = null;
@@ -190,6 +204,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     edge = button(`+ ${t('Add widgets')}`, () => { forced = true; openDrawer(edge); openAdd(true); }, { id: 'gz-sb-edge', className: 'gz-sb-btn gz-sb-edge gz-sb-own', hidden: true });
     launch = label(button(t('Sidebar'), () => openDrawer(launch), { id: 'gz-sb-launch', className: 'gz-sb-btn gz-sb-launch gz-sb-own', hidden: true }), t('Open the sidebar'));
     launch.setAttribute('aria-haspopup', 'dialog');
+    backdrop = make('div', { className: 'gz-sb-backdrop', hidden: true });
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.addEventListener('pointerdown', () => closeDrawer());
   };
   const fold = (part) => {
     const v = !(rec.fold[family] || {})[part];
@@ -206,6 +223,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const ATTRS = ['role', 'aria-labelledby', 'aria-modal', 'aria-label'];
   const detach = () => {
     if (!host) return;
+    widthCancel?.();
     mo?.disconnect();
     for (const e of [grip, head, pageHead, dock]) e?.remove();
     if (host.own) host.el.remove();
@@ -217,6 +235,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     host = null;
   };
   const attach = (n) => {
+    closeDrawer(false);
     detach();
     if (n) {
       host = { el: n.el, page: n.page, own: false };
@@ -252,22 +271,27 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const pageEmpty = !host.page || !filled(host.page);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
     const m = S.mode({ vw: innerWidth, left: A.left(), width: dragW || rec.width, grades: family === 'grades', empty: pageEmpty && !docked && !forced, open: rec.open });
-    const next = forced && m.mode !== 'drawer' ? 'drawer' : m.mode;
+    const next = (forced || (host.fallback && m.mode !== 'none')) && m.mode !== 'drawer' ? 'drawer' : m.mode;
     if (next !== 'drawer' && drawer) closeDrawer(false);
     const w = next === 'drawer' ? Math.min(m.w || rec.width, rec.width) : m.w;
     setAttr(html(), 'data-gz-sidebar', next);
     setAttr(html(), 'data-gz-sidebar-open', next === 'drawer' && drawer ? '' : false);
     setVar('--gz-sidebar-w', `${w}px`);
+    const main = document.getElementById('main');
+    const css = typeof getComputedStyle === 'function' ? getComputedStyle(html()) : null;
+    const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
+    setVar('--gz-sb-top', `${Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0))}px`);
     pageHead.hidden = pageEmpty;
     jump.hidden = pageEmpty || !docked || !(host.page.offsetHeight > innerHeight * 0.6);
     edge.hidden = next !== 'none';
     launch.hidden = next !== 'drawer' || drawer;
-    for (const b of [edge, launch]) if (b.parentNode !== document.body) document.body.append(b);
+    backdrop.hidden = next !== 'drawer' || !drawer || modalAway;
+    for (const b of [edge, launch, backdrop]) if (b.parentNode !== document.body) document.body.append(b);
     // A labelled landmark beside the content; a dialog while it is an open drawer.
     const dialog = next === 'drawer' && drawer;
     setAttr(host.el, 'role', next === 'none' || (next === 'drawer' && !drawer) ? false : dialog ? 'dialog' : 'complementary');
     setAttr(host.el, 'aria-labelledby', next === 'none' ? false : 'gz-sb-title');
-    setAttr(host.el, 'aria-modal', dialog ? 'true' : false);
+    setAttr(host.el, 'aria-modal', dialog && !modalAway ? 'true' : false);
     const text = t(next === 'drawer' ? 'Close sidebar' : rec.open ? 'Collapse sidebar' : 'Expand sidebar');
     if (toggle.getAttribute('aria-label') !== text) { label(toggle, text); toggle.textContent = next === 'drawer' ? '×' : (rec.open !== rtl() ? '⇥' : '⇤'); }
     setAttr(toggle, 'aria-expanded', next === 'drawer' ? false : String(rec.open));
@@ -300,6 +324,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       if (host.page && pageHead.nextElementSibling !== host.page) host.page.before(pageHead);
       if (dock.parentNode !== host.el) host.el.append(dock);
     }
+    host.fallback = !n && !!A.standalone?.();
     const first = !active;
     active = true;
     if (first) emit('change');
@@ -323,10 +348,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       };
       const up = (ev) => {
         for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) el.removeEventListener(k, f);
+        widthCancel = null;
+        if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
         const w = dragW;
         dragW = 0;
-        if (ev.type === 'pointerup' && w && w !== rec.width) keep(w); else layout();
+        if (ev?.type === 'pointerup' && w && w !== rec.width) keep(w); else layout();
       };
+      widthCancel = () => up(null);
       el.setPointerCapture?.(e.pointerId);
       for (const [k, f] of [['pointermove', move], ['pointerup', up], ['pointercancel', up]]) el.addEventListener(k, f);
     });
@@ -343,39 +371,65 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // ---- the drawer ---------------------------------------------------------------------------------------------------
   // A dialog over the page: the rest of the page inert while it is open, Tab kept in it, Escape closes it, and the focus
   // goes back where it was. An LMS dialog opened from inside it is added to the page after, so it stays reachable.
-  const ours = (e) => e === edge || e === launch || e.id === 'gz-sb-menu';
+  const ours = (e) => e === edge || e === launch || e === backdrop || e.id === 'gz-sb-menu';
+  const nativeModal = () => [...document.querySelectorAll('[role="dialog"], [role="alertdialog"], dialog[open]')].some((e) =>
+    e !== host?.el && !host?.el.contains(e) && e.style.display !== 'none' && !e.closest('[hidden], [aria-hidden="true"]') && (e.getClientRects?.().length ?? 1));
+  const modalSync = () => {
+    if (!drawer || !host) return;
+    const away = nativeModal(), wanted = new Set();
+    // Native portals may have existed before opening the drawer. While their modal is visible, let the LMS own
+    // focus and background handling, then resume this drawer when it closes.
+    if (!away) for (let a = host.el; a && a !== document.body && a.parentElement; a = a.parentElement) {
+      for (const s of a.parentElement.children) if (s !== a && s.tagName && !['SCRIPT', 'STYLE', 'LINK'].includes(s.tagName) && !ours(s)) wanted.add(s);
+    }
+    for (const e of inerted) if (!wanted.has(e)) e.inert = false;
+    inerted = inerted.filter((e) => wanted.has(e));
+    for (const e of wanted) if (!e.inert) { e.inert = true; inerted.push(e); }
+    if (modalAway !== away) { modalAway = away; layout(); }
+  };
   const openDrawer = (from) => {
     if (!active) return;
     opener = from || document.activeElement;
     drawer = true;
     layout();
-    for (let a = host.el; a && a !== document.body && a.parentElement; a = a.parentElement) {
-      for (const s of a.parentElement.children) if (s !== a && s.tagName && s.tagName !== 'SCRIPT' && !s.inert && !ours(s)) { s.inert = true; inerted.push(s); }
-    }
+    modalSync();
+    modalObserver ||= new MutationObserver(modalSync);
+    modalObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'aria-hidden', 'open', 'hidden', 'style', 'class'] });
     document.addEventListener('keydown', onKey);
+    document.addEventListener('focusin', onFocus);
     toggle.focus();
   };
   const closeDrawer = (restore = true) => {
     const was = drawer;
     drawer = false;
     forced = false;
+    modalAway = false;
+    modalObserver?.disconnect();
     for (const e of inerted) e.inert = false;
     inerted = [];
     document.removeEventListener('keydown', onKey);
+    document.removeEventListener('focusin', onFocus);
     if (!was) return;
+    closeMenu();
     if (adding && !adding.hidden) openAdd(false, false);
     layout();
     if (restore && opener?.isConnected) opener.focus();
     opener = null;
   };
+  const focusables = () => [...host.el.querySelectorAll('a[href], button, input, select, textarea, iframe, [tabindex], [contenteditable="true"]')].filter((x) =>
+    !x.disabled && x.type !== 'hidden' && (x.tabIndex ?? 0) >= 0 && !x.hidden && !x.closest('[hidden], [inert], [aria-hidden="true"]')
+    && (x.getClientRects?.().length ?? 1) && (typeof getComputedStyle !== 'function' || getComputedStyle(x).visibility !== 'hidden'));
+  const onFocus = (e) => {
+    if (drawer && !modalAway && !host?.el.contains(e.target) && !menuEl?.contains(e.target)) (focusables()[0] || toggle).focus();
+  };
   const onKey = (e) => {
-    if (!drawer || !host?.el.contains(e.target)) return;
+    if (!drawer || modalAway || menuEl?.contains(e.target)) return;
     if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); closeDrawer(); return; }
     if (e.key !== 'Tab') return;
-    const all = [...host.el.querySelectorAll('a[href], button:not([disabled]), input, select, textarea, [tabindex="0"]')].filter((x) => !x.hidden && !x.closest('[hidden]') && (x.getClientRects?.().length ?? 1));
+    const all = focusables();
     if (!all.length) return;
     const [a, z] = [all[0], all.at(-1)];
-    if (e.shiftKey ? e.target === a : e.target === z) { e.preventDefault(); (e.shiftKey ? z : a).focus(); }
+    if (!host.el.contains(e.target) || (e.shiftKey ? e.target === a : e.target === z)) { e.preventDefault(); (e.shiftKey ? z : a).focus(); }
   };
 
   // ---- menus --------------------------------------------------------------------------------------------------------
@@ -445,6 +499,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Everything Glaze added taken away, and the column back as the LMS had it. features/widgets.js hears first, so it
   // takes its docked tiles away itself.
   const teardown = () => {
+    epoch++;
+    gen++;
     const was = active;
     active = false;
     if (was) emit('change');
@@ -454,16 +510,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     own?.remove();
     edge?.remove();
     launch?.remove();
+    backdrop?.remove();
     cancelAnimationFrame(frame);
     clearTimeout(noteTimer);
     const h = html();
     if (h) {
       for (const k of ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo']) h.removeAttribute(k);
       h.style?.removeProperty?.('--gz-sidebar-w');
+      h.style?.removeProperty?.('--gz-sb-top');
     }
     removeEventListener('resize', onResize);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
-    if (was) { starting = null; rec = null; key = ''; }
+    starting = null; rec = null; key = ''; flying = 0; lost = false;
     drawnCount = null;
     mode = 'none';
   };
