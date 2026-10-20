@@ -7,7 +7,7 @@ All notable changes to Glaze are documented here. The format follows
 ## [3.3.1] — 2026-10-20
 
 ### Fixed
-- Blackboard assessment information shares the sidebar with docked widgets: Grades / Attempts on current assignment overviews and Details & Information while editing an attempt. Native rubric links, the editor and submission controls keep their existing behavior.
+- Blackboard assessment information shares the sidebar with docked widgets: Grades / Attempts on current assignment overviews, including submitted work and pages without optional Description or Assessment Details sections, and Details & Information while editing an attempt. Native rubric links, the editor and submission controls keep their existing behavior.
 - Sidebar headers and controls stay below Blackboard breadcrumbs, document and assessment headers, and Canvas course-tab rows, including when those headers resize.
 - Blackboard discussion participants render in the sidebar again. The column stays within the native discussion layout so participant loading and scrolling continue to work.
 
