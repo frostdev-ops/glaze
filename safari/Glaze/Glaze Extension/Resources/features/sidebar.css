@@ -67,7 +67,9 @@
   /* The room the page keeps beside the column: its width, the gap, and a floating card's inset. */
   html[data-gz-sidebar="expanded"] { --gz-sb-room: calc(var(--gz-sidebar-w) + 16px + var(--gz-sb-inset, 0px)); }
   html[data-gz-sidebar="collapsed"] { --gz-sb-room: calc(3rem + 16px + var(--gz-sb-inset, 0px)); }
-  html[data-gz-sb-ultra]:not([data-gz-sb-fixed]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(.base-courses-content, .course-outline-content),
+  /* Ultra's Courses page keeps the room on the whole page (its header and Glaze's toolbar in it, the list or grid, the
+     filters and pagination), not only the list beside the column. */
+  html[data-gz-sb-ultra]:not([data-gz-sb-fixed]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(.base-courses-container, .course-outline-content),
   html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: var(--gz-sb-room) !important; }
   html[data-gz-sb-ultra]:not([data-gz-sb-fixed]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-room { margin-inline-end: var(--gz-sb-room); }
   /* Canvas's module sequence footer (Previous / Next), fixed at the window's foot with a width Canvas computes: between

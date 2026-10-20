@@ -15,7 +15,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     const shot = async (name) => { if (out) { fs.mkdirSync(out, { recursive: true }); await page.screenshot({ path: path.join(out, `${name}.png`) }); } };
     await page.route('**/*', (r) => r.request().url().startsWith('https://bb.school.test/ultra/') ? r.fulfill({ contentType: 'text/html', body: '<html><body></body></html>' }) : r.abort());
-    const setup = async (family) => {
+    const setup = async (family, w = 352) => {
       await page.goto(`https://bb.school.test/ultra/${family === 'courses' ? 'course' : 'courses/_101_1/outline'}`);
       await page.setContent(`<style>
         * { box-sizing: border-box; } body { margin: 0; } #main-content-inner { margin-left: 200px; }
@@ -24,18 +24,19 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         .bb-course-navigation { height: 60px; } .course-content-container > .panel-wrap { position: relative; z-index: 20; }
         .layer-details { position: fixed; inset: 0; z-index: 2000; background: white; }
       </style><div id="site-wrap"><div id="main-content-inner">${family === 'courses'
-        ? '<div class="base-courses-content"><div class="courses-panel"><button id="main-end" style="float:right">Last course</button></div><div class="todo-panel"><bb-todo>Native To Do</bb-todo></div></div>'
+        ? '<section class="base-courses-container route-view-container"><div class="base-courses-header-container" style="display:flex;justify-content:space-between"><h1>Courses</h1><div class="base-header-tools"><button>Hide widgets</button><button id="tools-end">Edit layout</button></div></div><div class="base-courses-content"><div class="courses-panel"><button id="main-end" style="float:right">Last course</button></div><div class="todo-panel"><bb-todo>Native To Do</bb-todo></div></div><nav id="pager" style="display:flex;justify-content:flex-end"><button id="pager-end">Next page</button></nav></section>'
         : '<div class="course-content-container"><div class="panel-wrap"><div class="bb-course-navigation">Course navigation</div><section class="course-outline-content"><div class="outline-column"><button id="main-end" style="float:right">Last item</button></div><aside class="outline-actions"><button>Faculty</button></aside></section></div></div>'}</div></div>`);
       for (const file of ['features/apps.css', 'features/sidebar.css']) await page.addStyleTag({ path: path.join(root, file) });
       for (const file of ['lib/widgets.js', 'lib/sidebar.js']) await page.addScriptTag({ path: path.join(root, file) });
-      await page.evaluate(() => {
-        const rec = GZ_SIDEBAR.clean({ mig: 1, dock: [{ id: 'notes' }], dest: { notes: 'dock' } });
+      await page.evaluate((w) => {
+        const rec = GZ_SIDEBAR.clean({ mig: 1, width: w, chose: { width: true }, dock: [{ id: 'notes' }], dest: { notes: 'dock' } });
         window.chrome = { storage: { local: { get: (key, cb) => cb({ [key]: rec }) }, onChanged: { addListener() {}, removeListener() {} } }, runtime: {} };
         window.GZ_CTX = { site: 'ultra', t: (s) => s, need: async () => {}, account: async () => '_42_1', courseId: () => '_101_1', settings: () => ({ enhance: { sidebar: true, notes: true, todo: true } }) };
-      });
+      }, w);
       await page.addScriptTag({ path: path.join(root, 'features/sidebar.js') });
       await page.evaluate(async () => { GZ_SIDEBAR_UI.sync(true); await GZ_SIDEBAR_UI.ready(); });
-      await page.waitForSelector('[data-gz-sidebar-host]');
+      await page.waitForSelector('[data-gz-sidebar-host]', { state: 'attached' });
+      await page.waitForTimeout(100);
     };
     for (const family of ['courses', 'outline']) {
       await setup(family);
@@ -132,7 +133,18 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
     // A discussion's details column in its grid; an assignment's overview (Grades / Attempts absorbed into This page);
     // an attempt (its Details & Information absorbed, Save and Close and Submit never covered: stubs whose clicks are
     // counted, nothing is submitted); a page that does not match (nothing absorbed); the Gradebook's absolute tool panel.
+    // Ultra's Courses page: its header and Glaze's toolbar in it, the list and the pager all end short of the expanded
+    // column and its gap, at three widths and the widest column.
     await page.emulateMedia({ media: 'screen' });
+    for (const width of [1800, 1440, 1280]) for (const w of [352, 480]) {
+      await page.setViewportSize({ width, height: 900 });
+      await setup('courses', w);
+      const c = await page.evaluate(() => { const h = document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect(), r = (id) => document.getElementById(id).getBoundingClientRect().right;
+        return { mode: document.documentElement.dataset.gzSidebar, left: h.left, tools: r('tools-end'), pager: r('pager-end'), list: r('main-end') }; });
+      check(c.mode !== 'expanded' || [c.tools, c.pager, c.list].every((x) => x <= c.left - 16 + 1), `courses ${width} @${w}: ${c.mode}; header tools, list and pager clear of the column (${Math.round(c.tools)}, ${Math.round(c.pager)}, ${Math.round(c.list)} / ${Math.round(c.left)})`);
+      if (width === 1800 && w === 480) await shot('p6-ultra-courses-header');
+    }
+    await page.setViewportSize({ width: 1600, height: 900 });
     const LOOK = { dark: '--gz-surface:#0d1b2e;--gz-surface-2:#060d18;--gz-ink:#e8f2fa;--gz-ink-muted:#8fa8c0;--gz-line:#16283f;--gz-line-strong:#24405f;--gz-accent:#17c8f4;--gz-accent-ink:#04121f;--gz-accent-soft:#082f49',
       light: '--gz-surface:#ffffff;--gz-surface-2:#f4f5f7;--gz-ink:#14181f;--gz-ink-muted:#5b6472;--gz-line:#e3e6ea;--gz-line-strong:#c8cdd4;--gz-accent:#2563eb;--gz-accent-ink:#ffffff;--gz-accent-soft:#dbeafe' };
     const panelWrap = (inner) => `<section class="assessment-overview-modern-panel routed-page route-view-container"><learning-module-panel-view class="routed-page-body"><div class="table-of-contents-disabled"><div class="panel-content-body"><div class="root-learning-module-panel"><div id="learningModulePanelContainerId" class="content-item-container">${inner}</div></div></div></div></learning-module-panel-view></section>`;
