@@ -9,6 +9,7 @@
 
 <p align="center">
   <a href="https://chromewebstore.google.com/detail/jmmaeoajomodnbnlmdikjooalmcilooh"><b>Get it for Chrome</b></a> ·
+  <a href="https://addons.mozilla.org/en-US/firefox/addon/glaze/"><b>Get it for Firefox</b></a> ·
   <a href="https://github.com/frostdev-ops/glaze/releases/latest"><b>Download for Mac (Safari)</b></a> ·
   <a href="https://frostdev.io/glaze"><b>frostdev.io/glaze</b></a>
 </p>
@@ -52,8 +53,9 @@ domain. No account, no analytics: what Glaze keeps stays on your device.
 - **Safari on Mac** (macOS 12+, Safari 17.2+): download the `.dmg` from the
   [latest release](https://github.com/frostdev-ops/glaze/releases/latest), open **Glaze**, click **Install Glaze**, then
   follow its guide to turn Glaze on in Safari's settings. It keeps itself up to date.
-- **Firefox** (140+): not on Firefox Add-ons yet. Load a build as a
-  [temporary add-on](docs/install.md#firefox).
+- **Firefox** (desktop 140+, Android 142+): install from
+  [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/glaze/). It stays installed after Firefox restarts
+  and receives updates through Firefox. See the [install guide](docs/install.md#firefox) for setup and development builds.
 - **iPhone and iPad, and loading from source:** see the [install guide](docs/install.md).
 
 Then open your Blackboard Ultra, Canvas or Moodle site and click the Glaze icon.
