@@ -68,6 +68,10 @@
   html[data-gz-sb-ultra]:not([data-gz-sb-fixed]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(.base-courses-content, .course-outline-content),
   html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) :is(#main-content-inner, .routed-page.bb-offcanvas-container) { padding-inline-end: var(--gz-sb-room) !important; }
   html[data-gz-sb-ultra]:not([data-gz-sb-fixed]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-room { margin-inline-end: var(--gz-sb-room); }
+  /* Canvas's module sequence footer (Previous / Next), fixed at the window's foot with a width Canvas computes: between
+     the content's start (--gz-sb-left, from features/sidebar.js) and the column's room. */
+  html:not([dir="rtl"]):is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #module_sequence_footer { left: var(--gz-sb-left, auto) !important; right: var(--gz-sb-room) !important; width: auto !important; }
+  html[dir="rtl"]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #module_sequence_footer { right: var(--gz-sb-left, auto) !important; left: var(--gz-sb-room) !important; width: auto !important; }
   /* A course's tool pages (Gradebook, Calendar, Announcements, Discussions, Messages, Groups, Achievements) are an
      absolute panel the whole width of the course: beside Glaze's own column it ends at the column's edge and the gap. */
   html[data-gz-sb-fixed]:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) .course-content-container > .panel-wrap {

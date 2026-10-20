@@ -642,8 +642,7 @@ test('a kind of page turned off shows the page as Canvas has it, with no dock; o
 });
 
 test('Canvas discussion topics and assignment pages each get their family', async () => {
-  for (const [fixture, where, family, kind] of [['canvas-discussion-topic.html', '/courses/2/discussion_topics/5', 'discussion', 'glaze'], ['canvas-assignment.html', '/courses/2/assignments/7', 'assignment', 'native'], ['canvas-submission.html', '/courses/2/assignments/7/submissions/3', 'assignment', 'native']]) {
-    if (!fs.existsSync(path.join(__dirname, 'fixtures', fixture))) continue;
+  for (const [fixture, where, family, kind] of [['canvas-discussion-topic.html', '/courses/2/discussion_topics/5', 'discussion', 'glaze'], ['canvas-assignment.html', '/courses/25/assignments/171', 'assignment', 'native'], ['canvas-submission.html', '/courses/2/assignments/7/submissions/3', 'assignment', 'glaze']]) {
     const p = page({ fixture, where, width: 1700, left: 84, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
     const nativeEls = p.doc.body.all().map((e) => [e, e.parentNode]);
     await p.pass();

@@ -95,13 +95,62 @@ const layoutOk = async (name, width) => {
     // Inspect only an existing untimed attempt; never start, answer or submit a quiz.
     const take = quizzes.find((q, i) => q.id === 49 && !q.time_limit && subs[i].some((s) => s.workflow_state === 'untaken'));
     const done = quizzes.find((q, i) => subs[i].some((s) => s.workflow_state === 'complete'));
+    let topic = null;
+    for (const c of courses) { const list = await api(`/api/v1/courses/${c.id}/discussion_topics`).catch(() => []); const d = Array.isArray(list) && list.find((x) => !x.is_announcement); if (d) { topic = { ...d, course: c.id }; break; } }
     const PAGES = [
       ['dashboard', '/'], ['course-home', `/courses/${calc.id}`], ['assignment', `/courses/${calc.id}/assignments/${asg.id}`],
+      ['submission', `/courses/${calc.id}/assignments/${asg.id}/submissions/${me.id}`], ...(topic ? [['discussion', `/courses/${topic.course}/discussion_topics/${topic.id}`]] : []),
       ['grades', `/courses/${calc.id}/grades`], ['calendar', '/calendar'], ['syllabus', `/courses/${calc.id}/assignments/syllabus`],
       ['modules', `/courses/${calc.id}/modules`], ...(done ? [['quiz-results', `/courses/${hist.id}/quizzes/${done.id}`]] : []),
     ];
     const lay = { ...W.layout({ tiles: W.TILES.map((id) => ({ id, on: id === 'notes', size: 'l' })) }), filled: ['cdash'] };
     lay.boards.cdash = lay.boards.cdash.map((x) => ({ ...x, on: x.id === 'notes' || x.id === 'todo' }));
+
+    // Discussions and assignments, each with its family; then both styles (Floating, Embedded) under a dark and a light
+    // Look on the Dashboard, a course's home, a discussion and an assignment: the column a card off the edges or flush
+    // with a hairline, Canvas's own blocks inner panels (never its square ground box), the content clear of it.
+    // SIDEBAR_FIXTURES=<dir> also saves the discussion and submission pages (sidebar off, scripts out) as test fixtures.
+    const FAMILY = { submission: 'assignment', discussion: 'discussion', assignment: 'assignment' };
+    for (const [name, where] of PAGES.filter(([n]) => FAMILY[n])) {
+      if (process.env.SIDEBAR_FIXTURES && name !== 'assignment') {
+        await store(settings(false), { widgetLayout: lay });
+        await page.goto(local + where); await page.waitForLoadState('networkidle').catch(() => {});
+        const body = await page.evaluate(() => { const b = document.body.cloneNode(true); for (const e of b.querySelectorAll('script, style, link, noscript, svg')) e.remove(); return `<!doctype html><html><body class="${document.body.className}">${b.innerHTML}</body></html>`; });
+        fs.writeFileSync(path.join(process.env.SIDEBAR_FIXTURES, `canvas-${name === 'discussion' ? 'discussion-topic' : name}.html`), body);
+      }
+      await store(settings(true), { widgetLayout: lay });
+      await page.goto(local + where); await page.waitForSelector('[data-gz-sidebar-host]');
+      const fam = await page.evaluate(() => document.documentElement.dataset.gzSbFamily);
+      ok(fam === FAMILY[name], `${name}: the ${FAMILY[name]} family (${fam})`);
+      await layoutOk(name, 1600);
+    }
+    const STYLE_PAGES = [['dashboard', '/'], ['course-home', `/courses/${calc.id}`], ...PAGES.filter(([n]) => n === 'discussion' || n === 'assignment')];
+    for (const style of ['float', 'embed']) for (const [preset, dark] of [['Frost', true], ['Paper', false]]) {
+      await store(settings(true, false, { preset, colors: G.GZ_PRESETS.find(([n]) => n === preset)[1], sidebar: { style } }), { widgetLayout: lay });
+      for (const [name, where] of STYLE_PAGES) {
+        await page.goto(local + where); await page.waitForSelector('[data-gz-sidebar-host]');
+        await page.waitForTimeout(400);
+        const g = await page.evaluate(() => {
+          const h = document.querySelector('[data-gz-sidebar-host]'), cs = getComputedStyle(h), r = h.getBoundingClientRect();
+          const rs = h.querySelector(':scope > #right-side'), rcs = rs && getComputedStyle(rs);
+          const blocks = rs ? [...rs.children].filter((e) => e.getClientRects().length && e.textContent.trim()).map((e) => parseFloat(getComputedStyle(e).borderTopLeftRadius)) : [];
+          const c = document.getElementById('content')?.getBoundingClientRect();
+          return { mode: document.documentElement.dataset.gzSidebar, style: document.documentElement.dataset.gzSbStyle, radius: parseFloat(cs.borderTopLeftRadius), right: innerWidth - r.right, bg: cs.backgroundImage + cs.backgroundColor,
+            rsBg: rcs?.backgroundColor, rsRadius: rcs && parseFloat(rcs.borderTopLeftRadius), blocks, clear: !c || c.right <= r.left - 15 };
+        });
+        const tag = `${name} ${style} ${dark ? 'dark' : 'light'}`;
+        probe(g.style === style, `${tag}: data-gz-sb-style`);
+        if (g.mode === 'expanded') {
+          probe(style === 'float' ? g.radius > 0 && g.right >= 10 : g.radius === 0 && g.right <= 1, `${tag}: ${style === 'float' ? 'a card off the edge' : 'flush with the edge'} (radius ${g.radius}, right ${g.right})`);
+          probe(!/rgba\(0, 0, 0, 0\)$/.test(g.bg) || /gradient|color-mix|rgb/.test(g.bg), `${tag}: the column has a surface`);
+          if (g.rsBg !== undefined) probe(g.rsBg === 'rgba(0, 0, 0, 0)', `${tag}: Canvas's #right-side is see-through, not its ground box (${g.rsBg})`);
+          probe(g.blocks.every((x) => x > 0), `${tag}: Canvas's blocks are rounded inner panels (${g.blocks.join(',')})`);
+          probe(g.clear, `${tag}: the content keeps clear of the column`);
+        }
+        await shot(`p6-canvas-${name}-${style}-${dark ? 'dark' : 'light'}`);
+      }
+    }
+    if (process.env.SIDEBAR_STYLES_ONLY) { console.log(JSON.stringify({ checks, failures: failures.length, errors })); process.exitCode = failures.length ? 1 : 0; return; }
 
     // Real pointer gestures, modal keyboard behavior, and appearance under alternate browser settings.
     await store(settings(true), { widgetLayout: lay });

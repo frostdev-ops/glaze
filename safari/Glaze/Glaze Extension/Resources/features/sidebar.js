@@ -511,6 +511,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setAttr(html(), 'data-gz-sidebar', next);
     setAttr(html(), 'data-gz-sidebar-open', next === 'drawer' && drawer ? '' : false);
     setVar('--gz-sidebar-w', `${w}px`);
+    setVar('--gz-sb-left', `${A.left()}px`);
     const main = document.getElementById('main');
     const css = typeof getComputedStyle === 'function' ? getComputedStyle(html()) : null;
     const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
@@ -861,7 +862,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const h = html();
     if (!h) return;
     for (const k of SB_ATTRS) h.removeAttribute(k);
-    for (const k of ['--gz-sidebar-w', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha']) h.style?.removeProperty?.(k);
+    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha']) h.style?.removeProperty?.(k);
   };
   const sync = (want) => {
     on = !!want;
