@@ -90,7 +90,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   };
   // undefined until the current course's gradebook answers.
   const gradesIn = () => { const cid = courseId(); return cid ? bookFor(cid, true).grades : undefined; };
-  const onBook = () => { tagExtras([document.body]); renderNew(); renderCalc(); globalThis.GZ_COURSE_CARDS?.sync(); };
+  const onBook = () => { tagExtras([document.body]); renderProgress(); renderNew(); renderCalc(); globalThis.GZ_COURSE_CARDS?.sync(); };
 
   // ---- grades on course cards (Extras) ---------------------------------------------------------
   // On the Courses page each card's status line ("Open") gains the course's overall grade, drawn by CSS
@@ -203,7 +203,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       const m = msg && GZ_PAGE.completion(msg.textContent, !!msg.querySelector('svg') || !!msg.parentElement.querySelector('.js-completion-chart [class*="chartLineCompleted"]'));
       if (m) { total += m.total; done += m.done; continue; }
       const rs = it.querySelector('.js-review-state-icon-button');
-      if (rs) { total += 1; if (rs.getAttribute('aria-checked') === 'true') done += 1; }
+      if (rs) { total += 1; if (GZ_PAGE.isDone(rs.getAttribute('aria-checked'), gradesIn()?.get(it.dataset.contentId))) done += 1; }
     }
     if (!total) return old?.remove();
     drawProgress(old, done, total, rows[0].parentElement);
