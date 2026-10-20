@@ -41,7 +41,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
   const top = () => I.links.length && solo && I.settings.enhance;
-  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
+  // The sidebar (features/sidebar.js): the top page's right column, with Better To Do and the docked widgets in it. Better
+  // To Do takes Ultra's places itself only without it (or while it can't start).
+  const sidebarHere = () => !!top()?.sidebar && !tabFrame && /^\/ultra(\/|$)/.test(location.pathname);
+  const syncSidebar = () => load(sidebarHere, 'features/sidebar.js', 'GZ_SIDEBAR_UI');
+  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarHere() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
@@ -374,8 +378,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     syncWidgets();
   };
   const dash = () => top()?.dashboard && /^\/ultra\/institution-page\/?$/.test(location.pathname);
-  const widgetsHere = () => { const e = !tabFrame && top(); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats)); };
+  const widgetsHere = () => { const e = !tabFrame && top(); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats) || (e.todo && sidebarHere())); };
   const syncWidgets = () => {
+    syncSidebar();
     const on = widgetsHere();
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
     if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);

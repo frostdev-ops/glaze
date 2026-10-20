@@ -75,7 +75,9 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
         let block = document.getElementById('gz-nt-block');
         if (!block) block = make('div', { id: 'gz-nt-block', className: 'outline-action-block' });
         if (b.parentNode !== block) block.append(b);
-        if (side.lastElementChild !== block) side.append(block);
+        // Last of the page's blocks: with the sidebar (features/sidebar.js), above its widgets.
+        const end = [...side.children].find((c) => c.id === 'gz-sb-widgets');
+        if (end ? block.nextElementSibling !== end : side.lastElementChild !== block) { if (end) end.before(block); else side.append(block); }
       } else {
         const last = [...side.querySelectorAll('a.button-sidebar-wide')].pop();
         if (last ? b.previousElementSibling !== last : b.parentNode !== side) { if (last) last.after(b); else side.prepend(b); }

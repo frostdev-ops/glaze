@@ -722,9 +722,11 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 }
 #site-wrap .outline-action-block .MuiAccordion-root { background: transparent !important; border: 0 !important; box-shadow: none !important; }
 /* The column: its panels an even gap apart (Ultra's and Glaze's own margins varied), no rule beside them, nothing
-   for an empty placeholder (Ultra's course schedule without one), and no stray space inside a panel's edges. */
-#site-wrap aside.outline-actions { gap: calc(0.75rem * var(--gz-space, 1)); border-left: 0 !important; }
-#site-wrap aside.outline-actions > * { margin-block: 0 !important; }
+   for an empty placeholder (Ultra's course schedule without one), and no stray space inside a panel's edges. As the
+   sidebar beside the content (features/sidebar.css) it has the sidebar's edge, and Glaze's header keeps its own margins. */
+#site-wrap aside.outline-actions { gap: calc(0.75rem * var(--gz-space, 1)); }
+html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions { border-left: 0 !important; }
+#site-wrap aside.outline-actions > :not(.gz-sb-head) { margin-block: 0 !important; }
 #site-wrap aside.outline-actions > .conditional-block:not(:has(> *)) { display: none; }
 #site-wrap .outline-action-block > :first-child { margin-top: 0 !important; }
 #site-wrap .outline-action-block > :last-child { margin-bottom: 0 !important; }

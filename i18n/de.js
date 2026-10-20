@@ -2875,6 +2875,8 @@
   "{name} is in the sidebar.": "{name} ist in der Seitenleiste.",
   "Turn on widgets in Glaze settings to add them here.": "Schalte Widgets in den Glaze-Einstellungen ein, um sie hier hinzuzufügen.",
   "Move to sidebar": "In die Seitenleiste",
+  "Move To Do to sidebar": "To-do in die Seitenleiste",
+  "To Do is on one of your Blackboard boards but not the other. Keep it in the sidebar instead?": "To-do ist auf einem deiner Blackboard-Boards, aber nicht auf dem anderen. Stattdessen in der Seitenleiste behalten?",
   "Move to Dashboard": "Aufs Dashboard",
   "Auto height": "Automatische Höhe",
   "{name} is its own height again.": "{name} hat wieder seine eigene Höhe.",

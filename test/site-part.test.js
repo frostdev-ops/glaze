@@ -173,11 +173,15 @@ for (const site of ['canvas', 'ultra']) {
 
 
 test('default Dashboard alone does not load widgets on course routes; an explicitly saved global float does', () => noUnhandled(async () => {
-  const opts = { site: 'ultra', preload: true, pathname: '/ultra/courses/_1_1/outline', raw: { enhance: { notes: false, widgets: false, pet: false } } };
+  const opts = { site: 'ultra', preload: true, pathname: '/ultra/courses/_1_1/outline', raw: { enhance: { notes: false, widgets: false, pet: false, sidebar: false } } };
   const asks = (p) => p.sent.filter((m) => m?.files?.includes('features/widgets.js')).length;
   const p = page(opts);
   await settle();
   assert.equal(asks(p), 0, 'no global tiles: retain lazy cost');
+  // With the sidebar (on by default), Better To Do's dock is drawn by the widgets, so they load for it.
+  const s = page({ ...opts, raw: { enhance: { notes: false, widgets: false, pet: false } } });
+  await settle();
+  assert.equal(asks(s), 1, 'the sidebar\'s To Do: the widgets load for the dock');
   const q = page({ ...opts, local: { widgetLayout: { boards: { pages: [{ id: 'timer', on: true }] } } } });
   await settle();
   assert.equal(asks(q), 1, 'saved global tile: load its UI with legacy Widgets off');

@@ -86,7 +86,8 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const where = () => {
     // Ultra: a block of its own in the outline's right-hand column, under Ultra's details and actions.
     const aside = ultra && document.querySelector('aside.outline-actions');
-    if (aside) { const d = aside.querySelector('.js-details-and-actions'); return (b) => (d ? d.after(b) : aside.append(b)); }
+    // With the sidebar (features/sidebar.js) the column ends with its widgets: a block goes above them.
+    if (aside) { const d = aside.querySelector('.js-details-and-actions'), end = [...aside.children].find((c) => c.id === 'gz-sb-widgets'); return (b) => (d ? d.after(b) : end ? end.before(b) : aside.append(b)); }
     if (ultra) return null;
     const side = document.getElementById('course_show_secondary');
     if (rec && side && side.offsetParent !== null) return (b) => side.prepend(b);

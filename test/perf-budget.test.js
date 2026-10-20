@@ -93,6 +93,10 @@ const SIDEBAR_UI = { ultra: 24, canvas: 24 + 683, moodle: 24 };
 // The sidebar broker's account reader reuses each site's cached identity (owner-approved raise). Measured against
 // af936dcf: content.js's GZ_CTX.account adds 97 shared bytes; identity checks and their deadline stay in the worker.
 const SIDEBAR_ACCOUNT = { ultra: 97, canvas: 97, moodle: 97 };
+// The sidebar on Blackboard Ultra (owner-approved raise, 2026-10-19): content-ultra.js's hook that loads features/sidebar.js
+// on the top page, with Better To Do and the widgets following it (503 bytes on Ultra). The Ultra adapter, the Courses
+// page's board without its column and the dock load on demand. Measured against c1c01563.
+const SIDEBAR_ULTRA = { ultra: 503, canvas: 0, moodle: 0 };
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -101,7 +105,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site], budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site], budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -198,7 +202,8 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 const STYLE_READS = [
   ['features/mods.js', 'getComputedStyle(x.canvas)', 1], // one mounted mod canvas per slot while checking whether its Worker should pause
   ['features/navbar-canvas.js', 'getComputedStyle(el)', 1], // school logo background, one header mark per replacement
-  ['features/coursetabs.js', 'getComputedStyle(parent.document.documentElement)', 1], // a Canvas tab's frame: the bar's two room variables on the page around, when the bar or the window changes
+  ['features/coursetabs.js', 'getComputedStyle(parent.document.documentElement)', 1],
+  ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out // a Canvas tab's frame: the bar's two room variables on the page around, when the bar or the window changes
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.

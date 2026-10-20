@@ -2875,6 +2875,8 @@
   "{name} is in the sidebar.": "{name} est dans la barre latérale.",
   "Turn on widgets in Glaze settings to add them here.": "Activez les widgets dans les paramètres de Glaze pour les ajouter ici.",
   "Move to sidebar": "Déplacer dans la barre latérale",
+  "Move To Do to sidebar": "Déplacer À faire dans la barre latérale",
+  "To Do is on one of your Blackboard boards but not the other. Keep it in the sidebar instead?": "À faire est sur l’un de vos tableaux Blackboard, mais pas sur l’autre. La garder plutôt dans la barre latérale ?",
   "Move to Dashboard": "Déplacer vers le tableau de bord",
   "Auto height": "Hauteur automatique",
   "{name} is its own height again.": "{name} a de nouveau sa propre hauteur.",

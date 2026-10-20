@@ -29,7 +29,7 @@
   /* Narrow: a drawer over the page, at the window's right edge above any bottom bar, hidden until opened. */
   html[data-gz-sidebar="drawer"] [data-gz-sidebar-host] { display: none !important; }
   html[data-gz-sidebar="drawer"][data-gz-sidebar-open] [data-gz-sidebar-host] {
-    display: block !important; position: fixed !important; z-index: 1300; top: calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px)); bottom: var(--gz-sb-bottom, 0px);
+    display: block !important; position: fixed !important; z-index: 1300; top: var(--gz-sb-top, calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px))); bottom: var(--gz-sb-bottom, 0px);
     inset-inline-end: 0; inset-inline-start: auto; width: min(var(--gz-sidebar-w), calc(100vw - 16px)) !important; max-width: none !important; margin: 0 !important;
     overflow-y: auto; overscroll-behavior: contain; padding: 0 calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) 1rem;
     color: var(--gz-ink); font-family: var(--gz-font);
@@ -38,6 +38,25 @@
   }
   html[data-gz-sidebar="drawer"][data-gz-sidebar-open] body::after { content: ""; position: fixed; inset: 0; z-index: 1299; background: rgb(0 0 0 / 0.32); }
   [data-gz-sb-fold-page] > #right-side { display: none !important; }
+
+  /* Blackboard Ultra. Its columns are their own content (data-gz-sb-self): a course outline's stays a column of blocks
+     an even gap apart; folding This page hides every block but Glaze's parts. Glaze's own column (gz-sb-fixed, where a
+     page has none, or over a layer) is fixed at the window's edge below the navigation or a course's top bar
+     (--gz-sb-top), and the page's content keeps clear of it. Ultra's layers are above the page: so is the drawer. */
+  html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) aside.outline-actions[data-gz-sidebar-host] { display: flex !important; flex-direction: column; }
+  [data-gz-sb-fold-page][data-gz-sb-self] > :not(.gz-sb-resize, .gz-sb-head, .gz-sb-pagehead, #gz-sb-widgets) { display: none !important; }
+  html:is([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #gz-sidebar.gz-sb-fixed {
+    position: fixed !important; z-index: 1000; top: var(--gz-sb-top, calc(var(--gz-navbar-top, 0px) + var(--gz-ctabs-row, 0px))); bottom: var(--gz-sb-bottom, 0px);
+    inset-inline-end: 0; inset-inline-start: auto; max-height: none;
+  }
+  html[data-gz-sb-fixed][data-gz-sidebar="expanded"] :is(#main-content-inner, .course-content-container) { padding-inline-end: calc(var(--gz-sidebar-w) + 16px) !important; }
+  html[data-gz-sb-fixed][data-gz-sidebar="collapsed"] :is(#main-content-inner, .course-content-container) { padding-inline-end: calc(3rem + 16px) !important; }
+  html[data-gz-sb-fixed][data-gz-sidebar="drawer"][data-gz-sidebar-open] #gz-sidebar.gz-sb-fixed { z-index: 2100; }
+  html[data-gz-sb-fixed][data-gz-sidebar="drawer"][data-gz-sidebar-open] body::after { z-index: 2099; }
+  html[data-gz-sb-fixed] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 2050; }
+  html[data-gz-sb-fixed] .gz-sb-menu { z-index: 2200; }
+  .gz-sb-offer { display: grid; gap: 0.4rem; justify-items: start; margin: 0 0 0.6rem; padding: 0.6rem 0.75rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
+  .gz-sb-offer[hidden] { display: none; }
 
   /* The header: the title, Jump to widgets, the menu and collapse, staying at the top while the column scrolls. */
   .gz-sb-head {

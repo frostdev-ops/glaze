@@ -2875,6 +2875,8 @@
   "{name} is in the sidebar.": "{name} staat in de zijbalk.",
   "Turn on widgets in Glaze settings to add them here.": "Zet widgets aan in de Glaze-instellingen om ze hier toe te voegen.",
   "Move to sidebar": "Naar de zijbalk",
+  "Move To Do to sidebar": "Taken naar de zijbalk",
+  "To Do is on one of your Blackboard boards but not the other. Keep it in the sidebar instead?": "Taken staat op een van je Blackboard-borden, maar niet op het andere. In plaats daarvan in de zijbalk houden?",
   "Move to Dashboard": "Naar het dashboard",
   "Auto height": "Automatische hoogte",
   "{name} is its own height again.": "{name} heeft weer zijn eigen hoogte.",

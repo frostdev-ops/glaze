@@ -1,6 +1,6 @@
 // The sidebar (enhance.sidebar): the page's own sidebar content (This page), then the widgets the student docks under it
 // (My widgets), in one column at the window's right edge, loaded on demand. The site's part calls sync(on) from its passes
-// (content-canvas.js syncSidebar), in the top frame; features/widgets.js draws the docked widgets into host().widgets,
+// (content-canvas.js, content-ultra.js syncSidebar), in the top frame; features/widgets.js draws the docked widgets into host().widgets,
 // with the same tiles as its boards and floats. The state is lib/sidebar.js: one record per account on this device,
 // changed field by field through the worker ('glaze:sidebar').
 // The page's own column stays where and as the LMS made it: nothing of it is moved, cloned or rebuilt. Glaze adds its
@@ -8,7 +8,7 @@
 // CSS variables only (features/sidebar.css); a page without a column gets Glaze's own (#gz-sidebar), beside its content.
 // Wide enough, the column keeps its room beside the content (expanded, or collapsed to its header); narrower, it is a
 // drawer behind a button. A page with nothing for it keeps no room, only a button at the edge to add widgets.
-// Each LMS is an adapter (ADAPTERS): Canvas here. Nothing here asks the LMS for anything but who is signed in.
+// Each LMS is an adapter (ADAPTERS): Canvas and Blackboard Ultra. Nothing here asks the LMS for anything but who is signed in.
 // A second injection into the same frame keeps the first.
 var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const ctx = globalThis.GZ_CTX;
@@ -29,7 +29,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Each LMS's: family() the kind of page (its sections fold per kind), courseId() the page's course ('' elsewhere),
   // native() its own column ({ el, page }: the column and its content) when the page shows one Glaze recognizes, else
   // null; boundary() where Glaze's own column goes without one; left() what its navigation takes from the window's width.
-  // Ultra's comes with its pages (features/sidebar.css already styles any host); course tabs' frames later still.
+  // Optional: own, a class for Glaze's own column; overlay() the page is a layer the sidebar only opens over; top() where
+  // a fixed column starts (px, null for the navigation's). Course tabs' frames come later still.
   const ADAPTERS = {
     canvas: {
       family() {
@@ -61,10 +62,51 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         return Math.max(0, Math.round(rtl() ? innerWidth - r.right : r.left));
       },
     },
+    // Blackboard Ultra. Its columns are flex columns of blocks with no wrapper of their own, so the column is its own
+    // content (page === el): Glaze's header goes first in it, This page right after, the widgets last, and every block
+    // between stays where Ultra (or Glaze's outline helpers: Course notes, the syllabus) put it. The Courses page's column
+    // holds Ultra's To Do; a course outline's (aside.outline-actions) Faculty, Details & Actions and the schedule. A
+    // content item's or a discussion's details column is in a layer over the page, where keeping room is wrong: Ultra's is
+    // left as it is, and the sidebar is Glaze's own column, as a drawer (overlay). Elsewhere, Glaze's own column, fixed at
+    // the window's edge (own) with the page's content kept clear of it (features/sidebar.css).
+    ultra: {
+      family() {
+        const p = location.pathname;
+        if (document.querySelector('.layer-details')) return 'detail';
+        if (/^\/ultra\/course\/?$/.test(p)) return 'courses';
+        if (/^\/ultra\/courses\/_\d+_\d+\/outline/.test(p)) return 'outline';
+        return 'other';
+      },
+      // Follow page: the course whose outline (or an item opened over it) this is; all courses elsewhere.
+      courseId: () => (/^\/ultra\/courses\/_\d+_\d+\/outline/.test(location.pathname) && ctx.courseId?.()) || '',
+      native() {
+        const f = ADAPTERS.ultra.family();
+        const el = f === 'courses' ? document.querySelector('div.todo-panel') : f === 'outline' ? document.querySelector('aside.outline-actions') : null;
+        return el ? { el, page: el } : null;
+      },
+      boundary: () => document.body,
+      own: 'gz-sb-fixed',
+      overlay: () => !!document.querySelector('.layer-details'),
+      // Where the page's content starts: a course's panel, else the page (#main-content-inner, whose start padding is
+      // Glaze's bar's room), right of Ultra's own nav.
+      left() {
+        const m = document.querySelector('.course-content-container') || document.getElementById('main-content-inner');
+        if (!m) return 0;
+        const r = m.getBoundingClientRect();
+        let pad = 0;
+        try { pad = parseFloat(getComputedStyle(m).paddingInlineStart) || 0; } catch { /* no styles to ask */ }
+        return Math.max(0, Math.round((rtl() ? innerWidth - r.right : r.left) + pad));
+      },
+      // Below a course's top bar (with Glaze's course tabs in it), when one is open; else below the navigation (CSS).
+      top() {
+        const r = document.querySelector('div.bb-course-navigation')?.getBoundingClientRect();
+        return r && r.height && r.top < innerHeight / 2 ? Math.max(0, Math.round(r.bottom)) : null;
+      },
+    },
   };
   const A = ADAPTERS[LMS] || ADAPTERS.canvas;
   // Native To Do lists Better To Do can take the place of (features/apps.css hides them while data-gz-sidebar-todo is set).
-  const NATIVE_TODO = '.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list';
+  const NATIVE_TODO = '.Sidebar__TodoListContainer, .todo-list-header, ul.to-do-list, bb-todo';
 
   // ---- state --------------------------------------------------------------------------------------------------------
   let S = null; // lib/sidebar.js
@@ -77,7 +119,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let dock = null, dockBtn = null, list = null, note = null, addBtn = null, adding = null, live = null, edge = null, launch = null;
   let mode = 'none', drawer = false, forced = false, opener = null, inerted = [], dragW = 0;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
-  let mo = null, frame = 0, noteTimer = 0;
+  let mo = null, frame = 0, noteTimer = 0, passFrame = 0, offer = null;
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
   const emit = (e, ...a) => { for (const f of subs[e]) { try { f(...a); } catch { /* one listener's fault stays its own */ } } };
   const on_ = (e, f) => { subs[e]?.add(f); return () => subs[e]?.delete(f); };
@@ -185,7 +227,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     addBtn.setAttribute('aria-expanded', 'false');
     adding = make('div', { className: 'gz-sb-adding', id: 'gz-sb-adding', hidden: true });
     addBtn.setAttribute('aria-controls', 'gz-sb-adding');
-    dock = make('section', { id: 'gz-sb-widgets', className: 'gz-sb-widgets' }, make('h2', { className: 'gz-sb-sec' }, dockBtn), list, note, addBtn, adding);
+    // Ultra's boards disagreed about To Do (lib/sidebar.js migrate): offered here, never forced, until docked or dismissed.
+    offer = make('div', { className: 'gz-sb-offer', hidden: true },
+      make('p', { className: 'gz-sb-faint', textContent: t('To Do is on one of your Blackboard boards but not the other. Keep it in the sidebar instead?') }),
+      button(t('Move To Do to sidebar'), () => { op([{ op: 'dock', id: 'todo', at: 0 }]); say(t('{name} is in the sidebar.', { name: t('To Do') })); dockBtn.focus(); }, { className: 'gz-sb-btn gz-sb-small' }),
+      button(t('Dismiss'), () => { op([{ op: 'offer', v: 'dismissed' }]); dockBtn.focus(); }, { className: 'gz-sb-btn gz-sb-small' }));
+    dock = make('section', { id: 'gz-sb-widgets', className: 'gz-sb-widgets' }, make('h2', { className: 'gz-sb-sec' }, dockBtn), offer, list, note, addBtn, adding);
     dock.setAttribute('aria-labelledby', 'gz-sb-wh');
     edge = button(`+ ${t('Add widgets')}`, () => { forced = true; openDrawer(edge); openAdd(true); }, { id: 'gz-sb-edge', className: 'gz-sb-btn gz-sb-edge gz-sb-own', hidden: true });
     launch = label(button(t('Sidebar'), () => openDrawer(launch), { id: 'gz-sb-launch', className: 'gz-sb-btn gz-sb-launch gz-sb-own', hidden: true }), t('Open the sidebar'));
@@ -211,7 +258,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (host.own) host.el.remove();
     else {
       for (const [k, v] of kept) { if (v === null) host.el.removeAttribute(k); else host.el.setAttribute(k, v); }
-      for (const k of ['data-gz-sidebar-host', 'data-gz-sb-fold-page']) host.el.removeAttribute(k);
+      for (const k of ['data-gz-sidebar-host', 'data-gz-sb-fold-page', 'data-gz-sb-self']) host.el.removeAttribute(k);
     }
     kept = [];
     host = null;
@@ -222,23 +269,32 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       host = { el: n.el, page: n.page, own: false };
       kept = ATTRS.map((k) => [k, n.el.getAttribute(k)]);
     } else {
-      own ||= make('aside', { id: 'gz-sidebar', className: 'gz-sb-own' });
+      own ||= make('aside', { id: 'gz-sidebar', className: A.own ? `gz-sb-own ${A.own}` : 'gz-sb-own' });
       A.boundary().append(own);
       host = { el: own, page: null, own: true };
     }
     host.el.setAttribute('data-gz-sidebar-host', host.own ? 'glaze' : 'native');
     host.el.prepend(grip, head);
-    if (host.page) host.page.before(pageHead);
+    if (self()) { host.el.setAttribute('data-gz-sb-self', ''); head.after(pageHead); }
+    else if (host.page) host.page.before(pageHead);
     host.el.append(dock);
     // The page's own content may arrive late (Canvas's Dashboard fills its column after load): looked at again once a
     // frame, never rebuilt.
     if (host.page && typeof MutationObserver === 'function') {
-      mo ||= new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active) layout(); }); });
+      mo ||= new MutationObserver((rs) => { if (!rs?.length || !rs.every(mine)) { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active) (ultra ? place() : layout()); }); } });
       mo.observe(host.page, { childList: true, subtree: true });
+      // Ultra (Angular) may swap its column for a new one between the site's passes: its parent is watched for that.
+      if (ultra && host.el.parentNode) mo.observe(host.el.parentNode, { childList: true });
     }
   };
+  // Ultra's columns are their own content (ADAPTERS.ultra).
+  const self = () => !!host && host.page === host.el;
+  // A change only to Glaze's own parts of the column (a docked widget redrawing, the header) says nothing of the page's.
+  const part = (n) => n === grip || n === head || n === pageHead || n === dock;
+  const mine = (r) => [grip, head, pageHead, dock].some((e) => e && e !== r.target && e.contains?.(r.target)) || part(r.target)
+    || ([...(r.addedNodes || []), ...(r.removedNodes || [])].length > 0 && [...(r.addedNodes || []), ...(r.removedNodes || [])].every(part));
   // Content: a child with words or a control, not one Glaze hides (the native To Do it replaces).
-  const filled = (el) => [...el.children].some((c) => c.tagName && !['SCRIPT', 'STYLE', 'TEMPLATE', 'LINK'].includes(c.tagName) && !c.hidden
+  const filled = (el) => [...el.children].some((c) => c.tagName && !part(c) && !['SCRIPT', 'STYLE', 'TEMPLATE', 'LINK'].includes(c.tagName) && !c.hidden
     && !(html().hasAttribute('data-gz-sidebar-todo') && c.closest(NATIVE_TODO) === c)
     && (c.textContent.trim() || c.querySelector('a, button, input, select, textarea, img, svg, canvas, iframe')));
 
@@ -252,9 +308,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const pageEmpty = !host.page || !filled(host.page);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
     const m = S.mode({ vw: innerWidth, left: A.left(), width: dragW || rec.width, grades: family === 'grades', empty: pageEmpty && !docked && !forced, open: rec.open });
-    const next = forced && m.mode !== 'drawer' ? 'drawer' : m.mode;
+    // Over a layer (A.overlay: Ultra's details column), with anything to show, it is a drawer whatever the width.
+    const next = (forced || (A.overlay?.() && m.mode !== 'none')) && m.mode !== 'drawer' ? 'drawer' : m.mode;
     if (next !== 'drawer' && drawer) closeDrawer(false);
     const w = next === 'drawer' ? Math.min(m.w || rec.width, rec.width) : m.w;
+    // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
+    if (A.top) { const top = A.top(); if (top == null) html().style.removeProperty?.('--gz-sb-top'); else setVar('--gz-sb-top', `${top}px`); }
+    setAttr(html(), 'data-gz-sb-fixed', host.own && A.own ? '' : false);
     setAttr(html(), 'data-gz-sidebar', next);
     setAttr(html(), 'data-gz-sidebar-open', next === 'drawer' && drawer ? '' : false);
     setVar('--gz-sidebar-w', `${w}px`);
@@ -284,6 +344,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     list.hidden = !!f.widgets;
     addBtn.hidden = !!f.widgets;
     if (f.widgets && adding) adding.hidden = true;
+    offer.hidden = !!f.widgets || rec.offer.todo !== 'pending' || rec.dest.todo === 'dock' || !ctx.settings().enhance.todo;
     if (!adding.hidden) openAdd(true, false);
   };
   // A pass (the site's, or the column changed): the column found again, dressed if it isn't, laid out.
@@ -297,8 +358,11 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (!host || !host.el.isConnected || (n ? host.el !== n.el || host.page !== n.page : !host.own)) attach(n);
     else {
       if (head.parentNode !== host.el) host.el.prepend(grip, head);
-      if (host.page && pageHead.nextElementSibling !== host.page) host.page.before(pageHead);
+      if (self()) { if (pageHead.previousElementSibling !== head) head.after(pageHead); }
+      else if (host.page && pageHead.nextElementSibling !== host.page) host.page.before(pageHead);
       if (dock.parentNode !== host.el) host.el.append(dock);
+      // A block Ultra added after the widgets: the widgets go last again, unless one of them has the focus.
+      else if (self() && host.el.lastElementChild !== dock && !dock.contains(document.activeElement)) host.el.append(dock);
     }
     const first = !active;
     active = true;
@@ -455,11 +519,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     edge?.remove();
     launch?.remove();
     cancelAnimationFrame(frame);
+    cancelAnimationFrame(passFrame);
     clearTimeout(noteTimer);
     const h = html();
     if (h) {
-      for (const k of ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo']) h.removeAttribute(k);
+      for (const k of ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed']) h.removeAttribute(k);
       h.style?.removeProperty?.('--gz-sidebar-w');
+      h.style?.removeProperty?.('--gz-sb-top');
     }
     removeEventListener('resize', onResize);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
@@ -473,7 +539,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     ready().then((ok) => {
       if (!ok || !on) return;
       if (!active) { addEventListener('resize', onResize); try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ } }
-      place();
+      // Ultra's passes come with every change Angular makes: once there, they are gathered into one a frame.
+      if (ultra && active) { cancelAnimationFrame(passFrame); passFrame = requestAnimationFrame(() => { if (on && active) place(); }); }
+      else place();
     });
   };
 
