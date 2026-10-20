@@ -49,8 +49,11 @@ const MODS = () => [
   { 'hooks.js': b64(DATA), 'leaf.png': PNG }, { courses: true }),
   record(ID.rail, { name: 'Clock', permissions: [], hooks: 'hooks.js', ui: { rail: [{ id: 'clock', name: 'Clock', file: 'rail.html' }] } },
     { 'hooks.js': b64('void 0'), 'rail.html': b64('<!doctype html><body><p id=t>rail</p><script src="rail.js"></script>'), 'rail.js': b64("glaze.storage.set('railRan', true);") }),
-  record(ID.nav, { name: 'Nav', permissions: [], hooks: 'hooks.js', replaces: ['nav', 'tile:timer'], ui: { nav: {}, tiles: [{ id: 'timer', name: 'Mod timer', sizes: ['s'] }] } },
-    { 'hooks.js': b64("glaze.ui.render('nav', { type: 'stack', label: 'Mod nav', children: [{ type: 'button', id: 'home', label: 'Mod home' }] }); glaze.ui.render('tile:timer', { type: 'text', text: 'Replacement timer content' });") }),
+  record(ID.nav, { name: 'Nav', permissions: [{ id: 'nav.items', why: 'An item of its own.' }], hooks: 'hooks.js', replaces: ['nav', 'tile:timer'], ui: { nav: {}, tiles: [{ id: 'timer', name: 'Mod timer', sizes: ['s'] }] } },
+    { 'hooks.js': b64("glaze.ui.render('nav', { type: 'stack', label: 'Mod nav', children: [{ type: 'button', id: 'home', label: 'Mod home' }] }); glaze.ui.render('tile:timer', { type: 'text', text: 'Replacement timer content' });"
+      + "glaze.nav.add({ id: 'hose', label: 'Hose', icon: 'star', action: true }).then(() => glaze.storage.set('added', true), (e) => glaze.storage.set('added', e.message));"
+      + "glaze.nav.add({ id: 'away', label: 'Away', href: 'https://elsewhere.test/' }).catch((e) => glaze.storage.set('away', e.message));"
+      + "glaze.on('nav.action', (d) => glaze.storage.set('action', d.id));") }, { 'nav.items': true }),
 ];
 const SHELL = `<!doctype html><html lang="en"><head><base href="/ultra/"><meta charset="utf-8"><title>Local LMS</title><style>
 body{margin:0;font:14px system-ui}.MuiDrawer-paper{position:fixed;inset:0 auto 0 0;width:200px;background:#262626}.MuiDrawer-paper a{display:block;padding:10px 24px;color:#fff}
@@ -173,15 +176,37 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
       ok(await until(() => stored(ID.data, 'effect'), 'effect replaced') === 'complete', 'the replaced moment goes to the mod');
       ok(await until(() => page.evaluate(() => !!document.getElementById('gz-fx')), 'effect canvas', 4000).catch(() => false), 'its effect plays (glaze.effects.play)');
       // Nav replacement: on, then off.
-      ok(await page.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation"]')).display !== 'none'), 'the nav is Ultra\'s while the replacement is off');
+      // nav.items: the mod's own item in Glaze's bar, marked as its own; a link to another site refused; a real click told to it.
+      if (await inPage(page, () => !!globalThis.GZ_NAVBAR_UI?.live())) {
+        ok(await until(() => stored(ID.nav, 'added'), 'nav item added') === true, 'glaze.nav.add puts an item in the bar');
+        eq(await until(() => stored(ID.nav, 'away'), 'away refused'), 'args', 'an item linking to another site is refused');
+        const item = page.locator('#gz-navbar [data-id="mod:aaaaaaaaaaaaaaab.hose"]').first();
+        await until(() => item.isVisible(), 'mod item shown');
+        eq(await item.getAttribute('aria-description'), 'From Nav', 'shown as the mod\'s');
+        await item.click();
+        eq(await until(() => stored(ID.nav, 'action'), 'nav.action'), 'hose', 'a real click reaches the mod as nav.action');
+      }
+      // With Glaze's bar drawn, the replacement stands in for the bar; without it, for Ultra's own nav.
+      const barLive = await inPage(page, () => !!globalThis.GZ_NAVBAR_UI?.live());
+      const native = () => page.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation"]')).display);
+      const glazeBar = () => page.evaluate(() => [...(document.getElementById('gz-navbar')?.shadowRoot?.querySelectorAll('.rail, .topbar, .tabs') || [])].some((e) => getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden'));
+      if (barLive) ok(await glazeBar(), 'Glaze\'s bar shows while the replacement is off');
+      else ok(await native() !== 'none', 'the nav is Ultra\'s while the replacement is off');
+      const nativeBefore = await native();
       await set('local', { [`modReplace:${ID.nav}`]: { nav: true } });
-      await until(() => page.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation"]')).display === 'none'), 'nav replaced');
+      await until(async () => (barLive ? !await glazeBar() : await native() === 'none'), 'nav replaced');
       t = await until(async () => { const x = await tree(page); return x.all.some((n) => n.nodeName === 'BUTTON' && x.text(n) === 'Mod home') && x; }, 'mod nav drawn');
       ok(t.all.some((n) => t.attr(n, 'role') === 'navigation' && t.attr(n, 'aria-label') === 'Nav'), 'the mod\'s nav takes its place, as navigation');
+      if (barLive) {
+        eq(await native(), nativeBefore, 'Ultra\'s own nav stays as Glaze keeps it (hidden under the bar)');
+        const box = await page.evaluate(() => { const r = document.querySelector('.gz-mod-nav').getBoundingClientRect(); return { w: r.width, h: r.height, left: r.left, room: getComputedStyle(document.documentElement).getPropertyValue('--gz-navbar-left').trim() }; });
+        ok(box.w > 0 && box.h > 0 && box.left === 0 && `${box.w}px` === box.room, 'it fills the room the bar keeps for the page', box);
+        eq((await stats(page)).navMode, 'bar', 'in Glaze\'s bar\'s place');
+      }
       ok((await stats(page)).ready[ID.nav] !== undefined && !(await stats(page)).gone[ID.nav], 'turning it on restarts nothing');
       await set('local', { [`modReplace:${ID.nav}`]: { nav: false } });
-      await until(() => page.evaluate(() => getComputedStyle(document.querySelector('nav[class*="makeStylesnavigation"]')).display !== 'none' && !document.querySelector('.gz-mod-nav')), 'nav back');
-      ok(true, 'turned off, Ultra\'s nav is back exactly');
+      await until(async () => !(await page.evaluate(() => !!document.querySelector('.gz-mod-nav'))) && (barLive ? await glazeBar() : await native() !== 'none'), 'nav back');
+      ok(true, barLive ? 'turned off, Glaze\'s bar is back' : 'turned off, Ultra\'s nav is back exactly');
       // An opted-in built-in tile uses the mod's renderer, then restores the native renderer.
       await set('local', { [`modReplace:${ID.nav}`]: { 'tile:timer': true }, widgetLayout: { boards: { pages: [
         { id: `m${ID.data.slice(0, 14)}0`, on: true, size: 'm' }, { id: 'timer', on: true, size: 's' },

@@ -1,7 +1,5 @@
-// Glaze — Canvas's part of the first content script: what only Canvas does, so Ultra and Moodle don't parse it. Listed
-// before content.js for *.instructure.com and schools' own Canvas hosts (lib/background.js); content.js calls it with its
-// helpers and live state (I) and puts what it returns over its defaults (X). A second copy keeps the first; it ends on
-// its value (loadable).
+// Canvas-only helpers for content.js, loaded before it on Canvas hosts (lib/background.js) or on demand.
+// Receives the core's live state (I); reinjection keeps the first copy and returns it.
 var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const { C, html, isPreview, need, t, locale, capi, canvasCourseKey, canvasCourseId, celebrate, markDue, drawProgress, cardBadge, KIND, cardsInView, inView, tagExtras, setVar, setAttr } = I;
 
@@ -28,14 +26,44 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   }, true);
 
   // ---- the student's courses -------------------------------------------------------------------
-  let canvasList = null;
-  const canvasCourses = () => (canvasList ||= capi('/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100')
-    .then((j) => (Array.isArray(j) ? j : []), () => { setTimeout(() => { canvasList = null; }, 60000); return []; })); // asked again after a minute
+  const COURSE_CACHE = 'gz-canvas-courses';
+  let canvasList = null, canvasSnapshot = null, coursesRead = false;
+  // Same tab and origin, briefly: navigation needn't ask for the same courses and colors again.
+  try {
+    const kept = JSON.parse(sessionStorage.getItem(COURSE_CACHE)), age = Date.now() - kept?.at;
+    if (age >= 0 && age < 60000 && /^\d+$/.test(kept.uid) && Array.isArray(kept.list) && kept.colors && typeof kept.colors === 'object') canvasSnapshot = kept;
+  } catch { /* blocked or empty */ }
+  // Follow Canvas's next link, never off this API; a broken cycle or huge account stops at twenty pages.
+  const readCourses = async () => {
+    let next = '/courses?enrollment_state=active&include[]=total_scores&include[]=current_grading_period_scores&include[]=restrict_quantitative_data&include[]=term&per_page=100';
+    const out = [], seen = new Set();
+    for (let page = 0; next && page < 20 && !seen.has(next); page++) {
+      const path = next;
+      seen.add(path); next = '';
+      let link;
+      const rows = await capi(path, (r) => { link = r.headers.get('Link'); });
+      if (!Array.isArray(rows)) throw new Error('Invalid list');
+      out.push(...rows);
+      const raw = /<([^>]+)>\s*;\s*rel="?next"?(?:\s*[,;]|$)/i.exec(link || '')?.[1];
+      if (raw) try {
+        const u = new URL(raw, `${location.origin}/api/v1${path}`);
+        if (u.origin === location.origin && !u.username && !u.password && u.pathname.startsWith('/api/v1/')) next = u.pathname.slice(7) + u.search;
+      } catch { /* malformed next link */ }
+    }
+    return out;
+  };
   let mine = null;
   const profile = () => (mine ||= capi('/users/self/profile').catch((e) => { mine = null; throw e; }));
-  const record = () => Promise.all([canvasCourses(), capi('/users/self/colors').catch(() => ({}))]).then(([list, colors]) => {
+  // Who is signed in is always Canvas's word on this page (the page's own storage could say anything); a snapshot counts
+  // only for that account, so one signed in a moment ago never lends its courses or grades.
+  const snap = () => (canvasSnapshot ? profile().then((p) => (String(p?.id) === canvasSnapshot.uid ? canvasSnapshot : null), () => null) : Promise.resolve(null));
+  const canvasCourses = () => (canvasList ||= snap().then((s) => s ? s.list : readCourses()
+    .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return []; }))); // asked again after a minute
+  const record = () => snap().then((s) => Promise.all([canvasCourses(), s ? s.colors : capi('/users/self/colors').catch(() => null), profile().catch(() => null)])).then(([list, colors, me]) => {
+    // Failed reads must not turn into a fresh, empty snapshot.
+    if (coursesRead && colors && /^\d+$/.test(me?.id)) try { sessionStorage.setItem(COURSE_CACHE, JSON.stringify({ at: Date.now(), uid: String(me.id), list, colors })); } catch { /* blocked or full */ }
     const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
-      name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
+      name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors?.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
     }]));
     // Preserve Blackboard and other schools; Canvas ids alone are only unique within their own host.
     chrome.storage.local.get('seenCourses', (r) => {
@@ -46,12 +74,19 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   });
 
   // ---- code on demand ------------------------------------------------------------------------------
+  // The sidebar (features/sidebar.js): the page's column, with Better To Do and the docked widgets in it, on the page or in
+  // a course tab's frame (only the one on screen works it). Better To Do takes the site's sidebar itself only without it
+  // (or while it can't start).
+  const sidebarHere = () => I.links.length && I.settings.enhance.sidebar && I.settings.sidebar?.canvas !== false && (window.top === window || !!I.tabFrame) && !/^\/log(in|out)\b/.test(location.pathname);
+  const sidebarOn = () => sidebarHere() && (globalThis.GZ_SIDEBAR_UI?.enabled?.() ?? !I.settings.sidebar?.off?.length);
+  const syncSidebar = () => (sidebarHere() ? need('features/sidebar.js', () => globalThis.GZ_SIDEBAR_UI).then(() => GZ_SIDEBAR_UI.sync(sidebarHere()), () => {}) : globalThis.GZ_SIDEBAR_UI?.sync(false));
   const todoHere = () => I.links.length && I.settings.enhance.todo && /^\/(courses\/\d+\/?)?$/.test(location.pathname);
-  const syncTodo = () => (todoHere() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoHere()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
+  const todoSide = () => todoHere() && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed());
+  const syncTodo = () => (todoSide() ? need('features/todo.js', () => globalThis.GZ_TODO_UI).then(() => GZ_TODO_UI.sync(todoSide()), () => {}) : globalThis.GZ_TODO_UI?.sync(false));
   const cardsHere = () => I.links.length && I.settings.enhance.cardTasks && location.pathname === '/';
   const syncCardTasks = () => (cardsHere() && document.querySelector('.ic-DashboardCard') ? need('features/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.sync(cardsHere()), () => {}) : globalThis.GZ_CARD_TASKS?.sync(false));
-  const widgetsHere = () => I.links.length && (window.top === window || I.tabFrame === 'page') && (I.settings.enhance.widgets || I.settings.enhance.notes || I.settings.enhance.pet);
-  const syncWidgets = () => (widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
+  const widgetsHere = () => { const e = I.settings.enhance; return I.links.length && (window.top === window || I.tabFrame === 'page' || (!!I.tabFrame && sidebarOn())) && (e.widgets || e.notes || e.pet || (e.todo && (location.pathname === '/' || sidebarOn()))); };
+  const syncWidgets = () => (syncSidebar(), widgetsHere() ? need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => {}) : globalThis.GZ_WIDGETS_UI?.sync(false));
   const remindHere = () => I.links.length && window.top === window && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => I.settings.enhance[k]);
   const syncRemind = () => (remindHere() ? need('features/reminders.js', () => globalThis.GZ_REMIND_UI).then(() => GZ_REMIND_UI.sync(remindHere()), () => {}) : globalThis.GZ_REMIND_UI?.sync(false));
   const sylHere = () => I.links.length && window.top === window && I.settings.enhance.syllabus && /^\/courses\/\d+(\/assignments\/syllabus)?\/?$/.test(location.pathname);
@@ -106,9 +141,20 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // our own write is a mutation too. Not /users/self/colors: Canvas picks a default color in the browser for a course
   // with none and saves it only after painting, and a color changed on the page never reaches a list asked for once.
   const COURSE_BOXES = [['.ic-DashboardCard', '.ic-DashboardCard__header_hero', 'backgroundColor'], ['.planner-grouping', ':scope > ol', 'borderColor']];
-  const liftCourses = () => {
+  const liftCourses = (records) => {
     for (const [box, src, prop] of COURSE_BOXES) {
-      for (const el of document.querySelectorAll(box)) {
+      // Initial paint visits every box; mutations only revisit their box and newly inserted boxes.
+      const boxes = records ? new Set() : document.querySelectorAll(box);
+      if (records) for (const r of records) {
+        const near = r.target.closest?.(box);
+        if (near) boxes.add(near);
+        if (r.type === 'childList') for (const n of r.addedNodes) {
+          if (n.nodeType !== 1) continue;
+          if (n.matches(box)) boxes.add(n);
+          for (const el of n.querySelectorAll(box)) boxes.add(el);
+        }
+      }
+      for (const el of boxes) {
         const c = el.querySelector(src)?.style[prop];
         if (c && el.style.getPropertyValue('--gz-course-raw') !== c) el.style.setProperty('--gz-course-raw', c);
       }
@@ -200,10 +246,10 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
 
   // ---- course progress (Extras) ---------------------------------------------------------------
   // The outline with a done state is Modules: the bar adds up the completion requirements the course sets, done or not
-  // as Canvas's own API has them for this student (asked once a page), above the Modules list, also on a course home
+  // as Canvas's own API has them for this student, above the Modules list, also on a course home
   // that shows it. A course that sets none gets no bar: Canvas calls a module without requirements "completed", and it
   // hides that itself, as nothing there was asked of you.
-  // Progress and new-content badges share this exact capped list; news can refresh after five minutes.
+  // Progress and new-content badges share this exact capped list; both refresh after five minutes.
   const canvasModuleLists = new Map();
   const canvasModules = (cid) => {
     let c = canvasModuleLists.get(cid);
@@ -223,25 +269,28 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const syncFolders = () => (I.links.length && I.settings.enhance.hideFolders && document.getElementById('context_modules')
     ? need('lib/folders.js', () => globalThis.GZ_FOLDERS).then(() => need('features/folders.js', () => globalThis.GZ_FOLDER_UI)).then(() => GZ_FOLDER_UI.sync(true, me()), () => {})
     : globalThis.GZ_FOLDER_UI?.sync(false));
-  let reqs = null; // { cid, progress: { done, total } | null }, null when the whole total isn't known
+  let reqs = null; // { cid, load, progress: { done, total } | null }, tied to the shared Modules cache
   const canvasProgress = () => {
     syncFolders();
     const old = document.getElementById('gz-progress');
     const cid = canvasCourseId();
     const list = I.observer && I.settings.enabled && I.settings.enhance.progress && /^\/courses\/\d+(\/modules)?\/?$/.test(location.pathname) && document.getElementById('context_modules_sortable_container');
     if (!list) return old?.remove();
-    if (reqs?.cid !== cid) {
-      const r = (reqs = { cid });
+    if (reqs?.cid === cid && Date.now() - reqs.failed < 60000) return old?.remove(); // a failed request is asked again after a minute
+    const load = canvasModules(cid);
+    if (reqs?.cid !== cid || reqs.load !== load) {
+      const r = (reqs = { cid, load });
       // shortcut: hide incomplete module lists; follow Link and items_url if large-course progress is needed.
-      canvasModules(cid).then((mods) => {
+      load.then((mods) => {
         r.progress = GZ_PAGE.canvasProgress(mods);
         if (reqs === r) canvasProgress();
-      }).catch(() => {});
+      }).catch(() => { if (reqs === r) r.failed = Date.now(); }); // a failed request must not pin the course
       return;
     }
     if (!reqs.progress?.total) return old?.remove();
     drawProgress(old, reqs.progress.done, reqs.progress.total, list);
   };
+  addEventListener('pageshow', (e) => { if (e.persisted) canvasProgress(); }); // BFCache may outlive the Modules cache
 
   // ---- new grades and new content (Extras) ----------------------------------------------------
   // Canvas keeps unread grade dots itself. A passive HTML GET reads those exact dots, without running

@@ -219,7 +219,7 @@ test('reminders on Ultra: quiet on a test, assignment or tool page; links made w
 
 test('content-ultra.js loads each where it goes: Better To Do on the Courses page and outlines, cards with cards, reminders anywhere; top frame only', async () => {
   const src = read('content-ultra.js');
-  const decls = ['load', 'top', 'syncTodo', 'syncCardTasks', 'syncRemind'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
+  const decls = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo', 'syncCardTasks', 'syncRemind'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
   const asked = [];
   const ctx = {
     I: { links: [1], settings: { enhance: { todo: true, cardTasks: true, remind: false, remindExam: false, remindPlan: false, remindClass: false, streak: true } } },
@@ -252,7 +252,7 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
 test('review (B2 1): a module that lands after Glaze or its switch went off stays off; a list turned off while lib/ultra.js loads reads nothing', async () => {
   // content-ultra.js: the switches are asked again when the file lands, not taken from when it was asked for.
   const src = read('content-ultra.js');
-  const decls = ['load', 'top', 'syncTodo'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
+  const decls = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
   let arrive;
   const asked = [];
   const ctx = { I: { links: [1], settings: { enhance: { todo: true } } }, location: { pathname: '/ultra/course' }, window: {}, need: () => new Promise((r) => { arrive = r; }) };

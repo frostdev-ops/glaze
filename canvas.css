@@ -438,6 +438,7 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 /* The right column: its section titles are labels, not headings. */
 #right-side :is(h2, h3) { color: var(--gz-ink-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); padding-bottom: 0.5rem; }
 #right-side a { color: var(--gz-accent); }
+/* The column's room, width and modes are the sidebar's (features/sidebar.css), on every page that has it. */
 
 /* ---- lists: modules, assignments, quizzes ----
    A module or an assignment group is one card: a band for its title, rows with hairlines under it. */
@@ -514,6 +515,10 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 }
 
 /* ---- dashboard cards ---- */
+/* Fill the actual content room, including the room left beside Glaze's sidebar. */
+#application .ic-DashboardCard__box__container { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--gz-card-w, 262px)), 1fr)); gap: var(--gz-card-gap, 16px); margin: 0; }
+#application .ic-DashboardCard__box__container > .ic-DashboardCard { width: 100%; min-width: 0; box-sizing: border-box; margin: 0; }
+
 #application .ic-DashboardCard {
   background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-card-r, var(--gz-radius)); box-shadow: var(--gz-rest-shadow);
   overflow: hidden; transition: var(--gz-card-transition); animation: var(--gz-enter); width: var(--gz-card-w, 262px);
@@ -1538,6 +1543,8 @@ html[data-gz-ctabs]:not([data-gz-ctabs~="nav"]) #sticky-container { top: var(--g
 html[data-gz-ctabs]:not([data-gz-ctabs~="above"]) .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs))::before { order: 99; }
 html[data-gz-ctab-framed] :is(#application, #drawer-layout-mount-point, #gz-scene) { visibility: hidden !important; }
 html[data-gz-ctab-framed] #application :is(#gz-ctabs, dialog[open], [role="dialog"], [role="alertdialog"], [role="alert"], [role="status"]) { visibility: visible; }
+/* A visible course frame owns scrolling. Exhausting its native scroller must not wheel the covered document or drawer. */
+html[data-gz-ctab-framed], html[data-gz-ctab-framed] #drawer-layout-content { overflow-y: hidden !important; }
 
 /* Glaze navigation replaces only Canvas's navigation chrome. Portal trays, dialogs and alerts stay outside these rules.
    The words reserve first-paint room; the renderer supplies the same dimensions inline once mounted. */

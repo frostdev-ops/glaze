@@ -608,6 +608,11 @@ html[data-gz-footer] .pagehelp-directive, html[data-gz-footer] [data-gz-fixed-bo
 html[data-gz-footer] .route-view-container, html[data-gz-footer] .routed-page, html[data-gz-footer] [data-gz-vh] {
   max-height: calc(100vh - var(--gz-footer-h) - var(--gz-navbar-top, 0px)) !important;
 }
+/* A course or routed page holds the bar's padding inside its own height (and on Ultra is itself a .route-view-container):
+   its cap leaves that room in, or the page would stop a bar's height above the footer. */
+html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-page) {
+  max-height: calc(100vh - var(--gz-footer-h)) !important;
+}
 #gz-footer {
   position: fixed;
   inset: auto 0 0 0;
@@ -722,9 +727,11 @@ html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick,
 }
 #site-wrap .outline-action-block .MuiAccordion-root { background: transparent !important; border: 0 !important; box-shadow: none !important; }
 /* The column: its panels an even gap apart (Ultra's and Glaze's own margins varied), no rule beside them, nothing
-   for an empty placeholder (Ultra's course schedule without one), and no stray space inside a panel's edges. */
-#site-wrap aside.outline-actions { gap: calc(0.75rem * var(--gz-space, 1)); border-left: 0 !important; }
-#site-wrap aside.outline-actions > * { margin-block: 0 !important; }
+   for an empty placeholder (Ultra's course schedule without one), and no stray space inside a panel's edges. As the
+   sidebar beside the content (features/sidebar.css) it has the sidebar's edge, and Glaze's header keeps its own margins. */
+#site-wrap aside.outline-actions { gap: calc(0.75rem * var(--gz-space, 1)); }
+html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap aside.outline-actions { border-left: 0 !important; }
+#site-wrap aside.outline-actions > :not(.gz-sb-head) { margin-block: 0 !important; }
 #site-wrap aside.outline-actions > .conditional-block:not(:has(> *)) { display: none; }
 #site-wrap .outline-action-block > :first-child { margin-top: 0 !important; }
 #site-wrap .outline-action-block > :last-child { margin-bottom: 0 !important; }
@@ -944,10 +951,11 @@ span.enhanced-tooltip span.enhanced-tooltip-pip { background-color: var(--gz-tip
 #site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { background: var(--gz-card-ov); opacity: var(--gz-card-ov-a); }
 html[data-gz-card-plain] #site-wrap article.course-element-card[data-gz-card="image"] .course-banner::after { display: none; }
 /* Only the measured grid gets sizing/condensing. List rows keep Ultra's native geometry. */
-html[data-gz-card-width] #site-wrap .multi-column-view .course-columns { display: flex !important; flex-wrap: wrap; }
+#site-wrap :is(.multi-column-view.course-columns, .multi-column-view .course-columns) { width: 100%; min-width: 0; box-sizing: border-box; }
+#site-wrap .multi-column-view .course-org-list > :is(.term-group, .favorites-group) { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--gz-card-w, 262px)), 1fr)); gap: var(--gz-card-gap, 16px); }
 html[data-gz-card-width] #site-wrap .multi-column-view .course-card-term-name { flex-basis: 100%; }
 html[data-gz-card-gap] #site-wrap .multi-column-view :is(.course-columns, .course-org-list > div) { gap: var(--gz-card-gap) !important; }
-html[data-gz-card-width] #site-wrap .multi-column-view article.course-element-card { width: min(100%, var(--gz-card-w)) !important; flex: 0 1 var(--gz-card-w); margin: 0 !important; }
+#site-wrap .multi-column-view article.course-element-card { width: 100% !important; min-width: 0; margin: 0 !important; }
 html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card .course-banner { height: var(--gz-card-h) !important; }
 /* The banner's height sets the card's least height (Ultra's 156px of details below it), never a fixed one. */
 html[data-gz-card-height] #site-wrap .multi-column-view article.course-element-card { height: auto !important; min-height: calc(var(--gz-card-h) + 156px); }
@@ -1185,14 +1193,22 @@ html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }
   html[data-gz-navbar] #main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }
   /* A course, and a page Ultra routes in its place (an assignment's details and attempts, a document opened on its own). */
   html[data-gz-navbar] .inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }
+  /* Keep the layer over its backdrop and the page underneath; only its absolute content wrapper clears the bar. */
+  html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }
   html[data-gz-navbar] #gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }
   html[data-gz-navbar]:not([data-gz-footer]) :is(.route-view-container, .routed-page, [data-gz-vh]) { max-height: calc(100vh - var(--gz-navbar-top)) !important; }
+  html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }
+}
+/* The strip lives in the layer's own sticky header. Leave the native close button its first 48px. */
+@media screen {
+  html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main) *) [class*="headerRoot"]:has(bb-close, .bb-close) #gz-ctabs { margin-inline-start: 48px !important; width: calc(100% - 48px) !important; }
 }
 @media (min-width: 1280px) {
   html[data-gz-navbar~="rail"][data-gz-navbar~="auto"] { --gz-navbar-left: 272px; }
   html[data-gz-navbar~="rail"][data-gz-navbar~="auto"][data-gz-navbar~="embed"] { --gz-navbar-left: 248px; }
 }
 @media (max-width: 899.98px) {
-  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive]) .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
+  html[data-gz-navbar]:not([data-gz-navbar~="none"]) :is(body, #main-content-inner, .inner-wrap > :is(section.course, .routed-page)) { box-sizing: border-box; padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }
   html[data-gz-navbar]:not([data-gz-navbar~="none"]) #gz-ctabs-frames { margin-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }

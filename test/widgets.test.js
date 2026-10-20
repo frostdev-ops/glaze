@@ -90,7 +90,7 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   const fresh = W.layout(undefined);
   assert.deepEqual(fresh.tiles.map((t) => t.id), W.TILES);
   assert.deepEqual(fresh.tiles.filter((t) => t.on).map((t) => t.id), [], 'a first layout has no widget on');
-  assert.deepEqual(Object.fromEntries(W.BOARDS.map((b) => [b, fresh.boards[b].filter((t) => t.on).map((t) => t.id)])), { courses: ['todo'], dash: ['todo'], cdash: [] }, 'only Better To Do, where it was');
+  assert.deepEqual(Object.fromEntries(W.BOARDS.map((b) => [b, fresh.boards[b].filter((t) => t.on).map((t) => t.id)])), { courses: ['todo'], dash: ['todo'], cdash: ['todo'] }, 'absent storage alone never authorizes starter widgets');
   // A layout stored before then: a tile kept without its on/off reads as it did.
   assert.deepEqual(W.layout({ tiles: [{ id: 'agenda' }, { id: 'music' }] }).tiles.filter((t) => t.on).map((t) => t.id), ['agenda', 'notes', 'timer', 'quotes']);
   const kept = W.layout({ tiles: [{ id: 'music', on: true, size: 'l', float: true, x: 0.5, y: 2 }, { id: 'music' }, { id: 'evil' }, { id: 'timer', size: 'xl' }, null], music: 'javascript:x' });
@@ -99,10 +99,10 @@ test('layout: every tile once, in the kept order, with defaults; moves and float
   assert.equal(kept.music, '');
   assert.equal(W.layout({ music: ' https://youtu.be/jfKfPfyJRdk ' }).music, 'https://youtu.be/jfKfPfyJRdk');
   const ids = (l) => l.tiles.map((t) => t.id).join(' ');
-  assert.equal(ids(W.move(fresh, 'timer', -1)), 'notes timer agenda quotes music breathe buddy todo');
+  assert.equal(ids(W.move(fresh, 'timer', -1)), 'notes timer agenda quotes music breathe buddy todo settings pet');
   assert.equal(ids(W.move(fresh, 'notes', -1)), ids(fresh), 'the first stays first');
-  assert.equal(ids(W.move(fresh, 'todo', 1)), ids(fresh), 'the last stays last');
-  assert.equal(ids(W.move(fresh, 'buddy', 0, 'agenda')), 'notes buddy agenda timer quotes music breathe todo');
+  assert.equal(ids(W.move(fresh, 'pet', 1)), ids(fresh), 'the last stays last');
+  assert.equal(ids(W.move(fresh, 'buddy', 0, 'agenda')), 'notes buddy agenda timer quotes music breathe todo settings pet');
   assert.equal(ids(W.move(fresh, 'buddy', 0, 'nope')), ids(fresh));
   assert.deepEqual(W.set(fresh, 'timer', { size: 'zz', on: false }).tiles[2], { id: 'timer', on: false, size: 's', float: false, x: null, y: null, z: 0, fold: false });
   // Floating: inside the margin, onto an edge within SNAP of it, and kept as where in the free room it is.
@@ -205,13 +205,13 @@ test('study buddy: happy after a win, awake while the timer runs or after a pat,
 });
 
 test('layout: a tile another file declares (MORE) comes after the built-in ones, off and at its size, and keeps its place', () => {
-  const more = { pet: { size: 'm' }, notes: { size: 'l' }, 'Bad id': {}, x: {} };
+  const more = { sample: { size: 'm' }, notes: { size: 'l' }, 'Bad id': {}, x: {} };
   const lay = W.layout(undefined, more);
-  assert.deepEqual(lay.tiles.map((t) => t.id), [...W.TILES, 'pet'], 'a built-in id or a bad one is not added');
-  assert.deepEqual(lay.tiles.at(-1), { id: 'pet', on: false, size: 'm', float: false, x: null, y: null, z: 0, fold: false });
-  const kept = W.layout({ tiles: [{ id: 'pet', on: true, size: 's', float: true, x: 0.5, y: 0 }, { id: 'notes' }] }, more);
-  assert.deepEqual(kept.tiles.slice(0, 2).map((t) => [t.id, t.on, t.size, t.float]), [['pet', true, 's', true], ['notes', true, 'm', false]]);
-  assert.ok(!W.layout(kept).tiles.some((t) => t.id === 'pet'), 'without its declaration, not a tile');
+  assert.deepEqual(lay.tiles.map((t) => t.id), [...W.TILES, 'sample'], 'a built-in id or a bad one is not added');
+  assert.deepEqual(lay.tiles.at(-1), { id: 'sample', on: false, size: 'm', float: false, x: null, y: null, z: 0, fold: false });
+  const kept = W.layout({ tiles: [{ id: 'sample', on: true, size: 's', float: true, x: 0.5, y: 0 }, { id: 'notes' }] }, more);
+  assert.deepEqual(kept.tiles.slice(0, 2).map((t) => [t.id, t.on, t.size, t.float]), [['sample', true, 's', true], ['notes', true, 'm', false]]);
+  assert.ok(!W.layout(kept).tiles.some((t) => t.id === 'sample'), 'without its declaration, not a tile');
 });
 
 test('notes: an Ultra account (_N_N) has its own key on its own site', () => {
@@ -232,7 +232,7 @@ test('boards: each its own layout; the Courses page starts from the tiles in its
   assert.ok(c.every((t) => t.size === 's' && t.x === null && t.y === null && t.z === 0 && !t.fold), "small enough for Ultra's column, placed where the panel was");
   const d = lay.boards.dash;
   assert.deepEqual(d.filter((t) => t.on).map((t) => [t.id, t.size]), [['notes', 'm'], ['agenda', 'm'], ['timer', 's'], ['quotes', 'm'], ['todo', 'm']], "Canvas's Dashboard defaults, Better To Do with them (Codex B7b 5)");
-  assert.equal(lay.tiles.find((t) => t.id === 'todo').on, false, 'not a tile on Canvas, where it has its own place');
+  assert.equal(lay.tiles.find((t) => t.id === 'todo').on, false, 'To Do belongs to the board, never the global floats');
   // Kept boards come back as they were; what isn't a spot, a size or a z is dropped, and a spot needs both x and y.
   const kept = W.layout({ ...lay, boards: { courses: [{ id: 'notes', on: true, size: 'l', x: 40, y: 64, r: true, z: 3, fold: true }, { id: 'timer', x: 5 }, { id: 'evil', x: 1, y: 1 }, { id: 'agenda', x: -4, y: 2.5, z: 1e6 }], dash: 'nope' } });
   assert.deepEqual(kept.boards.courses.slice(0, 3), [
@@ -497,7 +497,7 @@ test('Canvas board: an old grid migrates once, in order, at its sizes, with its 
   };
   const more = { pet: { size: 'm' } }, l = W.layout(old, more), b = l.boards.cdash;
   assert.deepEqual(b.map((x) => x.id), l.tiles.map((x) => x.id));
-  assert.deepEqual(b.filter((x) => x.on).map((x) => [x.id, x.size]), [['quotes', 'l'], ['timer', 's'], ['pet', 'm'], ['agenda', 'm']]);
+  assert.deepEqual(b.filter((x) => x.on).map((x) => [x.id, x.size]), [['quotes', 'l'], ['timer', 's'], ['pet', 'm'], ['agenda', 'm'], ['todo', 'm']]);
   assert.ok(b.every((x) => x.x === null && x.y === null && x.r === false));
   assert.deepEqual([l.tiles[2].float, l.tiles[2].x, l.tiles[2].y], [true, 0.25, 0.75]);
   assert.equal(l.music, old.music);
@@ -558,7 +558,7 @@ test("Canvas course tiles: Canvas's numeric ids, on Canvas's Dashboard board onl
 });
 
 test('filled: a board given its first tiles is marked once, so one emptied since stays empty', () => {
-  const fresh = W.layout(undefined);
+  const fresh = W.fresh();
   assert.deepEqual(fresh.filled, []);
   const key = 'course:https://canvas.test/27';
   const l = W.apply(fresh, { fill: 'cdash', ops: [{ s: 'cdash', id: key, set: { on: true } }] });
@@ -567,7 +567,7 @@ test('filled: a board given its first tiles is marked once, so one emptied since
   const emptied = W.apply(l, { ops: [{ s: 'cdash', id: key, remove: true }] });
   assert.deepEqual(emptied.filled, ['cdash'], 'kept when its tiles go');
   assert.deepEqual(W.apply(emptied, { fill: 'cdash', ops: [] }).filled, ['cdash'], 'once');
-  assert.deepEqual(W.layout({ filled: ['cdash', 'nope', 'cdash'] }).filled, ['cdash'], 'only boards, each once');
+  assert.deepEqual(W.layout({ starter: true, filled: ['cdash', 'nope', 'cdash'] }).filled, ['cdash'], 'only boards, each once');
   assert.deepEqual(W.apply(fresh, { fill: 'nope', ops: [] }).filled, []);
 });
 
@@ -575,9 +575,9 @@ test('kept: an update keeps what a device without a stored layout showed, and ad
   const on = (l, b) => (b ? l.boards[b] : l.tiles).filter((t) => t.on).map((t) => t.id);
   const four = ['notes', 'agenda', 'timer', 'quotes'];
   const was = W.kept(true);
-  assert.deepEqual([on(was), on(was, 'cdash'), on(was, 'courses'), on(was, 'dash')], [four, four, [...four, 'todo'], [...four, 'todo']]);
+  assert.deepEqual([on(was), on(was, 'cdash'), on(was, 'courses'), on(was, 'dash')], [four, [...four, 'todo'], [...four, 'todo'], [...four, 'todo']]);
   for (const l of [W.kept(undefined), W.kept(false)]) {
-    assert.deepEqual([on(l), on(l, 'cdash'), on(l, 'courses')], [['notes'], ['notes'], ['notes', 'todo']], 'the notes box (its own switch) as it was; no widget');
+    assert.deepEqual([on(l), on(l, 'cdash'), on(l, 'courses')], [['notes'], ['notes', 'todo'], ['notes', 'todo']], 'the notes box and existing To Do; no extra widget');
     assert.deepEqual(on(l, 'dash'), [...four, 'todo'], "Ultra's Dashboard showed these whatever the widgets' switch");
   }
   assert.deepEqual(W.layout(was), was, 'stored, it reads back the same');

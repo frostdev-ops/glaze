@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Glaze",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "Restyle Blackboard Ultra, Canvas and Moodle: palettes, fonts, backgrounds and motion, plus handy extras.",
   "default_locale": "en",
   "permissions": [
@@ -149,6 +149,8 @@
         "features/apps.css",
         "features/surfaces.css",
         "features/coursetabs.css",
+        "features/sidebar.css",
+        "features/docreview.css",
         "assets/logo.svg",
         "assets/logo-dark.svg",
         "icons/icon.svg"

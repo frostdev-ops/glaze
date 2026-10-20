@@ -634,7 +634,7 @@
             <span class="desc">Put stickers on any course page from the command palette (Ctrl+K): Place stickers on this page. They are kept on this computer, and never shown on a quiz you are taking.</span></label>
         </div>
 </section></div>
-<div id="panel-navigation" role="tabpanel" aria-labelledby="tab-navigation" data-editor-panel="navigation" hidden><nav class="section-links" aria-label="Sections"><a href="#navigation/bar" data-editor-alias>Glaze navigation</a><a href="#navigation/items" data-editor-alias>Navigation items</a><a href="#navigation/tabs" data-editor-alias>Course tabs</a></nav>
+<div id="panel-navigation" role="tabpanel" aria-labelledby="tab-navigation" data-editor-panel="navigation" hidden><nav class="section-links" aria-label="Sections"><a href="#navigation/bar" data-editor-alias>Glaze navigation</a><a href="#navigation/items" data-editor-alias>Navigation items</a><a href="#navigation/sidebar" data-editor-alias>Sidebar</a><a href="#navigation/tabs" data-editor-alias>Course tabs</a></nav>
 <section id="navbar" data-editor-section="navigation/bar" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-navigation-bar">
 <p class="section-path" data-editor-breadcrumb><a href="#navigation/bar" data-editor-alias>Glaze navigation</a></p><div class="section-heading"><h2 id="heading-navigation-bar">Glaze navigation</h2><button type="button" class="section-reset" data-reset-section="navigation/bar">Reset section</button></div>
 <p class="desc section-note">Glaze's own navigation, the same in every Look, in place of the site's.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra · Moodle</p>
@@ -704,7 +704,84 @@
 <label class="check"><input type="checkbox" id="nbar-link-tab"><span>Open in a new tab</span></label>
 <div class="row"><button type="submit" class="primary">Add link</button></div>
 </form>
+<h3>Arranged by mods</h3>
+<p class="desc">A mod may arrange the bar while it runs, never saved. Your own choices still win where you made them.</p>
+<ul id="nbar-mods" class="nb-widgets"></ul>
 <p id="nbar-status" class="desc" role="status" aria-live="polite"></p>
+</section>
+<section id="side-panel" data-editor-section="navigation/sidebar" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-navigation-sidebar">
+<p class="section-path" data-editor-breadcrumb><a href="#navigation/sidebar" data-editor-alias>Sidebar</a></p><div class="section-heading"><h2 id="heading-navigation-sidebar">Sidebar</h2><button type="button" class="section-reset" data-reset-section="navigation/sidebar">Reset section</button></div>
+<p class="desc section-note">The page's own sidebar with your widgets docked under it, at the right edge of the page.</p><p class="site-scope" translate="no">Canvas · Blackboard Ultra</p>
+<label class="check nb-master"><input type="checkbox" data-key="enhance.sidebar"><span>Use the sidebar</span>
+          <span class="desc">On Canvas and Blackboard Ultra: the page's own sidebar with your widgets docked under it, at the right edge on wide screens and a drawer on narrow ones. Where each widget goes is kept for each site and account, on this device. Turn it off to get each site's own sidebar and Glaze's boards back as they were; your dock is kept for when you turn it on again. To start over, choose Reset sidebar for this account in the sidebar's ⋯ menu.</span></label>
+<div class="nb-body" data-sidebar>
+<div class="nb-group"><h3>Where</h3>
+<label class="check"><input type="checkbox" data-key="sidebar.canvas"><span>On Canvas</span></label>
+<label class="check"><input type="checkbox" data-key="sidebar.ultra"><span>On Blackboard Ultra</span></label>
+<p class="desc" id="sidebar-off-head">Show it on these pages. Elsewhere the site's own sidebar stays as it is, without your docked widgets.</p>
+<div id="sidebar-off" class="seg wrap" role="group" aria-labelledby="sidebar-off-head"></div></div>
+<div class="nb-group"><h3 id="sbar-style-head">Style</h3>
+<div class="seg nb-cards" role="radiogroup" aria-labelledby="sbar-style-head">
+<label><input type="radio" name="sidebar.style" value="float"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="ln" x="8" y="10" width="70" height="56" rx="5"/><rect class="bar" x="84" y="6" width="30" height="64" rx="6"/><circle class="it" cx="99" cy="16" r="3"/></svg><b>Floating</b><span class="desc">A glass card over the page, with a little room around it.</span></label>
+<label><input type="radio" name="sidebar.style" value="embed"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="ln" x="8" y="10" width="72" height="56" rx="5"/><path class="bar" d="M87 1h24a8 8 0 0 1 8 8v58a8 8 0 0 1-8 8H87z"/></svg><b>Embedded</b><span class="desc">Set into the edge of the page, like the site's own column.</span></label>
+<label><input type="radio" name="sidebar.style" value="auto"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="ln" x="8" y="10" width="70" height="56" rx="5"/><rect class="bar" x="84" y="6" width="30" height="64" rx="6"/></svg><b>Like the navigation</b><span class="desc">Floating or embedded, as Glaze's navigation is.</span></label>
+</div></div>
+<div class="nb-group"><h3 id="sbar-open-head">When a page opens</h3>
+<div class="seg nb-cards" role="radiogroup" aria-labelledby="sbar-open-head">
+<label><input type="radio" name="sidebar.open" value="auto"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="ln" x="8" y="10" width="70" height="56" rx="5"/><rect class="bar" x="84" y="6" width="30" height="64" rx="6"/><rect class="it" x="90" y="12" width="18" height="4" rx="2"/></svg><b>As you left it</b><span class="desc">Expanded or collapsed, as you last chose.</span></label>
+<label><input type="radio" name="sidebar.open" value="expanded"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="ln" x="8" y="10" width="70" height="56" rx="5"/><rect class="bar" x="84" y="6" width="30" height="64" rx="6"/><rect class="it" x="90" y="12" width="18" height="4" rx="2"/><rect class="it" x="90" y="22" width="18" height="12" rx="2"/></svg><b>Expanded</b><span class="desc">Every page starts with it open.</span></label>
+<label><input type="radio" name="sidebar.open" value="collapsed"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="ln" x="8" y="10" width="94" height="56" rx="5"/><rect class="bar" x="106" y="6" width="8" height="64" rx="4"/></svg><b>Collapsed</b><span class="desc">Every page starts with it folded to a strip.</span></label>
+<label><input type="radio" name="sidebar.open" value="drawer"><svg class="nb-thumb" viewBox="0 0 120 76" aria-hidden="true"><rect class="pg" x="1" y="1" width="118" height="74" rx="8"/><rect class="ln" x="8" y="10" width="104" height="56" rx="5"/><rect class="bar" x="92" y="56" width="20" height="10" rx="5"/></svg><b>Drawer only</b><span class="desc">A button at the edge opens it over the page.</span></label>
+</div></div>
+<div class="nb-group"><h3>Header</h3>
+<label class="field"><span>Name</span><input type="text" data-key="sidebar.title" maxlength="40" placeholder="Sidebar"></label>
+<label class="check"><input type="checkbox" data-key="sidebar.heading"><span>Show its name</span></label>
+<label class="check"><input type="checkbox" data-key="sidebar.jump"><span>Jump to widgets</span>
+          <span class="desc">A button in the header when the page's own content is long.</span></label></div>
+<div class="nb-group"><h3>Layout</h3>
+<div class="row"><label class="field"><span>Width (pixels)</span><input type="range" data-key="sidebar.width" min="288" max="480" step="8"><output data-for="sidebar.width"></output></label></div>
+<p class="desc">Until you drag its edge on a page. Dragging is kept for each site and account.</p>
+<div class="field wide"><span id="sbar-order-label">First</span>
+<div class="seg" role="radiogroup" aria-labelledby="sbar-order-label">
+<label><input type="radio" name="sidebar.order" value="page">This page</label>
+<label><input type="radio" name="sidebar.order" value="widgets">My widgets</label>
+</div></div>
+<div class="field wide"><span id="sbar-page-label">This page</span>
+<div class="seg" role="radiogroup" aria-labelledby="sbar-page-label">
+<label><input type="radio" name="sidebar.page" value="shown">Shown</label>
+<label><input type="radio" name="sidebar.page" value="folded">Folded at first</label>
+<label><input type="radio" name="sidebar.page" value="hidden">Hidden</label>
+</div></div>
+<div class="row">
+            <label class="field"><span>Room for the page (pixels)</span><input type="range" data-key="sidebar.min" min="480" max="1200" step="20"><output data-for="sidebar.min"></output></label>
+            <label class="field"><span>Room for grades (pixels)</span><input type="range" data-key="sidebar.grades" min="600" max="1400" step="20"><output data-for="sidebar.grades"></output></label>
+          </div>
+<p class="desc">When the window can't keep this much beside the sidebar, the sidebar becomes a drawer.</p>
+<label class="check"><input type="checkbox" data-key="sidebar.absorb"><span>Absorb page panels into the sidebar</span>
+          <span class="desc">On Blackboard Ultra, an assignment's Grades and attempts or its Details and information show in This page instead of beside the assignment. They stay the assignment's own: turn this off to keep them where Blackboard puts them.</span></label></div>
+<div class="nb-group"><h3>Appearance</h3>
+<div class="field wide"><span id="sbar-surface-label">Surface</span>
+<div class="seg" role="radiogroup" aria-labelledby="sbar-surface-label">
+<label><input type="radio" name="sidebar.surface" value="glass">Glass</label>
+<label><input type="radio" name="sidebar.surface" value="solid">Solid</label>
+<label><input type="radio" name="sidebar.surface" value="clear">Clear</label>
+</div></div>
+<div class="row" data-sidebar-glass>
+            <label class="field"><span>Blur (pixels)</span><input type="range" data-key="sidebar.blur" min="0" max="40" step="1"><output data-for="sidebar.blur"></output></label>
+            <label class="field"><span>Opacity (%)</span><input type="range" data-key="sidebar.opacity" min="40" max="100" step="1"><output data-for="sidebar.opacity"></output></label>
+          </div>
+<div class="row">
+            <label>Corners <select data-key="sidebar.radius"><option value="auto">As the Look</option><option value="none">Square</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+            <label>Spacing <select data-key="sidebar.density"><option value="auto">As the Look</option><option value="compact">Compact</option><option value="cozy">Cozy</option><option value="comfortable">Comfortable</option></select></label>
+          </div>
+<p class="desc">A Look you share carries the sidebar's style, surface and corners, never where your widgets are.</p></div>
+<div class="nb-group"><h3 id="sbar-todo-head">To Do in the sidebar</h3>
+<div class="seg" role="radiogroup" aria-labelledby="sbar-todo-head">
+<label><input type="radio" name="sidebar.todo" value="follow">Follow page</label>
+<label><input type="radio" name="sidebar.todo" value="all">All courses</label>
+</div>
+<p class="desc">Follow page shows a course's work inside it and everything elsewhere. A choice made in the sidebar itself wins for that account.</p></div>
+</div>
 </section>
 <section id="tabs" data-editor-section="navigation/tabs" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-navigation-tabs">
 <p class="section-path" data-editor-breadcrumb><a href="#navigation/tabs" data-editor-alias>Course tabs</a></p><div class="section-heading"><h2 id="heading-navigation-tabs">Course tabs</h2><button type="button" class="section-reset" data-reset-section="navigation/tabs">Reset section</button></div>
@@ -986,6 +1063,7 @@
             <span class="desc">On Canvas and Blackboard Ultra: a box for your own notes on Canvas's Dashboard or Ultra's Courses page (small, medium or large; web addresses in them become links) and a notes app with folders, formatting, checklists, pictures, attachments and links to your courses' content. Open the app from Ctrl+K, the notes box, a Canvas course card's + menu, or Course notes on a Canvas course's home or an Ultra course's outline. Kept on this device only, for each site and account, in Glaze's own storage, which the school's site can't read. Deleted notes stay in the trash for 30 days; export everything as a zip at any time.</span></label>
 <label class="check"><input type="checkbox" data-key="enhance.widgets"><span>Widgets</span>
             <span class="desc">An agenda of your day, a focus timer, a quote, music, a breathing exercise and a study buddy. On Canvas's Dashboard, Edit layout lets you add, move and resize them, and any of them can float over every Canvas page. On Blackboard Ultra they float on the Courses page and on Glaze's Dashboard (the Institution page, with Better To Do), each with a layout of its own, and any of them can float over every Blackboard page: Edit layout lets you drag them anywhere or move them with the arrow keys; they snap to a grid, the edges and each other, and Alt places them freely.</span></label>
+<p class="desc">Dock widgets in the page's sidebar: <a href="#navigation/sidebar" data-editor-alias>Sidebar settings</a></p>
 <div class="row">
             <label class="field"><span>Focus minutes</span><input type="range" data-key="widgets.work" min="1" max="120" step="1"><output data-for="widgets.work"></output></label>
             <label class="field"><span>Break minutes</span><input type="range" data-key="widgets.rest" min="1" max="60" step="1"><output data-for="widgets.rest"></output></label>
@@ -1089,6 +1167,13 @@
 <label class="check"><input type="checkbox" data-key="enhance.toggles"><span>Document buttons</span>
           <span class="desc">Round buttons at the bottom right of course documents: dark documents, and focus mode (the document alone, with a reading-progress line and reading time; Esc leaves it).</span>
           <span class="desc">On Canvas: a bar above pages, assignments and file previews.</span></label>
+<div class="group" id="document-review"><h3>Document review</h3>
+<label class="check"><input type="checkbox" data-key="docreview.compact"><span>Compact submission header</span></label>
+<label class="check"><input type="checkbox" data-key="docreview.fullscreen"><span>Full-screen document button</span></label>
+<label class="check"><input type="checkbox" data-key="docreview.focus"><span>Focus document button</span></label>
+<label class="check"><input type="checkbox" data-key="docreview.hideBars"><span>Hide Glaze bars in focus</span></label>
+<label class="check"><input type="checkbox" data-key="docreview.remember"><span>Remember document focus for this session</span></label>
+</div>
 </section></div>
 <div id="panel-sharing" role="tabpanel" aria-labelledby="tab-sharing" data-editor-panel="sharing" hidden><nav class="section-links" aria-label="Sections"><a href="#sharing/sessions" data-editor-alias>Share sessions</a><a href="#sharing/relay" data-editor-alias>Relay</a><a href="#sharing/calendar" data-editor-alias data-gcal-link hidden>Google Calendar sync</a></nav>
 <section id="sharing-sessions" data-editor-section="sharing/sessions" data-sites="Extension only" aria-labelledby="heading-sharing-sessions">

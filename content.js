@@ -56,7 +56,7 @@
   let accentInk = null; // dark text Glaze itself puts on accent fills; the sweep leaves it alone
   let enhanced = {};
   // Each site's theme, shared motion and surfaces; Canvas and Ultra also share tabs and apps.
-  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css', 'features/coursetabs.css'], 'features/surfaces.css'];
+  const SHEETS = [...ultra ? ['theme.css', 'motion.css', 'extras.css'] : [`${site}.css`, 'motion.css'], ...moodle ? [] : ['features/apps.css', 'features/coursetabs.css', 'features/sidebar.css'], 'features/surfaces.css'];
   // What only one site does: its part puts its own over these (the site's part, below). Moodle's: nothing.
   const no = () => {};
   const X = { record: () => Promise.resolve(), planner: no, tagCards: no, tagExtras: no, lift: no, gate: no, stop: no, renderProgress: no,
@@ -74,8 +74,8 @@
   // doesn't, and stays as it is.
   // Moodle's: its page id and layout on <body>.
   const isCanvas = () => !!document.querySelector(moodle ? 'body[id^="page-"][class*="pagelayout-"]' : '#application.ic-app');
-  // A same-host tool can carry Canvas's head marker too; confirm its wrapper before styling a frame.
-  if (!ultra && window.top !== window) {
+  // Other frames need a wrapper check; our named course tabs theme while the parser is still in the head.
+  if (!ultra && !solo) {
     await new Promise(onBody);
     if (!isCanvas()) return;
   }
@@ -85,7 +85,7 @@
   // next getBoundingClientRect would force a reflow, once per element.
   // A full pass is O(elements) getComputedStyle calls, so only the first pass looks at everything;
   // after that we only look at the subtrees the mutation observer reports.
-  // ponytail: 20k-element cap on the full pass; drop it if a real page ever needs one that big.
+  // ponytail: 20k-element cap per pass; drop it if a real page ever needs one that big.
   const MAX_FULL = 20000;
   // Thin, wide images in course content are decorative dividers drawn for a white page; on a dark
   // theme they glow. Their size is only known once loaded.
@@ -207,8 +207,11 @@
     const els = [];
     for (const r of roots) {
       els.push(r);
-      for (const d of r.querySelectorAll('*')) els.push(d);
-      if (els.length > MAX_FULL) break;
+      for (const d of r.querySelectorAll('*')) {
+        if (els.length >= MAX_FULL) break;
+        els.push(d);
+      }
+      if (els.length >= MAX_FULL) break;
     }
     sweepEls(els);
   };
@@ -270,14 +273,14 @@
   // Moodle's: <body>'s course (1 is the site) under its theme sheet's root.
   const canvasCourseKey = (id = moodle ? document.body?.className.match(/\bcourse-(?!1\b)(\d+)/)?.[1] : canvasCourseId()) => id ? `${site}:${moodle ? document.querySelector('link[href*="/theme/styles"]')?.href.split('/theme/')[0] : location.origin}/${id}` : null;
   const recordCourses = () => {
+    if (window.top !== window) return; // account-wide work belongs to the page around the course tabs
     if (!ultra) {
-      if (canvasRecorded || !solo) return;
+      if (canvasRecorded) return;
       canvasRecorded = true;
       if (moodle) return moodleIn().then((m) => m.record()).catch(() => { canvasRecorded = false; });
       X.record().catch(() => { canvasRecorded = false; });
       return;
     }
-    if (!solo) return;
     X.record();
   };
   // What's left to do in the next seven days (GZ_DUE_WEEK), from Ultra's own To Do list, or on Canvas from
@@ -340,10 +343,7 @@
   };
   // Moodle's extras, on first use: its data read (lib/moodle.js), then asked of the page's own Moodle.
   const moodleIn = () => need('lib/moodle.js', () => globalThis.GZ_MOODLE).then(() => need('features/moodle.js', () => globalThis.GZ_MOODLE_PAGE)).then(() => GZ_MOODLE_PAGE);
-  // The page's language: its catalogue (i18n/<lang>.js) is asked for as the page starts, and nothing is on an
-  // English page. Until it is in, the extras that write words wait (flush), so no English turns into German in
-  // front of you; the theme itself never waits. It is asked for once per page: if that fails, the page stays in
-  // English for good, since switching language under the student later would be worse than not switching.
+  // Load the page's catalogue once. Text extras wait for it; the theme doesn't. A failure keeps English for this page.
   let wordsFor = null; // the catalogue the words are ready for ('' for none)
   let wordsLate = false; // a pass skipped its extras while waiting: the next one covers the whole page
   const wordsIn = new Set(); // what was drawn outside the extras' wait (the keyboard help) redraws itself in the words
@@ -370,9 +370,9 @@
   // (content-ultra.js). Absolute URLs: Ultra's <base href> points at its CDN.
   // Canvas's REST API is the same thing under /api/v1 (capi): its string-id JSON keeps long ids exact, and an
   // older Canvas starts a response with `while(1);`.
-  const api = (path, base = '/learn/api/v1', accept = 'application/json') => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', redirect: 'error', headers: { accept } })
-    .then((r) => (r.ok ? r.text() : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
-  const capi = (path) => api(path, '/api/v1', 'application/json+canvas-string-ids');
+  const api = (path, base = '/learn/api/v1', accept = 'application/json', reply) => fetch(`${location.origin}${base}${path}`, { credentials: 'same-origin', redirect: 'error', headers: { accept } })
+    .then((r) => (r.ok ? (reply?.(r), r.text()) : Promise.reject(r.status))).then((text) => JSON.parse(text.replace(/^while\(1\);/, '')));
+  const capi = (path, reply) => api(path, '/api/v1', 'application/json+canvas-string-ids', reply);
   // The Canvas course this page is in (/courses/:id/...), or undefined.
   const canvasCourseId = () => location.pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1];
 
@@ -456,7 +456,7 @@
     // Keep native-parent removals for remount/teardown; ignore owned UI internals.
     records = records.filter((r) => !globalThis.GZ_LIGHT?.owns(r) && !r.target.closest?.('.gz-game,.gz-game-dialog,.gz-game-world') && !(ultra && r.target.closest?.('[id^="gz-"]')));
     if (!records.length) return;
-    X.lift();
+    X.lift(records);
     for (const r of records) {
       if (ultra && r.attributeName === 'aria-checked') {
         if (r.oldValue !== 'true' && r.target.getAttribute('aria-checked') === 'true' && Date.now() <= (reviewing.get(r.target) || 0)) { reviewing.delete(r.target); celebrate(r.target); }
@@ -843,11 +843,15 @@
   // Expired copies go; with backup off, all copies go. Top frame only.
   const tidyDrafts = () => {
     if (window.top !== window) return;
-    // Only drafts are read where keys can be listed.
-    local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => s.get(ks?.filter((k) => k.startsWith('draft:')) || null, (all) => {
+    const sweep = (s, all) => {
       if (!Object.keys(all || {}).some((k) => k.startsWith('draft:'))) return;
       need('lib/drafts.js', () => globalThis.GZ_DRAFTS).then(() => { const old = GZ_DRAFTS.stale(all, Date.now(), settings.enhance.drafts); if (old.length) s.remove(old); }, () => {});
-    })).catch(() => {}));
+    };
+    local((s) => Promise.resolve(s.getKeys?.()).catch(() => null).then((ks) => {
+      if (ks) return s.get(ks.filter((k) => k.startsWith('draft:')), (all) => sweep(s, all));
+      // Without key listing everything is read, local artwork too: at most once a day, so old copies still go.
+      s.get('draftsSwept', (r) => { if (!(r?.draftsSwept > Date.now() - 864e5)) { s.set({ draftsSwept: Date.now() }); s.get(null, (all) => sweep(s, all)); } });
+    }).catch(() => {}));
   };
 
   // ---- download all (Extras) -------------------------------------------------------------------
@@ -892,13 +896,16 @@
     try { chrome.storage.sync.set({ enhance: settings.enhance }); } catch { /* extension reloaded under the tab */ }
   };
   const syncDocTools = () => {
+    // Read-only review is independently lazy, including when the reading tools are off.
+    if (observer && /\/(?:student-submission-view|submissions\/\d+)\/?$/.test(location.pathname)) need('features/docreview.js', () => globalThis.GZ_DOCREVIEW).then(() => GZ_DOCREVIEW.sync(!!observer), () => {});
+    else globalThis.GZ_DOCREVIEW?.sync(false);
     globalThis.GZ_KEYS?.sync();
     if (globalThis.GZ_DOCS) return GZ_DOCS.sync();
     if (observer && ((ultra && document.querySelector(PREVIEWS)) || (solo && settings.enhance.toggles && document.querySelector(`${DOC}, ${PREVIEWS}`)))) {
       need('features/docs.js', () => globalThis.GZ_DOCS).then(() => GZ_DOCS.sync(), () => {});
     }
   };
-  // Here, so it is first to see the key: Esc leaves focus mode, and the site doesn't also act on it.
+  // Reading focus gets Escape before the site.
   addEventListener('keydown', (e) => globalThis.GZ_DOCS?.esc(e), true);
 
   // ---- keyboard shortcuts (Extras) ------------------------------------------------------------
@@ -1316,8 +1323,10 @@
   const armFlip = () => {
     if (onSchedule() || globalThis.GZ_SCHEDULE) need('features/schedule.js', () => globalThis.GZ_SCHEDULE).then(() => GZ_SCHEDULE.arm({ auto: onSchedule, reapply }), () => {});
     // The pointer, Look rotation and this page's stickers (features/lookx.js) load once one is in use.
+    if (globalThis.GZ_LOOKX) return GZ_LOOKX.sync();
     const k = `stk:${location.origin}${location.pathname.replace(/(.)\/+$/, '$1')}`, x = settings.extras;
-    local((l) => l.get(k, (r) => { if (globalThis.GZ_LOOKX || links.length && (x.cursor !== 'off' || x.rotate !== 'off' || x.stickers && r?.[k]?.length)) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
+    if (!links.length || !x.stickers && x.cursor === 'off' && x.rotate === 'off') return;
+    local((l) => l.get(k, (r) => { if (x.cursor !== 'off' || x.rotate !== 'off' || x.stickers && r?.[k]?.length) need('features/lookx.js', () => globalThis.GZ_LOOKX).then(() => GZ_LOOKX.sync(), () => {}); }));
   };
   const clearSettings = () => {
     for (const k of vars) html.style.removeProperty(k);
@@ -1470,9 +1479,9 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   // Wearing or taking off a Look can change the nav's layout (GZ_CTX.parts).
   document.addEventListener('glaze:parts', () => { if (links.length) X.syncNav(); });
 
-  // The helpers a file loaded by need() may use (features/*.js): this frame's, through one name. The part's are asked
-  // of it when called, so a part that comes late still answers.
+  // This frame's helpers for lazy features; site helpers resolve when called.
   globalThis.GZ_CTX = Object.freeze({ need, t, locale, capi, local, canvasCourseId, celebrate, moment, gradeMoment, settings: () => settings, nav: () => worn.nav, repaintNav: (src) => X.paintNav(worn.nav, src), on: () => !!observer && !!chrome.runtime?.id,
+    account: () => (site === 'canvas' ? X.ctx.profile().then((p) => String(p.id)) : X.ctx.me()),
     // The palette, the keys, the course menu, the previews and Download all (W0c).
     site, wordsIn, typing, keyOn, make, dueWeek, moodleIn, courseId, toggleOf,
     nickOf: (cid) => X.nickOf(cid), courseList: () => courseList, courseColors, varText, cardUI,
@@ -1487,14 +1496,23 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
 
   // Independent card/widget stores aren't theme settings; don't transfer them on every page load.
   let lookX;
-  const load = () => new Promise((res) => {
-    try { chrome.storage.sync.get([...Object.keys(GZ_DEFAULTS), 'lookX'], (raw) => { lookX = chrome.runtime.lastError ? undefined : raw?.lookX; res(GZ_SANITIZE(chrome.runtime.lastError ? {} : raw)); }); }
-    catch { res(GZ_SANITIZE()); }
-  }).then((s) => {
-    // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
-    try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
-    return s;
-  });
+  let settingsRead = 0, settingsPending;
+  const load = () => {
+    const n = ++settingsRead;
+    return (settingsPending = Promise.all([new Promise((res) => {
+      try { chrome.storage.sync.get([...Object.keys(GZ_DEFAULTS), 'lookX'], (raw) => res(chrome.runtime.lastError ? {} : raw)); }
+      catch { res({}); }
+    }), new Promise((res) => {
+      try { chrome.storage.local.get('freshDefaults', (r) => res(r?.freshDefaults?.fresh === true)); } catch { res(false); }
+    })]).then(([raw, fresh]) => {
+      if (n !== settingsRead) return settingsPending;
+      lookX = raw?.lookX;
+      const s = GZ_SANITIZE(raw, fresh);
+      // Not the nicknames: they're Ultra's, and this tab's sessionStorage is the page's to read too.
+      try { sessionStorage.setItem(KEPT, JSON.stringify({ ...s, courses: { ...s.courses, names: {} } })); } catch { /* blocked or full */ }
+      return s;
+    }));
+  };
   // The previous palette covers storage latency, avoiding a dark flash with a light look.
   const KEPT = 'gz-settings';
   try { const kept = sessionStorage.getItem(KEPT); if (kept) settings = GZ_SANITIZE(JSON.parse(kept)); } catch { /* none */ }
@@ -1541,13 +1559,13 @@ body.mce-content-body :is(hr, table, th, td) { border-color: var(--gz-line-stron
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (changes.lookX && area === 'sync') lookX = changes.lookX.newValue;
-    if (area === 'local' && Object.keys(changes).some((k) => /^mod(s$|:|Dev$|Order$|sBlocklist$)/.test(k))) modsIn(true);
+    if (area === 'local' && Object.keys(changes).some((k) => /^mod(s$|:|Dev$|Order$|sBlocklist$|NavLayout:)/.test(k))) modsIn(true);
     else if (changes.lookX && (area !== 'sync' || !changes.enabled)) partsIn();
     if (area === 'local' && changes.seenCourses) {
       courseList = changes.seenCourses.newValue || {};
       reapply();
     }
-    if (area !== 'sync' || isPreview || !Object.keys(changes).some((k) => k in settings || k in GZ_SPEC)) return;
+    if (isPreview || !(area === 'local' && changes.freshDefaults) && (area !== 'sync' || !Object.keys(changes).some((k) => k in settings || k in GZ_SPEC))) return;
     load().then((s) => {
       const was = settings.enabled && links.length > 0;
       settings = s;

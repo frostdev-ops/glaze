@@ -132,7 +132,7 @@ test('a course frame follows the parent navigation placement and disconnects whe
     keepClear() {}, home: () => ({ at: 'above', ok: false, put: () => { connected = true; } }),
     MutationObserver: class { constructor(fn) { this.fn = fn; observer = this; } observe() { this.active = true; } disconnect() { this.active = false; } },
     document: { addEventListener() {}, removeEventListener() {} }, addEventListener() {}, removeEventListener() {},
-    onScroll() {}, onLeave() {}, onHide() {}, lay() {}, onResize() {}, measureRow() {}, navRoom() {}, ctx: { site: 'ultra' }, chrome: { runtime: {} },
+    onScroll() {}, onLeave() {}, onHide() {}, onShow() {}, lay() {}, onResize() {}, measureRow() {}, navRoom() {}, ctx: { site: 'ultra' }, chrome: { runtime: {} },
   });
   const api = vm.runInContext(part(src, '  const navHolds =', '  // From content-ultra.js')
     + part(src, '  const flag =', '  // ---- the strip')

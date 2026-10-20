@@ -69,7 +69,7 @@ const page = ({ site = 'ultra', todo = true, local = {}, failLoad = false } = {}
   return { ui, doc, c, settings, loads, clock, filled, stopped, wrote, woke, visible, local, bbTodo, panel: () => doc.getElementById('gz-panel') };
 };
 // Only the declared tile is on: the built-in ones have tests of their own.
-const ONLY_PET = { widgetLayout: { todo: true, tiles: [...W.TILES.map((id) => ({ id, on: false })), { id: 'pet', on: true }] } };
+const ONLY_PET = { widgetLayout: { todo: true, canvasTodo: true, tiles: W.TILES.map((id) => ({ id, on: id === 'pet' })) } };
 
 test("Ultra: the panel goes first in the Courses page's To Do column, and comes back when Ultra redraws it", async () => {
   const p = page({ local: structuredClone(ONLY_PET) });

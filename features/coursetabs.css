@@ -73,6 +73,11 @@ html[data-gz-motion="off"] #gz-ctabs-frames > .gz-ctabs-pic, html[data-gz-motion
 #gz-ctabs .gz-ctab[data-loading]::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: 2px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, transparent, var(--gz-course, var(--gz-accent)), transparent) 0 0 / 40% 100% no-repeat; animation: gz-ctab-load 0.9s linear infinite; }
 @keyframes gz-ctab-load { from { background-position: -40% 0; } to { background-position: 140% 0; } }
 html[data-gz-motion="off"] #gz-ctabs .gz-ctab[data-loading]::before { animation: none; background: var(--gz-course, var(--gz-accent)); opacity: 0.5; }
+/* Canvas: a frame's next page loading behind the one on screen (features/coursetabs.js turnTo): a light sweeping along the
+   page's top edge, from a beat in (a page that comes at once shows none). */
+#gz-ctabs-frames[data-turning]::after { content: ""; position: absolute; z-index: 3; top: var(--gz-navbar-top, 0px); inset-inline: var(--gz-navbar-left, 0px) 0; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--gz-accent, #6fdcff), transparent) 0 0 / 30% 100% no-repeat; animation: gz-ctab-load 1s linear infinite, gz-ctab-beat 0.01s 0.15s both; }
+@keyframes gz-ctab-beat { from { opacity: 0; } to { opacity: 1; } }
+html[data-gz-motion="off"] #gz-ctabs-frames[data-turning]::after { animation: none; background: var(--gz-accent, #6fdcff); opacity: 0.5; }
 html[data-gz-ctab-framed] :is(#gz-float .gz-w, #gz-float[data-stack]) { z-index: 1260; }
 /* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
 html[data-gz-ctab-framed] :is(#gz-stickers, #gz-read, #gz-doc-tools, #gz-peek, #gz-cm) { visibility: hidden !important; }

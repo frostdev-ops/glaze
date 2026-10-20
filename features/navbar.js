@@ -14,13 +14,14 @@
 // A site's adapter (GZ_NAVBAR_<SITE>(X), below for Ultra, features/navbar-<site>.js for the others):
 //   read() -> [{ id, label, href, active, badge, panel }]   the site's own items (lib/navlayout.js's vocabulary)
 //   go(id) -> bool             open one through the site's own link     brand() -> { src, name }    avatar() -> url
-//   home() -> id               the logo's item                          main() -> the page's main element
+//   home() -> id               the logo's item                          main(doc) -> the main element of doc (the page, or the course tab's frame on screen)
 //   observe(fn), unobserve()   call fn when the site's nav changes
 //   inCourse() -> bool         (optional) a course is open
 //   menu(doc) -> { name, color, items: [{ key, label, href, active, badge, tab }] } | null   (optional) the open course's own
 //                              menu, read from doc (the page, or the course tab's frame on screen)
 //   panel(id) -> Promise<{ title, filter, sections: [{ label, rows: [{ label, sub, href, color, icon, badge, current,
 //                run, tab }] }], foot: [rows], empty } | null>   (optional) an item marked panel, drawn as Glaze's panel
+//   current(href) -> bool      (optional) a panel link's current state, including cached and already drawn rows
 //   run(what)                  (optional) a panel row's action that isn't a link (signing out)
 var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   const X = globalThis.GZ_CTX, M = GZ_NAVBAR, L = GZ_NAV_LAYOUT, N = GZ_NAV_ITEMS, html = document.documentElement;
@@ -38,6 +39,16 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     svg.append(path); return svg;
   };
   const get = (keys) => new Promise((res) => { try { chrome.storage.sync.get(keys, (r) => res(chrome.runtime.lastError ? {} : r || {})); } catch { res({}); } });
+  let itemRead = 0;
+  const readItems = () => {
+    const n = ++itemRead;
+    return Promise.all([get(['navbarItems', 'navItems']), new Promise((res) => {
+      try { chrome.storage.local.get('freshDefaults', (r) => res(r?.freshDefaults?.fresh === true)); } catch { res(false); }
+    })]).then(([r, fresh]) => {
+      if (n !== itemRead) return;
+      prefs = M.initial(r.navbarItems, r.navItems, fresh); legacy = r.navItems ? N.clean(r.navItems) : null; sig = ''; sync();
+    });
+  };
   const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } });
   const plain = (e) => !e.button && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
   const wide = () => matchMedia('(min-width: 900px)').matches;
@@ -48,6 +59,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
   let cmenu = null, panel = '', panelFrom = null, panelTurn = 0;
   let wx = null, docked = false; // Glaze's widgets (features/navbar-widgets.js), once any is on; the dock open over the page
   const skipMain = new Set(); // Elements given a temporary focus target by Skip to content.
+  const mainAt = () => { try { return site.main(tabsApi()?.doc?.() || document); } catch { return site.main(); } };
   const panels = new Map(); // id -> { at, data }: a panel's rows, kept a minute
   const listeners = new Map(), mods = new Map(); // event -> Set(fn); owner -> Map(id -> item)
   const emit = (event, data) => { for (const fn of listeners.get(event) || []) { try { fn(data); } catch { /* one listener's error isn't the bar's */ } } };
@@ -71,6 +83,17 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       .map((x, at) => ({ id: `cm:${at}`, key: String(x.key || ''), label: x.label.replace(/\s+/g, ' ').trim().slice(0, 60), href: x.href, active: !!x.active, tab: x.tab === true, badge: typeof x.badge === 'string' || typeof x.badge === 'number' ? String(x.badge).slice(0, 4) : '', icon: M.courseIcon(x.key, x.label), course: true }))
       .filter((x) => x.label);
     return items.length ? { name: String(m.name || '').replace(/\s+/g, ' ').trim().slice(0, 80), color: /^#[0-9a-f]{3,8}$/i.test(m.color || '') ? m.color : '', items } : null;
+  };
+
+  // A mod's layout the bar wears (features/mods.js): said quietly beside Customize navigation, with the way back.
+  const arranged = () => globalThis.GZ_MODS?.arranger?.() || null;
+  const arrangedRow = (role) => {
+    const a = arranged();
+    if (!a) return [];
+    const b = part(make('button', { type: 'button', className: 'row customize' }, icon('layers'), make('span', { textContent: `${t('Arranged by {name}', { name: a.name })} · ${t('Use my own')}` })), 'row arranged');
+    b.dataset.act = 'nav-own'; b.dataset.mod = a.id;
+    if (role) b.setAttribute('role', role);
+    return [b];
   };
 
   // ---- drawing --------------------------------------------------------------------------------------------------------
@@ -170,6 +193,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     e.dataset.id = item.id;
     part(e, item.active ? `${partName} active` : partName);
     if (item.active) e.setAttribute('aria-current', 'page');
+    if (item.by) { const from = t('From {name}', { name: item.by }); e.setAttribute('aria-description', from); e.setAttribute('title', from); }
     return e;
   };
   const badgeOf = (item) => (settings().badges !== false && item.badge ? item.badge : '');
@@ -177,7 +201,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     const e = node(item, 'item', 'item');
     const b = badgeOf(item);
     put(e, icon(item.icon), label(item.label, i), b ? badge(b) : null);
-    e.dataset.tip = b ? `${item.label} · ${b}` : item.label;
+    e.dataset.tip = [item.label, b, item.by].filter(Boolean).join(' · ');
     return e;
   };
   const initials = (name) => [...(name.match(/\p{L}[\p{L}'’-]*/gu) || [])].filter((w, i, a) => i === 0 || i === a.length - 1).map((w) => [...w][0].toUpperCase()).join('') || [...name.trim()][0] || '?';
@@ -256,7 +280,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     el.tdock.setAttribute('aria-expanded', String(docked));
   };
   const render = () => {
-    const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tabs, .sheet, .menu'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
+    const active = root.activeElement, pane = active?.closest('.rail, .topbar, .tsub, .tabs, .sheet, .menu'), focused = active?.dataset?.id, focusedTab = active?.dataset?.cid && `${active.dataset.act}|${active.dataset.cid}`;
+    const focusedCourse = focused?.startsWith('cm:') && active.href;
     const tabAt = focusedTab ? [...pane.querySelectorAll('.ctab-go')].findIndex((e) => e.dataset.cid === active.dataset.cid) : -1, wasMenu = menu;
     brandInto(el.brand); brandInto(el.tbrand);
     // The rail: groups, a divider between, the course tabs, the active marker that glides from item to item.
@@ -342,7 +367,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (model.signout) sheetRows.push(row(model.signout));
     const custom = part(make('button', { type: 'button', className: 'row customize' }, icon('settings'), make('span', { textContent: t('Customize navigation') })), 'row customize');
     custom.dataset.act = 'customize';
-    sheetRows.push(custom);
+    sheetRows.push(custom, ...arrangedRow());
     el.sheet.replaceChildren(...sheetRows);
     if (menu) menuTo('', false);
     for (const e of root.querySelectorAll('[data-id]')) if (byId(e.dataset.id)?.panel) { e.setAttribute('aria-haspopup', 'dialog'); e.setAttribute('aria-expanded', String(panel === e.dataset.id)); }
@@ -351,7 +376,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     if (wasMenu && lay.place === 'top' && wide() && !(wasMenu === 'more' ? el.tmore : el.tacc).hidden) menuTo(wasMenu, false);
     const restore = active === el.brand || active === el.tbrand ? active
       : focusedTab ? pane?.querySelector(`[data-act="${focusedTab.split('|')[0]}"][data-cid="${CSS.escape(focusedTab.split('|')[1])}"]`)
-        : focused ? pane?.querySelector(`[data-id="${CSS.escape(focused)}"]:not(.brand)`) : active?.classList.contains('more') ? el.more : active?.dataset.act === 'customize' ? pane?.querySelector('[data-act="customize"]') : null;
+        : focusedCourse ? [...(pane?.querySelectorAll('[data-id]') || [])].find((e) => e.dataset.id.startsWith('cm:') && e.href === focusedCourse)
+          : focused ? pane?.querySelector(`[data-id="${CSS.escape(focused)}"]:not(.brand)`) : active?.classList.contains('more') ? el.more : active?.dataset.act === 'customize' ? pane?.querySelector('[data-act="customize"]') : null;
     const nearby = tabAt >= 0 ? [...pane.querySelectorAll('.ctab-go')].at(Math.min(tabAt, pane.querySelectorAll('.ctab-go').length - 1)) || pane.querySelector('a, button') : null;
     const target = restore || nearby || (active?.isConnected ? active : sheetOpen ? el.sheet.querySelector('a[href], button:not([disabled])') : wasMenu ? el.menu.querySelector('a, button') || (wasMenu === 'more' ? el.tmore : el.tacc) : null);
     if (target?.getClientRects().length) target.focus({ preventScroll: true });
@@ -524,7 +550,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       : [model.account && entry({ ...model.account, label: t('Account') }), model.signout && entry(model.signout)].filter(Boolean);
     const custom = make('button', { type: 'button', className: 'row customize' }, icon('settings'), make('span', { textContent: t('Customize navigation') }));
     custom.dataset.act = 'customize'; custom.setAttribute('role', 'menuitem');
-    el.menu.replaceChildren(...items, sep(), custom);
+    el.menu.replaceChildren(...items, sep(), custom, ...arrangedRow('menuitem'));
     el.menu.setAttribute('aria-label', which === 'more' ? t('More') : t('Your account'));
     el.menu.hidden = false;
     const r = from.getBoundingClientRect(), w = el.menu.offsetWidth;
@@ -576,10 +602,10 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     }
   };
   const panelRow = (r) => {
-    const link = r.href && !r.run;
-    const e = part(make(link ? 'a' : 'button', { className: 'row' }), r.current ? 'panel-row active' : 'panel-row');
+    const link = r.href && !r.run, current = link && site.current ? site.current(r.href) : r.current;
+    const e = part(make(link ? 'a' : 'button', { className: 'row' }), current ? 'panel-row active' : 'panel-row');
     if (link) { e.href = r.href; if (r.tab || !sameSite(r.href)) { e.target = '_blank'; e.rel = 'noopener noreferrer'; } } else { e.type = 'button'; e.dataset.run = r.run || ''; }
-    if (r.current) e.setAttribute('aria-current', 'page');
+    if (current) e.setAttribute('aria-current', 'page');
     const lead = r.color ? part(make('span', { className: 'dot', textContent: mark(r.label) }), 'course-dot') : icon(M.PICKS.includes(r.icon) ? r.icon : 'chevron');
     if (r.color) lead.style.setProperty('--c', r.color);
     const text = make('span', { className: 'text' }, make('span', { className: 'name', textContent: r.label }), r.sub ? make('small', { textContent: r.sub }) : null);
@@ -653,6 +679,8 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 
   // ---- acting ---------------------------------------------------------------------------------------------------------
   const glaze = (what, e) => {
+    // "Use my own": this mod's layouts stay off until the student lets it arrange again (Settings → Navigation).
+    if (what === 'nav-own') { const id = e?.target?.closest?.('[data-mod]')?.dataset.mod || arranged()?.id; if (id && /^[a-z2-7]{16}$/.test(id)) try { chrome.storage.local.set({ [`modNavLayout:${id}`]: false }); } catch { /* reloaded */ } return; }
     // Settings opens as a page of the site, beside the bar (features/settingspage.js); the editor's preview keeps a tab.
     if (what === 'settings' || what === 'customize') {
       const tab = () => send(what === 'customize' ? { type: 'glaze:sessions-open', section: 'navigation/bar' } : 'options');
@@ -719,7 +747,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
       else if (path.includes(el.more)) { e.preventDefault(); sheetTo(!sheetOpen); }
       else if (path.includes(el.tmore)) { e.preventDefault(); menuTo(menu === 'more' ? '' : 'more'); }
       else if (path.includes(el.tacc)) { e.preventDefault(); if (model.account?.panel && site.panel) panelTo(panel === 'profile' ? '' : 'profile', el.tacc); else menuTo(menu === 'account' ? '' : 'account'); }
-      else if (path.includes(el.skip)) { e.preventDefault(); const main = site.main(); if (main) { if (!main.hasAttribute('tabindex')) { skipMain.add(main); main.tabIndex = -1; } main.focus(); } }
+      else if (path.includes(el.skip)) { e.preventDefault(); const main = mainAt(); if (main) { if (!main.hasAttribute('tabindex')) { skipMain.add(main); main.tabIndex = -1; } main.focus(); } }
       return;
     }
     const act = target.dataset.act;
@@ -735,7 +763,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     emit('navigate', { id: item.id });
     // The course's own pages: through the course tabs where they run, so a course tab's frame follows.
     if (item.course) { if (plain(e) && !item.tab) { e.preventDefault(); openHere(item.href); } sheetTo(false); if (!lay.open) peekTo(false); return; }
-    if (item.owner) { if (!item.href) e.preventDefault(); mods.get(item.owner)?.get(item.id)?.select?.(); }
+    if (item.owner) { if (!item.href) e.preventDefault(); if (e.isTrusted) mods.get(item.owner)?.get(item.id)?.select?.(); }
     else if (item.action) { e.preventDefault(); glaze(item.action, e); }
     // The site's own items go through its own links, so its router (and its trays) handle them as it would.
     else if (item.native && plain(e)) { e.preventDefault(); goNative(item.id); }
@@ -811,17 +839,32 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Orphaned (orphaned() above): the bar stays as it is drawn, rather than leave the page without any navigation.
     if (host && !chrome.runtime?.id) return;
     if (!on()) { stop(); return; }
-    if (!read) { read = true; get(['navbarItems', 'navItems']).then((r) => { prefs = M.clean(r.navbarItems); legacy = r.navItems ? N.clean(r.navItems) : null; sig = ''; sync(); }); }
+    if (!read) { read = true; readItems(); }
     if (applied !== settings()) { rail = null; peekTo(false); applied = settings(); }
     if (rail && rail === settings().rail) rail = null;
     if (host && !host.isConnected) stop();
     if (!host) mount();
+    // A mod's nav stands in for the bar (features/mods.js): the bar hides, and still keeps the page's room.
+    const stands = !!globalThis.GZ_MODS?.navStands?.();
+    if (stands !== host.hasAttribute('data-replaced')) {
+      host.toggleAttribute('data-replaced', stands);
+      if (stands) { menuTo('', false); sheetTo(false); dockTo(false, false); tip(null); }
+    }
     host.setAttribute('dir', (html.dir || document.body?.dir) === 'rtl' ? 'rtl' : 'ltr');
     host.dataset.motion = html.getAttribute('data-gz-motion') || '';
     host.toggleAttribute('data-footer', html.hasAttribute('data-gz-footer'));
     const api = tabsApi();
+    if (skipMain.size) {
+      const main = mainAt();
+      for (const old of skipMain) if (old !== main) { if (old.getAttribute('tabindex') === '-1') old.removeAttribute('tabindex'); skipMain.delete(old); }
+    }
+    if (panel && site.current) for (const e of el.panel.querySelectorAll('a.row')) {
+      const current = site.current(e.href); part(e, current ? 'panel-row active' : 'panel-row');
+      if (current) e.setAttribute('aria-current', 'page'); else e.removeAttribute('aria-current');
+    }
     cmenu = readMenu();
-    lay = M.layout(settings(), { width: innerWidth, course: inCourse(), rail, tabs: !!api, menu: !!cmenu });
+    const by = arranged(), place = { left: 'rail', top: 'top' }[by?.place];
+    lay = M.layout(place ? { ...settings(), place } : settings(), { width: innerWidth, course: inCourse(), rail, tabs: !!api, menu: !!cmenu });
     rows = lay.tabs && api ? api.rows() : [];
     // A course tab shown over the page is in Courses, whatever the page under it is.
     const framed = !!globalThis.GZ_CTABS?.showing?.() && globalThis.GZ_CTABS.showing() !== 'page'; // (not Canvas's page frame: the page in it says)
@@ -841,16 +884,14 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     wx?.set(wants);
     const docks = [...(globalThis.GZ_MODS?.rail() || []), ...(globalThis.GZ_MODWIDGETS?.rail() || [])];
     for (const d of docks) if (d.el.parentNode !== el.dock) el.dock.append(d.el);
-    const next = JSON.stringify([model, rows, lay, cmenu, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url, !!wx, docks.map((d) => d.key), wide()]);
+    const next = JSON.stringify([model, rows, lay, cmenu, settings(), site.brand(), site.avatar?.(), X.locale(), X.settings().nav?.li, logo.url, by, !!wx, docks.map((d) => d.key), wide()]);
     if (next !== sig) { sig = next; render(); emit('change', view()); } else if (measured !== geometry()) layout();
   };
   const queue = () => { if (!queued && !sleeping) queued = requestAnimationFrame(() => { queued = 0; sync(); }); };
   chrome.storage.onChanged.addListener((c, area) => {
+    if ((area === 'local' && c.freshDefaults) || (area === 'sync' && (c.navbarItems || c.navItems))) readItems();
     if (area === 'local' && logo.id && c[`navLogo:${logo.id}`]) { clearLogo(); sig = ''; if (host) sync(); }
     if (area !== 'sync' || !chrome.runtime?.id) return;
-    if (c.navbarItems) prefs = M.clean(c.navbarItems.newValue);
-    if (c.navItems) legacy = c.navItems.newValue ? N.clean(c.navItems.newValue) : null;
-    if (c.navbarItems || c.navItems) { sig = ''; if (host) sync(); }
   });
   addEventListener('resize', () => { if (!host) return; measured = ''; tip(null); menuTo('', false); placePanel(); if (!wide()) peekTo(false); else sheetTo(false); sync(); });
   addEventListener('popstate', () => { if (host) { panelTo('', null, false); queue(); } });
@@ -869,7 +910,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     place: lay?.place || 'none', style: lay?.style || 'float', course: inCourse(), menu: cmenu ? { name: cmenu.name, items: cmenu.items.map(strip) } : null, panel } : null);
   const OWNER = /^[a-z0-9][a-z0-9_-]{0,47}$/, ID = /^[a-z][a-z0-9-]{0,31}$/;
   const SLOTS = ['top', 'bottom'];
-  // A mod's item, checked: a name, one of the bar's icons, an https address or the page's own, a short badge, and a
+  // A mod's item, checked: a name, one of the bar's icons, an address of this site only, a short badge, and a
   // group of the bar or a slot. Anything else refuses (null).
   const check = (owner, raw) => {
     if (!OWNER.test(owner) || !raw || typeof raw !== 'object' || !ID.test(raw.id) || typeof raw.label !== 'string') return null;
@@ -878,13 +919,14 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     let href = '';
     if (raw.href !== undefined && raw.href !== '') {
       if (typeof raw.href !== 'string' || raw.href.length > 512) return null;
-      try { const u = new URL(raw.href, location.href); if (!['http:', 'https:'].includes(u.protocol) || u.protocol !== 'https:' && u.origin !== location.origin || u.username || u.password || u.href.length > 512) return null; href = u.href; } catch { return null; }
+      try { const u = new URL(raw.href, location.href); if (!['http:', 'https:'].includes(u.protocol) || u.origin !== location.origin || u.username || u.password || u.href.length > 512) return null; href = u.href; } catch { return null; }
     }
     if (raw.icon !== undefined && !M.PICKS.includes(raw.icon)) return null;
     if (raw.badge !== undefined && !(typeof raw.badge === 'number' || (typeof raw.badge === 'string' && [...raw.badge].length <= 4))) return null;
     if (raw.slot !== undefined && !SLOTS.includes(raw.slot)) return null;
-    if (raw.group !== undefined && typeof raw.group !== 'string') return null;
-    return { id: `mod:${owner}.${raw.id}`, owner, label, icon: raw.icon || 'link', href, badge: raw.badge ?? '', group: raw.group, slot: raw.slot, select: typeof raw.select === 'function' ? raw.select : null };
+    if (raw.group !== undefined && typeof raw.group !== 'string' && !Number.isInteger(raw.group)) return null;
+    const by = typeof raw.by === 'string' ? raw.by.replace(/[\p{Cc}\p{Bidi_Control}]/gu, ' ').trim().slice(0, 80) : '';
+    return { id: `mod:${owner}.${raw.id}`, owner, label, icon: raw.icon || 'link', href, badge: raw.badge ?? '', group: raw.group, slot: raw.slot, by, select: typeof raw.select === 'function' ? raw.select : null };
   };
   const api = {
     sync,
@@ -913,9 +955,11 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
     // Opens an item as a click on it would: the site's own through its own link.
     go: (id) => {
       const item = byId(id);
-      if (!item || item.hidden && !item.native) return false;
+      if (!item || item.hidden && !item.native || item.href && !sameSite(item.href)) return false;
       emit('navigate', { id });
-      if (item.owner) { mods.get(item.owner)?.get(item.id)?.select?.(); if (item.href) location.assign(item.href); }
+      if (item.panel && site.panel) panelTo(panel === id ? '' : id);
+      else if (item.course) openHere(item.href);
+      else if (item.owner) { mods.get(item.owner)?.get(item.id)?.select?.(); if (item.href) location.assign(item.href); }
       else if (item.action) glaze(item.action);
       else if (item.native) goNative(id);
       else if (item.href) location.assign(item.href);

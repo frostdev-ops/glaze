@@ -160,13 +160,13 @@ const worker = ({ sessionFail = null } = {}) => {
   return { store, send, removed, installed };
 };
 
-test('a fresh install stays empty on later updates, while an older install keeps its defaults', async () => {
+test('a fresh install keeps its starter layout on later updates, while an older install keeps its defaults', async () => {
   const W = require('../lib/widgets.js');
   const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
   const fresh = worker();
   fresh.installed[0]({ reason: 'install' }); await settle();
   fresh.installed[0]({ reason: 'update' }); await settle();
-  assert.deepEqual(W.layout(fresh.store.local.widgetLayout), W.layout(), 'an untouched fresh layout must not gain old widgets');
+  assert.deepEqual(W.layout(fresh.store.local.widgetLayout), W.fresh(), 'owner 2026-10-20: starter defaults are installed once');
   const old = worker(); old.store.sync.enhance.widgets = true;
   old.installed[0]({ reason: 'update' }); await settle();
   assert.deepEqual(W.layout(old.store.local.widgetLayout), W.kept(true));

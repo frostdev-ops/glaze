@@ -1,4 +1,4 @@
-importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'lookparts.js', 'share.js', 'lookx.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'gcal-auth.js', 'coursetabs.js');
+importScripts('download.js', 'color.js', 'fonts.js', 'surfaces.js', '../defaults.js', 'history.js', 'cards.js', 'nav.js', 'nav-items.js', 'navlayout.js', 'motionx.js', 'parts.js', 'nav-store.js', 'todo.js', 'petbrain.js', 'pet.js', 'petsprites.js', 'remind.js', 'widgets.js', 'sidebar.js', 'lookparts.js', 'share.js', 'lookx.js', 'gradescope.js', 'doctext.js', 'folders.js', 'notes.js', 'calexport.js', 'gcal.js', 'gcal-auth.js', 'coursetabs.js');
 
 // Cache packaged broker scripts at install; parse them on first use rather than every worker wake.
 const BROKER_FILES = {
@@ -44,8 +44,13 @@ const ultraAt = (s) => {
 // A course tab's live frame (features/coursetabs.js) is an Ultra page of its own: a frame of a tab whose page is on the
 // same Ultra site counts as that page.
 const ultraPage = (s) => s.frameId === 0 || (s.frameId > 0 && !!ultraAt(s) && !!s.tab?.url?.startsWith(`${ultraAt(s)}/`));
+// A first page can ask for its dock before the site's registration finishes. Wait for that validated report rather
+// than rejecting its migration and leaving the page with an empty, unmigrated record.
+const ultraReports = new Map();
+let ultraTurn = null;
 const fromUltra = async (s) => {
   const o = ultraAt(s);
+  if (o && ultraReports.has(o)) await ultraReports.get(o);
   return o && (await chrome.storage.local.get('ultra').then(({ ultra = [] }) => ultra.includes(o), () => false)) ? o : null;
 };
 // A registered Moodle's top frame may pin its navigation, through the same narrow broker edit as Ultra.
@@ -61,7 +66,7 @@ const fromMoodle = async (s) => {
 // for a Gradescope course placed with one of its own site's courses, and its own accounts' answer to "show it here?"),
 // and the editor.
 const switchOn = (k) => Promise.resolve().then(() => chrome.storage.sync.get(['enabled', 'enhance']))
-  .then(({ enabled, enhance }) => { const s = GZ_SANITIZE({ enabled, enhance }); return s.enabled && s.enhance[k]; }).catch(() => false);
+  .then(async (raw) => { const { freshDefaults } = await chrome.storage.local.get('freshDefaults'); const s = GZ_SANITIZE(raw, freshDefaults?.fresh === true); return s.enabled && s.enhance[k]; }).catch(() => false);
 const gradescopeOn = () => switchOn('gradescope');
 const fromGradescope = (s) => s.id === chrome.runtime.id && !!s.tab && s.frameId === 0 && typeof s.url === 'string' && s.url.startsWith(`${GZ_GRADESCOPE.HOST}/`);
 const gradescopeFor = async (gid, s) => {
@@ -188,6 +193,7 @@ const BROKER = {
         target = { ...area, sync: { ...area.sync, set: (patch) => GZ_XPARTS.write(area, parts, patch) } };
       }
       const r = await (m.restore ? GZ_FOLDERS.restore(m.restore, target, GZ_TODO, pets) : GZ_TODO.change(m, target));
+      if (r.ok && m.restore && !await area.local.set({ freshDefaults: { fresh: false, pending: false } })) return { ...r, cleanup: false };
       return r.ok && m.restore && !await GZ_NAV_STORE.cleanup(area) ? { ...r, cleanup: false } : r;
     },
   },
@@ -381,7 +387,7 @@ BROKER.widgetLayout = {
     const canvas = s.frameId === 0 && (await fromCanvas(s));
     const site = canvas || (ultraPage(s) && (await fromUltra(s)));
     if (!site || (await chrome.storage.sync.get('enabled')).enabled === false) return false;
-    if (m.fill !== undefined && (!canvas || m.fill !== 'cdash')) return false;
+    if (m.fill !== undefined && (s.frameId !== 0 || m.fill !== (canvas ? 'cdash' : 'dash') || m.ops.some((o) => o?.s !== m.fill))) return false;
     // Course cards: only the page's own site's, Canvas's on its Dashboard, Ultra's on its two boards.
     const courses = m.ops.filter((o) => typeof o?.id === 'string' && o.id.startsWith('course:'));
     return !courses.length || (s.frameId === 0 && (canvas || site === await fromUltra(s)) && courses.every((o) => {
@@ -389,7 +395,64 @@ BROKER.widgetLayout = {
       return c?.origin === site && c.canvas === !!canvas && (canvas ? o.s === 'cdash' : ['courses', 'dash'].includes(o.s));
     }));
   },
-  run: (m, { local }) => GZ_WIDGETS.change(m, local),
+  run: async (m, area) => {
+    const before = await area.local.get(['widgetLayout', 'freshDefaults', 'earlyWidgetEdits']);
+    // A content script can run before onInstalled. Until its reason is known, retain the old defaults and remember
+    // only explicit edits; installation can then choose its baseline without losing those edits.
+    let early = before.earlyWidgetEdits;
+    if (!before.freshDefaults && !before.widgetLayout) {
+      early = { ops: {} };
+      const { enhance } = await area.sync.get('enhance');
+      if (!await area.local.set({ widgetLayout: GZ_WIDGETS.kept(enhance?.widgets), earlyWidgetEdits: early })) return { ok: false, error: 'write' };
+    }
+    if (!await defaultEdits(m, area)) return { ok: false, error: 'write' };
+    const local = !early || before.freshDefaults ? area.local : { ...area.local, set: async (patch) => {
+      const lay = patch.widgetLayout, ops = { ...early.ops };
+      for (const o of m.ops) {
+        const tile = (o.s === 'canvas' ? lay.tiles : lay.boards[o.s] || []).find((t) => t.id === o.id);
+        if (tile || (o.remove && GZ_WIDGETS.course(o.id))) ops[`${o.s}:${o.id}`] = tile ? { s: o.s, id: o.id, set: tile } : { s: o.s, id: o.id, remove: true };
+      }
+      early = { ...early, ops: Object.fromEntries(Object.entries(ops).slice(-1024)), ...(m.more && { more: { ...early.more, ...m.more } }), ...(m.widths && { widths: lay.widths }), ...(typeof m.music === 'string' && { music: lay.music }),
+        ...(m.ops.some((o) => o.s === 'canvas' && (o.move || o.to)) && { order: lay.tiles.map((t) => t.id) }) };
+      return area.local.set({ ...patch, earlyWidgetEdits: early });
+    } };
+    const r = await GZ_WIDGETS.change(m, local);
+    await resumeDefaults(true);
+    return r.ok ? { ...r, layout: (await area.local.get('widgetLayout')).widgetLayout } : r;
+  },
+};
+// The sidebar's record (lib/sidebar.js change): a page's field-level changes to its own site's account's record, applied
+// to what is stored then. Canvas's top frame only (a course tab's frame goes through its top); Ultra's pages and their
+// course tabs' frames, as for the layout. The record's lms must be the sender's.
+BROKER.sidebar = {
+  allow: async (m, s) => {
+    const at = GZ_SIDEBAR.parse(m.key);
+    if (!at || !GZ_SIDEBAR.ops(m.ops)) return false;
+    const site = at.lms === 'canvas' ? s.frameId === 0 && (await fromCanvas(s)) : ultraPage(s) && (await fromUltra(s));
+    return site === at.origin && (await chrome.storage.sync.get('enabled')).enabled !== false;
+  },
+  run: async (m, { local, sync }, s) => {
+    const at = GZ_SIDEBAR.parse(m.key);
+    // Ask the exact document's existing identity reader in Glaze's isolated world, inside the write queue. A key from
+    // an old account, a signed-out page or a replaced document cannot migrate or edit another account's record.
+    const target = s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] };
+    const check = chrome.scripting.executeScript({ target, func: async (lms, origin, uid) => {
+      const c = globalThis.GZ_CTX;
+      const here = () => (globalThis.origin || location.origin) === origin && globalThis.GZ_CTX === c && c?.site === lms && c.on();
+      return here() && String(await c.account()) === uid && here();
+    }, args: [at.lms, at.origin, at.uid] }).then((r) => r?.[0]?.result === true, () => false);
+    // A suspended document or slow identity read must not hold every other storage write in the queue.
+    let timer;
+    const same = await Promise.race([check, new Promise((res) => { timer = setTimeout(() => res(false), 1500); })])
+      .finally(() => clearTimeout(timer));
+    if (!same) return { ok: false, error: 'sender' };
+    if (!(await local.get('freshDefaultAccount')).freshDefaultAccount
+      && !await local.set({ freshDefaultAccount: m.key })) return { ok: false, error: 'write' };
+    if (!await defaultEdits(m, { local, sync })) return { ok: false, error: 'write' };
+    const r = await GZ_SIDEBAR.change(m, local, sync, { settings: false });
+    await resumeDefaults(true);
+    return r.ok ? { ...r, rec: (await local.get(m.key))[m.key] } : r;
+  },
 };
 BROKER.notesapp = {
   allow: async (m, s) => typeof m.key === 'string' && GZ_NOTES.KEY.test(m.key) && m.key.startsWith(`notesIdx:${(await fromCanvas(s)) || (await fromUltra(s))}/`),
@@ -620,8 +683,11 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     if (!ok) return { ok: false, error: 'sender' };
     h.interrupt?.(m);
     const generation = sessionGeneration;
-    return (brokerTurn ||= GZ_CARDS.queue())(() => name === 'sessions' && generation !== sessionGeneration && SESSION_NETWORK.has(m.op)
-      ? { ok: false, error: 'off' } : h.run(m, { sync: brokerArea('sync'), local: brokerArea('local') }));
+    return (brokerTurn ||= GZ_CARDS.queue())(async () => {
+      await resumeDefaults();
+      return name === 'sessions' && generation !== sessionGeneration && SESSION_NETWORK.has(m.op)
+        ? { ok: false, error: 'off' } : h.run(m, { sync: brokerArea('sync'), local: brokerArea('local') }, sender);
+    });
   })
     .then(reply, () => reply({ ok: false, error: 'write' }));
   return true;
@@ -770,24 +836,120 @@ const notesHome = (canvas) => {
 };
 const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/*'], js: ['lib/color.js', 'lib/i18n.js', 'lib/fonts.js', 'lib/surfaces.js', 'defaults.js', 'lib/gradescope.js', 'features/gradescope.js'], runAt: 'document_idle', persistAcrossSessions: true };
 chrome.storage.onChanged.addListener((changes, area) => { if (area === 'sync' && (changes.enhance || changes.enabled)) serial(ensure); });
-// An update keeps the widgets a device showed while it had no layout stored (lib/widgets.js kept): new layouts start empty.
-// In the broker's queue, so a page's layout change ('glaze:widgetLayout') is never written over.
-const keepWidgets = async (fresh) => {
-  if ((await chrome.storage.local.get('widgetLayout')).widgetLayout) return;
-  const { enhance } = await chrome.storage.sync.get('enhance');
-  await chrome.storage.local.set({ widgetLayout: fresh ? GZ_WIDGETS.layout() : GZ_WIDGETS.kept(enhance?.widgets) });
+// Defaults are an install transaction, independent of whether a page already wrote its layout or migrated its dock.
+// Its local intent survives worker restarts. Navigation uses a local fallback until a real sync preference is present.
+// Removals use separate sync keys: a device still starting up never uploads defaults over another device's choices.
+const defaultEdits = async (m, { local, sync }) => {
+  const patch = {};
+  for (const o of m.ops || []) {
+    if (m.key && ['settings', 'todo'].includes(o.id) && ['remove', 'undock', 'dock'].includes(o.op))
+      patch[`starterOff:${m.key}:${o.id}`] = o.op !== 'dock';
+    if (!m.fill && ['dash', 'cdash'].includes(o.s)) {
+      patch[`starterOff:${o.s}:cards`] = true;
+      if (['pet', 'timer', 'notes', 'quotes', 'todo'].includes(o.id) && typeof o.set?.on === 'boolean')
+        patch[`starterOff:${o.s}:${o.id}`] = !o.set.on;
+      if (GZ_WIDGETS.course(o.id) && (o.remove || typeof o.set?.on === 'boolean'))
+        patch[`starterOff:${o.s}:${o.id}`] = o.remove === true || !o.set.on;
+    }
+  }
+  const boards = [...new Set((m.ops || []).filter((o) => !m.fill && ['dash', 'cdash'].includes(o.s)).map((o) => o.s))];
+  if (boards.length) {
+    const lay = GZ_WIDGETS.apply((await local.get('widgetLayout')).widgetLayout, m);
+    for (const b of boards) patch[`starterOff:${b}:empty`] = !lay.boards[b].some((t) => t.on);
+  }
+  return !Object.keys(patch).length || await sync.set(patch);
+};
+const resumeDefaults = async (force = false) => {
+  const local = await chrome.storage.local.get(['freshDefaults', 'freshDefaultAccount', 'widgetLayout', 'earlyWidgetEdits']);
+  let state = local.freshDefaults;
+  if (!force && (!state || (!state.pending && !state.fresh))) return;
+  state ||= { fresh: false, pending: false };
+  const sync = await chrome.storage.sync.get(null), patch = {};
+  let lay = local.widgetLayout;
+  if (state.pending) {
+    if (!lay || local.earlyWidgetEdits) {
+      lay = state.fresh ? GZ_WIDGETS.fresh() : GZ_WIDGETS.kept(sync.enhance?.widgets);
+      const early = local.earlyWidgetEdits;
+      if (early) {
+        const ops = Object.values(early.ops);
+        for (let i = 0; i < ops.length; i += 64) lay = GZ_WIDGETS.apply(lay, { ops: ops.slice(i, i + 64) }, early.more);
+        lay = GZ_WIDGETS.apply(lay, { ops: [], widths: early.widths, music: early.music }, early.more);
+        if (early.order) lay.tiles.sort((a, b) => early.order.indexOf(a.id) - early.order.indexOf(b.id));
+        patch.earlyWidgetEdits = null;
+      }
+    }
+    state = { ...state, pending: false };
+  }
+  if ((state.fresh || lay?.starter === true) && lay) {
+    const ops = [];
+    for (const b of ['dash', 'cdash']) {
+      for (const t of lay.boards[b]) if (sync[`starterOff:${b}:empty`] === true || sync[`starterOff:${b}:${t.id}`] === true)
+        ops.push({ s: b, id: t.id, ...(GZ_WIDGETS.course(t.id) ? { remove: true } : { set: { on: false } }) });
+    }
+    for (let i = 0; i < ops.length; i += 64) lay = GZ_WIDGETS.apply(lay, { ops: ops.slice(i, i + 64) });
+    for (const b of ['dash', 'cdash']) if (sync[`starterOff:${b}:cards`] === true && !lay.filled.includes(b)) lay = { ...lay, filled: [...lay.filled, b] };
+    const account = state.fresh && (state.account || local.freshDefaultAccount);
+    if (account && GZ_SIDEBAR.parse(account)) {
+      state = { ...state, account };
+      const before = (await chrome.storage.local.get(account))[account];
+      if (before) {
+        let rec = GZ_SIDEBAR.clean(before);
+        if (!state.dockDone) {
+          if (!Object.hasOwn(rec.dest, 'settings')) rec = GZ_SIDEBAR.apply(rec, [{ op: 'dock', id: 'settings' }]);
+          state = { ...state, dockDone: true };
+        }
+        if (JSON.stringify(rec) !== JSON.stringify(before)) patch[account] = { ...rec, rev: (rec.rev + 1) % 2 ** 31 };
+      }
+    }
+  }
+  // Earlier starter installs have no transaction record, and each device can have a different first account.
+  // A synced removal still applies to its matching existing record, without granting any new seeding authority.
+  for (const [k, v] of Object.entries(sync)) {
+    const id = k.endsWith(':settings') ? 'settings' : k.endsWith(':todo') ? 'todo' : '';
+    const account = k.startsWith('starterOff:sidebar:') && id ? k.slice(11, -id.length - 1) : '';
+    if (v !== true || !GZ_SIDEBAR.parse(account)) continue;
+    const before = patch[account] || (await chrome.storage.local.get(account))[account];
+    if (!before) continue;
+    const rec = GZ_SIDEBAR.apply(before, [{ op: 'remove', id }]);
+    if (JSON.stringify(rec) !== JSON.stringify(before)) patch[account] = { ...rec, rev: (rec.rev + 1) % 2 ** 31 };
+  }
+  if (JSON.stringify(lay) !== JSON.stringify(local.widgetLayout)) patch.widgetLayout = lay;
+  if (local.freshDefaults && JSON.stringify(state) !== JSON.stringify(local.freshDefaults)) patch.freshDefaults = state;
+  if (Object.keys(patch).length) await chrome.storage.local.set(patch);
+};
+const keepWidgets = async (fresh, provisional = false) => {
+  const local = await chrome.storage.local.get(['freshDefaults', 'widgetLayout']);
+  if (provisional && !local.freshDefaults) {
+    if (!local.widgetLayout) {
+      const { enhance } = await chrome.storage.sync.get('enhance');
+      await chrome.storage.local.set({ widgetLayout: GZ_WIDGETS.kept(enhance?.widgets), earlyWidgetEdits: { ops: {} } });
+    }
+    return;
+  }
+  if (!local.freshDefaults)
+    await chrome.storage.local.set({ freshDefaults: { fresh, pending: true } });
+  await resumeDefaults();
 };
 chrome.runtime.onInstalled.addListener((d) => {
-  // Mark fresh installs too: a later update must not mistake their untouched empty layout for a pre-change device.
-  if (['install', 'update'].includes(d?.reason)) (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {});
-  serial(async () => { await chrome.scripting.unregisterContentScripts(); await ensure(); });
+  // Mark fresh installs too: a later update must not mistake their untouched starter layout for a pre-change device.
+  const seeded = ['install', 'update'].includes(d?.reason)
+    ? (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(d.reason === 'install')).catch(() => {}) : Promise.resolve();
+  serial(async () => { await seeded; await chrome.scripting.unregisterContentScripts(); await ensure(); });
 });
-chrome.runtime.onStartup.addListener(() => serial(ensure));
+chrome.runtime.onStartup.addListener(() => { (brokerTurn ||= GZ_CARDS.queue())(() => keepWidgets(false, true)).catch(() => {}); serial(ensure); });
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && Object.keys(changes).some((k) => k.startsWith('starterOff:')))
+    (brokerTurn ||= GZ_CARDS.queue())(() => resumeDefaults(true)).catch(() => {});
+});
 // An Ultra site found (content-ultra.js, once Glaze has started on a page it found to be Ultra): its top frame's origin is
 // kept, so its pages may write their own site's data (fromUltra).
 chrome.runtime.onMessage.addListener((m, s) => {
   const o = m?.type === 'glaze:ultra' && s.frameId === 0 && ultraAt(s);
-  if (o) serial(async () => { const { ultra = [] } = await chrome.storage.local.get('ultra'); if (!ultra.includes(o)) await chrome.storage.local.set({ ultra: [...ultra, o] }); });
+  if (o && !ultraReports.has(o)) {
+    const registered = (ultraTurn ||= GZ_CARDS.queue())(async () => { const { ultra = [] } = await chrome.storage.local.get('ultra'); if (!ultra.includes(o)) await chrome.storage.local.set({ ultra: [...ultra, o] }); });
+    ultraReports.set(o, registered);
+    registered.catch(() => {}).finally(() => { if (ultraReports.get(o) === registered) ultraReports.delete(o); });
+  }
 });
 chrome.runtime.onMessage.addListener((m, { tab, frameId, url }) => {
   if ((m !== 'canvas' && m !== 'moodle') || frameId !== 0 || !tab) return;
@@ -887,7 +1049,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // it asks (a site's part too, where its host was registered for the other LMS). Only these files, and only into a
 // frame of a tab Glaze already runs in (Chrome reports which).
 const SAFARI = new URL(chrome.runtime.getURL('')).protocol === 'safari-web-extension:';
-const LOADABLE = new Set(['lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js']);
+const LOADABLE = new Set(['lib/nav.js', 'features/light.js', 'lib/nav-items.js', 'lib/navlayout.js', 'content-ultra.js', 'content-canvas.js', 'features/nav.js', 'lib/navbar.js', 'features/navbar-canvas.js', 'features/navbar-moodle.js', 'features/navbar.js', 'features/navbar-widgets.js', 'features/settingspage.js', 'lib/folders.js', 'features/folders.js', 'lib/zip.js', 'lib/drafts.js', 'lib/gradecalc.js', 'features/grades.js', 'features/schedule.js', 'lib/todo.js', 'features/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'lib/cards.js', 'features/cards.js', 'features/cardtasks.js', 'lib/moodle.js', 'features/moodle.js', 'lib/seek.js', 'features/search.js', 'lib/remind.js', 'features/reminders.js', 'features/palette.js', 'features/keys.js', 'features/coursemenu.js', 'features/previews.js', 'features/download.js', 'lib/widgets.js', 'lib/sidebar.js', 'features/sidebar.js', 'features/widgets.js', 'features/coursecards.js', 'features/dashboard.js', 'lib/lookx.js', 'features/lookx.js', 'lib/lookparts.js', 'features/lookparts.js', 'lib/motionx.js', 'features/drafts.js', 'features/docs.js', 'features/docreview.js', 'features/place.js', 'lib/gradescope.js', 'lib/ics.js', 'lib/calexport.js', 'features/calexport.js', 'lib/gpa.js', 'lib/doctext.js', 'features/import.js', 'features/gpaterms.js', 'lib/syllabus.js', 'features/syllabus.js', 'lib/classes.js', 'features/classes.js', 'lib/insights.js', 'features/insights.js', 'lib/notes.js', 'features/notes.js', 'lib/ultra.js', 'lib/pet.js', 'lib/petbrain.js', 'lib/petphysics.js', 'features/petworld.js', 'lib/petsprites.js', 'lib/petplayer.js', 'features/pet.js', 'lib/coursetabs.js', 'features/coursetabs.js', 'features/sharing.js', 'lib/parts.js', 'features/rules.js', 'features/motionx.js', 'lib/glsl.js', 'features/mods.js', 'features/modui.js', 'features/modwidgets.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];

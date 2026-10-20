@@ -41,7 +41,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const page = (k) => () => need('lib/ultra.js', () => globalThis.GZ_ULTRA).then(() => GZ_ULTRA.page[k]());
   const load = (on, file, n) => (on() ? need(file, () => globalThis[n]).then(() => globalThis[n].sync(!!on()), () => {}) : globalThis[n]?.sync(false));
   const top = () => I.links.length && solo && I.settings.enhance;
-  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname), 'features/todo.js', 'GZ_TODO_UI');
+  // The sidebar (features/sidebar.js) owns To Do in the visible document while enabled on this kind of page;
+  // otherwise its legacy places stay in use, including while the sidebar cannot start.
+  const sidebarHere = () => !!top()?.sidebar && I.settings.sidebar?.ultra !== false && /^\/ultra(\/|$)/.test(location.pathname);
+  const sidebarOn = () => sidebarHere() && (globalThis.GZ_SIDEBAR_UI?.enabled?.() ?? !I.settings.sidebar?.off?.length);
+  const syncSidebar = () => load(sidebarHere, 'features/sidebar.js', 'GZ_SIDEBAR_UI');
+  const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), 'features/todo.js', 'GZ_TODO_UI');
   const syncCardTasks = () => load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'features/cardtasks.js', 'GZ_CARD_TASKS');
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'features/reminders.js', 'GZ_REMIND_UI');
@@ -374,8 +379,10 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     syncWidgets();
   };
   const dash = () => top()?.dashboard && /^\/ultra\/institution-page\/?$/.test(location.pathname);
-  const widgetsHere = () => { const e = !tabFrame && top(); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats)); };
+  // A course tab's frame has the dock's widgets only (floats and the wandering pet are the page's).
+  const widgetsHere = () => { const e = top(); if (e && tabFrame) return sidebarOn() && !!(e.widgets || e.notes || e.pet || e.todo); return !!e && (dash() || e.widgets || e.notes || e.pet || (e.dashboard && globalFloats) || (e.todo && sidebarOn())); };
   const syncWidgets = () => {
+    syncSidebar();
     const on = widgetsHere();
     if (!dash()) html.removeAttribute('data-gz-dash'); else if (!html.hasAttribute('data-gz-dash')) html.setAttribute('data-gz-dash', '');
     if (on) need('features/widgets.js', () => globalThis.GZ_WIDGETS_UI).then(() => GZ_WIDGETS_UI.sync(widgetsHere()), () => { if (dash()) html.setAttribute('data-gz-dash', 'ip'); }); else globalThis.GZ_WIDGETS_UI?.sync(false);

@@ -1,0 +1,39 @@
+<!doctype html><html lang="en" data-gz-navbar="rail open float tabs" data-gz-ctabs="above" data-gz-footer><head><meta charset="utf-8"><title>Submission review layer</title><style>
+* { box-sizing: border-box; } html,body { margin: 0; height: 100%; font: 14px/1.4 sans-serif; }
+:root { --gz-ground: #0a1420; --gz-surface: #142230; --gz-surface-2: #1c3044; --gz-ink: #edf7ff; --gz-ink-muted: #aac4da; --gz-line: #405368; --gz-line-strong: #607388; --gz-accent: #66d9ef; --gz-font: system-ui; --gz-space: 1; --gz-radius: 12px; }
+.inner-wrap { position: relative; height: 100vh; } .routed-page { position: static; height: 100%; }
+.underlying-header { height: 80px; background: #d000d0; } .underlying-header header { height: 40px; }
+.bb-offcanvas-overlay { position: fixed; inset: 0; z-index: 1010; background: rgb(0 0 0 / .65); }
+.bb-offcanvas-panel, .bb-offcanvas-panel-wrap { position: absolute; inset: 0; }
+.bb-offcanvas-panel { z-index: 1011; background: #0a1420; }
+.layer-content { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.makeStylesheaderRoot-review { position: sticky; top: 0; z-index: 2; flex: none; height: 88px; background: #0a1420; }
+bb-close { position: absolute; inset-inline-start: 0; top: 0; z-index: 3; } .bb-close { width: 44px; height: 40px; }
+h1 { font-size: 16px; height: 48px; margin: 0; padding: 10px 16px; text-align: center; }
+.review-scroll, .review-body { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: auto; }
+.review-grade { height: 75px; flex: none; padding: 16px; }
+main { display: flex; flex-direction: row; flex: 1; min-height: 0; overflow: hidden; }
+main > section { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; overflow: auto; }
+.review-feedback { height: 100px; flex: none; padding: 16px; }
+.review-files, .review-chain { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; }
+[role=tablist] { display: flex; height: 48px; min-height: 48px; } [role=tabpanel] { flex: 1; min-height: 0; }
+[role=tabpanel] iframe { display: block; width: 100%; height: 100%; border: 0; }
+main > aside { width: 430px; flex: none; overflow: auto; padding: 16px; }
+main > aside h2 { margin: 0 0 12px; } .criterion { border: 1px solid #607388; border-radius: 8px; padding: 10px; margin: 8px 0; }
+.criterion button { display: block; max-width: 100%; } .criterion p { margin: 6px 0; }
+#gz-navbar { position: fixed; inset-block: 12px 44px; inset-inline-start: 12px; width: calc(var(--gz-navbar-left) - 24px); z-index: 2147483000; background: #142230; }
+button, a { font: inherit; } .native-modal-backdrop { position: fixed; inset: 0; z-index: 1299; background: #0009; }
+.native-modal { position: fixed; inset: 120px 30px auto auto; width: 500px; height: 300px; z-index: 1300; background: white; color: black; padding: 20px; }
+</style></head><body>
+<div id="gz-navbar"><button type="button">Navigation</button></div><div id="gz-footer">Glaze</div>
+<div id="site-wrap"><div class="inner-wrap"><section class="assessment-overview-modern-panel routed-page route-view-container bb-offcanvas-container">
+<div class="underlying-header"><header><button id="underlying-close" type="button">Underlying close</button>Course &gt; Module breadcrumb</header></div>
+<div class="bb-offcanvas-overlay"></div>
+<div class="first bb-offcanvas-panel bb-offcanvas-right screen student-view-submission-panel" role="dialog"><div class="bb-offcanvas-panel-wrap"><div class="layer-content">
+<div class="makeStylesheaderRoot-review"><bb-close><button id="layer-close" class="bb-close" type="button" aria-label="Close">×</button></bb-close><div id="gz-ctabs"><button id="course-tab" type="button">Course tab</button></div><h1>Assessment Feedback</h1></div>
+<div class="review-scroll"><div class="review-body"><div class="review-grade">Final Grade <span>5 / 5</span></div>
+<main><section><div class="review-feedback"><div class="js-overall-feedback">Overall Feedback</div><div class="feedback-text">Feedback stays available.</div></div>
+<div class="review-files"><div role="tablist" aria-label="Submission files"><button type="button" role="tab">Instructions</button><button type="button" role="tab" aria-selected="true">Document.pdf</button></div><div class="review-chain"><div id="files-viewer-tab-panel-:r1:" role="tabpanel"><iframe title="Document viewer" src="https://annotate-us.foundations.blackboard.com/ui/pdf-viewer/1/index.html"></iframe></div></div></div>
+</section><aside><h2 id="rubric-heading">Rubric</h2><div class="rubric-inline-container"><div class="criterion"><button id="criterion-1" type="button" aria-expanded="false">Criterion one</button><p>Score 5 / 5</p><a id="rubric-detail" href="#rubric-detail">Rubric details</a></div><div class="criterion"><button id="criterion-2" type="button" aria-expanded="false">Criterion two</button><p>Score 5 / 5</p></div></div></aside></main>
+</div></div></div></div></div></section></div></div>
+</body></html>

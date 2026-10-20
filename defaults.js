@@ -27,6 +27,10 @@ const GZ_COLORS = [
 // doesn't depend on the language Ultra is shown in).
 const GZ_TABS = [['calendar', 'Calendar'], ['announcements', 'Announcements'], ['engagement', 'Discussions'], ['grades', 'Gradebook'], ['messages', 'Messages'], ['groups', 'Groups'], ['achievements', 'Achievements']];
 
+// The kinds of page the sidebar can be turned off on (sidebar.off), by the page family features/sidebar.js reads:
+// Canvas's Dashboard and Ultra's Courses page are both 'dashboard', a Canvas course home and an Ultra outline 'course'.
+const GZ_SIDEBAR_KINDS = [['dashboard', 'Dashboard'], ['course', 'Course home'], ['discussion', 'Discussions'], ['assignment', 'Assignments'], ['grades', 'Grades'], ['calendar', 'Calendar and syllabus'], ['quiz', 'Quizzes'], ['other', 'Other pages']];
+
 // Everything else, as [default, rule]. A rule is an enum (array of strings), a [min, max] number
 // range, 'bool', 'url' (https only, or empty), 'name' (a preset name), 'tabs' (GZ_TABS slugs),
 // 'hexes' (three #rrggbb colors, or none), 'font' (a lib/fonts.js id or a typed family name) or
@@ -59,6 +63,15 @@ const GZ_SPEC = {
     u: ['', 'url'], i: ['', 'picture'], o: [75, [0, 100]], f: ['none', ['none', 'vivid', 'mono', 'noir', 'warm', 'cool', 'faded', 'dreamy']], ink: ['#ffffff', 'hex'],
     logo: [true, 'bool'], labels: ['normal', ['normal', 'small', 'icons']], size: ['medium', ['small', 'medium', 'large']], collapsed: [false, 'bool'],
   },
+  // The sidebar's look and behaviour for every account (features/sidebar.js has what each value means); where widgets
+  // sit, the width dragged and folds are each account's (lib/sidebar.js). The switch is enhance.sidebar.
+  sidebar: {
+    title: ['', 'label'], style: ['float', ['float', 'embed', 'auto']], open: ['auto', ['auto', 'expanded', 'collapsed', 'drawer']],
+    width: [352, [288, 480]], order: ['page', ['page', 'widgets']], page: ['shown', ['shown', 'folded', 'hidden']], heading: [true, 'bool'], jump: [true, 'bool'],
+    surface: ['glass', ['glass', 'solid', 'clear']], blur: [16, [0, 40]], opacity: [88, [40, 100]],
+    radius: ['auto', ['auto', 'none', 'small', 'medium', 'large']], density: ['auto', ['auto', 'compact', 'cozy', 'comfortable']],
+    min: [720, [480, 1200]], grades: [900, [600, 1400]], canvas: [true, 'bool'], ultra: [true, 'bool'], off: [[], 'kinds'], todo: ['follow', ['follow', 'all']], absorb: [true, 'bool'],
+  },
   // Glaze's own navigation in place of the site's (lib/navbar.js has what each value means).
   navbar: { on: [true, 'bool'], place: ['rail', ['rail', 'top']], style: ['float', ['float', 'embed']], rail: ['auto', ['auto', 'open', 'icons']],
     course: ['same', ['same', 'icons', 'top', 'hide']], cmenu: [true, 'bool'], tabs: [true, 'bool'], peek: [true, 'bool'], badges: [true, 'bool'], brand: ['glaze', ['glaze', 'school', 'custom', 'none']] },
@@ -75,6 +88,8 @@ const GZ_SPEC = {
     newgrades: [true, 'bool'], newcontent: [true, 'bool'], calc: [true, 'bool'], palette: [true, 'bool'], drafts: [true, 'bool'],
     download: [true, 'bool'], todo: [true, 'bool'], cardTasks: [false, 'bool'], gradescope: [false, 'bool'], search: [true, 'bool'],
     notes: [false, 'bool'], widgets: [true, 'bool'], pet: [false, 'bool'], dashboard: [true, 'bool'],
+    // sidebar: the page's sidebar, widgets docked under it (lib/sidebar.js).
+    sidebar: [true, 'bool'],
     // place: reopen course content at its saved folders and scroll. coursemenu: each course card's button for its color,
     // tint and look. tabs: Ultra's course tabs (lib/coursetabs.js).
     place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'],
@@ -89,6 +104,7 @@ const GZ_SPEC = {
     // Syllabus import on a course's home and Syllabus page (features/syllabus.js).
     syllabus: [false, 'bool'],
   },
+  docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
   // features/lookx.js. cursor 'own': a picture kept on this device.
   extras: { cursor: ['off', ['off', 'aqua', 'lilac', 'pearl', 'own']], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
@@ -228,6 +244,9 @@ const cleanValue = (v, d, rule) => {
   if (rule === 'picture') return typeof v === 'string' && /^[a-z0-9]{12}$/.test(v) ? v : d;
   if (rule === 'time') return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : d;
   if (rule === 'name') return cleanName(v) || d;
+  if (rule === 'kinds') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_SIDEBAR_KINDS.some(([slug]) => slug === t)))] : [...d];
+  // A name the student types (the sidebar's title): one line, no control characters, at most 40 characters.
+  if (rule === 'label') return typeof v === 'string' ? [...v.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim()].slice(0, 40).join('').trim() : d;
   if (rule === 'tabs') return Array.isArray(v) ? [...new Set(v.filter((t) => GZ_TABS.some(([slug]) => slug === t)))] : [...d];
   if (rule === 'font' || rule === 'font-auto') {
     const f = typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : '';
@@ -311,7 +330,7 @@ const GZ_COURSE_LOOK = (s, cid) => {
 const GZ_PRESET = (name, custom) => GZ_ALL_PRESETS(custom).find(([n]) => n === name)?.[1] || null;
 const GZ_MATCH_PRESET = (colors, custom) => GZ_ALL_PRESETS(custom).find(([, c]) => sameColors(c, colors))?.[0] || null;
 
-const GZ_SANITIZE = (raw) => {
+const GZ_SANITIZE = (raw, fresh = false) => {
   raw = isObj(raw) ? raw : {};
   const out = { version: 2, enabled: typeof raw.enabled === 'boolean' ? raw.enabled : GZ_DEFAULTS.enabled };
   out.colors = cleanColors(raw.colors);
@@ -319,6 +338,8 @@ const GZ_SANITIZE = (raw) => {
     const src = isObj(raw[g]) ? raw[g] : {};
     out[g] = Object.fromEntries(Object.entries(keys).map(([k, [d, rule]]) => [k, cleanValue(src[k], d, rule)]));
   }
+  // Initial feature choices stay local until edited; saved switches, including late sync, always win.
+  if (fresh === true) for (const id of ['notes', 'pet']) if (typeof raw.enhance?.[id] !== 'boolean') out.enhance[id] = true;
   // 2.2's darkDocs inverted.
   if (isObj(raw.enhance) && raw.enhance.docPages === undefined && raw.enhance.darkDocs === true) out.enhance.docPages = 'dark';
   // 1.0 had only the three motion switches: all off meant "no motion".
@@ -542,5 +563,5 @@ const GZ_TINT = (colors, course, t) => {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GZ_SURFACE_VARS, GZ_COLORS, GZ_TABS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_COLOR, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
+  module.exports = { GZ_SURFACE_VARS, GZ_COLORS, GZ_TABS, GZ_SIDEBAR_KINDS, GZ_SPEC, GZ_DEFAULTS, GZ_PALETTE, GZ_PRESETS, GZ_MAX_PRESETS, GZ_BG_SETS, GZ_BG_COLORS, GZ_GRADIENT, GZ_SCENE_LOOK, GZ_SANITIZE, GZ_SANITIZE_PRESETS, GZ_ALL_PRESETS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON, GZ_COURSE_LOOK, GZ_PRESET, GZ_MATCH_PRESET, GZ_ACTIVE_COLORS, GZ_SCHEDULE_DARK, GZ_SCHEDULE_NEXT, GZ_CONTRAST, GZ_COURSES, GZ_SLOT_COLORS, GZ_COURSE_COLORS, GZ_COURSE_VARS, GZ_COURSE_EDIT, GZ_COURSE_COLOR, GZ_COURSE_TINTED, GZ_NICK_MAX, GZ_SYNC_ITEM_MAX, GZ_SYNC_BYTES, GZ_CAL_COURSE, GZ_DUE_WEEK, GZ_CANVAS_DUE_WEEK, GZ_TINT };
 }

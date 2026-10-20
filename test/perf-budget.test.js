@@ -50,6 +50,8 @@ const LOOK_PARTS = [{ ultra: 1955, canvas: 2035, moodle: 1947 }, { ultra: 1178, 
 // change to them, their order or the blocklist, and a mod's background kind in the scene: 125 bytes on every site.
 // Measured against eb00d4dd.
 const CODE_MODS = { ultra: 732 + 439 + 256 + 125, canvas: 732 + 439 + 256 + 125, moodle: 732 + 439 + 256 + 125 };
+// Navigation opt-outs refresh installed parts: 11 bytes in content.js's storage-key matcher (owner-approved budget raise).
+const NAV_LAYOUT_REFRESH = 11;
 // Media backgrounds (mods phase 4), raised by what they add, as the Look parts' hooks were: the scene sync picks lib/scene-media.js
 // instead of lib/scene.js for a video or animation (the module's name, its element and the check that the right one is running)
 // and defaults.js's bg.kind has 'media': 479 bytes on every site. Measured against 795dfd5. The player, Lottie and the file
@@ -71,6 +73,42 @@ const CANVAS_TABS = { ultra: 34, canvas: 570, moodle: 34 };
 // course lists its modules, and who is signed in for its key (594 bytes on Canvas). The feature itself loads on demand.
 // Measured against 14b9cc71.
 const HIDE_MODULES = { ultra: 0, canvas: 594, moodle: 0 };
+// Load audit: early course-tab themes, bounded sweeps and storage guards (+253 shared bytes), plus the 60 s
+// course/color snapshot and mutation-scoped color lifts (+1340 Canvas). Existing headroom covers the rest;
+// raise only enough for the excess over each site's budget.
+const LOAD_AUDIT = { ultra: 246, canvas: 1201, moodle: 0 };
+// Dashboard audit: response headers add 35 shared bytes; bounded course pagination, shared identity and progress
+// expiry/retry add 1659 Canvas bytes. Raise only the excess after existing headroom and the 2% allowance.
+const DASH_AUDIT = { ultra: 34, canvas: 1660, moodle: 0 };
+// Review of the audits: draft cleanup where storage has no key listing (once a day, all sites), and Canvas's course
+// snapshot bound to the account Canvas names on each page. Raise only the excess, as above.
+const AUDIT_REVIEW = { ultra: 258, canvas: 329, moodle: 234 };
+// The sidebar's switch (owner-approved raise, 2026-10-19): defaults.js's enhance.sidebar, 107 bytes on every site. The
+// sidebar's state, its worker writes and everything else load on demand. Measured against 7860886e.
+const SIDEBAR = { ultra: 107, canvas: 107, moodle: 107 };
+// The sidebar on Canvas (owner-approved raise, 2026-10-19): content.js's stylesheet for it (features/sidebar.css, 24 bytes on
+// every site) and content-canvas.js's hook that loads features/sidebar.js on the top page, with Better To Do and the widgets
+// following it (683 bytes on Canvas). The sidebar, its layout and the dock load on demand. Measured against 3fdb8735.
+const SIDEBAR_UI = { ultra: 24, canvas: 24 + 683, moodle: 24 };
+// The sidebar broker's account reader reuses each site's cached identity (owner-approved raise). Measured against
+// af936dcf: content.js's GZ_CTX.account adds 97 shared bytes; identity checks and their deadline stay in the worker.
+const SIDEBAR_ACCOUNT = { ultra: 97, canvas: 97, moodle: 97 };
+// The sidebar on Blackboard Ultra (owner-approved raise, 2026-10-19): content-ultra.js's hook that loads features/sidebar.js
+// on the top page, with Better To Do and the widgets following it (503 bytes on Ultra). The Ultra adapter, the Courses
+// page's board without its column and the dock load on demand. Measured against c1c01563.
+const SIDEBAR_ULTRA = { ultra: 503, canvas: 0, moodle: 0 };
+// The sidebar in course tabs' frames (owner-approved raise, 2026-10-19): content-ultra.js's and content-canvas.js's hooks
+// also load it in a tab's frame, with only the dock's widgets there (238 bytes on Ultra, 128 on Canvas). Which document
+// works it, the relay through the page around the frame and pausing the others load on demand. Measured against b6dd6f62.
+const SIDEBAR_FRAMES = { ultra: 238, canvas: 128, moodle: 0 };
+// The sidebar's settings (owner-approved raise, 2026-10-19; Phase 6 settings, 2026-10-20): defaults.js's synced sidebar group
+// with its two rules (a typed title, the page kinds), 1915 bytes on every site, and each site part's per-site switch in its
+// hook (39 bytes on Ultra, 40 on Canvas). The style, layout and appearance they set apply on demand. Measured against 7769ec18.
+const SIDEBAR_SETTINGS = { ultra: 1915 + 39, canvas: 1915 + 40, moodle: 1915 };
+// Fresh defaults (owner-approved first-script hooks, 2026-10-20): read the local install flag alongside sync settings,
+// and use Notes/Pet defaults only while their switches are absent. Nothing is uploaded before sync arrives.
+// Measured against 86fdc1ee: defaults.js and content.js only; the layout and migration remain lazy.
+const FRESH_DEFAULTS = 631;
 // Ultra's and Canvas's first scripts are the manifest's; Moodle's is what lib/background.js registers for a Moodle host:
 // Canvas's without its part.
 const entry = (pattern) => m.content_scripts.find((c) => c.matches.includes(pattern)).js;
@@ -79,7 +117,7 @@ const FIRST_SCRIPT = { ultra: entry('https://*/ultra'), canvas: entry('https://*
 for (const [site, files] of Object.entries(FIRST_SCRIPT)) {
   test(`the first content script on ${site} stays within its budget`, () => {
     const total = files.reduce((n, f) => n + size(f), 0);
-    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site], budget = Math.round(baseline * 1.02);
+    const baseline = FIRST_SCRIPT_BASELINE[site] + LOOK_PARTS.reduce((n, p) => n + p[site], 0) + CODE_MODS[site] + NAV_LAYOUT_REFRESH + MEDIA_BG[site] + NAVBAR[site] + CANVAS_TABS[site] + HIDE_MODULES[site] + LOAD_AUDIT[site] + DASH_AUDIT[site] + AUDIT_REVIEW[site] + SIDEBAR[site] + SIDEBAR_ACCOUNT[site] + SIDEBAR_UI[site] + SIDEBAR_ULTRA[site] + SIDEBAR_FRAMES[site] + SIDEBAR_SETTINGS[site] + FRESH_DEFAULTS, budget = Math.round(baseline * 1.02);
     assert.ok(total <= budget, `${site}: ${total} bytes in ${files.length} files: over the budget of ${budget} (${baseline} + 2%). Load new code on demand instead, or put what only one site does in its part.`);
   });
 }
@@ -174,8 +212,16 @@ test('no setInterval fires faster than once a minute unless it is reviewed, and 
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['features/docreview.js', 'getComputedStyle(el)', 1], // only the viewer's ancestors on entry and while focused; reject fixed-position traps
+
+  ['features/mods.js', 'getComputedStyle(x.canvas)', 1], // one mounted mod canvas per slot while checking whether its Worker should pause
   ['features/navbar-canvas.js', 'getComputedStyle(el)', 1], // school logo background, one header mark per replacement
   ['features/coursetabs.js', 'getComputedStyle(parent.document.documentElement)', 1], // a Canvas tab's frame: the bar's two room variables on the page around, when the bar or the window changes
+  ['features/sidebar.js', 'getComputedStyle(html())', 1], // the root's navigation offsets in a batched sidebar layout pass
+  ['features/sidebar.js', 'getComputedStyle(x)', 1], // only the drawer's focusable controls, on Tab or a focus escape
+  ['features/sidebar.js', 'getComputedStyle(node)', 1], // one exact overview or Rubric and at most 30 ancestors at projection start; Rubric overflow checks stop at 400 descendants
+  ['features/sidebar.js', 'getComputedStyle(p)', 1], // visible Ultra course tool panels: reserve their width once, in the absolute panel
+  ['features/sidebar.js', 'getComputedStyle(m)', 1], // Ultra: the page's one content element's start padding (Glaze's bar), when the sidebar is laid out
 
   // The long-tail sweep (content.js, "long tail"): the first pass reads every element once, capped at MAX_FULL; later
   // passes only the subtrees the mutation observer reports. Its own colour reads, and an InstUI icon's.
@@ -224,7 +270,7 @@ test('the scans see the code they are meant to', () => {
 // the whole page (measured: 95 ms of style per press on a 9,400-element outline; 0.2 ms without those rules). Ultra's sheets:
 // no class tests or descendant `*` in a :has(), and a :has() before a combinator sits on a class, id or attribute, or a tag
 // that is not a page container.
-const ULTRA_SHEETS = ['features/coursetabs.css', 'theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css', 'features/rules.css', 'features/navlayout.css'];
+const ULTRA_SHEETS = ['features/coursetabs.css', 'theme.css', 'extras.css', 'motion.css', 'features/apps.css', 'features/surfaces.css', 'features/rules.css', 'features/navlayout.css', 'features/sidebar.css'];
 // The containers a page is built of: flagged, one may hold the whole page.
 const BROAD = new Set(['', '*', 'html', 'body', 'div', 'span', 'section', 'main']);
 const hasRules = (css) => {

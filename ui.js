@@ -3,9 +3,12 @@ const GZ_UI = (() => {
   const store = chrome.storage.sync;
 
   // Settings, and the dashboard cards' (lib/cards.js keeps those apart, out of the content script's first load).
-  const clean = (raw) => ({ ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw?.card) });
+  const clean = (raw, fresh) => ({ ...GZ_SANITIZE(raw, fresh), card: GZ_CARDS.settings(raw?.card) });
   // The Look's parts (lib/lookparts.js) are part of a Look but live in their own key: s.parts is { x, m }, or null.
-  const withParts = async (raw) => ({ ...clean(raw), parts: await GZ_XPARTS.fromStored(raw?.lookX, GZ_XPARTS.areas().local).catch(() => null) ?? null });
+  const withParts = async (raw) => {
+    const local = await Promise.resolve(chrome.storage.local?.get('freshDefaults')).catch(() => null);
+    return { ...clean(raw, local?.freshDefaults?.fresh === true), parts: await GZ_XPARTS.fromStored(raw?.lookX, GZ_XPARTS.areas().local).catch(() => null) ?? null };
+  };
   const load = () => new Promise((res) => {
     try { store.get(null, (raw) => res(withParts(chrome.runtime.lastError ? {} : raw))); } catch { res(withParts()); }
   });

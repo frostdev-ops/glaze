@@ -108,7 +108,7 @@ test("Canvas: a board's card is drawn as Canvas's own, from what its page shows,
   tile.update();
   assert.equal(card.querySelector('.ic-DashboardCard__header-title span').textContent, 'Calculus I');
   assert.equal(card.querySelector('.ic-DashboardCard__header-term').textContent, 'Fall 2026');
-  assert.equal(card.querySelector('.ic-DashboardCard__header_image').style.backgroundImage, '', 'no picture without its card');
+  assert.equal(card.querySelector('.ic-DashboardCard__header_image').style.backgroundImage, 'url("https://canvas.test/courses/27/files/22/download?verifier=x")', 'keep the last picture while native cards are absent');
   // A picture address that isn't one is never written into the style.
   shown = [{ querySelector: (sel) => sel === '.ic-DashboardCard__header_image' ? { style: { backgroundImage: 'url("javascript:x")' } } : native.querySelector(sel) }];
   ui.sync(); tile.update();

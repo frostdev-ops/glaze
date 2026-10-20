@@ -163,6 +163,23 @@ test('where the bar is: the placement, the course state, the style and the room 
   for (const rule of ['#main-content-inner { padding-inline-start: var(--gz-navbar-left) !important; }', '#main-content { box-sizing: border-box; padding-top: var(--gz-navbar-top) !important; }',
     '.inner-wrap > :is(section.course, .routed-page) { box-sizing: border-box; padding-inline-start: var(--gz-navbar-left) !important; padding-top: var(--gz-navbar-top) !important; }',
     '#gz-ctabs-frames { inset-inline-start: var(--gz-navbar-left); top: var(--gz-navbar-top); }', 'html[data-gz-ctabs~="nav"] #gz-ctabs { display: none !important; }']) assert.ok(css.includes(rule), rule);
+  // A course is padded for the bar inside its own height (and is itself a .route-view-container on Ultra), so its cap
+  // leaves the bar's room in, footer or not: taken twice, the page stopped a bar's height above the footer.
+  for (const rule of ['html[data-gz-navbar][data-gz-footer] .inner-wrap > :is(section.course, .routed-page) {\n  max-height: calc(100vh - var(--gz-footer-h)) !important;',
+    'html[data-gz-navbar]:not([data-gz-footer]) .inner-wrap > :is(section.course, .routed-page) { max-height: 100vh !important; }']) assert.ok(css.includes(rule), rule);
+  assert.ok(css.indexOf('html[data-gz-navbar][data-gz-footer] .inner-wrap >') > css.indexOf('html[data-gz-footer] .route-view-container'), 'after the general cap, so it wins');
+});
+
+test('full-window Ultra layers offset their content and keep their covering edges', () => {
+  const css = read('theme.css');
+  const selector = 'html[data-gz-navbar] .bb-offcanvas-panel.screen:not(.peek, :is(.peek, .peek-panel__content-wrapper, .ms-Panel-main, .bb-offcanvas-panel.screen) *) > .bb-offcanvas-panel-wrap';
+  assert.ok(css.includes(`${selector} { inset-inline-start: var(--gz-navbar-left) !important; top: var(--gz-navbar-top) !important; width: auto !important; }`));
+  assert.ok(css.match(/@media \(min-width: 900px\) \{[\s\S]*?\n\}/g).some((block) => block.includes(selector)), 'desktop room stays in the existing navbar guard');
+  assert.ok(css.includes('margin-inline-start: 48px !important; width: calc(100% - 48px) !important;'));
+  const mobile = selector.replace('html[data-gz-navbar]', 'html[data-gz-navbar]:not([data-gz-navbar~="none"]):not([data-gz-review-immersive])');
+  assert.ok(css.includes(`${mobile} { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; }`));
+  assert.ok(css.match(/@media \(max-width: 899\.98px\) \{[\s\S]*?\n\}/g).some((block) => block.includes(mobile)), 'bottom room is mobile only');
+  assert.doesNotMatch(css, /html\[data-gz-navbar\] \.bb-offcanvas-panel[^{}>]* \{[^}]*inset-inline-start/);
 });
 
 test("Ultra's first paint words the bar as the model does, for each setting, in and out of a course", () => {
@@ -227,9 +244,9 @@ test("a mod's items are checked: name, icon, address, badge, place; one owner ca
     chrome: { runtime: { id: 'x' }, storage: { onChanged: { addListener: noop } } },
     GZ_CTX: { site: 'ultra', t: (k) => k, locale: () => 'en', on: () => false, settings: () => ({ enabled: true, navbar: { on: false } }), parts: () => null, setVar: noop } });
   const ui = vm.runInContext(read('features/navbar.js'), ctx);
-  assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'star', href: 'https://due.test/', badge: 3, group: 'main' }), true);
+  assert.equal(ui.add('countdown', { id: 'next', label: 'Next due', icon: 'star', href: 'https://school.test/ultra/calendar', badge: 3, group: 'main' }), true);
   for (const bad of [{ id: 'Next', label: 'x' }, { id: 'a', label: '' }, { id: 'a', label: 'x'.repeat(41) }, { id: 'a', label: 'x', href: 'javascript:alert(1)' }, { id: 'a', label: 'x', href: 'http://plain.test/' },
-    ...['blob:https://school.test/id', 'https://user:pass@due.test/', null, 1, {}].map((href) => ({ id: 'a', label: 'x', href })),
+    ...['blob:https://school.test/id', 'https://user:pass@due.test/', 'https://due.test/', 'https://school.test.evil.test/', null, 1, {}].map((href) => ({ id: 'a', label: 'x', href })),
     { id: 'a', label: 'x', icon: 'skull' }, { id: 'a', label: 'x', badge: 'toolong' }, { id: 'a', label: 'x', slot: 'side' }, null]) assert.equal(ui.add('countdown', bad), false, JSON.stringify(bad));
   assert.equal(ui.add('Bad Owner', { id: 'a', label: 'x' }), false);
   assert.equal(ui.update('other', 'next', { label: 'Hijack' }), false);

@@ -161,6 +161,18 @@ interface GlazeEvents {
   cards: { courses: GlazeCourseRef[] };
   /** The navigation's items changed. `nav.items` answers this for you. */
   'nav.items': { items: GlazeNavItem[] };
+  /** Glaze's bar changed (`nav.read`). Ask `glaze.nav.model()`. */
+  'nav.change': Record<string, never>;
+  /** The student used an item of the bar (`nav.read`). */
+  'nav.navigate': { id: string };
+  /** The rail opened (`nav.read`). */
+  'nav.expand': Record<string, never>;
+  /** The rail closed (`nav.read`). */
+  'nav.collapse': Record<string, never>;
+  /** A phone's More sheet opened or closed (`nav.read`). */
+  'nav.sheet': { open: boolean };
+  /** The student clicked one of this mod's own items added with `action: true` (`nav.items`). `id` is the mod's id for it. */
+  'nav.action': { id: string };
   /** Worker only: the canvas of a slot has this size, in device pixels. */
   'canvas.size': { slot: string; w: number; h: number; dpr: number };
   /** Worker only: nothing of the slot's canvases shows (page hidden, motion off, or no canvas on the page); animation frames are on hold. */
@@ -378,12 +390,68 @@ interface GlazeNavLayout {
   icons?: Record<string, string>;
 }
 
+/** One item of Glaze's bar, as `glaze.nav.model()` gives it. */
+interface GlazeBarItem {
+  id: string;
+  label: string;
+  icon: string;
+  /** Up to 4 characters, `''` for none. */
+  badge: string;
+  active: boolean;
+  /** The label of its group, `''` for none. */
+  group: string;
+}
+
+/** Glaze's bar (`nav.read`): no addresses; at most 64 items. */
+interface GlazeBarModel {
+  place: 'rail' | 'top' | 'none';
+  items: GlazeBarItem[];
+  groups: { label: string; items: string[] }[];
+  /** The open course's own menu. */
+  course: { name: string; items: GlazeBarItem[] } | null;
+  /** The id of the item for where the student is, or `''`. */
+  active: string;
+}
+
+/** An item a mod adds to Glaze's bar (`nav.items`). Exactly one of `href` (a page of this school's site) and `action`. */
+interface GlazeBarAdd {
+  /** `a-z`, `0-9`, `-`, up to 32, starting with a letter: the mod's own name for it. */
+  id: string;
+  /** One line, up to 40. */
+  label: string;
+  /** One of the bar's icons; any other name draws the link icon. */
+  icon?: string;
+  href?: string;
+  /** `true`: a click sends this mod a `nav.action` event. */
+  action?: true;
+  /** A number, or up to 4 characters. */
+  badge?: number | string;
+  /** A group of the bar, by its label or its place (0 to 7); or `slot`. */
+  group?: string | number;
+  slot?: 'top' | 'bottom';
+}
+
 interface GlazeNav {
   /**
    * Called with the navigation's items; give back a layout to stand in for the student's own, or nothing to leave it.
    * The first mod in the student's order that gives one wins. `null` stops.
    */
   items(fn: ((items: GlazeNavItem[]) => GlazeNavLayout | null | void | Promise<GlazeNavLayout | null | void>) | null): void;
+  /** Glaze's bar now, or `null` where it isn't drawn. Worker. `nav.read` permission. */
+  model(): Promise<GlazeBarModel | null>;
+  /** Adds (or replaces) one of this mod's own items; at most 8. `nav.items` permission. */
+  add(item: GlazeBarAdd): Promise<GlazeBarAdd>;
+  /** Changes one of this mod's own items. `nav.items` permission. */
+  update(id: string, patch: Partial<Omit<GlazeBarAdd, 'id'>>): Promise<{ id: string; patch: Partial<GlazeBarAdd> }>;
+  /** Removes one of this mod's own items. `nav.items` permission. */
+  remove(id: string): Promise<{ id: string }>;
+  /** Proposes a layout over the student's while the mod runs, never saved; `null` withdraws it. `nav.layout` permission. */
+  layout(patch: GlazeNavLayout | null): Promise<GlazeNavLayout | null>;
+  /**
+   * Opens a bar item as a click on it would. Only for the mod whose nav replacement the student turned on, drawn from a
+   * tree, within a second of a click in its `nav` slot.
+   */
+  go(id: string): Promise<{ id: string }>;
 }
 
 interface GlazeCommand {

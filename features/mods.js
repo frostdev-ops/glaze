@@ -114,7 +114,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (!alive()) return stop();
     r.waiting.set(d.mod, n + 1);
     chrome.runtime.sendMessage({ type: 'glaze:mod', mod: d.mod, via: d.via, call: d.call, args: d.args })
-      .then((x) => { if (x?.ok === true && current() && !gone.has(d.mod)) apply(d.mod, d.via, d.call, x.value); reply(x); }, () => reply({ error: 'failed' }))
+      .then((x) => { const own = x?.ok === true && current() && !gone.has(d.mod) ? apply(d.mod, d.via, d.call, x.value) : null; reply(own || x); }, () => reply({ error: 'failed' }))
       .finally(() => r.waiting.set(d.mod, r.waiting.get(d.mod) - 1));
   };
   const heard = (r, d) => {
@@ -220,7 +220,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   };
   const emitAll = (event, data, may = () => true) => { for (const m of running()) if (may(m)) emit(m.id, event, data); };
   // The data events, each only to the mods granted what it is about; they carry no data (the mod asks, and is checked).
-  const NEEDS = { courses: 'courses', todo: 'todo', grade: 'grades', complete: 'todo', submit: 'todo' };
+  const NEEDS = { courses: 'courses', todo: 'todo', grade: 'grades', complete: 'todo', submit: 'todo', 'nav.change': 'nav.read', 'nav.navigate': 'nav.read', 'nav.expand': 'nav.read', 'nav.collapse': 'nav.read', 'nav.sheet': 'nav.read' };
   const tell = (event, data = {}) => emitAll(event, data, (m) => Array.isArray(m.events) && m.events.includes(NEEDS[event]));
   const site = () => ctx()?.site || '';
   const pageNow = () => {
@@ -288,7 +288,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (!m?.root) return;
     ui()?.then((U) => {
       if (mounts.get(k) !== m) return;
-      const got = U.render(m.root, trees.get(k) ?? null, { send: (kind, cid, value) => emit(id, 'ui', { slot: key, id: cid, kind, ...(value !== undefined && { value }) }), asset: (p) => asset(id, p), canvas: m.canvas });
+      const got = U.render(m.root, trees.get(k) ?? null, { send: (kind, cid, value) => { if (key === 'nav' && kind === 'click') navGestures.set(id, performance.now()); emit(id, 'ui', { slot: key, id: cid, kind, ...(value !== undefined && { value }) }); }, asset: (p) => asset(id, p), canvas: m.canvas });
       if (got.canvas !== m.canvas) {
         m.ro?.disconnect();
         m.canvas = got.canvas; m.g = null; m.size = ''; m.ro = null;
@@ -320,7 +320,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
       const showing = [...mounts].some(([k, x]) => {
         if (!k.startsWith(`${m.id}|`) || !x.canvas?.isConnected || !x.size) return false;
         const r = x.canvas.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
+        return r.width > 0 && r.height > 0 && globalThis.getComputedStyle?.(x.canvas)?.visibility !== 'hidden';
       });
       const p = document.hidden || motionOff() || !showing;
       if (pausedOf.get(m.id) !== p) { pausedOf.set(m.id, p); emit(m.id, 'canvas.pause', { paused: p }); }
@@ -356,8 +356,9 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (call === 'ui.render') { trees.set(`${id}|${v.slot}`, v.tree); draw(id, v.slot); }
     else if (call === 'cards.set') { o.cards = v; paintCards(); }
     else if (call === 'palette.set') o.cmds = v;
-    else if (call === 'nav.set' || call === 'rules.set' || call === 'look.override') {
-      o[{ 'nav.set': 'nav', 'rules.set': 'rules', 'look.override': 'look' }[call]] = Array.isArray(v) && !v.length ? null : v;
+    else if (call.startsWith('nav.') && call !== 'nav.set' && call !== 'nav.layout') return navCall(id, via, call, v);
+    else if (call === 'nav.set' || call === 'nav.layout' || call === 'rules.set' || call === 'look.override') {
+      o[{ 'nav.set': 'nav', 'nav.layout': 'layout', 'rules.set': 'rules', 'look.override': 'look' }[call]] = Array.isArray(v) && !v.length ? null : v;
       reparts();
     } else if (call === 'effects.play') {
       // At most one effect a mod every 200 ms, and none with motion off or the page hidden (features/motionx.js checks).
@@ -376,7 +377,9 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     overlays.delete(id);
     pausedOf.delete(id);
     if (had?.cards) paintCards();
-    if (had?.nav || had?.rules || had?.look) reparts();
+    if (had?.nav || had?.layout || had?.rules || had?.look) reparts();
+    navGestures.delete(id);
+    if (navOwn.delete(id)) bar()?.clear(id);
   };
   const resetAll = () => { for (const m of list) forget(m.id); };
 
@@ -386,13 +389,13 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   let partsSig = '', partsOut = null, partsBase;
   const freeze = (o) => { for (const v of Object.values(o)) if (v && typeof v === 'object') freeze(v); return Object.freeze(o); };
   const parts = (base) => {
-    const o = running().map((m) => overlays.get(m.id)).filter((x) => x && (x.nav || x.rules || x.look));
+    const o = running().map((m) => overlays.get(m.id) && { ...overlays.get(m.id), off: m.arranges === false }).filter((x) => x && (x.nav || x.layout || x.rules || x.look));
     if (!o.length) return base;
-    const sig = JSON.stringify(o.map((x) => [x.nav, x.rules, x.look]));
+    const sig = JSON.stringify(o.map((x) => [x.nav, x.layout, x.off, x.rules, x.look]));
     if (sig === partsSig && base === partsBase) return partsOut;
     const x = { ...(base || {}) };
-    for (const p of o.map((y) => y.look).filter(Boolean).reverse()) Object.assign(x, p);
-    const nav = o.map((y) => y.nav || y.look?.nav).find(Boolean);
+    for (const p of o.map((y) => y.look).filter(Boolean).reverse()) { const { nav, ...rest } = p; Object.assign(x, rest); }
+    const nav = o.map((y) => !y.off && (y.layout || y.nav || y.look?.nav)).find(Boolean);
     if (nav) x.nav = nav;
     const rules = [...(base?.rules || []), ...o.flatMap((y) => [...(y.look?.rules || []), ...(y.rules || [])])].slice(0, 64);
     if (rules.length) x.rules = rules;
@@ -431,9 +434,75 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   };
 
   // ---- the nav: items for transforms, rail widgets, a replacement -----------------------------------------------------------
-  const navItems = () => [...document.querySelectorAll('[data-gz-nav-id]')].slice(0, 64).map((u) => ({ id: u.dataset.gzNavId, label: (u.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80) }))
+  // The bar's items where Glaze's bar is drawn (features/navbar.js), else the older rail's.
+  const bar = () => globalThis.GZ_NAVBAR_UI || null;
+  const navItems = () => bar()?.live() ? (bar().model()?.items || []).filter((i) => !i.hidden && !i.id.startsWith('w:')).slice(0, 64).map((i) => ({ id: i.id, label: String(i.label).slice(0, 80) })) : [...document.querySelectorAll('[data-gz-nav-id]')].slice(0, 64).map((u) => ({ id: u.dataset.gzNavId, label: (u.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80) }))
     .filter((i) => i.id && !i.id.startsWith('w:') && !i.id.startsWith('g:'));
   let itemsSig = '';
+  const itemsNow = () => { const items = navItems(), isig = JSON.stringify(items); if (isig !== itemsSig) { itemsSig = isig; emitAll('nav.items', { items }); } };
+  // nav.read: the bar as a mod may read it, cleaned and capped (no addresses).
+  const cut = (x, n) => String(x ?? '').slice(0, n);
+  const navModel = () => {
+    const v = bar()?.live() ? bar().model() : null;
+    if (!v) return null;
+    const groupOf = new Map(v.groups.flatMap((g) => g.items.map((id) => [id, g.label])));
+    const one = (i, group) => ({ id: cut(i.id, 80), label: cut(i.label, 80), icon: cut(i.icon, 24), badge: cut(i.badge, 4), active: !!i.active, group: cut(group, 24) });
+    const items = v.items.filter((i) => !i.hidden).slice(0, 64);
+    return { place: cut(v.place, 8), items: items.map((i) => one(i, groupOf.get(i.id) ?? '')), groups: v.groups.slice(0, 8).map((g) => ({ label: cut(g.label, 24), items: g.items.filter((id) => items.some((i) => i.id === id)).map((id) => cut(id, 80)) })),
+      course: v.menu ? { name: cut(v.menu.name, 80), items: v.menu.items.slice(0, 64).map((i) => one(i, '')) } : null, active: cut(v.active, 80) };
+  };
+  // nav.items: each mod's own items (at most 8), kept here and handed to the bar (again when it loads), gone with the mod.
+  const navOwn = new Map(), navGestures = new Map(); // mod → Map(id → item); mod → when its nav slot was last clicked
+  const pushNav = (id) => {
+    const N = bar(), m = list.find((x) => x.id === id);
+    if (!N) return true;
+    N.clear(id);
+    let ok = true;
+    for (const it of navOwn.get(id)?.values() || []) ok = N.add(id, { ...it, action: undefined, by: m?.name || '', select: it.action ? () => emit(id, 'nav.action', { id: it.id }) : null }) && ok;
+    return ok;
+  };
+  const navCall = (id, via, call, v) => {
+    if (call === 'nav.model') return { ok: true, value: navModel() };
+    if (call === 'nav.go') {
+      const at = navGestures.get(id);
+      if (via !== 'worker' || claimant('nav')?.id !== id || navTaken?.mode !== 'bar' || at === undefined || performance.now() - at > 1000) return { error: 'permission' };
+      navGestures.delete(id);
+      return bar()?.go(v.id) ? null : { error: 'args' };
+    }
+    const mine = navOwn.get(id) || new Map();
+    const before = new Map(mine);
+    if (call === 'nav.add') { if (!mine.has(v.id) && mine.size >= 8) return { error: 'args' }; mine.set(v.id, v); }
+    else if (call === 'nav.update') {
+      const had = mine.get(v.id);
+      if (!had) return { error: 'args' };
+      const next = { ...had, ...v.patch };
+      for (const [a, b] of [['href', 'action'], ['group', 'slot']]) { if (a in v.patch) delete next[b]; if (b in v.patch) delete next[a]; }
+      mine.set(v.id, next);
+    } else if (call === 'nav.remove') { if (!mine.delete(v.id)) return { error: 'args' }; }
+    navOwn.set(id, mine);
+    if (!pushNav(id)) { navOwn.set(id, before); pushNav(id); return { error: 'args' }; }
+    return null;
+  };
+  // The bar's events, to the mods granted nav.read; the older nav.items transform and the replacement follow the bar.
+  let hooked = null;
+  const hookBar = () => {
+    const N = bar();
+    if (!N || hooked === N) return;
+    hooked = N;
+    N.on('change', () => { tell('nav.change'); itemsNow(); syncNavSlot(); });
+    N.on('navigate', (d) => tell('nav.navigate', { id: cut(d?.id, 80) }));
+    N.on('expand', () => tell('nav.expand'));
+    N.on('collapse', () => tell('nav.collapse'));
+    N.on('sheet', (d) => tell('nav.sheet', { open: !!d?.open }));
+    for (const id of navOwn.keys()) pushNav(id);
+  };
+  // The first mod, in the student's order, whose layout the bar wears now (not one the student said "Use my own" to).
+  const arranger = () => {
+    const m = running().find((x) => { const o = overlays.get(x.id); return x.arranges !== false && (o?.layout || o?.nav || o?.look?.nav); });
+    if (!m) return null;
+    const o = overlays.get(m.id), nav = o.layout || o.nav || o.look.nav;
+    return { id: m.id, name: m.name, place: nav.place || '' };
+  };
   // The first running mod, in the student's order, that has `key` turned on (and the slot to fill it, for nav and bg).
   const claimant = (key) => (run && runtime === true ? running().find((m) => m.on?.includes(key) && (key === 'bg' ? slotOf(m.id, 'background') : key === 'nav' || key.startsWith('tile:') ? slotOf(m.id, key) : true)) : null);
   const railBoxes = new Map(); // `${mod}|${slot}` → the rail's element for it
@@ -458,26 +527,50 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     });
   };
   const NAV_ROOT = { ultra: 'nav[class*="makeStylesnavigation"], nav#base_tools', canvas: '#header .ic-app-header__main-navigation', moodle: '.primary-navigation' };
-  let navTaken = null; // { root, display, box, k }
+  let navTaken = null; // { mode: 'bar' | 'native', root, display, box, k }
+  // Where Glaze's bar is drawn, the mod's nav stands in its place (the rail, the top bar or a phone's tabs), over the room
+  // the bar keeps; Glaze's bar hides (features/navbar.js asks navStands) and the school's own stays hidden. The box is put
+  // in once and only restyled (a frame moved loads again). Without Glaze's bar, it takes the school's own nav's place.
+  const placeBox = () => {
+    const v = bar()?.model(), wide = globalThis.matchMedia?.('(min-width: 900px)')?.matches ?? true;
+    const at = !v || v.place === 'none' ? 'display:none' : !wide ? 'bottom:0;inset-inline:0;height:calc(96px + env(safe-area-inset-bottom, 0px))'
+      : v.place === 'top' ? 'top:0;inset-inline:0;height:var(--gz-navbar-top, 0px)' : 'top:0;bottom:0;inset-inline-start:0;width:var(--gz-navbar-left, 0px)';
+    const css = `position:fixed;z-index:2147483000;overflow:auto;${at}`;
+    if (navTaken.css !== css) { navTaken.css = css; navTaken.box.style.cssText = css; }
+  };
   const syncNavSlot = () => {
-    const m = claimant('nav');
-    const root = m && NAV_ROOT[site()] ? document.querySelector(NAV_ROOT[site()]) : null;
-    const k = m && root ? `${m.id}|nav` : '';
-    if (navTaken && (navTaken.k !== k || navTaken.root !== root || !navTaken.box.isConnected)) {
-      detach(navTaken.k);
-      navTaken.box.remove();
-      if (navTaken.root.isConnected) { if (navTaken.display) navTaken.root.style.setProperty('display', navTaken.display, navTaken.prio); else navTaken.root.style.removeProperty('display'); }
+    const m = claimant('nav'), live = !!bar()?.live();
+    const root = m && !live && NAV_ROOT[site()] ? document.querySelector(NAV_ROOT[site()]) : null;
+    const k = m && (live || root) ? `${m.id}|nav` : '', mode = live ? 'bar' : 'native';
+    if (navTaken && (navTaken.k !== k || navTaken.mode !== mode || navTaken.root !== root || !navTaken.box.isConnected)) {
+      const was = navTaken;
       navTaken = null;
+      detach(was.k);
+      was.box.remove();
+      if (was.root?.isConnected) { if (was.display) was.root.style.setProperty('display', was.display, was.prio); else was.root.style.removeProperty('display'); }
+      if (was.mode === 'bar') bar()?.sync();
     }
-    if (!k || navTaken) { if (navTaken && navTaken.root.style.getPropertyValue('display') !== 'none') navTaken.root.style.setProperty('display', 'none', 'important'); return; }
+    if (navTaken) {
+      if (navTaken.mode === 'bar') placeBox();
+      else if (navTaken.root.style.getPropertyValue('display') !== 'none') navTaken.root.style.setProperty('display', 'none', 'important');
+      return;
+    }
+    if (!k) return;
     const box = document.createElement('div');
     box.className = 'gz-mod-nav';
     box.setAttribute('role', 'navigation');
     box.setAttribute('aria-label', slotOf(m.id, 'nav').name || m.name);
-    box.style.cssText = 'display:block;width:100%;height:100%;min-height:240px;overflow:auto';
-    navTaken = { root, display: root.style.getPropertyValue('display'), prio: root.style.getPropertyPriority('display'), box, k };
-    root.before(box);
-    root.style.setProperty('display', 'none', 'important');
+    if (live) {
+      navTaken = { mode, root: null, box, k };
+      placeBox();
+      document.documentElement.append(box);
+      bar().sync();
+    } else {
+      box.style.cssText = 'display:block;width:100%;height:100%;min-height:240px;overflow:auto';
+      navTaken = { mode, root, display: root.style.getPropertyValue('display'), prio: root.style.getPropertyPriority('display'), box, k };
+      root.before(box);
+      root.style.setProperty('display', 'none', 'important');
+    }
     attach(m.id, 'nav', box);
   };
   let bgTaken = null; // { box, k }
@@ -531,8 +624,8 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     const ids = cardList();
     const sig = JSON.stringify(ids);
     if (sig !== cardsAsked) { cardsAsked = sig; emitAll('cards', { courses: ids }, (m) => m.events?.includes('courses')); }
-    const items = navItems(), isig = JSON.stringify(items);
-    if (isig !== itemsSig) { itemsSig = isig; emitAll('nav.items', { items }); }
+    hookBar();
+    itemsNow();
     syncNavSlot();
     for (const k of mounts.keys()) { const [id, key] = k.split('|'); frameIn(id, key); }
     paintCards();
@@ -546,7 +639,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
   // What the worker says to run now; restarted when that changes. A mod stopped here starts again only if it changed. Only the
   // order or which replacements are on changing moves what shows, without a restart.
   let asking = 0, revision = 0;
-  const same = (a, b) => JSON.stringify(a.map(({ on, ...m }) => m).sort((x, y) => (x.id < y.id ? -1 : 1))) === JSON.stringify(b.map(({ on, ...m }) => m).sort((x, y) => (x.id < y.id ? -1 : 1)));
+  const same = (a, b) => JSON.stringify(a.map(({ on, arranges, ...m }) => m).sort((x, y) => (x.id < y.id ? -1 : 1))) === JSON.stringify(b.map(({ on, arranges, ...m }) => m).sort((x, y) => (x.id < y.id ? -1 : 1)));
   const refresh = () => {
     clearTimeout(asking);
     const current = ++revision;
@@ -602,7 +695,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
       // A kill message cannot reach a host frozen by frame code. Remove it before asking for the new list.
       const revoked = area === 'local' && (c.mods || c.modsBlocklist || (c.modDev && c.modDev.newValue !== true) || Object.entries(c).some(([k, v]) => k.startsWith('mod:') && (!v.newValue || v.newValue.enabled === false || v.newValue.blocked || JSON.stringify(v.oldValue?.grants) !== JSON.stringify(v.newValue?.grants))));
       if (revoked || (area === 'sync' && c.enabled?.newValue === false)) stop(false);
-      if ((area === 'local' && Object.keys(c).some((k) => k === 'mods' || k === 'modsBlocklist' || k === 'modOrder' || k === 'modDev' || k.startsWith('mod:') || k.startsWith('modReplace:'))) || (area === 'sync' && c.enabled)) refresh();
+      if ((area === 'local' && Object.keys(c).some((k) => k === 'mods' || k === 'modsBlocklist' || k === 'modOrder' || k === 'modDev' || k.startsWith('mod:') || k.startsWith('modReplace:') || k.startsWith('modNavLayout:'))) || (area === 'sync' && c.enabled)) refresh();
       if (area === 'sync' && (c.colors || c.motion)) { run?.port.postMessage({ event: 'theme' }); for (const sh of run?.slots.values() || []) sh.port.postMessage({ event: 'theme' }); setTimeout(paused, 100); }
       if (area === 'local') {
         for (const k of Object.keys(c)) if (k.startsWith('modSettings:')) emit(k.slice(12), 'settings', {});
@@ -615,7 +708,7 @@ var GZ_MODS = globalThis.GZ_MODS || (() => {
     if (!wired) wire();
     if (!run && Array.isArray(mods)) { list = mods; begin(); } else refresh();
   };
-  return { start, stop, verdict, parts, hasBg: () => running().some((m) => overlays.get(m.id)?.look?.bg), replaces, tiles, rail, cmds, pass, attach,
-    stats: () => ({ ...stats, running: !!run, runtime, gone: Object.fromEntries(gone), slots: [...mounts.keys()], slotHosts: run ? run.slots.size : 0, nav: navTaken?.k || '', bg: bgTaken?.k || '' }) };
+  return { start, stop, verdict, parts, arranger, navStands: () => navTaken?.mode === 'bar', navModel, hasBg: () => running().some((m) => overlays.get(m.id)?.look?.bg), replaces, tiles, rail, cmds, pass, attach,
+    stats: () => ({ ...stats, running: !!run, runtime, gone: Object.fromEntries(gone), slots: [...mounts.keys()], slotHosts: run ? run.slots.size : 0, nav: navTaken?.k || '', navMode: navTaken?.mode || '', navItems: Object.fromEntries([...navOwn].map(([k, v]) => [k, [...v.keys()]])), bg: bgTaken?.k || '' }) };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MODS; else GZ_MODS;

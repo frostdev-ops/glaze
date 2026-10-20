@@ -215,8 +215,10 @@ test('successful backup restore cleans logos only after settings commit; failed 
   const c = vm.createContext({ GZ_TODO: { change: async (m) => ({ ok: m.good }) }, GZ_FOLDERS: { restore: async () => ({ ok: c.good }) }, GZ_NAV_STORE: { cleanup: async () => { c.cleaned++; return true; } }, cleaned: 0, good: false });
   const body = src.match(/\n  todo: \{([\s\S]*?)\n  \},/)[1];
   const handler = vm.runInContext(`({${body}})`, c);
-  await handler.run({ restore: {}, good: false }, {}); assert.equal(c.cleaned, 0);
-  c.good = true; await handler.run({ restore: {}, good: true }, {}); assert.equal(c.cleaned, 1);
+  const writes = [], area = { local: { set: async (patch) => { writes.push(JSON.parse(JSON.stringify(patch))); return true; } } };
+  await handler.run({ restore: {}, good: false }, area); assert.equal(c.cleaned, 0); assert.deepEqual(writes, []);
+  c.good = true; await handler.run({ restore: {}, good: true }, area); assert.equal(c.cleaned, 1);
+  assert.deepEqual(writes, [{ freshDefaults: { fresh: false, pending: false } }]);
 });
 
 test('the shared planner reuses only this account covered fresh cache, otherwise a bounded shared memo', async () => {

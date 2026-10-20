@@ -1,16 +1,16 @@
 // A small stand-in for the DOM, for the tests that run a feature's page code in a VM (notes-ui, ultra-panel): elements
 // with children, attributes, simple selectors and listeners; doc.fire dispatches like the DOM (capture, then bubbling).
 // No tests here.
-// Simple selectors only: tag, #id, .class and [attr] or [attr="v"] compounds, joined by spaces or > (both as descendant).
+// Simple selectors only: tag (a custom element's too), #id, .class and [attr], [attr="v"] or [attr*="v"] compounds, joined by spaces or > (both as descendant).
 const one = (el, part) => {
-  const m = part.match(/^([a-z0-9]+|\*)?((?:[#.][\w-]+|\[[^\]]+\])*)$/i);
+  const m = part.match(/^([a-z0-9]+(?:-[a-z0-9]+)*|\*)?((?:[#.][\w-]+|\[[^\]]+\])*)$/i);
   if (!m || !el.tagName || (m[1] && m[1] !== '*' && el.tagName !== m[1].toUpperCase())) return false;
   return (m[2].match(/[#.][\w-]+|\[[^\]]+\]/g) || []).every((x) => {
     if (x[0] === '#') return el.id === x.slice(1);
     if (x[0] === '.') return String(el.className).split(/\s+/).includes(x.slice(1));
-    const [, k, v] = x.match(/^\[([\w-]+)(?:="([^"]*)")?\]$/);
+    const [, k, star, v] = x.match(/^\[([\w-]+)(?:(\*?)="([^"]*)")?\]$/);
     const a = el.getAttribute(k);
-    return a != null && (v == null || a === v);
+    return a != null && (v == null || (star ? a.includes(v) : a === v));
   });
 };
 const matches = (el, sel) => sel.split(',').some((alt) => {

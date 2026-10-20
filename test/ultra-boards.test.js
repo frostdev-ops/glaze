@@ -115,6 +115,7 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
       site: 'ultra', t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), locale: () => 'en', settings: () => settings, acted: () => (typeof acted === 'function' ? acted() : acted),
       need: async (f) => {
         loads.push(f); if (hold[f]) await hold[f];
+        if (f === 'features/pet.js') c.GZ_WIDGETS_UI.register('pet', () => ({}));
         const name = { 'features/dashboard.js': 'GZ_DASH_UI', ...(courses && { 'features/coursecards.js': 'GZ_COURSE_CARDS', 'features/cards.js': 'GZ_CARD_UI', 'lib/cards.js': 'GZ_CARDS' }) }[f];
         if (name && !c[name]) vm.runInContext(read(f), c);
       },
@@ -148,7 +149,8 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
   }
   vm.createContext(c);
   if (courses) vm.runInContext(read('lib/color.js'), c);
-  const ui = vm.runInContext(read('features/widgets.js'), c);
+  const ui = vm.runInContext(read('features/widgets.js').replace('return { sync, cover, hub: open, register, declare, who: account, avatar, catalog };',
+    'return { sync, cover, hub: open, register, declare, who: account, avatar, catalog, probeLayout: layoutBoard };'), c);
   const tile = (id) => doc.querySelector(`section[data-tile="${id}"]`);
   const ev = (type, x = {}) => ({ type, target: null, button: 0, pointerId: 1, clientX: 0, clientY: 0, altKey: false, shiftKey: false, preventDefault() {}, stopPropagation() {}, ...x });
   const tool = (id, name) => tile(id).querySelector('.gz-w-tools').children.find((x) => x.getAttribute('aria-label') === name);
@@ -754,10 +756,11 @@ test('landing: opt-in, once in a tab (the worker remembers it, not the page), ne
 test('the Dashboard is on by default with its own switch: its widgets and To Do with the others off, empty but for Add widget, or Ultra\'s page when off', async () => {
   const off = { notes: false, widgets: false, pet: false };
   assert.equal(D.GZ_DEFAULTS.enhance.dashboard, true, 'on by default');
-  const fresh = page({ at: 'dash' });
+  // Owner 2026-10-20: fresh installation enables notes and pet along with the starter row.
+  const fresh = page({ at: 'dash', enhance: { notes: true, pet: true }, local: { widgetLayout: W.fresh() } });
   fresh.ui.sync(true);
   await settle();
-  assert.deepEqual(fresh.doc.querySelectorAll('#gz-dash section.gz-w').map((x) => x.dataset.tile), ['todo'], 'a first Dashboard: Better To Do, no widget added');
+  assert.deepEqual(fresh.doc.querySelectorAll('#gz-dash section.gz-w').map((x) => x.dataset.tile), ['pet', 'timer', 'notes', 'quotes', 'todo'], 'owner 2026-10-20: starter Dashboard widgets');
   // A device updated from a version whose layouts started with four widgets keeps them (lib/widgets.js kept).
   const p = page({ at: 'dash', enhance: off, local: { widgetLayout: W.kept(false) } });
   p.ui.sync(true);
@@ -773,7 +776,7 @@ test('the Dashboard is on by default with its own switch: its widgets and To Do 
   assert.equal(q.doc.root.dataset.gzDash, 'dash', "the Dashboard, not Ultra's page");
   assert.ok(q.doc.querySelector('[role="tablist"]'), 'with the Institution page one click away');
   q.doc.fire(q.doc.querySelector('.gz-dash-edit'), 'click');
-  assert.deepEqual(q.doc.querySelectorAll('#gz-dash .gz-dash-add button').map((x) => x.textContent), ['+ Agenda', '+ Focus timer', '+ Quote', '+ Music', '+ Breathe', '+ Study buddy', '+ To Do']);
+  assert.deepEqual(q.doc.querySelectorAll('#gz-dash .gz-dash-add button').map((x) => x.textContent), ['+ Agenda', '+ Focus timer', '+ Quote', '+ Music', '+ Breathe', '+ Study buddy', '+ To Do', '+ Glaze settings']);
   // Switched off: no board, Ultra's page as it is (content-ultra.js doesn't ask for the board there either).
   const r = page({ at: 'dash', enhance: { ...off, dashboard: false, widgets: true } });
   r.ui.sync(true);
@@ -1411,4 +1414,49 @@ test('Course cards: Esc flushes pending color before the native dialog closes, w
     assert.ok(!p.doc.getElementById('gz-ccm'));
     assert.equal(sync(p).ucards[ukey('_101_1')].c, '#123456');
   }
+});
+
+test('responsive rows measure wrapped content at its final width before placing the following row', async () => {
+  const seed = W.fresh ? W.fresh() : { ...W.layout(), sidebarFresh: true };
+  const p = cardsPage({ at: 'dash', enhance: { notes: true, pet: true }, local: { widgetLayout: seed } });
+  p.ui.sync(true); await settle();
+  const box = p.doc.boxOf;
+  p.doc.boxOf = (el) => {
+    const r = box(el);
+    if (el.className !== 'gz-w') return r;
+    const width = parseFloat(el.style.width) || r.width;
+    return { ...r, width, height: el.dataset.tile === 'quotes' && width < 300 ? 480 : 200 };
+  };
+  p.tile('quotes').style.width = '384px';
+  p.ui.probeLayout();
+  const quote = p.tile('quotes').getBoundingClientRect();
+  const after = p.grid().children.filter((e) => e.className === 'gz-w').map((e) => e.getBoundingClientRect()).filter((r) => r.top > quote.top);
+  assert.ok(after.length);
+  assert.ok(after.every((r) => r.top >= quote.bottom), 'a wrapping quote cannot overlap a later row during its first layout pass');
+});
+
+test('responsive board rows read saved card width and gap from their independent sync store', async () => {
+  const seed = W.fresh ? W.fresh() : { ...W.layout(), sidebarFresh: true };
+  const lay = W.apply(seed, { fill: 'dash', ops: COURSES.map((c) => ({ s: 'dash', id: ckey(c.id), set: { on: true, term: 'Fall 2026', size: 's' } })) });
+  const p = cardsPage({ at: 'dash', courses: COURSES.map((c) => ({ ...c, term: 'Fall 2026' })), sync: { card: { width: 420, gap: 24 } }, enhance: { notes: true, pet: true }, local: { widgetLayout: lay } });
+  p.ui.sync(true); await settle();
+  const first = p.tile(ckey(COURSES[0].id)), second = p.tile(ckey(COURSES[1].id));
+  const room = p.grid().clientWidth, cols = Math.floor((room + 24) / (420 + 24));
+  assert.equal(parseFloat(first.style.width), (room - (cols - 1) * 24) / cols);
+  assert.equal(parseFloat(second.style.left) - parseFloat(first.style.left) - parseFloat(first.style.width), 24);
+  p.syncStore.card = { width: 200, gap: 0 };
+  p.changed({ card: { newValue: p.syncStore.card } }, 'sync'); await settle(); p.ui.probeLayout();
+  assert.equal(parseFloat(first.style.width), room / COURSES.length, 'live card settings, including a zero gap, reach the board');
+});
+
+test('a fresh first Dashboard fills when delayed course metadata arrives without another page pass', async () => {
+  const seed = W.fresh ? W.fresh() : { ...W.layout(), sidebarFresh: true }, pending = later();
+  const p = cardsPage({ at: 'dash', enhance: { notes: true, pet: true }, local: { widgetLayout: seed } });
+  p.c.GZ_CTX.courseList = () => ({});
+  p.c.GZ_CTX.canvasPeek = () => ({ me: null, books: new Map(), courses: pending });
+  p.ui.sync(true); await settle();
+  pending.res(COURSES.map((c) => ({ courseId: c.id, course: { name: c.name, courseId: c.code, term: { name: c.term } } })));
+  await settle();
+  for (const c of COURSES) assert.ok(p.tile(ckey(c.id)), c.id);
+  assert.ok(p.store.widgetLayout.filled.includes('dash'));
 });

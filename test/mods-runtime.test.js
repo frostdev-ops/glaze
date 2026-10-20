@@ -255,7 +255,7 @@ const page = ({ path = '/courses/1', list } = {}) => {
   const chrome = { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, sendMessage: async (m) => { sent.push(m); return m.type === 'glaze:mod' ? { ok: true, value: `answer to ${m.call}` } : m.op === 'list' ? { mods: list() } : { ok: true }; } },
     storage: { onChanged: { addListener: (f) => { chrome.changed = f; } } } };
   const el = (tag) => {
-    const e = { tag, isConnected: false, listeners: {}, style: {}, setAttribute() {}, append(c) { c.isConnected = true; }, remove() { this.isConnected = false; },
+    const e = { tag, isConnected: false, listeners: {}, style: {}, setAttribute() {}, replaceChildren() {}, append(c) { c.isConnected = true; }, remove() { this.isConnected = false; },
       addEventListener(t, f) { (this.listeners[t] ||= []).push(f); }, attachShadow() { return e; } };
     if (tag === 'iframe') { frames.push(e); e.contentWindow = { postMessage: (data, origin, ports) => { e.posted = [...(e.posted || []), { data, origin, ports }]; } }; }
     return e;
@@ -1031,5 +1031,222 @@ test('Look overrides and nav layouts are immediate while full UI and effect repl
   await settle();
   eq(p.G.parts(null), { ...look, nav });
   for (const key of ['nav', 'bg', 'effect:complete']) assert.equal(p.G.replaces(key), false, key);
+  port.close();
+});
+
+// ---- Glaze's bar: nav.read, nav.items, nav.layout and a replacement ---------------------------------------------------------
+// A stand-in for features/navbar.js's API: its model, the mods' items by owner, its listeners, what it was asked to open.
+const fakeBar = (model) => {
+  const items = new Map(), heard = {}, went = [];
+  let synced = 0;
+  return { items, heard, went, get synced() { return synced; }, live: () => true, model: () => model, sync: () => { synced++; },
+    on(e, f) { (heard[e] ||= []).push(f); }, clear: (owner) => items.delete(owner),
+    add: (owner, it) => { if (!/^[a-z][a-z0-9-]{0,31}$/.test(it.id)) return false; if (!items.has(owner)) items.set(owner, new Map()); items.get(owner).set(it.id, it); return true; },
+    go: (id) => { went.push(id); return true; } };
+};
+const BAR = { place: 'rail', active: 'calendar', menu: null,
+  groups: [{ id: 'main', label: 'Main', items: ['course', 'calendar', 'grades'] }],
+  items: [{ id: 'course', label: 'Courses', icon: 'book', href: 'https://lms.test/courses', badge: '', active: false, hidden: false }, { id: 'calendar', label: 'Calendar', icon: 'calendar', href: 'https://lms.test/calendar', badge: '3', active: true, hidden: false },
+    { id: 'grades', label: 'Grades', icon: 'grades', href: 'https://lms.test/grades', badge: '', active: false, hidden: true }] };
+
+test('nav.items: a mod\'s items go to the bar under its own name, at most eight, and go with the mod', async () => {
+  const p = page();
+  const bar = p.ctx.GZ_NAVBAR_UI = fakeBar(BAR);
+  let value;
+  p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value } : { ok: true });
+  p.G.start([W('a'), W('b')]);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  const ask = async (call, v, mod = 'a') => { value = v; const id = Math.random(); port.postMessage({ mod, via: 'worker', id, call, args: [] }); await settle(); return got.find((x) => x.id === id); };
+  eq((await ask('nav.add', { id: 'due', label: 'Due', action: true })).ok, true);
+  const item = bar.items.get('a').get('due');
+  assert.equal(item.by, 'a', 'marked as the mod\'s');
+  item.select();
+  await settle();
+  eq(got.filter((x) => x.event === 'nav.action'), [{ event: 'nav.action', mod: 'a', data: { id: 'due' } }], 'a click is told to that mod alone');
+  eq((await ask('nav.update', { id: 'due', patch: { href: 'https://lms.test/x' } })).ok, true);
+  assert.equal(bar.items.get('a').get('due').href, 'https://lms.test/x');
+  assert.equal(bar.items.get('a').get('due').select, null, 'an href takes the action\'s place');
+  eq(await ask('nav.update', { id: 'other', patch: { label: 'X' } }), { mod: 'a', via: 'worker', id: got.at(-1).id, ok: false, error: 'args' }, 'only its own items');
+  for (let i = 0; i < 7; i++) await ask('nav.add', { id: `i${i}`, label: 'I', action: true });
+  eq((await ask('nav.add', { id: 'nine', label: 'I', action: true })).error, 'args', 'at most eight');
+  eq((await ask('nav.add', { id: 'b1', label: 'B', action: true }, 'b')).ok, true);
+  eq((await ask('nav.remove', { id: 'i0' })).ok, true);
+  assert.equal(bar.items.get('a').size, 7);
+  port.postMessage({ stopped: 'a', why: 'error' });
+  await settle();
+  assert.equal(bar.items.has('a'), false, 'all of a stopped mod\'s items go');
+  assert.equal(bar.items.get('b').size, 1, 'another mod\'s stay');
+  port.close();
+});
+
+test('nav.read: the model is cleaned and capped, and the bar\'s events reach only granted mods', async () => {
+  const p = page();
+  p.ctx.GZ_NAVBAR_UI = fakeBar(BAR);
+  p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value: true } : { ok: true });
+  p.G.start([{ ...W('a'), events: ['nav.read'] }, W('b')]);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  p.G.pass();
+  port.postMessage({ mod: 'a', via: 'worker', id: 1, call: 'nav.model', args: [] });
+  await settle();
+  eq(got.find((x) => x.id === 1).value, { place: 'rail', items: [{ id: 'course', label: 'Courses', icon: 'book', badge: '', active: false, group: 'Main' }, { id: 'calendar', label: 'Calendar', icon: 'calendar', badge: '3', active: true, group: 'Main' }],
+    groups: [{ label: 'Main', items: ['course', 'calendar'] }], course: null, active: 'calendar' }, 'no addresses, no hidden items');
+  const bar = p.ctx.GZ_NAVBAR_UI;
+  for (const f of bar.heard.navigate) f({ id: 'calendar' });
+  for (const f of bar.heard.sheet) f({ open: true });
+  for (const f of bar.heard.change) f({});
+  await settle();
+  eq(got.filter((x) => x.event?.startsWith('nav.') && x.event !== 'nav.items').map((x) => [x.event, x.mod, x.data]), [['nav.navigate', 'a', { id: 'calendar' }], ['nav.sheet', 'a', { open: true }], ['nav.change', 'a', {}]]);
+  eq(got.filter((x) => x.event === 'nav.items').at(-1).data, { items: [{ id: 'course', label: 'Courses' }, { id: 'calendar', label: 'Calendar' }] }, 'the older transform reads the new bar');
+  port.close();
+});
+
+test('nav.layout lays over the student\'s like nav.set, first mod wins, and "Use my own" turns that mod\'s off', async () => {
+  const lay = { a: { hidden: ['calendar'], place: 'top' }, b: { hidden: ['grades'] } };
+  let list = [W('a'), W('b')];
+  const p = page({ list: () => list });
+  p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value: lay[m.mod] } : m.op === 'list' ? { mods: list } : { ok: true });
+  p.G.start(list);
+  const { port } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  port.postMessage({ mod: 'b', via: 'worker', id: 1, call: 'nav.layout', args: [] });
+  port.postMessage({ mod: 'a', via: 'worker', id: 2, call: 'nav.set', args: [] });
+  await settle();
+  eq(p.G.parts(null).nav, lay.a, 'the first in the student\'s order wins');
+  eq(p.G.arranger(), { id: 'a', name: 'a', place: 'top' });
+  list = [{ ...W('a'), arranges: false }, W('b')];
+  p.chrome.changed({ 'modNavLayout:a': { newValue: false } }, 'local');
+  await p.tick(100);
+  eq(p.G.parts(null).nav, lay.b, 'Use my own: a\'s layout is off, the next mod\'s shows');
+  eq(p.G.arranger()?.id, 'b');
+  assert.equal(p.G.stats().running, true, 'without restarting the mods');
+  lay.b = null;
+  port.postMessage({ mod: 'b', via: 'worker', id: 4, call: 'nav.layout', args: [] });
+  await settle();
+  assert.equal(p.G.parts(null).nav, undefined, 'null withdraws it');
+  port.close();
+});
+
+test('Use my own also withdraws a nav in Look overrides and keeps the worn layout', async () => {
+  let list = [W('a'), W('b')];
+  const p = page({ list: () => list });
+  const layouts = { a: { hidden: ['calendar'] }, b: { hidden: ['grades'] } };
+  p.chrome.runtime.sendMessage = async (m) => m.type === 'glaze:mod' ? { ok: true, value: { nav: layouts[m.mod], cursor: { kind: 'trail' } } } : { mods: list };
+  p.G.start(list);
+  const { port } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  for (const mod of ['a', 'b']) port.postMessage({ mod, via: 'worker', id: mod, call: 'look.override', args: [] });
+  await settle();
+  const base = { nav: { hidden: ['tools'] } };
+  eq(p.G.parts(base).nav, layouts.a);
+  list = list.map((m) => ({ ...m, arranges: false }));
+  p.chrome.changed({ 'modNavLayout:a': { newValue: false }, 'modNavLayout:b': { newValue: false } }, 'local');
+  await p.tick(100);
+  eq(p.G.parts(base).nav, base.nav, 'restore the worn layout');
+  assert.equal(p.G.parts(null).nav, undefined, 'no worn layout means no nav overlay');
+  eq(p.G.parts(null).cursor, { kind: 'trail' }, 'other Look parts still apply');
+  port.postMessage({ mod: 'a', via: 'worker', id: 'again', call: 'look.override', args: [] });
+  await settle();
+  assert.equal(p.G.parts(null).nav, undefined, 'proposing again cannot undo the opt-out');
+  port.close();
+});
+
+test('a nav replacement stands in for Glaze\'s bar, hides it, comes off again, and go() needs a click in its slot first', async () => {
+  let list = [{ ...W('a'), on: ['nav'], slots: [{ key: 'nav', name: 'My nav', file: null }] }];
+  const p = page({ list: () => list });
+  const bar = p.ctx.GZ_NAVBAR_UI = fakeBar(BAR);
+  let sent = null;
+  p.ctx.GZ_MODUI = { render: (root, tree, o) => { sent = o.send; return { canvas: null }; } };
+  p.chrome.runtime.sendMessage = async (m) => (m.type === 'glaze:mod' ? { ok: true, value: { id: 'calendar' } } : m.op === 'list' ? { mods: list } : { ok: true });
+  p.G.start(list);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  p.G.pass();
+  await settle();
+  assert.equal(p.G.stats().navMode, 'bar');
+  assert.equal(p.G.navStands(), true, 'Glaze\'s bar is told to hide');
+  const box = p.appended.find((e) => e.className === 'gz-mod-nav');
+  assert.match(box.style.cssText, /position:fixed.*width:var\(--gz-navbar-left/, 'in the rail\'s room');
+  const go = async (id) => { port.postMessage({ mod: 'a', via: 'worker', id, call: 'nav.go', args: [] }); await settle(); return got.find((x) => x.id === id); };
+  assert.equal((await go(1)).error, 'permission', 'no click, no navigation');
+  sent('click', 'b');
+  p.clock += 900;
+  assert.equal((await go(2)).ok, true);
+  eq(bar.went, ['calendar']);
+  assert.equal((await go(3)).error, 'permission', 'one click, one go');
+  sent('click', 'b');
+  p.clock += 1100;
+  assert.equal((await go(4)).error, 'permission', 'not after a second');
+  sent('click', 'b');
+  port.postMessage({ mod: 'a', via: 'frame:nav', id: 5, call: 'nav.go', args: [] });
+  await settle();
+  assert.equal(got.find((x) => x.id === 5).error, 'permission', 'a Worker only');
+  const syncs = bar.synced;
+  list = [{ ...list[0], on: [] }];
+  p.chrome.changed({ 'modReplace:a': { newValue: {} } }, 'local');
+  await p.tick(100);
+  p.G.pass();
+  assert.equal(p.G.stats().navMode, '');
+  assert.equal(p.G.navStands(), false);
+  assert.equal(box.isConnected, false);
+  assert.ok(bar.synced > syncs, 'Glaze\'s bar is drawn again');
+  port.close();
+});
+
+test('replacement gestures cannot be forged by messages, another mod or another slot', async () => {
+  const p = page(), bar = p.ctx.GZ_NAVBAR_UI = fakeBar(BAR), sends = new Map();
+  p.ctx.GZ_MODUI = { render: (root, tree, o) => { sends.set(root, o.send); return { canvas: null }; } };
+  p.chrome.runtime.sendMessage = async () => ({ ok: true, value: { id: 'calendar' } });
+  const nav = { key: 'nav', name: 'Nav' }, tile = { key: 'tile:x', name: 'X' };
+  p.G.start([{ ...W('a'), on: ['nav'], slots: [nav, tile] }, { ...W('b'), on: ['nav'], slots: [nav] }]);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  p.G.pass();
+  const other = p.ctx.document.createElement('div'), otherSlot = p.ctx.document.createElement('div');
+  p.G.attach('b', 'nav', other); p.G.attach('a', 'tile:x', otherSlot);
+  await settle();
+  const go = async (id, mod = 'a') => { port.postMessage({ mod, via: 'worker', id, call: 'nav.go', args: [] }); await settle(); return got.find((x) => x.id === id); };
+  port.postMessage({ event: 'ui', mod: 'a', data: { slot: 'nav', id: 'go', kind: 'click' } });
+  assert.equal((await go(1)).error, 'permission');
+  sends.get(other)('click', 'go');
+  assert.equal((await go(2)).error, 'permission', 'another mod cannot lend a gesture');
+  assert.equal((await go(3, 'b')).error, 'permission', 'only the active replacement may go');
+  sends.get(otherSlot)('click', 'go');
+  assert.equal((await go(4)).error, 'permission', 'another slot of the same mod cannot lend a gesture');
+  const own = p.appended.find((e) => e.className === 'gz-mod-nav');
+  sends.get(own)('click', 'go');
+  assert.equal((await go(5)).ok, true);
+  eq(bar.went, ['calendar']);
+  port.close();
+});
+
+test('a canvas behind a replacement pauses even when its layout box stays nonzero', async () => {
+  const p = page();
+  p.G.start([{ ...W('a'), slots: [{ key: 'tile:x', file: null }] }]);
+  const { port, got } = await p.load();
+  port.postMessage({ ready: true });
+  await settle();
+  let visibility = 'visible';
+  p.ctx.getComputedStyle = () => ({ visibility });
+  const canvas = { isConnected: true, getBoundingClientRect: () => ({ width: 100, height: 100 }), getContext: () => ({}), style: { setProperty() {} } };
+  p.ctx.ResizeObserver = class { observe() {} disconnect() {} };
+  p.ctx.GZ_MODUI = { render: () => ({ canvas }) };
+  const el = p.ctx.document.createElement('div');
+  p.G.attach('a', 'tile:x', el);
+  await settle();
+  p.G.pass();
+  await settle();
+  assert.equal(got.filter((m) => m.event === 'canvas.pause').at(-1).data.paused, false);
+  visibility = 'hidden'; p.G.pass(); await settle();
+  assert.equal(got.filter((m) => m.event === 'canvas.pause').at(-1).data.paused, true);
+  visibility = 'visible'; p.G.pass(); await settle();
+  assert.equal(got.filter((m) => m.event === 'canvas.pause').at(-1).data.paused, false);
   port.close();
 });

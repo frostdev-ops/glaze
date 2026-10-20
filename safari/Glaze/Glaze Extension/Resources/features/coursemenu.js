@@ -84,8 +84,13 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
       const token = csrf();
       if (!canvas || !token || !(/^(course_nicknames\/\d{1,20}|colors\/course_\d{1,20})$/.test(path))) throw new Error('save');
       return fetch(`${location.origin}/api/v1/users/self/${path}`, {
-        method, credentials: 'same-origin', redirect: 'error', headers: { accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': token, 'x-requested-with': 'XMLHttpRequest' }, ...(body && { body: JSON.stringify(body) }),
-      }).then((r) => (r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(String(r.status)))));
+        method, credentials: 'same-origin', redirect: 'error', keepalive: true, headers: { accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': token, 'x-requested-with': 'XMLHttpRequest' }, ...(body && { body: JSON.stringify(body) }),
+      }).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        // The next document must read the saved nickname/color, rather than the pre-edit sixty-second snapshot.
+        try { sessionStorage.removeItem('gz-canvas-courses'); } catch { /* blocked */ }
+        return r.json().catch(() => ({}));
+      });
     });
     writes.set(path, next);
     const done = () => { if (writes.get(path) === next) writes.delete(path); };
@@ -156,7 +161,9 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const rev = ++state.rev;
     paintColor(id, hex);
     clearTimeout(state.timer);
-    state.timer = setTimeout(() => {
+    state.save = () => {
+      clearTimeout(state.timer);
+      state.save = null;
       canvasSave(`colors/course_${id}`, 'PUT', { hexcode: hex }).then(() => {
         state.saved = hex;
         if (state.rev === rev && menu?.cid === m.cid) { menuNote(''); paintMenu(); }
@@ -165,9 +172,11 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
         paintColor(id, state.saved);
         if (menu?.cid === m.cid) { menuNote(t('Not saved. Try again in a moment.')); paintMenu(); }
       });
-    }, soon ? 500 : 0);
+    };
+    state.timer = setTimeout(state.save, soon ? 500 : 0);
     if (menu === m) paintMenu(m);
   };
+  addEventListener('pagehide', () => { for (const state of colored.values()) state.save?.(); }); // navigation must not strand a draft behind its debounce
 
   // -- the popover --
   const swatches = () => [

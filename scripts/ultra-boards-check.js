@@ -41,8 +41,8 @@ const SHELL = (title, main, script = '') => `<!doctype html><html lang="en"><hea
   body { margin: 0; font: 14px/1.45 "Open Sans", system-ui, sans-serif; }
   .MuiDrawer-paper { position: fixed; inset: 0 auto 0 0; width: 200px; background: #262626; }
   .MuiDrawer-paper a { display: block; padding: 10px 24px; color: #fff; text-decoration: none; }
-  main#main-content { margin-left: 200px; }
-  @media (max-width: 767px) { .MuiDrawer-paper { display: none; } main#main-content { margin-left: 0; } }
+  #main-content-inner { padding-left: 200px; }
+  @media (max-width: 767px) { .MuiDrawer-paper { display: none; } #main-content-inner { padding-left: 0; } }
   .base-header { padding: 24px 30px; border-bottom: 1px solid #d8d8d8; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
   h1#main-heading { margin: 0; font: 400 32px Georgia, serif; }
   .base-courses-content { display: flex; }
@@ -101,7 +101,9 @@ const api = (u) => {
   return { results: [] };
 };
 
-const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, enhance: { ...G.GZ_DEFAULTS.enhance, notes: true, widgets: true }, ...extra });
+// This check exercises the legacy boards. Sidebar migration and geometry have their own check.
+const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ...G.GZ_PRESETS.find(([n]) => n === preset)[1] }, ...extra,
+  navbar: { ...G.GZ_DEFAULTS.navbar, on: false }, enhance: { ...G.GZ_DEFAULTS.enhance, notes: true, widgets: true, ...extra.enhance, sidebar: false } });
 
 (async () => {
   fs.mkdirSync(out, { recursive: true });
@@ -133,7 +135,7 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     }, [s, local]);
     const layout = () => opts.evaluate(() => chrome.storage.local.get('widgetLayout').then((r) => r.widgetLayout));
     const page = await ctx.newPage();
-    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('pageerror', (e) => { errors.push(e.stack || String(e)); console.error(e.stack || String(e)); });
     page.on('console', (msg) => { if (msg.type() === 'error' && !/ERR_NAME_NOT_RESOLVED|ERR_FAILED|404/.test(msg.text())) errors.push(msg.text()); });
     const shot = async (name) => { await page.evaluate(() => getSelection().removeAllRanges()); await page.waitForTimeout(400); await page.screenshot({ path: path.join(out, `${name}.png`), fullPage: true }); };
     const until = async (read, check, message) => {
@@ -147,6 +149,22 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
     };
     const rect = (sel) => page.evaluate((s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return r && { left: r.left, top: r.top + scrollY, right: r.right, bottom: r.bottom + scrollY, width: r.width }; }, sel);
     const tile = (id) => `section.gz-w[data-tile="${id}"]`;
+    // Default card width has no data-gz-card-width override. Its grid must still fill each track.
+    await store(settingsFor('Paper', { enhance: { notes: false, widgets: false, todo: false } }), { widgetLayout: require('../lib/widgets.js').kept(false) });
+    await page.goto(`${O}/ultra/course`);
+    await until(() => page.evaluate(() => getComputedStyle(document.querySelector('.term-group')).display), (v) => v === 'grid', 'native course grid did not load');
+    for (const dir of ['ltr', 'rtl']) for (const width of [1600, 1280, 768, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate((dir) => { document.documentElement.dir = dir; }, dir);
+      const rows = await page.evaluate(() => {
+        const host = document.querySelector('.term-group'), r = host.getBoundingClientRect();
+        const cards = [...host.querySelectorAll('article.course-element-card')].map((e) => { const a = e.getBoundingClientRect(); return { left: a.left - r.left, top: a.top, width: a.width }; });
+        return { width: r.width, row: cards.filter((c) => Math.abs(c.top - cards[0].top) < 1).sort((a, b) => a.left - b.left) };
+      });
+      ok(Math.abs(rows.row[0].left) < 1 && Math.abs(rows.row.at(-1).left + rows.row.at(-1).width - rows.width) < 1,
+        `native default grid ${dir} ${width}: cards fill the row without a width override`);
+    }
+    if (process.env.ULTRA_GRID_ONLY === '1') { if (fails) process.exitCode = 1; return; }
     // Narrow shots are one tall window: Glaze's Ultra theme scrolls the page inside main, which a full-page shot misses.
     const open = async (where, width, height = width < 768 ? 2400 : 860) => {
       await page.setViewportSize({ width, height });
@@ -172,7 +190,8 @@ const settingsFor = (preset, extra = {}) => G.GZ_SANITIZE({ preset, colors: { ..
         if (cycling) await page.evaluate(() => document.querySelector('section.gz-w[data-tile="quotes"] button[aria-pressed="true"]')?.click());
       }
     };
-    const notes = { [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
+    // These interaction cases use the retained legacy layout; fresh installs use the 2026-10-20 starter layout.
+    const notes = { widgetLayout: require('../lib/widgets.js').layout({ todo: true }), [`notes:${O}/_900_1`]: { text: 'Read chapter 4 before the lab. Office hours: Tue 2pm.', at: Date.now() } };
 
     if (!process.env.B10_ONLY) {
     // ---- light: both boards as they start, wide and narrow ---------------------------------------------------------

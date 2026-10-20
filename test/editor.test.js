@@ -6,12 +6,13 @@ for (const file of ['todo', 'widgets', 'remind', 'nav', 'coursetabs']) require(p
 const N = require(path.join(root, 'lib/nav-items.js')), E = require(path.join(root, 'lib/editor.js'));
 const cards = require(path.join(root, 'lib/cards.js'));
 const TABS = ['look', 'navigation', 'blackboard', 'canvas', 'moodle', 'study', 'sharing', 'mods', 'backup', 'about'];
-const GROUP = { auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', navbar: 'navigation/bar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses', mods: 'backup/privacy' };
+const GROUP = { docreview: 'study/tools', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'look/navigation', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'blackboard/declutter', card: 'look/cards', courses: 'look/courses', mods: 'backup/privacy' };
 const ENHANCE = {
   'study/tools': ['urgency', 'clamp', 'scores', 'reading', 'previews', 'progress', 'keys', 'newcontent', 'palette', 'drafts', 'download', 'search', 'place', 'coursemenu', 'docPages', 'toggles'],
   'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
   'study/todo': ['todo', 'cardTasks', 'gradescope'],
   'study/widgets': ['notes', 'widgets'],
+  'navigation/sidebar': ['sidebar'],
   'study/pet': ['pet'],
   'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
   'study/imports': ['syllabus', 'insights'],
@@ -32,7 +33,7 @@ const SPECIAL = {
   'look.font': ['font-grid'], 'look.head': ['font-grid'], 'look.mono': ['font-grid'],
   'bg.image': ['bg-image'], 'bg.colors': ['bg-colors'],
   'nav.u': ['nav-url'], 'nav.i': ['nav-file'], 'nav.li': ['nav-logo-file'],
-  'declutter.tabs': ['declutter-tabs'],
+  'declutter.tabs': ['declutter-tabs'], 'sidebar.off': ['sidebar-off'],
   ...Object.fromEntries(D.GZ_COLORS.map(([key]) => [`colors.${key}`, ['colors']])),
   ...Object.fromEntries(['colors', 'tinted', 'looks', 'names'].map((key) => [`courses.${key}`, ['course-list', 'org-list']])),
 };

@@ -21,6 +21,17 @@ function GZ_NAVBAR_CANVAS(X) {
   const courseId = (doc = document) => /\/courses\/(\d+)(?:\/|$)/.exec(doc.location?.pathname || '')?.[1] || '';
   // Where you are: the page in the frame Canvas's pages outside a course open in, when it shows (features/coursetabs.js).
   const framedAt = () => { const c = globalThis.GZ_CTABS; try { return (c?.showing?.() === 'page' && c.bar?.doc?.()?.location.pathname) || ''; } catch { return ''; } };
+  // bar.doc() can still name a loading frame hidden under its picture, or a document a frame has left.
+  const viewDoc = (doc) => {
+    if (!doc || doc === document) return document;
+    try {
+      const f = doc.defaultView?.frameElement;
+      return doc.location.origin === location.origin && f?.isConnected && f.contentDocument === doc && !f.inert && f.style.visibility !== 'hidden' && f.getClientRects().length ? doc : document;
+    } catch { return document; }
+  };
+  // The page in view: a course tab's frame on screen, else this page.
+  const viewAt = () => { try { return viewDoc(globalThis.GZ_CTABS?.bar?.doc?.()).location.pathname || location.pathname; } catch { return location.pathname; } };
+  const current = (href) => new URL(href).pathname === viewAt();
   const here = (href, id) => {
     const path = (framedAt() || location.pathname).replace(/\/$/, '') || '/', own = new URL(href).pathname.replace(/\/$/, '') || '/';
     if (id === 'history' || id === 'help' || id === 'tools') return false;
@@ -72,7 +83,7 @@ function GZ_NAVBAR_CANVAS(X) {
   };
   const row = (label, href, extra = {}, external = false) => {
     const dest = url(href, external);
-    return text(label) && dest ? { label: text(label), href: dest, current: new URL(dest).pathname === location.pathname, ...extra } : null;
+    return text(label) && dest ? { label: text(label), href: dest, current: current(dest), ...extra } : null;
   };
   const data = (title, rows, foot = []) => ({ title, filter: true, sections: [{ rows: rows.filter(Boolean) }], foot });
   const HELP_ACTION = /^(?:create_ticket|teacher_feedback|ada_chatbot)$/;
@@ -163,7 +174,8 @@ function GZ_NAVBAR_CANVAS(X) {
     },
     avatar: () => { const img = document.querySelector('#global_nav_profile_link img'); return url(img?.currentSrc || img?.src || '', true); },
     home: () => 'dashboard',
-    main: () => document.getElementById('content') || document.querySelector('main'),
+    current,
+    main: (doc) => { const d = viewDoc(doc); return d.getElementById('content') || d.querySelector('main'); },
     inCourse: () => !!courseId() || /-extension:$/.test(location.protocol) && ['outline', 'tabs'].includes(document.documentElement.dataset.previewPage),
     menu: (doc = document) => {
       const list = doc.getElementById('section-tabs');

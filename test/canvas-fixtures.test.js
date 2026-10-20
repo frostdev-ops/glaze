@@ -176,8 +176,8 @@ const UNSEEN = [
   // The inbox's compose dialog (open: it is the old modal on other Canvas builds) and its fields.
   '#compose-message-modal', '[data-testid="subject-input"]', '[data-testid="address-book-tag"]',
   // Submission details, annotated and uploaded submissions, rubrics and outcomes the seed doesn't have.
-  '.annotated-document-submission', '.file-upload-submission-table', '.submission-details-header__time', '.rubric-title',
-  '.wellBelowMasteryShader', '.userMessage',
+  '.annotated-document-submission', '.file-upload-submission-table', '.rubric-title',
+  '.wellBelowMasteryShader',
   // Instructor content features the seed doesn't use.
   '.equation_image', '.course-color-block', '.subtitle',
   // Striped tables: the People and Pages lists, not captured.

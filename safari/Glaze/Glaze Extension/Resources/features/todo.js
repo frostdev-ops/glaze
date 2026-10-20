@@ -1,8 +1,9 @@
-// Better To Do: Glaze's own To Do list, on by default (enhance.todo). On Canvas it takes the place of Canvas's sidebar
-// list on the Dashboard and a course's home page; on Blackboard Ultra, of Ultra's own To Do on the Courses page, and on a
+// Better To Do: Glaze's own To Do list, on by default (enhance.todo). With the sidebar (features/sidebar.js), its widget
+// mounts it (mount, unmount): in the dock it follows the page's course, or shows all courses, as the student picks. Without
+// the sidebar, on Canvas it lives in a Dashboard widget and takes the place of the sidebar list on a course's home page; on Blackboard Ultra, of Ultra's own To Do on the Courses page, and on a
 // course's outline it's a block of its own in the right column (that course only). The site's part loads this (need) and
 // calls sync(on) from content.js's passes; the logic is lib/todo.js, loaded from here. The site's own list is hidden by
-// features/apps.css only while this one is on the page, right before it (#gz-todo ~ …), so if anything here fails, it comes back.
+// features/apps.css while this list replaces it; the Dashboard board also hides it when its widget is deliberately removed.
 //
 // What it asks Canvas for, with the student's session: their profile (id, time zone), their planner items (Link
 // paging), and, for a teacher, /users/self/todo and each listed assignment's submission summary. On Ultra: the student,
@@ -36,7 +37,10 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   let shown = new Map(); // key -> row, for every row the list drew
   const open = new Set(); // rows with their details open, and "show more" groups
   const shut = new Set(['done', 'graded', 'read']); // sections closed until opened
-  let form = null; // the add/edit form's task: { id?, cid, … } or null
+  let form = null, formAccount = ''; // the add/edit form's task: { id?, cid, … } or null; kept for this account across mounts
+  // Mounted by its widget (mount): { target, courseId, scope: 'follow' | 'all', setScope?(v), failed?() }; null when the
+  // site's own sidebar is where it goes (sync, anchor).
+  let mounted = null;
   let gs = null; // Gradescope's items for this site (lib/todo.js gradescope), once the list first draws
 
   // The list's own settings (storage.sync `todo`, in GZ_SPEC once lib/todo.js is in); content.js reads only the switch.
@@ -53,7 +57,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
   const ultra = ctx.site === 'ultra';
   // The course whose page this is ('' elsewhere), and whether ticks go to the site: only Canvas has a planner for them.
-  const here = () => (ultra ? ctx.courseId() : ctx.canvasCourseId()) || '';
+  const here = () => (mounted ? (mounted.scope === 'all' ? '' : mounted.courseId || '') : (ultra ? ctx.courseId() : ctx.canvasCourseId()) || '');
   const toSite = () => !ultra && o().sync;
 
   // ---- Canvas ------------------------------------------------------------------------------------------------
@@ -132,7 +136,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // and an older answer is dropped when it comes.
   const refresh = (force = false) => {
     const g = gen;
-    if (!who || dead) return null;
+    if (!who || dead || asleep || document.visibilityState === 'hidden') return null;
     if (fetching && fetchGen === g) return fetching;
     const done = (p) => { fetching = p; fetchGen = g; p.finally(() => { if (fetching === p) fetching = null; }); return p; };
     if (!force && covers(cache, Date.now())) {
@@ -192,7 +196,10 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   const typing = () => !!box?.contains(document.activeElement) && document.activeElement.matches('input:not([type="checkbox"]), textarea, select');
   const fail = () => {
     dead = true;
+    const m = mounted;
+    mounted = null;
     off();
+    m?.failed?.();
   };
   const when = (x, now) => L.label(x, now, who.tz, lang());
   const dueText = (r, now) => {
@@ -360,14 +367,14 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   };
   const render = (force = false) => {
     if (!box || !L || !who) return;
+    if (asleep) { drawn = ''; return; }
     const now = Date.now();
     // here(): Ultra moves the list between its Courses page and a course's outline without a page load.
-    const sig = JSON.stringify([prefs, lang(), Math.floor(now / 6e4), here()]);
+    const sig = JSON.stringify([prefs, lang(), Math.floor(now / 6e4), here(), mounted?.scope]);
     if (!force && (sig === drawn || typing())) return;
     drawn = sig;
     // What's typed in the task form so far survives the redraw.
-    const f = box.querySelector('.gz-todo-form');
-    if (f && form) form.draft = Object.fromEntries([...new FormData(f)].map(([k, v]) => [k, String(v)]));
+    captureForm();
     const course = here();
     gs ||= L.gradescope(() => { drawn = ''; render(); });
     const out = L.build({ items: [...(cache?.items || []), ...gs(now, who.uid)], grading: o().teacher ? cache?.grading || [] : [], data, o: o(), now, tz: who.tz, cids: courses.cids, course, names: courses.names, sync: toSite() });
@@ -382,7 +389,16 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     add.setAttribute('aria-expanded', String(!!form));
     const ics = small('ics', t('Export calendar (.ics)'), t('Export'));
     ics.dataset.focus = 'ics';
-    head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }),
+    // In the dock: Follow page (this course inside one, all of them elsewhere) or All courses, kept for the account.
+    const scope = mounted?.setScope && make('div', { className: 'gz-todo-scope', role: 'group' }, ...[['follow', 'Follow page'], ['all', 'All courses']].map(([v, l]) => {
+      const b = small('scope', t(l));
+      b.dataset.v = v;
+      b.dataset.focus = `scope ${v}`;
+      b.setAttribute('aria-pressed', String(mounted.scope === v));
+      return b;
+    }));
+    if (scope) scope.setAttribute('aria-label', t('Courses shown'));
+    head.replaceChildren(make('h2', { id: 'gz-todo-title', textContent: t('To Do') }), scope,
       ...(out.count.all > 0 ? [make('span', { className: 'gz-todo-count', textContent: t('{done} of {all} done', out.count) })] : []),
       ...(globalThis.GZ_REMIND_UI?.head() || []), small('sessions', t('Share sessions')), ics, add); // the streak and reminders (features/reminders.js), when on
     const parts = [form && taskForm()];
@@ -407,6 +423,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       }));
     }
     body.replaceChildren(...parts.filter(Boolean));
+    if (cache) { box.hidden = false; box.setAttribute('data-ready', ''); mounted?.rendered?.(); }
     if (!was) return;
     const seen = (v) => { const e = box.querySelector(`[data-focus="${CSS.escape(v)}"]`); return e?.checkVisibility() ? e : null; };
     (seen(was) || order.slice(order.indexOf(was) + 1).map(seen).find(Boolean) || seen('add'))?.focus({ preventScroll: true });
@@ -448,6 +465,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const el = e.target.closest('[data-act]');
     if (!el || el.tagName === 'INPUT' || el.tagName === 'FORM') return;
     const act = el.dataset.act;
+    if (act === 'scope') { if (mounted?.scope !== el.dataset.v) mounted?.setScope?.(el.dataset.v); return; }
     if (act === 'sessions') { if (human(e)) chrome.runtime.sendMessage({ type: 'glaze:sessions-open' }).catch(() => {}); return; }
     const k = el.closest('[data-key]')?.dataset.key;
     if (act === 'add') { form = form ? null : { cid: here() }; render(true); if (form) box.querySelector('[data-focus="form title"]')?.focus(); return; }
@@ -526,11 +544,12 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     const k = e.target.dataset?.kind;
     if (k) { if (e.target.open) shut.delete(k); else shut.add(k); }
   };
-  const onShow = () => { if (document.visibilityState === 'visible') { render(); refresh(); } };
+  const onShow = () => { if (document.visibilityState === 'visible' && !asleep) { render(); refresh(); } };
   const onStore = (changes, area) => {
     if (!L || !who) return;
     if (area === 'sync' && changes.todo) readPrefs().then(() => { render(true); refresh(); });
     if (area === 'local' && changes[key]) { data = L.clean(changes[key].newValue); render(true); }
+    if (area === 'local' && !asleep && changes[draftKey()]) { takeDraft(changes[draftKey()].newValue); render(true); }
   };
 
   // ---- on the page -------------------------------------------------------------------------------------------------
@@ -543,11 +562,15 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       const [p, list] = await Promise.all([ctx.profile(), ctx.canvasCourses(), readPrefs()]);
       if (g !== gen) return;
       if (!L.ID.test(String(p?.id))) throw new Error('no profile');
+      if (formAccount && formAccount !== String(p.id)) form = null;
+      formAccount = String(p.id);
       who = { uid: String(p.id), tz: L.zone(p.time_zone) };
       coursesIn(list);
       key = L.storeKey(location.origin, who.uid);
-      const r = await new Promise((res) => { try { store().get([key, CACHE], res); } catch { res({}); } });
+      const r = await new Promise((res) => { try { store().get([key, CACHE, draftKey()], res); } catch { res({}); } });
       if (g !== gen) return;
+      // A form left open on another page (keepDraft) opens again here, once.
+      takeDraft(r?.[draftKey()]);
       data = L.clean(r?.[key]);
       cache = r?.[CACHE]?.key === key ? r[CACHE] : null;
       if (!box) return;
@@ -557,24 +580,34 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       if (g === gen) fail();
     }
   };
-  // Where the list goes: right before this. Canvas: its list, the React one, or (a teacher's, server-drawn) a heading and
-  // a list. Ultra: the To Do tile's spot on either board (features/widgets.js), or else its own To Do on the Courses page
+  // Where the list goes: right before this. Canvas: the Dashboard's widget, or its native list on course homes (and if
+  // the board cannot load). Ultra: the To Do tile's spot on either board, or else its own To Do on the Courses page
   // (anything Glaze puts first in that column stays above), or, on a course's outline, the right column's Details &
   // Actions block.
   const anchor = () => {
     if (ultra) return here() ? document.querySelector('aside.outline-actions > .js-details-and-actions') : document.querySelector(':is(#gz-dash, #gz-room) .gz-w-todo-spot') || document.querySelector('div.todo-panel > bb-todo');
+    if (location.pathname === '/' && document.querySelector('#gz-dash')) return document.querySelector('#gz-dash .gz-w-todo-spot');
     const native = document.querySelector('#right-side .Sidebar__TodoListContainer') || document.querySelector('#right-side ul.to-do-list');
     return native?.previousElementSibling?.matches('.todo-list-header') ? native.previousElementSibling : native;
   };
   const sync = (on) => {
+    if (mounted) return; // its widget has it (mount)
     if (!on || dead) return off();
     const native = anchor();
-    if (!native) return;
+    if (!native) return off();
+    boxIn();
+    // On a course's outline, a block of Ultra's right column, spaced as its own are.
+    if (ultra) box.className = here() ? 'gz-todo outline-action-block' : 'gz-todo';
+    if (box.nextElementSibling !== native) native.before(box);
+    if (!started) started = start();
+    else if (who) render();
+  };
+  const boxIn = () => {
     if (!box) {
       head = make('div', { className: 'gz-todo-head' });
       line = make('p', { className: 'gz-todo-say', role: 'status' });
       body = make('div', { className: 'gz-todo-body' });
-      box = make('section', { id: 'gz-todo', className: 'gz-todo' }, head, line, body);
+      box = make('section', { id: 'gz-todo', className: 'gz-todo', hidden: !!mounted }, head, line, body);
       box.setAttribute('aria-labelledby', 'gz-todo-title');
       box.addEventListener('click', onClick);
       box.addEventListener('change', onChange);
@@ -586,24 +619,98 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
       try { chrome.storage.onChanged.addListener(onStore); } catch { /* reloaded */ }
       const sharedBox = box;
       ctx.need('features/sharing.js', () => globalThis.GZ_SHARING_UI).then(() => { if (box === sharedBox) shareSurface = GZ_SHARING_UI.surface(); }).catch(() => {});
+      addEventListener('pagehide', keepDraft);
       setBusy(true);
     }
-    // On a course's outline, a block of Ultra's right column, spaced as its own are.
-    if (ultra) box.className = here() ? 'gz-todo outline-action-block' : 'gz-todo';
-    if (box.nextElementSibling !== native) native.before(box);
-    if (!started) started = start();
-    else if (who) render();
   };
+  // Mounted in target (its widget's body) for the page in c ({ courseId, scope, setScope, failed }); again with a new c
+  // when the page or the scope changes. A list that can't load says so to failed(), so the site's own comes back.
+  const mount = (target, c) => {
+    if (dead) { c?.failed?.(); return false; }
+    if (!target || !c) return false;
+    const was = mounted && JSON.stringify([mounted.courseId, mounted.scope]);
+    if (!mounted && box) off(); // the site's own sidebar had it
+    if (!mounted) asleep = false;
+    mounted = { target, courseId: String(c.courseId || ''), scope: c.scope === 'all' ? 'all' : 'follow', setScope: c.setScope, rendered: c.rendered, failed: c.failed };
+    boxIn();
+    if (box.parentNode !== target) target.append(box);
+    if (!started) started = start();
+    else if (who && was !== JSON.stringify([mounted.courseId, mounted.scope])) render(true);
+    return true;
+  };
+  // Taken away (its widget went, or moved): what's typed in the form stays for the next mount.
+  const unmount = (target) => {
+    if (!mounted || (target && mounted.target !== target)) return;
+    keepDraft();
+    mounted = null;
+    off();
+  };
+  // The open form, as typed: in this document's memory always, and across pages in the drafts store (storage.local
+  // draft:todo:<origin>/<uid>, swept after 14 days or with Back up what you type off, content.js), while that is on.
+  const captureForm = () => {
+    const f = box?.querySelector('.gz-todo-form');
+    if (f && form) form.draft = Object.fromEntries([...new FormData(f)].map(([k, v]) => [k, String(v)]));
+  };
+  const draftKey = () => (who ? `draft:todo:${location.origin}/${who.uid}` : '');
+  const keepDraft = () => {
+    if (asleep) return;
+    captureForm();
+    const k = draftKey();
+    if (!k || !mounted) return;
+    try {
+      if (form && ctx.settings().enhance.drafts) return put({ [k]: { text: form.draft?.title || form.title || '', at: Date.now(), todo: form } });
+      else if (!form) store().remove(k);
+    } catch { /* reloaded */ }
+  };
+  const takeDraft = (d) => {
+    if (asleep || form || !mounted || !ctx.settings().enhance.drafts || !d || !(Date.now() - d.at < 14 * 864e5) || !d.todo || typeof d.todo !== 'object') return;
+    form = draftForm(d.todo);
+    try { store().remove(draftKey()); } catch { /* reloaded */ }
+  };
+  // Another document takes the sidebar (a course tab's frame shown, or this one hidden; features/widgets.js): the open
+  // form goes to the drafts store for whichever document shows next, this one too, and nothing draws or refreshes here
+  // meanwhile. Without Back up what you type, it stays in this document's memory only.
+  let asleep = false, draftRead = 0;
+  const suspend = () => {
+    if (!mounted || asleep) return;
+    draftRead++;
+    captureForm();
+    if (form && who && ctx.settings().enhance.drafts) {
+      const sent = form, account = formAccount, saved = keepDraft();
+      form = null;
+      Promise.resolve(saved).then((ok) => { if (!ok && !form && formAccount === account) { form = sent; if (!asleep) render(true); } });
+    }
+    asleep = true;
+  };
+  const resume = async () => {
+    if (!asleep) return;
+    asleep = false;
+    if (!mounted || !who || !box) return;
+    const g = gen, k = draftKey(), n = ++draftRead;
+    const r = await new Promise((res) => { try { store().get(k, res); } catch { res({}); } });
+    if (g !== gen || n !== draftRead || asleep || !mounted || draftKey() !== k) return;
+    takeDraft(r?.[k]);
+    render(true);
+    refresh();
+  };
+  const FIELDS = ['title', 'cid', 'date', 'time', 'notes'];
+  const draftForm = (x) => ({
+    ...(typeof x.id === 'string' && { id: x.id.slice(0, 64) }), cid: typeof x.cid === 'string' ? x.cid.slice(0, 32) : '',
+    ...(Number.isFinite(x.done) && { done: x.done }), ...(Number.isFinite(x.at) && { at: x.at }),
+    draft: Object.fromEntries(FIELDS.filter((k) => typeof x.draft?.[k] === 'string').map((k) => [k, x.draft[k].slice(0, 2000)])),
+  });
   const off = () => {
     shareSurface?.(); shareSurface = null;
     gen++;
     if (!box) return;
     box.remove();
     box = null;
+    who = null;
     started = null;
     drawn = '';
     document.removeEventListener('visibilitychange', onShow);
     removeEventListener('focus', onShow);
+    removeEventListener('pagehide', keepDraft);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
   };
   // "Add task" from the palette: the form, open and focused.
@@ -619,7 +726,7 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // The command palette's entries while the list is on the page.
   const cmds = () => (box && who ? [{ label: t('Add task'), hint: 'Glaze', group: 'Glaze', run: add }] : []);
 
-  return { sync, add, cmds };
+  return { sync, add, cmds, mount, unmount, suspend, resume };
 })();
 
 GZ_TODO_UI;

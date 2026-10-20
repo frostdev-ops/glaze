@@ -1,0 +1,92 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const { El } = require('./stand-in-dom.js');
+const M = require('../lib/navbar.js');
+const L = require('../lib/navlayout.js');
+
+const source = fs.readFileSync(require.resolve('../features/navbar.js'), 'utf8');
+const part = (from, to) => source.slice(source.indexOf(from), source.indexOf(to, source.indexOf(from)));
+const plain = (x) => JSON.parse(JSON.stringify(x));
+const origin = 'https://school.test';
+
+test('phone tabs, sheet rows and overflow entries identify mod items', () => {
+  const c = vm.createContext({
+    make: (tag, props) => Object.assign(new El(tag, {}), props), part: (e) => e,
+    t: (s, v) => s.replace('{name}', v.name),
+  });
+  const node = vm.runInContext(part('  const node =', '  const badgeOf =') + '\nnode;', c);
+  for (const [cls, name] of [['tab', 'tab'], ['row', 'row'], ['row', 'menu-item']]) {
+    const e = node({ id: 'mod:abcdefghijklmnop.login', label: 'Sign in', by: '<Study>' }, cls, name);
+    assert.equal(e.getAttribute('aria-description'), 'From <Study>', name);
+    assert.equal(e.getAttribute('title'), 'From <Study>', name);
+  }
+  assert.equal(node({ id: 'calendar' }, 'tab', 'tab').getAttribute('aria-description'), null);
+});
+
+test('student links and worn Look links keep off-site HTTPS addresses', () => {
+  const link = { id: 'library0000a', n: 'Library', u: 'https://library.test/', i: 'book' };
+  for (const input of [{ prefs: M.clean({ links: [link] }) }, { look: L.clean({ links: [link] }) }]) {
+    const item = M.build(input).items.find((i) => i.id === `link:${link.id}`);
+    assert.equal(item.href, link.u);
+    assert.equal(item.owner, undefined);
+  }
+});
+
+test('a layout cannot replace the destination of a saved student link with the same ID', () => {
+  const id = 'library0000a', u = 'https://library.test/';
+  const prefs = M.clean({ links: [{ id, n: 'My Library', u }], items: { [`link:${id}`]: { label: 'My saved name' } } });
+  const look = L.clean({ links: [{ id, n: 'Library', u: 'https://other.test/login' }] });
+  const item = M.build({ prefs, look }).items.find((i) => i.id === `link:${id}`);
+  assert.equal(item.label, 'My saved name');
+  assert.equal(item.href, u, 'explicit student destinations win over worn and mod layouts');
+});
+
+const api = (items) => {
+  const calls = [];
+  const c = vm.createContext({ M, URL, location: { origin, href: origin + '/', assign: (href) => calls.push(['assign', href]) }, isPreview: false,
+    byId: (id) => items.find((i) => i.id === id), emit() {}, mods: new Map(), listeners: new Map(), host: { isConnected: true },
+    sync() {}, view() {}, queue() {}, glaze: (action) => calls.push(['action', action]), goNative: (id) => calls.push(['native', id]),
+    site: { panel() {} }, panel: '', panelTo: (id) => calls.push(['panel', id]), openHere: (href) => calls.push(['open', href]),
+  });
+  const result = vm.runInContext(part('  const safeHref =', '  // The open course') + part('  const OWNER =', '  return api;') + '\napi;', c);
+  return { ...result, calls };
+};
+
+test('replacement go refuses off-site and unsafe destinations, while direct custom links stay valid', () => {
+  const hrefs = ['https://library.test/', '//else.test/', 'javascript:alert(1)', 'data:text/html,login', 'https://u:p@school.test/', 'https://schооl.test/'];
+  for (const href of hrefs) {
+    const h = api([{ id: 'link:library0000a', href }]);
+    assert.equal(h.go('link:library0000a'), false, href);
+    assert.deepEqual(h.calls, []);
+  }
+  const h = api([{ id: 'calendar', native: true, href: origin + '/calendar' }]);
+  assert.equal(h.go('https://else.test/'), false, 'an arbitrary URL is not an item ID');
+  assert.equal(h.go('calendar'), true);
+  assert.deepEqual(h.calls, [['native', 'calendar']]);
+});
+
+test('replacement go opens native panels and course pages through Glaze', () => {
+  const h = api([{ id: 'course', native: true, panel: true, href: origin + '/courses' }, { id: 'cm:0', course: true, href: origin + '/courses/1/modules' }]);
+  assert.equal(h.go('course'), true);
+  assert.equal(h.go('cm:0'), true);
+  assert.deepEqual(h.calls, [['panel', 'course'], ['open', origin + '/courses/1/modules']]);
+});
+
+test('a replacement hides bar surfaces while keeping the panel host and frame mounts in place', () => {
+  const host = new El('div', {}), calls = [];
+  let stands = true;
+  const c = vm.createContext({ host, globalThis: { GZ_MODS: { navStands: () => stands } },
+    menuTo: () => calls.push('menu'), sheetTo: () => calls.push('sheet'), dockTo: () => calls.push('dock'), tip: () => calls.push('tip'),
+  });
+  const replace = () => vm.runInContext(`(() => { ${part("    // A mod's nav stands in for the bar", "    host.setAttribute('dir'")} })();`, c);
+  replace();
+  assert.notEqual(host.style.display, 'none', 'panels must remain visible over the replacement');
+  assert.equal(host.hasAttribute('data-replaced'), true);
+  assert.deepEqual(calls.sort(), ['dock', 'menu', 'sheet', 'tip']);
+  replace();
+  assert.equal(calls.length, 4, 'no repeated work while replacement stays on');
+  stands = false; replace();
+  assert.equal(host.hasAttribute('data-replaced'), false);
+});
