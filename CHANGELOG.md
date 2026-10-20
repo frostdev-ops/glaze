@@ -6,7 +6,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
-## 3.2.1 (unreleased)
+## [3.3.0] — 2026-10-20
 
 ### Added
 - Fresh installs: Glaze settings in the navigation bar and after To Do in the sidebar, and a Dashboard starter layout with pet habitat, focus timer, notes, quotes and course cards on Canvas and Ultra. Saved layouts and removals stay as chosen. Course cards fill even responsive rows beside the sidebar, following card size and gap settings.
