@@ -265,6 +265,25 @@
   [data-gz-sb-page-hidden] > #right-side, [data-gz-sb-page-hidden] > .gz-sb-pagehead,
   [data-gz-sb-page-hidden][data-gz-sb-self] > :not(.gz-sb-resize, .gz-sb-head, #gz-sb-widgets) { display: none !important; }
 
+  /* Ultra's participant cards use an explicit IntersectionObserver root. A fixed or top-layer sidebar is outside
+     that root's containing-block chain and Ultra leaves its cards empty. Keep this column in the native grid and
+     sticky in its scroll container; only Glaze's backdrop joins the grid when the narrow drawer is opened. */
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar] #full-discussions[bb-intersection-observer-root] .course-main-container {
+    grid-template-columns: minmax(0, 1fr) var(--gz-sidebar-w) !important; padding-inline-end: var(--gz-sb-inset) !important;
+    max-width: none !important; margin-inline: 0 !important; column-gap: 16px;
+  }
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar] #full-discussions[bb-intersection-observer-root] .course-main-container > :not([data-gz-sidebar-host], .gz-sb-backdrop) { grid-column: 1 !important; grid-row: 1; }
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"] {
+    position: sticky !important; grid-column: 2; grid-row: 1; align-self: start; justify-self: end;
+    top: calc(var(--gz-sb-native-offset, 0px) + var(--gz-sb-inset)) !important; bottom: auto !important; inset-inline: auto !important;
+    height: calc(100dvh - var(--gz-sb-native-top, var(--gz-sb-top, 0px)) - max(var(--gz-sb-end), var(--gz-sb-native-end, 0px)) - var(--gz-sb-inset)) !important;
+    max-height: calc(100dvh - var(--gz-sb-top, 0px) - max(var(--gz-sb-end), var(--gz-sb-native-end, 0px)) - 2 * var(--gz-sb-inset)) !important;
+  }
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="collapsed"] #full-discussions[bb-intersection-observer-root] .course-main-container { grid-template-columns: minmax(0, 1fr) 3rem !important; }
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="collapsed"] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"] { height: auto !important; }
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"]:is([data-gz-sidebar="drawer"], [data-gz-sidebar="none"]) #full-discussions[bb-intersection-observer-root] .course-main-container { grid-template-columns: minmax(0, 1fr) !important; }
+  html[data-gz-sb-native-root][data-gz-sb-family="discussion"][data-gz-sidebar="drawer"] #full-discussions[bb-intersection-observer-root] .course-main-container > [data-gz-sidebar-host="native"] { grid-column: 1; z-index: 2100; }
+
   html[data-gz-focus][data-gz-sidebar] { --gz-sb-room: 0px; }
   html[data-gz-focus][data-gz-sidebar] #not_right_side { padding-inline-end: 0 !important; }
 

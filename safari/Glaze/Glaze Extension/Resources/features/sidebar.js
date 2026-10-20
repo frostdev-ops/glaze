@@ -24,6 +24,20 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const html = () => document.documentElement;
   const has = (el, c) => ` ${el?.className || ''} `.includes(` ${c} `);
   const rtl = () => html()?.dir === 'rtl';
+  const headerBottom = (headers) => {
+    let bottom = 0;
+    for (const e of headers) {
+      const r = e.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight)) continue;
+      let visible = true;
+      for (let p = e; p?.tagName; p = p.parentElement) {
+        const s = typeof getComputedStyle === 'function' ? getComputedStyle(p) : null;
+        if (p.hidden || s?.display === 'none' || s?.visibility === 'hidden' || s?.visibility === 'collapse' || s?.opacity === '0') { visible = false; break; }
+      }
+      if (visible) bottom = Math.max(bottom, r.bottom);
+    }
+    return Math.round(bottom);
+  };
 
   // ---- adapters -----------------------------------------------------------------------------------------------------
   // Each LMS's: family() the kind of page (its sections fold per kind), courseId() the page's course ('' elsewhere),
@@ -63,6 +77,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         const r = m.getBoundingClientRect();
         return Math.max(0, Math.round(rtl() ? innerWidth - r.right : r.left));
       },
+      // Without a breadcrumb bar (Dashboard/Calendar), course tabs go inside #main, including in a course frame.
+      // That strip is not represented by --gz-ctabs-row: measure its actual bottom as well as the content start.
+      headers: () => [...document.querySelectorAll('#gz-ctabs')],
+      top: (headers) => Math.max(headerBottom(headers), Math.min(innerHeight - 100, document.getElementById('main')?.getBoundingClientRect().top || 0)),
     },
     // Blackboard Ultra. Its columns are flex columns of blocks with no wrapper of their own, so the column is its own
     // content (page === el): Glaze's header goes first in it, This page right after, the widgets last, and every block
@@ -115,11 +133,25 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         try { pad = parseFloat(getComputedStyle(m).paddingInlineStart) || 0; } catch { /* no styles to ask */ }
         return Math.max(0, Math.round((rtl() ? innerWidth - r.right : r.left) + pad));
       },
-      // Below a course's top bar (with Glaze's course tabs in it), when one is open; else below the navigation (CSS).
-      top() {
-        const r = document.querySelector('div.bb-course-navigation')?.getBoundingClientRect();
-        return r && r.height && r.top < innerHeight / 2 ? Math.max(0, Math.round(r.bottom)) : null;
+      headers() {
+        const headers = new Set(document.querySelectorAll('div.bb-course-navigation, .routed-page > content-page-header, .route-view-container > content-page-header'));
+        // Full routed documents/assessments use a panel header instead of content-page-header. Stay within that
+        // shell, outside its content: a document's own headings and article headers are not navigation.
+        for (const page of document.querySelectorAll('.routed-page.bb-offcanvas-container')) {
+          for (const e of page.querySelectorAll('[class*="panelHeaderContainerRoot"], .panel-header, header, [class*="headerRoot"]')) {
+            const body = e.closest('main, [role="main"], article, .routed-page-body, .routed-scroll, .panel-body');
+            if (body && page.contains(body)) continue;
+            // Course tabs can be siblings of the inner header inside this wrapper; reserve its whole height.
+            const wrap = e.closest('[class*="headerRoot"]');
+            headers.add(wrap && page.contains(wrap) ? wrap : e);
+          }
+        }
+        return [...headers];
       },
+      // Both course navigation and routed tools' breadcrumbs can cover the column. Their viewport bottoms already
+      // include any navigation/tab rows above them, including inside a course frame: never add those heights again.
+      // Angular can keep outgoing routes mounted while hidden or translated outside the viewport.
+      top: headerBottom,
     },
   };
   const A = ADAPTERS[LMS] || ADAPTERS.canvas;
@@ -159,6 +191,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   let modalObserver = null, backdrop = null, widthCancel = null, lifted = null;
   let drawnCount = null; // the widgets features/widgets.js drew into the dock (null: not said yet)
   let mo = null, frame = 0, noteTimer = 0, retryTimer = 0, passFrame = 0, offer = null, asleep = false;
+  let topRO = null, topHeaders = [];
   let openHere = null; // expanded or collapsed on this page, when the settings start each page one way
   const isOpen = () => (['expanded', 'collapsed'].includes(cfg().open) ? openHere ?? cfg().open === 'expanded' : rec.open);
   const subs = { change: new Set(), mode: new Set(), context: new Set() };
@@ -343,8 +376,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const detach = () => {
     if (!host) return;
     lift(false);
+    watchNativeScroll(null);
     widthCancel?.();
     mo?.disconnect();
+    topRO?.disconnect(); topHeaders = [];
     absorb([]);
     absorbBlocked = new WeakMap();
     for (const e of [grip, head, pageHead, slot, dock]) e?.remove();
@@ -605,6 +640,23 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   const minMain = () => { const c = cfg(); return family === 'grades' ? c.grades ?? S.MAIN_GRADES : c.min ?? S.MAIN; };
   let safeEnd = 0;
   const inset = () => styleOf() === 'float' ? 12 : 0;
+  // Ultra only mounts participant cards while they intersect this explicit root. A viewport-fixed/top-layer host
+  // leaves its containing-block chain, so keep that native column sticky inside its own discussion instead.
+  const discussionRoot = () => ultra && family === 'discussion' && !host?.own ? host?.el.closest('#full-discussions[bb-intersection-observer-root]') : null;
+  let nativeScroller = null;
+  const watchNativeScroll = (root) => {
+    let next = null;
+    if (root) {
+      for (let p = host.el.parentElement; p && p !== html(); p = p.parentElement) {
+        if (/(auto|scroll|overlay)/.test(getComputedStyle(p).overflowY)) { next = p; break; }
+      }
+      next ||= document;
+    }
+    if (next === nativeScroller) return;
+    nativeScroller?.removeEventListener('scroll', queueLayout);
+    nativeScroller = next;
+    nativeScroller?.addEventListener('scroll', queueLayout, { passive: true });
+  };
   const roomFor = () => Math.min(S.MAX_WIDTH, innerWidth - A.left() - inset() - safeEnd - S.GAP - minMain());
   // How the sidebar looks (the settings): on <html>, for features/sidebar.css.
   const dress = () => {
@@ -647,6 +699,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       p.getBoundingClientRect().width > 0 && typeof getComputedStyle === 'function' && getComputedStyle(p).position === 'absolute');
     setAttr(html(), 'data-gz-sb-tool', tool ? '' : false);
     setAttr(html(), 'data-gz-sb-family', family || false);
+    const nativeRoot = discussionRoot();
+    setAttr(html(), 'data-gz-sb-native-root', nativeRoot ? '' : false);
+    watchNativeScroll(nativeRoot);
     setAttr(html(), 'data-gz-sb-layer', layer ? '' : false);
     setAttr(host.el, 'data-gz-sb-overlay', ultra && A.overlay() ? '' : false);
     setAttr(html(), 'data-gz-sidebar', next);
@@ -655,10 +710,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     setVar('--gz-sb-left', `${A.left()}px`);
     const main = document.getElementById('main');
     const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
-    // Ultra's adapter says where a fixed column starts (a course's top bar), else below the navigation.
+    // Each LMS's headers and the global navigation share this viewport: use their furthest bottom.
+    const headers = A.headers?.();
+    watchTop(headers);
     const reviewTop = review?.layer.querySelector('[class*="headerRoot"]')?.getBoundingClientRect().bottom;
-    const top = reviewTop ?? (A.top ? A.top() ?? navTop : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0)));
+    const top = reviewTop ?? (A.top ? Math.max(navTop, A.top(headers) ?? 0) : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0)));
     setVar('--gz-sb-top', `${top}px`);
+    if (nativeRoot) {
+      const scrollRect = nativeScroller === document ? null : nativeScroller?.getBoundingClientRect();
+      setVar('--gz-sb-native-offset', `${Math.max(0, top - (scrollRect?.top || 0))}px`);
+      setVar('--gz-sb-native-top', `${Math.max(top, host.el.getBoundingClientRect().top)}px`);
+      setVar('--gz-sb-native-end', `${scrollRect ? Math.max(0, innerHeight - scrollRect.bottom) : 0}px`);
+    }
     foot();
     pageHead.hidden = pageEmpty;
     setAttr(host.el, 'data-gz-sb-page-hidden', hidePage ? '' : false);
@@ -666,10 +729,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     edge.hidden = next !== 'none';
     launch.hidden = next !== 'drawer' || drawer;
     backdrop.hidden = next !== 'drawer' || !drawer || modalAway;
-    for (const b of [edge, launch, backdrop]) if (b.parentNode !== document.body) document.body.append(b);
+    for (const b of [edge, launch]) if (b.parentNode !== document.body) document.body.append(b);
+    // Keep our backdrop in the same native stacking context as a sticky discussion drawer.
+    const backdropParent = nativeRoot ? host.el.parentElement : document.body;
+    if (backdrop.parentNode !== backdropParent) backdropParent.append(backdrop);
     // A labelled landmark beside the content; a dialog while it is an open drawer.
     const dialog = next === 'drawer' && drawer;
-    lift(ultra && dialog && !modalAway);
+    lift(ultra && dialog && !modalAway && !nativeRoot);
     setAttr(host.el, 'role', next === 'none' || (next === 'drawer' && !drawer) ? false : dialog ? 'dialog' : 'complementary');
     setAttr(host.el, 'aria-labelledby', next === 'none' ? false : 'gz-sb-title');
     setAttr(host.el, 'aria-modal', dialog && !modalAway ? 'true' : false);
@@ -762,7 +828,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const r = f?.isConnected && f.getClientRects().length ? f.getBoundingClientRect() : null;
     setVar('--gz-sb-foot', `${r ? Math.max(0, Math.round(ultra ? innerHeight - r.top : r.height)) : 0}px`);
   };
-  const onResize = () => { absorbInvalid(); if (asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
+  const queueLayout = () => { if (!active || asleep) return; cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { if (active && !asleep) layout(); }); };
+  const onResize = () => { absorbInvalid(); queueLayout(); };
+  // Breadcrumbs can wrap when their title arrives or the LMS changes its tools, without a window resize.
+  // Reuse the observer until Angular replaces a header; only the active document keeps observations.
+  const watchTop = (next) => {
+    if (!next || typeof ResizeObserver !== 'function') return;
+    if (next.length === topHeaders.length && next.every((e, i) => e === topHeaders[i])) return;
+    topRO ||= new ResizeObserver(queueLayout);
+    topRO.disconnect();
+    topHeaders = next;
+    for (const e of next) topRO.observe(e);
+  };
   // The document on screen changed (features/coursetabs.js): asleep, the drawer and menu close and nothing is watched;
   // awake again, the column is looked at as on a pass.
   const cover = () => {
@@ -773,6 +850,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       closeDrawer(false);
       asleep = true;
       mo?.disconnect();
+      topRO?.disconnect(); topHeaders = [];
+      watchNativeScroll(null);
       for (const f of [frame, passFrame]) cancelAnimationFrame(f);
       clearTimeout(noteTimer);
       widthCancel?.();
@@ -995,6 +1074,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     bare();
     openHere = null;
     removeEventListener('resize', onResize);
+    watchNativeScroll(null);
     document.removeEventListener('visibilitychange', cover);
     try { chrome.storage.onChanged.removeListener(onStore); } catch { /* reloaded */ }
     starting = null; rec = null; key = ''; flying = 0; lost = false;
@@ -1003,12 +1083,12 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   };
   // <html> as before the sidebar: its attributes and variables gone.
   const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
-    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle'];
+    'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle', 'data-gz-sb-native-root'];
   const bare = () => {
     const h = html();
     if (!h) return;
     for (const k of SB_ATTRS) h.removeAttribute(k);
-    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha']) if (h.style?.getPropertyValue?.(k)) h.style.removeProperty(k);
+    for (const k of ['--gz-sidebar-w', '--gz-sb-left', '--gz-sb-top', '--gz-sb-foot', '--gz-sb-blur', '--gz-sb-alpha', '--gz-sb-native-offset', '--gz-sb-native-top', '--gz-sb-native-end']) if (h.style?.getPropertyValue?.(k)) h.style.removeProperty(k);
     if (hadStyle === false && h.getAttribute('style') === '') h.removeAttribute('style');
     hadStyle = null;
   };

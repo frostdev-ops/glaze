@@ -178,6 +178,8 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
         * { box-sizing: border-box; } html { ${LOOK[look]}; --gz-radius: 16px; --gz-shadow: 0 8px 24px rgb(0 0 0 / .35); --gz-font: system-ui; color-scheme: ${look}; }
         body { margin: 0; font: 15px/1.5 system-ui; color: var(--gz-ink); background: linear-gradient(135deg, var(--gz-surface-2), color-mix(in srgb, var(--gz-accent) 25%, var(--gz-surface-2))); min-height: 100vh; }
         #main-content-inner { margin-left: 200px; height: 100vh; position: relative; } h2, h3 { margin: 0 0 8px; }
+        .routed-page > content-page-header { display: block; height: 47px; position: relative; z-index: 1; background: var(--gz-surface); }
+        .routed-page:has(> content-page-header) > .routed-page-body { position: relative; z-index: 0; }
         .course-main-container { display: grid; grid-template-columns: minmax(0, 1fr) 427px; gap: 24px; padding: 24px; }
         .layer-details > * > * > * , .discussion-participants { padding: 12px; border: 1px solid var(--gz-line); border-radius: 16px; background: color-mix(in srgb, var(--gz-surface) 88%, transparent); margin-bottom: 12px; }
         .assessment-overview-modern-panel { position: relative; display: block; height: 100vh; } learning-module-panel-view, .table-of-contents-disabled, .panel-content-body { position: absolute; inset: 0; display: flex; flex-direction: column; }
@@ -219,6 +221,14 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       await live('discussion', { style, look });
       check(await page.evaluate(() => document.querySelector('.layer-details').dataset.gzSidebarHost === 'native' && document.documentElement.dataset.gzSidebar === 'expanded'), `discussion ${tag}: Ultra's details column is the sidebar, expanded`);
       check(await page.evaluate(() => document.querySelector('#main-end').getBoundingClientRect().right + 16 <= document.querySelector('.layer-details').getBoundingClientRect().left + 1), `discussion ${tag}: the thread keeps clear of it`);
+      check(await page.evaluate(() => {
+        const header = document.querySelector('content-page-header').getBoundingClientRect();
+        const head = document.querySelector('.gz-sb-head').getBoundingClientRect();
+        return head.top >= header.bottom && [...document.querySelectorAll('.gz-sb-head button')].filter((e) => e.getClientRects().length).every((e) => {
+          const r = e.getBoundingClientRect();
+          return e.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+        });
+      }), `discussion ${tag}: sidebar heading and controls clear the breadcrumb and receive pointer input`);
       check(await unmovedLive(), `discussion ${tag}: no node moved`);
       await shot(`p6-ultra-discussion-${style}-${look}`);
       for (const surface of ['glass', 'solid']) {
