@@ -90,7 +90,7 @@ const page = ({ at = 'outline', width = 1600, stored = {}, enhance = {}, widgets
   const settings = () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, todo: true, sidebar: true, dashboard: true, ...enhance }, sidebar: c.sidebarSettings || {} });
   const sync = { get: async () => ({ enhance: settings().enhance }) };
   const c = {
-    console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, structuredClone,
+    console, URL, Intl, Date, Map, Set, JSON, Promise, Error, Number, Math, Object, Array, String, structuredClone, queueMicrotask,
     setTimeout: () => 0, clearTimeout() {}, setImmediate,
     addEventListener: (type, f) => winListeners.push({ type, f }), removeEventListener: (type, f) => { const i = winListeners.findIndex((l) => l.type === type && l.f === f); if (i >= 0) winListeners.splice(i, 1); },
     innerWidth: width, innerHeight: 900, location: { origin: O, pathname: where, href: `${O}${where}` },

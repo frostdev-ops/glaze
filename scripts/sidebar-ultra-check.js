@@ -379,6 +379,7 @@ const check = (ok, text) => { checks++; fails += !ok; console.log(`${ok ? 'ok' :
       await page.waitForTimeout(100);
       check(await page.evaluate(() => Math.abs(document.querySelector('.course-content-container > .panel-wrap').getBoundingClientRect().right + 16 - document.querySelector('[data-gz-sidebar-host]').getBoundingClientRect().left) <= 1), `${tool}: the course tool panel keeps the sidebar's gap`);
     }
+    await require('./ultra-offcanvas-fixture.js')({ page, root, check, shot });
     console.log(JSON.stringify({ checks, fails }));
     process.exitCode = fails ? 1 : 0;
   } finally { await browser?.close(); fs.rmSync(tmp, { recursive: true, force: true }); }

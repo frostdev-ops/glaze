@@ -46,6 +46,9 @@ const reachable = (f, selector) => f.locator(selector).evaluateAll((es) => es.le
       const req = r.request(), u = new URL(req.url());
       return ['GET', 'HEAD'].includes(req.method()) || req.method() === 'POST' && u.pathname === '/login/canvas' ? r.continue() : r.abort();
     });
+    const layers = await ctx.newPage();
+    try { await require('./ultra-offcanvas-fixture.js')({ page: layers, root, check: ok, shot: (name) => layers.screenshot({ path: path.join(out, `${name}.png`) }) }); }
+    finally { await layers.close(); }
     const page = await ctx.newPage(); await page.goto(origin + '/fixture');
     const f = page.frames().find((f) => f.url() === origin + route); await f.waitForSelector('iframe');
     await install(page, 'ultra'); await install(f, 'ultra', '_1_1');

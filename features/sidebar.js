@@ -100,6 +100,9 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       boundary: () => document.body,
       own: 'gz-sb-fixed',
       overlay: () => !!document.querySelector('.layer-details') && !ADAPTERS.ultra.discussion(),
+      layer: () => [...document.querySelectorAll('.bb-offcanvas-panel.screen')].filter((e) => {
+        const r = e.getBoundingClientRect(); return !e.closest('.peek, .peek-panel__content-wrapper, .ms-Panel-main') && r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight;
+      }).pop() || null,
       // Where the page's content starts: a course's panel, else the page (#main-content-inner, whose start padding is
       // Glaze's bar's room), right of Ultra's own nav.
       left() {
@@ -389,12 +392,34 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // Independent scrollers cannot safely share keyboard scrolling: only a fully visible, non-scrolling slot qualifies.
   // Any scroll, re-render, obstruction or changed geometry restores native flow, without trying again on every pass.
   // Attempt details have no verified structure yet; they always keep Ultra's presentation, even with the setting on.
-  let absorbed = [], absorbSheet = null, absorbRO = null, absorbMO = null, absorbRootMO = null, absorbBox = null, absorbBlocked = new WeakMap(), absorbGen = 0;
+  let absorbed = [], absorbSheet = null, absorbRO = null, absorbMO = null, absorbRootMO = null, absorbBox = null, absorbBlocked = new WeakMap(), absorbGen = 0, rubricNative = null;
   const OVERVIEW = 'section.assessment-overview-modern-panel.routed-page.route-view-container > learning-module-panel-view.routed-page-body > div.table-of-contents-disabled > div.panel-content-body > div.root-learning-module-panel > div#learningModulePanelContainerId.content-item-container > div.content-item-container-children > content-body > div.base-body > div.content-root > div.standard-content-body > div.assessment-overview-grid';
   const PANEL = `${OVERVIEW} > div.overview-section.overview-attempts-section.overview-attempts-section-container:nth-child(3):has(> h2#grades-attempts-header.section-label)`;
+  const REVIEW = 'div.bb-offcanvas-panel.screen.student-view-submission-panel';
+  const RUBRIC = `${REVIEW} > div.bb-offcanvas-panel-wrap main > aside:has(.rubric-inline-container)`;
   const absorbKey = () => JSON.stringify([location.pathname, location.search, innerWidth, innerHeight, cfg(), rec?.width, isOpen()]);
+  // Only the read-only submission viewer's two-column layout. Other document/preview layers keep their native panels.
+  const rubricView = () => {
+    if (!ultra || !/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/overview\/student-submission-view\/?$/.test(location.pathname)) return null;
+    const roots = [...document.querySelectorAll(REVIEW)];
+    if (roots.length !== 1) return null;
+    const layer = roots[0], wrap = layer.children.length === 1 && layer.firstElementChild;
+    if (!wrap || wrap.tagName !== 'DIV' || !has(wrap, 'bb-offcanvas-panel-wrap') || layer.closest('.peek, .peek-panel__content-wrapper, .ms-Panel-main')) return null;
+    const mains = [...wrap.querySelectorAll('main')], main = mains.length === 1 && mains[0], kids = main && [...main.children];
+    if (!kids || kids.length !== 2 || kids[0].tagName !== 'SECTION' || kids[1].tagName !== 'ASIDE') return null;
+    const viewer = kids[0], el = kids[1], rubrics = [...el.querySelectorAll('.rubric-inline-container')], headings = [...el.children].filter((e) => e.tagName === 'H2');
+    if (rubrics.length !== 1 || !rubrics[0].children.length || headings.length !== 1 || !headings[0].textContent.trim()
+      || el.querySelector('form, input, select, textarea, iframe, [contenteditable="true"], button[type="submit"]')) return null;
+    const frames = [...viewer.querySelectorAll('[role="tabpanel"] iframe')];
+    if (frames.length !== 1 || !frames[0].parentElement.id.startsWith('files-viewer-tab-panel-')) return null;
+    try { const u = new URL(frames[0].getAttribute('src')); if (u.origin !== 'https://annotate-us.foundations.blackboard.com' || !/^\/ui\/pdf-viewer\/[^/]+\/index\.html$/.test(u.pathname)) return null; } catch { return null; }
+    if (!el.isConnected || el.closest('[hidden], [aria-hidden="true"]')) return null;
+    return { layer, wrap, main, viewer, el, heading: headings[0], frame: frames[0] };
+  };
   const absorbable = () => {
     if (!ultra || cfg().absorb === false) { absorbBlocked = new WeakMap(); return []; }
+    const review = rubricView();
+    if (review) return absorbBlocked.get(review.el) === absorbKey() ? [] : [review.el];
     if (!/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/overview\/?$/.test(location.pathname) || html().hasAttribute('data-gz-focus')) return [];
     const grids = [...document.querySelectorAll('div.assessment-overview-grid')];
     if (grids.length !== 1) return [];
@@ -424,16 +449,18 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     removeEventListener('beforeprint', absorbInvalid);
     removeEventListener('popstate', absorbInvalid);
     removeEventListener('hashchange', absorbInvalid);
-    absorbed = []; absorbBox = null;
+    absorbed = []; absorbBox = null; rubricNative = null;
     pageBtn?.removeAttribute('aria-describedby');
     slot?.style.removeProperty('height');
     if (slot && slot.getAttribute('style') === '') slot.removeAttribute('style');
   };
   const absorbInvalid = () => {
     if (!absorbed.length) return;
+    const review = !!rubricNative;
     absorbBlocked.set(absorbed[0], absorbKey());
     restoreAbsorbed();
     if (host?.own) pageHead.hidden = true;
+    if (review && on && active && !covered()) queueMicrotask(() => { if (on && active && !asleep) layout(); });
   };
   const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
   const syncAbsorbed = () => {
@@ -445,9 +472,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         || r.width < 1 || r.height < 1 || r.left < hr.left || r.right > hr.right || r.top < pageHead.getBoundingClientRect().bottom
         || r.bottom > hr.bottom - 4 || Math.abs(r.top - sr.top) > 1 || Math.abs(r.left - sr.left) > 1
         || (absorbBox && ['left', 'top', 'width', 'height'].some((k) => Math.abs(r[k] - absorbBox[k]) > 1))) throw Error('geometry');
+      if (rubricNative && (rubricNative.viewer.getBoundingClientRect().width + 1 < rubricNative.viewerWidth || e.scrollHeight > e.clientHeight + 1)) throw Error('viewer');
       for (const own of [head, pageHead, dock, grip]) if (overlaps(r, own.getBoundingClientRect())) throw Error('controls');
       // Test the real painted controls, not synthetic dispatchEvent: another stacking context must fail closed.
-      for (const x of [e, ...e.querySelectorAll('a[href]')]) {
+      for (const x of [e, ...e.querySelectorAll(rubricNative ? 'a[href], button, [role="button"], [tabindex]' : 'a[href]')].filter((x) => !x.closest('[hidden], [aria-hidden="true"]') && x.getBoundingClientRect().height > 0)) {
         const b = x.getBoundingClientRect();
         if (b.width < 1 || b.height < 1 || b.left < r.left || b.right > r.right || b.top < r.top || b.bottom > r.bottom) throw Error('control');
         const points = x === e ? [[b.left + b.width / 2, b.top + 2], [b.left + b.width / 2, b.bottom - 2]] : [[b.left + b.width / 2, b.top + b.height / 2]];
@@ -463,37 +491,83 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const e = list[0];
     try {
       const css = (node) => getComputedStyle(node);
-      const grid = css(e.parentElement), native = css(e);
-      const columns = grid.gridTemplateColumns.split(/\s+/).map(parseFloat);
-      if (grid.display !== 'grid' || columns.length !== 3 || columns.some((v) => !Number.isFinite(v)) || columns[0] < 1 || columns[1] !== 0 || columns[2] < 200
-        || native.gridColumnStart !== '3' || native.gridColumnEnd !== 'span 1' || native.gridRowStart !== '1' || native.gridRowEnd !== 'span 2') return;
-      // A transformed, clipped or independently stacked ancestor cannot project into the sidebar's viewport layer.
-      let count = 0;
-      for (let p = e; p; p = p.parentElement) {
-        if (++count > 30) return;
-        const c = css(p);
-        if (c.display === 'none' || c.visibility !== 'visible' || c.transform !== 'none' || c.perspective !== 'none' || c.filter !== 'none'
-          || c.backdropFilter !== 'none' || c.clipPath !== 'none' || c.opacity !== '1' || c.isolation !== 'auto'
-          || !['none', ''].includes(c.contain) || !['normal', ''].includes(c.containerType) || c.willChange !== 'auto'
-          || (c.position !== 'static' && c.zIndex !== 'auto')) return;
+      const review = rubricView();
+      if (review?.el === e) {
+        absorbed = list;
+        const native = e.getBoundingClientRect(), vc = css(review.viewer), mc = css(review.main);
+        rubricNative = { ...review, width: native.width, viewerWidth: review.viewer.getBoundingClientRect().width };
+        if (mc.display !== 'flex' || mc.flexDirection !== 'row' || Number(vc.flexGrow) < 1 || native.width < 200) throw Error('layout');
+        const nodes = [e];
+        for (let i = 0; i < nodes.length; i++) {
+          const x = nodes[i], children = [...x.children].filter((n) => n.tagName);
+          if (nodes.length + children.length > 400 || x.clientHeight > 0 && x.scrollHeight > x.clientHeight + 1) throw Error('overflow');
+          nodes.push(...children);
+        }
+        let count = 0;
+        for (let p = e; p; p = p.parentElement) {
+          if (++count > 30) throw Error('depth');
+          const c = css(p), stack = p === review.layer && c.position === 'absolute' && c.zIndex === '1011';
+          if (c.display === 'none' || c.visibility !== 'visible' || c.transform !== 'none' || c.perspective !== 'none' || c.filter !== 'none'
+            || c.backdropFilter !== 'none' || c.clipPath !== 'none' || c.opacity !== '1' || c.isolation !== 'auto' || !['none', ''].includes(c.contain)
+            || !['normal', ''].includes(c.containerType) || c.willChange !== 'auto' || (!stack && c.position !== 'static' && c.zIndex !== 'auto')) throw Error('stack');
+        }
+        if (host.el.scrollTop || host.el.scrollHeight > host.el.getBoundingClientRect().height + 1) throw Error('scroll');
+        pv(slot, 'height', '1px');
+        const sr = slot.getBoundingClientRect();
+        absorbSheet = make('style', { id: 'gz-sb-absorb' });
+        // The native rubric remains in the layer's stacking context. The owned card has an unpainted, non-intercepting
+        // slot above it; only Glaze's headers and widgets paint and accept events above the full-window layer.
+        absorbSheet.textContent = `@media screen { html[data-gz-sidebar="expanded"]:not([data-gz-focus], [data-gz-review-focus], [data-gz-review-immersive]) ${RUBRIC} {
+          position:fixed!important; z-index:1011!important; top:${sr.top}px!important; left:${sr.left}px!important; right:auto!important; bottom:auto!important;
+          width:${sr.width}px!important; height:auto!important; max-height:none!important; min-width:0!important; max-width:none!important; margin:0!important; box-sizing:border-box;
+          overflow:visible!important; padding:calc(var(--gz-sb-pad,1rem) * .75)!important; background:var(--gz-surface)!important;
+        } html[data-gz-sidebar="expanded"]:not([data-gz-focus], [data-gz-review-focus], [data-gz-review-immersive]) ${REVIEW} main > section { flex:1 1 0!important; min-width:0!important; margin-inline-end:var(--gz-sb-room)!important; }
+        html[data-gz-sidebar="expanded"][data-gz-sb-fixed] #gz-sidebar.gz-sb-fixed[data-gz-sidebar-host] { z-index:1012!important; background:none!important; backdrop-filter:none!important; -webkit-backdrop-filter:none!important; pointer-events:none!important; }
+        #gz-sidebar > :not(.gz-sb-slot) { pointer-events:auto; }
+        #gz-sidebar > :is(.gz-sb-head,.gz-sb-pagehead,#gz-sb-widgets) { background:var(--gz-sb-fill,var(--gz-surface)); }
+        }`;
+        document.body.append(absorbSheet);
+        pv(slot, 'height', `${e.getBoundingClientRect().height}px`);
+        const hr = host.el.getBoundingClientRect(), x = sr.left - hr.left, y = sr.top - hr.top, right = x + sr.width, bottom = y + e.getBoundingClientRect().height;
+        // The owned background accepts events everywhere except the exact native Rubric aperture.
+        absorbSheet.textContent += `@media screen { #gz-sidebar.gz-sb-fixed::before { content:""; position:absolute; inset:0; z-index:-1;
+          border-radius:inherit; background:var(--gz-sb-fill,var(--gz-surface)); pointer-events:auto;
+          clip-path:polygon(evenodd,0 0,100% 0,100% 100%,0 100%,0 0,${x}px ${y}px,${right}px ${y}px,${right}px ${bottom}px,${x}px ${bottom}px,${x}px ${y}px,0 0);
+        } }`;
+      } else {
+        const grid = css(e.parentElement), native = css(e);
+        const columns = grid.gridTemplateColumns.split(/\s+/).map(parseFloat);
+        if (grid.display !== 'grid' || columns.length !== 3 || columns.some((v) => !Number.isFinite(v)) || columns[0] < 1 || columns[1] !== 0 || columns[2] < 200
+          || native.gridColumnStart !== '3' || native.gridColumnEnd !== 'span 1' || native.gridRowStart !== '1' || native.gridRowEnd !== 'span 2') return;
+        // A transformed, clipped or independently stacked ancestor cannot project into the sidebar's viewport layer.
+        let count = 0;
+        for (let p = e; p; p = p.parentElement) {
+          if (++count > 30) return;
+          const c = css(p);
+          if (c.display === 'none' || c.visibility !== 'visible' || c.transform !== 'none' || c.perspective !== 'none' || c.filter !== 'none'
+            || c.backdropFilter !== 'none' || c.clipPath !== 'none' || c.opacity !== '1' || c.isolation !== 'auto'
+            || !['none', ''].includes(c.contain) || !['normal', ''].includes(c.containerType) || c.willChange !== 'auto'
+            || (c.position !== 'static' && c.zIndex !== 'auto')) return;
+        }
+        if (host.el.scrollTop || host.el.scrollHeight > host.el.getBoundingClientRect().height + 1) return;
+        absorbed = list;
+        absorbSheet = make('style', { id: 'gz-sb-absorb' });
+        pv(slot, 'height', '1px');
+        const sr = slot.getBoundingClientRect();
+        absorbSheet.textContent = `@media screen { html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${PANEL} {
+          position:fixed!important; z-index:1001!important; top:${sr.top}px!important; left:${sr.left}px!important; right:auto!important; bottom:auto!important;
+          width:${sr.width}px!important; max-width:none!important; min-width:0!important; margin:0!important; box-sizing:border-box;
+          padding:calc(var(--gz-sb-pad, 1rem) * .75)!important; border:1px solid var(--gz-border-line, var(--gz-line))!important;
+          border-radius:var(--gz-sb-ir, 8px)!important; background:var(--gz-surface)!important; box-shadow:none!important;
+        } html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} { grid-template-columns:minmax(0,1fr)!important; }
+        html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} > :not(:nth-child(3)) { grid-column:1 / -1!important; } }`;
+        document.body.append(absorbSheet);
+        pv(slot, 'height', `${e.getBoundingClientRect().height}px`);
       }
-      if (host.el.scrollTop || host.el.scrollHeight > host.el.getBoundingClientRect().height + 1) return;
-      absorbed = list;
-      absorbSheet = make('style', { id: 'gz-sb-absorb' });
-      pv(slot, 'height', '1px');
-      const sr = slot.getBoundingClientRect();
-      absorbSheet.textContent = `@media screen { html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${PANEL} {
-        position:fixed!important; z-index:1001!important; top:${sr.top}px!important; left:${sr.left}px!important; right:auto!important; bottom:auto!important;
-        width:${sr.width}px!important; max-width:none!important; min-width:0!important; margin:0!important; box-sizing:border-box;
-        padding:calc(var(--gz-sb-pad, 1rem) * .75)!important; border:1px solid var(--gz-border-line, var(--gz-line))!important;
-        border-radius:var(--gz-sb-ir, 8px)!important; background:var(--gz-surface)!important; box-shadow:none!important;
-      } html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} { grid-template-columns:minmax(0,1fr)!important; }
-      html[data-gz-sidebar="expanded"]:not([data-gz-focus]) ${OVERVIEW} > :not(:nth-child(3)) { grid-column:1 / -1!important; } }`;
-      document.body.append(absorbSheet);
-      pv(slot, 'height', `${e.getBoundingClientRect().height}px`);
       syncAbsorbed();
       if (!absorbed.length) return;
-      pageBtn.setAttribute('aria-describedby', 'grades-attempts-header');
+      const heading = rubricNative?.heading;
+      if (!rubricNative || heading?.id && document.getElementById(heading.id) === heading) pageBtn.setAttribute('aria-describedby', heading?.id || 'grades-attempts-header');
       const g = absorbGen;
       const changed = () => { if (g === absorbGen) absorbInvalid(); };
       if (typeof ResizeObserver === 'function') { absorbRO = new ResizeObserver(() => { if (g === absorbGen) syncAbsorbed(); }); for (const x of [e, host.el, head, pageHead, slot, dock]) absorbRO.observe(x); }
@@ -502,7 +576,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       absorbMO.observe(e.parentElement.parentElement, { childList: true, subtree: true, attributes: true, characterData: true });
       for (let p = e.parentElement.parentElement.parentElement; p && p !== html(); p = p.parentElement) absorbMO.observe(p, { attributes: true, childList: true });
       absorbRootMO = new MutationObserver(changed);
-      absorbRootMO.observe(html(), { attributes: true, attributeFilter: ['data-gz-focus', 'dir', 'class', 'style'] });
+      absorbRootMO.observe(html(), { attributes: true, attributeFilter: ['data-gz-focus', 'data-gz-review-focus', 'data-gz-review-immersive', 'dir', 'class', 'style'] });
       document.addEventListener('scroll', absorbInvalid, { capture: true, passive: true });
       addEventListener('beforeprint', absorbInvalid);
       addEventListener('popstate', absorbInvalid);
@@ -543,10 +617,13 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const pageEmpty = hidePage || ((!host.page || (ultra && A.overlay()) || !filled(host.page)) && !shownPanels.length);
     const docked = drawnCount ?? (widgetsOn() ? S.docked(rec).length : 0);
     const width = S.shown(rec, cfg()).width;
-    const m = S.mode({ vw: innerWidth, left: A.left(), right: inset() + safeEnd, width: dragW || width, min: minMain(), empty: pageEmpty && !docked && !forced, open: isOpen() });
+    const layer = A.layer?.(), review = layer && rubricView();
+    const limit = review ? (rubricNative?.width ?? review.el.getBoundingClientRect().width) - S.GAP - inset() - safeEnd : 0;
+    const reviewReady = review && shownPanels[0] === review.el && limit >= S.MIN_WIDTH && (!docked || drawnCount !== null) && !hidePage && !pageFolded();
+    const m = S.mode({ vw: innerWidth, left: A.left(), right: inset() + safeEnd, width: reviewReady ? Math.min(dragW || width, limit) : dragW || width, min: minMain(), empty: pageEmpty && !docked && !forced, open: isOpen() });
     // Over a layer (A.overlay: Ultra's details column), as a standalone fallback, or set to (sidebar.open), with anything
     // to show, a drawer.
-    const next = (forced || ((host.fallback || A.overlay?.() || cfg().open === 'drawer') && m.mode !== 'none')) && m.mode !== 'drawer' ? 'drawer' : m.mode;
+    const next = (forced || ((layer && (!reviewReady || m.mode !== 'expanded') || host.fallback || A.overlay?.() || cfg().open === 'drawer') && m.mode !== 'none')) && m.mode !== 'drawer' ? 'drawer' : m.mode;
     if (next !== 'drawer' && drawer) closeDrawer(false);
     const w = next === 'drawer' ? Math.min(m.w || width, width) : m.w;
     // Glaze's own column fixed at the edge (A.own) keeps the page's content clear of it, below the adapter's top.
@@ -557,6 +634,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
       p.getBoundingClientRect().width > 0 && typeof getComputedStyle === 'function' && getComputedStyle(p).position === 'absolute');
     setAttr(html(), 'data-gz-sb-tool', tool ? '' : false);
     setAttr(html(), 'data-gz-sb-family', family || false);
+    setAttr(html(), 'data-gz-sb-layer', layer ? '' : false);
     setAttr(host.el, 'data-gz-sb-overlay', ultra && A.overlay() ? '' : false);
     setAttr(html(), 'data-gz-sidebar', next);
     setAttr(html(), 'data-gz-sidebar-open', next === 'drawer' && drawer ? '' : false);
@@ -565,7 +643,8 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     const main = document.getElementById('main');
     const navTop = (parseFloat(css?.getPropertyValue('--gz-navbar-top')) || 0) + (parseFloat(css?.getPropertyValue('--gz-ctabs-row')) || 0);
     // Ultra's adapter says where a fixed column starts (a course's top bar), else below the navigation.
-    const top = A.top ? A.top() ?? navTop : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0));
+    const reviewTop = review?.layer.querySelector('[class*="headerRoot"]')?.getBoundingClientRect().bottom;
+    const top = reviewTop ?? (A.top ? A.top() ?? navTop : Math.max(navTop, Math.min(innerHeight - 100, main?.getBoundingClientRect().top || 0)));
     setVar('--gz-sb-top', `${top}px`);
     foot();
     pageHead.hidden = pageEmpty;
@@ -589,6 +668,10 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     if (next !== mode) { mode = next; emit('mode', mode); }
     absorb(next === 'expanded' && !hidePage && !pageFolded() ? shownPanels : []);
     if (host.own) pageHead.hidden = !absorbed.length;
+    if (layer && next === 'expanded' && !rubricNative && review) {
+      absorbBlocked.set(review.el, absorbKey());
+      queueMicrotask(() => { if (on && active && !asleep) layout(); });
+    }
   };
   const paint = () => {
     if (!active || !host || asleep) return;
@@ -740,7 +823,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     catch { if (value === null) el.removeAttribute('popover'); else el.setAttribute('popover', value); }
   };
   const nativeModal = () => [...document.querySelectorAll('[role="dialog"], [role="alertdialog"], dialog[open]')].some((e) =>
-    e !== host?.el && !host?.el.contains(e) && e.style.display !== 'none' && !e.closest('[hidden], [aria-hidden="true"]') && (e.getClientRects?.().length ?? 1));
+    e !== host?.el && e !== A.layer?.() && !host?.el.contains(e) && e.style.display !== 'none' && !e.closest('[hidden], [aria-hidden="true"]') && (e.getClientRects?.().length ?? 1));
   const modalSync = () => {
     if (!drawer || !host) return;
     const away = nativeModal(), wanted = new Set();
@@ -906,7 +989,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
     mode = 'none';
   };
   // <html> as before the sidebar: its attributes and variables gone.
-  const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool',
+  const SB_ATTRS = ['data-gz-sidebar', 'data-gz-sidebar-open', 'data-gz-sidebar-todo', 'data-gz-sb-fixed', 'data-gz-sb-ultra', 'data-gz-sb-family', 'data-gz-sb-tool', 'data-gz-sb-layer',
     'data-gz-sb-style', 'data-gz-sb-surface', 'data-gz-sb-radius', 'data-gz-sb-density', 'data-gz-sb-order', 'data-gz-sb-notitle'];
   const bare = () => {
     const h = html();

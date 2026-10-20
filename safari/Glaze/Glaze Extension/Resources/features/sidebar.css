@@ -99,6 +99,7 @@
   html[data-gz-sb-ultra] .gz-sb-backdrop { z-index: 2099; }
   html[data-gz-sb-ultra] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 2050; }
   html[data-gz-sb-ultra] .gz-sb-menu { z-index: 2200; }
+  html[data-gz-sb-layer] :is(.gz-sb-edge, .gz-sb-launch) { z-index: 1012; }
   .gz-sb-offer { display: grid; gap: 0.4rem; justify-items: start; margin: 0 0 0.6rem; padding: 0.6rem 0.75rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); }
   .gz-sb-offer[hidden] { display: none; }
 
